@@ -373,21 +373,21 @@ static int get_obj_policy_from_attr(const DoutPrefixProvider *dpp,
   return ret;
 }
 
-static boost::optional<PublicAccessBlockConfiguration>
+static PublicAccessBlockConfiguration
 get_public_access_conf_from_attr(const map<string, bufferlist>& attrs)
 {
+  PublicAccessBlockConfiguration configuration;
   if (auto aiter = attrs.find(RGW_ATTR_PUBLIC_ACCESS);
       aiter != attrs.end()) {
     bufferlist::const_iterator iter{&aiter->second};
-    PublicAccessBlockConfiguration access_conf;
     try {
-      access_conf.decode(iter);
-    } catch (const buffer::error& e) {
-      return boost::none;
+      configuration.decode(iter);
+    } catch (const buffer::error&) {
+      // reset to default
+      configuration = PublicAccessBlockConfiguration{};
     }
-    return access_conf;
   }
-  return boost::none;
+  return configuration;
 }
 
 static int read_bucket_policy(const DoutPrefixProvider *dpp, 
@@ -4175,7 +4175,7 @@ int RGWPutObj::init_processing(optional_yield y) {
   } /* copy_source */
 
   // reject public canned acls
-  if (s->public_access_block && s->public_access_block->BlockPublicAcls &&
+  if (s->public_access_block.BlockPublicAcls &&
       (s->canned_acl == "public-read" ||
        s->canned_acl == "public-read-write" ||
        s->canned_acl == "authenticated-read")) {
@@ -6407,8 +6407,7 @@ void RGWPutACLs::execute(optional_yield y)
     *_dout << dendl;
   }
 
-  if (s->public_access_block &&
-      s->public_access_block->BlockPublicAcls &&
+  if (s->public_access_block.BlockPublicAcls &&
       new_policy.is_public(this)) {
     op_ret = -EACCES;
     return;
@@ -8855,8 +8854,7 @@ void RGWPutBucketPolicy::execute(optional_yield y)
       s->cct, &s->bucket_tenant, data.to_str(),
       s->cct->_conf.get_val<bool>("rgw_policy_reject_invalid_principals"));
     rgw::sal::Attrs attrs(s->bucket_attrs);
-    if (s->public_access_block &&
-        s->public_access_block->BlockPublicPolicy &&
+    if (s->public_access_block.BlockPublicPolicy &&
         rgw::IAM::is_public(p)) {
       op_ret = -EACCES;
       return;

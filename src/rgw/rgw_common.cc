@@ -1379,8 +1379,9 @@ bool verify_bucket_permission(const DoutPrefixProvider* dpp,
 
   // If RestrictPublicBuckets is enabled and the bucket policy allows public access,
   // deny the request if the requester is not in the bucket owner account
-  const bool restrict_public_buckets = s->public_access_block && s->public_access_block->RestrictPublicBuckets;
-  if (restrict_public_buckets && bucket_policy && rgw::IAM::is_public(*bucket_policy) && !s->identity->is_owner_of(s->bucket_info.owner)) {
+  if (s->public_access_block.RestrictPublicBuckets &&
+      bucket_policy && rgw::IAM::is_public(*bucket_policy) &&
+      !s->identity->is_owner_of(s->bucket_info.owner)) {
     ldpp_dout(dpp, 10) << __func__ << ": public policies are blocked by the RestrictPublicBuckets block public access setting" << dendl;
     return false;
   }
@@ -1456,8 +1457,7 @@ bool verify_bucket_permission_no_policy(const DoutPrefixProvider* dpp,
 
   if (bucket_acl.verify_permission(dpp, *ps->identity, perm, perm,
                                    ps->get_referer(),
-                                   ps->public_access_block &&
-                                   ps->public_access_block->IgnorePublicAcls)) {
+                                   ps->public_access_block.IgnorePublicAcls)) {
     ldpp_dout(dpp, 10) << __func__ << ": granted by bucket acl" << dendl;
     if (granted_by_acl) {
       *granted_by_acl = true;
@@ -1546,8 +1546,9 @@ bool verify_object_permission(const DoutPrefixProvider* dpp, struct perm_state_b
 
   // If RestrictPublicBuckets is enabled and the bucket policy allows public access,
   // deny the request if the requester is not in the bucket owner account
-  const bool restrict_public_buckets = ps->public_access_block && ps->public_access_block->RestrictPublicBuckets;
-  if (restrict_public_buckets && bucket_policy && rgw::IAM::is_public(*bucket_policy) && !ps->identity->is_owner_of(ps->bucket_info.owner)) {
+  if (ps->public_access_block.RestrictPublicBuckets &&
+      bucket_policy && rgw::IAM::is_public(*bucket_policy) &&
+      !ps->identity->is_owner_of(ps->bucket_info.owner)) {
     ldpp_dout(dpp, 10) << __func__ << ": public policies are blocked by the RestrictPublicBuckets block public access setting" << dendl;
     return false;
   }
@@ -1633,8 +1634,7 @@ bool verify_object_permission_no_policy(const DoutPrefixProvider* dpp,
   if (ps->bucket_object_ownership != rgw::s3::ObjectOwnership::BucketOwnerEnforced &&
       object_acl.verify_permission(dpp, *ps->identity, ps->perm_mask, perm,
                                    nullptr, /* http referrer */
-                                   ps->public_access_block &&
-                                   ps->public_access_block->IgnorePublicAcls)) {
+                                   ps->public_access_block.IgnorePublicAcls)) {
     ldpp_dout(dpp, 10) << __func__ << ": granted by object acl" << dendl;
     if (granted_by_acl) {
       *granted_by_acl = true;
