@@ -616,7 +616,7 @@ int rgw_build_bucket_policies(const DoutPrefixProvider *dpp, rgw::sal::Driver* d
       return -EINVAL;
     }
 
-    s->bucket_access_conf = get_public_access_conf_from_attr(s->bucket_attrs);
+    s->public_access_block = get_public_access_conf_from_attr(s->bucket_attrs);
     s->bucket_object_ownership = rgw::s3::get_object_ownership(s->bucket_attrs);
   }
 
@@ -4177,7 +4177,7 @@ int RGWPutObj::init_processing(optional_yield y) {
   } /* copy_source */
 
   // reject public canned acls
-  if (s->bucket_access_conf && s->bucket_access_conf->block_public_acls() &&
+  if (s->public_access_block && s->public_access_block->block_public_acls() &&
       (s->canned_acl == "public-read" ||
        s->canned_acl == "public-read-write" ||
        s->canned_acl == "authenticated-read")) {
@@ -6409,8 +6409,8 @@ void RGWPutACLs::execute(optional_yield y)
     *_dout << dendl;
   }
 
-  if (s->bucket_access_conf &&
-      s->bucket_access_conf->block_public_acls() &&
+  if (s->public_access_block &&
+      s->public_access_block->block_public_acls() &&
       new_policy.is_public(this)) {
     op_ret = -EACCES;
     return;
@@ -8857,8 +8857,8 @@ void RGWPutBucketPolicy::execute(optional_yield y)
       s->cct, &s->bucket_tenant, data.to_str(),
       s->cct->_conf.get_val<bool>("rgw_policy_reject_invalid_principals"));
     rgw::sal::Attrs attrs(s->bucket_attrs);
-    if (s->bucket_access_conf &&
-        s->bucket_access_conf->block_public_policy() &&
+    if (s->public_access_block &&
+        s->public_access_block->block_public_policy() &&
         rgw::IAM::is_public(p)) {
       op_ret = -EACCES;
       return;
