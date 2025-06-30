@@ -32,12 +32,21 @@ namespace {
     }
     return 0;
   }
+
+  void update_mtime_attribute(const DoutPrefixProvider* dpp, rgw::sal::Attrs& attrs) {
+    bufferlist mtime_bl;
+    const auto mtime = ceph::coarse_real_time::clock::now();
+    encode(mtime, mtime_bl);
+    attrs[RGW_ATTR_BUCKET_LOGGING_MTIME] = std::move(mtime_bl);
+    ldpp_dout(dpp, 20) << "INFO: logging config modified at: " << mtime << dendl;
+  }
 }
 
 // GET /<bucket name>/?logging
 // reply is XML encoded
 class RGWGetBucketLoggingOp : public RGWOp {
   rgw::bucketlogging::configuration configuration;
+  std::optional<ceph::real_time> mtime;
 
 public:
   int verify_permission(optional_yield y) override {
@@ -73,6 +82,20 @@ public:
       try {
         configuration.enabled = true;
         decode(configuration, iter->second);
+        if (auto mtime_it = src_bucket->get_attrs().find(RGW_ATTR_BUCKET_LOGGING_MTIME);
+            mtime_it != src_bucket->get_attrs().end()) {
+          try {
+            ceph::real_time tmp_mtime;
+            decode(tmp_mtime, mtime_it->second);
+            mtime = std::move(tmp_mtime);
+          } catch (buffer::error& err) {
+            ldpp_dout(this, 5) << "WARNING: failed to decode logging mtime attribute '" << RGW_ATTR_BUCKET_LOGGING_MTIME
+              << "' for bucket '" << src_bucket_id << "', error: " << err.what() << dendl;
+          }
+        } else {
+          ldpp_dout(this, 5) << "WARNING: no logging mtime attribute '" << RGW_ATTR_BUCKET_LOGGING_MTIME
+            << "' for bucket '" << src_bucket_id << "'" << dendl;
+        }
       } catch (buffer::error& err) {
         ldpp_dout(this, 1) << "WARNING: failed to decode logging attribute '" << RGW_ATTR_BUCKET_LOGGING
           << "' for bucket '" << src_bucket_id << "', error: " << err.what() << dendl;
@@ -89,6 +112,9 @@ public:
 
   void send_response() override {
     dump_errno(s);
+    if (mtime) {
+      dump_last_modified(s, *mtime);
+    }
     end_header(s, this, to_mime_type(s->format));
     dump_start(s);
 
@@ -253,6 +279,7 @@ class RGWPutBucketLoggingOp : public RGWDefaultResponseOp {
         if (!old_conf || (old_conf && *old_conf != configuration)) {
           // conf changed (or was unknown) - update
           it->second = conf_bl;
+          update_mtime_attribute(this, attrs);
           return src_bucket->merge_and_store_attrs(this, attrs, y);
         }
         // nothing to update
@@ -260,6 +287,7 @@ class RGWPutBucketLoggingOp : public RGWDefaultResponseOp {
       }
       // conf was added
       attrs.insert(std::make_pair(RGW_ATTR_BUCKET_LOGGING, conf_bl));
+      update_mtime_attribute(this, attrs);
       return src_bucket->merge_and_store_attrs(this, attrs, y);
     }, y);
     if (op_ret < 0) {
@@ -276,7 +304,7 @@ class RGWPutBucketLoggingOp : public RGWDefaultResponseOp {
       }
     } else if (*old_conf != configuration) {
       // conf changed - do cleanup
-      if (const auto ret = commit_logging_object(*old_conf, target_bucket, this, y); ret < 0) {
+      if (const auto ret = commit_logging_object(*old_conf, target_bucket, this, y, nullptr); ret < 0) {
         ldpp_dout(this, 1) << "WARNING: could not commit pending logging object when updating logging configuration of bucket '" <<
           src_bucket->get_key() << "', ret = " << ret << dendl;
       } else {
@@ -312,49 +340,23 @@ class RGWPostBucketLoggingOp : public RGWDefaultResponseOp {
   // and usd in execute()
   rgw::bucketlogging::configuration configuration;
   std::unique_ptr<rgw::sal::Bucket> target_bucket;
+  std::unique_ptr<rgw::sal::Bucket> source_bucket;
+  std::string old_obj;
 
   int init_processing(optional_yield y) override {
     if (const auto ret = verify_bucket_logging_params(this, s); ret < 0) {
       return ret;
     }
 
-    std::unique_ptr<rgw::sal::Bucket> src_bucket;
     {
       const rgw_bucket src_bucket_id{s->bucket_tenant, s->bucket_name};
       if (const auto ret = driver->load_bucket(this, src_bucket_id,
-                                 &src_bucket, y); ret < 0) {
+                                 &source_bucket, y); ret < 0) {
         ldpp_dout(this, 1) << "ERROR: failed to get bucket '" << src_bucket_id << "', ret = " << ret << dendl;
         return ret;
       }
     }
-    const auto src_bucket_id = src_bucket->get_key();
-    const auto& bucket_attrs = src_bucket->get_attrs();
-    auto iter = bucket_attrs.find(RGW_ATTR_BUCKET_LOGGING);
-    if (iter == bucket_attrs.end()) {
-      ldpp_dout(this, 1) << "WARNING: no logging configured on bucket '" << src_bucket_id << "'" << dendl;
-      return 0;
-    }
-    try {
-      configuration.enabled = true;
-      decode(configuration, iter->second);
-    } catch (buffer::error& err) {
-      ldpp_dout(this, 1) << "WARNING: failed to decode logging attribute '" << RGW_ATTR_BUCKET_LOGGING
-        << "' for bucket '" << src_bucket_id << "', error: " << err.what() << dendl;
-      return -EINVAL;
-    }
-
-    rgw_bucket target_bucket_id;
-    if (const auto ret = rgw::bucketlogging::get_bucket_id(configuration.target_bucket, s->bucket_tenant, target_bucket_id); ret < 0) {
-      ldpp_dout(this, 1) << "ERROR: failed to parse target bucket '" << configuration.target_bucket << "', ret = " << ret << dendl;
-      return ret;
-    }
-
-    if (const auto ret = driver->load_bucket(this, target_bucket_id,
-                                 &target_bucket, y); ret < 0) {
-      ldpp_dout(this, 1) << "ERROR: failed to get target bucket '" << target_bucket_id << "', ret = " << ret << dendl;
-      return ret;
-    }
-    return 0;
+    return rgw::bucketlogging::get_target_and_conf_from_source(this, driver, source_bucket.get(), s->bucket_tenant, configuration, target_bucket, y);
   }
 
   int verify_permission(optional_yield y) override {
@@ -383,15 +385,33 @@ class RGWPostBucketLoggingOp : public RGWDefaultResponseOp {
       ldpp_dout(this, 1) << "ERROR: failed to get pending logging object name from target bucket '" << target_bucket_id << "'" << dendl;
       return;
     }
-    const auto old_obj = obj_name;
-    op_ret = rgw::bucketlogging::rollover_logging_object(configuration, target_bucket, obj_name, this, null_yield, true, &objv_tracker);
+    const auto region = driver->get_zone()->get_zonegroup().get_api_name();
+    op_ret = rgw::bucketlogging::rollover_logging_object(configuration, target_bucket, obj_name, this, region, source_bucket, null_yield, true, &objv_tracker, &old_obj);
     if (op_ret < 0) {
-      ldpp_dout(this, 1) << "ERROR: failed to flush pending logging object '" << old_obj
-               << "' to target bucket '" << target_bucket_id << "'" << dendl;
+      if (op_ret == -ENOENT) {
+        ldpp_dout(this, 5) << "WARNING: no pending logging object '" << obj_name << "'. nothing to flush"
+            << " to target bucket '" << target_bucket_id << "'. "
+            << " last committed object is '" << old_obj << "'" << dendl;
+        op_ret = 0;
+      } else {
+        ldpp_dout(this, 1) << "ERROR: failed flush pending logging object '" << obj_name << "'"
+            << " to target bucket '" << target_bucket_id << "'. "
+            << " last committed object is '" << old_obj << "'" << dendl;
+      }
       return;
     }
     ldpp_dout(this, 20) << "INFO: flushed pending logging object '" << old_obj
                 << "' to target bucket '" << target_bucket_id << "'" << dendl;
+  }
+
+  void send_response() override {
+    dump_errno(s);
+    end_header(s, this, to_mime_type(s->format));
+    dump_start(s);
+    s->formatter->open_object_section_in_ns("PostBucketLoggingOutput", XMLNS_AWS_S3);
+    s->formatter->dump_string("FlushedLoggingObject", old_obj);
+    s->formatter->close_section();
+    rgw_flush_formatter_and_reset(s, s->formatter);
   }
 };
 

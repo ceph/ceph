@@ -11,7 +11,7 @@ log data can be used to monitor bucket activity, detect unauthorized
 access, get insights into the bucket usage and use the logs as a journal for bucket changes.
 The log records are stored in objects in a separate bucket and can be analyzed later.
 Logging configuration is done at the bucket level and can be enabled or disabled at any time.
-The log bucket can accumulate logs from multiple buckets. It is recommended to configured 
+The log bucket can accumulate logs from multiple buckets. It is recommended to configured
 a different "prefix" for each bucket, so that the logs of different buckets will be stored
 in different objects in the log bucket.
 
@@ -26,6 +26,9 @@ in different objects in the log bucket.
     - Source and log bucket must be in the same zonegroup
     - Source and log buckets may belong to different accounts (with proper bucket policy set)
     - The log bucket may have object lock enabled with default retention period
+    - The 16 byte unique ID part of the log object name is a lexicographically ordered random string,
+      that consists of a 10 bytes counter, and a 6 bytes random alphanumeric string.
+      or a random, alphanumeric string if the counter is not available
 
 
 .. toctree::
@@ -50,18 +53,49 @@ This means that there are the logging operation may fail, with no indication to 
 
 Journal
 ```````
-If logging type is set to "Journal", the records are written to the log bucket before the bucket operation is completed. 
-This means that if the logging action fails, the operation will not be executed, and an error will be returned to the client.
-An exception to the above are "multi/delete" log records: if writing these log records fail, the operation continues and may still be successful.
+If logging type is set to "Journal", the records are written to the log bucket before the bucket operation is completed.
+This means that if the logging action fails, the operation will not be executed, and an error will be returned to the client
+Some exceptions exists to that rule, the "Fails Operation" columns in the table below indicate by "No" which operations will not fail even if logging failed.
 Journal mode supports filtering out records based on matches of the prefixes and suffixes of the logged object keys. Regular-expression matching can also be used on these to create filters.
 Note that it may happen that the log records were successfully written, but the bucket operation failed, since the logs are written.
 
+The following operation are supported in journal mode:
+
++-------------------------------+-------------------------------------+-----------------+
+| Operation                     | Operation Name                      | Fails Operation |
++===============================+=====================================+=================+
+| ``PutObject``                 | ``REST.PUT.OBJECT``                 | Yes             |
++-------------------------------+-------------------------------------+-----------------+
+| ``DeleteObject``              | ``REST.DELETE.OBJECT``              | No              |
++-------------------------------+-------------------------------------+-----------------+
+| ``DeleteObjects``             | ``REST.POST.DELETE_MULTI_OBJECT``   | No              |
++-------------------------------+-------------------------------------+-----------------+
+| ``CompleteMultipartUpload``   | ``REST.POST.UPLOAD``                | Yes             |
++-------------------------------+-------------------------------------+-----------------+
+| ``CopyObject``                | ``REST.PUT.OBJECT``                 | Yes             |
++-------------------------------+-------------------------------------+-----------------+
+| ``PutObjectAcl``              | ``REST.PUT.ACL``                    | Yes             |
++-------------------------------+-------------------------------------+-----------------+
+| ``PutObjectLegalHold``        | ``REST.PUT.LEGAL_HOLD``             | Yes             |
++-------------------------------+-------------------------------------+-----------------+
+| ``PutObjectRetention``        | ``REST.PUT.RETENTION``              | Yes             |
++-------------------------------+-------------------------------------+-----------------+
+| ``PutObjectTagging``          | ``REST.PUT.OBJECT_TAGGING``         | Yes             |
++-------------------------------+-------------------------------------+-----------------+
+| ``DeleteObjectTagging``       | ``REST.DELETE.OBJECT_TAGGING``      | No              |
++-------------------------------+-------------------------------------+-----------------+
+
+Multisite
+`````````
+In a multi-zone deployment, each zone will use its own log object before the log object is added to the log bucket.
+After the log object is added to the log bucket (e.g after being flushed) it will be replicated to other zones.
+This means that for a given time period there could be more than one log object holding relevant log records.
 
 Bucket Logging Policy
 ---------------------
 On the source bucket, only its owner is allowed to enable or disable bucket logging.
 For a bucket to be used as a log bucket, it must have bucket policy that allows that (even if the source bucket and the log bucket are owned by the same user or account).
-The bucket policy must allow the `s3:PutObject` action for the log bucket, to be perfomed by the `logging.s3.amazonaws.com` service principal.
+The bucket policy must allow the `s3:PutObject` action for the log bucket, to be performed by the `logging.s3.amazonaws.com` service principal.
 It should also specify the source bucket and account that are expected to write logs to it. For example:
 
 ::
@@ -117,7 +151,7 @@ For example:
 
 ::
 
-  fish/2024-08-06-09-40-09-TI9ROKN05DD4HPQF
+  fish/2024-08-06-09-40-09-0000000002AGQ6W1
 
 Partitioned
 ```````````
@@ -125,13 +159,13 @@ has the following format:
 
 ::
 
-  <prefix><bucket owner>/<source region>/[tenant:]<bucket name>/<year>/<month>/<day>/<year-month-day-hour-minute-second>-<16 bytes unique-id>
+  <prefix><source bucket owner>/<zone group>/[tenant:]<source bucket name>/<year>/<month>/<day>/<year-month-day-hour-minute-second>-<16 bytes unique-id>
 
 For example:
 
 ::
 
-  fish/testid//all-log/2024/08/06/2024-08-06-10-11-18-1HMU3UMWOJKNQJ0X
+  fish/testid/default/fish-bucket/2024/08/06/2024-08-06-10-11-18-0000000011D1FGPA
 
 Log Records
 ~~~~~~~~~~~

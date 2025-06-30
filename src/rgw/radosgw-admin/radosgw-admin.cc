@@ -7788,27 +7788,19 @@ int main(int argc, const char **argv)
     if (ret < 0) {
       return -ret;
     }
-    const auto& bucket_attrs = bucket->get_attrs();
-    auto iter = bucket_attrs.find(RGW_ATTR_BUCKET_LOGGING);
-    if (iter == bucket_attrs.end()) {
-      cerr << "WARNING: no logging configured on bucket" << std::endl;
+
+    rgw::bucketlogging::configuration configuration;
+    std::unique_ptr<rgw::sal::Bucket> target_bucket;
+    ret =  rgw::bucketlogging::get_target_and_conf_from_source(dpp(), driver, bucket.get(), tenant, configuration, target_bucket, null_yield);
+    if (ret < 0 && ret != -ENODATA) {
+      cerr << "ERROR: failed to get target bucket and logging conf from source bucket '"
+        << bucket_name << "': " << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    } else if (ret == -ENODATA) {
+      cerr << "ERROR: bucket '" << bucket_name << "' does not have logging enabled" << std::endl;
       return 0;
     }
-    rgw::bucketlogging::configuration configuration;
-    try {
-      configuration.enabled = true;
-      decode(configuration, iter->second);
-    } catch (buffer::error& err) {
-      cerr << "ERROR: failed to decode logging attribute '" << RGW_ATTR_BUCKET_LOGGING
-        << "'. error: " << err.what() << std::endl;
-      return  EINVAL;
-    }
-    std::unique_ptr<rgw::sal::Bucket> target_bucket;
-    ret = init_bucket(tenant, configuration.target_bucket, "", &target_bucket);
-    if (ret < 0) {
-      cerr << "ERROR: failed to get target logging bucket '" << configuration.target_bucket << "'" << std::endl;
-      return -ret;
-    }
+
     std::string obj_name;
     RGWObjVersionTracker objv_tracker;
     ret = target_bucket->get_logging_object_name(obj_name, configuration.target_prefix, null_yield, dpp(), &objv_tracker);
@@ -7816,11 +7808,18 @@ int main(int argc, const char **argv)
       cerr << "ERROR: failed to get pending logging object name from target bucket '" << configuration.target_bucket << "'" << std::endl;
       return -ret;
     }
-    const auto old_obj = obj_name;
-    ret = rgw::bucketlogging::rollover_logging_object(configuration, target_bucket, obj_name, dpp(), null_yield, true, &objv_tracker);
+    std::string old_obj;
+    const auto region = driver->get_zone()->get_zonegroup().get_api_name();
+    ret = rgw::bucketlogging::rollover_logging_object(configuration, target_bucket, obj_name, dpp(), region, bucket, null_yield, true, &objv_tracker, &old_obj);
     if (ret < 0) {
-      cerr << "ERROR: failed to flush pending logging object '" << old_obj
-        << "' to target bucket '" << configuration.target_bucket << "'" << std::endl;
+      if (ret == -ENOENT) {
+        cerr << "WARNING: no pending logging object '" << obj_name << "'. nothing to flush";
+        ret = 0;
+      } else {
+        cerr << "ERROR: failed flush pending logging object '" << obj_name << "'";
+      }
+      cerr << " to target bucket '" << configuration.target_bucket << "'. "
+        << " last committed object is '" << old_obj << "'" << std::endl;
       return -ret;
     }
     cout << "flushed pending logging object '" << old_obj

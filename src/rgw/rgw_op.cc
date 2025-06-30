@@ -1295,6 +1295,25 @@ void RGWPutObjTags::execute(optional_yield y)
     return;
   }
 
+  op_ret = s->object->get_obj_attrs(y, this);
+  if (op_ret < 0) {
+    ldpp_dout(this, 0) << "ERROR: failed to get obj attrs, obj=" << s->object
+                       << " ret=" << op_ret << dendl;
+    return;
+  }
+  const auto etag = s->object->get_attrs()[RGW_ATTR_ETAG].to_str();
+  op_ret = rgw::bucketlogging::log_record(driver,
+      rgw::bucketlogging::LoggingType::Journal,
+      s->object.get(),
+      s,
+      canonical_name(),
+      etag,
+      s->object->get_size(),
+      this, y, false, false);
+  if (op_ret < 0) {
+    return;
+  }
+
   s->object->set_atomic(true);
   op_ret = s->object->modify_obj_attrs(RGW_ATTR_TAGS, tags_bl, y, this);
   if (op_ret == -ECANCELED){
@@ -1328,6 +1347,25 @@ void RGWDeleteObjTags::execute(optional_yield y)
 {
   if (rgw::sal::Object::empty(s->object.get()))
     return;
+
+  op_ret = s->object->get_obj_attrs(y, this);
+  if (op_ret < 0) {
+    ldpp_dout(this, 0) << "ERROR: failed to get obj attrs, obj=" << s->object
+                       << " ret=" << op_ret << dendl;
+    return;
+  }
+  const auto etag = s->object->get_attrs()[RGW_ATTR_ETAG].to_str();
+  op_ret = rgw::bucketlogging::log_record(driver,
+      rgw::bucketlogging::LoggingType::Journal,
+      s->object.get(),
+      s,
+      canonical_name(),
+      etag,
+      s->object->get_size(),
+      this, y, false, false);
+  if (op_ret < 0) {
+    return;
+  }
 
   op_ret = s->object->delete_obj_attrs(this, RGW_ATTR_TAGS, y);
 }
@@ -4801,8 +4839,23 @@ void RGWPutObj::execute(optional_yield y)
     return;
   }
 
+  auto ret = rgw::bucketlogging::log_record(driver,
+      rgw::bucketlogging::LoggingType::Standard,
+      s->object.get(),
+      s,
+      (multipart ? "REST.PUT.PART" : canonical_name()),
+      etag,
+      s->object->get_size(),
+      this,
+      y,
+      true,
+      false);
+  if (ret  < 0) {
+    ldpp_dout(this, 5) << "WARNING: in Standard mode, put object operation ignores bucket logging failure: " << ret << dendl;
+ }
+
   // send request to notification manager
-  int ret = res->publish_commit(this, s->obj_size, mtime, etag, s->object->get_instance());
+  ret = res->publish_commit(this, s->obj_size, mtime, etag, s->object->get_instance());
   if (ret < 0) {
     ldpp_dout(this, 1) << "ERROR: publishing notification failed, with error: " << ret << dendl;
     // too late to rollback operation, hence op_ret is not set here
@@ -6321,6 +6374,22 @@ void RGWPutACLs::execute(optional_yield y)
     return;
   }
 
+  if (!rgw::sal::Object::empty(s->object)) {
+    // in journal mode we log only object ACLs
+    const auto etag = s->object->get_attrs()[RGW_ATTR_ETAG].to_str();
+    op_ret = rgw::bucketlogging::log_record(driver,
+        rgw::bucketlogging::LoggingType::Journal,
+        s->object.get(),
+        s,
+        canonical_name(),
+        etag,
+        s->object->get_size(),
+        this, y, false, false);
+    if (op_ret < 0) {
+      return;
+    }
+  }
+
   bufferlist bl;
   new_policy.encode(bl);
   map<string, bufferlist> attrs;
@@ -7122,6 +7191,12 @@ void RGWCompleteMultipart::execute(optional_yield y)
     return;
   }
 
+  // size is logged in stadared mode
+  int ret = rgw::bucketlogging::log_record(driver, rgw::bucketlogging::LoggingType::Standard, s->object.get(), s, canonical_name(), "", ofs, this, y, true, false);
+  if (ret < 0) {
+    ldpp_dout(this, 5) << "WARNING: in Standard mode, complete MPU operation ignores bucket logging failure: " << ret << dendl;
+  }
+
   remove_objs.clear();
 
   // use cls_version_check() when deleting the meta object to detect part uploads that raced
@@ -7167,7 +7242,7 @@ void RGWCompleteMultipart::execute(optional_yield y)
   etag = s->object->get_attrs()[RGW_ATTR_ETAG].to_str();
 
   // send request to notification manager
-  int ret = res->publish_commit(this, ofs, upload_time, etag, s->object->get_instance());
+  ret = res->publish_commit(this, ofs, upload_time, etag, s->object->get_instance());
   if (ret < 0) {
     ldpp_dout(this, 1) << "ERROR: publishing notification failed, with error: " << ret << dendl;
     // too late to rollback operation, hence op_ret is not set here
@@ -8995,6 +9070,19 @@ void RGWPutObjRetention::execute(optional_yield y)
     }
   }
 
+  const auto etag = s->object->get_attrs()[RGW_ATTR_ETAG].to_str();
+  op_ret = rgw::bucketlogging::log_record(driver,
+      rgw::bucketlogging::LoggingType::Journal,
+      s->object.get(),
+      s,
+      canonical_name(),
+      etag,
+      s->object->get_size(),
+      this, y, false, false);
+  if (op_ret < 0) {
+    return;
+  }
+
   op_ret = s->object->modify_obj_attrs(RGW_ATTR_OBJECT_RETENTION, bl, s->yield, this);
 
   return;
@@ -9097,6 +9185,26 @@ void RGWPutObjLegalHold::execute(optional_yield y) {
     op_ret = -ERR_MALFORMED_XML;
     return;
   }
+
+  op_ret = s->object->get_obj_attrs(y, this);
+  if (op_ret < 0) {
+    ldpp_dout(this, 0) << "ERROR: failed to get obj attrs, obj=" << s->object
+                       << " ret=" << op_ret << dendl;
+    return;
+  }
+  const auto etag = s->object->get_attrs()[RGW_ATTR_ETAG].to_str();
+  op_ret = rgw::bucketlogging::log_record(driver,
+      rgw::bucketlogging::LoggingType::Journal,
+      s->object.get(),
+      s,
+      canonical_name(),
+      etag,
+      s->object->get_size(),
+      this, y, false, false);
+  if (op_ret < 0) {
+    return;
+  }
+
   bufferlist bl;
   obj_legal_hold.encode(bl);
   //if instance is empty, we should modify the latest object
