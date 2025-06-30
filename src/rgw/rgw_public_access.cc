@@ -35,3 +35,14 @@ std::ostream& operator<< (std::ostream& os, const PublicAccessBlockConfiguration
     return os;
 }
 
+auto config_union(const PublicAccessBlockConfiguration& lhs,
+                  const PublicAccessBlockConfiguration& rhs)
+  -> PublicAccessBlockConfiguration
+{
+  return {
+    .BlockPublicAcls = lhs.BlockPublicAcls || rhs.BlockPublicAcls,
+    .IgnorePublicAcls = lhs.IgnorePublicAcls || rhs.IgnorePublicAcls,
+    .BlockPublicPolicy = lhs.BlockPublicPolicy || rhs.BlockPublicPolicy,
+    .RestrictPublicBuckets = lhs.RestrictPublicBuckets || rhs.RestrictPublicBuckets,
+  };
+}
