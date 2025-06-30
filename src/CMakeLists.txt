@@ -471,22 +471,22 @@ if(WITH_CRIMSON)
       build_dpdk(${CMAKE_BINARY_DIR}/src/dpdk)
     endif()
   endif()
-  list(APPEND Seastar_CXX_FLAGS
-    "-DSEASTAR_NO_EXCEPTION_HACK"
-    "-Wno-error"
-    "-Wno-sign-compare"
-    "-Wno-attributes"
-    "-Wno-pessimizing-move"
-    "-Wno-address-of-packed-member"
-    "-Wno-non-virtual-dtor")
-  set(Seastar_CXX_FLAGS "${Seastar_CXX_FLAGS}" CACHE STRING "" FORCE)
   add_subdirectory(seastar)
   # create the directory so cmake won't complain when looking at the imported
   # target: Seastar exports this directory created at build-time
   file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/seastar/gen/include")
   file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/seastar/gen/src")
-  # required by any target that links to seastar
-  target_compile_options(seastar PUBLIC "-Wno-non-virtual-dtor")
+  target_compile_options(seastar
+  PUBLIC
+    # required by any target that links to seastar
+    "-Wno-non-virtual-dtor"
+  PRIVATE
+    "-DSEASTAR_NO_EXCEPTION_HACK"
+    "-Wno-error"
+    "-Wno-sign-compare"
+    "-Wno-attributes"
+    "-Wno-pessimizing-move"
+    "-Wno-address-of-packed-member")
   add_subdirectory(crimson)
 endif()
 
