@@ -14,6 +14,8 @@
  */
 
 #pragma once
+
+#include <iosfwd>
 #include "include/encoding.h"
 
 class XMLObj;
@@ -44,7 +46,12 @@ struct PublicAccessBlockConfiguration {
   }
 
   void decode_xml(XMLObj *obj);
-  void dump_xml(Formatter *f) const;
+  void dump_xml(ceph::Formatter *f) const;
 };
 WRITE_CLASS_ENCODER(PublicAccessBlockConfiguration)
 std::ostream& operator<< (std::ostream& os, const PublicAccessBlockConfiguration& access_conf);
+
+/// Return the union of two configurations by memberwise logical-or.
+auto config_union(const PublicAccessBlockConfiguration& lhs,
+                  const PublicAccessBlockConfiguration& rhs)
+  -> PublicAccessBlockConfiguration;
