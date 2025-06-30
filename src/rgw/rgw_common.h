@@ -1380,7 +1380,7 @@ struct req_state : DoutPrefixProvider {
 
   rgw::IAM::Environment env;
   boost::optional<rgw::IAM::Policy> iam_policy;
-  boost::optional<PublicAccessBlockConfiguration> bucket_access_conf;
+  boost::optional<PublicAccessBlockConfiguration> public_access_block;
   std::vector<rgw::IAM::Policy> iam_identity_policies;
 
   /* Is the request made by an user marked as a system one?
@@ -1697,7 +1697,7 @@ struct perm_state_base {
   const RGWBucketInfo bucket_info;
   int perm_mask;
   bool defer_to_bucket_acls;
-  boost::optional<PublicAccessBlockConfiguration> bucket_access_conf;
+  boost::optional<PublicAccessBlockConfiguration> public_access_block;
 
   perm_state_base(CephContext *_cct,
                   const rgw::IAM::Environment& _env,
@@ -1705,14 +1705,14 @@ struct perm_state_base {
                   const RGWBucketInfo& _bucket_info,
                   int _perm_mask,
                   bool _defer_to_bucket_acls,
-                  boost::optional<PublicAccessBlockConfiguration> _bucket_access_conf = boost::none) :
+                  boost::optional<PublicAccessBlockConfiguration> _public_access_block = boost::none) :
                                                 cct(_cct),
                                                 env(_env),
                                                 identity(_identity),
                                                 bucket_info(_bucket_info),
                                                 perm_mask(_perm_mask),
                                                 defer_to_bucket_acls(_defer_to_bucket_acls),
-                                                bucket_access_conf(_bucket_access_conf)
+                                                public_access_block(_public_access_block)
   {}
 
   virtual ~perm_state_base() {}
