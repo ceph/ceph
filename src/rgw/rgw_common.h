@@ -1389,6 +1389,7 @@ struct req_state : DoutPrefixProvider {
 
   std::string canned_acl;
   bool has_acl_header{false};
+  bool granted_by_acl{false};
   bool local_source{false}; /* source is local */
 
   int prot_flags{0};
@@ -1757,7 +1758,7 @@ bool verify_bucket_permission_no_policy(
   const perm_state_base * const s,
   const RGWAccessControlPolicy& user_acl,
   const RGWAccessControlPolicy& bucket_acl,
-  const int perm);
+  const int perm, bool* granted_by_acl = nullptr);
 
 bool verify_user_permission_no_policy(const DoutPrefixProvider* dpp,
                                       struct perm_state_base * const s,
@@ -1769,7 +1770,8 @@ bool verify_object_permission_no_policy(const DoutPrefixProvider* dpp,
 					const RGWAccessControlPolicy& user_acl,
 					const RGWAccessControlPolicy& bucket_acl,
 					const RGWAccessControlPolicy& object_acl,
-					const int perm);
+					const int perm,
+                                        bool *granted_by_acl = nullptr);
 
 // determine whether a request is allowed or denied within an account
 rgw::IAM::Effect evaluate_iam_policies(
@@ -1798,7 +1800,7 @@ bool verify_bucket_permission(const DoutPrefixProvider* dpp,
 			      const boost::optional<rgw::IAM::Policy>& bucket_policy,
                               const std::vector<rgw::IAM::Policy>& identity_policies,
                               const std::vector<rgw::IAM::Policy>& session_policies,
-                              const uint64_t op);
+                              const uint64_t op, bool *granted_by_acl = nullptr);
 bool verify_bucket_permission(
   const DoutPrefixProvider* dpp,
   req_state * const s,
