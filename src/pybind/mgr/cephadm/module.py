@@ -366,9 +366,9 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         ),
         Option(
             'agent_refresh_rate',
-            type='secs',
-            default=20,
-            desc='How often agent on each host will try to gather and send metadata'
+            type='int',
+            default=-1,
+            desc='How often each agent sends metadata. Use -1 to auto-adjust based on cluster size.'
         ),
         Option(
             'agent_avg_concurrency',
