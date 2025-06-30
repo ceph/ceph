@@ -5,6 +5,8 @@
 
 #include <memory>
 
+#include "rgw_auth_registry.h"
+
 class ActiveRateLimiter;
 class OpsLogSink;
 class RGWREST;

@@ -2268,25 +2268,12 @@ int RadosStore::get_raw_chunk_size(const DoutPrefixProvider* dpp, const rgw_raw_
   return rados->get_max_chunk_size(obj.pool, chunk_size, dpp);
 }
 
-int RadosStore::init_neorados(const DoutPrefixProvider* dpp) {
-  if (!neorados) try {
-      neorados = neorados::RADOS::make_with_cct(dpp->get_cct(), io_context,
-						ceph::async::use_blocked);
-    } catch (const boost::system::system_error& e) {
-      ldpp_dout(dpp, 0) << "ERROR: creating neorados handle failed: "
-			<< e.what() << dendl;
-      return ceph::from_error_code(e.code());
-    }
-  return 0;
-}
-
 int RadosStore::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
 {
   std::unique_ptr<ZoneGroup> zg =
     std::make_unique<RadosZoneGroup>(this, svc()->zone->get_zonegroup());
   zone = make_unique<RadosZone>(this, std::move(zg));
-
-  return init_neorados(dpp);
+  return 0;
 }
 
 int RadosStore::log_usage(const DoutPrefixProvider *dpp, map<rgw_user_bucket, RGWUsageBatch>& usage_info, optional_yield y)
@@ -5445,20 +5432,17 @@ int RadosRole::delete_obj(const DoutPrefixProvider *dpp, optional_yield y)
 
 extern "C" {
 
-  void* newRadosStore(void* io_context, void* dpp_)
+void* newRadosStore(void* io_context_, CephContext* cct)
 {
-  auto dpp = static_cast<DoutPrefixProvider*>(dpp_);
-  rgw::sal::RadosStore* store = new rgw::sal::RadosStore(
-    *static_cast<boost::asio::io_context*>(io_context));
+  auto& io_context = *static_cast<boost::asio::io_context*>(io_context_);
+  ceph_assert(!io_context.stopped());
+  auto neorados = make_neorados(cct, io_context);
+  if (!neorados || !*neorados) {
+    return nullptr;
+  }
+  rgw::sal::RadosStore* store = nullptr;
+    store = new rgw::sal::RadosStore(*neorados);
   if (store) {
-    int ret = store->init_neorados(dpp);
-    if (ret < 0) {
-      ldpp_dout(dpp, 0) << "ERROR: failed to initialize neorados (ret=" << cpp_strerror(-ret) << ")" << dendl;
-      delete store;
-      store = nullptr;
-      return store;
-    }
-
     RGWRados* rados = new RGWRados();
 
     if (!rados) {
@@ -5471,5 +5455,4 @@ extern "C" {
 
   return store;
 }
-
 }

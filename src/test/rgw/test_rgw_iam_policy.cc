@@ -21,18 +21,14 @@
 
 #include <gtest/gtest.h>
 
+#include "rgw_sal_store.h"
+
 #include "include/stringify.h"
-#include "common/async/context_pool.h"
-#include "common/code_environment.h"
 #include "common/ceph_context.h"
-#include "global/global_init.h"
 #include "rgw_auth.h"
-#include "rgw_auth_registry.h"
 #include "rgw_iam_managed_policy.h"
 #include "rgw_op.h"
 #include "rgw_process_env.h"
-#include "rgw_sal_rados.h"
-#include "driver/rados/rgw_zone.h"
 #include "rgw_sal_config.h"
 
 using std::string;
@@ -1113,18 +1109,56 @@ TEST_F(IPPolicyTest, asNetworkInvalid) {
   EXPECT_FALSE(rgw::IAM::Condition::as_network("1.2.3.10000"));
 }
 
+class DumbUser : public rgw::sal::StoreUser {
+  using StoreUser::StoreUser;
+  std::unique_ptr<User> clone() {
+    return std::make_unique<DumbUser>(*this);
+  }
+  int read_attrs(const DoutPrefixProvider*, optional_yield) {
+    return -ENOTSUP;
+  }
+  int merge_and_store_attrs(const DoutPrefixProvider*, rgw::sal::Attrs&,
+			    optional_yield) {
+    return -ENOTSUP;
+  }
+  int read_usage(const DoutPrefixProvider*, uint64_t, uint64_t, uint32_t,
+		 bool*, RGWUsageIter&,
+		 std::map<rgw_user_bucket, rgw_usage_log_entry>&) {
+    return -ENOTSUP;
+  }
+  virtual int trim_usage(const DoutPrefixProvider*, uint64_t,
+			 uint64_t, optional_yield) {
+    return -ENOTSUP;
+  }
+  int load_user(const DoutPrefixProvider* dpp, optional_yield y) {
+    return -ENOTSUP;
+  }
+  int store_user(const DoutPrefixProvider*, optional_yield, bool, RGWUserInfo*) {
+    return -ENOTSUP;
+  }
+  int remove_user(const DoutPrefixProvider*, optional_yield) {
+    return -ENOTSUP;
+  }
+  int verify_mfa(const std::string&, bool*, const DoutPrefixProvider*,
+		 optional_yield) {
+    return -ENOTSUP;
+  }
+  int list_groups(const DoutPrefixProvider*, optional_yield,
+		  std::string_view, uint32_t, rgw::sal::GroupList&) {
+    return -ENOTSUP;
+  }
+};
+
 TEST_F(IPPolicyTest, IPEnvironment) {
   RGWProcessEnv penv;
   // Unfortunately RGWCivetWeb is too tightly tied to civetweb to test RGWCivetWeb::init_env.
   RGWEnv rgw_env;
-  ceph::async::io_context_pool context_pool(cct->_conf->rgw_thread_pool_size); \
-  rgw::sal::RadosStore store(context_pool);
-  std::unique_ptr<rgw::sal::User> user = store.get_user(rgw_user());
+  std::unique_ptr<rgw::sal::User> user = std::make_unique<DumbUser>(rgw_user());
   rgw_env.set("REMOTE_ADDR", "192.168.1.1");
   rgw_env.set("HTTP_HOST", "1.2.3.4");
   req_state rgw_req_state(cct.get(), penv, &rgw_env, 0);
   rgw_req_state.set_user(user);
-  rgw_build_iam_environment(&store, &rgw_req_state);
+  rgw_build_iam_environment(&rgw_req_state);
   auto ip = rgw_req_state.env.find("aws:SourceIp");
   ASSERT_NE(ip, rgw_req_state.env.end());
   EXPECT_EQ(ip->second, "192.168.1.1");
@@ -1132,13 +1166,13 @@ TEST_F(IPPolicyTest, IPEnvironment) {
   ASSERT_EQ(cct.get()->_conf.set_val("rgw_remote_addr_param", "SOME_VAR"), 0);
   EXPECT_EQ(cct.get()->_conf->rgw_remote_addr_param, "SOME_VAR");
   rgw_req_state.env.clear();
-  rgw_build_iam_environment(&store, &rgw_req_state);
+  rgw_build_iam_environment(&rgw_req_state);
   ip = rgw_req_state.env.find("aws:SourceIp");
   EXPECT_EQ(ip, rgw_req_state.env.end());
 
   rgw_env.set("SOME_VAR", "192.168.1.2");
   rgw_req_state.env.clear();
-  rgw_build_iam_environment(&store, &rgw_req_state);
+  rgw_build_iam_environment(&rgw_req_state);
   ip = rgw_req_state.env.find("aws:SourceIp");
   ASSERT_NE(ip, rgw_req_state.env.end());
   EXPECT_EQ(ip->second, "192.168.1.2");
@@ -1146,14 +1180,14 @@ TEST_F(IPPolicyTest, IPEnvironment) {
   ASSERT_EQ(cct.get()->_conf.set_val("rgw_remote_addr_param", "HTTP_X_FORWARDED_FOR"), 0);
   rgw_env.set("HTTP_X_FORWARDED_FOR", "192.168.1.3");
   rgw_req_state.env.clear();
-  rgw_build_iam_environment(&store, &rgw_req_state);
+  rgw_build_iam_environment(&rgw_req_state);
   ip = rgw_req_state.env.find("aws:SourceIp");
   ASSERT_NE(ip, rgw_req_state.env.end());
   EXPECT_EQ(ip->second, "192.168.1.3");
 
   rgw_env.set("HTTP_X_FORWARDED_FOR", "192.168.1.4, 4.3.2.1, 2001:db8:85a3:8d3:1319:8a2e:370:7348");
   rgw_req_state.env.clear();
-  rgw_build_iam_environment(&store, &rgw_req_state);
+  rgw_build_iam_environment(&rgw_req_state);
   ip = rgw_req_state.env.find("aws:SourceIp");
   ASSERT_NE(ip, rgw_req_state.env.end());
   EXPECT_EQ(ip->second, "192.168.1.4");
