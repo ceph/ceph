@@ -3,15 +3,17 @@
                 *ngIf="managedByConfig$ | async as managedByConfig">
     <div class="row h-100 justify-content-center align-items-center">
       <div class="blank-page">
-        <i class="mx-auto d-block"
-           [ngClass]="[icons.large, icons.wrench]">
-        </i>
+        <svg [cdsIcon]="icons.wrench"
+             [size]="icons.size20"
+             class="cds-info-color cds-icon-wrench"></svg>
       <div class="mt-4 text-center">
         <h4 class="mt-3">This cluster is already managed by cluster -
           <a target="_blank"
              [href]="managedByConfig['MANAGED_BY_CLUSTERS'][0]['url']">
             {{ managedByConfig['MANAGED_BY_CLUSTERS'][0]['fsid'] }}
-            <i class="fa fa-external-link"></i>
+            <svg [cdsIcon]="icons.launch"
+                 [size]="icons.size16"
+                 class="cds-info-color"></svg>
           </a>
         </h4>
       </div>
@@ -62,7 +64,9 @@
   <a target="_blank"
      [href]="row.url">
       {{ row?.url?.endsWith('/') ? row?.url?.slice(0, -1) : row.url }}
-    <i class="fa fa-external-link"></i>
+    <svg [cdsIcon]="icons.launch"
+         [size]="icons.size16"
+         class="cds-info-color"></svg>
   </a>
 </ng-template>
 
@@ -71,18 +75,23 @@
              let-value="data.value"
              let-row="data.row">
   <span *ngIf="row.remainingTimeWithoutSeconds > 0 && row.cluster_alias !== 'local-cluster'">
-    <i *ngIf="row.remainingDays < 8"
-       i18n-title
-       title="Cluster's token is about to expire"
-       [class.icon-danger-color]="row.remainingDays < 2"
-       [class.icon-warning-color]="row.remainingDays < 8"
-       class="{{ icons.warning }}"></i>
+    <svg  i18n-title
+          *ngIf="row.remainingDays < 8"
+          [cdsIcon]="icons.warning"
+          title="Cluster's token is about to expire"
+          [size]="icons.size16"
+          [class.cds-danger-color]="row.remainingDays < 2"
+          [class.cds-warning-color]="row.remainingDays < 8"
+          class="cds-warning-color"></svg>
+      {{row.remainingDays}}
     <span title="{{ row.expiryDate }}">{{ row.remainingTimeWithoutSeconds / 1000 | duration }}</span>
   </span>
   <span *ngIf="row.remainingTimeWithoutSeconds <= 0 && row.remainingDays <=0 && row.cluster_alias !== 'local-cluster'">
-    <i i18n-title
-       title="Cluster's token has expired"
-       class="{{ icons.danger }}"></i>
+    <svg i18n-title
+         [cdsIcon]="icons.danger"
+         title="Cluster's token has expired"
+         [size]="icons.size16"
+         class="cds-danger-color"></svg>
     <span class="text-danger">Token expired</span>
   </span>
   <span *ngIf="row.cluster_alias === 'local-cluster'">N/A</span>

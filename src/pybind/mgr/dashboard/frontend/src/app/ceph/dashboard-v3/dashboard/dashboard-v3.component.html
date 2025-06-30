@@ -26,7 +26,9 @@
             <a routerLink="/api-docs"
                target="_blank">
                {{ origin }}/api-docs
-              <i class="fa fa-external-link"></i>
+              <svg [cdsIcon]="icons.launch"
+                   [size]="icons.size16"
+                   class="cds-info-color"></svg>
             </a>
           </dd>
           <ng-container>
@@ -42,7 +44,9 @@
               <a target="_blank"
                  [href]="telemetryURL">
                  {{ telemetryURL }}
-                <i class="fa fa-external-link"></i>
+              <svg [cdsIcon]="icons.launch"
+                   [size]="icons.size16"
+                   class="cds-info-color"></svg>
               </a>
             </dd>
           </ng-container>
@@ -53,7 +57,9 @@
                 <a target="_blank"
                    [href]="managedByConfig['MANAGED_BY_CLUSTERS'][0]['url']">
                   {{ managedByConfig['MANAGED_BY_CLUSTERS'][0]['fsid'] }}
-                  <i class="fa fa-external-link"></i>
+                  <svg [cdsIcon]="icons.launch"
+                       [size]="icons.size16"
+                       class="cds-info-color"></svg>
                 </a>
               </dd>
             </span>
@@ -148,11 +154,15 @@
             </div>
             <div class="d-flex flex-column ms-4 me-4 mt-4 mb-4">
               <div class="d-flex flex-row col-md-3 ms-4">
-                <i  *ngIf="healthData.health?.status"
-                    [ngClass]="[healthData.health.status | healthIcon, icons.large2x]"
-                    [ngStyle]="healthData.health.status | healthColor"
-                    [title]="healthData.health.status">
-                </i>
+              <span>
+                <div id="healthStatus"
+                     [cdsIcon]="healthData.health.status | healthIcon"
+                     *ngIf="healthData.health?.status"
+                     [ngStyle]="healthData.health.status | healthColor"
+                     class="cds-space-5"
+                     [size]="icons.size20"
+                     [title]="healthData.health.status"></div>
+              </span>
               <span class="ms-2 mt-n1 lead"
                     *ngIf="!healthData.health?.checks?.length"
                     i18n>Cluster</span>
@@ -162,8 +172,7 @@
                 <a class="ms-2 mt-n1 lead text-primary"
                    popoverClass="info-card-popover-cluster-status"
                    *ngIf="healthData.health?.checks?.length"
-                   i18n>Cluster
-                </a>
+                   i18n>Cluster</a>
               </div>
               <div cdsToggletipContent
                    #healthCheck>
@@ -178,8 +187,9 @@
             <div class="d-flex flex-column col-md-3">
               <div *ngIf="hasHardwareError"
                    class="d-flex flex-row">
-                <i class="text-danger"
-                   [ngClass]="[icons.danger, icons.large2x]"></i>
+                <svg [cdsIcon]="icons.danger"
+                     [size]="icons.size20"
+                     class="cds-danger-color cds-space-5"></svg>
                 <span class="ms-2 mt-n1 lead"
                       i18n>Hardware</span>
               </div>
@@ -198,7 +208,9 @@
                         id="dangerAlerts"
                         i18n-title
                         *ngIf="prometheusAlertService?.activeCriticalAlerts">
-                  <i [ngClass]="[icons.danger]"></i>
+                  <svg [cdsIcon]="icons.danger"
+                       [size]="icons.size16"
+                       class="cds-danger-color cds-icon cds-mr-2"></svg>
                   <span>{{ prometheusAlertService.activeCriticalAlerts }}</span>
                 </button>
 
@@ -209,7 +221,9 @@
                         id="warningAlerts"
                         i18n-title
                         *ngIf="prometheusAlertService?.activeWarningAlerts">
-                  <i [ngClass]="[icons.infoCircle]"></i>
+                  <svg [cdsIcon]="icons.infoCircle"
+                       [size]="icons.size16"
+                       class="cds-warning-color cds-icon cds-mr-2"></svg>
                   <span>{{ prometheusAlertService.activeWarningAlerts }}</span>
                 </button>
               </div>
@@ -297,10 +311,10 @@
       <div class="card tc_alerts border-0 pt-3">
         <div class="row no-gutters ps-2">
           <div class="col-sm-1 text-center">
-            <span [ngClass]="[icons.stack, icons.large, 'text-'+alertClass[alert.labels.severity]]">
-              <i [ngClass]="[icons.circle, icons.stack2x]"></i>
-              <i [ngClass]="[icons.stack1x, icons.inverse, icons.warning]"></i>
-            </span>
+            <svg [cdsIcon]="icons.warning"
+                 [size]="icons.size24"
+                 [ngClass]="'cds-'+alertClass[alert.labels.severity]+'-color'"
+                 ></svg>
           </div>
           <div class="col-md-11 ps-0">
             <div class="card-body ps-0 pe-1 pb-1 pt-0">
@@ -325,6 +339,10 @@
 <ng-template #logsLink>
   <ng-container *ngIf="permissions.log.read">
     <p class="logs-link"
-       i18n><i [ngClass]="[icons.infoCircle]"></i> See <a routerLink="/logs">Logs</a> for more details.</p>
+       i18n>
+      <svg [cdsIcon]="icons.circle"
+           [size]="icons.size16"
+           class="cds-icon"></svg> See
+    <a routerLink="/logs">Logs</a> for more details.</p>
   </ng-container>
 </ng-template>

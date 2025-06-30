@@ -55,11 +55,14 @@ export enum Icons {
   lineChart = 'analytics', // Line chart
   signOut = 'fa fa-sign-out', // Sign Out
   circle = 'dot-mark', // Circle
-  bell = 'notification', // Notification
-  mute = 'notification--off', // Mute or silence
   leftArrow = 'caret--left', // Left facing angle
   rightArrow = 'caret--right', // Right facing angle
   downArrow = 'caret--down',
+  health = 'fa fa-heartbeat', // Health
+  bell = 'notification--filled', // Notification
+  mute = 'notification--off--filled', // Mute or silence
+  tag = 'fa fa-tag', // Tag, Badge
+
   flag = 'fa fa-flag', // OSD configuration
   clearFilters = 'close--filled', // Clear filters, solid x
   download = 'download', // Download

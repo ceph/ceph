@@ -88,6 +88,8 @@ import { SidePanelComponent } from './side-panel/side-panel.component';
 import InfoIcon from '@carbon/icons/es/information/16';
 import CopyIcon from '@carbon/icons/es/copy/32';
 import downloadIcon from '@carbon/icons/es/download/16';
+import NotifyOffIcon from '@carbon/icons/es/notification--off--filled/16';
+import NotifyOnIcon from '@carbon/icons/es/notification--filled/16';
 
 @NgModule({
   imports: [
@@ -215,6 +217,6 @@ import downloadIcon from '@carbon/icons/es/download/16';
 })
 export class ComponentsModule {
   constructor(private iconService: IconService) {
-    this.iconService.registerAll([InfoIcon, CopyIcon, EditIcon, CodeIcon, downloadIcon]);
+    this.iconService.registerAll([InfoIcon, CopyIcon, EditIcon, CodeIcon, downloadIcon, NotifyOnIcon, NotifyOffIcon]);
   }
 }

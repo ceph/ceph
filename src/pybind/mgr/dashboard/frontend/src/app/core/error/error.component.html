@@ -46,8 +46,9 @@
 
 
 <ng-template #elseBlock>
-  <i class="fa fa-exclamation-triangle mx-auto d-block text-danger"></i>
-
+  <svg [cdsIcon]="icons.danger"
+       [size]="icons.size32"
+       class="cds-danger-color cds-icon--size-10"></svg>
   <div class="mt-4 text-center">
     <h3 i18n><b>Page not Found</b></h3>
 

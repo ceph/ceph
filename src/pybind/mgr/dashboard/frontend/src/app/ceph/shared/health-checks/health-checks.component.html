@@ -23,6 +23,11 @@
 <ng-template #logsLink>
   <ng-container *ngIf="permissions.log.read">
     <p class="logs-link"
-        i18n><i [ngClass]="[icons.infoCircle]"></i> See <a routerLink="/logs">Logs</a> for more details.</p>
+       i18n>
+      <svg [cdsIcon]="icons.infoCircle"
+           [size]="icons.size16"
+           class="cds-info-color"></svg> See
+      <a routerLink="/logs">Logs</a> for more details.
+    </p>
   </ng-container>
 </ng-template>
