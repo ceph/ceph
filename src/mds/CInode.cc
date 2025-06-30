@@ -84,12 +84,6 @@ void CInodeCommitOperation::update(ObjectOperation &op, inode_backtrace_t &bt) {
     encode(_symlink, symlink_bl);
     op.setxattr("symlink", symlink_bl);
   }
-
-  if (remote_inode) {
-    bufferlist remote_inode_bl;
-    encode(remote_inode, remote_inode_bl);
-    op.setxattr("remote_inode", remote_inode_bl);
-  }
 }
 
 class CInodeIOContext : public MDSIOContextBase
@@ -237,10 +231,8 @@ ostream& operator<<(ostream& out, const CInode& in)
     }
   } else {
     out << " s=" << in.get_inode()->size;
-    if (in.get_inode()->nlink != 1) {
+    if (in.get_inode()->nlink != 1)
       out << " nl=" << in.get_inode()->nlink;
-      out << " referent_inodes=" << std::hex << in.get_inode()->referent_inodes;
-    }
   }
 
   // rstat
@@ -1456,12 +1448,8 @@ void CInode::_store_backtrace(std::vector<CInodeCommitOperation> &ops_vec,
     slink = symlink;
   }
 
-  inodeno_t remote_inode = 0;
-  if (is_referent_remote())
-    remote_inode = get_remote_ino();
-
   ops_vec.emplace_back(op_prio, pool, get_inode()->layout,
-                       mdcache->mds->mdsmap->get_up_features(), slink, remote_inode);
+                       mdcache->mds->mdsmap->get_up_features(), slink);
 
   if (!state_test(STATE_DIRTYPOOL) || get_inode()->old_pools.empty() || ignore_old_pools) {
     dout(20) << __func__ << ": no dirtypool or no old pools or ignore_old_pools" << dendl;
@@ -1799,11 +1787,10 @@ void CInode::decode_lock_iauth(bufferlist::const_iterator& p)
 
 void CInode::encode_lock_ilink(bufferlist& bl)
 {
-  ENCODE_START(2, 1, bl);
+  ENCODE_START(1, 1, bl);
   encode(get_inode()->version, bl);
   encode(get_inode()->ctime, bl);
   encode(get_inode()->nlink, bl);
-  encode(get_inode()->referent_inodes, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -1817,8 +1804,6 @@ void CInode::decode_lock_ilink(bufferlist::const_iterator& p)
   decode(tm, p);
   if (_inode->ctime < tm) _inode->ctime = tm;
   decode(_inode->nlink, p);
-  if (struct_v >= 2)
-    decode(_inode->referent_inodes, p);
   DECODE_FINISH(p);
   reset_inode(std::move(_inode));
 }
