@@ -127,6 +127,7 @@ def get_cmd_output(cmd_out):
     out = out.strip('\n')
     return out
 
+
 def main():
     """
     execute the datacache test
@@ -172,24 +173,45 @@ def main():
     json_op = json.loads(out)
     cached_object_name = json_op['manifest']['prefix']
     log.debug("Cached object name is: %s", cached_object_name)
+    stripe_size = json_op['manifest']['begin_iter']['stripe_size']
+    log.debug("*** stripe_size = %s", stripe_size)
+    stripe_max_size = json_op['manifest']['rules'][0]['val']['stripe_max_size']
+    log.debug("*** stripe_max_size = %s", stripe_max_size)
+    compression_type = 'none'
+    if 'compression' in json_op and 'compression_type' in json_op['compression']:
+        compression_type = json_op['compression']['compression_type']
+    log.debug("*** compression_type = %s", compression_type)
 
-    # check that the cache is enabled (does the cache directory empty)
+    # check if the cache directory is empty or not
     out = exec_cmd('find %s -type f | wc -l' % (cache_dir))
-    chk_cache_dir = int(get_cmd_output(out))
-    log.debug("Check cache dir content: %s", chk_cache_dir)
-    if chk_cache_dir == 0:
-        log.info("NOTICE: datacache test object not found, inspect if datacache was bypassed or disabled during this check.")
+    cache_dir_file_count = int(get_cmd_output(out))
+    log.debug("*** cache_dir_file_count = %s", cache_dir_file_count)
+
+    if stripe_max_size > 4194304:
+        # ref: qa/suites/rgw/verify/striping$/stripe-greater-than-chunk.yaml : "rgw obj stripe size: 6291456"
+        log.debug("*** NOTICE: Running under 'stripe-greater-than-chunk' permutation - skipping the RGW Datacache test")
         return
+    elif compression_type != 'none':
+        log.debug("*** NOTICE: Running under 'compression' enabled permutation - skipping the RGW Datacache test")
+        return
+    else:
+        log.debug("*** NOTICE: RGW Datacache test will be performed")
+
+    if cache_dir_file_count == 0:
+        log.debug("*** ERROR: Cache directory is empty, RGW Datacache test FAILED")
+        assert(cache_dir_file_count > 0)
 
     # list the files in the cache dir for troubleshooting
-    out = exec_cmd('ls -l %s' % (cache_dir))
+    out = exec_cmd('ls -ltr %s' % (cache_dir))
     # get name of cached object and check if it exists in the cache
-    out = exec_cmd('find %s -type f -name "*" | tail -1' % (cache_dir))
-    cached_object_path = get_cmd_output(out)
+    out = exec_cmd('ls -1tr %s | tail -1' % (cache_dir))
+    cached_object_path = cache_dir + "/" + get_cmd_output(out)
+
+    out = exec_cmd('ls -ltr %s' % (cache_dir))
     log.debug("Path of file in datacache is: %s", cached_object_path)
     out = exec_cmd("sha1sum %s  | awk '{ print $1 }'" % (cached_object_path))
     cached_object_sha1 = get_cmd_output(out)
-    log.debug("SHA1 of file in datacache is: %s", cached_object_sha1)
+    log.debug("*** SHA1 of file in datacache is: %s", cached_object_sha1)
 
     # check to see if the cached object is in Ceph
     out = exec_cmd('rados ls -p default.rgw.buckets.data')
@@ -198,14 +220,16 @@ def main():
 
     out = exec_cmd("dd status=none if=%s of=/dev/stdout bs=1M skip=4 | sha1sum | awk '{ print $1 }'" % (outfile))
     org_object_sha1 = get_cmd_output(out)
-    log.debug("SHA1 of cached part in original file is: %s", org_object_sha1)
+    log.debug("*** SHA1 of cached part in original file is: %s", org_object_sha1)
     out = exec_cmd("dd status=none if=%s of=/dev/stdout bs=1M skip=4 | sha1sum | awk '{ print $1 }'" % (get_file_path))
     download_object_sha1 = get_cmd_output(out)
-    log.debug("SHA1 of cached part in downloaded file is: %s", download_object_sha1)
+    log.debug("*** SHA1 of cached part in downloaded file is: %s", download_object_sha1)
 
-    assert((cached_object_sha1 == org_object_sha1) or (org_object_sha1 == download_object_sha1 and chk_cache_dir > 0))
-    # (cached_object_sha1 == org_object_sha1) test fails if "stripe_size" is not exactly 4MiB(4194304),
-    # in that case fall back to checking the sha1 of the downloaded file
+    log.debug("*** CHECK: cache_dir_file_count: %s > 0  and  (cached_object_sha1: %s == org_object_sha1: %s  or  (stripe_size: %s < 4194304 and org_object_sha1: %s == download_object_sha1: %s)", cache_dir_file_count, cached_object_sha1, org_object_sha1, stripe_size, org_object_sha1, download_object_sha1)
+    assert(cache_dir_file_count > 0  and  (cached_object_sha1 == org_object_sha1  or  (stripe_size < 4194304 and org_object_sha1 == download_object_sha1)))
+    #                                     (cached_object_sha1 == org_object_sha1) test fails if "stripe_size" < 4MiB(4194304),
+    #                                     in that case fall back to checking the sha1 of the downloaded file (https://tracker.ceph.com/issues/71387)
+
     log.debug("RGW Datacache test SUCCESS")
 
     # remove datacache dir
