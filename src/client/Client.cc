@@ -18310,15 +18310,17 @@ int Client::set_fscrypt_policy_v2(int fd, const struct fscrypt_policy_v2& policy
 
 int Client::ll_set_fscrypt_policy_v2(Inode *in, const struct fscrypt_policy_v2& policy)
 {
-  if (in->fscrypt_auth.size() > 0) {
-    struct fscrypt_policy_v2 policy2;
-    in->fscrypt_ctx->convert_to(&policy2);
-    if (memcmp(&policy, &policy2, sizeof(policy)))
-      return -EEXIST;
-  }
-
   if (!in->is_dir())
     return -ENOTDIR;
+
+  if (in->is_fscrypt_enabled()) {
+    struct fscrypt_policy_v2 policy2;
+    in->fscrypt_ctx->convert_to(&policy2);
+    if (memcmp(&policy, &policy2, sizeof(policy))) {
+      return -EEXIST;
+    }
+    return 0;
+  }
 
   if (in->is_dir() && in->dir && in->dir->dentries.size() > 0)
     return -ENOTEMPTY;
