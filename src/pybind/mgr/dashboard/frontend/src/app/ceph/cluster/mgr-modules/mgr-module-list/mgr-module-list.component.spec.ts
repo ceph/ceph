@@ -14,6 +14,7 @@ import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed, PermissionHelper } from '~/testing/unit-test-helper';
 import { MgrModuleDetailsComponent } from '../mgr-module-details/mgr-module-details.component';
 import { MgrModuleListComponent } from './mgr-module-list.component';
+import { SummaryService } from '~/app/shared/services/summary.service';
 
 describe('MgrModuleListComponent', () => {
   let component: MgrModuleListComponent;
@@ -37,6 +38,8 @@ describe('MgrModuleListComponent', () => {
     fixture = TestBed.createComponent(MgrModuleListComponent);
     component = fixture.componentInstance;
     mgrModuleService = TestBed.inject(MgrModuleService);
+    const summaryService = TestBed.inject(SummaryService);
+    spyOn(summaryService, 'startPolling');
   });
 
   it('should create', () => {
@@ -141,6 +144,7 @@ describe('MgrModuleListComponent', () => {
         always_on: false
       });
       component.updateModuleState();
+      tick(mgrModuleService.REFRESH_INTERVAL);
       tick(mgrModuleService.REFRESH_INTERVAL);
       tick(mgrModuleService.REFRESH_INTERVAL);
       expect(mgrModuleService.enable).toHaveBeenCalledWith('foo');
