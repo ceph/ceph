@@ -507,6 +507,11 @@ class Resource:
         _customize = getattr(resource_cls, '_customize_resource', None)
         if _customize is not None:
             resource = _customize(resource)
+            if not resource:
+                raise ValueError(
+                    '_customize_resource must return a valid resource object,'
+                    f' not {resource!r}'
+                )
         return resource
 
 
