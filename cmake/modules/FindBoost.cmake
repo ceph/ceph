@@ -1,9 +1,14 @@
 # Distributed under the OSI-approved BSD 3-Clause License.  See accompanying
-# file Copyright.txt or https://cmake.org/licensing for details.
+# file LICENSE.rst or https://cmake.org/licensing for details.
 
 #[=======================================================================[.rst:
 FindBoost
 ---------
+
+.. versionchanged:: 3.30
+  This module is available only if policy :policy:`CMP0167` is not set to
+  ``NEW``.  Port projects to upstream Boost's ``BoostConfig.cmake`` package
+  configuration file, for which ``find_package(Boost)`` now searches.
 
 Find Boost include dirs and libraries
 
@@ -379,6 +384,18 @@ the Boost CMake package configuration for details on what it provides.
 Set ``Boost_NO_BOOST_CMAKE`` to ``ON``, to disable the search for boost-cmake.
 #]=======================================================================]
 
+if(POLICY CMP0167)
+  cmake_policy(GET CMP0167 _FindBoost_CMP0167)
+  if(_FindBoost_CMP0167 STREQUAL "NEW")
+    message(FATAL_ERROR "The FindBoost module has been removed by policy CMP0167.")
+  endif()
+endif()
+
+if(_FindBoost_testing)
+  set(_FindBoost_included TRUE)
+  return()
+endif()
+
 # The FPHSA helper provides standard way of reporting final search results to
 # the user including the version and component checks.
 include(FindPackageHandleStandardArgs)
@@ -388,6 +405,9 @@ cmake_policy(PUSH)
 cmake_policy(SET CMP0057 NEW) # if IN_LIST
 if(POLICY CMP0102)
   cmake_policy(SET CMP0102 NEW) # if mark_as_advanced(non_cache_var)
+endif()
+if(POLICY CMP0159)
+  cmake_policy(SET CMP0159 NEW) # file(STRINGS) with REGEX updates CMAKE_MATCH_<n>
 endif()
 
 function(_boost_get_existing_target component target_var)
@@ -1380,7 +1400,7 @@ function(_Boost_COMPONENT_DEPENDENCIES component _ret)
       set(_Boost_TIMER_DEPENDENCIES chrono)
       set(_Boost_WAVE_DEPENDENCIES filesystem serialization thread chrono atomic)
       set(_Boost_WSERIALIZATION_DEPENDENCIES serialization)
-    elseif(Boost_VERSION_STRING VERSION_LESS 1.84.0)
+    elseif(Boost_VERSION_STRING VERSION_LESS 1.87.0)
       set(_Boost_CONTRACT_DEPENDENCIES thread chrono)
       set(_Boost_COROUTINE_DEPENDENCIES context)
       set(_Boost_FIBER_DEPENDENCIES context)
@@ -1392,7 +1412,6 @@ function(_Boost_COMPONENT_DEPENDENCIES component _ret)
       set(_Boost_MPI_PYTHON_DEPENDENCIES python${component_python_version} mpi serialization)
       set(_Boost_NUMPY_DEPENDENCIES python${component_python_version})
       set(_Boost_THREAD_DEPENDENCIES chrono atomic)
-      set(_Boost_TIMER_DEPENDENCIES chrono)
       set(_Boost_WAVE_DEPENDENCIES filesystem serialization thread chrono atomic)
       set(_Boost_WSERIALIZATION_DEPENDENCIES serialization)
     else()
@@ -1401,7 +1420,7 @@ function(_Boost_COMPONENT_DEPENDENCIES component _ret)
       set(_Boost_FIBER_DEPENDENCIES context)
       set(_Boost_IOSTREAMS_DEPENDENCIES regex)
       set(_Boost_JSON_DEPENDENCIES container)
-      set(_Boost_LOG_DEPENDENCIES log_setup filesystem thread regex chrono atomic)
+      set(_Boost_LOG_DEPENDENCIES log_setup filesystem thread regex atomic)
       set(_Boost_MATH_DEPENDENCIES math_c99 math_c99f math_c99l math_tr1 math_tr1f math_tr1l)
       set(_Boost_MPI_DEPENDENCIES serialization)
       set(_Boost_MPI_PYTHON_DEPENDENCIES python${component_python_version} mpi serialization)
