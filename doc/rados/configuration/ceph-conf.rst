@@ -25,7 +25,7 @@ sometimes change between releases. For this reason, it is best to review the
 version of this documentation that applies to your Ceph release.  When updating
 to a new Ceph release, also review the release notes for important changes.
 
-Option names
+Option Names
 ============
 
 Each Ceph configuration option has a unique name that consists of words
@@ -44,7 +44,7 @@ For the sake of clarity and
 convenience, we suggest that you consistently use underscores, as we do
 throughout this documentation.
 
-Config sources
+Config Sources
 ==============
 
 Each Ceph daemon and client pulls configuration option values from one or more
@@ -68,7 +68,7 @@ daemon or process will commence.
 
 .. _bootstrap-options:
 
-Bootstrap options
+Bootstrap Options
 -----------------
 
 Bootstrap options enable each Ceph daemon
@@ -96,7 +96,7 @@ option that identifies the addresses of the cluster's Monitors. When
 configuration file can be avoided entirely.
 
 
-Skipping monitor config
+Skipping Monitor Config
 -----------------------
 
 The option ``--no-mon-config`` can be passed to any command in order to skip
@@ -107,7 +107,7 @@ but the Monitor quorum is down.
 
 .. _ceph-conf-file:
 
-Configuration sections
+Configuration Sections
 ======================
 
 Each configuration option associated with a single process or daemon
@@ -249,7 +249,7 @@ Ceph supports the following metavariables:
    :example: ``/var/run/ceph/$cluster-$name-$pid.asok``
 
 
-Ceph configuration file
+Ceph Configuration File
 =======================
 
 On startup, Ceph processes search for a configuration file in the
@@ -279,11 +279,11 @@ text after a pound sign (#) or a semi-colon semicolon (;). For example:
 
 .. _ceph-conf-settings:
 
-Config file section names
+Config File Section Names
 -------------------------
 
 The configuration file is divided into sections. Each section must begin with a
-valid configuration section name (see `Configuration sections`_, above) within
+valid configuration section name (see :ref:`ceph-conf-file`, above) within
 square brackets. For example:
 
 .. code-block:: ini
@@ -300,18 +300,20 @@ square brackets. For example:
     [osd.2]
     debug_ms = 10
 
-Config file option values
+Config File Option Values
 -------------------------
 
 The value of a configuration option is a string. If the string is too long to
 fit on a single line, you may place a backslash (``\``) at the end of the line
 and the backslash will act as a line continuation marker. In such a case, the
 value of the option will be the string after ``=`` in the current line,
-combined with the string in the next line. Here is an example::
+combined with the string in the next line. Here is an example:
 
-  [global]
-  foo = long long ago\
-  long ago
+.. code-block:: ini
+
+    [global]
+    foo = long long ago\
+    long ago
 
 In this example, the value of the "``foo``" option is "``long long ago long
 ago``".  Be careful to not place a backslash at the end of the final line
@@ -401,7 +403,7 @@ Each configuration option specifies one of the following types for its value:
    A set of IPv4 or IPv6 addresses separated by commas (``,``). The set of addresses can be optionally delimited
    with ``[`` and ``]``.
 
-   :example: ``[v1:1.2.3.4:567,v2:1.2.3.4:568]``, ``v1:1.2.3.4:567,v1:1.2.3.14:567``  ``[2409:8a1e:8fb6:aa20:1260:4bff:fe92:18f5::567], [2409:8a1e:8fb6:aa20:1260:4bff:fe92:18f5::568]``
+   :example: ``[v1:1.2.3.4:567,v2:1.2.3.4:568]``, ``v1:1.2.3.4:567,v1:1.2.3.14:567``, ``[2409:8a1e:8fb6:aa20:1260:4bff:fe92:18f5::567], [2409:8a1e:8fb6:aa20:1260:4bff:fe92:18f5::568]``
 
 .. describe:: uuid
 
@@ -453,7 +455,7 @@ and to fetch additional configuration information. In most cases this applies on
 records<mon-dns-lookup>` if your DNS infrastructure is very robust and
 under your control.
 
-Sections and masks
+Sections and Masks
 ------------------
 
 Configuration options stored by the Monitors can be stored in a global section,
@@ -620,7 +622,7 @@ Use the ``ceph config set`` command to update configuration options. For
 example, to enable the most verbose debug log level on a specific OSD, run a
 command of the following form:
 
-.. prompt:: bash $
+.. prompt:: bash #
 
    ceph config set osd.1701 debug_ms 20
 
@@ -632,7 +634,7 @@ command of the following form:
 
 .. note:: Log subsystem levels range from 0 to 20.
 
-Override values
+Override Values
 ---------------
 
 Runtime option values can be set temporarily by using the ``ceph tell``
@@ -648,13 +650,13 @@ Override values can be set in two ways:
 #. From any host, send a message to a daemon with a command of the following
    form:
 
-   .. prompt:: bash $
+   .. prompt:: bash #
 
       ceph tell <name> config set <option> <value>
 
    For example:
 
-   .. prompt:: bash $
+   .. prompt:: bash #
 
       ceph tell osd.1701 config set debug_osd 20
 
@@ -662,20 +664,20 @@ Override values can be set in two ways:
    For example, to adjust the debug level on all OSD daemons, run a command of
    the following form:
 
-   .. prompt:: bash $
+   .. prompt:: bash #
 
       ceph tell osd.* config set debug_osd 20
 
 #. On the host where a specific daemon is running, connect to the daemon via a socket
    in ``/var/run/ceph`` by running a command of the following form:
 
-   .. prompt:: bash $
+   .. prompt:: bash #
 
       ceph daemon <name> config set <option> <value>
 
    For example:
 
-   .. prompt:: bash $
+   .. prompt:: bash #
 
       ceph daemon osd.4 config set debug_osd 20
 
@@ -683,27 +685,27 @@ Override values can be set in two ways:
    values are shown to have a source of ``override``.
 
 
-Viewing runtime settings
+Viewing Runtime Settings
 ========================
 
 You can see the current settings specified for a running daemon with the ``ceph
 config show`` command. For example, to see the (non-default) settings for the
 daemon ``osd.1701``, run the following command:
 
-.. prompt:: bash $
+.. prompt:: bash #
 
    ceph config show osd.1701
 
 To see only the value of a single option for a specific daemon, run a command of following form:
 
-.. prompt:: bash $
+.. prompt:: bash #
 
    ceph config show osd.1701 debug_osd
 
 To see all settings for a specific daemon (including the settings with default
 values), run a command of the following form:
 
-.. prompt:: bash $
+.. prompt:: bash #
 
    ceph config show-with-defaults osd.1701
 
@@ -713,7 +715,7 @@ current settings for ``osd.1701``, run the following command on the host
 where ``osd.1701`` runs. The host whre a daemon runs can be determined with
 the ``ceph osd find`` command or ``ceph orch ps`` commands.
 
-.. prompt:: bash $
+.. prompt:: bash #
 
    ceph daemon osd.1701 config show
 
@@ -721,18 +723,18 @@ To see non-default settings and to see the source of each value came (for exampl
 a config file, the central Monitor DB, or an override), run a command of the
 following form:
 
-.. prompt:: bash $
+.. prompt:: bash #
 
    ceph daemon osd.1701 config diff
 
 To see the value of a single option, run a command of the following form:
 
-.. prompt:: bash $
+.. prompt:: bash #
 
    ceph daemon osd.1701 config get debug_osd
 
 
-Changes introduced in Octopus
+Changes Introduced in Octopus
 =============================
 
 The Octopus release changed the way that the configuration file is parsed.
@@ -746,7 +748,7 @@ These changes are as follows:
     warning line 42: 'foo' in section 'bar' redefined
 - Prior to Octopus, options containing invalid UTF-8 characters were ignored
   with warning messages. In Octopus and later releases they are treated as fatal errors.
-- The backslash character ``\`` is interpreted as aline-continuation marker that
+- The backslash character ``\`` is interpreted as a line-continuation marker that
   combines the next line with the current one. Prior to Octopus, there was a
   requirement that any end-of-line backslash be followed by a non-empty line.
   In Octopus and later releases, an empty line following a backslash is allowed.
