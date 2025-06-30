@@ -51,11 +51,11 @@ public:
                std::list<rgw_bi_log_entry>& result,
                bool *truncated) = 0;
 
-  virtual int get_log_status(const DoutPrefixProvider *dpp,
+  virtual int log_get_max_marker(const DoutPrefixProvider *dpp,
                      const RGWBucketInfo& bucket_info,
-                     const rgw::bucket_log_layout_generation& log_layout,
-                     int shard_id,
-                     std::map<int, std::string> *markers,
+                     const std::map<int, rgw_bucket_dir_header>& headers,
+                     const int shard_id,
+                     std::map<int, std::string> *max_markers,
                      optional_yield y) = 0;
 };
 
@@ -93,11 +93,11 @@ public:
                std::list<rgw_bi_log_entry>& result,
                bool *truncated) override;
 
-  int get_log_status(const DoutPrefixProvider *dpp,
+  int log_get_max_marker(const DoutPrefixProvider *dpp,
                      const RGWBucketInfo& bucket_info,
-                     const rgw::bucket_log_layout_generation& log_layout,
-                     int shard_id,
-                     std::map<int, std::string> *markers,
+                     const std::map<int, rgw_bucket_dir_header>& headers,
+                     const int shard_id,
+                     std::map<int, std::string> *max_markers,
                      optional_yield y) override;
 };
 
@@ -115,6 +115,7 @@ class RGWSI_BILog_RADOS_FIFO : public RGWSI_BILog_RADOS
   } svc;
 
   std::unique_ptr<rgw::cls::fifo::FIFO> _open_fifo(
+    const DoutPrefixProvider *dpp,
     const RGWBucketInfo& bucket_info);
 
   friend struct BILogUpdateBatchFIFO;
@@ -147,10 +148,10 @@ public:
                std::list<rgw_bi_log_entry>& result,
                bool *truncated) override;
 
-  int get_log_status(const DoutPrefixProvider *dpp,
-                     const RGWBucketInfo& bucket_info,
-                     const rgw::bucket_log_layout_generation& log_layout,
-                     int shard_id,
-                     std::map<int, std::string> *markers,
-                     optional_yield y) override;
+  int log_get_max_marker(const DoutPrefixProvider *dpp,
+                         const RGWBucketInfo& bucket_info,
+                         const std::map<int, rgw_bucket_dir_header>& headers,
+                         const int shard_id,
+                         std::map<int, std::string>* max_markers,
+                         optional_yield y) override;
 };

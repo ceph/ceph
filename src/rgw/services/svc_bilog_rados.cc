@@ -352,30 +352,18 @@ int RGWSI_BILog_RADOS_InIndex::log_list(const DoutPrefixProvider *dpp, optional_
   return 0;
 }
 
-int RGWSI_BILog_RADOS_InIndex::get_log_status(const DoutPrefixProvider *dpp,
+int RGWSI_BILog_RADOS_InIndex::log_get_max_marker(const DoutPrefixProvider *dpp,
                                       const RGWBucketInfo& bucket_info,
-				      const rgw::bucket_log_layout_generation& log_layout, 
-                                      int shard_id,
-                                      map<int, std::string> *markers,
+                                      const std::map<int, rgw_bucket_dir_header>& headers,
+                                      const int shard_id,
+                                      std::map<int, std::string> *max_markers,
 				      optional_yield y)
 {
-  vector<rgw_bucket_dir_header> headers;
-  map<int, string> bucket_instance_ids;
-  const auto& current_index = rgw::log_to_index_layout(log_layout);
-  int r = svc.bi->cls_bucket_head(dpp, bucket_info, current_index, shard_id, &headers, &bucket_instance_ids, y);
-  if (r < 0)
-    return r;
-
-  ceph_assert(headers.size() == bucket_instance_ids.size());
-
-  auto iter = headers.begin();
-  map<int, string>::iterator viter = bucket_instance_ids.begin();
-
-  for(; iter != headers.end(); ++iter, ++viter) {
+ for (const auto& [ header_shard_id, header ] : headers) {
     if (shard_id >= 0) {
-      (*markers)[shard_id] = iter->max_marker;
+      (*max_markers)[shard_id] = header.max_marker;
     } else {
-      (*markers)[viter->first] = iter->max_marker;
+      (*max_markers)[header_shard_id] = header.max_marker;
     }
   }
 
@@ -403,7 +391,7 @@ int RGWSI_BILog_RADOS_FIFO::log_trim(const DoutPrefixProvider *dpp, optional_yie
   }
   ceph_assert(shard_id == 0 || shard_id == -1);
 
-  auto fifo = _open_fifo(bucket_info);
+  auto fifo = _open_fifo(dpp, bucket_info);
   if (!fifo) {
     lderr(cct) << __PRETTY_FUNCTION__
                << ": unable to open FIFO: " << ""//get_oid(index)
@@ -445,7 +433,7 @@ int RGWSI_BILog_RADOS_FIFO::log_stop(const DoutPrefixProvider *dpp, optional_yie
 }
 
 std::unique_ptr<rgw::cls::fifo::FIFO>
-RGWSI_BILog_RADOS_FIFO::_open_fifo(const RGWBucketInfo& bucket_info)
+RGWSI_BILog_RADOS_FIFO::_open_fifo(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info)
 {
   librados::IoCtx index_pool;
   std::string bucket_oid;
@@ -485,7 +473,7 @@ int RGWSI_BILog_RADOS_FIFO::log_list(const DoutPrefixProvider *dpp, optional_yie
     ceph_assert(shard_id == 0 || shard_id == -1);
   }
 
-  auto fifo = _open_fifo(bucket_info);
+  auto fifo = _open_fifo(dpp, bucket_info);
   if (!fifo) {
     lderr(cct) << __PRETTY_FUNCTION__
                << ": unable to open FIFO: " << ""//get_oid(index)
@@ -533,12 +521,12 @@ int RGWSI_BILog_RADOS_FIFO::log_list(const DoutPrefixProvider *dpp, optional_yie
   return 0;
 }
 
-int RGWSI_BILog_RADOS_FIFO::get_log_status(const DoutPrefixProvider *dpp,
-                     const RGWBucketInfo& bucket_info,
-                     const rgw::bucket_log_layout_generation& log_layout,
-                     int shard_id,
-                     std::map<int, std::string> *markers,
-                     optional_yield y)
+int RGWSI_BILog_RADOS_FIFO::log_get_max_marker(const DoutPrefixProvider *dpp,
+                                               const RGWBucketInfo& bucket_info,
+                                               const std::map<int, rgw_bucket_dir_header>& headers,
+                                               const int shard_id,
+                                               std::map<int, std::string>* max_markers,
+                                               optional_yield y)
 {
   if (shard_id > 1) {
     // the initial implementation does support single shard only.
@@ -546,7 +534,7 @@ int RGWSI_BILog_RADOS_FIFO::get_log_status(const DoutPrefixProvider *dpp,
   } else {
     ceph_assert(shard_id == 0 || shard_id == -1);
   }
-  auto fifo = _open_fifo(bucket_info);
+  auto fifo = _open_fifo(dpp, bucket_info);
   if (!fifo) {
     lderr(cct) << __PRETTY_FUNCTION__
                << ": unable to open FIFO: " << ""//get_oid(index)
@@ -572,7 +560,7 @@ int RGWSI_BILog_RADOS_FIFO::get_log_status(const DoutPrefixProvider *dpp,
                << dendl;
     return ret;
   }
-  (*markers)[0] = rgw::cls::fifo::marker{
+  (*max_markers)[0] = rgw::cls::fifo::marker{
     head_part_num,
     head_part_header.last_ofs
   }.to_string();

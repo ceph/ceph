@@ -84,6 +84,7 @@ extern "C" {
 #include "services/svc_sync_modules.h"
 #include "services/svc_cls.h"
 #include "services/svc_bilog_rados.h"
+#include "services/svc_bi_rados.h"
 #include "services/svc_mdlog.h"
 #include "services/svc_user.h"
 #include "services/svc_zone.h"
@@ -10931,7 +10932,7 @@ next:
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;
     }
-    map<int, string> markers;
+
     const auto& logs = bucket->get_info().layout.logs;
     auto log_layout = std::reference_wrapper{logs.back()};
     if (gen) {
@@ -10942,13 +10943,25 @@ next:
       }
       log_layout = *i;
     }
-
-    ret = static_cast<rgw::sal::RadosStore*>(driver)->svc()->bilog_rados->get_log_status(dpp(), bucket->get_info(), log_layout, shard_id,
-						    &markers, null_yield);
+    std::map<int, string> markers;
+    {
+    std::map<int, rgw_bucket_dir_header> headers;
+    ret = static_cast<rgw::sal::RadosStore*>(driver)->svc()->bi_rados->get_dir_headers(dpp(), bucket->get_info(),
+                                                                                          &headers, log_layout, shard_id,
+                                                                                          null_yield);
     if (ret < 0) {
-      cerr << "ERROR: get_bi_log_status(): " << cpp_strerror(-ret) << std::endl;
-      return -ret;
+      cerr << "ERROR: get_dir_headers(): " << cpp_strerror(-ret) << std::endl;
+      return ret;
     }
+
+    ret = static_cast<rgw::sal::RadosStore*>(driver)->svc()->bilog_rados->log_get_max_marker(dpp(), bucket->get_info(), headers,
+                                                        shard_id, &markers, null_yield);
+    if (ret < 0) {
+      cerr << "ERROR: log_get_max_marker(): " << cpp_strerror(-ret) << std::endl;
+      return -ret;
+      }
+    }
+
     formatter->open_object_section("entries");
     encode_json("markers", markers, formatter.get());
     formatter->dump_string("current_time",

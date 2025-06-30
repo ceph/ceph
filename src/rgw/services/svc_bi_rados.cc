@@ -354,17 +354,15 @@ struct IndexHeadReader : rgwrados::shard_io::RadosReader {
   }
 };
 
-int RGWSI_BucketIndex_RADOS::cls_bucket_head(const DoutPrefixProvider *dpp,
+int RGWSI_BucketIndex_RADOS::get_dir_headers(const DoutPrefixProvider *dpp,
                                              const RGWBucketInfo& bucket_info,
                                              const rgw::bucket_index_layout_generation& idx_layout,
-                                             int shard_id,
-                                             vector<rgw_bucket_dir_header> *headers,
-                                             map<int, string> *bucket_instance_ids,
+                                             int shard_id, std::map<int, rgw_bucket_dir_header>* headers,
                                              optional_yield y)
 {
   librados::IoCtx index_pool;
   map<int, string> oids;
-  int r = open_bucket_index(dpp, bucket_info, shard_id, idx_layout, &index_pool, &oids, bucket_instance_ids);
+  int r = open_bucket_index(dpp, bucket_info, shard_id, idx_layout, &index_pool, &oids, nullptr);
   if (r < 0)
     return r;
 
@@ -395,12 +393,12 @@ int RGWSI_BucketIndex_RADOS::cls_bucket_head(const DoutPrefixProvider *dpp,
 
   try {
     std::transform(buffers.begin(), buffers.end(),
-                   std::back_inserter(*headers),
+                   std::inserter(*headers, headers->end()),
                    [] (const auto& kv) {
-                     rgw_bucket_dir_header header;
-                     auto p = kv.second.cbegin();
-                     decode(header, p);
-                     return header;
+                      rgw_bucket_dir_header header;
+                      auto p = kv.second.cbegin();
+                      decode(header, p);
+                      return std::pair<int, rgw_bucket_dir_header>(kv.first, header);
                    });
   } catch (const ceph::buffer::error&) {
     return -EIO;
@@ -562,10 +560,10 @@ int RGWSI_BucketIndex_RADOS::read_stats(const DoutPrefixProvider *dpp,
                                         RGWBucketEnt *result,
                                         optional_yield y)
 {
-  vector<rgw_bucket_dir_header> headers;
+  std::map<int, rgw_bucket_dir_header> headers;
 
   result->bucket = bucket_info.bucket;
-  int r = cls_bucket_head(dpp, bucket_info, bucket_info.layout.current_index, RGW_NO_SHARD, &headers, nullptr, y);
+  int r = get_dir_headers(dpp, bucket_info, bucket_info.layout.current_index, RGW_NO_SHARD, &headers, y);
   if (r < 0) {
     return r;
   }
@@ -574,12 +572,11 @@ int RGWSI_BucketIndex_RADOS::read_stats(const DoutPrefixProvider *dpp,
   result->size = 0; 
   result->size_rounded = 0; 
 
-  auto hiter = headers.begin();
-  for (; hiter != headers.end(); ++hiter) {
+  for ([[maybe_unused]] const auto& [ header_shard_id, header ] : headers) {
     RGWObjCategory category = RGWObjCategory::Main;
-    auto iter = (hiter->stats).find(category);
-    if (iter != hiter->stats.end()) {
-      struct rgw_bucket_category_stats& stats = iter->second;
+    if (const auto iter = header.stats.find(category);
+        iter != std::end(header.stats)) {
+      const struct rgw_bucket_category_stats& stats = iter->second;
       result->count += stats.num_entries;
       result->size += stats.total_size;
       result->size_rounded += stats.total_size_rounded;

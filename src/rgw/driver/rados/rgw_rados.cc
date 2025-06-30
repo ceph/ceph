@@ -9911,35 +9911,30 @@ int RGWRados::get_bucket_stats_and_bilog_meta(const DoutPrefixProvider *dpp, opt
 			       map<RGWObjCategory, RGWStorageStats>& stats,
 			       string *max_marker, bool *syncstopped)
 {
-  vector<rgw_bucket_dir_header> headers;
-  map<int, string> bucket_instance_ids;
-  int r = svc.bi_rados->cls_bucket_head(dpp, bucket_info, idx_layout, shard_id,
-                                        &headers, &bucket_instance_ids, y);
+  std::map<int, rgw_bucket_dir_header> headers;
+  int r = svc.bi_rados-> dpp, bucket_info, idx_layout, shard_id,
+                                        &headers, y);
   if (r < 0) {
     return r;
   }
 
-  ceph_assert(headers.size() == bucket_instance_ids.size());
-
-  auto iter = headers.begin();
-  map<int, string>::iterator viter = bucket_instance_ids.begin();
   BucketIndexShardsManager ver_mgr;
   BucketIndexShardsManager master_ver_mgr;
   BucketIndexShardsManager marker_mgr;
   char buf[64];
-  for(; iter != headers.end(); ++iter, ++viter) {
-    accumulate_raw_stats(*iter, stats);
-    snprintf(buf, sizeof(buf), "%lu", (unsigned long)iter->ver);
-    ver_mgr.add(viter->first, string(buf));
-    snprintf(buf, sizeof(buf), "%lu", (unsigned long)iter->master_ver);
-    master_ver_mgr.add(viter->first, string(buf));
+  for (const auto& [header_shard_id, header ] : headers) {
+    accumulate_raw_stats(header, stats);
+    snprintf(buf, sizeof(buf), "%lu", (unsigned long)header.ver);
+    ver_mgr.add(header_shard_id, string(buf));
+    snprintf(buf, sizeof(buf), "%lu", (unsigned long)header.master_ver);
+    master_ver_mgr.add(header_shard_id, string(buf));
     if (shard_id >= 0) {
-      *max_marker = iter->max_marker;
+      *max_marker = header.max_marker;
     } else {
-      marker_mgr.add(viter->first, iter->max_marker);
+      marker_mgr.add(header_shard_id, header.max_marker);
     }
     if (syncstopped != NULL)
-      *syncstopped = iter->syncstopped;
+      *syncstopped = header.syncstopped;
   }
   ver_mgr.to_string(bucket_ver);
   master_ver_mgr.to_string(master_ver);
