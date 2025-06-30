@@ -1405,7 +1405,8 @@ struct req_state : DoutPrefixProvider {
 
   rgw::IAM::Environment env;
   boost::optional<rgw::IAM::Policy> iam_policy;
-  boost::optional<PublicAccessBlockConfiguration> public_access_block;
+  // PublicAccessBlock configuration that applies to this request
+  PublicAccessBlockConfiguration public_access_block;
   rgw::s3::ObjectOwnership bucket_object_ownership = rgw::s3::ObjectOwnership::ObjectWriter;
   std::vector<rgw::IAM::Policy> iam_identity_policies;
 
@@ -1725,7 +1726,7 @@ struct perm_state_base {
   rgw::s3::ObjectOwnership bucket_object_ownership;
   int perm_mask;
   bool defer_to_bucket_acls;
-  boost::optional<PublicAccessBlockConfiguration> public_access_block;
+  PublicAccessBlockConfiguration public_access_block;
 
   perm_state_base(CephContext *_cct,
                   const rgw::IAM::Environment& _env,
@@ -1734,7 +1735,7 @@ struct perm_state_base {
                   rgw::s3::ObjectOwnership bucket_object_ownership,
                   int _perm_mask,
                   bool _defer_to_bucket_acls,
-                  boost::optional<PublicAccessBlockConfiguration> _public_access_block = boost::none) :
+                  PublicAccessBlockConfiguration _public_access_block = {}) :
                                                 cct(_cct),
                                                 env(_env),
                                                 identity(_identity),
