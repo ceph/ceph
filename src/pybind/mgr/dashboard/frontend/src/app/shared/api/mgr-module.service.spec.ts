@@ -10,6 +10,7 @@ import { MgrModuleListComponent } from '~/app/ceph/cluster/mgr-modules/mgr-modul
 import { ToastrModule } from 'ngx-toastr';
 import { SharedModule } from '../shared.module';
 import { BlockUIService } from 'ng-block-ui';
+import { SummaryService } from '../services/summary.service';
 
 describe('MgrModuleService', () => {
   let service: MgrModuleService;
@@ -88,6 +89,8 @@ describe('MgrModuleService', () => {
       spyOn(notificationService, 'suspendToasties');
       spyOn(blockUIService, 'start');
       spyOn(blockUIService, 'stop');
+      const summaryService = TestBed.inject(SummaryService);
+      spyOn(summaryService, 'startPolling');
     });
 
     it('should enable module', fakeAsync(() => {
@@ -100,6 +103,7 @@ describe('MgrModuleService', () => {
       });
       const selected = component.selection.first();
       service.updateModuleState(selected.name, selected.enabled);
+      tick(service.REFRESH_INTERVAL);
       tick(service.REFRESH_INTERVAL);
       tick(service.REFRESH_INTERVAL);
       expect(service.enable).toHaveBeenCalledWith('foo');
