@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
 set -ex
 
-# ./test.sh                       # Default: parallel mode, 30-min timeout
-# ./test.sh --serial              # Serial mode, 30-min timeout
-# ./test.sh --crimson             # Crimson mode, 30-min timeout
-# ./test.sh --timeout 3600        # Parallel mode, 60-min timeout
-# ./test.sh --serial --timeout 60 # Serial mode, 1-min timeout
-# ./test.sh --crimson --timeout 0 # Crimson mode, no timeout
+# ./test.sh                               # Default: parallel mode, 30-min timeout
+# ./test.sh --serial                      # Serial mode, 30-min timeout
+# ./test.sh --crimson                     # Crimson mode, 30-min timeout
+# ./test.sh --timeout 3600                # Parallel mode, 60-min timeout
+# ./test.sh --serial --timeout 60         # Serial mode, 1-min timeout
+# ./test.sh --crimson --timeout 0         # Crimson mode, no timeout
+# ../qa/workunits/rados/test.sh --vstart  # Run tests locally from `ceph/build` dir
 
 # First argument must be either --serial or --crimson or nothing
 parallel=1
@@ -36,6 +37,9 @@ fi
 color="" # Default color setting for gtest in terminal (-t)
 [ -t 1 ] && color="--gtest_color=yes"
 
+vstart=0
+[ "$1" = "--vstart" ] && vstart=1
+
 function cleanup() {
     pkill -P $$ || true
 }
@@ -46,6 +50,44 @@ mkdir -p $GTEST_OUTPUT_DIR
 
 declare -A pids
 
+
+# If in vstart mode, compile all test targets
+if [ $vstart -eq 1 ]; then
+    for f in \
+        api_aio api_aio_pp \
+	api_io api_io_pp \
+	api_asio api_list \
+	api_lock api_lock_pp \
+	api_misc api_misc_pp \
+	api_tier_pp \
+	api_pool \
+	api_snapshots api_snapshots_pp \
+	api_stat api_stat_pp \
+	api_watch_notify api_watch_notify_pp \
+	api_cmd api_cmd_pp \
+	api_service api_service_pp \
+	api_c_write_operations \
+	api_c_read_operations \
+	list_parallel \
+	open_pools_parallel \
+	delete_pools_parallel
+    do
+        ninja -j$(nproc) ceph_test_rados_$f
+    done
+
+    for f in \
+        cls cmd handler_error io ec_io list ec_list misc pool read_operations snapshots \
+        watch_notify write_operations
+    do
+        ninja -j$(nproc) ceph_test_neorados_$f
+    done
+
+    echo "Setting up a test cluster..."
+    ninja -j$(nproc) vstart
+    ../src/vstart.sh --debug --new -x --localhost --bluestore
+fi
+
+# Running all tests
 for f in \
     api_aio api_aio_pp \
     api_io api_io_pp \
@@ -65,15 +107,19 @@ for f in \
     open_pools_parallel \
     delete_pools_parallel
 do
+    executable="ceph_test_rados_$f"
+    if [ $vstart -eq 1 ]; then
+        executable="./bin/$executable"
+    fi
     if [ $parallel -eq 1 ]; then
 	r=`printf '%25s' $f`
 	ff=`echo $f | awk '{print $1}'`
-	bash -o pipefail -exc "ceph_test_rados_$f --gtest_output=xml:$GTEST_OUTPUT_DIR/$f.xml $color 2>&1 | tee ceph_test_rados_$ff.log | sed \"s/^/$r: /\"" &
+	bash -o pipefail -exc "$executable --gtest_output=xml:$GTEST_OUTPUT_DIR/$f.xml $color 2>&1 | tee ceph_test_rados_$ff.log | sed \"s/^/$r: /\"" &
 	pid=$!
 	echo "test $f on pid $pid"
 	pids[$f]=$pid
     else
-	ceph_test_rados_$f
+	$executable
     fi
 done
 
@@ -81,10 +127,14 @@ for f in \
     cls cmd handler_error io ec_io list ec_list misc pool read_operations snapshots \
     watch_notify write_operations
 do
+    executable="ceph_test_neorados_$f"
+    if [ $vstart -eq 1 ]; then
+        executable="./bin/$executable"
+    fi
     if [ $parallel -eq 1 ]; then
 	r=`printf '%25s' $f`
 	ff=`echo $f | awk '{print $1}'`
-	bash -o pipefail -exc "ceph_test_neorados_$f --gtest_output=xml:$GTEST_OUTPUT_DIR/neorados_$f.xml $color 2>&1 | tee ceph_test_neorados_$ff.log | sed \"s/^/$r: /\"" &
+	bash -o pipefail -exc "$executable --gtest_output=xml:$GTEST_OUTPUT_DIR/neorados_$f.xml $color 2>&1 | tee ceph_test_neorados_$ff.log | sed \"s/^/$r: /\"" &
 	pid=$!
 	echo "test $f on pid $pid"
 	pids[$f]=$pid
@@ -95,7 +145,7 @@ do
 			continue
 		fi
 	fi
-	ceph_test_neorados_$f
+	$executable
     fi
 done
 
@@ -155,6 +205,11 @@ EOF
         ret=1
     }
 done
+fi
+
+if [ $vstart -eq 1 ]; then
+    echo "Shutting down test cluster..."
+    ../src/stop.sh
 fi
 
 exit $ret
