@@ -20,6 +20,11 @@ from ..schedule import DaemonPlacement
 logger = logging.getLogger(__name__)
 
 
+def _add_cfg(cfg_dict: Dict[str, Any], key: str, value: Any) -> None:
+    if value:
+        cfg_dict[key] = value
+
+
 @register_cephadm_service
 class SMBService(CephService):
     TYPE = 'smb'
@@ -130,19 +135,13 @@ class SMBService(CephService):
         config_blobs['cluster_id'] = smb_spec.cluster_id
         config_blobs['features'] = smb_spec.features
         config_blobs['config_uri'] = smb_spec.config_uri
-        if smb_spec.join_sources:
-            config_blobs['join_sources'] = smb_spec.join_sources
-        if smb_spec.user_sources:
-            config_blobs['user_sources'] = smb_spec.user_sources
-        if smb_spec.custom_dns:
-            config_blobs['custom_dns'] = smb_spec.custom_dns
-        if smb_spec.cluster_meta_uri:
-            config_blobs['cluster_meta_uri'] = smb_spec.cluster_meta_uri
-        if smb_spec.cluster_lock_uri:
-            config_blobs['cluster_lock_uri'] = smb_spec.cluster_lock_uri
+        _add_cfg(config_blobs, 'join_sources', smb_spec.join_sources)
+        _add_cfg(config_blobs, 'user_sources', smb_spec.user_sources)
+        _add_cfg(config_blobs, 'custom_dns', smb_spec.custom_dns)
+        _add_cfg(config_blobs, 'cluster_meta_uri', smb_spec.cluster_meta_uri)
+        _add_cfg(config_blobs, 'cluster_lock_uri', smb_spec.cluster_lock_uri)
         cluster_public_addrs = smb_spec.strict_cluster_ip_specs()
-        if cluster_public_addrs:
-            config_blobs['cluster_public_addrs'] = cluster_public_addrs
+        _add_cfg(config_blobs, 'cluster_public_addrs', cluster_public_addrs)
         ceph_users = smb_spec.include_ceph_users or []
         config_blobs.update(
             self._ceph_config_and_keyring_for(
