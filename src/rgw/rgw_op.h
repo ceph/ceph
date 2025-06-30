@@ -67,6 +67,7 @@ class RGWOp;
 class RGWRados;
 class RGWMultiCompleteUpload;
 class RGWPutObj_Torrent;
+class RGWMultiDelObject;
 
 namespace rgw::auth::registry { class StrategyRegistry; }
 
@@ -1532,6 +1533,10 @@ protected:
   bool multipart_delete;
   std::string version_id;
   ceph::real_time unmod_since; /* if unmodified since */
+  ceph::real_time last_mod_time_match; /* if modified time match */
+  uint64_t size_match = 0; /* if size match */
+  const char *if_match; /* if etag match */
+  const char *if_nomatch; /* if size doesn't match */
   bool no_precondition_error;
   std::unique_ptr<RGWBulkDelete::Deleter> deleter;
   bool bypass_perm;
@@ -2172,7 +2177,7 @@ class RGWDeleteMultiObj : public RGWOp {
    * Handles the deletion of an individual object and uses
    * set_partial_response to record the outcome.
    */
-  void handle_individual_object(const rgw_obj_key& o, optional_yield y);
+  void handle_individual_object(const RGWMultiDelObject& object, optional_yield y);
 
 protected:
   std::vector<delete_multi_obj_entry> ops_log_entries;
