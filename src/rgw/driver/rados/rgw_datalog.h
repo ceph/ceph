@@ -206,7 +206,7 @@ class DataLogBackends final
   std::mutex m;
   RGWDataChangesLog& datalog;
 
-  DataLogBackends(neorados::RADOS& rados,
+  DataLogBackends(neorados::RADOS rados,
 		  const neorados::Object oid,
 		  const neorados::IOContext& loc,
 		  fu2::unique_function<std::string(
@@ -549,7 +549,7 @@ public:
 
 class RGWDataChangesBE : public boost::intrusive_ref_counter<RGWDataChangesBE> {
 protected:
-  neorados::RADOS& r;
+  neorados::RADOS r;
   neorados::IOContext loc;
   RGWDataChangesLog& datalog;
 
@@ -564,7 +564,7 @@ public:
 
   const uint64_t gen_id;
 
-  RGWDataChangesBE(neorados::RADOS& r,
+  RGWDataChangesBE(neorados::RADOS r,
 		   neorados::IOContext loc,
 		   RGWDataChangesLog& datalog,
 		   uint64_t gen_id)
