@@ -335,9 +335,8 @@ auto SysReqApplier<T>::load_acct_info(const DoutPrefixProvider* dpp) const -> st
         effective_tenant = uid->tenant;
       } else if (const auto* id = std::get_if<rgw_account_id>(&effective_owner->id); id) {
         RGWAccountInfo info;
-        rgw::sal::Attrs attrs;
         RGWObjVersionTracker objv;
-        int r = driver->load_account_by_id(dpp, null_yield, *id, info, attrs, objv);
+        int r = driver->load_account_by_id(dpp, null_yield, *id, info, objv);
         if (r < 0) {
           throw -EACCES;
         }

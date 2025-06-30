@@ -1639,9 +1639,8 @@ int get_owner_quota_info(const DoutPrefixProvider* dpp,
       },
       [&] (const rgw_account_id& account_id) {
         RGWAccountInfo info;
-        rgw::sal::Attrs attrs; // ignored
         RGWObjVersionTracker objv; // ignored
-        int r = driver->load_account_by_id(dpp, y, account_id, info, attrs, objv);
+        int r = driver->load_account_by_id(dpp, y, account_id, info, objv);
         if (r >= 0) {
           quotas.user_quota = info.quota;
           quotas.bucket_quota = info.bucket_quota;
@@ -3387,10 +3386,9 @@ static int get_account_max_buckets(const DoutPrefixProvider* dpp,
                                    int32_t& max_buckets)
 {
   RGWAccountInfo info;
-  rgw::sal::Attrs attrs;
   RGWObjVersionTracker objv;
 
-  int ret = driver->load_account_by_id(dpp, y, id, info, attrs, objv);
+  int ret = driver->load_account_by_id(dpp, y, id, info, objv);
   if (ret < 0) {
     ldpp_dout(dpp, 4) << "failed to load account owner: " << cpp_strerror(ret) << dendl;
     return ret;

@@ -162,10 +162,9 @@ void RGWCreateUser_IAM::execute(optional_yield y)
 {
   // check the current user count against account limit
   RGWAccountInfo account;
-  rgw::sal::Attrs attrs; // unused
   RGWObjVersionTracker objv; // unused
   op_ret = driver->load_account_by_id(this, y, info.account_id,
-                                      account, attrs, objv);
+                                      account, objv);
   if (op_ret < 0) {
     ldpp_dout(this, 4) << "failed to load iam account "
         << info.account_id << ": " << cpp_strerror(op_ret) << dendl;
@@ -924,10 +923,9 @@ void RGWCreateAccessKey_IAM::execute(optional_yield y)
   {
     // read account's access key limit
     RGWAccountInfo account;
-    rgw::sal::Attrs attrs; // unused
     RGWObjVersionTracker objv; // unused
     op_ret = driver->load_account_by_id(this, y, user->get_info().account_id,
-                                        account, attrs, objv);
+                                        account, objv);
     if (op_ret < 0) {
       ldpp_dout(this, 4) << "failed to load iam account "
           << user->get_info().account_id << ": " << cpp_strerror(op_ret) << dendl;

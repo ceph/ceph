@@ -803,10 +803,8 @@ WebTokenEngine::authenticate( const DoutPrefixProvider* dpp,
       std::optional<RGWAccountInfo> account;
       if (!role_account.empty()) {
         account.emplace();
-        rgw::sal::Attrs attrs; // ignored
         RGWObjVersionTracker objv; // ignored
-        ret = driver->load_account_by_id(dpp, y, role_account,
-                                         *account, attrs, objv);
+        ret = driver->load_account_by_id(dpp, y, role_account, *account, objv);
         if (ret < 0) {
           ldpp_dout(dpp, 0) << "Role account " << role_account << " not found" << dendl;
           return result_t::deny(-EACCES);

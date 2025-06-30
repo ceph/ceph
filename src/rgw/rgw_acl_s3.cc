@@ -312,9 +312,8 @@ static int read_owner_display_name(const DoutPrefixProvider* dpp,
       },
       [&] (const rgw_account_id& account_id) {
         RGWAccountInfo info;
-        rgw::sal::Attrs attrs;
         RGWObjVersionTracker objv;
-        int r = driver->load_account_by_id(dpp, y, account_id, info, attrs, objv);
+        int r = driver->load_account_by_id(dpp, y, account_id, info, objv);
         if (r >= 0) {
           name = info.name;
         }

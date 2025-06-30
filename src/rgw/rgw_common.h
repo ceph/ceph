@@ -850,6 +850,9 @@ struct RGWAccountInfo {
   static constexpr int32_t DEFAULT_ACCESS_KEY_LIMIT = 4;
   int32_t max_access_keys = DEFAULT_ACCESS_KEY_LIMIT;
 
+  // account attributes stored as xattrs, not part of the encoding
+  rgw::sal::Attrs attrs;
+
   void encode(bufferlist& bl) const {
     ENCODE_START(2, 1, bl);
     encode(id, bl);

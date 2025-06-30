@@ -1567,14 +1567,13 @@ int RadosStore::load_account_by_id(const DoutPrefixProvider* dpp,
                                    optional_yield y,
                                    std::string_view id,
                                    RGWAccountInfo& info,
-                                   Attrs& attrs,
                                    RGWObjVersionTracker& objv)
 {
   ceph::real_time mtime; // ignored
   return rgwrados::account::read(
       dpp, y, *svc()->sysobj,
       svc()->zone->get_zone_params(),
-      id, info, attrs, mtime, objv);
+      id, info, mtime, objv);
 }
 
 int RadosStore::load_account_by_name(const DoutPrefixProvider* dpp,
@@ -1582,26 +1581,24 @@ int RadosStore::load_account_by_name(const DoutPrefixProvider* dpp,
                                      std::string_view tenant,
                                      std::string_view name,
                                      RGWAccountInfo& info,
-                                     Attrs& attrs,
                                      RGWObjVersionTracker& objv)
 {
   return rgwrados::account::read_by_name(
       dpp, y, *svc()->sysobj,
       svc()->zone->get_zone_params(),
-      tenant, name, info, attrs, objv);
+      tenant, name, info, objv);
 }
 
 int RadosStore::load_account_by_email(const DoutPrefixProvider* dpp,
                                       optional_yield y,
                                       std::string_view email,
                                       RGWAccountInfo& info,
-                                      Attrs& attrs,
                                       RGWObjVersionTracker& objv)
 {
   return rgwrados::account::read_by_email(
       dpp, y, *svc()->sysobj,
       svc()->zone->get_zone_params(),
-      email, info, attrs, objv);
+      email, info, objv);
 }
 
 static int write_mdlog_entry(const DoutPrefixProvider* dpp, optional_yield y,
@@ -1626,13 +1623,12 @@ int RadosStore::store_account(const DoutPrefixProvider* dpp,
                               optional_yield y, bool exclusive,
                               const RGWAccountInfo& info,
                               const RGWAccountInfo* old_info,
-                              const Attrs& attrs,
                               RGWObjVersionTracker& objv)
 {
   ceph::real_time mtime = ceph::real_clock::now();
   int r = rgwrados::account::write(
       dpp, y, *svc()->sysobj, svc()->zone->get_zone_params(),
-      info, old_info, attrs, mtime, exclusive, objv);
+      info, old_info, mtime, exclusive, objv);
   if (r < 0) {
     return r;
   }

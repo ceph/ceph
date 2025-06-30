@@ -152,12 +152,10 @@ int create(const DoutPrefixProvider* dpp,
 
   constexpr RGWAccountInfo* old_info = nullptr;
   constexpr bool exclusive = true;
-  rgw::sal::Attrs attrs;
   RGWObjVersionTracker objv;
   objv.generate_new_write_ver(dpp->get_cct());
 
-  int ret = driver->store_account(dpp, y, exclusive, info,
-                                  old_info, attrs, objv);
+  int ret = driver->store_account(dpp, y, exclusive, info, old_info, objv);
   if (ret < 0) {
     return ret;
   }
@@ -178,18 +176,14 @@ int modify(const DoutPrefixProvider* dpp,
 {
   int ret = 0;
   RGWAccountInfo info;
-  rgw::sal::Attrs attrs;
   RGWObjVersionTracker objv;
   if (!op_state.account_id.empty()) {
-    ret = driver->load_account_by_id(dpp, y, op_state.account_id,
-                                     info, attrs, objv);
+    ret = driver->load_account_by_id(dpp, y, op_state.account_id, info, objv);
   } else if (!op_state.account_name.empty()) {
     ret = driver->load_account_by_name(dpp, y, op_state.tenant,
-                                       op_state.account_name,
-                                       info, attrs, objv);
+                                       op_state.account_name, info, objv);
   } else if (!op_state.email.empty()) {
-    ret = driver->load_account_by_email(dpp, y, op_state.email,
-                                        info, attrs, objv);
+    ret = driver->load_account_by_email(dpp, y, op_state.email, info, objv);
   } else {
     err_msg = "requires --account-id or --account-name or --email";
     return -EINVAL;
@@ -252,7 +246,7 @@ int modify(const DoutPrefixProvider* dpp,
 
   constexpr bool exclusive = false;
 
-  ret = driver->store_account(dpp, y, exclusive, info, &old_info, attrs, objv);
+  ret = driver->store_account(dpp, y, exclusive, info, &old_info, objv);
   if (ret < 0) {
     return ret;
   }
@@ -273,19 +267,15 @@ int remove(const DoutPrefixProvider* dpp,
 {
   int ret = 0;
   RGWAccountInfo info;
-  rgw::sal::Attrs attrs;
   RGWObjVersionTracker objv;
 
   if (!op_state.account_id.empty()) {
-    ret = driver->load_account_by_id(dpp, y, op_state.account_id,
-                                     info, attrs, objv);
+    ret = driver->load_account_by_id(dpp, y, op_state.account_id, info, objv);
   } else if (!op_state.account_name.empty()) {
     ret = driver->load_account_by_name(dpp, y, op_state.tenant,
-                                       op_state.account_name,
-                                       info, attrs, objv);
+                                       op_state.account_name, info, objv);
   } else if (!op_state.email.empty()) {
-    ret = driver->load_account_by_email(dpp, y, op_state.email,
-                                        info, attrs, objv);
+    ret = driver->load_account_by_email(dpp, y, op_state.email, info, objv);
   } else {
     err_msg = "requires --account-id or --account-name or --email";
     return -EINVAL;
@@ -387,19 +377,15 @@ int info(const DoutPrefixProvider* dpp,
 {
   int ret = 0;
   RGWAccountInfo info;
-  rgw::sal::Attrs attrs;
   RGWObjVersionTracker objv;
 
   if (!op_state.account_id.empty()) {
-    ret = driver->load_account_by_id(dpp, y, op_state.account_id,
-                                     info, attrs, objv);
+    ret = driver->load_account_by_id(dpp, y, op_state.account_id, info, objv);
   } else if (!op_state.account_name.empty()) {
     ret = driver->load_account_by_name(dpp, y, op_state.tenant,
-                                       op_state.account_name,
-                                       info, attrs, objv);
+                                       op_state.account_name, info, objv);
   } else if (!op_state.email.empty()) {
-    ret = driver->load_account_by_email(dpp, y, op_state.email,
-                                        info, attrs, objv);
+    ret = driver->load_account_by_email(dpp, y, op_state.email, info, objv);
   } else {
     err_msg = "requires --account-id or --account-name or --email";
     return -EINVAL;
@@ -426,18 +412,15 @@ int stats(const DoutPrefixProvider* dpp,
 {
   int ret = 0;
   RGWAccountInfo info;
-  rgw::sal::Attrs attrs; // ignored
   RGWObjVersionTracker objv; // ignored
 
   if (!op_state.account_id.empty()) {
     // look up account by id
-    ret = driver->load_account_by_id(dpp, y, op_state.account_id,
-                                     info, attrs, objv);
+    ret = driver->load_account_by_id(dpp, y, op_state.account_id, info, objv);
   } else if (!op_state.account_name.empty()) {
     // look up account by tenant/name
     ret = driver->load_account_by_name(dpp, y, op_state.tenant,
-                                       op_state.account_name,
-                                       info, attrs, objv);
+                                       op_state.account_name, info, objv);
   } else {
     err_msg = "requires account id or name";
     return -EINVAL;
@@ -492,18 +475,15 @@ int list_users(const DoutPrefixProvider* dpp, rgw::sal::Driver* driver,
 {
   int ret = 0;
   RGWAccountInfo info;
-  rgw::sal::Attrs attrs; // ignored
   RGWObjVersionTracker objv; // ignored
 
   if (!op_state.account_id.empty()) {
     // look up account by id
-    ret = driver->load_account_by_id(dpp, y, op_state.account_id,
-                                     info, attrs, objv);
+    ret = driver->load_account_by_id(dpp, y, op_state.account_id, info, objv);
   } else if (!op_state.account_name.empty()) {
     // look up account by tenant/name
     ret = driver->load_account_by_name(dpp, y, op_state.tenant,
-                                       op_state.account_name,
-                                       info, attrs, objv);
+                                       op_state.account_name, info, objv);
   } else {
     err_msg = "requires account id or name";
     return -EINVAL;
