@@ -65,6 +65,7 @@ class RGWOp;
 class RGWRados;
 class RGWMultiCompleteUpload;
 class RGWPutObj_Torrent;
+class RGWMultiDelObject;
 
 namespace rgw::auth::registry { class StrategyRegistry; }
 
@@ -360,8 +361,8 @@ protected:
   const char *range_str;
   const char *if_mod;
   const char *if_unmod;
-  const char *if_match;
-  const char *if_nomatch;
+  const char *if_match{nullptr};
+  const char *if_nomatch{nullptr};
   uint32_t mod_zone_id;
   uint64_t mod_pg_ver;
   off_t ofs;
@@ -1214,8 +1215,8 @@ protected:
   off_t ofs;
   const char *supplied_md5_b64;
   const char *supplied_etag;
-  const char *if_match;
-  const char *if_nomatch;
+  const char *if_match{nullptr};
+  const char *if_nomatch{nullptr};
   std::string copy_source;
   const char *copy_source_range;
   RGWBucketInfo copy_source_bucket_info;
@@ -1464,6 +1465,9 @@ protected:
   bool multipart_delete;
   std::string version_id;
   ceph::real_time unmod_since; /* if unmodified since */
+  ceph::real_time last_mod_time_match; /* if modified time match */
+  std::optional<uint64_t> size_match; /* if size match */
+  const char *if_match{nullptr}; /* if etag match */
   bool no_precondition_error;
   std::unique_ptr<RGWBulkDelete::Deleter> deleter;
   bool bypass_perm;
@@ -1499,8 +1503,8 @@ protected:
   RGWAccessControlPolicy dest_policy;
   const char *if_mod;
   const char *if_unmod;
-  const char *if_match;
-  const char *if_nomatch;
+  const char *if_match{nullptr};
+  const char *if_nomatch{nullptr};
   // Required or it is not a copy operation
   std::string_view copy_source;
   // Not actually required
@@ -2029,15 +2033,15 @@ class RGWDeleteMultiObj : public RGWOp {
    * Handles the deletion of an individual object and uses
    * set_partial_response to record the outcome.
    */
-  void handle_individual_object(const rgw_obj_key& o,
+  void handle_individual_object(const RGWMultiDelObject& object,
                                 optional_yield y,
                                 boost::asio::deadline_timer *formatter_flush_cond,
                                 const bool skip_olh_obj_update = false);
-  void handle_versioned_objects(const std::vector<rgw_obj_key>& objects,
+  void handle_versioned_objects(const std::vector<RGWMultiDelObject>& objects,
                                 uint32_t max_aio, boost::asio::yield_context yield);
-  void handle_non_versioned_objects(const std::vector<rgw_obj_key>& objects,
+  void handle_non_versioned_objects(const std::vector<RGWMultiDelObject>& objects,
                                     uint32_t max_aio, boost::asio::yield_context yield);
-  void handle_objects(const std::vector<rgw_obj_key>& objects,
+  void handle_objects(const std::vector<RGWMultiDelObject>& objects,
                       uint32_t max_aio, boost::asio::yield_context yield);
 
   /**
