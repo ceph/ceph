@@ -158,6 +158,23 @@ class SMBService(CephService):
         config_blobs['service_ports'] = smb_spec.service_ports()
         if smb_spec.bind_addrs:
             config_blobs['bind_networks'] = smb_spec.bind_networks()
+        if 'remote-control' in smb_spec.features:
+            files = config_blobs.setdefault('files', {})
+            _add_cfg(
+                files,
+                'remote_control.ssl.crt',
+                smb_spec.remote_control_ssl_cert,
+            )
+            _add_cfg(
+                files,
+                'remote_control.ssl.key',
+                smb_spec.remote_control_ssl_key,
+            )
+            _add_cfg(
+                files,
+                'remote_control.ca.crt',
+                smb_spec.remote_control_ca_cert,
+            )
 
         logger.debug('smb generate_config: %r', config_blobs)
         self._configure_cluster_meta(smb_spec, daemon_spec)
