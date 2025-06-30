@@ -293,6 +293,7 @@ target_link_libraries(rgw_common
     legacy-option-headers
     global
     cls_2pc_queue_client
+    cls_hash_client
     cls_cmpomap_client
     cls_lock_client
     cls_log_client
