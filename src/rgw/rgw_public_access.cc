@@ -26,10 +26,10 @@ std::ostream& operator<< (std::ostream& os, const PublicAccessBlockConfiguration
     oldState.copyfmt(os);
 
     os << std::boolalpha
-       << "BlockPublicAcls: " << access_conf.block_public_acls() << std::endl
-       << "IgnorePublicAcls: " << access_conf.ignore_public_acls() << std::endl
-       << "BlockPublicPolicy" << access_conf.block_public_policy() << std::endl
-       << "RestrictPublicBuckets" << access_conf.restrict_public_buckets() << std::endl;
+       << "BlockPublicAcls: " << access_conf.BlockPublicAcls << std::endl
+       << "IgnorePublicAcls: " << access_conf.IgnorePublicAcls << std::endl
+       << "BlockPublicPolicy" << access_conf.BlockPublicPolicy << std::endl
+       << "RestrictPublicBuckets" << access_conf.RestrictPublicBuckets << std::endl;
 
     os.copyfmt(oldState);
     return os;
