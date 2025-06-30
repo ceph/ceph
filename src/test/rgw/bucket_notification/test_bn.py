@@ -505,17 +505,17 @@ def get_ip():
     return ip
 
 
-def connection():
+def connection(no_retries=False):
     hostname = get_config_host()
     port_no = get_config_port()
     vstart_access_key = get_access_key()
     vstart_secret_key = get_secret_key()
-
     conn = S3Connection(aws_access_key_id=vstart_access_key,
-                  aws_secret_access_key=vstart_secret_key,
-                      is_secure=False, port=port_no, host=hostname,
-                      calling_format='boto.s3.connection.OrdinaryCallingFormat')
-
+                        aws_secret_access_key=vstart_secret_key,
+                        is_secure=False, port=port_no, host=hostname,
+                        calling_format='boto.s3.connection.OrdinaryCallingFormat')
+    if no_retries:
+        conn.num_retries = 0
     return conn
 
 
@@ -3230,7 +3230,8 @@ def test_persistent_topic_dump():
 
 
 def ps_s3_persistent_topic_configs(persistency_time, config_dict):
-    conn = connection()
+    # create connection with no retries
+    conn = connection(no_retries=True)
     zonegroup = get_config_zonegroup()
 
     # create random port for the http server
@@ -3278,15 +3279,17 @@ def ps_s3_persistent_topic_configs(persistency_time, config_dict):
         client_threads.append(thr)
     [thr.join() for thr in client_threads]
     time_diff = time.time() - start_time
-    print('average time for creation + async http notification is: ' + str(time_diff*1000/number_of_objects) + ' milliseconds')
+    log.info('creation of %d objects took %f seconds', number_of_objects, time_diff)
+
+    time_buffer = 20
 
     # topic stats
     if time_diff > persistency_time:
-        log.warning('persistency time for topic %s already passed. not possible to check object in the queue', topic_name)
+        log.warning('persistency time for topic %s already passed. not possible to check object in the queue, as some may have expired', topic_name)
     else:
         get_stats_persistent_topic(topic_name, number_of_objects)
         # wait as much as ttl and check if the persistent topics have expired
-        time.sleep(persistency_time)
+        time.sleep(persistency_time+time_buffer)
 
     get_stats_persistent_topic(topic_name, 0)
 
@@ -3301,15 +3304,16 @@ def ps_s3_persistent_topic_configs(persistency_time, config_dict):
         client_threads.append(thr)
     [thr.join() for thr in client_threads]
     time_diff = time.time() - start_time
-    print('average time for deletion + async http notification is: ' + str(time_diff*1000/number_of_objects) + ' milliseconds')
+    log.info('deletion of %d objects took %f seconds', count, time_diff)
+    assert_equal(count, number_of_objects)
 
     # topic stats
     if time_diff > persistency_time:
-        log.warning('persistency time for topic %s already passed. not possible to check object in the queue', topic_name)
+        log.warning('persistency time for topic %s already passed. not possible to check object in the queue, as some may have expired', topic_name)
     else:
         get_stats_persistent_topic(topic_name, number_of_objects)
         # wait as much as ttl and check if the persistent topics have expired
-        time.sleep(persistency_time)
+        time.sleep(persistency_time+time_buffer)
 
     get_stats_persistent_topic(topic_name, 0)
 
@@ -3331,8 +3335,7 @@ def create_persistency_config_string(config_dict):
 def test_ps_s3_persistent_topic_configs_ttl():
     """ test persistent topic configurations with time_to_live """
     config_dict = {"time_to_live": 30, "max_retries": "None", "retry_sleep_duration": "None"}
-    buffer = 10
-    persistency_time = config_dict["time_to_live"] + buffer
+    persistency_time = config_dict["time_to_live"]
 
     ps_s3_persistent_topic_configs(persistency_time, config_dict)
 
@@ -3340,8 +3343,7 @@ def test_ps_s3_persistent_topic_configs_ttl():
 def test_ps_s3_persistent_topic_configs_max_retries():
     """ test persistent topic configurations with max_retries and retry_sleep_duration """
     config_dict = {"time_to_live": "None", "max_retries": 10, "retry_sleep_duration": 1}
-    buffer = 30
-    persistency_time = config_dict["max_retries"]*config_dict["retry_sleep_duration"] + buffer
+    persistency_time = config_dict["max_retries"]*config_dict["retry_sleep_duration"]
 
     ps_s3_persistent_topic_configs(persistency_time, config_dict)
 
