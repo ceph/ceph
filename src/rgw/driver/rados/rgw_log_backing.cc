@@ -52,7 +52,7 @@ inline std::ostream& operator <<(std::ostream& m, const shard_check& t) {
 namespace {
 /// Return the shard type, and a bool to see whether it has entries.
 asio::awaitable<shard_check>
-probe_shard(const DoutPrefixProvider* dpp, neorados::RADOS& rados,
+probe_shard(const DoutPrefixProvider* dpp, neorados::RADOS rados,
 	    const neorados::Object& obj, const neorados::IOContext& loc,
 	    bool& fifo_unsupported)
 {
@@ -98,7 +98,7 @@ probe_shard(const DoutPrefixProvider* dpp, neorados::RADOS& rados,
 }
 
 asio::awaitable<log_type> handle_dne(const DoutPrefixProvider *dpp,
-				     neorados::RADOS& rados,
+				     neorados::RADOS rados,
 				     const neorados::Object& obj,
 				     const neorados::IOContext& loc,
 				     log_type def,
@@ -127,7 +127,7 @@ asio::awaitable<log_type> handle_dne(const DoutPrefixProvider *dpp,
 
 asio::awaitable<log_type>
 log_backing_type(const DoutPrefixProvider* dpp,
-		 neorados::RADOS& rados,
+		 neorados::RADOS rados,
                  const neorados::IOContext& loc,
 		 log_type def,
 		 int shards,
@@ -167,7 +167,7 @@ log_backing_type(const DoutPrefixProvider* dpp,
 
 asio::awaitable<void> log_remove(
   const DoutPrefixProvider *dpp,
-  neorados::RADOS& rados,
+  neorados::RADOS rados,
   const neorados::IOContext& loc,
   int shards,
   const fu2::unique_function<std::string(int) const>& get_oid,
@@ -224,16 +224,26 @@ asio::awaitable<void> log_remove(
   co_return;
 }
 
-logback_generations::~logback_generations() {
+void logback_generations::shutdown() {
   if (watchcookie > 0) {
     auto cct = rados.cct();
     sys::error_code ec;
-    rados.unwatch(watchcookie, loc, asio::detached);
+    rados.unwatch(watchcookie, loc, async::use_blocked[ec]);
     if (ec) {
       lderr(cct) << __PRETTY_FUNCTION__ << ":" << __LINE__
 		 << ": failed unwatching oid=" << oid
 		 << ", " << ec.message() << dendl;
     }
+    watchcookie = 0;
+  }
+}
+
+
+logback_generations::~logback_generations() {
+  auto cct = rados.cct();
+  if (watchcookie > 0) {
+    lderr(cct) << __PRETTY_FUNCTION__ << ":" << __LINE__
+	       << ": logback_generations destroyed without shutdown." << dendl;
   }
 }
 

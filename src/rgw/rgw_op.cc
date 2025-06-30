@@ -879,8 +879,7 @@ static void rgw_add_grant_to_iam_environment(rgw::IAM::Environment& e, req_state
   }
 }
 
-void rgw_build_iam_environment(rgw::sal::Driver* driver,
-	                              req_state* s)
+void rgw_build_iam_environment(req_state* s)
 {
   const auto& m = s->info.env->get_map();
   auto t = ceph::real_clock::now();
@@ -8615,7 +8614,7 @@ int RGWHandler::do_init_permissions(const DoutPrefixProvider *dpp, optional_yiel
     return ret==-ENODATA ? -EACCES : ret;
   }
 
-  rgw_build_iam_environment(driver, s);
+  rgw_build_iam_environment(s);
   return ret;
 }
 

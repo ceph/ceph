@@ -13,14 +13,16 @@
  *
  */
 
+#include <optional>
+
 #include <errno.h>
 #include <stdlib.h>
-#include <system_error>
 #include <unistd.h>
-#include <sstream>
 
 #include "common/errno.h"
 //#include "common/dout.h"
+
+#include "common/async/blocked_completion.h"
 
 #include "rgw_sal.h"
 #include "rgw_sal_rados.h"
@@ -48,7 +50,7 @@
 //#define dout_context g_ceph_context
 
 extern "C" {
-extern rgw::sal::Driver* newRadosStore(void* io_context, const void* dpp);
+extern rgw::sal::Driver* newRadosStore(void* io_context, CephContext* cct);
 #ifdef WITH_RADOSGW_DBSTORE
 extern rgw::sal::Driver* newDBStore(CephContext *cct);
 #endif
@@ -65,6 +67,20 @@ extern rgw::sal::Driver* newBaseFilter(rgw::sal::Driver* next);
 #ifdef WITH_RADOSGW_D4N
 extern rgw::sal::Driver* newD4NFilter(rgw::sal::Driver* next, boost::asio::io_context& io_context);
 #endif
+}
+
+
+std::optional<neorados::RADOS>
+make_neorados(CephContext* cct, boost::asio::io_context& io_context) {
+  try {
+    auto neorados = neorados::RADOS::make_with_cct(cct, io_context,
+						   ceph::async::use_blocked);
+    return neorados;
+  } catch (const std::exception& e) {
+    ldout(cct, 0) << "Failed constructing neroados handle: " << e.what()
+		  << dendl;
+  }
+  return std::nullopt;
 }
 
 rgw::sal::Driver* DriverManager::init_storage_provider(const DoutPrefixProvider* dpp,
@@ -87,7 +103,7 @@ rgw::sal::Driver* DriverManager::init_storage_provider(const DoutPrefixProvider*
   rgw::sal::Driver* driver{nullptr};
 
   if (cfg.store_name.compare("rados") == 0) {
-    driver = newRadosStore(&io_context, dpp);
+    driver = newRadosStore(&io_context, cct);
     RGWRados* rados = static_cast<rgw::sal::RadosStore* >(driver)->getRados();
 
     if ((*rados).set_use_cache(use_cache)
@@ -114,7 +130,11 @@ rgw::sal::Driver* DriverManager::init_storage_provider(const DoutPrefixProvider*
     }
   }
   else if (cfg.store_name.compare("d3n") == 0) {
-    driver = new rgw::sal::RadosStore(io_context);
+    auto neorados = make_neorados(cct, io_context);
+    if (!neorados) {
+      return nullptr;
+    }
+    driver = new rgw::sal::RadosStore(*neorados);
     RGWRados* rados = new D3nRGWDataCache<RGWRados>;
     dynamic_cast<rgw::sal::RadosStore*>(driver)->setRados(rados);
     rados->set_store(static_cast<rgw::sal::RadosStore* >(driver));
@@ -241,7 +261,7 @@ rgw::sal::Driver* DriverManager::init_raw_storage_provider(const DoutPrefixProvi
 {
   rgw::sal::Driver* driver = nullptr;
   if (cfg.store_name.compare("rados") == 0) {
-    driver = newRadosStore(&io_context, dpp);
+    driver = newRadosStore(&io_context, cct);
     RGWRados* rados = static_cast<rgw::sal::RadosStore* >(driver)->getRados();
 
     rados->set_context(cct);
