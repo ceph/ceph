@@ -49,6 +49,10 @@ namespace rgw::dedup {
       return this->md5_low;
     }
 
+    bool multipart_object() const {
+      return num_parts > 0;
+    }
+
     uint64_t md5_high;      // High Bytes of the Object Data MD5
     uint64_t md5_low;       // Low  Bytes of the Object Data MD5
     uint32_t size_4k_units; // Object size in 4KB units max out at 16TB (AWS MAX-SIZE is 5TB)
@@ -110,10 +114,10 @@ namespace rgw::dedup {
                                      disk_block_id_t block_id,
                                      record_id_t rec_id);
 
-    void count_duplicates(uint64_t *p_singleton_count,
-                          uint64_t *p_unique_count,
-                          uint64_t *p_duplicate_count,
-                          uint64_t *p_duplicate_bytes_approx);
+    void count_duplicates(dedup_stats_t *p_small_objs_stat,
+                          dedup_stats_t *p_big_objs_stat,
+                          uint64_t *p_duplicate_head_bytes);
+
     void remove_singletons_and_redistribute_keys();
   private:
     // 32 Bytes unified entries
