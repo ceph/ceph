@@ -1829,8 +1829,8 @@ class DB {
           bool high_precision_time;
           uint32_t mod_zone_id;
           uint64_t mod_pg_ver;
-          const char *if_match;
-          const char *if_nomatch;
+          const char *if_match{nullptr};
+          const char *if_nomatch{nullptr};
 
           ConditionParams() :
             mod_ptr(NULL), unmod_ptr(NULL), high_precision_time(false), mod_zone_id(0), mod_pg_ver(0),
@@ -1872,8 +1872,8 @@ class DB {
           rgw_user owner;
           RGWObjCategory category;
           int flags;
-          const char *if_match;
-          const char *if_nomatch;
+          const char *if_match{nullptr};
+          const char *if_nomatch{nullptr};
           std::optional<uint64_t> olh_epoch;
           ceph::real_time delete_at;
           bool canceled;
@@ -1915,7 +1915,11 @@ class DB {
           std::list<rgw_obj_index_key> *remove_objs;
           ceph::real_time expiration_time;
           ceph::real_time unmod_since;
+          ceph::real_time last_mod_time_match;
           ceph::real_time mtime; /* for setting delete marker mtime */
+          std::optional<uint64_t> size_match;
+          const char *if_match{nullptr};
+          const char *if_nomatch{nullptr};
           bool high_precision_time;
           rgw_zone_set *zones_trace;
           bool abortmp;
