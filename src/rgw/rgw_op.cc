@@ -389,6 +389,18 @@ get_public_access_conf_from_attr(const map<string, bufferlist>& attrs)
   return configuration;
 }
 
+static PublicAccessBlockConfiguration
+get_public_access_conf(const map<string, bufferlist>& bucket_attrs,
+                       const std::optional<RGWAccountInfo>& account)
+{
+  auto bucket_config = get_public_access_conf_from_attr(bucket_attrs);
+  if (!account) {
+    return bucket_config;
+  }
+  auto account_config = get_public_access_conf_from_attr(account->attrs);
+  return config_union(bucket_config, account_config);
+}
+
 static int read_bucket_policy(const DoutPrefixProvider *dpp, 
                               rgw::sal::Driver* driver,
                               req_state *s,
@@ -615,7 +627,8 @@ int rgw_build_bucket_policies(const DoutPrefixProvider *dpp, rgw::sal::Driver* d
       return -EINVAL;
     }
 
-    s->public_access_block = get_public_access_conf_from_attr(s->bucket->get_attrs());
+    s->public_access_block = get_public_access_conf(s->bucket->get_attrs(),
+                                                    s->auth.identity->get_account());
   }
 
   /* handle user ACL only for those APIs which support it */
