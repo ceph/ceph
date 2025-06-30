@@ -178,7 +178,7 @@ struct string_key_view_t {
     } else if (dedup_type == Type::MAX) {
       len = MARKER_MAX;
     } else {
-      ceph_abort("impossible path");
+      ceph_abort_msg("impossible path");
     }
     std::memcpy(p_append, &len, sizeof(string_size_t));
   }

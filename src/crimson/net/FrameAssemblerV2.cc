@@ -427,7 +427,7 @@ FrameAssemblerV2::read_frame_payload()
     // and abort after putting entire data field on wire. This will be used by
     // the kernel client to avoid unnecessary buffering.
     if (!ok) {
-      ceph_abort("TODO");
+      ceph_abort_msg("TODO");
     }
     return &rx_segments_data;
   });

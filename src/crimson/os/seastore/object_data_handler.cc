@@ -489,7 +489,7 @@ ObjectDataHandler::write_ret do_remappings(
           return ObjectDataHandler::write_iertr::now();
         });
       } else {
-        ceph_abort("impossible");
+        ceph_abort_msg("impossible");
         return ObjectDataHandler::write_iertr::now();
       }
   });
@@ -585,7 +585,7 @@ ObjectDataHandler::write_ret do_insertions(
 	  ObjectDataHandler::write_iertr::pass_further{}
 	);
       } else {
-	ceph_abort("impossible");
+	ceph_abort_msg("impossible");
 	return ObjectDataHandler::write_iertr::now();
       }
     });

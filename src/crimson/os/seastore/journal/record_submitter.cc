@@ -469,7 +469,7 @@ void RecordSubmitter::update_state()
   } else if (num_outstanding_io == io_depth_limit) {
     state = state_t::FULL;
   } else {
-    ceph_abort("fatal error: io-depth overflow");
+    ceph_abort_msg("fatal error: io-depth overflow");
   }
 }
 

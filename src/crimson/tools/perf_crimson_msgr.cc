@@ -199,7 +199,7 @@ static seastar::future<> run(
       void ms_handle_connect(
           crimson::net::ConnectionRef,
           seastar::shard_id) override {
-        ceph_abort("impossible, server won't connect");
+        ceph_abort_msg("impossible, server won't connect");
       }
 
       void ms_handle_accept(
