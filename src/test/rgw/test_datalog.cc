@@ -199,7 +199,7 @@ public:
 
   /// \brief Delete pool used for testing
   boost::asio::awaitable<void> CoTearDown() override {
-    co_await datalog->shutdown();
+    co_await datalog->async_shutdown();
     co_await clean_pool();
     co_return;
   }
