@@ -787,15 +787,15 @@ seastar::future<> SeaStore::report_stats()
       cache_total.add(s);
     }
 
-    cache_size_stats_t lru_sizes_ps = cache_total.lru_sizes;
-    lru_sizes_ps.divide_by(seastar::smp::count);
-    cache_io_stats_t lru_io_ps = cache_total.lru_io;
-    lru_io_ps.divide_by(seastar::smp::count);
-    INFO("cache lru: total{} {}; per-shard: total{} {}",
-         cache_total.lru_sizes,
-         cache_io_stats_printer_t{seconds, cache_total.lru_io},
-         lru_sizes_ps,
-         cache_io_stats_printer_t{seconds, lru_io_ps});
+    cache_size_stats_t queue_sizes_ps = cache_total.pinboard_sizes;
+    queue_sizes_ps.divide_by(seastar::smp::count);
+    cache_io_stats_t queue_io_ps = cache_total.pinboard_io;
+    queue_io_ps.divide_by(seastar::smp::count);
+    INFO("cache pinboard: total{} {}; per-shard: total{} {}",
+         cache_total.pinboard_sizes,
+         cache_io_stats_printer_t{seconds, cache_total.pinboard_io},
+         queue_sizes_ps,
+         cache_io_stats_printer_t{seconds, queue_io_ps});
 
     cache_size_stats_t dirty_sizes_ps = cache_total.dirty_sizes;
     dirty_sizes_ps.divide_by(seastar::smp::count);

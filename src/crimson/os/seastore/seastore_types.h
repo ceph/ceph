@@ -3066,15 +3066,15 @@ struct cache_access_stats_printer_t {
 std::ostream& operator<<(std::ostream&, const cache_access_stats_printer_t&);
 
 struct cache_stats_t {
-  cache_size_stats_t lru_sizes;
-  cache_io_stats_t lru_io;
+  cache_size_stats_t pinboard_sizes;
+  cache_io_stats_t pinboard_io;
   cache_size_stats_t dirty_sizes;
   dirty_io_stats_t dirty_io;
   cache_access_stats_t access;
 
   void add(const cache_stats_t& o) {
-    lru_sizes.add(o.lru_sizes);
-    lru_io.add(o.lru_io);
+    pinboard_sizes.add(o.pinboard_sizes);
+    pinboard_io.add(o.pinboard_io);
     dirty_sizes.add(o.dirty_sizes);
     dirty_io.add(o.dirty_io);
     access.add(o.access);
