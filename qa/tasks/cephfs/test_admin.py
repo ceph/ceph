@@ -165,7 +165,7 @@ class TestAdminCommands(CephFSTestCase):
         if overwrites:
             self.run_ceph_cmd('osd', 'pool', 'set', n+"-data", 'allow_ec_overwrites', 'true')
 
-    def gen_health_warn_mds_cache_oversized(self, mds_id=None, fs=None):
+    def gen_health_warn_mds_cache_oversized(self, mds_id=None, fs=None, path='.'):
         health_warn = 'MDS_CACHE_OVERSIZED'
 
         # cs_name = config section name
@@ -181,9 +181,9 @@ class TestAdminCommands(CephFSTestCase):
             raise RuntimeError('Makes no sense to pass both, mds_id as well as '
                                'FS object')
 
-        self.config_set(cs_name, 'mds_cache_memory_limit', '1K')
+        self.config_set(cs_name, 'mds_cache_memory_limit', '50K')
         self.config_set(cs_name, 'mds_health_cache_threshold', '1.00000')
-        self.mount_a.open_n_background('.', 400)
+        self.mount_a.open_n_background(path, 400)
 
         self.wait_for_health(health_warn, 30)
 
@@ -2695,49 +2695,49 @@ class TestMDSFail(TestAdminCommands):
 
     def _get_unhealthy_mds_id(self, health_warn):
         '''
-        Return MDS ID for which health warning in "health_warn" has been
-        generated.
+        Returns number of MDSs for which health warning in "health_warn" has been
+        generated and the first MDS ID for which warning is generated
         '''
         health_report = json.loads(self.get_ceph_cmd_stdout('health detail '
-                                                            '--format json'))
+                                                            '--format json-pretty'))
         # variable "msg" should hold string something like this -
         # 'mds.b(mds.0): Behind on trimming (865/10) max_segments: 10,
         # num_segments: 86
+        count = health_report['checks'][health_warn]['summary']['count']
         msg = health_report['checks'][health_warn]['detail'][0]['message']
         mds_id = msg.split('(')[0]
         mds_id = mds_id.replace('mds.', '')
-        return mds_id
+        return count, mds_id
 
-    def test_with_health_warn_with_2_active_MDSs(self):
+    def test_with_health_warn_on_1_mds_with_2_active_MDSs(self):
         '''
         Test when a CephFS has 2 active MDSs and one of them have either
         health warning MDS_TRIM or MDS_CACHE_OVERSIZE, running "ceph mds fail"
-        fails for both MDSs without confirmation flag and passes for both when
+        fails on the MDS with warning without confirmation flag and passes for
+        the other mds without warning. It passes for the mds with warning when
         confirmation flag is passed.
         '''
         health_warn = 'MDS_CACHE_OVERSIZED'
         self.fs.set_max_mds(2)
-        self.gen_health_warn_mds_cache_oversized()
-        mds1_id, mds2_id = self.fs.get_active_names()
+
+        self.mount_a.run_shell_payload("mkdir dir1")
+        self.mount_a.setfattr("dir1", "ceph.dir.pin", "0")
+        self._wait_subtrees([('/dir1', 0)], rank=0)
+
+        mds0_id, mds1_id = self.fs.get_active_names()
+        self.gen_health_warn_mds_cache_oversized(mds_id=mds0_id, path="dir1")
 
         # MDS ID for which health warning has been generated.
-        hw_mds_id = self._get_unhealthy_mds_id(health_warn)
-        if mds1_id == hw_mds_id:
-            non_hw_mds_id = mds2_id
-        elif mds2_id == hw_mds_id:
-            non_hw_mds_id = mds1_id
-        else:
-            raise RuntimeError('There are only 2 MDSs right now but apparently'
-                               'health warning was raised for an MDS other '
-                               'than these two. This is definitely an error.')
+        count, hw_mds_id = self._get_unhealthy_mds_id(health_warn)
+        # Validate the warning is raised on only one mds
+        self.assertEqual(count, 1)
+        self.assertEqual(hw_mds_id, mds0_id)
 
         # actual testing begins now...
-        self.negtest_ceph_cmd(args=f'mds fail {non_hw_mds_id}', retval=1,
+        self.negtest_ceph_cmd(args=f'mds fail {mds0_id}', retval=1,
                               errmsgs=health_warn)
-        self.negtest_ceph_cmd(args=f'mds fail {hw_mds_id}', retval=1,
-                              errmsgs=health_warn)
-        self.run_ceph_cmd(f'mds fail {mds1_id} --yes-i-really-mean-it')
-        self.run_ceph_cmd(f'mds fail {mds2_id} --yes-i-really-mean-it')
+        self.run_ceph_cmd(f'mds fail {mds1_id}')
+        self.run_ceph_cmd(f'mds fail {mds0_id} --yes-i-really-mean-it')
 
     def test_when_other_MDS_has_warn_TRIM(self):
         '''
