@@ -243,6 +243,7 @@ static inline const char* to_mime_type(const RGWFormat f)
 #define RGW_REST_STS            0x10
 #define RGW_REST_IAM            0x20
 #define RGW_REST_SNS            0x40
+#define RGW_REST_S3CONTROL      0x80
 
 inline constexpr const char* RGW_REST_IAM_XMLNS =
     "https://iam.amazonaws.com/doc/2010-05-08/";
