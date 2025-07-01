@@ -95,7 +95,7 @@ struct ECCommon {
   struct read_request_t {
     const std::list<ec_align_t> to_read;
     const uint32_t flags = 0;
-    const ECUtil::shard_extent_set_t shard_want_to_read;
+    ECUtil::shard_extent_set_t shard_want_to_read;
     ECUtil::shard_extent_set_t zeros_for_decode;
     shard_id_map<shard_read_t> shard_reads;
     bool want_attrs = false;
@@ -166,6 +166,7 @@ struct ECCommon {
     std::optional<std::map<std::string, ceph::buffer::list, std::less<>>> attrs;
     ECUtil::shard_extent_map_t buffers_read;
     ECUtil::shard_extent_set_t processed_read_requests;
+    shard_id_set zero_length_reads;
 
     read_result_t(const ECUtil::stripe_info_t *sinfo) :
       r(0), buffers_read(sinfo),
@@ -179,7 +180,8 @@ struct ECCommon {
         os << ", noattrs";
       }
       os << ", buffers_read=" << buffers_read;
-      os << ", processed_read_requests=" << processed_read_requests << ")";
+      os << ", processed_read_requests=" << processed_read_requests;
+      os << ", zero_length_reads=" << zero_length_reads << ")";
     }
   };
 
