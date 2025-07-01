@@ -18,6 +18,7 @@ import tempfile
 import time
 import errno
 import ssl
+import hashlib
 from typing import Dict, List, Tuple, Optional, Union, Any, Callable, Sequence, TypeVar, cast
 
 import re
@@ -208,6 +209,76 @@ FuncT = TypeVar('FuncT', bound=Callable)
 
 
 logger = logging.getLogger()
+
+
+def deep_sort(data):
+    if isinstance(data, dict):
+        return {k: deep_sort(v) for k, v in sorted(data.items())}
+    elif isinstance(data, list):
+        # Try to sort if all elements are the same primitive type
+        try:
+            return sorted(deep_sort(v) for v in data)
+        except TypeError:
+            # Mixed types or uncomparable — just recurse
+            return [deep_sort(v) for v in data]
+    else:
+        return data
+
+
+def fuzzy_changed(prev: dict, current: dict, mem_threshold: int = 10 * 1024 * 1024, cpu_threshold: float = 1.0) -> bool:
+    for key in current:
+        if key not in prev:
+            return True
+        if key == 'memory_usage':
+            try:
+                prev_val = int(prev[key])
+                curr_val = int(current[key])
+                if abs(curr_val - prev_val) > mem_threshold:
+                    return True
+            except Exception:
+                return True
+        elif key == 'cpu_percentage':
+            try:
+                prev_val = float(prev[key].strip('%'))
+                curr_val = float(current[key].strip('%'))
+                if abs(curr_val - prev_val) > cpu_threshold:
+                    return True
+            except Exception:
+                return True
+        else:
+            try:
+                prev_val = prev[key]
+                curr_val = current[key]
+                if isinstance(prev_val, list) and isinstance(curr_val, list):
+                    if sorted(prev_val) != sorted(curr_val):
+                        return True
+                else:
+                    if prev_val != curr_val:
+                        return True
+            except Exception as e:
+                logger.warning(f"Exception comparing key '{key}': {e}")
+                return True
+
+    # Detect keys removed in current
+    for key in prev:
+        if key not in current:
+            return True
+
+    return False
+
+
+def stable_hash(obj: Any) -> Optional[str]:
+    try:
+        if isinstance(obj, bytes):
+            encoded = obj
+        elif isinstance(obj, str):
+            encoded = obj.encode('utf-8')
+        else:
+            encoded = json.dumps(obj, sort_keys=True, separators=(',', ':')).encode('utf-8')
+        return hashlib.sha256(encoded).hexdigest()
+    except Exception as e:
+        logger.error(f"Failed to calculate stable hash for {type(obj).__name__}: {e}")
+        return None
 
 
 ##################################
@@ -1311,6 +1382,12 @@ class CephadmAgent(DaemonForm):
         self.ssl_ctx = ssl.create_default_context()
         self.ssl_ctx.check_hostname = True
         self.ssl_ctx.verify_mode = ssl.CERT_REQUIRED
+        self.last_hashes: Dict[str, Optional[Any]] = {
+            'ls': None,
+            'volume': None,
+            'facts': None,
+            'networks': None,
+        }
 
     def validate(self, config: Dict[str, str] = {}) -> None:
         # check for the required files
@@ -1385,6 +1462,7 @@ class CephadmAgent(DaemonForm):
                 self.loop_interval = int(config['refresh_period'])
                 self.starting_port = int(config['listener_port'])
                 self.metadata_compresion_enabled = bool(config.get('metadata_compresion_enabled', False))
+                self.metadata_payload_optimization_enabled = bool(config.get('metadata_payload_optimization_enabled', False))
                 self.initial_startup_delay_max = int(config.get('initial_startup_delay_max', 0))
                 self.jitter_seconds = int(config.get('jitter_seconds', 0))
                 self.host = config['host']
@@ -1407,6 +1485,38 @@ class CephadmAgent(DaemonForm):
         if use_lsm.lower() == 'true':
             self.device_enhanced_scan = True
         self.volume_gatherer.update_func(lambda: self._ceph_volume(enhanced=self.device_enhanced_scan))
+
+    def update_section_if_changed(self, name: str, value: Any, payload: dict) -> None:
+        if value is None:
+            return
+
+        if name in ['ls', 'facts'] and isinstance(value, list):
+            prev = self.last_hashes.get(name)
+            changed = False
+            if not isinstance(prev, list) or len(prev) != len(value):
+                changed = True
+            else:
+                for i, cur_entry in enumerate(value):
+                    prev_entry = prev[i]
+                    if fuzzy_changed(prev_entry, cur_entry):
+                        changed = True
+                        break
+
+            if changed:
+                payload[name] = value
+                self.last_hashes[name] = value
+                logger.debug(f"{name} changed. Included in payload.")
+            else:
+                logger.debug(f"{name} has not changed significantly. Skipped.")
+        else:
+            # fallback to stable hash comparison for other fields
+            value_hash = stable_hash(value)
+            if value_hash and value_hash != self.last_hashes.get(name):
+                payload[name] = value
+                self.last_hashes[name] = value_hash
+                logger.debug(f"{name} changed. Included in payload.")
+            else:
+                logger.debug(f"{name} has not changed. Skipped.")
 
     def run(self) -> None:
 
@@ -1452,17 +1562,35 @@ class CephadmAgent(DaemonForm):
                 for k, v in networks[key].items():
                     networks_list[key][k] = list(v)
 
-            data = json.dumps({'host': self.host,
-                               'ls': (self.ls_gatherer.data if self.ack == self.ls_gatherer.ack
-                                      and self.ls_gatherer.data is not None else []),
-                               'networks': networks_list,
-                               'facts': HostFacts(self.ctx).dump(),
-                               'volume': (self.volume_gatherer.data if self.ack == self.volume_gatherer.ack
-                                          and self.volume_gatherer.data is not None else ''),
-                               'ack': str(ack),
-                               'keyring': self.keyring,
-                               'port': self.listener_port})
-            data = data.encode('ascii')
+            if self.metadata_payload_optimization_enabled:
+                payload = {
+                    'host': self.host,
+                    'ack': str(ack),
+                    'keyring': self.keyring,
+                    'port': self.listener_port,
+                }
+                facts = HostFacts(self.ctx).dump()
+                self.update_section_if_changed('facts', facts, payload)
+                self.update_section_if_changed('networks', networks_list, payload)
+
+                if self.ack == self.ls_gatherer.ack:
+                    self.update_section_if_changed('ls', self.ls_gatherer.data, payload)
+
+                if self.ack == self.volume_gatherer.ack:
+                    self.update_section_if_changed('volume', self.volume_gatherer.data, payload)
+
+                data = json.dumps(payload).encode('ascii')
+            else:
+                data = json.dumps({'host': self.host,
+                       'ls': (self.ls_gatherer.data if self.ack == self.ls_gatherer.ack
+                              and self.ls_gatherer.data is not None else []),
+                       'networks': networks_list,
+                       'facts': HostFacts(self.ctx).dump(),
+                       'volume': (self.volume_gatherer.data if self.ack == self.volume_gatherer.ack
+                                  and self.volume_gatherer.data is not None else ''),
+                       'ack': str(ack),
+                       'keyring': self.keyring,
+                       'port': self.listener_port}).encode('ascii')
 
             try:
                 send_time = time.monotonic()
@@ -1504,6 +1632,10 @@ class CephadmAgent(DaemonForm):
             command_ceph_volume(self.ctx)
 
         stdout = stream.getvalue()
+
+        #TODO(redo): remove this additioonal steps, this must be done in side the ceph-volume
+        ceph_volume_dict = json.loads(stdout)
+        stdout = json.dumps(deep_sort(ceph_volume_dict))
 
         if stdout:
             return (stdout, False)
