@@ -1799,6 +1799,7 @@ class CephadmAgent(DaemonForm):
                 self.loop_interval = int(config['refresh_period'])
                 self.starting_port = int(config['listener_port'])
                 self.initial_startup_delay_max = int(config.get('initial_startup_delay_max', 0))
+                self.jitter_seconds = int(config.get('jitter_seconds', 0))
                 self.host = config['host']
                 # Older agent.json files do not contain this field. Keep the
                 # existing image inference fallback for upgrade compatibility.
@@ -1901,7 +1902,10 @@ class CephadmAgent(DaemonForm):
             self.recent_iteration_index = (self.recent_iteration_index + 1) % 3
             run_time_average = sum(self.recent_iteration_run_times, 0.0) / len([t for t in self.recent_iteration_run_times if t])
 
-            self.event.wait(max(self.loop_interval - int(run_time_average), 0))
+            # Add ± jitter_seconds to introduce randomness
+            jitter = random.uniform(-self.jitter_seconds, self.jitter_seconds)
+            delay = max(self.loop_interval - int(run_time_average) + jitter, 0)
+            self.event.wait(delay)
             self.event.clear()
 
     def _ceph_volume(self, enhanced: bool = False) -> Tuple[str, bool]:
