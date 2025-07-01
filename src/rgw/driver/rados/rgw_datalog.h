@@ -4,6 +4,7 @@
 #pragma once
 
 #include <cstdint>
+#include <future>
 #include <list>
 #include <memory>
 #include <mutex>
@@ -14,6 +15,7 @@
 #include <variant>
 #include <vector>
 
+#include <boost/asio/use_future.hpp>
 #include <boost/asio/steady_timer.hpp>
 
 #include <boost/container/flat_map.hpp>
@@ -366,10 +368,13 @@ class RGWDataChangesLog
   using strand_t = asio::strand<executor_t>;
   strand_t renew_strand{executor};
   asio::cancellation_signal renew_signal = asio::cancellation_signal();
+  std::future<void> renew_future;
   strand_t watch_strand{executor};
   asio::cancellation_signal watch_signal = asio::cancellation_signal();
+  std::future<void> watch_future;
   strand_t recovery_strand{executor};
   asio::cancellation_signal recovery_signal = asio::cancellation_signal();
+  std::future<void> recovery_future;
 
   ceph::mono_time last_recovery = ceph::mono_clock::zero();
 
@@ -534,8 +539,7 @@ public:
   asio::awaitable<void> recover_shard(const DoutPrefixProvider* dpp, int index);
   asio::awaitable<void> recover(const DoutPrefixProvider* dpp,
 				std::shared_ptr<RGWDataChangesLog>);
-  asio::awaitable<void> shutdown();
-  asio::awaitable<void> shutdown_or_timeout();
+  asio::awaitable<void> async_shutdown();
   void blocking_shutdown();
 
   asio::awaitable<void> admin_sem_list(std::optional<int> req_shard,
