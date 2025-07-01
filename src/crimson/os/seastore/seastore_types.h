@@ -1278,6 +1278,11 @@ public:
   friend struct laddr_le_t;
   friend struct pladdr_le_t;
 
+  struct laddr_hash_t {
+    std::size_t operator()(const laddr_t &laddr) const {
+      return static_cast<std::size_t>(laddr.value);
+    }
+  };
 private:
   // Prevent direct construction of laddr_t with an integer,
   // always use laddr_t::from_raw_uint instead.
@@ -3138,3 +3143,19 @@ template <> struct fmt::formatter<crimson::os::seastore::write_result_t> : fmt::
 template <> struct fmt::formatter<crimson::os::seastore::omap_type_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<ceph::buffer::list> : fmt::ostream_formatter {};
 #endif
+
+template <>
+struct std::hash<crimson::os::seastore::laddr_t> {
+  using Laddr = crimson::os::seastore::laddr_t;
+  std::size_t operator()(const Laddr &laddr) const {
+    return Laddr::laddr_hash_t()(laddr);
+  }
+};
+
+template <>
+struct boost::hash<crimson::os::seastore::laddr_t> {
+  using Laddr = crimson::os::seastore::laddr_t;
+  std::size_t operator()(const Laddr &laddr) const {
+    return Laddr::laddr_hash_t()(laddr);
+  }
+};
