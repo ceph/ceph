@@ -2304,7 +2304,7 @@ class CephadmAgent(CephService):
         container_image = self._get_ceph_volume_image(self.mgr)
         cfg = {'target_ip': self.mgr.get_mgr_ip(),
                'target_port': agent.server_port,
-               'refresh_period': self.mgr.agent_refresh_rate,
+               'refresh_period': agent.compute_agents_refrsh_rate(),
                'listener_port': self.mgr.agent_starting_port,
                'host': daemon_spec.host,
                'container_image': container_image,
