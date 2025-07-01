@@ -29,3 +29,4 @@ target_link_libraries(crimson-objectstore-tool
   legacy-option-headers
   crimson
   crimson-os)
+install(TARGETS crimson-objectstore-tool DESTINATION bin)

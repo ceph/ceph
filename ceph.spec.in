@@ -2368,6 +2368,7 @@ fi
 %if 0%{with crimson}
 %files crimson-osd
 %{_bindir}/crimson-osd
+%{_bindir}/crimson-objectstore-tool
 %endif
 
 %files volume
