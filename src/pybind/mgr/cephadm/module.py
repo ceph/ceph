@@ -383,6 +383,12 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             desc='Max random startup delay (sec) before agent start sending metadata. Set to -1 for auto (default), or 0 to disable.'
         ),
         Option(
+            'agent_jitter_seconds',
+            type='int',
+            default=-1,
+            desc='Max random delay before agent sends metadata; set -1 for auto (default), 0 to disable'
+        ),
+        Option(
             'agent_starting_port',
             type='int',
             default=4721,
@@ -580,6 +586,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             self.agent_refresh_rate = 0
             self.agent_avg_concurrency = 0
             self.agent_initial_startup_delay_max = 0
+            self.agent_jitter_seconds = 0
             self.agent_down_multiplier = 0.0
             self.agent_starting_port = 0
             self.hw_monitoring = False
