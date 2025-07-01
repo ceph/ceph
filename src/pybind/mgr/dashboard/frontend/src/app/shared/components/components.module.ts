@@ -88,6 +88,7 @@ import { SidePanelComponent } from './side-panel/side-panel.component';
 import InfoIcon from '@carbon/icons/es/information/16';
 import CopyIcon from '@carbon/icons/es/copy/32';
 import downloadIcon from '@carbon/icons/es/download/16';
+import { ChartsModule } from '@carbon/charts-angular';
 
 @NgModule({
   imports: [
@@ -127,7 +128,8 @@ import downloadIcon from '@carbon/icons/es/download/16';
     ComboBoxModule,
     ProgressIndicatorModule,
     BaseChartDirective,
-    PanelModule
+    PanelModule,
+    ChartsModule
   ],
   declarations: [
     SparklineComponent,
