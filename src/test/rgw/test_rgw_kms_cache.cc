@@ -5,12 +5,6 @@
 #include "rgw_common.h"
 #include "rgw_kms.cc"
 
-// The KMS Cache must have a ceph context that outlives it. It is lazy
-// initialized as a static local in KMSContext{cct} and needs ceph
-// context infrastructure like perf counters up until the last TTL
-// reaper thread/coroutine is done.
-boost::intrusive_ptr<CephContext> cct;
-
 class TestSSEKMSWithTestingKMS : public ::testing::Test {
  protected:
   CephContext* cct = g_ceph_context;
@@ -166,9 +160,10 @@ int main(int argc, char** argv) {
       // make it very unlikely that the TTL reaper runs during unittests
       {"rgw_crypt_s3_kms_cache_positive_ttl", "3600"},
       {"rgw_crypt_s3_kms_cache_transient_error_ttl", "3600"},
-      {"rgw_crypt_s3_kms_cache_negative_ttl", "3600"}
+      {"rgw_crypt_s3_kms_cache_negative_ttl", "3600"},
+      {"debug_rgw", "20"}
   };
-  cct = global_init(
+  auto cct = global_init(
       &defaults, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY,
       CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
   common_init_finish(g_ceph_context);
