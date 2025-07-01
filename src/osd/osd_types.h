@@ -2457,19 +2457,23 @@ bool operator==(const pg_stat_t& l, const pg_stat_t& r);
  */
 struct store_statfs_t
 {
-  uint64_t total = 0;                  ///< Total bytes
-  uint64_t available = 0;              ///< Free bytes available
-  uint64_t internally_reserved = 0;    ///< Bytes reserved for internal purposes
+  // Primary logical stats
+  uint64_t total = 0;                  ///< Total logical bytes, aka store's capacity.
+  uint64_t available = 0;              ///< Remaining logical bytes available, i.e. how much additional data the store can fit.
 
-  int64_t allocated = 0;               ///< Bytes allocated by the store
+  // Additional user-specific ObjectStore stats
+  int64_t allocated = 0;                  ///< Bytes allocated - how much of logical capacity is occupied by user data
+  int64_t data_stored = 0;                ///< Bytes stored by user - how much data is kept in the store from user's perspective.
+  int64_t data_compressed = 0;            ///< Bytes compressed - how much data is persisted in compressed form.
+  int64_t data_compressed_allocated = 0;  ///< Bytes allocated after compression - how much space occupied for compressed user data.
+  int64_t data_compressed_original = 0;   ///< Bytes passed compression - how much user data has undergone compression.
 
-  int64_t data_stored = 0;                ///< Bytes actually stored by the user
-  int64_t data_compressed = 0;            ///< Bytes stored after compression
-  int64_t data_compressed_allocated = 0;  ///< Bytes allocated for compressed data
-  int64_t data_compressed_original = 0;   ///< Bytes that were compressed
+  // Additional internal ObjectStore stats
+  int64_t omap_allocated = 0;         ///< Bytes for OMAP - how much space used to keep OMAPs (estimation)
+  int64_t internal_metadata = 0;      ///< Bytes for internal metadata - how much space used for internal metadata
 
-  int64_t omap_allocated = 0;         ///< approx usage of omap data
-  int64_t internal_metadata = 0;      ///< approx usage of internal metadata
+  // Obsolete
+  uint64_t internally_reserved = 0;    ///< Bytes reserved for internal purposes, apparently NOT USED anymore.
 
   void reset() {
     *this = store_statfs_t();
@@ -2478,7 +2482,7 @@ struct store_statfs_t
 #define FLOOR(x) if (int64_t(x) < f) x = f
     FLOOR(total);
     FLOOR(available);
-    FLOOR(internally_reserved);
+
     FLOOR(allocated);
     FLOOR(data_stored);
     FLOOR(data_compressed);
@@ -2487,6 +2491,8 @@ struct store_statfs_t
 
     FLOOR(omap_allocated);
     FLOOR(internal_metadata);
+
+    FLOOR(internally_reserved);
 #undef FLOOR
   }
 
@@ -2540,19 +2546,20 @@ struct store_statfs_t
   void add(const store_statfs_t& o) {
     total += o.total;
     available += o.available;
-    internally_reserved += o.internally_reserved;
     allocated += o.allocated;
     data_stored += o.data_stored;
     data_compressed += o.data_compressed;
     data_compressed_allocated += o.data_compressed_allocated;
     data_compressed_original += o.data_compressed_original;
+
     omap_allocated += o.omap_allocated;
     internal_metadata += o.internal_metadata;
+
+    internally_reserved += o.internally_reserved;
   }
   void sub(const store_statfs_t& o) {
     total -= o.total;
     available -= o.available;
-    internally_reserved -= o.internally_reserved;
     allocated -= o.allocated;
     data_stored -= o.data_stored;
     data_compressed -= o.data_compressed;
@@ -2560,6 +2567,8 @@ struct store_statfs_t
     data_compressed_original -= o.data_compressed_original;
     omap_allocated -= o.omap_allocated;
     internal_metadata -= o.internal_metadata;
+
+    internally_reserved -= o.internally_reserved;
   }
   void dump(ceph::Formatter *f) const;
   DENC(store_statfs_t, v, p) {
