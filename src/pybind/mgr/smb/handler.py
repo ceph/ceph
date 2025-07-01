@@ -625,35 +625,6 @@ class ClusterConfigHandler:
             _cephx_data_entity(cluster_id),
         )
 
-    def generate_smb_service_spec(self, cluster_id: str) -> SMBSpec:
-        """Demo function that generates a smb service spec on demand."""
-        cluster = self._cluster_entry(cluster_id).get_cluster()
-        # if the user manually puts custom configurations (aka "override"
-        # configs) in the store, use that in favor of the generated config.
-        # this is mainly intended for development/test
-        config_entries = [
-            self.public_store[external.config_key(cluster_id)],
-            self.public_store[external.config_key(cluster_id, override=True)],
-        ]
-        join_source_entries = [
-            self.priv_store[(cluster_id, key)]
-            for key in external.stored_join_source_keys(
-                self.priv_store, cluster_id
-            )
-        ]
-        user_source_entries = [
-            self.priv_store[(cluster_id, key)]
-            for key in external.stored_usergroup_source_keys(
-                self.priv_store, cluster_id
-            )
-        ]
-        return _generate_smb_service_spec(
-            cluster,
-            config_entries=config_entries,
-            join_source_entries=join_source_entries,
-            user_source_entries=user_source_entries,
-        )
-
 
 def order_resources(
     resource_objs: Iterable[SMBResource],
