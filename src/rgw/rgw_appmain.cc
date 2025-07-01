@@ -60,6 +60,7 @@
 #include "rgw_kmip_client_impl.h"
 #include "rgw_perf_counters.h"
 #include "rgw_signal.h"
+#include "rgw_usage_counters.h"
 #ifdef WITH_ARROW_FLIGHT
 #include "rgw_flight_frontend.h"
 #endif
@@ -562,7 +563,9 @@ void rgw::AppMain::init_lua()
   if (r < 0) {
     ldpp_dout(dpp, 5) << "WARNING: failed to install Lua packages from allowlist. error: " << r
             << dendl;
-  }
+}
+
+
   for (const auto &p : failed_packages) {
     ldpp_dout(dpp, 5) << "WARNING: failed to install Lua package: " << p
             << " from allowlist" << dendl;
@@ -579,11 +582,21 @@ void rgw::AppMain::init_lua()
   }
 } /* init_lua */
 
+void rgw::AppMain::init_usage_exporter()
+{
+  exporter = std::make_unique<RGWExporter>();
+  exporter->start(dpp, env.driver);
+}
+
 void rgw::AppMain::shutdown(std::function<void(void)> finalize_async_signals)
 {
   if (env.driver->get_name() == "rados") {
     reloader.reset(); // stop the realm reloader
     static_cast<rgw::sal::RadosLuaManager*>(env.lua.manager.get())->unwatch_reload(dpp);
+  }
+
+  if (exporter) {
+    exporter->stop();
   }
 
   for (auto& fe : fes) {

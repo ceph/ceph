@@ -35,3 +35,4 @@ By default, the directory exported, *'rgw_posix_driver'*, is created in the `dev
 
 The POSIXDriver keeps a LMDB based cache of directories, so that it can provide ordered listings.  This directory lives in `rgw_posix_database_root`, which by default is created in the `dev` subdirectory
 
+Note that LMDB is now a general requirement for building the RGW daemon, even when the POSIX driver is not enabled.

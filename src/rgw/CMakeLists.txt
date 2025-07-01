@@ -30,6 +30,12 @@ endfunction()
 
 find_package(ICU 52.0 COMPONENTS uc REQUIRED)
 
+# LMDB is required for building rgw even when the POSIX driver is disabled
+find_package(LMDB REQUIRED)
+add_compile_definitions(LMDB_SAFE_NO_CPP_UTILITIES)
+
+option(WITH_LMDB "Enable LMDB-backed usage metrics in RGW" OFF)
+
 set(librgw_common_srcs
   services/svc_finisher.cc
   services/svc_bi_rados.cc
@@ -134,6 +140,10 @@ set(librgw_common_srcs
   rgw_sts.cc
   rgw_rest_sts.cc
   rgw_perf_counters.cc
+  rgw_exporter.cc
+  rgw_usage_cache.cc
+  rgw_usage_manager.cc
+  rgw_usage_counters.cc
   rgw_rest_oidc_provider.cc
   rgw_rest_iam.cc
   rgw_object_lock.cc
@@ -264,6 +274,12 @@ if(WITH_RADOSGW_D4N)
 endif()
 
 add_library(rgw_common STATIC ${librgw_common_srcs})
+
+if(WITH_LMDB)
+  message(STATUS "LMDB usage metrics support enabled")
+  add_definitions(-DWITH_LMDB)
+  target_link_libraries(rgw_common PRIVATE ${LMDB_LIBRARIES})
+endif()
 
 include(CheckCXXCompilerFlag)
 check_cxx_compiler_flag("-Wimplicit-const-int-float-conversion"

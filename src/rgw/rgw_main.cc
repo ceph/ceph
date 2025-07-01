@@ -14,6 +14,7 @@
 #include "rgw_common.h"
 #include "rgw_lib.h"
 #include "rgw_log.h"
+#include "rgw_usage_counters.h"
 
 #ifdef HAVE_SYS_PRCTL_H
 #include <sys/prctl.h>
@@ -151,6 +152,8 @@ int main(int argc, char *argv[])
     return -r;
   }
 
+  main.init_usage_exporter();
+
   main.cond_init_apis();
 
   mutex.lock();
@@ -162,6 +165,7 @@ int main(int argc, char *argv[])
   main.init_opslog();
   main.init_tracepoints();
   main.init_lua();
+  main.init_usage_exporter();
   r = main.init_frontends2(nullptr /* RGWLib */);
   if (r != 0) {
     derr << "ERROR:  initialize frontend fail, r = " << r << dendl;

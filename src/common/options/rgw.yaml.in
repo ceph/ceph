@@ -4203,6 +4203,14 @@ options:
   see_also:
   - rgw_bucket_counters_cache
   with_legacy: true
+- name: rgw_usage_cache_refresh_interval
+  type: uint
+  level: advanced
+  desc: Interval in seconds between usage cache refreshes
+  default: 43200
+  services:
+  - rgw
+  with_legacy: true
 - name: rgw_kafka_connection_idle
   type: uint 
   level: advanced

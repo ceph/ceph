@@ -18,6 +18,7 @@
 #include <vector>
 #include <map>
 #include <string>
+#include "rgw_exporter.h"
 
 #include "common/async/context_pool.h"
 
@@ -55,6 +56,7 @@ namespace rgw {
 
 namespace lua { class Background; }
 namespace sal { class ConfigStore; }
+class UsageExporter;
 
 class RGWLib;
 class AppMain {
@@ -70,6 +72,7 @@ class AppMain {
   OpsLogSink* olog = nullptr;
   RGWREST rest;
   std::unique_ptr<rgw::lua::Background> lua_background;
+  std::unique_ptr<rgw::UsageExporter> usage_exporter;
   std::unique_ptr<rgw::auth::ImplicitTenants> implicit_tenant_context;
   std::unique_ptr<rgw::dmclock::SchedulerCtx> sched_ctx;
   std::unique_ptr<ActiveRateLimiter> ratelimiter;
@@ -86,6 +89,7 @@ class AppMain {
   RGWProcessEnv env;
   void need_context_pool();
   std::optional<ceph::async::io_context_pool> context_pool;
+  std::unique_ptr<RGWExporter> exporter;
 public:
   AppMain(const DoutPrefixProvider* dpp);
   ~AppMain();
@@ -115,6 +119,7 @@ public:
   int init_frontends2(RGWLib* rgwlib = nullptr);
   void init_tracepoints();
   void init_lua();
+  void init_usage_exporter();
 
   bool have_http() {
     return have_http_frontend;
