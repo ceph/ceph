@@ -484,7 +484,25 @@ protected:
   /// List of matching prefixes/ColumnFamilies and merge operators
   std::vector<std::pair<std::string,
 			std::shared_ptr<MergeOperator> > > merge_ops;
-
+public:
+  struct keyrange_t {
+    std::string first_key;    // is in the range if exists
+    std::string upper_bound;  // is not in the range even if exists
+  };
+  /// splits a key range into multiple chunks of more or less equal size
+  virtual void util_divide_key_range(
+    const std::string& prefix,        // table to operate on
+    const std::string& starting_key,  // included if exists
+    const std::string& guardrail_key, // excluded if exists
+    uint64_t chunk_count,             // desired chunk count, but fewer can happen
+    uint64_t min_chunk_size,          // do not produce chunk smaller than this
+    float accepted_variance,          // +/- fluctuation of produced chunk size,
+                                      // smaller value requires more work, use 0.1 ?
+    std::vector<keyrange_t>& chunks){ // out: chunks
+      chunks.clear();
+      chunks.emplace_back(starting_key, guardrail_key);
+      return;
+    }
 };
 
 #endif
