@@ -180,6 +180,7 @@ class _Matcher:
                 resources.Share,
                 resources.JoinAuth,
                 resources.UsersAndGroups,
+                resources.TLSCredential,
             )
         }
         if txt in rtypes:
@@ -368,20 +369,21 @@ class ClusterConfigHandler:
                                 cluster_id, share_id
                             ).get_share()
                         )
-        if resources.JoinAuth in matcher:
-            log.debug("searching for join auths")
-            for auth_id in self.join_auth_ids():
-                if (resources.JoinAuth, auth_id) in matcher:
-                    out.append(self._join_auth_entry(auth_id).get_join_auth())
-        if resources.UsersAndGroups in matcher:
-            log.debug("searching for users and groups")
-            for ug_id in self.user_and_group_ids():
-                if (resources.UsersAndGroups, ug_id) in matcher:
-                    out.append(
-                        self._users_and_groups_entry(
-                            ug_id
-                        ).get_users_and_groups()
-                    )
+        _resources = (
+            (resources.JoinAuth, JoinAuthEntry),
+            (resources.UsersAndGroups, UsersAndGroupsEntry),
+            (resources.TLSCredential, TLSCredentialEntry),
+        )
+        for rtype, ecls in _resources:
+            if rtype in matcher:
+                log.debug("searching for %s", cast(Any, rtype).resource_type)
+                out.extend(
+                    ecls.from_store(
+                        self.internal_store, rid
+                    ).get_resource_type(rtype)
+                    for rid in ecls.ids(self.internal_store)
+                    if (rtype, rid) in matcher
+                )
         log.debug("search found %d resources", len(out))
         return out
 
