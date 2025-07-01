@@ -146,6 +146,21 @@ class AgentEndpoint:
         else:
             return self.mgr.agent_initial_startup_delay_max
 
+    def get_jitter(self) -> int:
+        """
+        Compute the jitter window (in seconds) applied before agents send metadata.
+
+        - If agent_jitter_seconds is -1 (auto), compute it as:
+            jitter = num_agents / avg_concurrency (M)
+        - This spreads agent reports evenly across the window.
+        - Uses a min jitter of 2s to prevent tight clustering in very small clusters.
+        """
+        if self.mgr.agent_jitter_seconds == -1:  # auto-jitter mode
+            agents_refresh_rate = self.compute_agents_refrsh_rate()
+            return max(2, int(agents_refresh_rate * 0.5))
+        else:
+            return self.mgr.agent_jitter_seconds
+
     def configure(self) -> None:
         self.host_data = HostData(self.mgr, self.server_port, self.server_addr)
         self.configure_tls(self.host_data)
