@@ -108,9 +108,7 @@ int main(int argc, char *argv[])
   DoutPrefix dp(cct.get(), dout_subsys, "rgw main: ");
   rgw::AppMain main(&dp);
 
-  if (g_conf()->rgw_crypt_s3_kms_cache_enabled) {
-    LinuxKeyringSecret::initialize_process_keyring();
-  }
+  LinuxKeyringSecret::initialize_process_keyring();
 
   main.init_frontends1(false /* nfs */);
   main.init_numa();
