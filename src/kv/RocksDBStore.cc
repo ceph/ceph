@@ -1430,6 +1430,38 @@ int64_t RocksDBStore::estimate_prefix_size(const string& prefix,
   return size;
 }
 
+int64_t RocksDBStore::estimate_range_size(
+  const string& prefix,
+  const string& key_from,
+  const string& key_to)
+{
+  // The default mode is to derive estimates based on
+  // sst files alone (INCLUDE_FILES).
+  // This gives an irritating result when a batch of keys is
+  // just commited but estimate keeps showing 0.
+  rocksdb::DB::SizeApproximationFlags flags(
+    rocksdb::DB::SizeApproximationFlags::INCLUDE_FILES |
+    rocksdb::DB::SizeApproximationFlags::INCLUDE_MEMTABLES);
+  uint64_t size = 0;
+  auto p_iter = cf_handles.find(prefix);
+  if (p_iter != cf_handles.end()) {
+    for (auto cf : p_iter->second.handles) {
+      uint64_t s = 0;
+      string start = key_from;//prefix + string(1, '\x00');
+      string limit = key_to;//prefix + string("\xff\xff\xff\xff");
+      rocksdb::Range r(start, limit);
+      db->GetApproximateSizes(cf, &r, 1, &s, flags);
+      size += s;
+    }
+  } else {
+    string start = combine_strings(prefix , key_from);
+    string limit = combine_strings(prefix , key_to);//prefix + "\xff\xff\xff\xff");
+    rocksdb::Range r(start, limit);
+    db->GetApproximateSizes(default_cf, &r, 1, &size, flags);
+  }
+  return size;
+}
+
 void RocksDBStore::get_statistics(Formatter *f)
 {
   if (!cct->_conf->rocksdb_perf)  {

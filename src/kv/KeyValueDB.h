@@ -409,6 +409,13 @@ public:
 				       const std::string& key_prefix) {
     return 0;
   }
+  /// estimate space utilization for a specified range (in bytes)
+  virtual int64_t estimate_range_size(
+    const std::string& prefix,
+    const std::string& key_from,
+    const std::string& key_to) {
+      return 0;
+  };
 
   /// compact the underlying store
   virtual void compact() {}

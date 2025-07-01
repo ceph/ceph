@@ -285,6 +285,9 @@ public:
 
   int64_t estimate_prefix_size(const std::string& prefix,
 			       const std::string& key_prefix) override;
+  int64_t estimate_range_size(const std::string& prefix,
+                              const std::string& key_from,
+                              const std::string& key_to) override;
   struct RocksWBHandler;
   class RocksDBTransactionImpl : public KeyValueDB::TransactionImpl {
   public:
