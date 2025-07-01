@@ -3474,6 +3474,17 @@ int RGWCreateBucket::verify_permission(optional_yield y)
     return -EACCES;
   }
 
+  // CreateBucket doesn't call rgw_build_bucket_policies() to initialize this
+  s->public_access_block = get_public_access_conf(s->bucket_attrs,
+                                                  s->auth.identity->get_account());
+  // reject public canned acls
+  if (s->public_access_block.BlockPublicAcls &&
+      (s->canned_acl == "public-read" ||
+       s->canned_acl == "public-read-write" ||
+       s->canned_acl == "authenticated-read")) {
+    return -EACCES;
+  }
+
   if (object_ownership) {
     // x-amz-object-ownership requires s3:PutBucketOwnershipControls permission
     if (!verify_user_permission(this, s, arn, rgw::IAM::s3PutBucketOwnershipControls, false)) {
