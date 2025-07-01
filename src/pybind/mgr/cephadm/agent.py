@@ -133,6 +133,22 @@ class AgentEndpoint:
 
         return max(20, refresh_rate)
 
+    def get_initial_delay(self) -> int:
+        """
+        Compute the maximum initial random startup delay (in seconds) before an agent starts reporting.
+
+        - If agent_initial_startup_delay_max is -1 (auto), compute as:
+            delay = num_agents / avg_concurrency (M)
+        - This prevents bursts of all agents from reporting immediately at startup.
+        - Enforces a minimum of 10s to avoid early tight clustering.
+        """
+        if self.mgr.agent_initial_startup_delay_max == -1: # auto-delay mode
+            num_agents = len(self.mgr.cache.get_hosts())
+            agents_avg_concurrency = self.compute_agents_avg_concurrency()
+            return max(10, num_agents // agents_avg_concurrency)
+        else:
+            return self.mgr.agent_initial_startup_delay_max
+
     def configure(self) -> Tuple[Dict, Dict, List[tuple], tuple]:
         self.host_data = HostData(self.mgr)
         ssl_info = self.configure_tls()

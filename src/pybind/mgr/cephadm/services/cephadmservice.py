@@ -2117,7 +2117,8 @@ class CephadmAgent(CephService):
                'refresh_period': agent.compute_agents_refrsh_rate(),
                'listener_port': self.mgr.agent_starting_port,
                'host': daemon_spec.host,
-               'device_enhanced_scan': str(self.mgr.device_enhanced_scan)}
+               'device_enhanced_scan': str(self.mgr.device_enhanced_scan),
+               'initial_startup_delay_max': agent.get_initial_delay()}
 
         tls_creds = self.get_certificates(daemon_spec)
         config = {
