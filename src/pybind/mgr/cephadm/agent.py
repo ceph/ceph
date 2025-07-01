@@ -717,12 +717,34 @@ class HostData(Server):
         self.unsubscribe()
         super().stop()
 
+    def get_data(self) -> Optional[dict]:
+        import io
+        import gzip
+        try:
+            content_encoding = cherrypy.request.headers.get('Content-Encoding', '')
+            remote_ip = cherrypy.request.remote.ip
+            raw_body = cherrypy.request.body.read()
+            if content_encoding == 'gzip':
+                self.mgr.log.info(f">>> Received gzipped payload from {remote_ip}")
+                buf = io.BytesIO(raw_body)
+                with gzip.GzipFile(fileobj=buf) as gz:
+                    decompressed = gz.read()
+                data = json.loads(decompressed.decode('utf-8'))
+            else:
+                self.mgr.log.info(f">>> Received plain payload from {remote_ip}")
+                data = json.loads(raw_body.decode('utf-8'))
+            return data
+        except Exception as e:
+            self.mgr.log.error(f"Failed to read request body: {e}")
+            return None
+
     @cherrypy.tools.allow(methods=['POST'])
-    @cherrypy.tools.json_in()
     @cherrypy.tools.json_out()
     @cherrypy.expose
     def index(self) -> Dict[str, Any]:
-        data: Dict[str, Any] = cherrypy.request.json
+        data: Optional[Dict[str, Any]] = self.get_data()
+        if data is None:
+            return {}
         results: Dict[str, Any] = {}
         try:
             self.check_request_fields(data)
