@@ -681,15 +681,20 @@ ExtentPlacementManager::BackgroundProcess::reserve_projected_usage(
     stats.io_blocked_sum += stats.io_blocking_num;
 
     blocking_io = seastar::promise<>();
+    auto begin_time = seastar::lowres_system_clock::now();
     return blocking_io->get_future(
-    ).then([this, usage, FNAME] {
-      return seastar::repeat([this, usage, FNAME] {
+    ).then([this, usage, FNAME, begin_time] {
+      return seastar::repeat([this, usage, FNAME, begin_time] {
         ceph_assert(!blocking_io);
         auto res = try_reserve_io(usage);
         if (res.is_successful()) {
           DEBUG("unblocked");
           assert(stats.io_blocking_num == 1);
           --stats.io_blocking_num;
+          auto end_time = seastar::lowres_system_clock::now();
+          auto duration = end_time - begin_time;
+          stats.io_blocked_time += std::chrono::duration_cast<
+            std::chrono::milliseconds>(duration).count();
           return seastar::make_ready_future<seastar::stop_iteration>(
             seastar::stop_iteration::yes);
         } else {
@@ -974,7 +979,9 @@ void ExtentPlacementManager::BackgroundProcess::register_metrics()
     sm::make_counter("io_blocked_count_clean", stats.io_blocked_count_clean,
                      sm::description("IOs that are blocked by cleaning")),
     sm::make_counter("io_blocked_sum", stats.io_blocked_sum,
-                     sm::description("the sum of blocking IOs"))
+                     sm::description("the sum of blocking IOs")),
+    sm::make_counter("io_blocked_time", stats.io_blocked_time,
+                     sm::description("the sum of the time(ms) in which IOs are blocked"))
   });
 }
 
