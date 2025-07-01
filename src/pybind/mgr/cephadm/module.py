@@ -366,9 +366,15 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         ),
         Option(
             'agent_refresh_rate',
-            type='secs',
-            default=20,
-            desc='How often agent on each host will try to gather and send metadata'
+            type='int',
+            default=-1,
+            desc='How often each agent sends metadata. Use -1 to auto-adjust based on cluster size.'
+        ),
+        Option(
+            'agent_avg_concurrency',
+            type='int',
+            default=-1,
+            desc='Target average number of agents sending per second. Used to compute jitter window. Set -1 for auto.'
         ),
         Option(
             'agent_starting_port',
@@ -566,6 +572,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             self.ssh_cert: Optional[str] = None
             self.use_agent = False
             self.agent_refresh_rate = 0
+            self.agent_avg_concurrency = 0
             self.agent_down_multiplier = 0.0
             self.agent_starting_port = 0
             self.hw_monitoring = False
