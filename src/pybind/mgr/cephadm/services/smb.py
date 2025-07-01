@@ -163,22 +163,36 @@ class SMBService(CephService):
             _add_cfg(
                 files,
                 'remote_control.ssl.crt',
-                smb_spec.remote_control_ssl_cert,
+                self._cert_or_uri(smb_spec.remote_control_ssl_cert),
             )
             _add_cfg(
                 files,
                 'remote_control.ssl.key',
-                smb_spec.remote_control_ssl_key,
+                self._cert_or_uri(smb_spec.remote_control_ssl_key),
             )
             _add_cfg(
                 files,
                 'remote_control.ca.crt',
-                smb_spec.remote_control_ca_cert,
+                self._cert_or_uri(smb_spec.remote_control_ca_cert),
             )
 
         logger.debug('smb generate_config: %r', config_blobs)
         self._configure_cluster_meta(smb_spec, daemon_spec)
         return config_blobs, []
+
+    def _cert_or_uri(self, data: Optional[str]) -> Optional[str]:
+        if data is None:
+            return None
+        if not data.startswith("URI:"):
+            return data
+        uri = data[4:]
+        if not uri.startswith('rados:mon-config-key'):
+            raise ValueError('unhandled URI scheme')
+
+        from smb.mon_store import MonKeyConfigStore
+        store = MonKeyConfigStore(self.mgr)
+        entry = store.lookup_uri(uri)
+        return entry.get_data()
 
     def config_dashboard(
         self, daemon_descrs: List[DaemonDescription]
