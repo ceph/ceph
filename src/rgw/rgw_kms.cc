@@ -27,6 +27,10 @@
 #include <rapidjson/writer.h>
 #include <algorithm>
 #include <boost/asio/associated_executor.hpp>
+#include <boost/asio/bind_cancellation_slot.hpp>
+#include <boost/asio/bind_executor.hpp>
+#include <boost/asio/cancellation_signal.hpp>
+#include <boost/asio/cancellation_type.hpp>
 #include <boost/asio/error.hpp>
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/spawn.hpp>
@@ -1130,47 +1134,79 @@ class KMSContext : public SSEContext {
                      << ttl << dendl;
       while (!stop.stop_requested()) {
         std::unique_lock<std::mutex> lock(mutex);
-        cond.wait_for(lock, ttl, [&stop] { return stop.stop_requested(); });
+        if (cond.wait_for(lock, ttl, [&stop] { return stop.stop_requested(); })) {
+	  break;
+	}
         const auto expired_count = cache.expire_erase();
         ldout(cct, 20) << "KMS Cache: TTL reaper thread expired "
                        << expired_count << " entries" << dendl;
       }
+      ldout(cct, 10) << "KMS Cache: Stopping TTL reaper thread " << thread_name
+                     << "/" << std::hex << std::this_thread::get_id()
+                     << std::dec << dendl;
     });
   }
 
   static void make_ttl_reaper_async(
       CephContext* cct, KMSSecretCache& cache, std::chrono::seconds ttl,
-      boost::asio::yield_context& yield) {
+      boost::asio::yield_context& yield,
+      boost::asio::cancellation_signal& cancel_signal) {
+    auto context = make_strand(yield.get_executor());
     boost::asio::spawn(
-        make_strand(yield.get_executor()),
-        [cct, &cache, ttl](const asio::yield_context& yield) {
-          ldout(cct, 10)
-              << "KMS Cache: Starting async TTL reaper, running every " << ttl
-              << dendl;
-          asio::steady_timer timer(yield.get_executor());
-          while (true) {
-            timer.expires_after(ttl);
-            boost::system::error_code ec;
-            timer.async_wait(yield[ec]);
-            if (ec == asio::error::operation_aborted) {
-              break;
-            }
-            const auto expired_count = cache.expire_erase();
-            ldout(cct, 20) << "KMS Cache: Async TTL reaper expired "
-                           << expired_count << " entries" << dendl;
-          }
-        },
-        boost::asio::detached);
+        context,
+            [cct, &cache, ttl](const asio::yield_context& yield) {
+              ldout(cct, 10)
+                  << "KMS Cache: Starting async TTL reaper, running every "
+                  << ttl << dendl;
+              asio::steady_timer timer(yield.get_executor());
+              while (true) {
+                timer.expires_after(ttl);
+                boost::system::error_code ec;
+                timer.async_wait(yield[ec]);
+                if (ec == asio::error::operation_aborted) {
+                  ldout(cct, 10)
+                      << "KMS Cache: Stopping async TTL reaper" << dendl;
+                  break;
+                }
+                const auto expired_count = cache.expire_erase();
+                ldout(cct, 20) << "KMS Cache: Async TTL reaper expired "
+                               << expired_count << " entries" << dendl;
+              }
+            },
+	boost::asio::bind_cancellation_slot(
+            cancel_signal.slot(), boost::asio::bind_executor(context, boost::asio::detached))
+		       );
   }
 
-  // secrets_cache lazy initializes the KMS cache on first call. It
-  // always initializes, but may choose to disable the cache in case
-  // something goes wrong (via config). This allows us to toggle the
-  // cache at runtime without worrying about its life cycle.
-  static KMSSecretCache& secrets_cache(CephContext* cct, optional_yield y) {
+  struct KMSCacheContext {
+    std::unique_ptr<KMSSecretCache> cache;
+    std::jthread ttl_reaper;
+    boost::asio::cancellation_signal ttl_cancel;
+    KMSCacheContext(const KMSCacheContext&) = delete;
+    KMSCacheContext(KMSCacheContext&&) = delete;
+    KMSCacheContext& operator=(const KMSCacheContext&) = delete;
+    KMSCacheContext& operator=(KMSCacheContext&&) = delete;
+    KMSCacheContext(CephContext* cct, size_t capacity, ceph::timespan ttl)
+        : cache(std::make_unique<KMSSecretCache>(
+              cct, "kms-cache", capacity, ttl)) {};
+  };
+
+  // lazy_secrets_cache manages the lazy initialization of the secrets
+  // cache. Do not use directly, use secrets_cache().
+  //
+  // Cache + TTL reaper lifecycle is packaged into KMSCacheContext and
+  // tied to CephContext via an associated object. We keep a static
+  // copy around for faster access. Destroying KMSCacheContext stops
+  // TTL reaper threads, but not the coroutine variant. The async TTL
+  // reaper needs to be stopped explicity before joining the RGW
+  // context pool to allow it to shut down.
+  static KMSCacheContext* lazy_secrets_cache(
+      CephContext* cct, optional_yield y, bool initialize = true) {
     static std::once_flag initialized;
-    static std::unique_ptr<KMSSecretCache> instance;
-    static std::jthread ttl_reaper;
+    static KMSCacheContext* instance;
+    if (!initialize) {
+      return instance;
+    }
     std::call_once(initialized, [&]() {
       ldout(cct, 10)
           << fmt::format(
@@ -1181,8 +1217,10 @@ class KMSContext : public SSEContext {
                  cct->_conf->rgw_crypt_s3_kms_cache_negative_ttl,
                  cct->_conf->rgw_crypt_s3_kms_cache_transient_error_ttl)
           << dendl;
-      instance = std::make_unique<KMSSecretCache>(
-          cct, "kms-cache", cct->_conf->rgw_crypt_s3_kms_cache_max_size,
+
+      instance = &cct->lookup_or_create_singleton_object<KMSCacheContext>(
+          "RGW::KMSContext::secrets_cache", false, cct,
+          cct->_conf->rgw_crypt_s3_kms_cache_max_size,
           std::chrono::seconds(
               cct->_conf->rgw_crypt_s3_kms_cache_positive_ttl));
       std::error_code ec;
@@ -1192,21 +1230,37 @@ class KMSContext : public SSEContext {
                       << ec << "). Disabling Cache." << dendl;
         cct->_conf->rgw_crypt_s3_kms_cache_enabled = false;
       }
-
       const auto min_ttl_secs = std::min(
           {cct->_conf->rgw_crypt_s3_kms_cache_positive_ttl,
            cct->_conf->rgw_crypt_s3_kms_cache_negative_ttl,
            cct->_conf->rgw_crypt_s3_kms_cache_transient_error_ttl});
       if (y) {
         make_ttl_reaper_async(
-            cct, *instance, std::chrono::seconds(min_ttl_secs),
-            y.get_yield_context());
+            cct, *instance->cache, std::chrono::seconds(min_ttl_secs),
+            y.get_yield_context(), instance->ttl_cancel);
       } else {
-        ttl_reaper = make_ttl_reaper_thread(
-            cct, *instance, std::chrono::seconds(min_ttl_secs));
+        instance->ttl_reaper = make_ttl_reaper_thread(
+            cct, *instance->cache, std::chrono::seconds(min_ttl_secs));
       }
     });
-    return *instance;
+    return instance;
+  }
+
+  // secrets_cache always initializes the KMS cache on first call. It
+  // may choose to disable the cache in case something goes wrong (via
+  // config). This allows us to toggle the cache at runtime without
+  // worrying about its life cycle.
+  static KMSSecretCache& secrets_cache(CephContext* cct, optional_yield y) {
+    return *lazy_secrets_cache(cct, y, true)->cache;
+  }
+
+  // stop_async_ttl_reaper stops the asio TTL reaper coroutine if the
+  // cache is initialized.
+  static void stop_async_ttl_reaper(CephContext* cct) {
+    auto* ctx = lazy_secrets_cache(cct, null_yield, false);
+    if (ctx != nullptr) {
+      ctx->ttl_cancel.emit(boost::asio::cancellation_type::all);
+    }
   }
 
   bool cache_enabled() {
@@ -1511,4 +1565,9 @@ int remove_sse_s3_bucket_key(const DoutPrefixProvider *dpp,
     ldpp_dout(dpp, 0) << "Missing or invalid secret engine" << dendl;
     return -EINVAL;
   }
+}
+
+void rgw_kms_cleanup(CephContext* cct) {
+  KMSContext kctx { cct };
+  kctx.stop_async_ttl_reaper(cct);
 }

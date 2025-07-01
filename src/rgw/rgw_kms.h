@@ -69,3 +69,5 @@ public:
                       optional_yield y, std::string& actual_key) = 0;
   virtual ~SecretEngine(){};
 };
+
+void rgw_kms_cleanup(CephContext* cct);
