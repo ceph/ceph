@@ -784,11 +784,12 @@ class HostData(Server):
         except Exception as e:
             raise Exception(
                 f'Counter value from agent on host {host} could not be converted to an integer: {e}')
-        metadata_types = ['ls', 'networks', 'facts', 'volume']
-        metadata_types_str = '{' + ', '.join(metadata_types) + '}'
-        if not all(item in data.keys() for item in metadata_types):
-            self.mgr.log.warning(
-                f'Agent on host {host} reported incomplete metadata. Not all of {metadata_types_str} were present. Received fields {fields}')
+        if not self.mgr.agent_metadata_payload_optimization_enabled:
+            metadata_types = ['ls', 'networks', 'facts', 'volume']
+            metadata_types_str = '{' + ', '.join(metadata_types) + '}'
+            if not all(item in data.keys() for item in metadata_types):
+                self.mgr.log.warning(
+                    f'Agent on host {host} reported incomplete metadata. Not all of {metadata_types_str} were present. Received fields {fields}')
 
     def handle_metadata(self, data: Dict[str, Any]) -> str:
         try:
