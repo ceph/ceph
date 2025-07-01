@@ -40,7 +40,7 @@ class ExtentQueue {
     const Transaction::src_t* p_src) {
     assert(extent.is_stable_clean());
     assert(!extent.is_placeholder());
-    assert(extent.primary_ref_list_hook.is_linked());
+    assert(extent.is_linked_to_list());
     assert(list.size() > 0);
     auto extent_loaded_length = extent.get_loaded_length();
     assert(current_size >= extent_loaded_length);
@@ -90,7 +90,7 @@ public:
     assert(extent.is_stable_clean());
     assert(!extent.is_placeholder());
 
-    if (extent.primary_ref_list_hook.is_linked()) {
+    if (extent.is_linked_to_list()) {
       do_remove_from_list(extent, nullptr);
     }
   }
@@ -102,7 +102,7 @@ public:
     assert(!extent.is_placeholder());
 
     auto extent_loaded_length = extent.get_loaded_length();
-    if (extent.primary_ref_list_hook.is_linked()) {
+    if (extent.is_linked_to_list()) {
       // present, move to top (back)
       assert(list.size() > 0);
       assert(current_size >= extent_loaded_length);
@@ -135,7 +135,7 @@ public:
     const Transaction::src_t* p_src) {
     assert(extent.is_data_stable());
 
-    if (extent.primary_ref_list_hook.is_linked()) {
+    if (extent.is_linked_to_list()) {
       assert(extent.is_stable_clean());
       assert(!extent.is_placeholder());
       // present, increase size

@@ -727,7 +727,7 @@ void Cache::mark_dirty(CachedExtentRef ref)
 {
   assert(ref->get_paddr().is_absolute());
   if (ref->is_stable_dirty()) {
-    assert(ref->primary_ref_list_hook.is_linked());
+    assert(ref->is_linked_to_list());
     return;
   }
 
@@ -741,7 +741,7 @@ void Cache::add_to_dirty(
     const Transaction::src_t* p_src)
 {
   assert(ref->is_stable_dirty());
-  assert(!ref->primary_ref_list_hook.is_linked());
+  assert(!ref->is_linked_to_list());
   ceph_assert(ref->get_modify_time() != NULL_TIME);
   assert(ref->is_fully_loaded());
   assert(ref->get_paddr().is_absolute() ||
@@ -771,7 +771,7 @@ void Cache::remove_from_dirty(
     const Transaction::src_t* p_src)
 {
   assert(ref->is_stable_dirty());
-  ceph_assert(ref->primary_ref_list_hook.is_linked());
+  ceph_assert(ref->is_linked_to_list());
   assert(ref->is_fully_loaded());
   assert(ref->get_paddr().is_absolute() ||
          ref->get_paddr().is_root());
@@ -803,11 +803,11 @@ void Cache::replace_dirty(
     const Transaction::src_t& src)
 {
   assert(prev->is_stable_dirty());
-  ceph_assert(prev->primary_ref_list_hook.is_linked());
+  ceph_assert(prev->is_linked_to_list());
   assert(prev->is_fully_loaded());
 
   assert(next->is_stable_dirty());
-  assert(!next->primary_ref_list_hook.is_linked());
+  assert(!next->is_linked_to_list());
   ceph_assert(next->get_modify_time() != NULL_TIME);
   assert(next->is_fully_loaded());
 
@@ -833,7 +833,7 @@ void Cache::clear_dirty()
   for (auto i = dirty.begin(); i != dirty.end(); ) {
     auto ptr = &*i;
     assert(ptr->is_stable_dirty());
-    ceph_assert(ptr->primary_ref_list_hook.is_linked());
+    ceph_assert(ptr->is_linked_to_list());
     assert(ptr->is_fully_loaded());
 
     auto extent_length = ptr->get_length();
@@ -889,7 +889,7 @@ void Cache::commit_replace_extent(
   const auto t_src = t.get_src();
   if (is_root_type(prev->get_type())) {
     assert(prev->is_stable_dirty());
-    assert(prev->primary_ref_list_hook.is_linked());
+    assert(prev->is_linked_to_list());
     // add the new dirty root to front
     remove_from_dirty(prev, nullptr/* exclude root */);
     add_to_dirty(next, nullptr/* exclude root */);
