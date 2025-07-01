@@ -349,7 +349,7 @@ static void get_shared_blob_key(uint64_t sbid, string *key)
   _key_encode_u64(sbid, key);
 }
 
-static int get_key_shared_blob(const string& key, uint64_t *sbid)
+int get_key_shared_blob(const string& key, uint64_t *sbid)
 {
   const char *p = key.c_str();
   if (key.length() < sizeof(uint64_t))
@@ -435,7 +435,7 @@ static int _get_key_object(const char *p, ghobject_t *oid)
 }
 
 template<typename S>
-static int get_key_object(const S& key, ghobject_t *oid)
+int get_key_object(const S& key, ghobject_t *oid)
 {
   if (key.length() < ENCODED_KEY_PREFIX_LEN)
     return -1;
@@ -444,6 +444,8 @@ static int get_key_object(const S& key, ghobject_t *oid)
   const char *p = key.c_str();
   return _get_key_object(p, oid);
 }
+
+template int get_key_object(const string& key, ghobject_t *oid);
 
 template<typename S>
 static void _get_object_key(const ghobject_t& oid, S *key)
@@ -552,7 +554,7 @@ int get_key_extent_shard(const string& key, string *onode_key, uint32_t *offset)
   return 0;
 }
 
-static bool is_extent_shard_key(const string& key)
+bool is_extent_shard_key(const string& key)
 {
   return *key.rbegin() == EXTENT_SHARD_KEY_SUFFIX;
 }
