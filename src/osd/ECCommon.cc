@@ -426,6 +426,7 @@ void ECCommon::ReadPipeline::start_read_op(
 void ECCommon::ReadPipeline::do_read_op(ReadOp &rop) {
   const int priority = rop.priority;
   const ceph_tid_t tid = rop.tid;
+  bool reads_sent = false;
 
   dout(10) << __func__ << ": starting read " << rop << dendl;
   ceph_assert(!rop.to_read.empty());
@@ -433,7 +434,6 @@ void ECCommon::ReadPipeline::do_read_op(ReadOp &rop) {
   map<pg_shard_t, ECSubRead> messages;
   for (auto &&[hoid, read_request]: rop.to_read) {
     bool need_attrs = read_request.want_attrs;
-    ceph_assert(!read_request.shard_reads.empty());
 
     for (auto &&[shard, shard_read]: read_request.shard_reads) {
       if (need_attrs && !sinfo.is_nonprimary_shard(shard)) {
@@ -456,9 +456,11 @@ void ECCommon::ReadPipeline::do_read_op(ReadOp &rop) {
       for (auto &[start, len]: shard_read.extents) {
         messages[shard_read.pg_shard].to_read[hoid].emplace_back(
           boost::make_tuple(start, len, read_request.flags));
+        reads_sent = true;
       }
     }
     ceph_assert(!need_attrs);
+    ceph_assert(reads_sent);
   }
 
   std::vector<std::pair<int, Message*>> m;
