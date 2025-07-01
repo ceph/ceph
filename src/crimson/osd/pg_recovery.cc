@@ -22,7 +22,8 @@ SET_SUBSYS(osd);
 
 using std::map;
 using std::set;
-using PglogBasedRecovery = crimson::osd::PglogBasedRecovery;
+
+namespace crimson::osd {
 
 void PGRecovery::start_pglogbased_recovery()
 {
@@ -710,4 +711,6 @@ void PGRecovery::on_backfill_reserved()
   // (but stopped one).
   backfill_state->process_event(
     BackfillState::Triggered{}.intrusive_from_this());
+}
+
 }
