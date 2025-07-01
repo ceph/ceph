@@ -3984,7 +3984,7 @@ class TestAgent:
     def test_deploy_cephadm_agent(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
         _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
         agent_spec = ServiceSpec(service_type="agent", placement=PlacementSpec(count=1))
-        agent_config = {"agent.json": "{\"target_ip\": \"::1\", \"target_port\": 7150, \"listener_port\": 4721, \"host\": \"test\", \"device_enhanced_scan\": \"False\", \"refresh_period\": 20, \"initial_startup_delay_max\": 10, \"jitter_seconds\": 10}", "keyring": "[client.agent.test]\nkey = None\n", "root_cert.pem": f"{cephadm_root_ca}", "listener.crt": f"{ceph_generated_cert}", "listener.key": f"{ceph_generated_key}"}
+        agent_config = {"agent.json": "{\"target_ip\": \"::1\", \"target_port\": 7150, \"listener_port\": 4721, \"host\": \"test\", \"device_enhanced_scan\": \"False\", \"metadata_compresion_enabled\": true, \"refresh_period\": 20, \"initial_startup_delay_max\": 10, \"jitter_seconds\": 10}", "keyring": "[client.agent.test]\nkey = None\n", "root_cert.pem": f"{cephadm_root_ca}", "listener.crt": f"{ceph_generated_cert}", "listener.key": f"{ceph_generated_key}"}
 
         with with_host(cephadm_module, 'test'):
             with with_service(cephadm_module, agent_spec):

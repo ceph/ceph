@@ -23,6 +23,7 @@ from mgr_util import test_port_allocation, PortAlreadyInUse
 from mgr_util import verify_tls_files
 import tempfile
 from cephadm.services.service_registry import service_registry
+import cephadm.cherrypy_compression_in
 
 from urllib.error import HTTPError, URLError
 from typing import Any, Dict, List, Set, TYPE_CHECKING, Optional, MutableMapping, IO
@@ -719,12 +720,25 @@ class HostData(Server):
         self.unsubscribe()
         super().stop()
 
+    def get_data(self) -> Optional[dict]:
+        try:
+            remote_ip = cherrypy.request.remote.ip
+            content_encoding = cherrypy.request.headers.get('Content-Encoding', 'identity')
+            raw_body = cherrypy.request.body.read()
+            self.mgr.log.debug(f">>> Received payload from {remote_ip}, Content-Encoding: {content_encoding}")
+            return json.loads(raw_body.decode('utf-8'))
+        except Exception as e:
+            self.mgr.log.error(f"Failed to read request body: {e}")
+            return None
+
     @cherrypy.tools.allow(methods=['POST'])
-    @cherrypy.tools.json_in()
+    @cherrypy.tools.compression_in()
     @cherrypy.tools.json_out()
     @cherrypy.expose
     def index(self) -> Dict[str, Any]:
-        data: Dict[str, Any] = cherrypy.request.json
+        data: Optional[Dict[str, Any]] = self.get_data()
+        if data is None:
+            return {}
         results: Dict[str, Any] = {}
         try:
             self.check_request_fields(data)

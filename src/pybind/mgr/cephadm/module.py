@@ -395,6 +395,12 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             desc='First port agent will try to bind to (will also try up to next 1000 subsequent ports if blocked)'
         ),
         Option(
+            'agent_metadata_compresion_enabled',
+            type='bool',
+            default=True,
+            desc='Enable compression of metadata sent from agent to reduce payload size'
+        ),
+        Option(
             'agent_down_multiplier',
             type='float',
             default=3.0,
@@ -589,6 +595,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             self.agent_jitter_seconds = 0
             self.agent_down_multiplier = 0.0
             self.agent_starting_port = 0
+            self.agent_metadata_compresion_enabled = True
             self.hw_monitoring = False
             self.service_discovery_port = 0
             self.secure_monitoring_stack = False
