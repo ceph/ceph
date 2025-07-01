@@ -87,12 +87,35 @@ public:
     double seconds) const ;
 
   void remove(CachedExtent &extent) {
+    assert(extent.is_linked_to_list());
+
+    do_remove_from_list(extent, nullptr);
+  }
+
+  void add_to_top(
+    CachedExtent &extent,
+    const Transaction::src_t* p_src) {
     assert(extent.is_stable_clean());
     assert(!extent.is_placeholder());
+    assert(!extent.is_linked_to_list());
 
-    if (extent.is_linked_to_list()) {
-      do_remove_from_list(extent, nullptr);
-    }
+    // absent, add to top (back)
+    auto extent_loaded_length = extent.get_loaded_length();
+    if (extent_loaded_length > 0) {
+      current_size += extent_loaded_length;
+      overall_io.in_sizes.account_in(extent_loaded_length);
+      if (p_src) {
+        get_by_ext(
+          get_by_src(trans_io_by_src_ext, *p_src),
+          extent.get_type()
+        ).in_sizes.account_in(extent_loaded_length);
+      }
+    } // else: the extent isn't loaded upon touch_extent()/on_cache(),
+      //       account the io later in increase_cached_size() upon read_extent()
+    get_by_ext(sizes_by_ext, extent.get_type()).account_in(extent_loaded_length);
+    intrusive_ptr_add_ref(&extent);
+    list.push_back(extent);
+    trim_to_capacity(p_src);
   }
 
   void move_to_top(
@@ -100,33 +123,13 @@ public:
     const Transaction::src_t* p_src) {
     assert(extent.is_stable_clean());
     assert(!extent.is_placeholder());
+    assert(extent.is_linked_to_list());
 
-    auto extent_loaded_length = extent.get_loaded_length();
-    if (extent.is_linked_to_list()) {
-      // present, move to top (back)
-      assert(list.size() > 0);
-      assert(current_size >= extent_loaded_length);
-      list.erase(list.s_iterator_to(extent));
-      list.push_back(extent);
-    } else {
-      // absent, add to top (back)
-      if (extent_loaded_length > 0) {
-        current_size += extent_loaded_length;
-        overall_io.in_sizes.account_in(extent_loaded_length);
-        if (p_src) {
-          get_by_ext(
-            get_by_src(trans_io_by_src_ext, *p_src),
-            extent.get_type()
-          ).in_sizes.account_in(extent_loaded_length);
-        }
-      } // else: the extent isn't loaded upon touch_extent()/on_cache(),
-        //       account the io later in increase_cached_size() upon read_extent()
-      get_by_ext(sizes_by_ext, extent.get_type()).account_in(extent_loaded_length);
-      intrusive_ptr_add_ref(&extent);
-      list.push_back(extent);
-
-      trim_to_capacity(p_src);
-    }
+    // present, move to top (back)
+    assert(list.size() > 0);
+    assert(current_size >= extent.get_loaded_length());
+    list.erase(list.s_iterator_to(extent));
+    list.push_back(extent);
   }
 
   void increase_cached_size(
@@ -134,24 +137,23 @@ public:
     extent_len_t increased_length,
     const Transaction::src_t* p_src) {
     assert(extent.is_data_stable());
+    assert(extent.is_linked_to_list());
+    assert(extent.is_stable_clean());
+    assert(!extent.is_placeholder());
 
-    if (extent.is_linked_to_list()) {
-      assert(extent.is_stable_clean());
-      assert(!extent.is_placeholder());
-      // present, increase size
-      assert(list.size() > 0);
-      current_size += increased_length;
-      get_by_ext(sizes_by_ext, extent.get_type()).account_parital_in(increased_length);
-      overall_io.in_sizes.account_in(increased_length);
-      if (p_src) {
-        get_by_ext(
-          get_by_src(trans_io_by_src_ext, *p_src),
-          extent.get_type()
-        ).in_sizes.account_in(increased_length);
-      }
-
-      trim_to_capacity(nullptr);
+    // present, increase size
+    assert(list.size() > 0);
+    current_size += increased_length;
+    get_by_ext(sizes_by_ext, extent.get_type()).account_parital_in(increased_length);
+    overall_io.in_sizes.account_in(increased_length);
+    if (p_src) {
+      get_by_ext(
+        get_by_src(trans_io_by_src_ext, *p_src),
+        extent.get_type()
+      ).in_sizes.account_in(increased_length);
     }
+
+    trim_to_capacity(nullptr);
   }
 
   void clear() {
@@ -317,20 +319,28 @@ public:
   }
 
   void remove(CachedExtent &extent) final {
-    lru.remove(extent);
+    if (extent.is_linked_to_list()) {
+      lru.remove(extent);
+    }
   }
 
   void move_to_top(
     CachedExtent &extent,
     const Transaction::src_t* p_src) final {
-    lru.move_to_top(extent, p_src);
+    if (extent.is_linked_to_list()) {
+      lru.move_to_top(extent, p_src);
+    } else {
+      lru.add_to_top(extent, p_src);
+    }
   }
 
   void increase_cached_size(
     CachedExtent &extent,
     extent_len_t increased_length,
     const Transaction::src_t* p_src) final {
-    lru.increase_cached_size(extent, increased_length, p_src);
+    if (extent.is_linked_to_list()) {
+      lru.increase_cached_size(extent, increased_length, p_src);
+    }
   }
 
   void clear() final {
