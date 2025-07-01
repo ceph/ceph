@@ -1258,7 +1258,8 @@
                     [--journal-object-size <journal-object-size>] 
                     [--journal-pool <journal-pool>] 
                     [--sparse-size <sparse-size>] [--no-progress] 
-                    [--export-format <export-format>] [--pool <pool>] 
+                    [--export-format <export-format>] 
+                    [--estimated-size <estimated-size>] [--pool <pool>] 
                     [--image <image>] 
                     <path-name> <dest-image-spec> 
   
@@ -1290,6 +1291,8 @@
     --sparse-size arg         sparse size in B/K/M [default: 4K]
     --no-progress             disable progress output
     --export-format arg       format of image file
+    --estimated-size arg      estimated image size (valid only for raw import
+                              from stdin, in M/G/T) [default: M]
   
   Image Features:
     (*) supports enabling/disabling on existing images

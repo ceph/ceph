@@ -725,7 +725,7 @@ static int do_import_v2(librados::Rados &rados, int fd, librbd::Image &image,
 
 static int do_import_v1(int fd, librbd::Image &image, uint64_t size,
                         size_t imgblklen, utils::ProgressContext &pc,
-			size_t sparse_size)
+                        size_t sparse_size, size_t estimated_size)
 {
   int r = 0;
   size_t reqlen = imgblklen;    // amount requested from read
@@ -758,6 +758,8 @@ static int do_import_v1(int fd, librbd::Image &image, uint64_t size,
     }
     if (!from_stdin)
       pc.update_progress(image_pos, size);
+    else if (estimated_size != 0)
+      pc.update_progress(image_pos, estimated_size);
 
     bufferptr blkptr(p, blklen); 
     // resize output image by binary expansion as we go for stdin
@@ -823,7 +825,8 @@ out:
 static int do_import(librados::Rados &rados, librbd::RBD &rbd,
 		     librados::IoCtx& io_ctx, const char *imgname,
 		     const char *path, librbd::ImageOptions& opts,
-		     bool no_progress, int import_format, size_t sparse_size)
+		     bool no_progress, int import_format, size_t sparse_size,
+		     size_t estimated_size)
 {
   int fd, r;
   struct stat stat_buf;
@@ -845,7 +848,11 @@ static int do_import(librados::Rados &rados, librbd::RBD &rbd,
   bool from_stdin = !strcmp(path, "-");
   if (from_stdin) {
     fd = STDIN_FILENO;
-    size = 1ULL << order;
+    if (estimated_size == 0) {
+      size = 1ULL << order;
+    } else {
+      size = estimated_size;
+    }
   } else {
     if ((fd = open(path, O_RDONLY|O_BINARY)) < 0) {
       r = -errno;
@@ -908,7 +915,8 @@ static int do_import(librados::Rados &rados, librbd::RBD &rbd,
   }
 
   if (import_format == 1) {
-    r = do_import_v1(fd, image, size, imgblklen, pc, sparse_size);
+    r = do_import_v1(fd, image, size, imgblklen, pc, sparse_size,
+                     estimated_size);
   } else {
     r = do_import_v2(rados, fd, image, size, imgblklen, pc, sparse_size);
   }
@@ -942,6 +950,7 @@ void get_arguments(po::options_description *positional,
   at::add_sparse_size_option(options);
   at::add_no_progress_option(options);
   at::add_export_format_option(options);
+  at::add_estimated_size_option(options);
 
   // TODO legacy rbd allowed import to accept both 'image'/'dest' and
   //      'pool'/'dest-pool'
@@ -1017,9 +1026,25 @@ int execute(const po::variables_map &vm,
   if (vm.count("export-format"))
     format = vm["export-format"].as<uint64_t>();
 
+  size_t estimated_size = 0;
+  if (vm.count(at::IMAGE_ESTIMATED_SIZE)) {
+    if (path != "-") {
+      std::cerr << "rbd: --estimated-size can be specified "
+                << "only for import from stdin" << std::endl;
+      return -EINVAL;
+    }
+    if (format != 1) {
+      std::cerr << "rbd: --estimated-size can be specified "
+                << "only for raw import (--export-format 1)" << std::endl;
+      return -EINVAL;
+    }
+    estimated_size = vm[at::IMAGE_ESTIMATED_SIZE].as<size_t>();
+  }
+
   librbd::RBD rbd;
   r = do_import(rados, rbd, io_ctx, image_name.c_str(), path.c_str(),
-                opts, vm[at::NO_PROGRESS].as<bool>(), format, sparse_size);
+                opts, vm[at::NO_PROGRESS].as<bool>(), format, sparse_size,
+                estimated_size);
   if (r < 0) {
     std::cerr << "rbd: import failed: " << cpp_strerror(r) << std::endl;
     return r;
