@@ -53,6 +53,15 @@ EntryKey = Tuple[str, str]
 FindParams = Dict[str, Any]
 
 
+class ResourceKey(Protocol):
+    """An object representing a key for a singular object in a store.
+    This key may be comprised of one or more input values.
+    """
+
+    def __str__(self) -> str:
+        ...  # pragma: no cover
+
+
 class ConfigEntry(Protocol):
     """A protocol for describing a configuration object that can be kept within
     a configuration store. Has the ability to identify itself either by a
