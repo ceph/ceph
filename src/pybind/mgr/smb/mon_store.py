@@ -146,6 +146,14 @@ class MonKeyStoreEntry:
         """Get the deserialized store entry value."""
         return json.loads(self._store._get_val(self._key))
 
+    def set_data(self, data: str) -> None:
+        """Set the store entry value to the given data."""
+        self._store._set_val(self._key, data)
+
+    def get_data(self) -> str:
+        """Get the stored data value."""
+        return self._store._get_val(self._key)
+
     def remove(self) -> bool:
         """Remove the current entry from the store."""
         return self._store.remove(self.full_key)
