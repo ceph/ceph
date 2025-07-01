@@ -93,6 +93,7 @@ using rgw::IAM::s3GetBucketObjectLockConfiguration;
 using rgw::IAM::s3GetObjectRetention;
 using rgw::IAM::s3GetObjectLegalHold;
 using rgw::IAM::s3DescribeJob;
+using rgw::IAM::s3GetAccountPublicAccessBlock;
 using rgw::IAM::s3objectlambdaGetObject;
 using rgw::IAM::s3objectlambdaListBucket;
 using rgw::IAM::iamGenerateCredentialReport;
@@ -459,6 +460,7 @@ TEST_F(PolicyTest, Parse3) {
   act2[s3GetPublicAccessBlock] = 1;
   act2[s3GetBucketEncryption] = 1;
   act2[s3GetObjectVersionForReplication] = 1;
+  act2[s3GetAccountPublicAccessBlock] = 1;
 
   EXPECT_EQ(p->statements[2].action, act2);
   EXPECT_EQ(p->statements[2].notaction, None);
@@ -532,6 +534,7 @@ TEST_F(PolicyTest, Eval3) {
   s3allow[s3GetPublicAccessBlock] = 1;
   s3allow[s3GetBucketEncryption] = 1;
   s3allow[s3GetObjectVersionForReplication] = 1;
+  s3allow[s3GetAccountPublicAccessBlock] = 1;
 
   ARN arn1(Partition::aws, Service::s3,
 		       "", arbitrary_tenant, "mybucket");
@@ -930,6 +933,7 @@ TEST_F(ManagedPolicyTest, AmazonS3ReadOnlyAccess)
   act[s3GetBucketPublicAccessBlock] = 1;
   act[s3GetBucketEncryption] = 1;
   act[s3GetObjectVersionForReplication] = 1;
+  act[s3GetAccountPublicAccessBlock] = 1;
   // s3:List*
   act[s3ListMultipartUploadParts] = 1;
   act[s3ListBucket] = 1;
