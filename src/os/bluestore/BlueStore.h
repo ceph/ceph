@@ -4082,6 +4082,7 @@ private:
     std::map<uint64_t, volatile_statfs> actual_pool_vstatfs;
     volatile_statfs actual_store_vstatfs;
   };
+  class Decoder_AllocationsAndStatFS;
   class ExtentDecoderPartial : public ExtentMap::ExtentDecoder {
     BlueStore& store;
     read_alloc_stats_t& stats;
@@ -4158,6 +4159,7 @@ private:
   int  read_allocation_from_drive_on_startup();
   int  reconstruct_allocations(SimpleBitmap *smbmp, read_alloc_stats_t &stats);
   int  read_allocation_from_onodes(SimpleBitmap *smbmp, read_alloc_stats_t& stats);
+  int  read_allocation_from_onodes_mt(SimpleBitmap *smbmp, read_alloc_stats_t& stats);
   int  commit_freelist_type();
   int  commit_to_null_manager();
   int  commit_to_real_manager();
