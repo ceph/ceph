@@ -205,6 +205,21 @@ class AgentEndpoint:
         else:
             return self.mgr.agent_initial_startup_delay_max
 
+    def get_jitter(self) -> int:
+        """
+        Compute the jitter window (in seconds) applied before agents send metadata.
+
+        - If agent_jitter_seconds is -1 (auto), compute it as:
+            jitter = num_agents / avg_concurrency (M)
+        - This spreads agent reports evenly across the window.
+        - Uses a min jitter of 2s to prevent tight clustering in very small clusters.
+        """
+        if self.mgr.agent_jitter_seconds == -1:  # auto-jitter mode
+            agents_refresh_rate = self.compute_agents_refrsh_rate()
+            return max(2, int(agents_refresh_rate * 0.5))
+        else:
+            return self.mgr.agent_jitter_seconds
+
     def configure(self) -> Tuple[Dict, Dict, List[tuple], tuple]:
         self.host_data = HostData(self.mgr)
         ssl_info = self.configure_tls()
@@ -1077,10 +1092,11 @@ class CephadmAgentHelpers:
             if host in self.mgr.offline_hosts:
                 return False
             self.mgr.agent_cache.agent_timestamp[host] = datetime_now()
-        # agent hasn't reported in down_multiplier * its refresh rate. Something is likely wrong with it.
+        # agent hasn't reported in:  down_multiplier * it's refresh rate + jitter. Something is likely wrong with it.
+        jitter: float = self.agent.get_jitter()
         down_mult: float = max(self.mgr.agent_down_multiplier, 1.5)
         time_diff = datetime_now() - self.mgr.agent_cache.agent_timestamp[host]
-        if time_diff.total_seconds() > down_mult * float(self.mgr.http_server.agent.compute_agents_refrsh_rate()):
+        if time_diff.total_seconds() > down_mult * float(self.mgr.http_server.agent.compute_agents_refrsh_rate() + jitter):
             return True
         return False
 
