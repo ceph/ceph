@@ -371,6 +371,12 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             desc='How often agent on each host will try to gather and send metadata'
         ),
         Option(
+            'agent_jitter_seconds',
+            type='int',
+            default=-1,
+            desc='Max random delay before agent sends metadata; set -1 for auto (default), 0 to disable'
+        ),
+        Option(
             'agent_starting_port',
             type='int',
             default=4721,
@@ -566,6 +572,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             self.ssh_cert: Optional[str] = None
             self.use_agent = False
             self.agent_refresh_rate = 0
+            self.agent_jitter_seconds = 0
             self.agent_down_multiplier = 0.0
             self.agent_starting_port = 0
             self.hw_monitoring = False
