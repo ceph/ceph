@@ -20670,6 +20670,23 @@ int BlueStore::read_allocation_from_onodes(SimpleBitmap *sbmap, read_alloc_stats
       ++stats.shard_count;
     }
   }
+  return 0;
+}
+
+//---------------------------------------------------------
+int BlueStore::reconstruct_allocations(SimpleBitmap *sbmap, read_alloc_stats_t &stats)
+{
+  // first set space used by superblock
+  auto super_length = std::max<uint64_t>(min_alloc_size, SUPER_RESERVED);
+  set_allocation_in_simple_bmap(sbmap, 0, super_length);
+  stats.extent_count++;
+
+  // then set all space taken by Objects
+  int ret = read_allocation_from_onodes(sbmap, stats);
+  if (ret < 0) {
+    derr << "failed read_allocation_from_onodes()" << dendl;
+    return ret;
+  }
 
   std::lock_guard l(vstatfs_lock);
   store_statfs_t s;
@@ -20691,23 +20708,6 @@ int BlueStore::read_allocation_from_onodes(SimpleBitmap *sbmap, read_alloc_stats
   vstatfs.publish(&s);
   dout(5) << __func__ << " recovered " << s
           << dendl;
-  return 0;
-}
-
-//---------------------------------------------------------
-int BlueStore::reconstruct_allocations(SimpleBitmap *sbmap, read_alloc_stats_t &stats)
-{
-  // first set space used by superblock
-  auto super_length = std::max<uint64_t>(min_alloc_size, SUPER_RESERVED);
-  set_allocation_in_simple_bmap(sbmap, 0, super_length);
-  stats.extent_count++;
-
-  // then set all space taken by Objects
-  int ret = read_allocation_from_onodes(sbmap, stats);
-  if (ret < 0) {
-    derr << "failed read_allocation_from_onodes()" << dendl;
-    return ret;
-  }
 
   return 0;
 }
