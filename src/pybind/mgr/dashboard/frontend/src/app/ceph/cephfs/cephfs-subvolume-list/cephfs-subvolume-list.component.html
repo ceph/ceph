@@ -33,9 +33,6 @@
                 [total]="row.info.bytes_quota"
                 [used]="row.info.bytes_used"
                 [title]="row.name"
-                [showFreeToolTip]="false"
-                customLegend="Quota"
-                [customLegendValue]="row.info.bytes_quota"
                 decimals="2"></cd-usage-bar>
 
   <ng-template #noLimitTpl>
