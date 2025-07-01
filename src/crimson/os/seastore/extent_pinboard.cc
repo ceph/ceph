@@ -8,7 +8,15 @@ SET_SUBSYS(seastore_cache);
 
 namespace crimson::os::seastore {
 
-class ExtentPinboardLRU : public ExtentPinboard {
+/**
+ * ExtentQueue
+ *
+ * A fixed-capacity queue for storing extents in memory. The implementation
+ * holds references to stored extents(increasing their refcount) to prevent
+ * release even when no transactions hold them. This queue serves as the
+ * underlying implementation for ExtentPinboard.
+ */
+class ExtentQueue {
   // max size (bytes)
   const std::size_t capacity = 0;
 
@@ -25,21 +33,19 @@ class ExtentPinboardLRU : public ExtentPinboard {
   mutable counter_by_src_t<counter_by_extent_t<cache_io_stats_t> >
     last_trans_io_by_src_ext;
 
-  CachedExtent::primary_ref_list lru;
+  CachedExtent::primary_ref_list list;
 
-  seastar::metrics::metric_group metrics;
-
-  void do_remove_from_lru(
+  void do_remove_from_list(
     CachedExtent &extent,
     const Transaction::src_t* p_src) {
     assert(extent.is_stable_clean());
     assert(!extent.is_placeholder());
     assert(extent.primary_ref_list_hook.is_linked());
-    assert(lru.size() > 0);
+    assert(list.size() > 0);
     auto extent_loaded_length = extent.get_loaded_length();
     assert(current_size >= extent_loaded_length);
 
-    lru.erase(lru.s_iterator_to(extent));
+    list.erase(list.s_iterator_to(extent));
     current_size -= extent_loaded_length;
     get_by_ext(sizes_by_ext, extent.get_type()).account_out(extent_loaded_length);
     overall_io.out_sizes.account_in(extent_loaded_length);
@@ -55,62 +61,37 @@ class ExtentPinboardLRU : public ExtentPinboard {
   void trim_to_capacity(
     const Transaction::src_t* p_src) {
     while (current_size > capacity) {
-      do_remove_from_lru(lru.front(), p_src);
+      do_remove_from_list(list.front(), p_src);
     }
   }
 
 public:
-  ExtentPinboardLRU(std::size_t capacity) : capacity(capacity) {
-    LOG_PREFIX(ExtentPinboardLRU::ExtentPinboardLRU);
-    INFO("created, lru_capacity=0x{:x}B", capacity);
-  }
+  explicit ExtentQueue(std::size_t capacity) : capacity(capacity) {}
 
   std::size_t get_capacity_bytes() const {
     return capacity;
   }
 
-  std::size_t get_current_size_bytes() const final {
+  std::size_t get_current_size_bytes() const {
     return current_size;
   }
 
-  std::size_t get_current_num_extents() const final {
-    return lru.size();
-  }
-
-  void register_metrics() final {
-    namespace sm = seastar::metrics;
-    metrics.add_group(
-      "cache",
-      {
-        sm::make_counter(
-          "lru_size_bytes",
-          [this] {
-            return get_current_size_bytes();
-          },
-          sm::description("total bytes pinned by the lru")
-        ),
-        sm::make_counter(
-          "lru_num_extents",
-          [this] {
-            return get_current_num_extents();
-          },
-          sm::description("total extents pinned by the lru")
-        ),
-      }
-    );
+  std::size_t get_current_num_extents() const {
+    return list.size();
   }
 
   void get_stats(
+    std::string_view queue_name,
     cache_stats_t &stats,
     bool report_detail,
-    double seconds) const final;
+    double seconds) const ;
 
   void remove(CachedExtent &extent) {
     assert(extent.is_stable_clean());
     assert(!extent.is_placeholder());
 
     if (extent.primary_ref_list_hook.is_linked()) {
-      do_remove_from_lru(extent, nullptr);
+      do_remove_from_list(extent, nullptr);
     }
   }
 
@@ -123,10 +104,10 @@ public:
     auto extent_loaded_length = extent.get_loaded_length();
     if (extent.primary_ref_list_hook.is_linked()) {
       // present, move to top (back)
-      assert(lru.size() > 0);
+      assert(list.size() > 0);
       assert(current_size >= extent_loaded_length);
-      lru.erase(lru.s_iterator_to(extent));
-      lru.push_back(extent);
+      list.erase(list.s_iterator_to(extent));
+      list.push_back(extent);
     } else {
       // absent, add to top (back)
       if (extent_loaded_length > 0) {
@@ -142,7 +123,7 @@ public:
         //       account the io later in increase_cached_size() upon read_extent()
       get_by_ext(sizes_by_ext, extent.get_type()).account_in(extent_loaded_length);
       intrusive_ptr_add_ref(&extent);
-      lru.push_back(extent);
+      list.push_back(extent);
 
       trim_to_capacity(p_src);
     }
@@ -151,14 +132,14 @@ public:
   void increase_cached_size(
     CachedExtent &extent,
     extent_len_t increased_length,
-    const Transaction::src_t* p_src) final {
+    const Transaction::src_t* p_src) {
     assert(extent.is_data_stable());
 
     if (extent.primary_ref_list_hook.is_linked()) {
       assert(extent.is_stable_clean());
       assert(!extent.is_placeholder());
       // present, increase size
-      assert(lru.size() > 0);
+      assert(list.size() > 0);
       current_size += increased_length;
       get_by_ext(sizes_by_ext, extent.get_type()).account_parital_in(increased_length);
       overall_io.in_sizes.account_in(increased_length);
@@ -173,33 +154,30 @@ public:
     }
   }
 
-  void clear() final {
-    LOG_PREFIX(ExtentPinboardLRU::clear);
-    for (auto iter = lru.begin(); iter != lru.end();) {
+  void clear() {
+    LOG_PREFIX(ExtentQueue::clear);
+    for (auto iter = list.begin(); iter != list.end();) {
       SUBDEBUG(seastore_cache, "clearing {}", *iter);
-      do_remove_from_lru(*(iter++), nullptr);
+      do_remove_from_list(*(iter++), nullptr);
     }
   }
 
-  ~ExtentPinboardLRU() {
+  ~ExtentQueue() {
     clear();
   }
 };
 
-ExtentPinboardRef create_extent_pinboard(std::size_t capacity) {
-  return std::make_unique<ExtentPinboardLRU>(capacity);
-}
-
-void ExtentPinboardLRU::get_stats(
+void ExtentQueue::get_stats(
+  std::string_view queue_name,
   cache_stats_t &stats,
   bool report_detail,
   double seconds) const
 {
-  LOG_PREFIX(Cache::LRU::get_stats);
+  LOG_PREFIX(ExtentQueue::get_stats);
 
-  stats.lru_sizes = cache_size_stats_t{current_size, lru.size()};
-  stats.lru_io = overall_io;
-  stats.lru_io.minus(last_overall_io);
+  stats.pinboard_sizes = cache_size_stats_t{current_size, list.size()};
+  stats.pinboard_io = overall_io;
+  stats.pinboard_io.minus(last_overall_io);
 
   if (report_detail && seconds != 0) {
     counter_by_src_t<counter_by_extent_t<cache_io_stats_t> >
@@ -220,11 +198,11 @@ void ExtentPinboardLRU::get_stats(
       }
       trans_io.add(trans_io_per_src);
     }
-    cache_io_stats_t other_io = stats.lru_io;
+    cache_io_stats_t other_io = stats.pinboard_io;
     other_io.minus(trans_io);
 
     std::ostringstream oss;
-    oss << "\nlru total" << stats.lru_sizes;
+    oss << "\n" << queue_name << " total" << stats.pinboard_sizes;
     cache_size_stats_t data_sizes;
     cache_size_stats_t mdat_sizes;
     cache_size_stats_t phys_sizes;
@@ -243,7 +221,7 @@ void ExtentPinboardLRU::get_stats(
         << "\n  mdat" << mdat_sizes
         << "\n  phys" << phys_sizes;
 
-    oss << "\nlru io: trans-"
+    oss << "\n" << queue_name << " io: trans-"
         << cache_io_stats_printer_t{seconds, trans_io}
         << "; other-"
         << cache_io_stats_printer_t{seconds, other_io};
@@ -284,6 +262,88 @@ void ExtentPinboardLRU::get_stats(
   }
 
   last_overall_io = overall_io;
+}
+
+class ExtentPinboardLRU : public ExtentPinboard {
+  ExtentQueue lru;
+  seastar::metrics::metric_group metrics;
+
+public:
+  ExtentPinboardLRU(std::size_t capacity) : lru(capacity) {
+    LOG_PREFIX(ExtentPinboardLRU::ExtentPinboardLRU);
+    INFO("created, lru_capacity=0x{:x}B", capacity);
+  }
+
+  std::size_t get_capacity_bytes() const {
+    return lru.get_capacity_bytes();
+  }
+
+  std::size_t get_current_size_bytes() const final {
+    return lru.get_current_size_bytes();
+  }
+
+  std::size_t get_current_num_extents() const final {
+    return lru.get_current_num_extents();
+  }
+
+  void register_metrics() final {
+    namespace sm = seastar::metrics;
+    metrics.add_group(
+      "cache",
+      {
+        sm::make_counter(
+          "lru_size_bytes",
+          [this] {
+            return get_current_size_bytes();
+          },
+          sm::description("total bytes pinned by the lru")
+        ),
+        sm::make_counter(
+          "lru_num_extents",
+          [this] {
+            return get_current_num_extents();
+          },
+          sm::description("total extents pinned by the lru")
+        ),
+      }
+    );
+  }
+
+  void get_stats(
+    cache_stats_t &stats,
+    bool report_detail,
+    double seconds) const final {
+    lru.get_stats("LRU", stats, report_detail, seconds);
+  }
+
+  void remove(CachedExtent &extent) final {
+    lru.remove(extent);
+  }
+
+  void move_to_top(
+    CachedExtent &extent,
+    const Transaction::src_t* p_src) final {
+    lru.move_to_top(extent, p_src);
+  }
+
+  void increase_cached_size(
+    CachedExtent &extent,
+    extent_len_t increased_length,
+    const Transaction::src_t* p_src) final {
+    lru.increase_cached_size(extent, increased_length, p_src);
+  }
+
+  void clear() final {
+    lru.clear();
+  }
+
+  ~ExtentPinboardLRU() {
+    clear();
+  }
+};
+
+ExtentPinboardRef create_extent_pinboard(std::size_t capacity) {
+  return std::make_unique<ExtentPinboardLRU>(capacity);
 }
 
 } // namespace crimson::os::seastore
