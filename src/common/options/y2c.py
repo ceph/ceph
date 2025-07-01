@@ -19,6 +19,7 @@ def level_to_cxx(lv):
 def eval_str(v):
     if v == "":
         return v
+    v = v.strip()
     v = v.strip('"').replace('"', '\\"')
     return f'"{v}"'
 
