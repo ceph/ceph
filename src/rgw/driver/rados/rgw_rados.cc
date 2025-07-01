@@ -8774,8 +8774,7 @@ static uint16_t get_olh_op_bilog_flags()
 }
 
 struct BILogUpdateBatchFIFO {
-  static constexpr auto BILOG_FIFO_SUFFIX = \
-    RGWSI_BILog_RADOS_FIFO::BILOG_FIFO_SUFFIX;
+
   std::unique_ptr<rgw::cls::fifo::FIFO> fifo;
 
   BILogUpdateBatchFIFO(RGWRados& store, const RGWBucketInfo& bucket_info);
@@ -8858,14 +8857,11 @@ struct BILogUpdateBatchFIFO {
 
 BILogUpdateBatchFIFO::BILogUpdateBatchFIFO(RGWRados& store,
                                            const RGWBucketInfo& bucket_info) {
-  librados::IoCtx index_pool;
-  std::string bucket_oid;
-  int r = store.svc.bi_rados->open_bucket_index(dpp, bucket_info, &index_pool, &bucket_oid);
-
-  rgw::cls::fifo::FIFO::create(index_pool,
-                               bucket_oid + BILOG_FIFO_SUFFIX,
-                               &fifo,
-                               null_yield /* FIXME */);
+  ceph_assert(store.svc.bi_rados);
+  fifo = RGWSI_BILog_RADOS_FIFO::open_fifo(bucket_info, *store.svc.bi_rados);
+  if (!fifo) {
+    // TODO: "oops" here
+  }
 }
 
 static BILogUpdateBatchFIFO get_or_create_fifo_bilog_op(RGWRados& store,

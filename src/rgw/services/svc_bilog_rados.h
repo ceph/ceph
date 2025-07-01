@@ -132,6 +132,11 @@ class RGWSI_BILog_RADOS_FIFO : public RGWSI_BILog_RADOS
     const DoutPrefixProvider *dpp,
     const RGWBucketInfo& bucket_info);
 
+  static std::unique_ptr<rgw::cls::fifo::FIFO> open_fifo(
+    const DoutPrefixProvider *dpp,
+    const RGWBucketInfo& bucket_info,
+    RGWSI_BucketIndex_RADOS& bi_rados);
+
   friend struct BILogUpdateBatchFIFO;
 
 public:

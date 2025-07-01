@@ -452,12 +452,13 @@ int RGWSI_BILog_RADOS_FIFO::log_stop(const DoutPrefixProvider *dpp, optional_yie
 }
 
 std::unique_ptr<rgw::cls::fifo::FIFO>
-RGWSI_BILog_RADOS_FIFO::_open_fifo(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info)
+RGWSI_BILog_RADOS_FIFO::_open_fifo(const DoutPrefixProvider *dpp,
+                                   const RGWBucketInfo& bucket_info,
+                                   RGWSI_BucketIndex_RADOS& bi_rados)
 {
   librados::IoCtx index_pool;
   std::string bucket_oid;
-  ceph_assert(svc.bi);
-  if (const int ret = svc.bi->open_bucket_index(dpp, bucket_info,
+  if (const int ret = bi_rados->open_bucket_index(dpp, bucket_info,
                                                 &index_pool,
                                                 &bucket_oid);
       ret < 0) {
@@ -471,6 +472,13 @@ RGWSI_BILog_RADOS_FIFO::_open_fifo(const DoutPrefixProvider *dpp, const RGWBucke
                                &ret_fifo,
                                null_yield /* FIXME */);
   return ret_fifo;
+}
+
+std::unique_ptr<rgw::cls::fifo::FIFO>
+RGWSI_BILog_RADOS_FIFO::_open_fifo(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info)
+{
+  ceph_assert(svc.bi);
+  return open_fifo(dpp, bucket_info, *svc.bi);
 }
 
 int RGWSI_BILog_RADOS_FIFO::log_list(const DoutPrefixProvider *dpp, optional_yield y,
