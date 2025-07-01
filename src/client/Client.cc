@@ -11257,24 +11257,31 @@ void Client::C_Readahead::finish(int r) {
   }
 }
 
+void Client::do_readahead(Fh *f, Inode *in, uint64_t off, uint64_t len, const pair<uint64_t, uint64_t>& readahead_extent)
+{
+  if (readahead_extent.second > 0) {
+    ldout(cct, 20) << "async readahead " << readahead_extent.first << "~" << readahead_extent.second
+                   << " (caller wants " << off << "~" << len << ")" << dendl;
+    Context *onfinish2 = new C_Readahead(this, f);
+    int r2 = objectcacher->file_read(&in->oset, &in->layout, in->snapid,
+                                     readahead_extent.first, readahead_extent.second,
+                                     NULL, 0, onfinish2);
+    if (r2 == 0) {
+      ldout(cct, 20) << "readahead initiated, c " << onfinish2 << dendl;
+      get_cap_ref(in, CEPH_CAP_FILE_RD | CEPH_CAP_FILE_CACHE);
+    } else {
+      ldout(cct, 20) << "readahead was no-op, already cached" << dendl;
+      delete onfinish2;
+    }
+  }
+}
+
 void Client::do_readahead(Fh *f, Inode *in, uint64_t off, uint64_t len)
 {
   if(f->readahead.get_min_readahead_size() > 0) {
     pair<uint64_t, uint64_t> readahead_extent = f->readahead.update(off, len, in->size);
     if (readahead_extent.second > 0) {
-      ldout(cct, 20) << "readahead " << readahead_extent.first << "~" << readahead_extent.second
-		     << " (caller wants " << off << "~" << len << ")" << dendl;
-      Context *onfinish2 = new C_Readahead(this, f);
-      int r2 = objectcacher->file_read(&in->oset, &in->layout, in->snapid,
-				       readahead_extent.first, readahead_extent.second,
-				       NULL, 0, onfinish2);
-      if (r2 == 0) {
-	ldout(cct, 20) << "readahead initiated, c " << onfinish2 << dendl;
-	get_cap_ref(in, CEPH_CAP_FILE_RD | CEPH_CAP_FILE_CACHE);
-      } else {
-	ldout(cct, 20) << "readahead was no-op, already cached" << dendl;
-	delete onfinish2;
-      }
+      do_readahead(f, in, off, len, readahead_extent);
     }
   }
 }
@@ -11339,6 +11346,21 @@ int Client::_read_async(Fh *f, uint64_t off, uint64_t len, bufferlist *bl,
                  << " max_bytes=" << f->readahead.get_max_readahead_size()
                  << " max_periods=" << conf->client_readahead_max_periods << dendl;
 
+  uint64_t ra = 0;
+  uint64_t merge_rsize = conf->client_readahead_merge_size;
+  pair<uint64_t, uint64_t> readahead_extent;
+  if (merge_rsize > 0 && f->readahead.get_min_readahead_size() > 0) {
+    readahead_extent = f->readahead.update(off, len, in->size);
+    if (readahead_extent.second > 0 &&
+        readahead_extent.second + len <= merge_rsize &&
+        readahead_extent.first == off + len &&
+        readahead_extent.first % in->layout.object_size != 0) {
+      ra = readahead_extent.second;
+      ldout(cct, 20) << "sync readahead " << readahead_extent.first << "~" << readahead_extent.second
+                     << " (caller wants " << off << "~" << len << ")" << dendl;
+    }
+  }
+
   // read (and possibly block)
   int r = 0;
   if (onfinish == nullptr) {
@@ -11347,7 +11369,7 @@ int Client::_read_async(Fh *f, uint64_t off, uint64_t len, bufferlist *bl,
   }
 
   r = objectcacher->file_read(&in->oset, &in->layout, in->snapid,
-			      off, len, bl, 0, io_finish.get());
+                              off, len, bl, 0, io_finish.get(), ra);
 
   if (onfinish != nullptr) {
     // put the cap ref since we're releasing C_Read_Async_Finisher
@@ -11375,7 +11397,9 @@ int Client::_read_async(Fh *f, uint64_t off, uint64_t len, bufferlist *bl,
     put_cap_ref(in, CEPH_CAP_FILE_CACHE);
   }
 
-  do_readahead(f, in, off, len);
+  if (ra == 0) {
+    do_readahead(f, in, off, len, readahead_extent);
+  }
 
   return r;
 }

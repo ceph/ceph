@@ -85,6 +85,14 @@ options:
   services:
   - mds_client
   with_legacy: true
+- name: client_readahead_merge_size
+  type: size
+  level: advanced
+  desc: merge data io and readahead io when they are continuous and small
+  default: 128_K
+  services:
+  - mds_client
+  with_legacy: true
 - name: client_reconnect_stale
   type: bool
   level: advanced
