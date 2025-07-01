@@ -1508,13 +1508,27 @@ class CephadmAgent(CephService):
     def get_dependencies(cls, mgr: "CephadmOrchestrator",
                          spec: Optional[ServiceSpec] = None,
                          daemon_type: Optional[str] = None) -> List[str]:
+
+        agent_options = [
+            'device_enhanced_scan',
+            'agent_starting_port',
+        ]
+        agent_static_cfg_opts = [f"{opt}: {mgr.get_module_option(opt)}" for opt in agent_options]
+
         agent = mgr.http_server.agent
+        agent_dynamic_cfg_opts = [
+            f'refresh_period: {agent.compute_agents_refrsh_rate()}',
+            f'initial_startup_delay_max: {agent.get_initial_delay()}',
+            f'jitter_seconds: {agent.get_jitter()}'
+        ]
+
         return sorted(
             [
                 str(mgr.get_mgr_ip()),
-                str(agent.server_port),
+                str(mgr.http_server.agent.server_port),
                 mgr.cert_mgr.get_root_ca(),
-                str(mgr.get_module_option("device_enhanced_scan")),
+                *agent_static_cfg_opts,
+                *agent_dynamic_cfg_opts,
             ]
         )
 
@@ -1545,10 +1559,10 @@ class CephadmAgent(CephService):
 
         cfg = {'target_ip': self.mgr.get_mgr_ip(),
                'target_port': agent.server_port,
-               'refresh_period': agent.compute_agents_refrsh_rate(),
                'listener_port': self.mgr.agent_starting_port,
                'host': daemon_spec.host,
                'device_enhanced_scan': str(self.mgr.device_enhanced_scan),
+               'refresh_period': agent.compute_agents_refrsh_rate(),
                'initial_startup_delay_max': agent.get_initial_delay(),
                'jitter_seconds': agent.get_jitter()}
 
@@ -1561,6 +1575,4 @@ class CephadmAgent(CephService):
             'listener.key': listener_key,
         }
 
-        return config, sorted([str(self.mgr.get_mgr_ip()), str(agent.server_port),
-                               self.mgr.cert_mgr.get_root_ca(),
-                               str(self.mgr.get_module_option('device_enhanced_scan'))])
+        return config, self.get_dependencies(self.mgr)
