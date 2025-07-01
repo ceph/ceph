@@ -1549,6 +1549,7 @@ class CephadmAgent(CephService):
                'listener_port': self.mgr.agent_starting_port,
                'host': daemon_spec.host,
                'device_enhanced_scan': str(self.mgr.device_enhanced_scan),
+               'initial_startup_delay_max': agent.get_initial_delay(),
                'jitter_seconds': agent.get_jitter()}
 
         listener_cert, listener_key = self.mgr.cert_mgr.generate_cert(daemon_spec.host, self.mgr.inventory.get_addr(daemon_spec.host))

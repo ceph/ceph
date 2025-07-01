@@ -1385,6 +1385,7 @@ class CephadmAgent(DaemonForm):
                 self.loop_interval = int(config['refresh_period'])
                 self.starting_port = int(config['listener_port'])
                 self.jitter_seconds = int(config.get('jitter_seconds', 0))
+                self.initial_startup_delay_max = int(config.get('initial_startup_delay_max', 0))
                 self.host = config['host']
                 use_lsm = config['device_enhanced_scan']
         except Exception as e:
@@ -1406,8 +1407,15 @@ class CephadmAgent(DaemonForm):
         self.volume_gatherer.update_func(lambda: self._ceph_volume(enhanced=self.device_enhanced_scan))
 
     def run(self) -> None:
+
         self.pull_conf_settings()
         self.ssl_ctx.load_verify_locations(self.ca_path)
+
+        # Introduce the randomness in the initialization (up to initial_startup_delay_max delay)
+        if self.initial_startup_delay_max:
+            delay = random.uniform(0, self.initial_startup_delay_max)
+            logger.debug(f"Delaying startup for {delay} seconds.")
+            time.sleep(delay)
 
         try:
             for _ in range(1001):
