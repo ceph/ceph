@@ -279,6 +279,12 @@ void add_size_option(boost::program_options::options_description *opt) {
      "image size (in M/G/T) [default: M]");
 }
 
+void add_estimated_size_option(boost::program_options::options_description *opt) {
+  opt->add_options()
+    (IMAGE_ESTIMATED_SIZE.c_str(), po::value<ImageSize>(),
+     "estimated image size (valid only for raw import from stdin, in M/G/T) [default: M]");
+}
+
 void add_sparse_size_option(boost::program_options::options_description *opt) {
   opt->add_options()
     (IMAGE_SPARSE_SIZE.c_str(), po::value<ImageObjectSize>(),
