@@ -79,6 +79,7 @@ extern "C" {
 #include "rgw_account.h"
 #include "rgw_bucket_logging.h"
 #include "rgw_dedup_cluster.h"
+#include "rgw_kms.h"
 #include "services/svc_sync_modules.h"
 #include "services/svc_cls.h"
 #include "services/svc_bilog_rados.h"
@@ -1276,6 +1277,7 @@ public:
     : driver(_s), pool(pool) {}
   ~StoreDestructor() {
     driver->shutdown();
+    rgw_kms_cleanup(g_ceph_context);
     pool->finish();
     DriverManager::close_storage(driver);
     rgw_http_client_cleanup();
