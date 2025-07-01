@@ -168,7 +168,7 @@ class MonKeyStoreEntry:
         # The rados:mon-config-key pseudo scheme is made up for the
         # purposes of communicating a key using the URI syntax with
         # other components, particularly the sambacc library.
-        return f'rados:mon-config-key:{self._store_key}'
+        return f'{self._store.SCHEME}:{self._store_key}'
 
     @property
     def full_key(self) -> EntryKey:
@@ -191,6 +191,7 @@ class MonKeyConfigStore:
     """
 
     PREFIX = 'smb/config/'
+    SCHEME = 'rados:mon-config-key'
 
     def __init__(self, mc: MonCommandIssuer):
         self._mc = mc
@@ -282,3 +283,17 @@ class MonKeyConfigStore:
         if ret != 0:
             raise KeyError(f'config-key rm {key!r} failed [{ret}]: {err}')
         return json_data
+
+    def lookup_uri(self, uri: str) -> MonKeyStoreEntry:
+        _scheme = f'{self.SCHEME}:'
+        if not uri.startswith(_scheme):
+            raise ValueError(f'invalid uri: {uri}')
+        slen = len(_scheme)
+        path = uri[slen:]
+        if not path.startswith(self.PREFIX):
+            raise ValueError(f'invalid path: {path!r} from {uri}')
+        plen = len(self.PREFIX)
+        subpath = path[plen:]
+        key = tuple(subpath.split('/', 1))
+        assert len(key) == 2
+        return self[key]
