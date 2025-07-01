@@ -6,8 +6,9 @@ from ceph_volume.api import lvm
 from ceph_volume.util import disk
 from ceph_volume.util import device
 from ceph_volume.util.constants import ceph_disk_guids
-from ceph_volume import conf, configuration, objectstore
-from ceph_volume.objectstore.rawbluestore import RawBlueStore
+from ceph_volume import conf, configuration
+from ceph_volume.objectstore.baseobjectstore import BaseObjectStore
+from ceph_volume.objectstore.raw import Raw
 from typing import Any, Dict, List, Optional, Callable
 
 
@@ -39,15 +40,15 @@ class Factory(object):
 def factory() -> Callable[..., argparse.Namespace]:
     return argparse.Namespace
 
-def objectstore_bluestore_factory(**kw):
-    o = objectstore.bluestore.BlueStore([])
+def objectstore_factory(**kw):
+    o = BaseObjectStore([])
     for k, v in kw.items():
         setattr(o, k, v)
     return o
 
 @pytest.fixture
-def objectstore_bluestore():
-    return objectstore_bluestore_factory
+def objectstore():
+    return objectstore_factory
 
 
 @pytest.fixture
@@ -524,11 +525,11 @@ raw_direct_report_data = {
 
 @pytest.fixture
 def mock_lvm_direct_report(monkeypatch):
-    monkeypatch.setattr('ceph_volume.objectstore.lvmbluestore.direct_report', lambda: lvm_direct_report_data)
+    monkeypatch.setattr('ceph_volume.objectstore.lvm.direct_report', lambda: lvm_direct_report_data)
 
 @pytest.fixture
 def mock_raw_direct_report(monkeypatch):
-    monkeypatch.setattr('ceph_volume.objectstore.rawbluestore.direct_report', lambda x: raw_direct_report_data)
+    monkeypatch.setattr('ceph_volume.objectstore.raw.direct_report', lambda x: raw_direct_report_data)
 
 @pytest.fixture
 def fake_lsblk_all(monkeypatch: Any) -> Callable:
@@ -541,8 +542,8 @@ def fake_lsblk_all(monkeypatch: Any) -> Callable:
     return apply
 
 @pytest.fixture
-def rawbluestore(factory: type[Factory]) -> RawBlueStore:
+def rawbluestore(factory: type[Factory]) -> Raw:
     args = factory(devices=['/dev/foo'])
-    with patch('ceph_volume.objectstore.rawbluestore.prepare_utils.create_key', Mock(return_value=['AQCee6ZkzhOrJRAAZWSvNC3KdXOpC2w8ly4AZQ=='])):
-        r = RawBlueStore(args)  # type: ignore
+    with patch('ceph_volume.objectstore.raw.prepare_utils.create_key', Mock(return_value=['AQCee6ZkzhOrJRAAZWSvNC3KdXOpC2w8ly4AZQ=='])):
+        r = Raw(args)  # type: ignore
         return r

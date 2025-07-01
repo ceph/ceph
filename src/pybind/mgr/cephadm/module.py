@@ -2981,7 +2981,7 @@ Then run the following:
             placement=PlacementSpec(host_pattern=host),
             data_devices=DeviceSelection(paths=devices),
             unmanaged=False,
-            objectstore="bluestore"
+            objectstore=drive_group.objectstore
         )
 
         self.log.info(f"Creating OSDs with service ID: {drive_group.service_id} on {host}:{device_list}")

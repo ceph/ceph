@@ -9,7 +9,7 @@ from ceph_volume.util import system, disk
 from ceph_volume.systemd import systemctl
 from ceph_volume.devices.lvm.common import rollback_osd
 from ceph_volume.devices.lvm.listing import direct_report
-from .bluestore import BlueStore
+from .baseobjectstore import BaseObjectStore
 from typing import Dict, Any, Optional, List, TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -19,7 +19,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-class LvmBlueStore(BlueStore):
+class Lvm(BaseObjectStore):
     def __init__(self, args: "argparse.Namespace") -> None:
         super().__init__(args)
         self.method = 'lvm'
@@ -59,6 +59,7 @@ class LvmBlueStore(BlueStore):
             self.block_lv = self.prepare_data_device('block', self.osd_fsid)
         self.block_device_path = self.block_lv.__dict__['lv_path']
 
+        self.tags['ceph.objectstore'] = self.objectstore
         self.tags['ceph.block_device'] = self.block_lv.__dict__['lv_path']
         self.tags['ceph.block_uuid'] = self.block_lv.__dict__['lv_uuid']
         self.tags['ceph.cephx_lockbox_secret'] = self.cephx_lockbox_secret
@@ -392,12 +393,14 @@ class LvmBlueStore(BlueStore):
         # ``prime-osd-dir`` can succeed even if permissions are
         # somehow messed up.
         system.chown(self.osd_path)
-        prime_command = [
-            'ceph-bluestore-tool', '--cluster=%s' % conf.cluster,
-            'prime-osd-dir', '--dev', osd_lv_path,
-            '--path', self.osd_path, '--no-mon-config']
+        objectstore = osd_block_lv.tags.get('ceph.objectstore', 'bluestore')
+        if objectstore == 'bluestore':
+            prime_command = [
+                'ceph-bluestore-tool', '--cluster=%s' % conf.cluster,
+                'prime-osd-dir', '--dev', osd_lv_path,
+                '--path', self.osd_path, '--no-mon-config']
 
-        process.run(prime_command)
+            process.run(prime_command)
         # always re-do the symlink regardless if it exists, so that the block,
         # block.wal, and block.db devices that may have changed can be mapped
         # correctly every time

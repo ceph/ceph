@@ -873,7 +873,7 @@ def get_devices(_sys_block_path='/sys/block', device=''):
         device_facts[diskname] = metadata
     return device_facts
 
-def has_bluestore_label(device_path):
+def has_bluestore_label(device_path: str) -> bool:
     isBluestore = False
     bluestoreDiskSignature = 'bluestore block device' # 22 bytes long
 
@@ -889,6 +889,22 @@ def has_bluestore_label(device_path):
         logger.info(f'{device_path} is a directory, skipping.')
 
     return isBluestore
+
+def has_seastore_label(device_path: str) -> bool:
+    is_seastore = False
+    seastore_disk_signature = b'seastore block device\n'  # 23 bytes including newline
+
+    try:
+        with open(device_path, "rb") as fd:
+            signature = fd.read(len(seastore_disk_signature))
+            if signature == seastore_disk_signature:
+                is_seastore = True
+    except IsADirectoryError:
+        print(f'{device_path} is a directory, skipping.')
+    except Exception as e:
+        print(f'Error reading {device_path}: {e}')
+
+    return is_seastore
 
 def get_lvm_mappers(sys_block_path: str = '/sys/block') -> List[str]:
     """

@@ -1,22 +1,23 @@
 import pytest
 from argparse import Namespace
 from unittest.mock import patch, Mock, MagicMock, call
-from ceph_volume.objectstore.lvmbluestore import LvmBlueStore
+from ceph_volume.objectstore.lvm import Lvm
 from ceph_volume.api.lvm import Volume
 from ceph_volume.util import system, disk
 from typing import Callable
 
 
-class TestLvmBlueStore:
-    @patch('ceph_volume.objectstore.lvmbluestore.prepare_utils.create_key', Mock(return_value=['AQCee6ZkzhOrJRAAZWSvNC3KdXOpC2w8ly4AZQ==']))
+class TestLvm:
+    @patch('ceph_volume.objectstore.lvm.prepare_utils.create_key', Mock(return_value=['AQCee6ZkzhOrJRAAZWSvNC3KdXOpC2w8ly4AZQ==']))
     def setup_method(self, m_create_key):
-        self.lvm_bs = LvmBlueStore([])
+        self.lvm = Lvm([])
 
     @patch('ceph_volume.conf.cluster', 'ceph')
     @patch('ceph_volume.api.lvm.get_single_lv')
-    @patch('ceph_volume.objectstore.lvmbluestore.prepare_utils.create_id', Mock(return_value='111'))
+    @patch('ceph_volume.objectstore.lvm.prepare_utils.create_id', Mock(return_value='111'))
     def test_pre_prepare_lv(self, m_get_single_lv, factory):
-        args = factory(cluster_fsid='abcd',
+        args = factory(objectstore='seastore',
+                       cluster_fsid='abcd',
                        osd_fsid='abc123',
                        crush_device_class='ssd',
                        osd_id='111',
@@ -26,15 +27,16 @@ class TestLvmBlueStore:
                                               vg_name='vg_foo',
                                               lv_tags='',
                                               lv_uuid='fake-uuid')
-        self.lvm_bs.encrypted = True
-        self.lvm_bs.dmcrypt_key = 'fake-dmcrypt-key'
-        self.lvm_bs.args = args
-        self.lvm_bs.pre_prepare()
-        assert self.lvm_bs.secrets['dmcrypt_key'] == 'fake-dmcrypt-key'
-        assert self.lvm_bs.secrets['crush_device_class'] == 'ssd'
-        assert self.lvm_bs.osd_id == '111'
-        assert self.lvm_bs.block_device_path == '/fake-path'
-        assert self.lvm_bs.tags == {'ceph.osd_fsid': 'abc123',
+        self.lvm.encrypted = True
+        self.lvm.dmcrypt_key = 'fake-dmcrypt-key'
+        self.lvm.args = args
+        self.lvm.objectstore = 'seastore'
+        self.lvm.pre_prepare()
+        assert self.lvm.secrets['dmcrypt_key'] == 'fake-dmcrypt-key'
+        assert self.lvm.secrets['crush_device_class'] == 'ssd'
+        assert self.lvm.osd_id == '111'
+        assert self.lvm.block_device_path == '/fake-path'
+        assert self.lvm.tags == {'ceph.osd_fsid': 'abc123',
                                     'ceph.osd_id': '111',
                                     'ceph.cluster_fsid': 'abcd',
                                     'ceph.cluster_name': 'ceph',
@@ -43,15 +45,17 @@ class TestLvmBlueStore:
                                     'ceph.block_device': '/fake-path',
                                     'ceph.block_uuid': 'fake-uuid',
                                     'ceph.cephx_lockbox_secret': '',
+                                    'ceph.objectstore': 'seastore',
                                     'ceph.encrypted': True,
                                     'ceph.vdo': '0',
                                     'ceph.with_tpm': 0}
 
     @patch('ceph_volume.conf.cluster', 'ceph')
     @patch('ceph_volume.api.lvm.get_single_lv')
-    @patch('ceph_volume.objectstore.lvmbluestore.prepare_utils.create_id', Mock(return_value='111'))
+    @patch('ceph_volume.objectstore.lvm.prepare_utils.create_id', Mock(return_value='111'))
     def test_pre_prepare_lv_with_dmcrypt_and_tpm(self, m_get_single_lv, factory):
-        args = factory(cluster_fsid='abcd',
+        args = factory(objectstore='seastore',
+                       cluster_fsid='abcd',
                        osd_fsid='abc123',
                        crush_device_class='ssd',
                        osd_id='111',
@@ -63,16 +67,17 @@ class TestLvmBlueStore:
                                               vg_name='vg_foo',
                                               lv_tags='',
                                               lv_uuid='fake-uuid')
-        self.lvm_bs.encrypted = True
-        self.lvm_bs.with_tpm = True
-        self.lvm_bs.dmcrypt_key = 'fake-dmcrypt-key-tpm2'
-        self.lvm_bs.args = args
-        self.lvm_bs.pre_prepare()
-        assert 'dmcrypt_key' not in self.lvm_bs.secrets.keys()
-        assert self.lvm_bs.secrets['crush_device_class'] == 'ssd'
-        assert self.lvm_bs.osd_id == '111'
-        assert self.lvm_bs.block_device_path == '/fake-path'
-        assert self.lvm_bs.tags == {'ceph.osd_fsid': 'abc123',
+        self.lvm.encrypted = True
+        self.lvm.with_tpm = True
+        self.lvm.dmcrypt_key = 'fake-dmcrypt-key-tpm2'
+        self.lvm.args = args
+        self.lvm.objectstore = 'seastore'
+        self.lvm.pre_prepare()
+        assert 'dmcrypt_key' not in self.lvm.secrets.keys()
+        assert self.lvm.secrets['crush_device_class'] == 'ssd'
+        assert self.lvm.osd_id == '111'
+        assert self.lvm.block_device_path == '/fake-path'
+        assert self.lvm.tags == {'ceph.osd_fsid': 'abc123',
                                     'ceph.osd_id': '111',
                                     'ceph.cluster_fsid': 'abcd',
                                     'ceph.cluster_name': 'ceph',
@@ -82,42 +87,47 @@ class TestLvmBlueStore:
                                     'ceph.block_uuid': 'fake-uuid',
                                     'ceph.cephx_lockbox_secret': '',
                                     'ceph.encrypted': True,
+                                    'ceph.objectstore': 'seastore',
                                     'ceph.vdo': '0',
                                     'ceph.with_tpm': 1}
 
-    @patch('ceph_volume.objectstore.lvmbluestore.prepare_utils.create_id', Mock(return_value='111'))
+    @patch('ceph_volume.conf.cluster', 'ceph')
+    @patch('ceph_volume.objectstore.lvm.prepare_utils.create_id', Mock(return_value='111'))
     def test_pre_prepare_no_lv(self, factory):
         args = factory(cluster_fsid='abcd',
+                       objectstore='seastore',
                        osd_fsid='abc123',
                        crush_device_class='ssd',
                        osd_id='111',
                        data='/dev/foo',
                        dmcrypt_key='fake-dmcrypt-key')
-        self.lvm_bs.prepare_data_device = lambda x, y: Volume(lv_name='lv_foo',
-                                                              lv_path='/fake-path',
-                                                              vg_name='vg_foo',
-                                                              lv_tags='',
-                                                              lv_uuid='fake-uuid')
-        self.lvm_bs.encrypted = True
-        self.lvm_bs.dmcrypt_key = 'fake-dmcrypt-key'
-        self.lvm_bs.args = args
-        self.lvm_bs.pre_prepare()
-        assert self.lvm_bs.secrets['dmcrypt_key'] == 'fake-dmcrypt-key'
-        assert self.lvm_bs.secrets['crush_device_class'] == 'ssd'
-        assert self.lvm_bs.osd_id == '111'
-        assert self.lvm_bs.block_device_path == '/fake-path'
-        assert self.lvm_bs.tags == {'ceph.osd_fsid': 'abc123',
-                                    'ceph.osd_id': '111',
-                                    'ceph.cluster_fsid': 'abcd',
-                                    'ceph.cluster_name': None,
-                                    'ceph.crush_device_class': 'ssd',
-                                    'ceph.osdspec_affinity': '',
-                                    'ceph.block_device': '/fake-path',
-                                    'ceph.block_uuid': 'fake-uuid',
-                                    'ceph.cephx_lockbox_secret': '',
-                                    'ceph.encrypted': True,
-                                    'ceph.vdo': '0',
-                                    'ceph.with_tpm': 0}
+        self.lvm.prepare_data_device = lambda x, y: Volume(lv_name='lv_foo',
+                                                           lv_path='/fake-path',
+                                                           vg_name='vg_foo',
+                                                           lv_tags='',
+                                                           lv_uuid='fake-uuid')
+        self.lvm.encrypted = True
+        self.lvm.dmcrypt_key = 'fake-dmcrypt-key'
+        self.lvm.args = args
+        self.lvm.objectstore = 'seastore'
+        self.lvm.pre_prepare()
+        assert self.lvm.secrets['dmcrypt_key'] == 'fake-dmcrypt-key'
+        assert self.lvm.secrets['crush_device_class'] == 'ssd'
+        assert self.lvm.osd_id == '111'
+        assert self.lvm.block_device_path == '/fake-path'
+        assert self.lvm.tags == {'ceph.osd_fsid': 'abc123',
+                                 'ceph.osd_id': '111',
+                                 'ceph.cluster_fsid': 'abcd',
+                                 'ceph.cluster_name': 'ceph',
+                                 'ceph.crush_device_class': 'ssd',
+                                 'ceph.osdspec_affinity': '',
+                                 'ceph.block_device': '/fake-path',
+                                 'ceph.block_uuid': 'fake-uuid',
+                                 'ceph.cephx_lockbox_secret': '',
+                                 'ceph.encrypted': True,
+                                 'ceph.vdo': '0',
+                                 'ceph.with_tpm': 0,
+                                 'ceph.objectstore': 'seastore'}
 
     @patch('ceph_volume.util.disk.is_partition', Mock(return_value=True))
     @patch('ceph_volume.api.lvm.create_lv')
@@ -127,22 +137,22 @@ class TestLvmBlueStore:
         args = factory(data='/dev/foo1',
                        data_slots=1,
                        data_size=102400)
-        self.lvm_bs.args = args
+        self.lvm.args = args
         m_create_lv.return_value = Volume(lv_name='lv_foo',
                                           lv_path='/fake-path',
                                           vg_name='vg_foo',
                                           lv_tags='',
                                           lv_uuid='abcd')
-        assert self.lvm_bs.prepare_data_device('block', 'abcd') == m_create_lv.return_value
-        assert self.lvm_bs.args.data_size == 102400
+        assert self.lvm.prepare_data_device('block', 'abcd') == m_create_lv.return_value
+        assert self.lvm.args.data_size == 102400
 
     @patch('ceph_volume.util.disk.is_device', Mock(return_value=False))
     @patch('ceph_volume.util.disk.is_partition', Mock(return_value=False))
     def test_prepare_data_device_fails(self, factory):
         args = factory(data='/dev/foo')
-        self.lvm_bs.args = args
+        self.lvm.args = args
         with pytest.raises(RuntimeError) as error:
-            self.lvm_bs.prepare_data_device('block', 'abcd')
+            self.lvm.prepare_data_device('block', 'abcd')
         assert ('Cannot use device (/dev/foo). '
         'A vg/lv path or an existing device is needed') == str(error.value)
 
@@ -150,25 +160,24 @@ class TestLvmBlueStore:
     @patch('ceph_volume.api.lvm.get_single_lv')
     def test_safe_prepare(self, m_get_single_lv, factory):
         args = factory(data='vg_foo/lv_foo')
-        self.lvm_bs.args = args
+        self.lvm.args = args
         m_get_single_lv.return_value = Volume(lv_name='lv_foo',
                                               lv_path='/fake-path',
                                               vg_name='vg_foo',
                                               lv_tags='',
                                               lv_uuid='fake-uuid')
-        self.lvm_bs.prepare = MagicMock()
-        self.lvm_bs.safe_prepare()
-        assert self.lvm_bs.prepare.called
+        self.lvm.prepare = MagicMock()
+        self.lvm.safe_prepare()
+        assert self.lvm.prepare.called
 
-    @patch('ceph_volume.objectstore.lvmbluestore.LvmBlueStore.prepare', Mock(side_effect=Exception))
+    @patch('ceph_volume.objectstore.lvm.Lvm.prepare', Mock(side_effect=Exception))
     @patch('ceph_volume.api.lvm.is_ceph_device', Mock(return_value=False))
-    # @patch('ceph_volume.devices.lvm.common.rollback_osd')
-    @patch('ceph_volume.objectstore.lvmbluestore.rollback_osd')
+    @patch('ceph_volume.objectstore.lvm.rollback_osd')
     @patch('ceph_volume.api.lvm.get_single_lv')
     def test_safe_prepare_raises_exception(self, m_get_single_lv, m_rollback_osd, factory):
         args = factory(data='/dev/foo')
-        self.lvm_bs.args = args
-        self.lvm_bs.osd_id = '111'
+        self.lvm.args = args
+        self.lvm.osd_id = '111'
         m_get_single_lv.return_value = Volume(lv_name='lv_foo',
                                               lv_path='/fake-path',
                                               vg_name='vg_foo',
@@ -176,13 +185,13 @@ class TestLvmBlueStore:
                                               lv_uuid='fake-uuid')
         m_rollback_osd.return_value = MagicMock()
         with pytest.raises(Exception):
-            self.lvm_bs.safe_prepare()
+            self.lvm.safe_prepare()
         assert m_rollback_osd.mock_calls == [call('111')]
 
-    @patch('ceph_volume.objectstore.lvmbluestore.LvmBlueStore.pre_prepare', Mock(return_value=None))
-    @patch('ceph_volume.objectstore.lvmbluestore.LvmBlueStore.prepare_dmcrypt', MagicMock())
+    @patch('ceph_volume.objectstore.lvm.Lvm.pre_prepare', Mock(return_value=None))
+    @patch('ceph_volume.objectstore.lvm.Lvm.prepare_dmcrypt', MagicMock())
     @patch('ceph_volume.objectstore.baseobjectstore.BaseObjectStore.prepare_osd_req', MagicMock())
-    @patch('ceph_volume.objectstore.bluestore.BlueStore.osd_mkfs', MagicMock())
+    @patch('ceph_volume.objectstore.baseobjectstore.BaseObjectStore.osd_mkfs', MagicMock())
     @patch('ceph_volume.util.disk.is_partition', Mock(return_value=True))
     @patch('ceph_volume.objectstore.baseobjectstore.BaseObjectStore.get_ptuuid', Mock(return_value='c6798f59-01'))
     @patch('ceph_volume.api.lvm.Volume.set_tags', MagicMock())
@@ -205,55 +214,55 @@ class TestLvmBlueStore:
                        block_db_slots=1,
                        with_tpm=False
                        )
-        self.lvm_bs.args = args
-        self.lvm_bs.block_lv = MagicMock()
-        self.lvm_bs.secrets['dmcrypt_key'] = 'fake-secret'
-        self.lvm_bs.prepare()
-        assert self.lvm_bs.wal_device_path == '/dev/foo1'
-        assert self.lvm_bs.db_device_path == '/dev/foo2'
-        assert self.lvm_bs.block_lv.set_tags.mock_calls == [call({
+        self.lvm.args = args
+        self.lvm.block_lv = MagicMock()
+        self.lvm.secrets['dmcrypt_key'] = 'fake-secret'
+        self.lvm.prepare()
+        assert self.lvm.wal_device_path == '/dev/foo1'
+        assert self.lvm.db_device_path == '/dev/foo2'
+        assert self.lvm.block_lv.set_tags.mock_calls == [call({
             'ceph.type': 'block',
             })]
-        assert not self.lvm_bs.prepare_dmcrypt.called
-        assert self.lvm_bs.osd_mkfs.called
-        assert self.lvm_bs.prepare_osd_req.called
+        assert not self.lvm.prepare_dmcrypt.called
+        assert self.lvm.osd_mkfs.called
+        assert self.lvm.prepare_osd_req.called
 
     def test_prepare_dmcrypt(self):
-        self.lvm_bs.secrets = {'dmcrypt_key': 'fake-secret'}
-        self.lvm_bs.tags = {'ceph.block_uuid': 'block-uuid1',
+        self.lvm.secrets = {'dmcrypt_key': 'fake-secret'}
+        self.lvm.tags = {'ceph.block_uuid': 'block-uuid1',
                             'ceph.db_uuid': 'db-uuid2',
                             'ceph.wal_uuid': 'wal-uuid3',
                             'ceph.with_tpm': 0}
-        self.lvm_bs.block_device_path = '/dev/sdb'
-        self.lvm_bs.db_device_path = '/dev/sdc'
-        self.lvm_bs.wal_device_path = '/dev/sdb'
-        self.lvm_bs.luks_format_and_open = lambda *a: f'/dev/mapper/{a[2]["ceph."+a[1]+"_uuid"]}'
-        self.lvm_bs.prepare_dmcrypt()
-        assert self.lvm_bs.block_device_path == '/dev/mapper/block-uuid1'
-        assert self.lvm_bs.db_device_path == '/dev/mapper/db-uuid2'
-        assert self.lvm_bs.wal_device_path == '/dev/mapper/wal-uuid3'
+        self.lvm.block_device_path = '/dev/sdb'
+        self.lvm.db_device_path = '/dev/sdc'
+        self.lvm.wal_device_path = '/dev/sdb'
+        self.lvm.luks_format_and_open = lambda *a: f'/dev/mapper/{a[2]["ceph."+a[1]+"_uuid"]}'
+        self.lvm.prepare_dmcrypt()
+        assert self.lvm.block_device_path == '/dev/mapper/block-uuid1'
+        assert self.lvm.db_device_path == '/dev/mapper/db-uuid2'
+        assert self.lvm.wal_device_path == '/dev/mapper/wal-uuid3'
 
-    @patch('ceph_volume.objectstore.lvmbluestore.encryption_utils.luks_open')
-    @patch('ceph_volume.objectstore.lvmbluestore.encryption_utils.luks_format')
+    @patch('ceph_volume.objectstore.lvm.encryption_utils.luks_open')
+    @patch('ceph_volume.objectstore.lvm.encryption_utils.luks_format')
     def test_luks_format_and_open(self, m_luks_format, m_luks_open):
-        result = self.lvm_bs.luks_format_and_open('/dev/foo',
+        result = self.lvm.luks_format_and_open('/dev/foo',
                                                   'block',
                                                   {'ceph.block_uuid': 'block-uuid1'})
         assert result == '/dev/mapper/block-uuid1'
 
-    @patch('ceph_volume.objectstore.lvmbluestore.LvmBlueStore.enroll_tpm2', Mock(return_value=MagicMock()))
-    @patch('ceph_volume.objectstore.lvmbluestore.encryption_utils.luks_open')
-    @patch('ceph_volume.objectstore.lvmbluestore.encryption_utils.luks_format')
+    @patch('ceph_volume.objectstore.lvm.Lvm.enroll_tpm2', Mock(return_value=MagicMock()))
+    @patch('ceph_volume.objectstore.lvm.encryption_utils.luks_open')
+    @patch('ceph_volume.objectstore.lvm.encryption_utils.luks_format')
     def test_luks_format_and_open_with_tpm(self, m_luks_format, m_luks_open):
-        self.lvm_bs.with_tpm = True
-        result = self.lvm_bs.luks_format_and_open('/dev/foo',
+        self.lvm.with_tpm = True
+        result = self.lvm.luks_format_and_open('/dev/foo',
                                                   'block',
                                                   {'ceph.block_uuid': 'block-uuid1'})
         assert result == '/dev/mapper/block-uuid1'
-        self.lvm_bs.enroll_tpm2.assert_called_once()
+        self.lvm.enroll_tpm2.assert_called_once()
 
     def test_luks_format_and_open_not_device(self):
-        result = self.lvm_bs.luks_format_and_open('',
+        result = self.lvm.luks_format_and_open('',
                                                   'block',
                                                   {})
         assert result == ''
@@ -282,8 +291,8 @@ class TestLvmBlueStore:
                        block_wal=None,
                        block_wal_size='0',
                        block_wal_slots=None)
-        self.lvm_bs.args = args
-        self.lvm_bs.setup_metadata_devices()
+        self.lvm.args = args
+        self.lvm.setup_metadata_devices()
         assert m_create_lv.mock_calls == [call(name_prefix='osd-db',
                                                uuid='d83fa1ca-bd68-4c75-bdc2-464da58e8abd',
                                                vg=None,
@@ -317,8 +326,8 @@ class TestLvmBlueStore:
                        block_wal=None,
                        block_wal_size='0',
                        block_wal_slots=None)
-        self.lvm_bs.args = args
-        self.lvm_bs.setup_metadata_devices()
+        self.lvm.args = args
+        self.lvm.setup_metadata_devices()
         assert m_set_tags.mock_calls == [call({
             'ceph.type': 'db',
             'ceph.vdo': '0',
@@ -344,8 +353,8 @@ class TestLvmBlueStore:
                        block_wal=None,
                        block_wal_size='0',
                        block_wal_slots=None)
-        self.lvm_bs.args = args
-        self.lvm_bs.setup_metadata_devices()
+        self.lvm.args = args
+        self.lvm.setup_metadata_devices()
         m_create_lv.assert_not_called()
         m_set_tags.assert_not_called()
 
@@ -355,16 +364,16 @@ class TestLvmBlueStore:
                       vg_name='vg_foo',
                       lv_tags='ceph.type=block,ceph.block_uuid=fake-block-uuid',
                       lv_uuid='fake-block-uuid')]
-        assert self.lvm_bs.get_osd_device_path(lvs, 'block') == '/fake-path'
+        assert self.lvm.get_osd_device_path(lvs, 'block') == '/fake-path'
 
-    @patch('ceph_volume.objectstore.lvmbluestore.encryption_utils.luks_open', MagicMock())
+    @patch('ceph_volume.objectstore.lvm.encryption_utils.luks_open', MagicMock())
     def test_get_osd_device_path_lv_block_encrypted(self):
         lvs = [Volume(lv_name='lv_foo',
                       lv_path='/fake-path',
                       vg_name='vg_foo',
                       lv_tags='ceph.type=block,ceph.block_uuid=fake-block-uuid,ceph.encrypted=1',
                       lv_uuid='fake-block-uuid')]
-        assert self.lvm_bs.get_osd_device_path(lvs, 'block') == '/dev/mapper/fake-block-uuid'
+        assert self.lvm.get_osd_device_path(lvs, 'block') == '/dev/mapper/fake-block-uuid'
 
     def test_get_osd_device_path_lv_db(self):
         lvs = [Volume(lv_name='lv_foo-block',
@@ -377,7 +386,7 @@ class TestLvmBlueStore:
                       vg_name='vg_foo_db',
                       lv_tags='ceph.type=db,ceph.block_uuid=fake-block-uuid,ceph.db_uuid=fake-db-uuid',
                       lv_uuid='fake-db-uuid')]
-        assert self.lvm_bs.get_osd_device_path(lvs, 'db') == '/fake-db-path'
+        assert self.lvm.get_osd_device_path(lvs, 'db') == '/fake-db-path'
 
     def test_get_osd_device_path_no_device_uuid(self):
         lvs = [Volume(lv_name='lv_foo-block',
@@ -390,10 +399,10 @@ class TestLvmBlueStore:
                       vg_name='vg_foo_db',
                       lv_tags='ceph.type=db,ceph.block_uuid=fake-block-uuid',
                       lv_uuid='fake-db-uuid')]
-        assert not self.lvm_bs.get_osd_device_path(lvs, 'db')
+        assert not self.lvm.get_osd_device_path(lvs, 'db')
 
     @patch('ceph_volume.util.disk.get_device_from_partuuid')
-    @patch('ceph_volume.objectstore.lvmbluestore.encryption_utils.luks_open', MagicMock())
+    @patch('ceph_volume.objectstore.lvm.encryption_utils.luks_open', MagicMock())
     def test_get_osd_device_path_phys_encrypted(self, m_get_device_from_partuuid):
         m_get_device_from_partuuid.return_value = '/dev/sda1'
         lvs = [Volume(lv_name='lv_foo-block',
@@ -401,7 +410,7 @@ class TestLvmBlueStore:
                      vg_name='vg_foo',
                      lv_tags='ceph.type=block,ceph.block_uuid=fake-block-uuid,ceph.db_uuid=fake-db-uuid,ceph.osd_id=0,ceph.osd_fsid=abcd,ceph.cluster_name=ceph,ceph.encrypted=1',
                      lv_uuid='fake-block-uuid')]
-        assert self.lvm_bs.get_osd_device_path(lvs, 'db') == '/dev/mapper/fake-db-uuid'
+        assert self.lvm.get_osd_device_path(lvs, 'db') == '/dev/mapper/fake-db-uuid'
 
     @patch('ceph_volume.util.disk.get_device_from_partuuid')
     def test_get_osd_device_path_phys(self, m_get_device_from_partuuid):
@@ -411,7 +420,7 @@ class TestLvmBlueStore:
                      vg_name='vg_foo',
                      lv_tags='ceph.type=block,ceph.block_uuid=fake-block-uuid,ceph.db_uuid=fake-db-uuid,ceph.osd_id=0,ceph.osd_fsid=abcd,ceph.cluster_name=ceph',
                      lv_uuid='fake-block-uuid')]
-        self.lvm_bs.get_osd_device_path(lvs, 'db')
+        self.lvm.get_osd_device_path(lvs, 'db')
 
     @patch('ceph_volume.util.disk.get_device_from_partuuid')
     def test_get_osd_device_path_phys_raises_exception(self, m_get_device_from_partuuid):
@@ -422,7 +431,7 @@ class TestLvmBlueStore:
                      lv_tags='ceph.type=block,ceph.block_uuid=fake-block-uuid,ceph.db_uuid=fake-db-uuid,ceph.osd_id=0,ceph.osd_fsid=abcd,ceph.cluster_name=ceph',
                      lv_uuid='fake-block-uuid')]
         with pytest.raises(RuntimeError):
-            self.lvm_bs.get_osd_device_path(lvs, 'db')
+            self.lvm.get_osd_device_path(lvs, 'db')
 
     def test__activate_raises_exception(self):
         lvs = [Volume(lv_name='lv_foo-db',
@@ -431,12 +440,12 @@ class TestLvmBlueStore:
                       lv_tags='ceph.type=db,ceph.db_uuid=fake-db-uuid',
                       lv_uuid='fake-db-uuid')]
         with pytest.raises(RuntimeError) as error:
-            self.lvm_bs._activate(lvs)
+            self.lvm._activate(lvs)
         assert str(error.value) == 'could not find a bluestore OSD to activate'
 
-    @patch('ceph_volume.objectstore.lvmbluestore.encryption_utils.write_lockbox_keyring', MagicMock())
-    @patch('ceph_volume.objectstore.lvmbluestore.encryption_utils.get_dmcrypt_key', MagicMock())
-    @patch('ceph_volume.objectstore.lvmbluestore.prepare_utils.create_osd_path')
+    @patch('ceph_volume.objectstore.lvm.encryption_utils.write_lockbox_keyring', MagicMock())
+    @patch('ceph_volume.objectstore.lvm.encryption_utils.get_dmcrypt_key', MagicMock())
+    @patch('ceph_volume.objectstore.lvm.prepare_utils.create_osd_path')
     @patch('ceph_volume.terminal.success')
     @pytest.mark.parametrize("encrypted", ["ceph.encrypted=0", "ceph.encrypted=1"])
     def test__activate(self,
@@ -463,7 +472,7 @@ class TestLvmBlueStore:
                       vg_name='vg_foo_wal',
                       lv_tags=f'ceph.type=wal,ceph.block_uuid=fake-block-uuid,ceph.wal_uuid=fake-wal-uuid,ceph.db_uuid=fake-db-uuid,ceph.osd_id=0,ceph.osd_fsid=abcd,ceph.cluster_name=ceph,{encrypted},ceph.cephx_lockbox_secret=abcd',
                       lv_uuid='fake-wal-uuid')]
-        self.lvm_bs._activate(lvs)
+        self.lvm._activate(lvs)
         if encrypted == "ceph.encrypted=0":
             assert fake_run.calls == [{'args': (['ceph-bluestore-tool', '--cluster=ceph',
                                                  'prime-osd-dir', '--dev', '/fake-block-path',
@@ -515,10 +524,10 @@ class TestLvmBlueStore:
                           factory,
                           fake_run):
         args = factory(no_systemd=True)
-        self.lvm_bs.args = args
-        self.lvm_bs.activate = MagicMock()
-        self.lvm_bs.activate_all()
-        assert self.lvm_bs.activate.mock_calls == [call(args,
+        self.lvm.args = args
+        self.lvm.activate = MagicMock()
+        self.lvm.activate_all()
+        assert self.lvm.activate.mock_calls == [call(args,
                                                         osd_id='1',
                                                         osd_fsid='824f7edf-371f-4b75-9231-4ab62a32d5c0'),
                                                    call(args,
@@ -533,10 +542,10 @@ class TestLvmBlueStore:
                                        fake_run,
                                        monkeypatch,
                                        capsys):
-        monkeypatch.setattr('ceph_volume.objectstore.lvmbluestore.direct_report', lambda: {})
+        monkeypatch.setattr('ceph_volume.objectstore.lvm.direct_report', lambda: {})
         args = factory(no_systemd=True)
-        self.lvm_bs.args = args
-        self.lvm_bs.activate_all()
+        self.lvm.args = args
+        self.lvm.activate_all()
         stdout, stderr = capsys.readouterr()
         assert "Was unable to find any OSDs to activate" in stderr
         assert "Verify OSDs are present with" in stderr
@@ -549,10 +558,10 @@ class TestLvmBlueStore:
                                         factory,
                                         fake_run):
         args = factory(no_systemd=False)
-        self.lvm_bs.args = args
-        self.lvm_bs.activate = MagicMock()
-        self.lvm_bs.activate_all()
-        assert self.lvm_bs.activate.mock_calls == []
+        self.lvm.args = args
+        self.lvm.activate = MagicMock()
+        self.lvm.activate_all()
+        assert self.lvm.activate.mock_calls == []
 
     @patch('ceph_volume.api.lvm.get_lvs')
     def test_activate_osd_id_and_fsid(self,
@@ -568,10 +577,10 @@ class TestLvmBlueStore:
                       lv_tags=f'ceph.osd_id={args.osd_id},ceph.osd_fsid={args.osd_fsid}',
                       lv_uuid='fake-uuid')]
         m_get_lvs.return_value = lvs
-        self.lvm_bs.args = args
-        self.lvm_bs._activate = MagicMock()
-        self.lvm_bs.activate()
-        assert self.lvm_bs._activate.mock_calls == [call(lvs, True, False)]
+        self.lvm.args = args
+        self.lvm._activate = MagicMock()
+        self.lvm.activate()
+        assert self.lvm._activate.mock_calls == [call(lvs, True, False)]
         assert m_get_lvs.mock_calls == [call(tags={'ceph.osd_id': '1',
                                                    'ceph.osd_fsid': '824f7edf'})]
 
@@ -589,10 +598,10 @@ class TestLvmBlueStore:
                       lv_tags='',
                       lv_uuid='fake-uuid')]
         m_get_lvs.return_value = lvs
-        self.lvm_bs.args = args
-        self.lvm_bs._activate = MagicMock()
-        self.lvm_bs.activate()
-        assert self.lvm_bs._activate.mock_calls == [call(lvs, True, False)]
+        self.lvm.args = args
+        self.lvm._activate = MagicMock()
+        self.lvm.activate()
+        assert self.lvm._activate.mock_calls == [call(lvs, True, False)]
         assert m_get_lvs.mock_calls == [call(tags={'ceph.osd_fsid': '824f7edf'})]
 
     def test_activate_osd_id_and_not_fsid(self,
@@ -601,10 +610,10 @@ class TestLvmBlueStore:
         args = factory(no_systemd=True,
                        osd_id='1',
                        osd_fsid=None)
-        self.lvm_bs.args = args
-        self.lvm_bs._activate = MagicMock()
+        self.lvm.args = args
+        self.lvm._activate = MagicMock()
         with pytest.raises(RuntimeError) as error:
-            self.lvm_bs.activate()
+            self.lvm.activate()
         assert str(error.value) == 'could not activate osd.1, please provide the osd_fsid too'
 
     def test_activate_not_osd_id_and_not_fsid(self,
@@ -613,10 +622,10 @@ class TestLvmBlueStore:
         args = factory(no_systemd=True,
                        osd_id=None,
                        osd_fsid=None)
-        self.lvm_bs.args = args
-        self.lvm_bs._activate = MagicMock()
+        self.lvm.args = args
+        self.lvm._activate = MagicMock()
         with pytest.raises(RuntimeError) as error:
-            self.lvm_bs.activate()
+            self.lvm.activate()
         assert str(error.value) == 'Please provide both osd_id and osd_fsid'
 
     @patch('ceph_volume.api.lvm.get_lvs')
@@ -629,8 +638,8 @@ class TestLvmBlueStore:
                        no_systemd=True)
         lvs = []
         m_get_lvs.return_value = lvs
-        self.lvm_bs.args = args
-        self.lvm_bs._activate = MagicMock()
+        self.lvm.args = args
+        self.lvm._activate = MagicMock()
         with pytest.raises(RuntimeError) as error:
-            self.lvm_bs.activate()
+            self.lvm.activate()
         assert str(error.value) == 'could not find osd.1 with osd_fsid 824f7edf'
