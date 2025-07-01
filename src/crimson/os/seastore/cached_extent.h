@@ -840,8 +840,12 @@ private:
   friend class ExtentIndex;
   friend class Transaction;
 
-  bool is_linked() {
+  bool is_linked_to_index() {
     return extent_index_hook.is_linked();
+  }
+
+  bool is_linked_to_list() {
+    return primary_ref_list_hook.is_linked();
   }
 
   /// hook for intrusive ref list (mainly dirty or lru list)
@@ -1272,7 +1276,7 @@ public:
 
   void erase(CachedExtent &extent) {
     assert(extent.parent_index);
-    assert(extent.is_linked());
+    assert(extent.is_linked_to_index());
     [[maybe_unused]] auto erased = extent_index.erase(
       extent_index.s_iterator_to(extent));
     extent.parent_index = nullptr;
