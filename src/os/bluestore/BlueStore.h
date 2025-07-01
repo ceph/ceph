@@ -4064,6 +4064,8 @@ public:
   int  push_allocation_to_rocksdb();
   int  read_allocation_from_drive_for_bluestore_tool();
 #endif
+  int compare_allocation_recovery_for_bluestore_tool();
+
   void set_allocation_in_simple_bmap(SimpleBitmap* sbmap, uint64_t offset, uint64_t length);
 
 private:
@@ -4130,18 +4132,24 @@ private:
   };
 
   friend std::ostream& operator<<(std::ostream& out, const read_alloc_stats_t& stats) {
+    out << "==========================================================" << std::endl
+        << "onode_count             = " ;out.width(10);out << stats.onode_count << std::endl
+        << "shard_count             = " ;out.width(10);out << stats.shard_count << std::endl
+        << "shared_blob_count       = " ;out.width(10);out << stats.shared_blob_count << std::endl
+        << "compressed_blob_count   = " ;out.width(10);out << stats.compressed_blob_count << std::endl
+        << "spanning_blob_count     = " ;out.width(10);out << stats.spanning_blob_count << std::endl
+        << "skipped_illegal_extent  = " ;out.width(10);out << stats.skipped_illegal_extent << std::endl
+        << "extent_count            = " ;out.width(10);out << stats.extent_count << std::endl
+        << "insert_count            = " ;out.width(10);out << stats.insert_count << std::endl;
+    store_statfs_t s;
+    stats.actual_store_vstatfs.publish(&s);
+    out << "store " << s << std::endl;
+    for (auto& ps :stats.actual_pool_vstatfs) {
+      store_statfs_t s;
+      ps.second.publish(&s);
+      out << "pool " << ps.first << " " << s << std::endl;
+    }
     out << "==========================================================" << std::endl;
-    out << "NCB::onode_count             = " ;out.width(10);out << stats.onode_count << std::endl
-	<< "NCB::shard_count             = " ;out.width(10);out << stats.shard_count << std::endl
-	<< "NCB::shared_blob_count      = " ;out.width(10);out << stats.shared_blob_count << std::endl
-	<< "NCB::compressed_blob_count   = " ;out.width(10);out << stats.compressed_blob_count << std::endl
-	<< "NCB::spanning_blob_count     = " ;out.width(10);out << stats.spanning_blob_count << std::endl
-	<< "NCB::skipped_illegal_extent  = " ;out.width(10);out << stats.skipped_illegal_extent << std::endl
-	<< "NCB::extent_count            = " ;out.width(10);out << stats.extent_count << std::endl
-	<< "NCB::insert_count            = " ;out.width(10);out << stats.insert_count << std::endl;
-
-    out << "==========================================================" << std::endl;
-
     return out;
   }
 
