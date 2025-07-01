@@ -1510,13 +1510,14 @@ class CephadmAgent(CephService):
                          daemon_type: Optional[str] = None) -> List[str]:
 
         agent_options = [
-            "device_enhanced_scan",
-            "agent_refresh_rate",
-            "agent_jitter_seconds",
-            "agent_initial_startup_delay_max",
-            "agent_metadata_compresion_enabled",
-            "agent_metadata_payload_optimization_enabled",
-            "agent_starting_port",
+            'device_enhanced_scan',
+            'agent_refresh_rate',
+            'agent_avg_concurrency',
+            'agent_jitter_seconds',
+            'agent_initial_startup_delay_max',
+            'agent_metadata_compresion_enabled',
+            'agent_metadata_payload_optimization_enabled',
+            'agent_starting_port',
         ]
 
         agent_cfg_deps = [f"{opt}: {mgr.get_module_option(opt)}" for opt in agent_options]
