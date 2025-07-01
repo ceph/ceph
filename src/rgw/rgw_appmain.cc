@@ -305,6 +305,7 @@ void rgw::AppMain::cond_init_apis()
 
     // S3 website mode is a specialization of S3
     const bool s3website_enabled = apis_set.contains("s3website");
+    const bool s3control_enabled = apis_set.contains("s3control");
     const bool sts_enabled = apis_set.contains("sts");
     const bool iam_enabled = apis_set.contains("iam");
     const bool pubsub_enabled =
@@ -315,7 +316,7 @@ void rgw::AppMain::cond_init_apis()
       if (!swift_at_root) {
         rest.register_default_mgr(set_logging(
             rest_filter(env.driver, RGW_REST_S3,
-                        new RGWRESTMgr_S3(s3website_enabled, sts_enabled,
+                        new RGWRESTMgr_S3(s3control_enabled, s3website_enabled, sts_enabled,
                                           iam_enabled, pubsub_enabled))));
       } else {
         derr << "Cannot have the S3 or S3 Website enabled together with "
