@@ -116,6 +116,51 @@ class AgentEndpoint:
         else:
             return self.mgr.agent_initial_startup_delay_max
 
+    def compute_agents_avg_concurrency(self) -> int:
+        """
+        Compute the average number of agents allowed to report metadata per second (M).
+
+        - If user-specified value is -1, use an adaptive formula: sqrt(N)/2 (capped at 10).
+        - Ensures a minimum of 2 agents/sec to avoid unnecessary serialization.
+        - This helps spread load while avoiding bursts, especially on small clusters.
+        """
+        if self.mgr.agent_avg_concurrency == -1:  # auto-concurrency mode
+            num_agents = len(self.mgr.cache.get_hosts())
+            agents_concurrency = min(20, int(num_agents ** 0.5 / 2))
+        else:
+            agents_concurrency = self.mgr.agent_avg_concurrency
+        # We force a minimum of 2 agents per seconds
+        return max(2, agents_concurrency)
+
+    def compute_agents_refrsh_rate(self) -> int:
+        """
+        Compute the refresh rate (in seconds) for agent metadata reporting.
+
+        - If the user has specified a fixed `agent_refresh_rate`, use that.
+        - If `agent_refresh_rate` is set to -1 (auto mode), compute it dynamically as:
+            refresh_rate = num_agents // avg_concurrency
+            where:
+              - num_agents = total number of agents in the cluster
+              - avg_concurrency = average number of agents allowed to report per second,
+                computed using a separate heuristic (sqrt(N)/2, capped).
+        - This ensures that agent updates are spread evenly and that the manager is not overwhelmed.
+
+        Notes:
+        - A minimum refresh rate of 20 seconds is enforced to avoid excessive agent churn and load.
+        - The dynamic mode adapts automatically as the cluster grows.
+
+        Returns:
+            int: The agent refresh rate in seconds.
+        """
+        if self.mgr.agent_refresh_rate == -1:  # auto-refresh rate
+            num_agents = len(self.mgr.cache.get_hosts())
+            agents_avg_concurrency = self.compute_agents_avg_concurrency()
+            refresh_rate = num_agents // agents_avg_concurrency
+        else:
+            refresh_rate = self.mgr.agent_refresh_rate
+
+        return max(20, refresh_rate)
+
     def configure(self) -> None:
         self.host_data = HostData(self.mgr, self.server_port, self.server_addr)
         self.configure_tls(self.host_data)
@@ -917,10 +962,11 @@ class CephadmAgentHelpers:
             if host in self.mgr.offline_hosts:
                 return False
             self.mgr.agent_cache.agent_timestamp[host] = datetime_now()
-        # agent hasn't reported in down multiplier * it's refresh rate. Something is likely wrong with it.
+        # agent hasn't reported in:  down_multiplier * it's refresh rate + jitter. Something is likely wrong with it.
+        jitter: float = self.agent.get_jitter()
         down_mult: float = max(self.mgr.agent_down_multiplier, 1.5)
         time_diff = datetime_now() - self.mgr.agent_cache.agent_timestamp[host]
-        if time_diff.total_seconds() > down_mult * float(self.mgr.agent_refresh_rate):
+        if time_diff.total_seconds() > down_mult * float(self.mgr.http_server.agent.compute_agents_refrsh_rate() + jitter):
             return True
         return False
 
@@ -931,7 +977,7 @@ class CephadmAgentHelpers:
             down_mult: float = max(self.mgr.agent_down_multiplier, 1.5)
             for agent in down_agent_hosts:
                 detail.append((f'Cephadm agent on host {agent} has not reported in '
-                              f'{down_mult * self.mgr.agent_refresh_rate} seconds. Agent is assumed '
+                              f'{down_mult * self.mgr.http_server.agent.compute_agents_refrsh_rate()} seconds. Agent is assumed '
                                'down and host may be offline.'))
             for dd in [d for d in self.mgr.cache.get_daemons_by_type('agent') if d.hostname in down_agent_hosts]:
                 dd.status = DaemonDescriptionStatus.error
