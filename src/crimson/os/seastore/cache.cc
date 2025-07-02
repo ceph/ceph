@@ -1535,7 +1535,7 @@ record_t Cache::prepare_record(
     i->state = CachedExtent::extent_state_t::CLEAN;
     assert(i->is_logical());
     i->clear_modified_region();
-    touch_extent(*i, &trans_src, t.get_cache_hint());
+    touch_extent_fully(*i, &trans_src, t.get_cache_hint());
     DEBUGT("inplace rewrite ool block is commmitted -- {}", t, *i);
   }
 
@@ -1570,7 +1570,7 @@ record_t Cache::prepare_record(
     if (i->is_stable_dirty()) {
       add_to_dirty(i, &t_src);
     } else {
-      touch_extent(*i, &t_src, t.get_cache_hint());
+      touch_extent_fully(*i, &t_src, t.get_cache_hint());
     }
 
     alloc_delta.alloc_blk_ranges.emplace_back(
@@ -1814,7 +1814,7 @@ void Cache::complete_commit(
     i->invalidate_hints();
     add_extent(i);
     const auto t_src = t.get_src();
-    touch_extent(*i, &t_src, t.get_cache_hint());
+    touch_extent_fully(*i, &t_src, t.get_cache_hint());
     i->complete_io();
     epm.commit_space_used(i->get_paddr(), i->get_length());
 
@@ -2083,7 +2083,7 @@ Cache::replay_delta(
             ext.cast<LogicalCachedExtent>()->set_laddr(laddr);
           }
           // replay is not included by the cache hit metrics
-          touch_extent(ext, nullptr, CACHE_HINT_TOUCH);
+          touch_extent_fully(ext, nullptr, CACHE_HINT_TOUCH);
         },
         nullptr) :
       _get_extent_if_cached(
