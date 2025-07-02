@@ -34,7 +34,9 @@
 #include "include/buffer.h"
 #include "include/encoding.h"
 
-#define STUCK_ON_JAMMY 1
+#if !defined(__clang__) && defined(__GNUC__) && (__GNUC__ < 13)
+#define BROKEN_CO_COMPOSED
+#endif
 
 /// \file neorados/cls/common.h
 ///
