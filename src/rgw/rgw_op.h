@@ -308,9 +308,15 @@ public:
   }
   virtual const char* name() const = 0;
   virtual RGWOpType get_type() { return RGW_OP_UNKNOWN; }
-  virtual std::string canonical_name() const { return fmt::format("REST.{}.{}", s->info.method, name()); }
+  virtual std::string canonical_name() const {
+    return fmt::format("REST.{}.{}",
+        s->info.method != nullptr ? s->info.method : "UNKNOWN",
+        name());
+  }
   // by default we log all bucket operations
-  virtual bool always_do_bucket_logging() const { return s->bucket != nullptr; }
+  virtual bool always_do_bucket_logging() const {
+    return s->bucket != nullptr;
+  }
 
   virtual uint32_t op_mask() { return 0; }
 
@@ -2107,7 +2113,7 @@ public:
   virtual int get_params(optional_yield y) = 0;
   void send_response() override = 0;
   const char* name() const override { return "list_bucket_multiparts"; }
-  virtual std::string canonical_name() const override { return fmt::format("REST.{}.UPLOADS", s->info.method); }
+  std::string canonical_name() const override { return fmt::format("REST.{}.UPLOADS", s->info.method); }
   RGWOpType get_type() override { return RGW_OP_LIST_BUCKET_MULTIPARTS; }
   uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
 };
