@@ -94,6 +94,29 @@ class InvalidInputError(ValueError, ErrorResponseBase):
         return -errno.EINVAL, data, "Invalid input"
 
 
+class BigString(str):
+    """A subclass of str that exists specifally to assit the YAML
+    formatting of longer strings (SSL/TLS certs). Because the
+    python YAML lib makes doing this automatically very awkward.
+    """
+
+    @staticmethod
+    def yaml_representer(
+        dumper: yaml.SafeDumper, data: 'BigString'
+    ) -> yaml.ScalarNode:
+        _type = 'tag:yaml.org,2002:str'
+        data = str(data)
+        if '\n' in data or len(data) >= 80:
+            return dumper.represent_scalar(_type, data, style='|')
+        return dumper.represent_scalar(_type, data)
+
+
+# thanks yaml lib for your odd api.
+# Maybe this should be part of object_format.py? If this could be useful
+# elsewhere, perhaps lift this.
+yaml.SafeDumper.add_representer(BigString, BigString.yaml_representer)
+
+
 class _RBase:
     # mypy doesn't currently (well?) support class decorators adding methods
     # so we use a base class to add this method to all our resource classes.
