@@ -2349,7 +2349,7 @@ void pool_io_callback(completion_t cb, void *arg /* Actually AioCompletion* */)
     ASSERT_EQ(0, info->c->wait_for_complete());
   }
   int r = info->c->get_return_value();
-  cout << "finish " << i << " r = " << r << std::endl;
+  //cout << "finish " << i << " r = " << r << std::endl;
 
   std::scoped_lock l(my_lock);
   inflight.erase(i);
@@ -2426,8 +2426,8 @@ TEST(LibRadosAio, PoolEIOFlag) {
   }
 
   if (!missed_eio) {
-    GTEST_SKIP() << "eio flag missed all ios that already completed";
     my_lock.unlock();
+    GTEST_SKIP() << "eio flag missed all ios that already completed";
   }
   cout << "max_success " << max_success << ", min_failed " << min_failed << std::endl;
   ASSERT_TRUE(max_success + 1 == min_failed);
