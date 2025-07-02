@@ -838,6 +838,15 @@ public:
     cache_state = state;
   }
 
+  extent_len_t get_last_touch_end() const {
+    return last_touch_end;
+  }
+
+  void set_last_touch_end(extent_len_t touch_end) {
+    assert(touch_end != 0);
+    last_touch_end = touch_end;
+  }
+
 private:
   template <typename T>
   friend class read_set_item_t;
@@ -944,6 +953,10 @@ private:
   // the target rewrite generation for the followup rewrite
   // or the rewrite generation for the fresh write
   rewrite_gen_t rewrite_generation = NULL_GENERATION;
+
+  // save the end offset of the most recent of extent touching,
+  // see Cache::touch_extent_by_range() and ExtentPinboardTwoQ.
+  extent_len_t last_touch_end = 0;
 
   // This field is unused when the ExtentPinboard use LRU algorithm
   extent_2q_state_t cache_state = extent_2q_state_t::Fresh;
