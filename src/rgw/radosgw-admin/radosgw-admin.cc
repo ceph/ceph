@@ -152,7 +152,7 @@ void usage()
   cout << "  caps rm                          remove user capabilities\n";
   cout << "  dedup stats                      Display dedup statistics from the last run\n";
   cout << "  dedup estimate                   Runs dedup in estimate mode (no changes will be made)\n";
-  cout << "  dedup restart                    Restart dedup\n";
+  cout << "  dedup restart                    Restart dedup; must include --yes-i-really-mean-it to activate\n";
   cout << "  dedup abort                      Abort dedup\n";
   cout << "  dedup pause                      Pause dedup\n";
   cout << "  dedup resume                     Resume paused dedup\n";
@@ -3652,7 +3652,6 @@ int main(int argc, const char **argv)
   int skip_zero_entries = false;  // log show
   int purge_keys = false;
   int yes_i_really_mean_it = false;
-  int tech_preview = false;
   int delete_child_objects = false;
   int fix = false;
   int remove_bad = false;
@@ -4112,8 +4111,6 @@ int main(int argc, const char **argv)
     } else if (ceph_argparse_binary_flag(args, i, &purge_keys, NULL, "--purge-keys", (char*)NULL)) {
       // do nothing
     } else if (ceph_argparse_binary_flag(args, i, &yes_i_really_mean_it, NULL, "--yes-i-really-mean-it", (char*)NULL)) {
-      // do nothing
-    } else if (ceph_argparse_binary_flag(args, i, &tech_preview, NULL, "--tech-preview", (char*)NULL)) {
       // do nothing
     } else if (ceph_argparse_binary_flag(args, i, &fix, NULL, "--fix", (char*)NULL)) {
       // do nothing
@@ -9243,12 +9240,6 @@ next:
 	if (!yes_i_really_mean_it) {
 	  cerr << "Full Dedup is dangerous and could lead to data loss!\n"
 	       << "do you really mean it? (requires --yes-i-really-mean-it)"
-	       << std::endl;
-	  return EINVAL;
-	}
-	if (!tech_preview) {
-	  cerr << "Full Dedup is supplied as a tech-preview only and should not be used on production systems!\n"
-	       << "Please acknowledge that you understand this is a tech preview (requires --tech-preview)"
 	       << std::endl;
 	  return EINVAL;
 	}
