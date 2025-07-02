@@ -153,7 +153,7 @@ public:
   /// Low-level coroutininized operations in the FIFO objclass.
   ///@{
 
-#if !STUCK_ON_JAMMY
+#if !defined(BROKEN_CO_COMPOSED)
   /// \brief Retrieve FIFO metadata
   ///
   /// \param rados RADOS handle
@@ -181,9 +181,7 @@ public:
 			       ret.part_entry_overhead);
       }, std::forward<CompletionToken>(token));
   }
-#endif // !STUCK_ON_JAMMY
-
-#if STUCK_ON_JAMMY
+#else // BROKEN_CO_COMPOSED
   /// \brief Retrieve FIFO metadata
   ///
   /// \param rados RADOS handle
@@ -230,9 +228,9 @@ public:
        }, rados.get_executor()),
        token, std::ref(rados), std::move(obj), std::move(ioc), std::move(objv));
   }
-#endif // STUCK_ON_JAMMY
+#endif // BROKEN_CO_COMPOSED
 
-#if !STUCK_ON_JAMMY
+#if !defined(BROKEN_CO_COMPOSED)
   /// \brief Retrieve part info
   ///
   /// \param part_num Number of part to query
@@ -255,9 +253,7 @@ public:
 	return std::move(ret.header);
       }, std::forward<CompletionToken>(token));
   }
-#endif // !STUCK_ON_JAMMY
-
-#if STUCK_ON_JAMMY
+#else // BROKEN_CO_COMPOSED
   /// \brief Retrieve part info
   ///
   /// \param part_num Number of part to query
@@ -298,7 +294,7 @@ public:
        }, rados.get_executor()),
        token, std::move(part_oid), this);
   }
-#endif // STUCK_ON_JAMMY
+#endif // BROKEN_CO_COMPOSED
 
 private:
 
