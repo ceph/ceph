@@ -59,10 +59,16 @@ class AuthMode(_StrEnum):
     ACTIVE_DIRECTORY = 'active-directory'
 
 
+class SourceReferenceType(_StrEnum):
+    RESOURCE = 'resource'
+
+
+# NOTE: Use SourceReferenceType for new source objects
 class JoinSourceType(_StrEnum):
     RESOURCE = 'resource'
 
 
+# NOTE: Use SourceReferenceType for new source objects
 class UserGroupSourceType(_StrEnum):
     RESOURCE = 'resource'
     EMPTY = 'empty'
