@@ -484,12 +484,7 @@ public:
   void get_stats(
     cache_stats_t &stats,
     bool report_detail,
-    double seconds) const final {
-    hot.get_stats("2Q_Hot", stats, report_detail, seconds);
-    cache_stats_t warm;
-    warm_in.get_stats("2Q_WarmIn", warm, report_detail, seconds);
-    stats.add(warm);
-  }
+    double seconds) const final;
 
   void remove(CachedExtent &extent) final {
     auto s = extent.get_2q_state();
@@ -633,7 +628,24 @@ private:
       cache_size_stats_t data;
       cache_size_stats_t mdat;
       cache_size_stats_t phys;
+
+      bool empty() const {
+	return data.is_empty() && mdat.is_empty() && phys.is_empty();
+      }
+
+      void minus(const summary_t &o) {
+	data.minus(o.data);
+	mdat.minus(o.mdat);
+	phys.minus(o.phys);
+      }
     };
+
+    summary_t &get_summary_via_src(Transaction::src_t src) {
+      if (src == Transaction::src_t::MAX) {
+	return other_hits;
+      }
+      return get_by_src(trans_hits, src);
+    }
     counter_by_src_t<summary_t> trans_hits;
     summary_t other_hits;
   };
@@ -665,6 +677,86 @@ private:
   mutable hit_stats_t overall_hits;
   mutable hit_stats_t last_hits;
 };
+
+void ExtentPinboardTwoQ::get_stats(
+  cache_stats_t &stats,
+  bool report_detail,
+  double seconds) const
+{
+  LOG_PREFIX(ExtentPinboardTwoQ::get_stats);
+  hot.get_stats("2Q_Hot", stats, report_detail, seconds);
+  cache_stats_t warm;
+  warm_in.get_stats("2Q_WarmIn", warm, report_detail, seconds);
+  stats.add(warm);
+
+  if (!report_detail || seconds == 0) {
+    return;
+  }
+
+  std::ostringstream oss;
+  bool output_src_type = true;
+
+  auto header = [&output_src_type, &oss](Transaction::src_t src) {
+    if (!output_src_type) {
+      return;
+    }
+    if (src == Transaction::src_t::MAX) {
+      oss << "\nOTHER:";
+    } else {
+      oss << '\n' << src << ':';
+    }
+    output_src_type = false;
+  };
+
+  auto handle_queue_counter = [&oss, &header, seconds]
+      (QueueCounter &cur_qc, QueueCounter &other_qc,
+       std::string_view name, Transaction::src_t src)
+  {
+    auto cur = cur_qc.get_summary_via_src(src);
+    auto &last = other_qc.get_summary_via_src(src);
+    cur.minus(last);
+    if (cur.empty()) {
+      return;
+    }
+    header(src);
+    oss << "\n  " << name << ':';
+    if (!cur.data.is_empty()) {
+      oss << "\n    data: " << cur.data.num_extents
+	  << cache_size_stats_printer_t{seconds, cur.data};
+    }
+    if (!cur.mdat.is_empty()) {
+      oss << "\n    mdat: " << cur.mdat.num_extents
+	  << cache_size_stats_printer_t{seconds, cur.mdat};
+    }
+    if (!cur.phys.is_empty()) {
+      oss << "\n    phys: " << cur.phys.num_extents
+	  << cache_size_stats_printer_t{seconds, cur.phys};
+    }
+  };
+
+  for (uint8_t _src = 0; _src <= TRANSACTION_TYPE_MAX; _src++) {
+    auto src = static_cast<Transaction::src_t>(_src);
+    output_src_type = true;
+    handle_queue_counter(
+      overall_hits.hot_hits, last_hits.hot_hits,
+      "2Q_hot", src);
+    handle_queue_counter(
+      overall_hits.warm_in_hits, last_hits.warm_in_hits,
+      "2Q_warm_in", src);
+    handle_queue_counter(
+      overall_hits.warm_out_hits, last_hits.warm_out_hits,
+      "2Q_warm_out", src);
+    handle_queue_counter(
+      overall_hits.missing_hits, last_hits.missing_hits,
+      "2Q_missing", src);
+    handle_queue_counter(
+      overall_hits.filtered_hits, last_hits.filtered_hits,
+      "2Q_filtered", src);
+  }
+
+  INFO("{}", oss.str());
+  last_hits = overall_hits;
+}
 
 void ExtentPinboardTwoQ::register_metrics() {
   namespace sm = seastar::metrics;
