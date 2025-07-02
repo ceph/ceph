@@ -13,6 +13,7 @@
  *
  */
 
+#include <set>
 #include <boost/intrusive/list.hpp>
 #include "global/global_init.h"
 #include "global/signal_handler.h"
@@ -21,6 +22,7 @@
 #include "common/Timer.h"
 #include "common/TracepointProvider.h"
 #include "common/numa.h"
+#include "common/split.h"
 #include "include/compat.h"
 #include "include/str_list.h"
 #include "include/stringify.h"
@@ -284,13 +286,10 @@ void rgw::AppMain::cond_init_apis()
    rgw_rest_init(g_ceph_context, env.driver->get_zone()->get_zonegroup());
 
   if (have_http_frontend) {
-    std::vector<std::string> apis;
-    get_str_vec(g_conf()->rgw_enable_apis, apis);
+    const auto apis = ceph::split(g_conf()->rgw_enable_apis);
 
-    std::map<std::string, bool> apis_map;
-    for (auto &api : apis) {
-      apis_map[api] = true;
-    }
+    std::set<std::string> apis_set;
+    apis_set.insert(apis.begin(), apis.end());
 
     /* warn about insecure keystone secret config options */
     if (!(g_ceph_context->_conf->rgw_keystone_admin_token.empty() ||
@@ -305,14 +304,14 @@ void rgw::AppMain::cond_init_apis()
     }
 
     // S3 website mode is a specialization of S3
-    const bool s3website_enabled = apis_map.count("s3website") > 0;
-    const bool sts_enabled = apis_map.count("sts") > 0;
-    const bool iam_enabled = apis_map.count("iam") > 0;
+    const bool s3website_enabled = apis_set.contains("s3website");
+    const bool sts_enabled = apis_set.contains("sts");
+    const bool iam_enabled = apis_set.contains("iam");
     const bool pubsub_enabled =
-        apis_map.count("pubsub") > 0 || apis_map.count("notifications") > 0;
+        apis_set.contains("pubsub") || apis_set.contains("notifications");
     // Swift API entrypoint could placed in the root instead of S3
     const bool swift_at_root = g_conf()->rgw_swift_url_prefix == "/";
-    if (apis_map.count("s3") > 0 || s3website_enabled) {
+    if (apis_set.contains("s3") || s3website_enabled) {
       if (!swift_at_root) {
         rest.register_default_mgr(set_logging(
             rest_filter(env.driver, RGW_REST_S3,
@@ -324,7 +323,7 @@ void rgw::AppMain::cond_init_apis()
       }
     }
 
-    if (apis_map.count("swift") > 0) {
+    if (apis_set.contains("swift")) {
       RGWRESTMgr_SWIFT* const swift_resource = new RGWRESTMgr_SWIFT;
 
       if (! g_conf()->rgw_cross_domain_policy.empty()) {
@@ -353,12 +352,12 @@ void rgw::AppMain::cond_init_apis()
       }
     }
 
-    if (apis_map.count("swift_auth") > 0) {
+    if (apis_set.contains("swift_auth")) {
       rest.register_resource(g_conf()->rgw_swift_auth_entry,
                 set_logging(new RGWRESTMgr_SWIFT_Auth));
     }
 
-    if (apis_map.count("admin") > 0) {
+    if (apis_set.contains("admin")) {
       RGWRESTMgr_Admin *admin_resource = new RGWRESTMgr_Admin;
       admin_resource->register_resource("info", new RGWRESTMgr_Info);
       admin_resource->register_resource("usage", new RGWRESTMgr_Usage);
@@ -368,7 +367,7 @@ void rgw::AppMain::cond_init_apis()
       rest.register_resource(g_conf()->rgw_admin_entry, admin_resource);
     }
 
-    if (apis_map.count("zero")) {
+    if (apis_set.contains("zero")) {
       rest.register_resource("zero", new rgw::RESTMgr_Zero());
     }
   } /* have_http_frontend */
