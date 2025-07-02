@@ -1,3 +1,5 @@
+# pylint: disable=unexpected-keyword-arg
+
 import functools
 import logging
 from typing import Annotated, Any, Callable, Dict, Generator, List, \
@@ -9,6 +11,14 @@ from .nvmeof_conf import NvmeofGatewaysConfig
 logger = logging.getLogger("nvmeof_client")
 
 try:
+    # if the protobuf version is newer than what we generated with
+    # proto file import will fail (because of differences between what's
+    # available in centos and ubuntu).
+    # this "hack" should be removed once we update both the
+    # distros; centos and ubuntu.
+    import os
+    os.environ["PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION"] = "python"
+
     import grpc  # type: ignore
     import grpc._channel  # type: ignore
     from google.protobuf.json_format import MessageToDict  # type: ignore
@@ -223,7 +233,7 @@ else:
             def wrapper(*args, **kwargs) -> Model:
                 message = func(*args, **kwargs)
                 msg_dict = MessageToDict(message, including_default_value_fields=True,
-                                         preserving_proto_field_name=True)
+                                         preserving_proto_field_name=True)  # type: ignore
 
                 result = namedtuple_to_dict(obj_to_namedtuple(msg_dict, model))
                 if finalize:
