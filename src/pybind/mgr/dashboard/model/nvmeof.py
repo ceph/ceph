@@ -157,6 +157,14 @@ class Host(NamedTuple):
     nqn: str
 
 
+class HostsInfo(NamedTuple):
+    status: int
+    error_message: str
+    allow_any_host: bool
+    subsystem_nqn: str
+    hosts: List[Host]
+
+
 class RequestStatus(NamedTuple):
     status: int
     error_message: str
