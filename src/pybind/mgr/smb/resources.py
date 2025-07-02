@@ -530,6 +530,8 @@ class Cluster(_RBase):
     # bind_addrs are used to restrict what IP addresses instances of this
     # cluster will use
     bind_addrs: Optional[List[ClusterBindIP]] = None
+    # configure a remote control sidecar server.
+    remote_control: Optional[RemoteControl] = None
 
     def validate(self) -> None:
         if not self.cluster_id:
@@ -575,6 +577,15 @@ class Cluster(_RBase):
     @property
     def clustering_mode(self) -> SMBClustering:
         return self.clustering if self.clustering else SMBClustering.DEFAULT
+
+    @property
+    def remote_control_is_enabled(self) -> bool:
+        """Return true if a remote control service should be enabled for this
+        cluster.
+        """
+        if not self.remote_control:
+            return False
+        return self.remote_control.is_enabled
 
     def is_clustered(self) -> bool:
         """Return true if smbd instance should use (CTDB) clustering."""
