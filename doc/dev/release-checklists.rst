@@ -41,7 +41,6 @@ Make sure X (and, ideally, X+1) is defined:
 Scripts
 ~~~~~~~
 
-- [x] src/script/backport-resolve-issue (`releases()`, `ver_to_release()`)
 - [x] src/script/backport-create-issue (`releases()`)
 - [x] src/script/ceph-release-notes (up to X)
 
