@@ -31,6 +31,8 @@ from .utils import checked
 
 ConversionOp = Tuple[PasswordFilter, PasswordFilter]
 
+_MASKED = '*' * 16
+
 
 def _get_intent(data: Simplified) -> Intent:
     """Helper function that returns the intent value from a data dict."""
@@ -644,7 +646,7 @@ def _password_convert(pvalue: str, operation: ConversionOp) -> str:
     if operation == (PasswordFilter.NONE, PasswordFilter.BASE64):
         pvalue = base64.b64encode(pvalue.encode("utf8")).decode("utf8")
     elif operation == (PasswordFilter.NONE, PasswordFilter.HIDDEN):
-        pvalue = "*" * 16
+        pvalue = _MASKED
     elif operation == (PasswordFilter.BASE64, PasswordFilter.NONE):
         pvalue = base64.b64decode(pvalue.encode("utf8")).decode("utf8")
     else:
