@@ -25,6 +25,7 @@ from .enums import (
     LoginCategory,
     PasswordFilter,
     SMBClustering,
+    SourceReferenceType,
     TLSCredentialType,
     UserGroupSourceType,
 )
@@ -463,6 +464,27 @@ class ClusterBindIP(_RBase):
     def _customize_resource(rc: resourcelib.Resource) -> resourcelib.Resource:
         rc.address.quiet = True
         rc.network.quiet = True
+        return rc
+
+
+@resourcelib.component()
+class TLSSource(_RBase):
+    """Represents TLS Certificates and Keys used to configure SMB related
+    resources.
+    """
+
+    source_type: SourceReferenceType = SourceReferenceType.RESOURCE
+    ref: str = ''
+
+    def validate(self) -> None:
+        if not self.ref:
+            raise ValueError('reference value must be specified')
+        else:
+            validation.check_id(self.ref)
+
+    @resourcelib.customize
+    def _customize_resource(rc: resourcelib.Resource) -> resourcelib.Resource:
+        rc.ref.quiet = True
         return rc
 
 
