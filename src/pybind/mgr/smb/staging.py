@@ -46,6 +46,10 @@ log = logging.getLogger(__name__)
 
 
 class Staging:
+    """A virtual store used to compile pending changes before saving them in
+    the destination store.
+    """
+
     def __init__(self, store: ConfigStore) -> None:
         self.destination_store = store
         self.incoming: Dict[EntryKey, SMBResource] = {}
@@ -139,6 +143,9 @@ class Staging:
 
 
 def auth_refs(cluster: resources.Cluster) -> Collection[str]:
+    """Return all IDs for join_auth resources referenced by the supplied
+    cluster.
+    """
     if cluster.auth_mode != AuthMode.ACTIVE_DIRECTORY:
         return set()
     return {
@@ -149,6 +156,9 @@ def auth_refs(cluster: resources.Cluster) -> Collection[str]:
 
 
 def ug_refs(cluster: resources.Cluster) -> Collection[str]:
+    """Return all IDs for users_and_groups resources referenced by the supplied
+    cluster.
+    """
     if (
         cluster.auth_mode != AuthMode.USER
         or cluster.user_group_settings is None
@@ -169,6 +179,12 @@ def cross_check_resource(
     path_resolver: PathResolver,
     earmark_resolver: EarmarkResolver,
 ) -> None:
+    """Check a given resource for consistency across the set of other resources
+    in the virtual transaction represented by the staging store and
+    resolver-helpers.
+
+    The cross-check is only for things outside the scope of a single resource.
+    """
     raise TypeError(f'not a valid smb resource: {type(resource)}')
 
 
