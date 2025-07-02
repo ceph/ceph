@@ -18322,8 +18322,9 @@ int Client::ll_set_fscrypt_policy_v2(Inode *in, const struct fscrypt_policy_v2& 
     return 0;
   }
 
-  if (in->is_dir() && in->dir && in->dir->dentries.size() > 0)
+  if (in->dir && in->dir->dentries.size() != in->dir->num_null_dentries) {
     return -ENOTEMPTY;
+  }
 
   FSCryptContext fsc(cct);
   fsc.init(policy);
