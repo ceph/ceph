@@ -1,6 +1,7 @@
 from typing import Dict, List, Optional, Tuple, Union, cast
 
 import base64
+import dataclasses
 import errno
 import json
 
@@ -24,6 +25,7 @@ from .enums import (
     LoginCategory,
     PasswordFilter,
     SMBClustering,
+    TLSCredentialType,
     UserGroupSourceType,
 )
 from .proto import Self, Simplified
@@ -623,6 +625,50 @@ class UsersAndGroups(_RBase):
         )
 
 
+@resourcelib.resource('ceph.smb.tls.credential')
+class TLSCredential(_RBase):
+    """Contains a TLS certificate or key that can be used to configure
+    SMB services that make use of TLS/SSL.
+    """
+
+    tls_credential_id: str
+    intent: Intent = Intent.PRESENT
+    credential_type: Optional[TLSCredentialType] = None
+    value: Optional[str] = None
+    # linked resources can only be used by the resource they are linked to
+    # and are automatically removed when the "parent" resource is removed
+    linked_to_cluster: Optional[str] = None
+
+    def validate(self) -> None:
+        if not self.tls_credential_id:
+            raise ValueError('tls_credential_id requires a value')
+        validation.check_id(self.tls_credential_id)
+        if self.linked_to_cluster is not None:
+            validation.check_id(self.linked_to_cluster)
+        if self.intent is Intent.PRESENT:
+            if self.credential_type is None:
+                raise ValueError('credential_type must be specified')
+            if not self.value:
+                raise ValueError('a value must be specified')
+
+    @resourcelib.customize
+    def _customize_resource(rc: resourcelib.Resource) -> resourcelib.Resource:
+        rc.value.wrapper_type = BigString
+        return rc
+
+    def convert(self, operation: ConversionOp) -> Self:
+        """When hiding sensitive data hide TLS/SSL certs too. However, the
+        BASE64 filter enum will act as a no-op. Our certs are already long
+        Base64 encoded strings that are resistant to casual shoulder-surfing.
+        """
+        if (
+            operation == (PasswordFilter.NONE, PasswordFilter.HIDDEN)
+            and self.value
+        ):
+            return dataclasses.replace(self, value=_MASKED)
+        return self
+
+
 # SMBResource is a union of all valid top-level smb resource types.
 SMBResource = Union[
     Cluster,
@@ -631,6 +677,7 @@ SMBResource = Union[
     RemovedShare,
     Share,
     UsersAndGroups,
+    TLSCredential,
 ]
 
 
