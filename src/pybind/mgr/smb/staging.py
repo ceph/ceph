@@ -6,6 +6,7 @@ from typing import (
     List,
     Optional,
     Set,
+    Type,
 )
 
 import functools
@@ -27,6 +28,7 @@ from .enums import (
 from .internal import (
     ClusterEntry,
     JoinAuthEntry,
+    ResourceEntry,
     ShareEntry,
     UsersAndGroupsEntry,
     resource_entry,
@@ -140,6 +142,27 @@ class Staging:
         log.debug('saved resource: %r; state: %s', resource, state)
         result = Result(resource, success=True, status={'state': state})
         return result
+
+    def _prune(
+        self,
+        cids: Collection[str],
+        ecls: Type[ResourceEntry],
+        rcls: Type[SMBResource],
+    ) -> None:
+        for _id in ecls.ids(self):
+            assert isinstance(_id, str)
+            rentry = ecls.from_store_by_key(self.destination_store, _id)
+            resource = rentry.get_resource_type(rcls)
+            _linked_to_cluster = getattr(resource, 'linked_to_cluster', None)
+            if not _linked_to_cluster:
+                continue
+            if _linked_to_cluster not in cids:
+                rentry.remove()
+
+    def prune_linked_entries(self) -> None:
+        cids = set(ClusterEntry.ids(self))
+        self._prune(cids, JoinAuthEntry, resources.JoinAuth)
+        self._prune(cids, UsersAndGroupsEntry, resources.UsersAndGroups)
 
 
 def auth_refs(cluster: resources.Cluster) -> Collection[str]:

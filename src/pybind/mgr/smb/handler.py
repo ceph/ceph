@@ -308,7 +308,7 @@ class ClusterConfigHandler:
             )
             with _store_transaction(staging.destination_store):
                 results = staging.save()
-                _prune_linked_entries(staging)
+                staging.prune_linked_entries()
             with _store_transaction(staging.destination_store):
                 self._sync_modified(results)
         return results
@@ -674,25 +674,6 @@ def order_resources(
         return 0
 
     return sorted(resource_objs, key=_keyfunc)
-
-
-def _prune_linked_entries(staging: Staging) -> None:
-    cids = set(ClusterEntry.ids(staging))
-    for auth_id in JoinAuthEntry.ids(staging):
-        join_auth = staging.get_join_auth(auth_id)
-        if (
-            join_auth.linked_to_cluster
-            and join_auth.linked_to_cluster not in cids
-        ):
-            JoinAuthEntry.from_store(
-                staging.destination_store, auth_id
-            ).remove()
-    for ug_id in UsersAndGroupsEntry.ids(staging):
-        ug = staging.get_users_and_groups(ug_id)
-        if ug.linked_to_cluster and ug.linked_to_cluster not in cids:
-            UsersAndGroupsEntry.from_store(
-                staging.destination_store, ug_id
-            ).remove()
 
 
 def _generate_share(
