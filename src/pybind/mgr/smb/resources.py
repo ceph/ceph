@@ -488,6 +488,28 @@ class TLSSource(_RBase):
         return rc
 
 
+@resourcelib.component()
+class RemoteControl(_RBase):
+    # enabled can be set to explicitly toggle the remote control server
+    enabled: Optional[bool] = None
+    # cert specifies the ssl/tls certificate to use
+    cert: Optional[TLSSource] = None
+    # cert specifies the ssl/tls server key to use
+    key: Optional[TLSSource] = None
+    # ca_cert specifies the ssl/tls ca cert for mTLS auth
+    ca_cert: Optional[TLSSource] = None
+
+    def validate(self) -> None:
+        if bool(self.cert) ^ bool(self.key):
+            raise ValueError('cert and key values must be provided together')
+
+    @property
+    def is_enabled(self) -> bool:
+        if self.enabled is not None:
+            return self.enabled
+        return bool(self.cert and self.key)
+
+
 @resourcelib.resource('ceph.smb.cluster')
 class Cluster(_RBase):
     """Represents a cluster (instance) that is / should be present."""
