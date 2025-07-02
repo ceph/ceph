@@ -330,7 +330,8 @@ public:
 
   void move_to_top(
     CachedExtent &extent,
-    const Transaction::src_t* p_src) final {
+    const Transaction::src_t* p_src,
+    extent_len_t /*load_start*/) final {
     if (extent.is_linked_to_list()) {
       lru.move_to_top(extent, p_src);
     } else {
@@ -368,18 +369,30 @@ public:
     clear();
   }
 
-  bool accessed_recently(laddr_t laddr) {
+  enum class AccessMode {
+    Missing,
+    ContinueFromLastEnd,
+    Again
+  };
+
+  AccessMode accessed_recently(laddr_t laddr, extent_len_t load_start) {
     auto iter = index.find(laddr);
     if (iter == index.end()) {
-      return false;
+      return AccessMode::Missing;
     }
+    // Current read start offset is same as the last access end offset,
+    // we treat this access as sequential read.
+    auto last_end = iter->second->last_access_end;
+    auto ret = (last_end != 0 && last_end == load_start)
+	? AccessMode::ContinueFromLastEnd
+	: AccessMode::Again;
     remove(iter);
-    return true;
+    return ret;
   }
 
-  void add(laddr_t laddr, extent_len_t length) {
+  void add(laddr_t laddr, extent_len_t length, extent_len_t loaded_end) {
     assert(!index.contains(laddr));
-    index[laddr] = queue.emplace(queue.end(), laddr, length);
+    index[laddr] = queue.emplace(queue.end(), laddr, length, loaded_end);
     current_size += length;
     trim_to(capacity);
   }
@@ -398,11 +411,12 @@ public:
 
 private:
   struct entry_t {
-    entry_t(laddr_t laddr, extent_len_t length)
-	: laddr(laddr), length(length) {}
+    entry_t(laddr_t laddr, extent_len_t length, extent_len_t loaded_end)
+	: laddr(laddr), length(length), last_access_end(loaded_end) {}
 
     laddr_t laddr;
     extent_len_t length;
+    extent_len_t last_access_end;
   };
 
   using entry_queue_t = std::list<entry_t>;
@@ -493,7 +507,8 @@ public:
 
   void move_to_top(
     CachedExtent &extent,
-    const Transaction::src_t* p_src) final {
+    const Transaction::src_t* p_src,
+    extent_len_t load_start) final {
     auto state = extent.get_2q_state();
     auto type = extent.get_type();
     auto loaded_len =
@@ -519,7 +534,13 @@ public:
     } else { // the logical extent which is not in warm_in and not in hot
       ceph_assert(state == extent_2q_state_t::Fresh);
       auto lext = extent.cast<LogicalCachedExtent>();
-      if (warm_out.accessed_recently(lext->get_laddr())) {
+      extent_len_t start = 0;
+      if (!extent.is_fully_loaded() && extent.get_loaded_length() == 0) {
+	start = load_start;
+      }
+      using AccessMode = IndexedFifoQueue::AccessMode;
+      if (auto m = warm_out.accessed_recently(lext->get_laddr(), start);
+	  m == AccessMode::Again) {
 	extent.set_2q_state(extent_2q_state_t::Hot);
 	auto trimmed_extents = hot.add_to_top(extent, p_src);
 	on_update_hot(trimmed_extents);
@@ -528,7 +549,11 @@ public:
 	extent.set_2q_state(extent_2q_state_t::WarmIn);
 	auto trimmed_extents = warm_in.add_to_top(extent, p_src);
 	on_update_warm_in(trimmed_extents);
-	hit_queue(overall_hits.missing_hits, p_src, type, loaded_len);
+	if (m == AccessMode::Missing) {
+	  hit_queue(overall_hits.missing_hits, p_src, type, loaded_len);
+	} else { // m == AccessMode::ContinueFromLastEnd
+	  hit_queue(overall_hits.filtered_hits, p_src, type, loaded_len);
+	}
       }
     }
   }
@@ -580,7 +605,7 @@ private:
       auto len = extent->is_fully_loaded()
 	  ? extent->get_length()
 	  : extent->get_loaded_length();
-      warm_out.add(lext->get_laddr(), len);
+      warm_out.add(lext->get_laddr(), len, lext->get_loaded_end_offset());
     }
   }
   // 2Q cache algorithm:
@@ -591,9 +616,12 @@ private:
   // Workflow:
   // 1. New non-logical extents enter warm_in first, physical extents
   //    are placed into hot queue directly
-  // 2. On warm_in eviction, add extent's metadata(laddr, loaded length)
+  // 2. On warm_in eviction, add extent's metadata(laddr, loaded length and end)
   //    to warm_out queue
-  // 3. If accessed while in warm_out, extent promotes to hot queue
+  // 3. If the extent in warm_out is accessed again and the load start doesn't
+  //    match the last accessed end recorded in the warm_out, promote extent
+  //    to the hot queue, otherwise add add extent to warm_in again because we
+  //    treat this this access as sequential read workload
   // 4. Hot queue manages extents using LRU algorithm
   ExtentQueue warm_in;
   IndexedFifoQueue warm_out;
@@ -632,6 +660,7 @@ private:
     QueueCounter warm_out_hits;
     QueueCounter hot_hits;
     QueueCounter missing_hits;
+    QueueCounter filtered_hits;
   };
   mutable hit_stats_t overall_hits;
   mutable hit_stats_t last_hits;

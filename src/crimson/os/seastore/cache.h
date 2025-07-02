@@ -290,7 +290,7 @@ public:
     }
 
     t.add_to_read_set(ret);
-    touch_extent(*ret, &t_src, t.get_cache_hint());
+    touch_extent(*ret, &t_src, t.get_cache_hint(), /*load_start=*/0);
     if (!ret->is_fully_loaded()) {
       SUBDEBUGT(seastore_cache,
         "{} {}~0x{:x} is present without fully loaded in cache -- {}",
@@ -360,7 +360,7 @@ public:
                 t, T::TYPE, offset, length);
       auto f = [&t, this, t_src](CachedExtent &ext) {
         t.add_to_read_set(CachedExtentRef(&ext));
-        touch_extent(ext, &t_src, t.get_cache_hint());
+        touch_extent(ext, &t_src, t.get_cache_hint(), /*load_start=*/0);
       };
       return trans_intr::make_interruptible(
         do_get_caching_extent<T>(
@@ -397,7 +397,7 @@ public:
     SUBTRACET(seastore_cache, "{} {}~0x{:x} is absent on t, query cache ...",
 	      t, T::TYPE, offset, length);
     const auto t_src = t.get_src();
-    auto f = [&t, this, t_src](CachedExtent &ext) {
+    auto f = [&t, this, partial_off, t_src](CachedExtent &ext) {
       // XXX: is_stable_dirty() may not be linked in lba tree
       assert(ext.is_stable());
       assert(T::TYPE == ext.get_type());
@@ -408,7 +408,7 @@ public:
       ++stats.access.load_absent;
 
       t.add_to_read_set(CachedExtentRef(&ext));
-      touch_extent(ext, &t_src, t.get_cache_hint());
+      touch_extent(ext, &t_src, t.get_cache_hint(), partial_off);
     };
     return trans_intr::make_interruptible(
       do_get_caching_extent<T>(
@@ -517,7 +517,7 @@ public:
             ++stats.access.cache_lru;
           }
           if (ret.is_paddr_known) {
-            touch_extent(*p_extent, &t_src, t.get_cache_hint());
+            touch_extent(*p_extent, &t_src, t.get_cache_hint(), /*load_start=*/0);
           } else {
             needs_touch = true;
           }
@@ -565,7 +565,7 @@ public:
 	t.maybe_add_to_read_set_step_2(p_extent);
       }
       if (needs_touch) {
-	touch_extent(*p_extent, &t_src, t.get_cache_hint());
+	touch_extent(*p_extent, &t_src, t.get_cache_hint(), /*load_start=*/0);
       }
       return get_extent_iertr::make_ready_future<CachedExtentRef>(
         CachedExtentRef(p_extent));
@@ -869,7 +869,7 @@ private:
                 t, type, offset, length, laddr);
       auto f = [&t, this, t_src](CachedExtent &ext) {
 	t.add_to_read_set(CachedExtentRef(&ext));
-	touch_extent(ext, &t_src, t.get_cache_hint());
+	touch_extent(ext, &t_src, t.get_cache_hint(), /*load_start=*/0);
       };
       return trans_intr::make_interruptible(
 	do_get_caching_extent_by_type(
@@ -911,7 +911,7 @@ private:
       ++stats.access.load_absent;
 
       t.add_to_read_set(CachedExtentRef(&ext));
-      touch_extent(ext, &t_src, t.get_cache_hint());
+      touch_extent(ext, &t_src, t.get_cache_hint(), /*load_start=*/0);
     };
     return trans_intr::make_interruptible(
       do_get_caching_extent_by_type(
@@ -1505,17 +1505,23 @@ public:
 
 private:
   /// Update extent pinboard for access to ref
+  ///
+  /// The extent must be touched before read_extent(), otherwise it is
+  /// incorrect to detect sequential read using load_start. It's safe
+  /// to pass zero ditectly when the caller isn't related to partial
+  /// read.
   void touch_extent(
       CachedExtent &ext,
       const Transaction::src_t* p_src,
-      cache_hint_t hint)
+      cache_hint_t hint,
+      extent_len_t load_start)
   {
     assert(ext.get_paddr().is_absolute());
     if (hint == CACHE_HINT_NOCACHE && is_logical_type(ext.get_type())) {
       return;
     }
     if (ext.is_stable_clean() && !ext.is_placeholder()) {
-      pinboard->move_to_top(ext, p_src);
+      pinboard->move_to_top(ext, p_src, load_start);
     }
   }
 

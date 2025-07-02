@@ -230,6 +230,12 @@ public:
   /// Converts to ptr when fully loaded
   ceph::bufferptr to_full_ptr(extent_len_t length);
 
+  extent_len_t get_end_offset() const {
+    assert(!buffer_map.empty());
+    auto &[off, bl] = *buffer_map.rbegin();
+    return off + bl.length();
+  }
+
 private:
   // create and append the read-hole to
   // load_ranges_t and bl
@@ -711,6 +717,18 @@ public:
   /// Returns length of partially loaded extent data in cache
   extent_len_t get_loaded_length() const {
     return loaded_length;
+  }
+
+  /// Returns the end offset of loaded range, used by ExtentPinboardTwoQ
+  /// to detect the sequential read workload
+  extent_len_t get_loaded_end_offset() const {
+    if (is_fully_loaded()) {
+      return get_length();
+    }
+    if (loaded_length == 0) {
+      return 0;
+    }
+    return buffer_space->get_end_offset();
   }
 
   /// Returns version, get_version() == 0

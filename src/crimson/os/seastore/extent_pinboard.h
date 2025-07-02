@@ -13,7 +13,8 @@ struct ExtentPinboard {
   virtual void register_metrics() = 0;
   virtual void move_to_top(
     CachedExtent &extent,
-    const Transaction::src_t *p_src) = 0;
+    const Transaction::src_t *p_src,
+    extent_len_t load_start) = 0;
   virtual void remove(CachedExtent &extent) = 0;
   virtual void get_stats(
     cache_stats_t &stats,
