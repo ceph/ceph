@@ -15,6 +15,7 @@
 #ifndef CEPH_BUFFER_H
 #define CEPH_BUFFER_H
 
+#include "common/likely.h"
 #if defined(__linux__) || defined(__FreeBSD__)
 #include <stdlib.h>
 #endif
@@ -209,7 +210,13 @@ struct error_code;
 	}
       }
 
-      iterator_impl& operator+=(size_t len);
+      void throw_end_of_buffer();
+      iterator_impl& operator+=(size_t len) {
+        pos += len;
+        if (unlikely(pos > end_ptr))
+          throw_end_of_buffer();
+        return *this;
+      }
 
       const char *get_pos() {
 	return pos;
