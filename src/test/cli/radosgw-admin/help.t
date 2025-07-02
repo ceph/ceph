@@ -18,7 +18,7 @@
     caps rm                          remove user capabilities
     dedup stats                      Display dedup statistics from the last run
     dedup estimate                   Runs dedup in estimate mode (no changes will be made)
-    dedup restart                    Restart dedup
+    dedup restart                    Restart dedup; must include --yes-i-really-mean-it to activate
     dedup abort                      Abort dedup
     dedup pause                      Pause dedup
     dedup resume                     Resume paused dedup
