@@ -5968,28 +5968,41 @@ void parse_post_action(const std::string& post_body, req_state* s)
   }
 }
 
+RGWRESTMgr_S3::RGWRESTMgr_S3(bool _enable_s3website,
+                             bool _enable_sts,
+                             bool _enable_iam,
+                             bool _enable_pubsub)
+  : enable_sts(_enable_sts),
+    enable_iam(_enable_iam),
+    enable_pubsub(_enable_pubsub)
+{
+  if (_enable_s3website) {
+    s3website = std::make_unique<RGWRESTMgr_S3Website>();
+  }
+}
+RGWRESTMgr_S3::~RGWRESTMgr_S3() = default;
+
+RGWRESTMgr* RGWRESTMgr_S3::get_resource_mgr_as_default(req_state* s,
+                                                       const std::string& uri,
+                                                       std::string* out_uri)
+{
+  // route matching requests to RGWRESTMgr_S3Website
+  const bool in_s3website_domain = (s->prot_flags & RGW_REST_WEBSITE);
+  if (s3website && in_s3website_domain) {
+    return s3website->get_resource_mgr(s, uri, out_uri);
+  }
+
+  return RGWRESTMgr::get_resource_mgr(s, uri, out_uri);
+}
+
 RGWHandler_REST* RGWRESTMgr_S3::get_handler(rgw::sal::Driver* driver,
 					    req_state* const s,
                                             const rgw::auth::StrategyRegistry& auth_registry,
                                             const std::string& frontend_prefix)
 {
-  bool is_s3website = enable_s3website && (s->prot_flags & RGW_REST_WEBSITE);
-  int ret =
-    RGWHandler_REST_S3::init_from_header(driver, s,
-					is_s3website ? RGWFormat::HTML :
-					RGWFormat::XML, true);
+  int ret = RGWHandler_REST_S3::init_from_header(driver, s, RGWFormat::XML, true);
   if (ret < 0) {
     return nullptr;
-  }
-
-  if (is_s3website) {
-    if (s->init_state.url_bucket.empty()) {
-      return new RGWHandler_REST_Service_S3Website(auth_registry);
-    }
-    if (rgw::sal::Object::empty(s->object.get())) {
-      return new RGWHandler_REST_Bucket_S3Website(auth_registry);
-    }
-    return new RGWHandler_REST_Obj_S3Website(auth_registry);
   }
 
   if (s->init_state.url_bucket.empty()) {
@@ -6027,6 +6040,26 @@ RGWHandler_REST* RGWRESTMgr_S3::get_handler(rgw::sal::Driver* driver,
   }
   // has bucket
   return new RGWHandler_REST_Bucket_S3(auth_registry, enable_pubsub);
+}
+
+RGWHandler_REST* RGWRESTMgr_S3Website::get_handler(
+    rgw::sal::Driver* driver,
+    req_state* const s,
+    const rgw::auth::StrategyRegistry& auth_registry,
+    const std::string& frontend_prefix)
+{
+  int ret = RGWHandler_REST_S3::init_from_header(driver, s, RGWFormat::HTML, true);
+  if (ret < 0) {
+    return nullptr;
+  }
+
+  if (s->init_state.url_bucket.empty()) {
+    return new RGWHandler_REST_Service_S3Website(auth_registry);
+  }
+  if (rgw::sal::Object::empty(s->object)) {
+    return new RGWHandler_REST_Bucket_S3Website(auth_registry);
+  }
+  return new RGWHandler_REST_Obj_S3Website(auth_registry);
 }
 
 bool RGWHandler_REST_S3Website::web_dir() const {
