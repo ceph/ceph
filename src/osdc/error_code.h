@@ -17,8 +17,6 @@
 
 #include <boost/system/error_code.hpp>
 
-#include "include/rados.h"
-
 const boost::system::error_category& osdc_category() noexcept;
 
 enum class osdc_errc {
