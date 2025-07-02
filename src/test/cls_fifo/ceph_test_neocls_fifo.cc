@@ -13,7 +13,6 @@
 
 #include <array>
 #include <boost/system/detail/errc.hpp>
-#include <coroutine>
 #include <memory>
 #include <new>
 #include <string_view>
@@ -60,94 +59,25 @@ public:
   template<asio::completion_token_for<void(sys::error_code)> CompletionToken>
   static auto read_meta(FIFO& f, const DoutPrefixProvider* dpp,
 			CompletionToken&& token) {
-    return boost::asio::async_initiate<CompletionToken, void(sys::error_code)>
-      (asio::co_composed<void(sys::error_code)>
-       ([](auto state, const DoutPrefixProvider* dpp,
-	   FIFO* f) -> void {
-	 try {
-	   state.throw_if_cancelled(true);
-	   state.reset_cancellation_state(asio::enable_terminal_cancellation());
-	   if (!f->impl.load()) {
-	     co_await f->maybe_open(dpp, asio::deferred);
-	   }
-	   co_await f->impl.load()->read_meta(dpp, asio::deferred);
-	 } catch (const sys::system_error& e) {
-	   co_return e.code();
-	 }
-	 co_return sys::error_code{};
-       }, f.get_executor()),
-       token, dpp, &f);
+    return f.impl->read_meta(dpp,
+			     f.consign(std::forward<CompletionToken>(token)));
   }
 
-  template<asio::completion_token_for<
-    void(sys::error_code, fifo::info)> CompletionToken>
-  static auto meta(FIFO& f, CompletionToken&& token) {
-    return boost::asio::async_initiate<CompletionToken,
-				       void(sys::error_code, fifo::info)>
-      (asio::co_composed<void(sys::error_code, fifo::info)>
-       ([](auto state, FIFO* f) -> void {
-	 try {
-	   state.throw_if_cancelled(true);
-	   state.reset_cancellation_state(asio::enable_terminal_cancellation());
-	   if (!f->impl.load()) {
-	     co_await f->maybe_open(nullptr, asio::deferred);
-	   }
-	   co_return {sys::error_code{}, f->impl.load()->info};
-	 } catch (const sys::system_error& e) {
-	   co_return {e.code(), fifo::info{}};
-	 }
-	 co_return {sys::error_code{}, fifo::info{}};
-       }, f.get_executor()),
-       token, &f);
+  static auto meta(FIFO& f) {
+    return f.impl->info;
   }
 
   template<asio::completion_token_for<
     void(sys::error_code, fifo::part_header)> CompletionToken>
   static auto get_part_info(FIFO& f, std::int64_t num, CompletionToken&& token) {
-    return boost::asio::async_initiate<CompletionToken,
-				       void(sys::error_code, fifo::part_header)>
-      (asio::co_composed<void(sys::error_code, fifo::part_header)>
-       ([](auto state, std::int64_t num, FIFO* f) -> void {
-	 try {
-	   state.throw_if_cancelled(true);
-	   state.reset_cancellation_state(asio::enable_terminal_cancellation());
-	   if (!f->impl.load()) {
-	     co_await f->maybe_open(nullptr, asio::deferred);
-	   }
-	   co_return co_await
-	     f->impl.load()->get_part_info(num, asio::as_tuple(asio::deferred));
-	 } catch (const sys::system_error& e) {
-	   co_return {e.code(), fifo::part_header{}};
-	 }
-	 co_return {sys::error_code{}, fifo::part_header{}};
-       }, f.get_executor()),
-       token, num, &f);
+    return f.impl->get_part_info(num,f.consign(
+				   std::forward<CompletionToken>(token)));
   }
 
-  template<asio::completion_token_for<
-    void(sys::error_code, std::uint32_t, std::uint32_t)> CompletionToken>
-  static auto get_part_layout_info(FIFO& f, CompletionToken&& token) {
-    return boost::asio::async_initiate<CompletionToken,
-				       void(sys::error_code, std::uint32_t,
-					    std::uint32_t)>
-      (asio::co_composed<void(sys::error_code, std::uint32_t, std::uint32_t)>
-       ([](auto state, FIFO* f) -> void {
-	 try {
-	   state.throw_if_cancelled(true);
-	   state.reset_cancellation_state(asio::enable_terminal_cancellation());
-	   if (!f->impl.load()) {
-	     co_await f->maybe_open(nullptr, asio::deferred);
-	   }
-	   co_return std::make_tuple(
-	     sys::error_code{},
-	     f->impl.load()->part_header_size,
-	     f->impl.load()->part_entry_overhead);
-	 } catch (const sys::system_error& e) {
-	   co_return {e.code(), 0, 0};
-	 }
-	 co_return {sys::error_code{}, 0, 0};
-       }, f.get_executor()),
-       token, &f);
+  static auto get_part_layout_info(FIFO& f) {
+    return std::make_tuple(
+	     f.impl->part_header_size,
+	     f.impl->part_entry_overhead);
   }
 };
 }
@@ -238,7 +168,7 @@ CORO_TEST_F(fifo, open_default, NeoRadosTest)
 				 asio::use_awaitable);
   // force reading from backend
   co_await FIFOtest::read_meta(*f, &dp, asio::use_awaitable);
-  auto info = co_await FIFOtest::meta(*f, asio::use_awaitable);
+  auto info = FIFOtest::meta(*f);
   EXPECT_EQ(info.id, fifo_id);
 }
 
@@ -260,7 +190,7 @@ CORO_TEST_F(fifo, open_params, NeoRadosTest)
 
   // force reading from backend
   co_await FIFOtest::read_meta(*f, &dp, asio::use_awaitable);
-  auto info = co_await FIFOtest::meta(*f, asio::use_awaitable);
+  auto info = FIFOtest::meta(*f);
   EXPECT_EQ(info.id, fifo_id);
   EXPECT_EQ(info.params.max_part_size, max_part_size);
   EXPECT_EQ(info.params.max_entry_size, max_entry_size);
@@ -372,7 +302,7 @@ CORO_TEST_F(fifo, multiple_parts, NeoRadosTest)
   std::array<char, max_entry_size> buf;
   buf.fill('\0');
   const auto [part_header_size, part_entry_overhead] =
-    co_await FIFOtest::get_part_layout_info(*f, asio::use_awaitable);
+    FIFOtest::get_part_layout_info(*f);
   const auto entries_per_part = ((max_part_size - part_header_size) /
 				 (max_entry_size + part_entry_overhead));
   const auto max_entries = entries_per_part * 4 + 1;
@@ -384,7 +314,7 @@ CORO_TEST_F(fifo, multiple_parts, NeoRadosTest)
     co_await f->push(&dp, bl, asio::use_awaitable);
   }
 
-  auto info = co_await FIFOtest::meta(*f, asio::use_awaitable);
+  auto info = FIFOtest::meta(*f);
   EXPECT_EQ(info.id, fifo_id);
   /* head should have advanced */
   EXPECT_GT(info.head_part_num, 0);
@@ -437,7 +367,7 @@ CORO_TEST_F(fifo, multiple_parts, NeoRadosTest)
     co_await f->trim(&dp, result.front().marker, false, asio::use_awaitable);
 
     /* check tail */
-    info = co_await FIFOtest::meta(*f, asio::use_awaitable);
+    info = FIFOtest::meta(*f);
 
     EXPECT_EQ(info.tail_part_num, i / entries_per_part);
 
@@ -449,7 +379,7 @@ CORO_TEST_F(fifo, multiple_parts, NeoRadosTest)
   }
 
   /* tail now should point at head */
-  info = co_await FIFOtest::meta(*f, asio::use_awaitable);
+  info = FIFOtest::meta(*f);
   EXPECT_EQ(info.head_part_num, info.tail_part_num);
 
   /* check old tails are removed */
@@ -476,7 +406,7 @@ CORO_TEST_F(fifo, two_pushers, NeoRadosTest)
   std::array<char, max_entry_size> buf;
   buf.fill('\0');
   const auto [part_header_size, part_entry_overhead] =
-    co_await FIFOtest::get_part_layout_info(*f1, asio::use_awaitable);
+    FIFOtest::get_part_layout_info(*f1);
   const auto entries_per_part = ((max_part_size - part_header_size) /
 				 (max_entry_size + part_entry_overhead));
   const auto max_entries = entries_per_part * 4 + 1;
@@ -525,7 +455,7 @@ CORO_TEST_F(fifo, two_pushers_trim, NeoRadosTest)
   std::array<char, max_entry_size> buf;
   buf.fill('\0');
   const auto [part_header_size, part_entry_overhead] =
-    co_await FIFOtest::get_part_layout_info(*f1, asio::use_awaitable);
+    FIFOtest::get_part_layout_info(*f1);
   const auto entries_per_part = ((max_part_size - part_header_size) /
 				 (max_entry_size + part_entry_overhead));
   const auto max_entries = entries_per_part * 4 + 1;
@@ -588,7 +518,7 @@ CORO_TEST_F(fifo, push_batch, NeoRadosTest)
   std::array<char, max_entry_size> buf;
   buf.fill('\0');
   const auto [part_header_size, part_entry_overhead] =
-    co_await FIFOtest::get_part_layout_info(*f, asio::use_awaitable);
+    FIFOtest::get_part_layout_info(*f);
   const auto entries_per_part = ((max_part_size - part_header_size) /
 				 (max_entry_size + part_entry_overhead));
   const auto max_entries = entries_per_part * 4 + 1;
@@ -614,7 +544,7 @@ CORO_TEST_F(fifo, push_batch, NeoRadosTest)
     auto& bl = result[i].data;
     EXPECT_EQ(i, *std::launder(reinterpret_cast<int*>(bl.c_str())));
   }
-  auto info = co_await FIFOtest::meta(*f, asio::use_awaitable);
+  auto info = FIFOtest::meta(*f);
   EXPECT_EQ(info.head_part_num, 4);
 }
 
