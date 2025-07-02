@@ -274,6 +274,10 @@ class ExtentPinboardLRU : public ExtentPinboard {
   ExtentQueue lru;
   seastar::metrics::metric_group metrics;
 
+  // hit and miss indicates if an extent is linked when touching it
+  uint64_t hit = 0;
+  uint64_t miss = 0;
+
 public:
   ExtentPinboardLRU(size_t capacity) : lru(capacity) {
     LOG_PREFIX(ExtentPinboardLRU::ExtentPinboardLRU);
@@ -311,6 +315,14 @@ public:
           },
           sm::description("total extents pinned by the lru")
         ),
+        sm::make_counter(
+          "lru_hit", hit,
+          sm::description("total count of the extents that are linked to lru when touching them")
+        ),
+        sm::make_counter(
+          "lru_miss", miss,
+          sm::description("total count of the extents that are not linked to lru when touching them")
+        ),
       }
     );
   }
@@ -334,8 +346,10 @@ public:
     extent_len_t /*load_start*/) final {
     if (extent.is_linked_to_list()) {
       lru.move_to_top(extent, p_src);
+      hit++;
     } else {
       lru.add_to_top(extent, p_src);
+      miss++;
     }
   }
 
@@ -519,6 +533,7 @@ public:
 	hit_queue(overall_hits.warm_in_hits, p_src, type, loaded_len);
 	// warm_in is a FIFO queue, do nothing here
       }
+      hit++;
     } else if (!is_logical_type(extent.get_type())) {
       // put physical extents to hot queue directly
       ceph_assert(state == extent_2q_state_t::Fresh);
@@ -526,6 +541,7 @@ public:
       auto trimmed_extents = hot.add_to_top(extent, p_src);
       on_update_hot(trimmed_extents);
       hit_queue(overall_hits.missing_hits, p_src, type, loaded_len);
+      miss++;
     } else { // the logical extent which is not in warm_in and not in hot
       ceph_assert(state == extent_2q_state_t::Fresh);
       auto lext = extent.cast<LogicalCachedExtent>();
@@ -550,6 +566,7 @@ public:
 	  hit_queue(overall_hits.filtered_hits, p_src, type, loaded_len);
 	}
       }
+      miss++;
     }
   }
 
@@ -676,6 +693,10 @@ private:
   };
   mutable hit_stats_t overall_hits;
   mutable hit_stats_t last_hits;
+
+  // hit and miss indicates if an extent is linked when touching it
+  uint64_t hit = 0;
+  uint64_t miss = 0;
 };
 
 void ExtentPinboardTwoQ::get_stats(
@@ -790,6 +811,14 @@ void ExtentPinboardTwoQ::register_metrics() {
           return hot.get_current_num_extents();
         },
         sm::description("total extents pinned by the 2q hot queue")
+      ),
+      sm::make_counter(
+        "2q_hit", hit,
+        sm::description("total count of the extents that are linked to 2Q when touching them")
+      ),
+      sm::make_counter(
+        "2q_miss", miss,
+        sm::description("total count of the extents that are not linked to 2Q when touching them")
       ),
     }
   );
