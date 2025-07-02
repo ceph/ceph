@@ -53,20 +53,31 @@ class ResourceEntry:
 
     @property
     def uri(self) -> str:
+        """Return a unique URI for this store entry."""
         return self.config_entry.uri
 
     def get(self) -> SMBResource:
+        """Fetch a single smb resource object from the underlying store."""
         return one(resources.load(self.config_entry.get()))
 
     def get_resource_type(self, cls: Type[T]) -> T:
+        """Fetch an smb resource matching the supplied type from the
+        underlying store.
+        """
         obj = self.get()
-        assert isinstance(obj, cls), f"{obj!r} is not a {cls}"
+        if not isinstance(obj, cls):
+            raise TypeError(f"{obj!r} is not a {cls}")
         return obj
 
     def set(self, resource: Simplifiable) -> None:
+        """Given a serializable resource object, save it to the store."""
         self.config_entry.set(resource.to_simplified())
 
     def create_or_update(self, resource: Simplifiable) -> State:
+        """Given a serializable resource object, save it to the store,
+        returning a state value indicating if the object was created
+        or updated.
+        """
         try:
             previous = self.config_entry.get()
         except KeyError:
@@ -78,23 +89,33 @@ class ResourceEntry:
         return State.CREATED if previous is None else State.UPDATED
 
     def remove(self) -> bool:
+        """Remove an object from the underlying store."""
         return self.config_entry.remove()
 
     @classmethod
     def ids(
         cls, store: ConfigStoreListing
     ) -> Union[Collection[str], Collection[Tuple[str, str]]]:
+        """Return a collection of id values representing all entries
+        in a particular namespace within the store.
+        """
         raise NotImplementedError()
 
     @classmethod
     def from_store_by_key(
         cls, store: ConfigStore, key: Union[str, ResourceKey]
     ) -> Self:
+        """Return a new resource entry object bound to the given store
+        and identified by the given key.
+        """
         _key = str(key)
         return cls(_key, store[str(cls.namespace), _key])
 
     @classmethod
     def to_key(cls, resource: SMBResource) -> ResourceKey:
+        """Return a key object uniquely identifiying a resource within a
+        particular namespace.
+        """
         raise NotImplementedError()
 
 
