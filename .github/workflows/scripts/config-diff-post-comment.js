@@ -14,7 +14,9 @@ module.exports = async ({ github, context, core, configDiff }) => {
     );
 
     // Check if any comment contains `/config check ok`
-    const configCheckOkComment = comments.find(comment => comment.body.includes("/config check ok"));
+    const configCheckOkComment = comments.find(
+      comment => comment.body.includes("/config check ok") && !comment.body.includes("### Config Diff Tool Output")
+    );
     if (configCheckOkComment) {
       core.info("Found '/config check ok' comment. Returning with success.");
       return;
