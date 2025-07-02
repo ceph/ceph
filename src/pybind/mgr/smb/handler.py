@@ -492,25 +492,12 @@ class ClusterConfigHandler:
                     msg='a resource with the same ID already exists',
                 )
         try:
-            if isinstance(
-                resource, (resources.Cluster, resources.RemovedCluster)
-            ):
-                _check_cluster(resource, staging)
-            elif isinstance(
-                resource, (resources.Share, resources.RemovedShare)
-            ):
-                _check_share(
-                    resource,
-                    staging,
-                    self._path_resolver,
-                    self._earmark_resolver,
-                )
-            elif isinstance(resource, resources.JoinAuth):
-                _check_join_auths(resource, staging)
-            elif isinstance(resource, resources.UsersAndGroups):
-                _check_users_and_groups(resource, staging)
-            else:
-                raise TypeError('not a valid smb resource')
+            cross_check_resource(
+                resource,
+                staging,
+                path_resolver=self._path_resolver,
+                earmark_resolver=self._earmark_resolver,
+            )
         except ErrorResult as err:
             log.debug('rejected resource: %r', resource)
             return err
@@ -787,6 +774,30 @@ def order_resources(
         return 0
 
     return sorted(resource_objs, key=_keyfunc)
+
+
+def cross_check_resource(
+    resource: SMBResource,
+    staging: _Staging,
+    *,
+    path_resolver: PathResolver,
+    earmark_resolver: EarmarkResolver,
+) -> None:
+    if isinstance(resource, (resources.Cluster, resources.RemovedCluster)):
+        _check_cluster(resource, staging)
+    elif isinstance(resource, (resources.Share, resources.RemovedShare)):
+        _check_share(
+            resource,
+            staging,
+            path_resolver,
+            earmark_resolver,
+        )
+    elif isinstance(resource, resources.JoinAuth):
+        _check_join_auths(resource, staging)
+    elif isinstance(resource, resources.UsersAndGroups):
+        _check_users_and_groups(resource, staging)
+    else:
+        raise TypeError('not a valid smb resource')
 
 
 def _check_cluster(cluster: ClusterRef, staging: _Staging) -> None:
