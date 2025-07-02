@@ -79,6 +79,7 @@ class ConfigNS(_StrEnum):
     SHARES = 'shares'
     USERS_AND_GROUPS = 'users_and_groups'
     JOIN_AUTHS = 'join_auths'
+    TLS_CREDENTIALS = 'tls_creds'
 
 
 class LoginCategory(_StrEnum):
