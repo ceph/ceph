@@ -111,6 +111,7 @@ import { RgwRateLimitDetailsComponent } from './rgw-rate-limit-details/rgw-rate-
 import { NfsClusterComponent } from '../nfs/nfs-cluster/nfs-cluster.component';
 import { RgwTopicListComponent } from './rgw-topic-list/rgw-topic-list.component';
 import { RgwTopicDetailsComponent } from './rgw-topic-details/rgw-topic-details.component';
+import { RgwTopicFormComponent } from './rgw-topic-form/rgw-topic-form.component';
 
 @NgModule({
   imports: [
@@ -140,14 +141,14 @@ import { RgwTopicDetailsComponent } from './rgw-topic-details/rgw-topic-details.
     InputModule,
     AccordionModule,
     CheckboxModule,
-    SelectModule,
     NumberModule,
     TabsModule,
     TagModule,
     TooltipModule,
     ComboBoxModule,
     ToggletipModule,
-    RadioModule
+    RadioModule,
+    SelectModule
   ],
   exports: [
     RgwDaemonDetailsComponent,
@@ -210,7 +211,8 @@ import { RgwTopicDetailsComponent } from './rgw-topic-details/rgw-topic-details.
     RgwBucketLifecycleListComponent,
     RgwRateLimitDetailsComponent,
     RgwTopicListComponent,
-    RgwTopicDetailsComponent
+    RgwTopicDetailsComponent,
+    RgwTopicFormComponent
   ],
   providers: [TitleCasePipe]
 })
@@ -429,7 +431,19 @@ const routes: Routes = [
   {
     path: 'topic',
     data: { breadcrumbs: 'Topic' },
-    children: [{ path: '', component: RgwTopicListComponent }]
+    children: [
+      { path: '', component: RgwTopicListComponent },
+      {
+        path: URLVerbs.CREATE,
+        component: RgwTopicFormComponent,
+        data: { breadcrumbs: ActionLabels.CREATE }
+      },
+      {
+        path: `${URLVerbs.EDIT}/:name`,
+        component: RgwTopicFormComponent,
+        data: { breadcrumbs: ActionLabels.EDIT }
+      }
+    ]
   }
 ];
 
