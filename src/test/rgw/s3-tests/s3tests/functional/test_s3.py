@@ -13602,3 +13602,91 @@ def test_put_object_current_if_match():
     assert (404, 'NoSuchKey') == _get_status_and_error_code(e.response)
 
     client.put_object(Bucket=bucket, Key=key, IfNoneMatch=etag)
+
+@pytest.mark.fails_on_aws # only supported for directory buckets
+@pytest.mark.conditional_write
+def test_delete_object_if_match():
+    client = get_client()
+    bucket = get_new_bucket(client)
+    key = 'obj'
+
+    etag = client.put_object(Bucket=bucket, Key=key)['ETag']
+
+    e = assert_raises(ClientError, client.delete_object, Bucket=bucket, Key=key, IfMatch='badetag')
+    assert (412, 'PreconditionFailed') == _get_status_and_error_code(e.response)
+
+    client.delete_object(Bucket=bucket, Key=key, IfMatch=etag)
+
+    e = assert_raises(ClientError, client.delete_object, Bucket=bucket, Key=key, IfMatch='*')
+    assert (404, 'NoSuchKey') == _get_status_and_error_code(e.response)
+    e = assert_raises(ClientError, client.delete_object, Bucket=bucket, Key=key, IfMatch='badetag')
+    assert (404, 'NoSuchKey') == _get_status_and_error_code(e.response)
+
+    # recreate to test IfMatch='*'
+    client.put_object(Bucket=bucket, Key=key)
+    client.delete_object(Bucket=bucket, Key=key, IfMatch='*')
+
+@pytest.mark.fails_on_aws # only supported for directory buckets
+@pytest.mark.conditional_write
+def test_delete_object_current_if_match():
+    client = get_client()
+    bucket = get_new_bucket(client)
+    check_configure_versioning_retry(bucket, "Enabled", "Enabled")
+    key = 'obj'
+
+    # on nonexistent object
+    e = assert_raises(ClientError, client.delete_object, Bucket=bucket, Key=key, IfMatch='*')
+    assert (404, 'NoSuchKey') == _get_status_and_error_code(e.response)
+    e = assert_raises(ClientError, client.delete_object, Bucket=bucket, Key=key, IfMatch='badetag')
+    assert (404, 'NoSuchKey') == _get_status_and_error_code(e.response)
+
+    response = client.put_object(Bucket=bucket, Key=key)
+    version = response['VersionId']
+    etag = response['ETag']
+
+    # on current version
+    e = assert_raises(ClientError, client.delete_object, Bucket=bucket, Key=key, IfMatch='badetag')
+    assert (412, 'PreconditionFailed') == _get_status_and_error_code(e.response)
+
+    response = client.delete_object(Bucket=bucket, Key=key, IfMatch=etag)
+    assert response['DeleteMarker']
+
+    # on current delete marker
+    e = assert_raises(ClientError, client.delete_object, Bucket=bucket, Key=key, IfMatch='*')
+    assert (404, 'NoSuchKey') == _get_status_and_error_code(e.response)
+    e = assert_raises(ClientError, client.delete_object, Bucket=bucket, Key=key, IfMatch='badetag')
+    assert (404, 'NoSuchKey') == _get_status_and_error_code(e.response)
+
+    # remove delete marker to retest IfMatch='*'
+    client.delete_object(Bucket=bucket, Key=key, VersionId=version)
+    client.delete_object(Bucket=bucket, Key=key, IfMatch='*')
+
+@pytest.mark.fails_on_aws # only supported for directory buckets
+@pytest.mark.conditional_write
+def test_delete_object_version_if_match():
+    client = get_client()
+    bucket = get_new_bucket(client)
+    check_configure_versioning_retry(bucket, "Enabled", "Enabled")
+    key = 'obj'
+
+    response = client.put_object(Bucket=bucket, Key=key)
+    version = response['VersionId']
+    etag = response['ETag']
+
+    # on specific version
+    e = assert_raises(ClientError, client.delete_object, Bucket=bucket, Key=key, VersionId=version, IfMatch='badetag')
+    assert (412, 'PreconditionFailed') == _get_status_and_error_code(e.response)
+
+    response = client.delete_object(Bucket=bucket, Key=key, VersionId=version, IfMatch=etag)
+    assert not response['DeleteMarker']
+
+    # on nonexistent version
+    e = assert_raises(ClientError, client.delete_object, Bucket=bucket, Key=key, VersionId=version, IfMatch='*')
+    assert (404, 'NoSuchKey') == _get_status_and_error_code(e.response)
+    e = assert_raises(ClientError, client.delete_object, Bucket=bucket, Key=key, VersionId=version, IfMatch='badetag')
+    assert (404, 'NoSuchKey') == _get_status_and_error_code(e.response)
+
+    # recreate to test IfMatch='*'
+    response = client.put_object(Bucket=bucket, Key=key)
+    version = response['VersionId']
+    client.delete_object(Bucket=bucket, Key=key, VersionId=version, IfMatch='*')
