@@ -1462,15 +1462,30 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
         result = raise_if_exception(completion)
         return HandleCommandResult(stdout=json.dumps(result))
 
+    @OrchestratorCLICommand.Read('orch agent show-config')
+    def _show_cephadm_agent_config(self) -> HandleCommandResult:
+        completion = self.show_agent_config()
+        result = raise_if_exception(completion)
+        return HandleCommandResult(stdout=json.dumps(result))
+
     @OrchestratorCLICommand.Write('orch alertmanager set-credentials')
-    def _set_alertmanager_access_info(self, username: Optional[str] = None, password: Optional[str] = None, inbuf: Optional[str] = None) -> HandleCommandResult:
+    def _set_alertmanager_access_info(
+        self,
+        username: Optional[str] = None,
+        password: Optional[str] = None,
+        inbuf: Optional[str] = None,
+    ) -> HandleCommandResult:
         try:
-            username, password = self._get_credentials(username, password, inbuf)
-            completion = self.set_alertmanager_access_info(username, password)
+            username, password = self._get_credentials(
+                username, password, inbuf
+            )
+            completion = self.set_alertmanager_access_info(
+                username, password
+            )
             result = raise_if_exception(completion)
             return HandleCommandResult(stdout=json.dumps(result))
         except ArgumentError as e:
-            return HandleCommandResult(-errno.EINVAL, "", (str(e)))
+            return HandleCommandResult(-errno.EINVAL, '', str(e))
 
     @OrchestratorCLICommand.Write('orch prometheus get-credentials')
     def _get_prometheus_access_info(self) -> HandleCommandResult:
