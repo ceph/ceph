@@ -51,11 +51,6 @@ public:
     void display_progress();
     
     /**
-     * Force display current progress regardless of display interval
-     */
-    void force_display_progress();
-    
-    /**
      * Display final summary when operation is complete
      */
     void display_final_summary();
@@ -81,19 +76,8 @@ public:
     int get_eta_seconds() const;
     
     /**
-     * Get elapsed time in seconds
-     */
-    int get_elapsed_seconds() const;
-    
-    /**
-     * Get processing rate (items per second)
-     */
-    float get_processing_rate() const;
-    
-    /**
      * Configuration methods
      */
-    void set_display_interval(int interval) { display_interval = interval; }
     void set_operation_name(const std::string& name) { operation_name = name; }
     
     /**
