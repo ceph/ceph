@@ -20675,7 +20675,12 @@ int BlueStore::reconstruct_allocations(SimpleBitmap *sbmap, read_alloc_stats_t &
   stats.extent_count++;
 
   // then set all space taken by Objects
-  int ret = read_allocation_from_onodes(sbmap, stats);
+  int ret;
+  if (cct->_conf.get_val<uint64_t>("bluestore_allocation_recovery_threads") == 0) {
+    ret = read_allocation_from_onodes(sbmap, stats);
+  } else {
+    ret = read_allocation_from_onodes_mt(sbmap, stats);
+  }
   if (ret < 0) {
     derr << "failed read_allocation_from_onodes()" << dendl;
     return ret;
