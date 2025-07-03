@@ -559,6 +559,9 @@ void MDSDaemon::set_up_admin_socket()
     "dump stray",
     asok_hook,
     "dump stray folder content");
+  r = admin_socket->register_command("dump_in_flight_cap_revokes name=client_id,type=CephString,req=true",
+				     asok_hook,
+				     "dump in-flight cap revoke messages sent to a client");
   ceph_assert(r == 0);
 }
 

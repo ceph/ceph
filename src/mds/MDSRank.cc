@@ -3097,6 +3097,22 @@ void MDSRankDispatcher::handle_asok_command(
      dout(10) << "dump_stray wait" << dendl;
     }
     return;
+  } else if (command == "dump_in_flight_cap_revokes") {
+    std::string client_id;
+    if (!cmd_getval(cmdmap, "client_id", client_id)) {
+      *css << "Invalid client_id specified";
+      r = -ENOENT;
+      goto out;
+    }
+    std::lock_guard l(mds_lock);
+    Session *session = sessionmap.get_session(
+      entity_name_t(CEPH_ENTITY_TYPE_CLIENT, strtol(client_id.c_str(), 0, 10)));
+    if (!session) {
+      *css << "cannot find client session";
+      r = -ENOENT;
+      goto out;
+    }
+    locker->dump_in_flight_cap_revokes(session->get_client(), f);
   } else {
     r = -ENOSYS;
   }

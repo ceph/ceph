@@ -2546,6 +2546,22 @@ int Locker::get_allowed_caps(CInode *in, Capability *cap,
   return allowed;
 }
 
+void Locker::dump_in_flight_cap_revokes(client_t client, Formatter *f) {
+  dout(20) << ": client=" << client << dendl;
+
+  auto it = revoking_caps_by_client.find(client);
+  if (it == revoking_caps_by_client.end()) {
+    return;
+  }
+
+  f->open_object_section("revoking_caps");
+  for (elist<Capability*>::iterator iter = it->second.begin(); !iter.end(); ++iter) {
+    Capability *cap = *iter;
+    cap->dump(f);
+  }
+  f->close_section();
+}
+
 int Locker::issue_caps(CInode *in, Capability *only_cap)
 {
   dout(20) << __func__ << ": " << *in;
