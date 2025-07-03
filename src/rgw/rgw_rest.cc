@@ -2030,17 +2030,8 @@ RGWRESTMgr::~RGWRESTMgr()
   delete default_mgr;
 }
 
-int RGWREST::preprocess(req_state *s, rgw::io::BasicClient* cio)
+int rgw_rest_transform_s3_vhost_style(req_state* s)
 {
-  req_info& info = s->info;
-
-  /* save the request uri used to hash on the client side. request_uri may suffer
-     modifications as part of the bucket encoding in the subdomain calling format.
-     request_uri_aws4 will be used under aws4 auth */
-  s->info.request_uri_aws4 = s->info.request_uri;
-
-  s->cio = cio;
-
   // We need to know if this RGW instance is running the s3website API with a
   // higher priority than regular S3 API, or possibly in place of the regular
   // S3 API.
@@ -2060,6 +2051,7 @@ int RGWREST::preprocess(req_state *s, rgw::io::BasicClient* cio)
   ldpp_dout(s, 10) << "rgw api priority: s3=" << api_priority_s3 << " s3website=" << api_priority_s3website << dendl;
   bool s3website_enabled = api_priority_s3website >= 0;
 
+  req_info& info = s->info;
   if (info.host.size()) {
     ssize_t pos;
     if (info.host.find('[') == 0) {
@@ -2198,6 +2190,26 @@ int RGWREST::preprocess(req_state *s, rgw::io::BasicClient* cio)
   if (s->info.domain.empty()) {
     s->info.domain = s->cct->_conf->rgw_dns_name;
   }
+
+  s->decoded_uri = url_decode(s->info.request_uri);
+  /* Validate for being free of the '\0' buried in the middle of the string. */
+  if (std::strlen(s->decoded_uri.c_str()) != s->decoded_uri.length()) {
+    return -ERR_ZERO_IN_URL;
+  }
+
+  return 0;
+}
+
+int RGWREST::preprocess(req_state *s, rgw::io::BasicClient* cio)
+{
+  req_info& info = s->info;
+
+  /* save the request uri used to hash on the client side. request_uri may suffer
+     modifications as part of the bucket encoding in the subdomain calling format.
+     request_uri_aws4 will be used under aws4 auth */
+  s->info.request_uri_aws4 = s->info.request_uri;
+
+  s->cio = cio;
 
   s->decoded_uri = url_decode(s->info.request_uri);
   /* Validate for being free of the '\0' buried in the middle of the string. */
