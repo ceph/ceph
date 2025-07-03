@@ -13,24 +13,10 @@
   &nbsp;<cd-doc section="grafana"></cd-doc>&nbsp;on how to add dashboards to Grafana.</cd-alert-panel>
 
 <ng-container *ngIf="grafanaExist && dashboardExist">
-  <div class="row mb-3">
-    <div class="col-lg-5 d-flex">
-      <div class="col-md-3 timepicker">
-        <label for="timepicker"
-               class="mt-2"
-               i18n>Grafana Time Picker</label>
-      </div>
-      <div class="col-sm-4">
-        <select id="timepicker"
-                name="timepicker"
-                class="form-select"
-                [(ngModel)]="time"
-                (ngModelChange)="onTimepickerChange($event)">
-          <option *ngFor="let key of grafanaTimes"
-                  [ngValue]="key.value">{{ key.name }}
-          </option>
-        </select>
-      </div>
+  <!--Start : UI row hidden intentionally; code retained as dead code for potential future use. -->
+  <div class="row mb-3"
+       *ngIf="showMessage">
+    <div class="col-lg-5 d-flex" >
       <div class="col-sm-1">
         <button class="btn btn-light ms-3"
                 i18n-title
@@ -49,6 +35,7 @@
       </div>
     </div>
   </div>
+  <!-- end -->
 
   <div class="row">
     <div class="col my-2"
