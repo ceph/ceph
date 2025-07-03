@@ -25,6 +25,7 @@ log = logging.getLogger(__name__)
 
 # Global variable to track whether we're using crimson-objectstore-tool
 CRIMSON = False
+TOOL_NAME = None
 
 def SKIP_IF_CRIMSON(reason="Not supported in crimson-objectstore-tool"):
     """
@@ -180,8 +181,9 @@ def task(ctx, config):
     global CRIMSON
     CRIMSON = config.get('crimson_objectstore_tool', False)
     
-    tool_name = 'crimson-objectstore-tool' if CRIMSON else 'ceph-objectstore-tool'
-    log.info('Beginning ceph_objectstore_tool using {}...'.format(tool_name))
+    global TOOL_NAME
+    TOOL_NAME = 'crimson-objectstore-tool' if CRIMSON else 'ceph-objectstore-tool'
+    log.info('Beginning ceph_objectstore_tool using {}...'.format(TOOL_NAME))
 
     log.debug(config)
     log.debug(ctx)
@@ -305,15 +307,15 @@ def test_objectstore(ctx, config, cli_remote, REP_POOL, REP_NAME, ec=False):
 
     # Test --op list and generate json for all objects
     log.info("Test --op list by generating json for all objects")
-    
+
     if CRIMSON:
         # crimson-objectstore-tool uses different command format
-        prefix = ("sudo crimson-objectstore-tool "
-                  "--data-path {fpath} ").format(fpath=FSPATH)
+        prefix = ("sudo adjust-ulimits ceph-coverage {testdir}/archive/coverage {tool_name} "
+                  "--data-path {fpath} ").format(testdir=TEUTHDIR, tool_name=TOOL_NAME, fpath=FSPATH)
     else:
-        prefix = ("sudo ceph-objectstore-tool "
+        prefix = ("sudo adjust-ulimits ceph-coverage {testdir}/archive/coverage {tool_name} "
                   "--data-path {fpath} "
-                  "--journal-path {jpath} ").format(fpath=FSPATH, jpath=JPATH)
+                  "--journal-path {jpath} ").format(testdir=TEUTHDIR, tool_name=TOOL_NAME, fpath=FSPATH, jpath=JPATH)
     for remote in osds.remotes.keys():
         log.debug(remote)
         log.debug(osds.remotes[remote])
