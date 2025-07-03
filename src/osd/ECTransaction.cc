@@ -564,8 +564,23 @@ ECTransaction::Generate::Generate(PGTransaction &t,
     entry->mod_desc.append(ECUtil::align_next(plan.orig_size));
   }
 
-  // On a size change, we want to update OI on all shards
-  if (plan.orig_size != plan.projected_size) {
+  // On a size change or when clearing whiteout,
+  // we want to update OI on all shards
+  bool size_change = plan.orig_size != plan.projected_size;
+  bool clear_whiteout = false;
+
+  // If we are updating the OI and we have a cache of the previous OI values
+  if (op.attr_updates.contains(OI_ATTR) && obc && obc->attr_cache.contains(OI_ATTR))
+  {
+    object_info_t oi_cache((obc->attr_cache[OI_ATTR]));
+    if (oi_cache.test_flag(object_info_t::FLAG_WHITEOUT))
+    {
+      object_info_t oi_updates(*(op.attr_updates[OI_ATTR]));
+      clear_whiteout = !oi_updates.test_flag(object_info_t::FLAG_WHITEOUT);
+    }
+  }
+
+  if (size_change || clear_whiteout) {
     all_shards_written();
   } else {
     // All primary shards must always be written, regardless of the write plan.
@@ -867,6 +882,7 @@ void ECTransaction::Generate::written_and_present_shards() {
     // written
     if (op.attr_updates.contains(OI_ATTR)) {
       object_info_t oi(*(op.attr_updates[OI_ATTR]));
+
       // The majority of the updates to OI are made before a transaction is
       // submitted to ECBackend, these are cached by OBC and are encoded into
       // the OI attr update for the transaction. By the time the transaction
