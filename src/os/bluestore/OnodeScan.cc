@@ -175,65 +175,175 @@ void BlueStore::Decoder_AllocationsAndStatFS::reset_new_shard() {
 }
 
 
+class BlueStore::OnodeScanMT {
+  BlueStore& store;
+  SimpleBitmap *sbmap;
+  read_alloc_stats_t& stats;
+  vector<KeyValueDB::keyrange_t> chunks;
+  uint32_t chunk_pos = 0;
+  uint64_t total = 0;
+  uint64_t interval = 1'000'000;
+  ceph::mutex lock = ceph::make_mutex("BlueStore::OnodeScanMT::lock");
+  void report_progress(uint32_t thread_no, uint64_t no_completed) {
+    auto &cct = store.cct;
+    std::lock_guard l(lock);
+    if (total / interval != (total + no_completed) / interval) {
+      dout(5) << __func__ << " processed objects count = "
+        << (total + no_completed) / interval * interval << dendl;
+    }
+    total += no_completed;
+  }
+
+  bool ask_for_work(
+    string& start_key,
+    string& upper_bound_key) {
+    std::lock_guard l(lock);
+    if (chunk_pos < chunks.size()) {
+      start_key = chunks[chunk_pos].first_key;
+      upper_bound_key = chunks[chunk_pos].upper_bound;
+      chunk_pos++;
+      return true;
+    } else {
+      return false;
+    }
+  }
+
+  int scan_onodes_range(
+    read_alloc_stats_t& stats,
+    const string& start_key,
+    const string& upper_bound_key)
+  {
+    auto& db = store.db;
+    auto& cct = store.cct;
+    auto it = db->get_iterator(PREFIX_OBJ, KeyValueDB::ITERATOR_NOCACHE);
+    if (!it) {
+      derr << "failed getting onode's iterator" << dendl;
+      return -ENOENT;
+    }
+
+    uint64_t kv_count = 0;
+    uint64_t last_completed = 0;
+    uint64_t count_interval = 100'000;
+    Decoder_AllocationsAndStatFS edecoder(store, stats, *sbmap,
+                                          store.min_alloc_size_order);
+    it->lower_bound(start_key);
+    // skip to first key that is beginning of Onode
+    while (it->valid() && is_extent_shard_key(it->key())) {
+      it->next();
+    }
+    // iterate over all onodes in requested range
+    for (; it->valid(); it->next(), kv_count++) {
+      if (kv_count && (kv_count % count_interval == 0)) {
+        report_progress(0, kv_count - last_completed);
+        last_completed = kv_count;
+      }
+      auto key = it->key();
+      auto okey = key;
+      dout(20) << __func__ << " decode onode " << pretty_binary_string(key) << dendl;
+      ghobject_t oid;
+      if (!is_extent_shard_key(it->key())) {
+        if (it->key() >= upper_bound_key) {
+          // Drag iteration after upper bound until new onode is found.
+          break;
+        }
+        int r = get_key_object(okey, &oid);
+        if (r != 0) {
+          derr << __func__
+               << " failed to decode onode key = " << pretty_binary_string(okey)
+               << dendl;
+          continue;
+        }
+        edecoder.reset(oid,
+                       &stats.actual_pool_vstatfs[oid.hobj.get_logical_pool()]);
+        Onode dummy_on(cct);
+        Onode::decode_raw(&dummy_on, it->value(), edecoder, store.segment_size != 0);
+        ++stats.onode_count;
+      } else {
+        edecoder.reset_new_shard();
+        uint32_t offset;
+        get_key_extent_shard(key, &okey, &offset);
+        int r = get_key_object(okey, &oid);
+        if (r != 0) {
+          derr << __func__
+               << " failed to decode onode key= " << pretty_binary_string(okey)
+               << " from extent key= " << pretty_binary_string(key) << dendl;
+          continue;
+        }
+        if (oid != edecoder.get_oid()) {
+          continue;
+        }
+        edecoder.decode_some(it->value(), nullptr);
+        ++stats.shard_count;
+      }
+    }
+    report_progress(0, kv_count - last_completed);
+    return 0;
+  }
+
+  void scanner_thread(
+    uint32_t thread_no,
+    read_alloc_stats_t& stats)
+  {
+    [[maybe_unused]] auto& cct = store.cct;
+    string start_key;
+    string upper_bound_key;
+    while(ask_for_work(start_key, upper_bound_key)) {
+      dout(10) << "thread " << thread_no << " runs: " << pretty_binary_string(start_key)
+        << "..." << pretty_binary_string(upper_bound_key) << dendl;
+      scan_onodes_range(stats, start_key, upper_bound_key);
+    }
+  }
+
+public:
+  OnodeScanMT(BlueStore& store, SimpleBitmap *sbmap, read_alloc_stats_t& stats)
+  : store(store), sbmap(sbmap), stats(stats) {}
+
+  int scan() {
+    [[maybe_unused]] auto& cct = store.cct;
+    std::vector<read_alloc_stats_t> thr_stats;
+    std::vector<thread> thr;
+
+    //bluestore_allocation_recovery_threads
+    size_t num_threads = cct->_conf.get_val<uint64_t>("bluestore_allocation_recovery_threads");
+    ceph_assert(num_threads > 0);
+    std::vector<double> timers;
+    store.db->util_divide_key_range(
+      PREFIX_OBJ, "", string(100, '\377'), num_threads, 50'000'000, 0.05, chunks);
+    for (size_t i = 0; i < chunks.size(); i++) {
+      dout(10) << i << ": " << pretty_binary_string(chunks[i].first_key)
+        << "..." << pretty_binary_string(chunks[i].upper_bound) << dendl;
+    }
+
+    num_threads = std::min(num_threads, chunks.size());
+    thr_stats.resize(num_threads);
+    thr.resize(num_threads);
+    timers.resize(num_threads);
+    for (size_t i = 0; i < num_threads; i++) {
+      thr[i] = std::thread(
+        &BlueStore::OnodeScanMT::scanner_thread, this, i, std::ref(thr_stats[i]));
+    }
+    for (size_t i = 0; i < num_threads; i++) {
+      thr[i].join();
+      stats.onode_count += thr_stats[i].onode_count;
+      stats.shard_count += thr_stats[i].shard_count;
+      stats.shared_blob_count += thr_stats[i].shared_blob_count;
+      stats.compressed_blob_count += thr_stats[i].compressed_blob_count;
+      stats.spanning_blob_count += thr_stats[i].spanning_blob_count;
+      stats.skipped_illegal_extent += thr_stats[i].skipped_illegal_extent;
+      stats.extent_count += thr_stats[i].extent_count;
+      stats.insert_count += thr_stats[i].insert_count;
+      for (auto &k : thr_stats[i].actual_pool_vstatfs) {
+        stats.actual_pool_vstatfs[k.first] += k.second;
+      }
+    }
+    return 0;
+  }
+};
+
 int BlueStore::read_allocation_from_onodes_mt(SimpleBitmap *sbmap, read_alloc_stats_t& stats)
 {
-  auto it = db->get_iterator(PREFIX_OBJ, KeyValueDB::ITERATOR_NOCACHE);
-  if (!it) {
-    derr << "failed getting onode's iterator" << dendl;
-    return -ENOENT;
-  }
-
-  uint64_t            kv_count       = 0;
-  uint64_t            count_interval = 1'000'000;
-  Decoder_AllocationsAndStatFS edecoder(*this, stats, *sbmap, min_alloc_size_order);
-
-  // iterate over all ONodes stored in RocksDB
-  for (it->lower_bound(string()); it->valid(); it->next(), kv_count++) {
-    // trace an even after every million processed objects (typically every 5-10 seconds)
-    if (kv_count && (kv_count % count_interval == 0) ) {
-      dout(5) << __func__ << " processed objects count = " << kv_count << dendl;
-    }
-
-    auto key = it->key();
-    auto okey = key;
-    dout(20) << __func__ << " decode onode " << pretty_binary_string(key) << dendl;
-    ghobject_t oid;
-    if (!is_extent_shard_key(it->key())) {
-      int r = get_key_object(okey, &oid);
-      if (r != 0) {
-        derr << __func__ << " failed to decode onode key = "
-             << pretty_binary_string(okey) << dendl;
-        return -EIO;
-      }
-      edecoder.reset(oid,
-        &stats.actual_pool_vstatfs[oid.hobj.get_logical_pool()]);
-      Onode dummy_on(cct);
-      Onode::decode_raw(&dummy_on,
-        it->value(),
-        edecoder,
-        segment_size != 0);
-      ++stats.onode_count;
-    } else {
-      edecoder.reset_new_shard();
-      uint32_t offset;
-      int r = get_key_extent_shard(key, &okey, &offset);
-      if (r != 0) {
-        derr << __func__ << " failed to decode onode extent key = "
-             << pretty_binary_string(key) << dendl;
-        return -EIO;
-      }
-      r = get_key_object(okey, &oid);
-      if (r != 0) {
-        derr << __func__
-             << " failed to decode onode key= " << pretty_binary_string(okey)
-             << " from extent key= " << pretty_binary_string(key)
-             << dendl;
-        return -EIO;
-      }
-      ceph_assert(oid == edecoder.get_oid());
-      edecoder.decode_some(it->value(), nullptr);
-      ++stats.shard_count;
-    }
-  }
+  OnodeScanMT scaner(*this, sbmap, stats);
+  scaner.scan();
   return 0;
 }
+
