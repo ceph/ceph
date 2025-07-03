@@ -294,6 +294,7 @@ write_superblock(
     [=, &device](auto &bp)
   {
     bufferlist bl;
+    bl.append(SUPERBLOCK_MAGIC);
     encode(sb, bl);
     auto iter = bl.begin();
     assert(bl.length() < sb.block_size);
@@ -323,13 +324,21 @@ read_superblock(seastar::file &device, seastar::stat_data sd)
       bl.push_back(bp);
       block_sm_superblock_t ret;
       auto bliter = bl.cbegin();
+      // Validate the magic prefix
+      std::string sb_magic;
+      bliter.copy(SUPERBLOCK_MAGIC_LEN, sb_magic);
+      if (sb_magic != SUPERBLOCK_MAGIC) {
+        ERROR("invalid superblock magic: got '{}'", sb_magic);
+        ceph_assert(0 == "invalid superblock magic");
+      }
+
       try {
         decode(ret, bliter);
       } catch (...) {
         ERROR("got decode error!");
         ceph_assert(0 == "invalid superblock");
       }
-      assert(ceph::encoded_sizeof<block_sm_superblock_t>(ret) <
+      assert(ceph::encoded_sizeof<block_sm_superblock_t>(ret) + SUPERBLOCK_MAGIC_LEN <
              sd.block_size);
       return BlockSegmentManager::access_ertr::future<block_sm_superblock_t>(
         BlockSegmentManager::access_ertr::ready_future_marker{},
