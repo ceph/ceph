@@ -190,6 +190,7 @@ void sr_t::dump(Formatter *f) const
   f->dump_unsigned("last_destroyed", last_destroyed);
   f->dump_stream("last_modified") << last_modified;
   f->dump_unsigned("change_attr", change_attr);
+  f->dump_unsigned("is_snapdir_visible", is_snapdir_visible());
   f->dump_unsigned("current_parent_since", current_parent_since);
 
   f->open_array_section("snaps");
@@ -239,5 +240,13 @@ void sr_t::generate_test_instances(std::list<sr_t*>& ls)
   ls.back()->past_parent_snaps.insert(6);
   ls.back()->last_modified = utime_t(9, 10);
   ls.back()->change_attr++;
+}
+
+void sr_t::print(std::ostream& out) const {
+  out << "(seq=" << seq
+      << " created=" << created
+      << " last_created=" << last_created
+      << " last_destroyed=" << last_destroyed
+      << " flags=" << flags << ")" << std::endl;
 }
 
