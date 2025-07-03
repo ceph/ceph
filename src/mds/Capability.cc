@@ -302,9 +302,11 @@ void Capability::dump(ceph::Formatter *f) const
   if (inode)
     f->dump_stream("ino") << inode->ino();
   f->dump_unsigned("last_sent", last_sent);
+  f->dump_unsigned("last_issue", last_issue);
   f->dump_stream("last_issue_stamp") << last_issue_stamp;
   f->dump_stream("wanted") << ccap_string(_wanted);
   f->dump_stream("pending") << ccap_string(_pending);
+  f->dump_stream("issued") << ccap_string(_issued);
 
   f->open_array_section("revokes");
   for (const auto &r : _revokes) {
