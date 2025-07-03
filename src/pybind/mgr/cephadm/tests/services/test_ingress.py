@@ -1208,7 +1208,7 @@ class TestIngressService:
             '}\n'
             '\n'
             'RADOS_KV {\n'
-            '        UserId = "nfs.foo.test.0.0";\n'
+            '        UserId = "nfs.foo";\n'
             '        nodeid = "0";\n'
             '        pool = ".nfs";\n'
             '        namespace = "foo";\n'
@@ -1219,21 +1219,9 @@ class TestIngressService:
             '}\n'
             '\n'
             'RADOS_URLS {\n'
-            '        UserId = "nfs.foo.test.0.0";\n'
+            '        UserId = "nfs.foo";\n'
             '        watch_url = '
             '"rados://.nfs/foo/conf-nfs.foo";\n'
-            '}\n'
-            '\n'
-            'CEPH {\n'
-            '        Ceph_Conf = "/etc/ceph/ceph.conf";\n'
-            '        umask = 0000;\n'
-            '        client_oc = false;\n'
-            '        async = false;\n'
-            '        zerocopy = false;\n'
-            '        use_old_uuid = false;\n'
-            '\n'
-            '        register_service = true;\n'
-            '        nodeid = "0";\n'
             '}\n'
             '\n'
             'RGW {\n'
@@ -1249,7 +1237,7 @@ class TestIngressService:
             'enable_rdma': False,
             'extra_args': ['-N', 'NIV_EVENT'],
             'keyring': (
-                '[client.nfs.foo.test.0.0]\n'
+                '[client.nfs.foo]\n'
                 'key = None\n'
             ),
             'namespace': 'foo',
@@ -1262,7 +1250,7 @@ class TestIngressService:
                 ),
                 'user': 'nfs.foo.test.0.0-rgw',
             },
-            'userid': 'nfs.foo.test.0.0',
+            'userid': 'nfs.foo',
         }
 
         nfs_daemons = [
