@@ -53,6 +53,7 @@ ostream& operator<<(ostream& out, const SnapRealm& realm)
   if (realm.srnode.past_parent_snaps.size() > 0) {
     out << " past_parent_snaps=" << realm.srnode.past_parent_snaps;
   }
+  out << " snapdir_visibility=" << realm.srnode.is_snapdir_visible();
 
   if (realm.srnode.is_parent_global())
     out << " global ";

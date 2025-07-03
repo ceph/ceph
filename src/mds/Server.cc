@@ -6503,6 +6503,115 @@ void Server::handle_client_setvxattr(const MDRequestRef& mdr, CInode *cur)
     mdr->no_early_reply = true;
     pip = pi.inode.get();
     adjust_realm = true;
+  } else if (name == "ceph.dir.subvolume.snapdirvisibility"sv) {
+    if (!cur->is_dir()) {
+      respond_to_request(mdr, -EINVAL);
+      return;
+    }
+
+    bool val{true};
+    try {
+      std::string errstr;
+      val = strict_strtob(value, &errstr);
+      if (!errstr.empty()) {
+        dout(10) << "bad vxattr value, unable to parse bool for " << name
+                 << ": " << errstr << dendl;
+        respond_to_request(mdr, -EINVAL);
+        return;
+      }
+    } catch (boost::bad_lexical_cast const& e) {
+      dout(10) << "bad vxattr value, unable to parse bool for " << name
+               << ": " << e.what() << dendl;
+      respond_to_request(mdr, -EINVAL);
+      return;
+    }
+
+    // perform few checks with lightweight rdlock
+    bool rdlock_snapdir_visibility{true};
+    if (!mdr->more()->rdonly_checks) {
+      lov.add_rdlock(&cur->snaplock);
+      if (!mds->locker->acquire_locks(mdr, lov)) {
+        return;
+      }
+
+      /* Skip if dirinode is not marked as a subvolume.
+      * This feature currently applies only to subvolume paths.
+      * For details, see: https://tracker.ceph.com/issues/71740
+      */
+      const auto srnode = cur->get_projected_srnode();
+      if (!srnode || !srnode->is_subvolume()) {
+        dout(10) << "cannot allow changing snapdir visibility for " 
+                 << req->get_filepath() << " since it's not a subvolume path" 
+                 << dendl;
+        respond_to_request(mdr, -EPERM);
+        return; 
+      }
+      // check if visibility already matches the desired value
+      rdlock_snapdir_visibility = srnode->is_snapdir_visible();
+      if (val == rdlock_snapdir_visibility) {
+        dout(20) << "snapdir visibility for " << req->get_filepath()
+                 << " is already set to " << std::boolalpha << val << dendl;
+        respond_to_request(mdr, 0);
+        return;
+      }
+      
+      mdr->more()->rdonly_checks = true;
+      dout(20) << "dropping rdlock" << dendl;
+      mds->locker->drop_locks(mdr.get());
+    }
+
+    if (!xlock_policylock(mdr, cur, false, true)) {
+      return;
+    }
+
+    /* Repeat rdlocks checks to see if anything changed b/w rdlock release and
+    *  xlock policylock acquisition
+    */ 
+    {
+      const auto subvol_ino = cur->find_snaprealm()->get_subvolume_ino();
+      if (!subvol_ino || subvol_ino != cur->ino()) {
+        dout(10) << "subvol ino changed between rdlock release and xlock "
+		             << "policylock acquisition; subvol_ino: " << subvol_ino
+                 << ", " << "cur->ino: " << cur->ino() << dendl;
+	      respond_to_request(mdr, -EPERM);
+	      return;
+      }
+
+      const auto srnode = cur->get_projected_srnode();
+      if (!srnode || !srnode->is_subvolume()) {
+        dout(10) << "cannot allow changing snapdir visibility for "
+                 << req->get_filepath() << " since it's not a subvolume path"
+                 << dendl;
+        respond_to_request(mdr, -EPERM);
+        return; 
+      }
+      if (rdlock_snapdir_visibility != srnode->is_snapdir_visible()) {
+        dout(10) << "snapdir visibility changed between rdlock release "
+                << "and xlock policylock acquisition" << dendl;
+        respond_to_request(mdr, -EPERM);
+        return;
+      }
+
+      if (val == srnode->is_snapdir_visible()) {
+        dout(20) << "snapdir visibility for " << req->get_filepath()
+                 << " is already set to " << std::boolalpha << val << dendl;
+        respond_to_request(mdr, 0);
+        return;
+      }
+    }
+
+    adjust_realm = true;
+    auto pi = cur->project_inode(mdr, false, adjust_realm);
+    dout(20) << "setting snapdir visibility to " << std::boolalpha
+               << val << " for " << req->get_filepath() << dendl;
+    if (val) {
+      pi.snapnode->set_snapdir_visibility();
+    } else {
+      pi.snapnode->unset_snapdir_visibility();
+    }
+
+    mdr->no_early_reply = true;
+    pip = pi.inode.get();
   } else if (name == "ceph.dir.pin"sv) {
     if (!cur->is_dir() || cur->is_root()) {
       respond_to_request(mdr, -EINVAL);
