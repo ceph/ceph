@@ -139,7 +139,7 @@ class AgentEndpoint:
         - This prevents bursts of all agents from reporting immediately at startup.
         - Enforces a minimum of 10s to avoid early tight clustering.
         """
-        if self.mgr.agent_initial_startup_delay_max == -1: # auto-delay mode
+        if self.mgr.agent_initial_startup_delay_max == -1:  # auto-delay mode
             num_agents = len(self.mgr.cache.get_hosts())
             agents_avg_concurrency = self.compute_agents_avg_concurrency()
             return max(10, num_agents // agents_avg_concurrency)

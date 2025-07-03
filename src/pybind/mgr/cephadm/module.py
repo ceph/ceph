@@ -3331,6 +3331,18 @@ Then run the following:
                 'certificate': self.cert_mgr.get_root_ca()}
 
     @handle_orch_error
+    def show_agent_config(self) -> Dict[str, str]:
+        agent = self.http_server.agent
+        return {
+            'agent_refresh_rate': str(agent.compute_agents_refrsh_rate()),
+            'agent_avg_concurrency': str(agent.compute_agents_avg_concurrency()),
+            'agent_initial_startup_delay_max': str(agent.get_initial_delay()),
+            'agent_jitter_seconds': str(agent.get_jitter()),
+            'agent_down_multiplier': str(self.agent_down_multiplier),
+            'agent_starting_port': str(self.agent_starting_port)
+        }
+
+    @handle_orch_error
     def cert_store_cert_ls(self, show_details: bool = False) -> Dict[str, Any]:
         return self.cert_mgr.cert_ls(show_details)
 
