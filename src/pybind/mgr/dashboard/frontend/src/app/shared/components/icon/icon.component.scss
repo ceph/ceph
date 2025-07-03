@@ -1,0 +1,17 @@
+@use '@carbon/styles/scss/theme';
+
+.success-icon {
+  color: theme.$support-success;
+}
+
+.danger-icon {
+  color: theme.$support-error;
+}
+
+.info-icon {
+  color: theme.$support-info;
+}
+
+.warning-icon {
+  color: theme.$support-caution-major;
+}
