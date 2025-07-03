@@ -51,6 +51,9 @@ class LinuxKeyringSecret {
 
   ~LinuxKeyringSecret() noexcept;
 
+  // Add a secret to the kernel process keyring. Beware: calling this
+  // with with an existing key _updates_ the value and causes multiple
+  // instances to refer to the same key.
   static tl::expected<LinuxKeyringSecret, std::error_code> add(
       const std::string& key, const std::string& secret) noexcept;
   static bool supported(std::error_code* ec = nullptr) noexcept;
