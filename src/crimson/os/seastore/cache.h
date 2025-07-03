@@ -464,6 +464,14 @@ public:
     return view->is_data_stable();
   }
 
+  CachedExtentRef peek_extent_viewable_by_trans(
+    Transaction &t,
+    CachedExtentRef extent) final
+  {
+    assert(extent);
+    return extent->get_transactional_view(t);
+  }
+
   get_extent_iertr::future<> maybe_wait_accessible(
     Transaction &t,
     CachedExtent &extent) final {
