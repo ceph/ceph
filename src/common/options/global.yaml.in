@@ -6748,6 +6748,27 @@ options:
   desc: A configurable number for stalled read warning to be appeared if number of stalled read occurence pass `bdev_stalled_read_warn_threshold` in `bdev_stalled_read_warn_lifetime` seconds
   default: 1
   with_legacy: true
+- name: bdev_discard_max_bytes
+  type: size
+  level: advanced
+  desc: Discard queue size in bytes that triggers health warning
+  long_desc: This parameter sets a threshold for the discard queue size (in bytes), triggering a health
+    warning when the queue exceeds the specified limit. This is particularly useful for devices with
+    slow discard operations, as a large backlog in the queue can block disk space that is marked as free
+    but not yet available for allocation, impacting system performance and storage efficiency.
+    `bdev_async_discard_max_pending` is measured in items, not bytes, so its value does not directly
+    correspond to the discard queue size in bytes.
+  default: 10_G
+  with_legacy: true
+  see_also:
+  - bdev_async_discard_max_pending
+- name: bdev_debug_discard_sleep
+  type: uint
+  level: dev
+  desc: A debugging tool to simulate slow discard operations by introducing a delay of
+    `bdev_debug_discard_sleep` milliseconds
+  default: 0
+  with_legacy: true
 - name: bluestore_cleaner_sleep_interval
   type: float
   level: advanced
