@@ -1643,33 +1643,20 @@ public:
     return 0;
   }
 
-
   /**
    * This is called when a new instance of an object (in a versioned bucket) is added (via PUT) or an existing instance is removed.
    * A part of that process is to update the OLH entry (in the bucket index) with the correct modification timestamp (epoch).
    * This timestamp is then used later on to guard against OLH updates for add/remove instance ops that happened *before*
    * the latest op that updated the OLH entry.
    * @param candidate_epoch - this is provided (> 0) in the case when a remote epoch is coming in as the result of multisite sync;
-   * @param mtime - modification time for the latest object instance that will serve as the new epoch.
-   *    Naturally, this will only be available during the link op (as we are getting the mtime from the newly created
-   *    object instance).
    */
-  bool start_modify(uint64_t candidate_epoch, ceph::real_time const *mtime=nullptr) {
-    using namespace std::chrono;
-    if (candidate_epoch) {
-      if (candidate_epoch < olh_data_entry.epoch) {
-        return false; /* olh cannot be modified, old epoch */
-      }
-      olh_data_entry.epoch = candidate_epoch;
-    } else {
-      ceph::real_time t = mtime ? *mtime : real_clock::now();
-      uint64_t new_epoch = duration_cast<nanoseconds>(t.time_since_epoch()).count();
-      // specifically handle the situation when multiple RGWs in the same zone receive a modification (PUT/POST/DELETE)
-      // request at exactly the same time (however unlikely that might be at the nanosecond resolution);
-      if (olh_data_entry.epoch >= new_epoch)
-        new_epoch = olh_data_entry.epoch + 1;
-      olh_data_entry.epoch = new_epoch;
+  bool start_modify (uint64_t candidate_epoch) {
+    // only update the olh.epoch if it is newer than the current one.
+    if (candidate_epoch < olh_data_entry.epoch) {
+      return false; /* olh cannot be modified, old epoch */
     }
+
+    olh_data_entry.epoch = candidate_epoch;
     return true;
   }
 
@@ -1919,14 +1906,16 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
 
   const uint64_t prev_epoch = olh.get_epoch();
 
-  auto mtime = obj.mtime();
-  if (!olh.start_modify(op.olh_epoch, &mtime)) {
-    ret = obj.write(op.olh_epoch, false, header);
+  // op.olh_epoch is provided (> 0) in the case when a remote epoch is coming in as the result of multisite sync;
+  uint64_t candidate_epoch = op.olh_epoch ? op.olh_epoch :
+    duration_cast<std::chrono::nanoseconds>(obj.mtime().time_since_epoch()).count();
+  if (!olh.start_modify(candidate_epoch)) {
+    ret = obj.write(candidate_epoch, false, header);
     if (ret < 0) {
       return ret;
     }
     if (removing) {
-      olh.update_log(CLS_RGW_OLH_OP_REMOVE_INSTANCE, op.op_tag, op.key, false, op.olh_epoch);
+      olh.update_log(CLS_RGW_OLH_OP_REMOVE_INSTANCE, op.op_tag, op.key, false, candidate_epoch);
     }
     return write_header_while_logrecord(hctx, header);
   }
@@ -2097,7 +2086,10 @@ static int rgw_bucket_unlink_instance(cls_method_context_t hctx, bufferlist *in,
     obj.set_epoch(1);
   }
 
-  if (!olh.start_modify(op.olh_epoch)) {
+  // op.olh_epoch is provided (> 0) in the case when a remote epoch is coming in as the result of multisite sync;
+  uint64_t candidate_epoch = op.olh_epoch ? op.olh_epoch :
+    duration_cast<std::chrono::nanoseconds>(real_clock::now().time_since_epoch()).count();
+  if (!olh.start_modify(candidate_epoch)) {
     ret = obj.unlink_list_entry(header);
     if (ret < 0) {
       return ret;
@@ -2107,7 +2099,7 @@ static int rgw_bucket_unlink_instance(cls_method_context_t hctx, bufferlist *in,
       return 0;
     }
 
-    olh.update_log(CLS_RGW_OLH_OP_REMOVE_INSTANCE, op.op_tag, op.key, false, op.olh_epoch);
+    olh.update_log(CLS_RGW_OLH_OP_REMOVE_INSTANCE, op.op_tag, op.key, false, candidate_epoch);
     return olh.write(header);
   }
 
