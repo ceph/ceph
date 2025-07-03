@@ -251,8 +251,8 @@ public:
   }
   virtual get_child_iertr::future<> maybe_wait_accessible(
     Transaction &, CachedExtent&) = 0;
-  virtual bool is_viewable_extent_data_stable(Transaction &, CachedExtentRef) = 0;
-  virtual bool is_viewable_extent_stable(Transaction &, CachedExtentRef) = 0;
+  virtual CachedExtentRef peek_extent_viewable_by_trans(
+    Transaction &t, CachedExtentRef extent) = 0;
   virtual ~ExtentTransViewRetriever() {}
 protected:
   virtual get_child_iertr::future<CachedExtentRef> get_extent_viewable_by_trans(
@@ -884,54 +884,68 @@ protected:
     assert(me.validate_stable_children());
   }
 
+  CachedExtentRef peek_child(
+    Transaction &t,
+    ExtentTransViewRetriever &etvr,
+    btreenode_pos_t pos,
+    node_key_t key) const
+  {
+    auto &me = down_cast();
+    assert(children.capacity());
+    assert(key == down_cast().iter_idx(pos).get_key());
+    auto child = children[pos];
+    if (is_reserved_ptr(child)) {
+      return nullptr;
+    } else if (is_valid_child_ptr(child)) {
+      return etvr.peek_extent_viewable_by_trans(
+	t, dynamic_cast<CachedExtent*>(child));
+    } else if (me.is_pending()) {
+      auto &sparent = me.get_stable_for_key(key);
+      auto spos = sparent.lower_bound(key).get_offset();
+      auto child = sparent.children[spos];
+      if (is_valid_child_ptr(child)) {
+	return etvr.peek_extent_viewable_by_trans(
+	  t, dynamic_cast<CachedExtent*>(child));
+      } else {
+	return nullptr;
+      }
+    } else {
+      return nullptr;
+    }
+  }
+
   // children are considered stable if any of the following case is true:
   // 1. The child extent is absent in cache
   // 2. The child extent is (data) stable
   //
   // For reserved mappings, the return values are undefined.
-  bool _is_child_stable(
+  bool is_child_stable(
     Transaction &t,
     ExtentTransViewRetriever &etvr,
     btreenode_pos_t pos,
     node_key_t key,
     bool data_only = false) const {
-    auto &me = down_cast();
-    assert(key == me.iter_idx(pos).get_key());
-    auto child = this->children[pos];
-    if (is_reserved_ptr(child)) {
-      return true;
-    } else if (is_valid_child_ptr(child)) {
-      assert(dynamic_cast<CachedExtent*>(child)->is_logical());
-      assert(
-	dynamic_cast<CachedExtent*>(child)->is_pending_in_trans(t.get_trans_id())
-	|| me.is_stable_ready());
-      if (data_only) {
-	return etvr.is_viewable_extent_data_stable(
-	  t, dynamic_cast<CachedExtent*>(child));
-      } else {
-	return etvr.is_viewable_extent_stable(
-	  t, dynamic_cast<CachedExtent*>(child));
-      }
-    } else if (me.is_pending()) {
-      auto key = me.iter_idx(pos).get_key();
-      auto &sparent = me.get_stable_for_key(key);
-      auto spos = sparent.lower_bound(key).get_offset();
-      auto child = sparent.children[spos];
-      if (is_valid_child_ptr(child)) {
-	assert(dynamic_cast<CachedExtent*>(child)->is_logical());
-	if (data_only) {
-	  return etvr.is_viewable_extent_data_stable(
-	    t, dynamic_cast<CachedExtent*>(child));
-	} else {
-	  return etvr.is_viewable_extent_stable(
-	    t, dynamic_cast<CachedExtent*>(child));
-	}
-      } else {
-	return true;
-      }
-    } else {
+    auto extent = peek_child(t, etvr, pos, key);
+    if (!extent) {
       return true;
     }
+    if (data_only) {
+      return extent->is_data_stable();
+    } else {
+      return extent->is_stable();
+    }
+  }
+
+  bool is_child_initial_pending(
+    Transaction &t,
+    ExtentTransViewRetriever &etvr,
+    btreenode_pos_t pos,
+    node_key_t key) const {
+    auto extent = peek_child(t, etvr, pos, key);
+    if (!extent) {
+      return false;
+    }
+    return extent->is_initial_pending();
   }
 
   parent_tracker_t<T>* my_tracker = nullptr;
