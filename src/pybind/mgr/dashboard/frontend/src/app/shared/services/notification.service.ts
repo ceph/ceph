@@ -2,21 +2,13 @@ import { Injectable } from '@angular/core';
 
 import _ from 'lodash';
 import { BehaviorSubject, Subject } from 'rxjs';
+import { ToastContent, NotificationType as CarbonNotificationType } from 'carbon-components-angular';
 
 import { NotificationType } from '../enum/notification-type.enum';
 import { CdNotification, CdNotificationConfig } from '../models/cd-notification';
 import { FinishedTask } from '../models/finished-task';
 import { CdDatePipe } from '../pipes/cd-date.pipe';
 import { TaskMessageService } from './task-message.service';
-
-export interface ActiveToast {
-  id: string;
-  title: string;
-  message: string;
-  caption: string;
-  carbonType: string;
-  lowContrast: boolean;
-}
 
 @Injectable({
   providedIn: 'root'
@@ -29,7 +21,7 @@ export class NotificationService {
   data$ = this.dataSource.asObservable();
 
   // Active toasts observable
-  private activeToastsSource = new BehaviorSubject<ActiveToast[]>([]);
+  private activeToastsSource = new BehaviorSubject<ToastContent[]>([]);
   activeToasts$ = this.activeToastsSource.asObservable();
 
   // Sidebar observable
@@ -37,7 +29,7 @@ export class NotificationService {
 
   private queued: CdNotificationConfig[] = [];
   private queuedTimeoutId: number;
-  private activeToasts: ActiveToast[] = [];
+  private activeToasts: ToastContent[] = [];
   KEY = 'cdNotifications';
 
   constructor(
@@ -190,29 +182,34 @@ export class NotificationService {
     // Get lowContrast setting from options, default to false
     const lowContrast = notification.options?.lowContrast || false;
     
-    // Create toast object
-    const toast: ActiveToast = {
-      id: _.uniqueId('toast-'),
+    // Create toast object using Carbon's ToastContent type
+    const toast: ToastContent = {
       title: notification.title,
-      message: notification.message || '',
+      subtitle: notification.message || '',
       caption: this.renderTimeAndApplicationHtml(notification),
-      carbonType: carbonType,
-      lowContrast: lowContrast
+      type: carbonType,
+      lowContrast: lowContrast,
+      showClose: true,
+      autohide: true,
+      duration: notification.options?.timeOut ? notification.options.timeOut / 1000 : 5
     };
+
     // Add new toast to the beginning of the array
     this.activeToasts = [toast, ...this.activeToasts];
     this.activeToastsSource.next(this.activeToasts);
-    // Auto remove after timeout if specified, or default to 5 seconds
-    const timeOut = notification.options?.timeOut || 5000;
-    setTimeout(() => {
-      this.removeToast(toast.id);
-    }, timeOut);
+
+    // Set up auto-dismissal
+    if (toast.autohide && toast.duration) {
+      setTimeout(() => {
+        this.removeToast(toast);
+      }, toast.duration * 1000);
+    }
   }
 
   /**
    * Map notification types to Carbon types
    */
-  private mapNotificationTypeToCarbon(type: NotificationType): string {
+  private mapNotificationTypeToCarbon(type: NotificationType): CarbonNotificationType {
     switch (type) {
       case NotificationType.error:
         return 'error';
@@ -228,19 +225,22 @@ export class NotificationService {
   }
 
   /**
-   * Remove a toast by ID
+   * Remove a toast
    */
-  removeToast(toastId: string) {
-    this.activeToasts = this.activeToasts.filter((t) => t.id !== toastId);
+  removeToast(toast: ToastContent) {
+    this.activeToasts = this.activeToasts.filter((t) => t !== toast);
     this.activeToastsSource.next(this.activeToasts);
   }
 
   renderTimeAndApplicationHtml(notification: CdNotification): string {
-    return `<small class="date">${this.cdDatePipe.transform(
-      notification.timestamp
-    )}</small><i class="float-end custom-icon ${notification.applicationClass}" title="${
-      notification.application
-    }"></i>`;
+    return `<div class="toast-caption-container">
+      <small class="date">${this.cdDatePipe.transform(
+        notification.timestamp
+      )}</small>
+      <i class="custom-icon ${notification.applicationClass}" title="${
+        notification.application
+      }"></i>
+    </div>`;
   }
 
   notifyTask(finishedTask: FinishedTask, success: boolean = true): number {
