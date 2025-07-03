@@ -10,6 +10,7 @@
 #include "ceph_ver.h"
 #include "common/HTMLFormatter.h"
 #include "common/XMLFormatter.h"
+#include "common/split.h"
 #include "common/utf8.h"
 #include "include/str_list.h"
 #include "rgw_common.h"
@@ -2045,17 +2046,16 @@ int RGWREST::preprocess(req_state *s, rgw::io::BasicClient* cio)
   // S3 API.
   // Map the listing of rgw_enable_apis in REVERSE order, so that items near
   // the front of the list have a higher number assigned (and -1 for items not in the list).
-  list<string> apis;
-  get_str_list(g_conf()->rgw_enable_apis, apis);
+  const auto apis = ceph::split(g_conf()->rgw_enable_apis);
   int api_priority_s3 = -1;
   int api_priority_s3website = -1;
   auto api_s3website_priority_rawpos = std::find(apis.begin(), apis.end(), "s3website");
   auto api_s3_priority_rawpos = std::find(apis.begin(), apis.end(), "s3");
   if (api_s3_priority_rawpos != apis.end()) {
-    api_priority_s3 = apis.size() - std::distance(apis.begin(), api_s3_priority_rawpos);
+    api_priority_s3 = std::distance(api_s3_priority_rawpos, apis.end());
   }
   if (api_s3website_priority_rawpos != apis.end()) {
-    api_priority_s3website = apis.size() - std::distance(apis.begin(), api_s3website_priority_rawpos);
+    api_priority_s3website = std::distance(api_s3website_priority_rawpos, apis.end());
   }
   ldpp_dout(s, 10) << "rgw api priority: s3=" << api_priority_s3 << " s3website=" << api_priority_s3website << dendl;
   bool s3website_enabled = api_priority_s3website >= 0;
