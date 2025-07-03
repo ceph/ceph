@@ -58,7 +58,8 @@ ostream& operator<<(ostream& out, const SnapRealm& realm)
   if (realm.srnode.is_parent_global())
     out << " global ";
   out << " last_modified " << realm.srnode.last_modified
-      << " change_attr " << realm.srnode.change_attr;
+      << " change_attr " << realm.srnode.change_attr
+      << " is_snapdir_visible " << realm.srnode.is_snapdir_visible();
   out << " " << &realm << ")";
   return out;
 }

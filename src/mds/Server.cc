@@ -6518,6 +6518,96 @@ void Server::handle_client_setvxattr(const MDRequestRef& mdr, CInode *cur)
     mdr->no_early_reply = true;
     pip = pi.inode.get();
     adjust_realm = true;
+  } else if (name == "ceph.dir.subvolume.snaps.visible"sv) {
+    if (!cur->is_dir()) {
+      respond_to_request(mdr, -EINVAL);
+      return;
+    }
+
+    bool val = true;
+    try {
+      std::string errstr;
+      val = strict_strtob(value, &errstr);
+      if (!errstr.empty()) {
+        dout(10) << "bad vxattr value, unable to parse bool for " << name
+                 << ": " << errstr << dendl;
+        respond_to_request(mdr, -EINVAL);
+        return;
+      }
+    } catch (boost::bad_lexical_cast const& e) {
+      dout(10) << "bad vxattr value, unable to parse bool for " << name
+               << ": " << e.what() << dendl;
+      respond_to_request(mdr, -EINVAL);
+      return;
+    }
+
+    // perform few checks with lightweight rdlock
+    if (!mdr->more()->rdonly_checks) {
+      lov.add_rdlock(&cur->snaplock);
+      if (!mds->locker->acquire_locks(mdr, lov)) {
+        dout(20) << "handle_client_getvxattr could not acquire rdlock on "
+                 << *cur << dendl;
+        return;
+      }
+
+      const auto srnode = cur->get_projected_srnode();
+      if (!srnode) {
+        dout(10) << "no-op since no snaprealm node found for "
+                 << req->get_filepath() << dendl;
+        respond_to_request(mdr, 0);
+        return; 
+      }
+      // check if visibility already matches the desired value
+      if (val == srnode->is_snapdir_visible()) {
+        dout(20) << "snapdir visibility for " << req->get_filepath()
+                 << " is already set to " << std::boolalpha << val << dendl;
+        respond_to_request(mdr, 0);
+        return;
+      }
+      
+      mdr->more()->rdonly_checks = true;
+      dout(20) << "dropping rdlock on " << *cur << dendl;
+      mds->locker->drop_locks(mdr.get());
+    }
+
+    if (!xlock_policylock(mdr, cur, false, true)) {
+      return;
+    }
+
+    /* Repeat rdlocks checks to see if anything changed b/w rdlock release and
+    *  xlock policylock acquisition
+    */ 
+    {
+      const auto srnode = cur->get_projected_srnode();
+      if (!srnode) {
+        dout(10) << "no-op since no snaprealm node found for "
+                 << req->get_filepath() << dendl;
+        respond_to_request(mdr, 0);
+        return; 
+      }
+
+      if (val == srnode->is_snapdir_visible()) {
+        dout(20) << "snapdir visibility for " << req->get_filepath()
+                 << " is already set to " << std::boolalpha << val << dendl;
+        respond_to_request(mdr, 0);
+        return;
+      }
+    }
+
+    adjust_realm = true;
+    auto pi = cur->project_inode(mdr, false, adjust_realm);
+    dout(20) << "setting snapdir visibility to " << std::boolalpha
+               << val << " for " << req->get_filepath() << dendl;
+    if (val) {
+      pi.snapnode->set_snapdir_visibility();
+    } else {
+      pi.snapnode->unset_snapdir_visibility();
+    }
+    pi.snapnode->last_modified = mdr->get_op_stamp();
+    pi.snapnode->change_attr++;
+
+    mdr->no_early_reply = true;
+    pip = pi.inode.get();
   } else if (name == "ceph.dir.pin"sv) {
     if (!cur->is_dir() || cur->is_root()) {
       respond_to_request(mdr, -EINVAL);
@@ -7287,6 +7377,19 @@ void Server::handle_client_getvxattr(const MDRequestRef& mdr)
   } else if (xattr_name == "ceph.dir.subvolume"sv) {
     const auto* srnode = cur->get_projected_srnode();
     *css << (srnode && srnode->is_subvolume() ? "1"sv : "0"sv);
+  } else if (xattr_name == "ceph.dir.subvolume.snaps.visible"sv) {
+    if (!cur->is_dir()) {
+      r = -ENOTDIR;
+    } else {
+      const auto srnode = cur->get_projected_srnode();
+      if (!srnode) {
+        dout(10) << "no-op since no snaprealm node found for "
+                 << mdr->client_request->get_filepath() << dendl;
+        r = 0;
+      } else {
+        *css << srnode->is_snapdir_visible();
+      }
+    }
   } else {
     // otherwise respond as invalid request
     // since we only handle ceph vxattrs here
