@@ -52,18 +52,18 @@
     <span *ngIf="data.categoryPgAmount?.clean">
       {{ data.categoryPgAmount?.clean }}
     </span>
-    <i class="text-success"
-       [ngClass]="[icons.success]">
-    </i>
+    <cd-icon
+       type="success">
+    </cd-icon >
   </span>
   <span *ngIf="data.info"
         class="ms-2">
     <span *ngIf="data.info">
       {{ data.info }}
     </span>
-    <i class="text-info"
-       [ngClass]="[icons.danger]">
-    </i>
+    <cd-icon
+       type="info">
+    </cd-icon >
   </span>
   <span *ngIf="data.warn || data.categoryPgAmount?.warning"
         class="ms-2">
@@ -73,9 +73,9 @@
     <span *ngIf="data.categoryPgAmount?.warning">
       {{ data.categoryPgAmount?.warning }}
     </span>
-    <i class="text-warning"
-       [ngClass]="[icons.warning]">
-    </i>
+    <cd-icon
+       type="warning">
+    </cd-icon >
   </span>
   <span *ngIf="data.error || data.categoryPgAmount?.unknown"
         class="ms-2">
@@ -85,9 +85,9 @@
     <span *ngIf="data.categoryPgAmount?.unknown">
       {{ data.categoryPgAmount?.unknown }}
     </span>
-    <i class="text-danger"
-       [ngClass]="[icons.danger]">
-    </i>
+    <cd-icon
+       type="danger">
+    </cd-icon >
   </span>
   <span *ngIf="data.categoryPgAmount?.working"
         class="ms-2">
@@ -99,13 +99,15 @@
     </i>
   </span>
 </ng-template>
-
+<cd-icon
+       type="progress">
+    </cd-icon >
 <ng-template #osdSummary>
   <span *ngIf="data.up === data.in">
     {{ data.up }}
-    <i class="text-success"
-       [ngClass]="[icons.success]">
-    </i>
+    <cd-icon
+       type="success">
+    </cd-icon >
   </span>
   <span *ngIf="data.up !== data.in">
     {{ data.up }}
@@ -151,36 +153,36 @@
 <ng-template #iscsiSummary>
   <span>
     {{ data.up }}
-    <i class="text-success"
+    <cd-icon
        *ngIf="data.up || data.up === 0"
-       [ngClass]="[icons.success]">
-    </i>
+       type="success">
+    </cd-icon >
   </span>
   <span *ngIf="data.down"
         class="ms-2">
         {{ data.down }}
-    <i class="text-danger"
-       [ngClass]="[icons.danger]">
-    </i>
+    <cd-icon
+       type="danger">
+    </cd-icon >
   </span>
 </ng-template>
 
 <ng-template #simplifiedSummary>
   <span *ngIf="!dropdownTotalError else showErrorNum">
     {{ data }}
-    <i class="text-success"
-       [ngClass]="[icons.success]"></i>
+    <cd-icon
+       type="success"></cd-icon >
   </span>
   <ng-template #showErrorNum>
     <span *ngIf="data - dropdownTotalError  > 0">
       {{ data - dropdownTotalError  }}
-    <i class="text-success"
-       [ngClass]="[icons.success]"></i>
+    <cd-icon
+      type="success"></cd-icon >
     </span>
     <span>
       {{ dropdownTotalError  }}
-      <i class="text-danger"
-         [ngClass]="[icons.danger]"></i>
+      <cd-icon
+        type="danger"></cd-icon >
     </span>
   </ng-template>
 </ng-template>
@@ -211,17 +213,17 @@
         </div>
         <span [ngClass]="data.value.error ? 'me-2' : 'me-4'">
           {{ data.value.ok }}
-          <i class="text-success"
+          <cd-icon
              *ngIf="data.value.ok"
-             [ngClass]="[icons.success]">
-          </i>
+             type="success">
+          </cd-icon >
         </span>
         <span *ngIf="data.value.error"
               class="me-4 ms-2">
               {{ data.value.error }}
-          <i class="text-danger"
-             [ngClass]="[icons.danger]">
-          </i>
+          <cd-icon
+             type="danger">
+          </cd-icon >
         </span>
       </div>
     </li>
