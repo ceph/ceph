@@ -269,6 +269,7 @@ private:
 enum class extent_pin_state_t : uint8_t {
   // shared state between LRU and 2Q impl
   Fresh = 0,
+  PendingPromote,
   // 2Q impl only
   WarmIn,
   Hot,
@@ -873,7 +874,7 @@ public:
     using crimson::common::get_conf;
     auto type = get_conf<std::string>("seastore_cachepin_type");
     if (type == "LRU") {
-      assert(pin_state == extent_pin_state_t::Fresh);
+      assert(pin_state <= extent_pin_state_t::PendingPromote);
     } else if (type == "2Q") {
       assert(pin_state < extent_pin_state_t::Max);
     } else {
@@ -889,7 +890,7 @@ public:
     using crimson::common::get_conf;
     auto type = get_conf<std::string>("seastore_cachepin_type");
     if (type == "LRU") {
-      assert(pin_state == extent_pin_state_t::Fresh);
+      assert(pin_state <= extent_pin_state_t::PendingPromote);
     } else if (type == "2Q") {
       assert(pin_state < extent_pin_state_t::Max);
     } else {
@@ -1117,6 +1118,7 @@ protected:
   friend class ExtentQueue;
   friend class ExtentPinboardLRU;
   friend class ExtentPinboardTwoQ;
+  friend class ExtentPromoter;
   template <typename T, typename... Args>
   static TCachedExtentRef<T> make_cached_extent_ref(
     Args&&... args) {

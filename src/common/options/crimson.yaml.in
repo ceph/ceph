@@ -342,3 +342,8 @@ options:
   desc: disable osd shards changes upon restart.
   flags:
   - startup
+- name: seastore_cache_promotion_size
+  type: size
+  level: advanced
+  desc: Size in bytes of extents to be promoted from cold devices, set 0 to disable promotion
+  default: 2_M

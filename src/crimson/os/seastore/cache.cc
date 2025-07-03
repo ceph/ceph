@@ -38,7 +38,8 @@ Cache::Cache(
         "seastore_data_delta_based_overwrite") > 0),
     pinboard(create_extent_pinboard(
       crimson::common::get_conf<Option::size_t>(
-       "seastore_cachepin_size_pershard")))
+       "seastore_cachepin_size_pershard"),
+      &epm))
 {
   register_metrics(store_index);
   segment_providers_by_device_id.resize(DEVICE_ID_MAX, nullptr);
