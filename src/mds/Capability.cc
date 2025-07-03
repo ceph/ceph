@@ -308,13 +308,18 @@ void Capability::dump(ceph::Formatter *f) const
   f->dump_stream("pending") << ccap_string(_pending);
   f->dump_stream("issued") << ccap_string(_issued);
 
-  f->open_array_section("revokes");
-  for (const auto &r : _revokes) {
-    f->open_object_section("revoke");
-    r.dump(f);
+  if (int _revoking = revoking()) {
+    f->dump_unsigned("revoking", _revoking);
+    f->dump_stream("last_revoke_stamp") << last_revoke_stamp;
+    // dump revocation list (in-flight revokes)
+    f->open_array_section("revokes");
+    for (const auto &r : _revokes) {
+      f->open_object_section("revoke");
+      r.dump(f);
+      f->close_section();
+    }
     f->close_section();
   }
-  f->close_section();
 }
 
 void Capability::generate_test_instances(std::list<Capability*>& ls)
