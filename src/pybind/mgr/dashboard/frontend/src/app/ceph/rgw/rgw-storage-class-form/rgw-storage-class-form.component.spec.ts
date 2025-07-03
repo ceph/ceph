@@ -72,6 +72,7 @@ describe('RgwStorageClassFormComponent', () => {
                     storage_class: 'CLOUDIBM',
                     tier_type: 'cloud-s3',
                     retain_head_object: true,
+                    allow_read_through: true,
                     s3: {
                       endpoint: 'https://s3.amazonaws.com',
                       access_key: 'ACCESSKEY',
@@ -96,6 +97,7 @@ describe('RgwStorageClassFormComponent', () => {
                     storage_class: 'CloudIBM',
                     tier_type: 'cloud-s3',
                     retain_head_object: true,
+                    allow_read_through: true,
                     s3: {
                       endpoint: 'https://s3.amazonaws.com',
                       access_key: 'ACCESSKEY',
@@ -132,6 +134,7 @@ describe('RgwStorageClassFormComponent', () => {
     component.storageClassForm.get('secret_key').setValue('secretkey');
     component.storageClassForm.get('target_path').setValue('/target');
     component.storageClassForm.get('retain_head_object').setValue(true);
+    component.storageClassForm.get('allow_read_through').setValue(true);
     component.storageClassForm.get('region').setValue('useast1');
     component.storageClassForm.get('multipart_sync_threshold').setValue(1024);
     component.storageClassForm.get('multipart_min_part_size').setValue(256);

@@ -39,7 +39,8 @@ describe('RgwStorageClassDetailsComponent', () => {
       multipart_min_part_size: 100,
       multipart_sync_threshold: 200,
       host_style: 'path',
-      retain_head_object: true
+      retain_head_object: true,
+      allow_read_through: true
     };
     component.selection = mockSelection;
     component.ngOnChanges();

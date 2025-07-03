@@ -125,9 +125,7 @@
               placeholder="e.g, us-east-1"
               i18n-placeholder
               [invalid]="
-              storageClassForm.showError('region', formDir, 'required')
-              "
-            />
+              storageClassForm.showError('region', formDir, 'required')"/>
           </cds-text-label>
           <ng-template #regionError>
             <span
@@ -274,6 +272,27 @@
           >
         </ng-template>
       </div>
+      <div class="form-item">
+        <cds-checkbox
+          id="allow_read_through"
+          formControlName="allow_read_through"
+          cdOptionalField="Allow Read Through"
+          i18n
+          (change)="onAllowReadThroughChange($event)"
+          >Allow Read Through
+          <cd-help-text>{{ allowReadThroughText }}</cd-help-text>
+        </cds-checkbox>
+      </div>
+      <div class="form-item">
+        <cds-checkbox
+          id="retain_head_object"
+          formControlName="retain_head_object"
+          cdOptionalField="Head Object (Stub File)"
+          i18n
+          >Head Object (Stub File)
+          <cd-help-text>{{ retainHeadObjectText }}</cd-help-text>
+        </cds-checkbox>
+      </div>
 
       <fieldset>
         <cds-accordion size="lg"
@@ -316,16 +335,6 @@
                   />
                 </cds-text-label>
               </div>
-            </div>
-            <div class="form-item">
-              <cds-checkbox
-                id="retain_head_object"
-                formControlName="retain_head_object"
-                cdOptionalField="Retain Head Object"
-                i18n-label
-                >Retain Head Object
-                <cd-help-text>{{ retainHeadObjectText }}</cd-help-text>
-              </cds-checkbox>
             </div>
           </cds-accordion-item>
         </cds-accordion>
