@@ -13945,3 +13945,69 @@ def test_delete_objects_version_if_match_last_modified_time():
 
     response = client.delete_objects(Bucket=bucket, Delete={'Objects': [{'Key': key, 'VersionId': version, 'LastModifiedTime': badmtime}]})
     assert 'NoSuchKey' == response['Errors'][0]['Code']
+
+@pytest.mark.fails_on_aws # only supported for directory buckets
+@pytest.mark.conditional_write
+def test_delete_objects_if_match_size():
+    client = get_client()
+    bucket = get_new_bucket(client)
+    key = 'obj'
+
+    size = 0
+    badsize = 9999
+
+    client.put_object(Bucket=bucket, Key=key)
+
+    response = client.delete_objects(Bucket=bucket, Delete={'Objects': [{'Key': key, 'Size': badsize}]})
+    assert 'PreconditionFailed' == response['Errors'][0]['Code']
+
+    response = client.delete_objects(Bucket=bucket, Delete={'Objects': [{'Key': key, 'Size': size}]})
+    assert key == response['Deleted'][0]['Key'] # success
+
+    response = client.delete_objects(Bucket=bucket, Delete={'Objects': [{'Key': key, 'Size': badsize}]})
+    assert 'NoSuchKey' == response['Errors'][0]['Code']
+
+@pytest.mark.fails_on_aws # only supported for directory buckets
+@pytest.mark.conditional_write
+def test_delete_objects_current_if_match_size():
+    client = get_client()
+    bucket = get_new_bucket(client)
+    check_configure_versioning_retry(bucket, "Enabled", "Enabled")
+    key = 'obj'
+
+    size = 0
+    badsize = 9999
+
+    client.put_object(Bucket=bucket, Key=key)
+
+    response = client.delete_objects(Bucket=bucket, Delete={'Objects': [{'Key': key, 'Size': badsize}]})
+    assert 'PreconditionFailed' == response['Errors'][0]['Code']
+
+    response = client.delete_objects(Bucket=bucket, Delete={'Objects': [{'Key': key, 'Size': size}]})
+    assert key == response['Deleted'][0]['Key'] # success
+    assert response['Deleted'][0]['DeleteMarker']
+
+    response = client.delete_objects(Bucket=bucket, Delete={'Objects': [{'Key': key, 'Size': badsize}]})
+    assert 'NoSuchKey' == response['Errors'][0]['Code']
+
+@pytest.mark.fails_on_aws # only supported for directory buckets
+@pytest.mark.conditional_write
+def test_delete_objects_version_if_match_size():
+    client = get_client()
+    bucket = get_new_bucket(client)
+    check_configure_versioning_retry(bucket, "Enabled", "Enabled")
+    key = 'obj'
+
+    size = 0
+    badsize = 9999
+
+    version = client.put_object(Bucket=bucket, Key=key)['VersionId']
+
+    response = client.delete_objects(Bucket=bucket, Delete={'Objects': [{'Key': key, 'VersionId': version, 'Size': badsize}]})
+    assert 'PreconditionFailed' == response['Errors'][0]['Code']
+
+    response = client.delete_objects(Bucket=bucket, Delete={'Objects': [{'Key': key, 'VersionId': version, 'Size': size}]})
+    assert key == response['Deleted'][0]['Key'] # success
+
+    response = client.delete_objects(Bucket=bucket, Delete={'Objects': [{'Key': key, 'VersionId': version, 'Size': badsize}]})
+    assert 'NoSuchKey' == response['Errors'][0]['Code']
