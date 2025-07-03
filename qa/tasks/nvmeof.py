@@ -22,7 +22,7 @@ gw_yaml_file = '/etc/ceph/nvmeof-gw.yaml'
 class Nvmeof(Task):
     """
     Setup nvmeof gateway on client and then share gateway config to target host.
-
+    tasks:
         - nvmeof:
             installer: host.a     // or 'nvmeof.nvmeof.a' 
             version: default
@@ -33,6 +33,16 @@ class Nvmeof(Task):
                 namespaces_count: 10
                 cli_version: latest
                 create_mtls_secrets: False 
+
+    You can pass extra conf file to override above setup values:
+
+    overrides: 
+        nvmeof:
+            gw_image: quay.io/ceph/nvmeof:devel
+            gateway_config:
+                subsystems_count: 3
+                namespaces_count: 20
+                cli_image: quay.io/ceph/nvmeof-cli:devel
                     
     """
 
@@ -44,6 +54,8 @@ class Nvmeof(Task):
             raise ConfigError('nvmeof requires a installer host to deploy service') 
         self.cluster_name, _, _ = misc.split_role(host)
         self.remote = get_remote_for_role(self.ctx, host)  
+        overrides = self.ctx.config.get('overrides', {})
+        misc.deep_merge(self.config, overrides.get('nvmeof', {}))
 
     def begin(self):
         super(Nvmeof, self).begin()
