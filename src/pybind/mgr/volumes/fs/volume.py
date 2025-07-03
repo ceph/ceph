@@ -1087,6 +1087,8 @@ class VolumeClient(CephfsClient["Module"]):
         uid       = kwargs['uid']
         gid       = kwargs['gid']
         mode      = kwargs['mode']
+        normalization = kwargs['normalization']
+        casesensitive = kwargs['casesensitive']
 
         try:
             with open_volume(self, volname) as fs_handle:
@@ -1098,13 +1100,15 @@ class VolumeClient(CephfsClient["Module"]):
                             'gid': gid,
                             'mode': octal_str_to_decimal_int(mode),
                             'data_pool': pool,
-                            'quota': size
+                            'quota': size,
+                            'normalization': normalization,
+                            'casesensitive': casesensitive,
                         }
                         set_group_attrs(fs_handle, group.path, attrs)
                 except VolumeException as ve:
                     if ve.errno == -errno.ENOENT:
                         oct_mode = octal_str_to_decimal_int(mode)
-                        create_group(fs_handle, self.volspec, groupname, size, pool, oct_mode, uid, gid)
+                        create_group(fs_handle, self.volspec, groupname, size, pool, oct_mode, uid, gid, normalization, casesensitive)
                     else:
                         raise
         except VolumeException as ve:
