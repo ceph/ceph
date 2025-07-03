@@ -1,11 +1,14 @@
 tasks:
 - install:
+    extra_system_packages:
+      deb: ['cpanminus', 'libxml-simple-perl']
+      rpm: ['cpanminus', 'perl-XML-Simple', 'perl-LWP-Protocol-https', 'perl-ExtUtils-Config', 'perl-ExtUtils-Helpers', 'perl-ExtUtils-InstallPaths', 'perl-Module-Build-Tiny']
 - ceph:
 - rgw: [client.0]
 - workunit:
     clients:
       client.0:
-        - rgw/s3_bucket_quota.pl
+        - rgw/s3_bucket_quota-run.sh
 overrides:
   ceph:
     conf:
