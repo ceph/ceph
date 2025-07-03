@@ -118,6 +118,11 @@ constexpr device_id_t DEVICE_ID_SEGMENTED_MIN = 0;
 constexpr device_id_t DEVICE_ID_RANDOM_BLOCK_MIN = 
   1 << (std::numeric_limits<device_id_t>::digits - 1);
 
+// TODO this Signature is only applicable for segment devices(SSD/HDD) not
+// for other two devices like ZBD/RANDOM_BLOCK_SSD
+constexpr const char SEASTORE_SUPERBLOCK_SIGN[] = "seastore block device\n";
+constexpr std::size_t SEASTORE_SUPERBLOCK_SIGN_LEN = sizeof(SEASTORE_SUPERBLOCK_SIGN) - 1;
+
 struct device_id_printer_t {
   device_id_t id;
 };
