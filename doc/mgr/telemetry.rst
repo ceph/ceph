@@ -3,11 +3,11 @@
 Telemetry Module
 ================
 
-The telemetry module sends anonymous data about the cluster back to the Ceph
+The telemetry module sends anonymous data about the cluster back to the
 developers to report how Ceph is used and to report problems experienced by
 users. 
 
-This data is visualized on `public dashboards
+This data is visualized on the `public dashboards
 <https://telemetry-public.ceph.com/>`_ that allow the community to see a
 summary of statistics including how many clusters are reporting, their total
 capacity and OSD count, and version distribution trends.
@@ -15,15 +15,15 @@ capacity and OSD count, and version distribution trends.
 Channels
 --------
 
-The telemetry report is broken down into several "channels", each with
-a different type of information. If telemetry has been enabled,
-individual channels can be turned on and off. (If telemetry is off,
-the per-channel setting has no effect.)
+The telemetry report is broken down into several "channels", each with a
+different type of information. When telemetry is enabled, individual channels
+can be turned on and off. (If telemetry is disabled, the per-channel setting
+has no effect.)
 
 * **basic** (default: on): Basic information about the cluster
 
     - capacity of the cluster
-    - number of monitors, managers, OSDs, MDSs, object gateways, or other
+    - number of Monitors, Managers, OSDs, MDSs, object gateways, or other
       daemons
     - software version currently being used
     - number and types of RADOS pools and CephFS file systems
@@ -60,9 +60,9 @@ reported data does not include pool names, object names, object contents,
 hostnames, or device serial numbers.
 
 The reported data contains counters and statistics pertaining to how the
-cluster has been deployed, the version of Ceph, the distribution of the hosts,
-and other parameters that help the project develop a better understanding of
-the way Ceph is used.
+cluster has been deployed, the version of Ceph, the OS distribution, and other
+parameters that help the project develop a better understanding of the way Ceph
+is used.
 
 Data is sent secured to
 `https://telemetry.ceph.com <https://telemetry.ceph.com>`_.
@@ -84,8 +84,8 @@ commands:
    ceph telemetry disable channel ident
    ceph telemetry disable channel perf
 
-Multiple channels can be enabled or disabled at the same time by running the
-following commands:
+Multiple channels can be enabled or disabled at the same time by running
+commands of the following form:
 
 .. prompt:: bash #
 
@@ -100,7 +100,7 @@ commands:
    ceph telemetry enable channel all
    ceph telemetry disable channel all
 
-Note that telemetry must be on for these commands to take effect.
+Note that telemetry must be enabled for these commands to take effect.
 
 List all channels with:
 
