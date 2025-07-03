@@ -220,7 +220,7 @@ def run_tests(ctx, config):
     for client, client_config in config.items():
         (remote,) = ctx.cluster.only(client).remotes.keys()
 
-        attr = ["!kafka_test", "!data_path_v2_kafka_test", "!kafka_failover", "!amqp_test", "!amqp_ssl_test", "!kafka_security_test", "!modification_required", "!manual_test", "!http_test"]
+        attr = ["basic_test"]
 
         if 'extra_attr' in client_config:
             attr = client_config.get('extra_attr')
@@ -291,6 +291,7 @@ def task(ctx,config):
         endpoint = ctx.rgw.role_endpoints.get(client)
         assert endpoint, 'bntests: no rgw endpoint for {}'.format(client)
 
+        cluster_name, _, _ = teuthology.split_role(client)
         bntests_conf[client] = ConfigObj(
             indent_type='',
             infile={
@@ -299,7 +300,7 @@ def task(ctx,config):
                     'port':endpoint.port,
                     'host':endpoint.dns_name,
                     'zonegroup':ctx.rgw.zonegroup,
-                    'cluster':'noname',
+                    'cluster':cluster_name,
                     'version':'v2'
                     },
                 's3 main':{}
