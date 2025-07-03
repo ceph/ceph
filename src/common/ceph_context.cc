@@ -67,6 +67,10 @@
 // for CINIT_FLAGS
 #include "common/common_init.h"
 
+#ifdef WITH_CPUTRACE
+#include "common/cputrace.h"
+#endif
+
 #include <iostream>
 #include <pthread.h>
 
@@ -685,6 +689,24 @@ int CephContext::_do_command(
     else if (command == "log reopen") {
       _log->reopen_log_file();
     }
+#ifdef WITH_CPUTRACE
+    else if (command == "cputrace start") {
+      cputrace_start(f);
+    }
+    else if (command == "cputrace stop") {
+      cputrace_stop(f);
+    }
+    else if (command == "cputrace dump") {
+      std::string logger;
+      std::string counter;
+      cmd_getval(cmdmap, "logger", logger);
+      cmd_getval(cmdmap, "counter", counter);
+      cputrace_dump(f, logger, counter);
+    }
+    else if (command == "cputrace reset") {
+      cputrace_reset(f);
+    }
+#endif
     else {
       ceph_abort_msg("registered under wrong command?");    
     }
@@ -781,6 +803,12 @@ CephContext::CephContext(uint32_t module_type_,
   _admin_socket->register_command("log dump", _admin_hook, "dump recent log entries to log file");
   _admin_socket->register_command("log reopen", _admin_hook, "reopen log file");
 
+#ifdef WITH_CPUTRACE
+  _admin_socket->register_command("cputrace start", _admin_hook, "start cpu profiling");
+  _admin_socket->register_command("cputrace stop", _admin_hook, "stop cpu profiling");
+  _admin_socket->register_command("cputrace reset", _admin_hook, "reset cpu profiling");
+  _admin_socket->register_command("cputrace dump name=logger,type=CephString,req=false name=counter,type=CephString,req=false", _admin_hook, "dump cpu profiling results");
+#endif
   _crypto_none = CryptoHandler::create(CEPH_CRYPTO_NONE);
   _crypto_aes = CryptoHandler::create(CEPH_CRYPTO_AES);
   _crypto_random.reset(new CryptoRandom());
