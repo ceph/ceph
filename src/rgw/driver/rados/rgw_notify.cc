@@ -1078,8 +1078,8 @@ static inline bool notification_match(reservation_t& res,
 
 static inline uint32_t compute_target_shard(const DoutPrefixProvider* dpp, const std::string& bucket_name, const std::string& object_key, const uint32_t num_shards){
   std::hash<std::string> hash_fn; 
-  size_t hash = hash_fn(bucket_name + ":" + object_key); 
-  ldpp_dout(dpp, 20)<<"INFO: Hash Value (hash) is:  "<<hash<<". Hash Key: " + bucket_name + ":" + object_key<<dendl; 
+  size_t hash = hash_fn(fmt::format("{}:{}", bucket_name, object_key)); 
+  ldpp_dout(dpp, 20) << "INFO: Hash Value (hash) is:  "<< hash << ". Hash Key: "<< bucket_name << ":"<<object_key<<dendl; 
   return hash % num_shards; 
 }
 
@@ -1157,7 +1157,7 @@ int publish_reserve(const DoutPrefixProvider* dpp,
         const uint64_t num_shards = topic_cfg.dest.num_shards; 
         target_shard = compute_target_shard(
             dpp, bucket_name, object_key, num_shards); 
-        const auto& shard_name = target_shard == 0 ? topic_cfg.dest.persistent_queue : topic_cfg.dest.persistent_queue + "." + std::to_string(target_shard); 
+        const auto& shard_name = target_shard == 0 ? topic_cfg.dest.persistent_queue : fmt::format("{}.{}", topic_cfg.dest.persistent_queue, target_shard); 
         ldpp_dout(res.dpp, 1) << "INFO: target_shard: " + shard_name <<dendl;       
         cls_2pc_queue_reserve(op, res.size, 1, &obl, &rval);
         auto ret = rgw_rados_operate(

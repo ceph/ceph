@@ -416,8 +416,7 @@ void RGWPSCreateTopicOp::execute(optional_yield y) {
   // if we already have an existing persistent queue - do nothing - resharding not supported
   // if we don't have a persistent queue already, just make shards or a single based on dest's num_shards from config
 
-  const bool already_persistent = topic && topic_needs_queue(topic->dest);
-  std::vector<std::string> q_names; 
+  const bool already_persistent = topic && topic_needs_queue(topic->dest); 
   if (!already_persistent && topic_needs_queue(dest)) {
     // initialize the persistent queue's location, using ':' as the namespace
     // delimiter because its inclusion in a TopicName would break ARNs
@@ -435,7 +434,7 @@ void RGWPSCreateTopicOp::execute(optional_yield y) {
         return;
       }
     }
-    ldpp_dout(this, 20) << "Successfully created " << dest.num_shards <<" shards for topic: " + topic_name<<dendl;
+    ldpp_dout(this, 20) << "Successfully created " << dest.num_shards <<" shards for topic: "<<topic_name<<dendl;
   } else if (already_persistent) {  // redundant call to CreateTopic
     //no resharding of existing topics for persistent bucket notifications
     dest.persistent_queue = topic->dest.persistent_queue;
@@ -912,11 +911,10 @@ void RGWPSSetTopicAttributesOp::execute(optional_yield y) {
         return;
       }
     }
-    ldpp_dout(this, 20) << "Successfully created " <<dest.num_shards<<" shards for topic: " + topic_name<<dendl;
+    ldpp_dout(this, 20) << "Successfully created " <<dest.num_shards<<" shards for topic: "<<topic_name<<dendl;
 
   } else if (already_persistent && !topic_needs_queue(dest)) {
     // changing the persistent topic to non-persistent.
-    dest.num_shards = 0; // set to 0 to indicate no sharding
     for(const auto& q: result.dest.get_shard_names()) {
       op_ret = driver->remove_persistent_topic(this, y, q);
       if (op_ret != -ENOENT && op_ret < 0) {
@@ -925,6 +923,7 @@ void RGWPSSetTopicAttributesOp::execute(optional_yield y) {
                           << op_ret << dendl;
         return;
       }
+      dest.num_shards = 0; // set to 0 to indicate no sharding
     }
     ldpp_dout(this, 20) << "Successfully removed " <<result.dest.num_shards<<" shards for topic: " + topic_name<<dendl;
   }

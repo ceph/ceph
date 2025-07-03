@@ -357,7 +357,7 @@ void rgw_pubsub_dest::decode_json(JSONObj* f) {
 
 ShardNamesView rgw_pubsub_dest::get_shard_names() const {
   const std::string base_name = persistent_queue; 
-  auto get_shard_name = [base_name](uint32_t i){return i != 0 ? base_name + "." + std::to_string(i) : base_name;};
+  auto get_shard_name = [base_name](uint32_t i){return i != 0 ? fmt::format("{}.{}", base_name, i) : base_name;};
   return std::ranges::views::iota(0u, num_shards) | std::ranges::views::transform(std::function<std::string(uint32_t)>(get_shard_name));
 }
 
@@ -905,7 +905,7 @@ int RGWPubSub::remove_topic_v2(const DoutPrefixProvider* dpp,
   if (!dest.push_endpoint.empty() && dest.persistent &&
       !dest.persistent_queue.empty()) {
 
-    for(const auto &q: dest.get_shard_names()) {
+    for(const auto& q: dest.get_shard_names()) {
       ret = driver->remove_persistent_topic(dpp, y, q);
       if (ret < 0 && ret != -ENOENT) {
         ldpp_dout(dpp, 1) << "ERROR: failed to remove shards for "
@@ -954,7 +954,7 @@ int RGWPubSub::remove_topic(const DoutPrefixProvider *dpp, const std::string& na
   }
   if (!t->second.dest.push_endpoint.empty() && t->second.dest.persistent &&
       !t->second.dest.persistent_queue.empty()) {
-      for(const auto &q: t->second.dest.get_shard_names()) {
+      for(const auto& q: t->second.dest.get_shard_names()) {
         ret = driver->remove_persistent_topic(dpp, y, q);
         if (ret < 0 && ret != -ENOENT) {
           ldpp_dout(dpp, 1) << "ERROR: failed to remove shards for "
