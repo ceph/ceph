@@ -85,6 +85,10 @@ struct sr_t {
   void clear_subvolume() { flags &= ~SUBVOLUME; }
   bool is_subvolume() const { return flags & SUBVOLUME; }
 
+  void set_snapdir_visibility() { flags |= SNAPDIR_VISIBILITY; }
+  void unset_snapdir_visibility() { flags &= ~SNAPDIR_VISIBILITY; }
+  bool is_snapdir_visible() const { return flags & SNAPDIR_VISIBILITY; }
+
   void encode(ceph::buffer::list &bl) const;
   void decode(ceph::buffer::list::const_iterator &bl);
   void dump(ceph::Formatter *f) const;
@@ -103,11 +107,13 @@ struct sr_t {
   uint64_t change_attr = 0;             // tracks changes to snap
                                         // realm attrs.
 
-  __u32 flags = 0;
   enum {
     PARENT_GLOBAL	= 1 << 0,
     SUBVOLUME		= 1 << 1,
+    SNAPDIR_VISIBILITY = 1 << 2,
   };
+
+  __u32 flags = SNAPDIR_VISIBILITY; // snapdir visibility is always on by default
 };
 WRITE_CLASS_ENCODER(sr_t)
 
