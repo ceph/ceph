@@ -86,6 +86,11 @@ by increasing :confval:`rgw_lc_max_wp_worker` from the default value of 3.
 .. note:: When looking to tune either of these specific values please validate the
    current Cluster performance and Ceph Object Gateway utilization before increasing.
 
+The lifecycle maintenance thread must also be enabled on at least one RGW
+daemon for each zone. 
+
+.. confval:: rgw_enable_lc_threads
+
 Garbage Collection Settings
 ===========================
 
@@ -137,6 +142,11 @@ default configuration values::
 .. note:: Modifying these values requires a restart of the RGW service.
 
 Once these values have been increased from default please monitor for performance of the cluster during Garbage Collection to verify no adverse performance issues due to the increased values.
+
+At least one RGW in each zone must have the garbage collection maintenance
+thread running:
+
+.. confval:: rgw_enable_gc_threads
 
 Multisite Settings
 ==================
