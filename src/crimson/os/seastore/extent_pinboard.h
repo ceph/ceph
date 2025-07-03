@@ -7,6 +7,9 @@
 #include "crimson/os/seastore/transaction.h"
 
 namespace crimson::os::seastore {
+class BackgroundListener;
+class ExtentCallbackInterface;
+class ExtentPlacementManager;
 
 struct ExtentPinboard {
   virtual ~ExtentPinboard() = default;
@@ -28,8 +31,14 @@ struct ExtentPinboard {
     extent_len_t increased_length,
     const Transaction::src_t *p_src) = 0;
   virtual void clear() = 0;
+  virtual void set_background_callback(BackgroundListener *listener) = 0;
+  virtual void set_extent_callback(ExtentCallbackInterface *cb) = 0;
+  virtual std::size_t get_promotion_size() const = 0;
+  virtual bool should_promote() const = 0;
+  virtual seastar::future<> promote() = 0;
 };
 using ExtentPinboardRef = std::unique_ptr<ExtentPinboard>;
-ExtentPinboardRef create_extent_pinboard(std::size_t capacity);
+ExtentPinboardRef create_extent_pinboard(
+  std::size_t capacity, ExtentPlacementManager *epm);
 
 } // namespace crimson::os::seastore
