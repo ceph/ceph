@@ -66,6 +66,8 @@ std::ostream &operator<<(std::ostream &out, const extent_pin_state_t &s) {
   switch (s) {
   case extent_pin_state_t::Fresh:
     return out << "Fresh";
+  case extent_pin_state_t::PendingPromote:
+    return out << "PendingPromote";
   case extent_pin_state_t::WarmIn:
     return out << "WarmIn";
   case extent_pin_state_t::Hot:

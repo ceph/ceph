@@ -33,7 +33,8 @@ Cache::Cache(
   : epm(epm),
     pinboard(create_extent_pinboard(
       crimson::common::get_conf<Option::size_t>(
-       "seastore_cachepin_size_pershard")))
+       "seastore_cachepin_size_pershard"),
+      &epm))
 {
   register_metrics();
   segment_providers_by_device_id.resize(DEVICE_ID_MAX, nullptr);

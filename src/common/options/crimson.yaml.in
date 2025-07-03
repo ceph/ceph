@@ -252,3 +252,8 @@ options:
         internal checksum feature without using sever CPU then enable if available,
         set to true to disable unconditionally.
   default: true
+- name: seastore_cache_promotion_size
+  type: size
+  level: advanced
+  desc: Size in bytes of extents to be promoted from cold devices, set 0 to disable promotion
+  default: 2_M
