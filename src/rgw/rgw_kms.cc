@@ -16,6 +16,7 @@
 #include "include/expected.hpp"
 #include "include/str_map.h"
 #include "common/safe_io.h"
+#include "include/uuid.h"
 #include "rgw/rgw_crypt.h"
 #include "rgw/rgw_keystone.h"
 #include "rgw/rgw_b64.h"
@@ -1435,7 +1436,14 @@ int reconstitute_actual_key_from_kms(const DoutPrefixProvider *dpp,
       return tl::unexpected(ret);
     }
 
-    auto keyring_secret = LinuxKeyringSecret::add(cache_key, secret);
+    // This function might be in flight for the same key_id more than
+    // once. The keyring key must, however, be unique to not refer
+    // (and remove) the same key twice.
+    uuid_d uuid;
+    uuid.generate_random();
+    const std::string keyring_key = string_cat_reserve(
+        key_prefix, kms_backend, "_", key_id, "_v", uuid.to_string());
+    auto keyring_secret = LinuxKeyringSecret::add(keyring_key, secret);
     ceph::crypto::zeroize_for_security(secret.data(), secret.length());
     if (!keyring_secret) {
       ldpp_dout(dpp, 5) << "KMS Cache: " << cache_key << " keyring add error ("
