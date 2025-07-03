@@ -5,6 +5,7 @@ import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ToastrModule } from 'ngx-toastr';
 import { PipesModule } from '~/app/shared/pipes/pipes.module';
 import { ModalModule } from 'carbon-components-angular';
+import { SharedModule } from '~/app/shared/shared.module';
 
 describe('RgwMultisiteSyncPolicyDetailsComponent', () => {
   let component: RgwMultisiteSyncPolicyDetailsComponent;
@@ -13,7 +14,13 @@ describe('RgwMultisiteSyncPolicyDetailsComponent', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       declarations: [RgwMultisiteSyncPolicyDetailsComponent],
-      imports: [HttpClientTestingModule, ToastrModule.forRoot(), PipesModule, ModalModule]
+      imports: [
+        HttpClientTestingModule,
+        ToastrModule.forRoot(),
+        PipesModule,
+        ModalModule,
+        SharedModule
+      ]
     }).compileComponents();
 
     fixture = TestBed.createComponent(RgwMultisiteSyncPolicyDetailsComponent);

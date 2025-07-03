@@ -94,6 +94,10 @@ class Connection(NamedTuple):
     connected: bool
     qpairs_count: int
     controller_id: int
+    use_psk: Optional[bool]
+    use_dhchap: Optional[bool]
+    subsystem: Optional[str]
+    disconnected_due_to_keepalive_timeout: Optional[bool]
 
 
 class ConnectionList(NamedTuple):
@@ -126,6 +130,8 @@ class Namespace(NamedTuple):
     uuid: Optional[str]
     ns_subsystem_nqn: Optional[str]
     trash_image: Optional[bool]
+    disable_auto_resize: Optional[bool]
+    read_only: Optional[bool]
 
 
 class NamespaceList(NamedTuple):
@@ -183,6 +189,7 @@ class Host(NamedTuple):
     nqn: str
     use_psk: Optional[bool]
     use_dhchap: Optional[bool]
+    disconnected_due_to_keepalive_timeout: Optional[bool]
 
 
 class HostsInfo(NamedTuple):

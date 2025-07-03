@@ -319,7 +319,7 @@ ActiveScrubbing::ActiveScrubbing(my_context ctx)
 
   session.m_osd_counters->inc(session.m_counters_idx->active_started_cnt);
   scrbr->get_clog()->debug()
-      << fmt::format("{} {} starts", pg_id, scrbr->get_op_mode_text());
+      << fmt::format("{} {} starts", pg_id.pgid, scrbr->get_op_mode_text());
 
   scrbr->on_init();
 }

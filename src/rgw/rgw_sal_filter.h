@@ -1008,7 +1008,7 @@ public:
   virtual ~FilterMPSerializer() = default;
 
   virtual int try_lock(const DoutPrefixProvider *dpp, utime_t dur, optional_yield y) override;
-  virtual int unlock() override { return next->unlock(); }
+  virtual int unlock(const DoutPrefixProvider* dpp, optional_yield y) override;
   virtual void clear_locked() override { next->clear_locked(); }
   virtual bool is_locked() override { return next->is_locked(); }
   virtual void print(std::ostream& out) const override { return next->print(out); }
@@ -1023,7 +1023,7 @@ public:
   virtual ~FilterLCSerializer() = default;
 
   virtual int try_lock(const DoutPrefixProvider *dpp, utime_t dur, optional_yield y) override;
-  virtual int unlock() override { return next->unlock(); }
+  virtual int unlock(const DoutPrefixProvider* dpp, optional_yield y) override;
   virtual void print(std::ostream& out) const override { return next->print(out); }
 };
 

@@ -732,19 +732,19 @@ public:
 }; /* LCOpRule */
 
 using WorkItem =
-  boost::variant<void*,
-		 /* out-of-line delete */
-		 std::tuple<LCOpRule, rgw_bucket_dir_entry>,
-		 /* uncompleted MPU expiration */
-		 std::tuple<lc_op, rgw_bucket_dir_entry>,
-		 rgw_bucket_dir_entry>;
+  std::variant<void*,
+	       /* out-of-line delete */
+	       std::tuple<LCOpRule, rgw_bucket_dir_entry>,
+	       /* uncompleted MPU expiration */
+	       std::tuple<lc_op, rgw_bucket_dir_entry>,
+	       rgw_bucket_dir_entry>;
 
 class WorkQ : public Thread
 {
 public:
   using unique_lock = std::unique_lock<std::mutex>;
   using work_f = std::function<void(RGWLC::LCWorker*, WorkQ*, WorkItem&)>;
-  using dequeue_result = boost::variant<void*, WorkItem>;
+  using dequeue_result = std::variant<void*, WorkItem>;
 
   static constexpr uint32_t FLAG_NONE =        0x0000;
   static constexpr uint32_t FLAG_EWAIT_SYNC =  0x0001;
@@ -827,11 +827,11 @@ private:
   void* entry() override {
     while (!wk->get_lc()->going_down()) {
       auto item = dequeue();
-      if (item.which() == 0) {
+      if (item.index() == 0) {
 	/* going down */
 	break;
       }
-      f(wk, this, boost::get<WorkItem>(item));
+      f(wk, this, std::get<WorkItem>(item));
     }
     return nullptr;
   }
@@ -909,7 +909,7 @@ int RGWLC::handle_multipart_expiration(rgw::sal::Bucket* target,
 
   auto pf = [&](RGWLC::LCWorker *wk, WorkQ *wq, WorkItem &wi) {
     int ret{0};
-    auto wt = boost::get<std::tuple<lc_op, rgw_bucket_dir_entry>>(wi);
+    auto wt = std::get<std::tuple<lc_op, rgw_bucket_dir_entry>>(wi);
     auto& [rule, obj] = wt;
 
     if (obj_has_expired(this, cct, obj.meta.mtime, rule.mp_expiration)) {
@@ -1782,7 +1782,7 @@ int RGWLC::bucket_lc_process(string& shard_id, LCWorker* worker,
 
   auto pf = [&bucket_name](RGWLC::LCWorker* wk, WorkQ* wq, WorkItem& wi) {
     auto wt =
-      boost::get<std::tuple<LCOpRule, rgw_bucket_dir_entry>>(wi);
+      std::get<std::tuple<LCOpRule, rgw_bucket_dir_entry>>(wi);
     auto& [op_rule, o] = wt;
 
     ldpp_dout(wk->get_lc(), 20)
@@ -1954,7 +1954,7 @@ int RGWLC::bucket_lc_post(int index, int max_lock_sec,
           << obj_names[index] << dendl;
     }
 clean:
-    lock->unlock();
+    lock->unlock(this, null_yield);
     ldpp_dout(this, 20) << "RGWLC::bucket_lc_post() unlock "
 			<< obj_names[index] << dendl;
     return 0;
@@ -2099,6 +2099,19 @@ time_t RGWLC::thread_stop_at()
   return time(nullptr) + interval;
 }
 
+// unique_lock expects an unlock() taking no arguments, but
+// LCSerializer::unlock() requires two. create an adapter that binds these
+// additional args
+struct LCLockAdapter {
+  rgw::sal::LCSerializer& serializer;
+  const DoutPrefixProvider* dpp = nullptr;
+  optional_yield y;
+
+  void unlock() {
+    serializer.unlock(dpp, y);
+  }
+};
+
 int RGWLC::process_bucket(int index, int max_lock_secs, LCWorker* worker,
 			  const std::string& bucket_entry_marker,
 			  bool once = false)
@@ -2126,8 +2139,8 @@ int RGWLC::process_bucket(int index, int max_lock_secs, LCWorker* worker,
   if (ret < 0)
     return 0;
 
-  std::unique_lock<rgw::sal::LCSerializer> lock(
-    *(serializer.get()), std::adopt_lock);
+  auto lock_adapter = LCLockAdapter{*serializer, this, null_yield};
+  std::unique_lock<LCLockAdapter> lock(lock_adapter, std::adopt_lock);
 
   rgw::sal::LCEntry entry;
   ret = sal_lc->get_entry(this, null_yield, obj_names[index],
@@ -2466,7 +2479,7 @@ int RGWLC::process(int index, int max_lock_secs, LCWorker* worker,
 
     /* drop lock so other instances can make progress while this
      * bucket is being processed */
-    lock->unlock();
+    lock->unlock(this, null_yield);
     ret = bucket_lc_process(entry.bucket, worker, thread_stop_at(), once);
     ldpp_dout(this, 5) << "RGWLC::process(): END entry 2: " << entry
       << " index: " << index << " worker ix: " << worker->ix << " ret: " << ret << dendl;
@@ -2513,7 +2526,7 @@ int RGWLC::process(int index, int max_lock_secs, LCWorker* worker,
   } while(1 && !once && !going_down());
 
 exit:
-  lock->unlock();
+  lock->unlock(this, null_yield);
   return 0;
 }
 
@@ -2682,7 +2695,7 @@ static int guard_lc_modify(const DoutPrefixProvider *dpp,
     }
     break;
   } while(true);
-  lock->unlock();
+  lock->unlock(dpp, null_yield);
   return ret;
 }
 

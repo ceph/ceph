@@ -8262,6 +8262,18 @@ void OSD::handle_osd_map(MOSDMap *m)
 	  << dendl;
 
   logger->inc(l_osd_map);
+  if (!m->maps.empty()) {
+    logger->inc(l_osd_full_map_received, m->maps.size());
+  }
+  if (!m->incremental_maps.empty()) {
+    logger->inc(l_osd_inc_map_received, m->incremental_maps.size());
+  }
+  dout(10) << __func__
+           << ": received " << m->maps.size() << " full maps "
+           << "and " << m->incremental_maps.size()
+           << " incremental maps"
+           << dendl;
+
   logger->inc(l_osd_mape, last - first + 1);
   if (first <= superblock.get_newest_map())
     logger->inc(l_osd_mape_dup, superblock.get_newest_map() - first + 1);
@@ -9892,8 +9904,7 @@ void OSD::enqueue_op(spg_t pg, OpRequestRef&& op, epoch_t epoch)
            << " type " << type
 	   << " cost " << cost
 	   << " latency " << latency
-	   << " epoch " << epoch
-	   << " " << *(op->get_req()) << dendl;
+	   << " epoch " << epoch << dendl;
   op->osd_trace.event("enqueue op");
   op->osd_trace.keyval("priority", priority);
   op->osd_trace.keyval("cost", cost);

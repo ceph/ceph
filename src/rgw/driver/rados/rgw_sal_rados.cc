@@ -4450,6 +4450,14 @@ int MPRadosSerializer::try_lock(const DoutPrefixProvider *dpp, utime_t dur, opti
   return ret;
 }
 
+int MPRadosSerializer::unlock(const DoutPrefixProvider *dpp, optional_yield y)
+{
+  librados::ObjectWriteOperation op;
+  op.assert_exists();
+  lock.unlock(&op);
+  return rgw_rados_operate(dpp, ioctx, oid, std::move(op), y);
+}
+
 LCRadosSerializer::LCRadosSerializer(RadosStore* store, const std::string& _oid, const std::string& lock_name, const std::string& cookie) :
   StoreLCSerializer(_oid),
   lock(lock_name)
@@ -4460,8 +4468,18 @@ LCRadosSerializer::LCRadosSerializer(RadosStore* store, const std::string& _oid,
 
 int LCRadosSerializer::try_lock(const DoutPrefixProvider *dpp, utime_t dur, optional_yield y)
 {
+  librados::ObjectWriteOperation op;
   lock.set_duration(dur);
-  return lock.lock_exclusive(ioctx, oid);
+  lock.lock_exclusive(&op);
+  return rgw_rados_operate(dpp, *ioctx, oid, std::move(op), y);
+}
+
+int LCRadosSerializer::unlock(const DoutPrefixProvider *dpp, optional_yield y)
+{
+  librados::ObjectWriteOperation op;
+  op.assert_exists();
+  lock.unlock(&op);
+  return rgw_rados_operate(dpp, *ioctx, oid, std::move(op), y);
 }
 
 int RadosLifecycle::get_entry(const DoutPrefixProvider* dpp, optional_yield y,
