@@ -607,6 +607,9 @@ ExtentPlacementManager::mount_ret ExtentPlacementManager::BackgroundProcess::mou
   trimmer->reset();
   stats = {};
   register_metrics(store_index);
+  if (logical_bucket) {
+    logical_bucket->mount(store_index);
+  }
   DEBUG("mounting main cleaner");
   co_await main_cleaner->mount();
   if (has_cold_tier()) {
