@@ -133,8 +133,8 @@ void Capability::revoke_info::decode(ceph::buffer::list::const_iterator& bl)
 
 void Capability::revoke_info::dump(ceph::Formatter *f) const
 {
-  f->dump_unsigned("before", before);
-  f->dump_unsigned("seq", seq);
+  f->dump_unsigned("prior_pending", before);
+  f->dump_unsigned("last_sent", seq);
   f->dump_unsigned("last_issue", last_issue);
 }
 
