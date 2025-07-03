@@ -369,6 +369,25 @@ public:
     CachedExtentRef extent) = 0;
 
   /**
+   * demote_region
+   *
+   * Demote the logical extents promoted from the slower device and evict
+   * the extents to the cold tier under the given laddr prefix.
+   */
+  struct demote_region_res_t {
+    std::size_t demoted_size = 0;
+    std::size_t evicted_size = 0;
+    bool complete = false;
+  };
+  using demote_region_iertr = base_iertr;
+  using demote_region_ret = demote_region_iertr::future<
+    demote_region_res_t>;
+  virtual demote_region_ret demote_region(
+    Transaction &t,
+    laddr_t prefix,
+    std::size_t max_proceed_size) = 0;
+
+  /**
    * get_extents_if_live
    *
    * Returns extent at specified location if still referenced by

@@ -9,6 +9,7 @@ set(crimson_seastore_srcs
   transaction_manager.cc
   cache.cc
   extent_pinboard.cc
+  logical_bucket.cc
   root_block.cc
   lba_manager.cc
   async_cleaner.cc
