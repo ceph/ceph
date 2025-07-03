@@ -190,6 +190,7 @@ void sr_t::dump(Formatter *f) const
   f->dump_unsigned("last_destroyed", last_destroyed);
   f->dump_stream("last_modified") << last_modified;
   f->dump_unsigned("change_attr", change_attr);
+  f->dump_unsigned("is_snapdir_visible", is_snapdir_visible());
   f->dump_unsigned("current_parent_since", current_parent_since);
 
   f->open_array_section("snaps");
