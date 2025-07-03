@@ -896,6 +896,9 @@ class Orchestrator(object):
         """remove prometheus remote write url and allowed metrics for multi-cluster"""
         raise NotImplementedError()
 
+    def show_agent_config(self) -> OrchResult[Dict[str, str]]:
+        raise NotImplementedError()
+
     def get_alertmanager_access_info(self) -> OrchResult[Dict[str, str]]:
         """get alertmanager access information"""
         raise NotImplementedError()
