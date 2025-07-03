@@ -20,6 +20,7 @@
 #include <fcntl.h>
 #include <sys/file.h>
 #include <sys/mman.h>
+#include <chrono>
 
 #include <boost/container/flat_map.hpp>
 #include <boost/lockfree/queue.hpp>
@@ -813,18 +814,25 @@ void KernelDevice::_discard_thread(uint64_t tid)
       if (thr->stop && !discard_threads.empty())
         break;
 
+      if (cct->_conf->bdev_debug_discard_sleep > 0)
+        std::this_thread::sleep_for(std::chrono::milliseconds(cct->_conf->bdev_debug_discard_sleep));
+
       // Limit local processing to MAX_LOCAL_DISCARD items.
       // This will allow threads to work in parallel
       //      instead of a single thread taking over the whole discard_queued.
       // It will also allow threads to finish in a timely manner.
       constexpr unsigned MAX_LOCAL_DISCARD = 32;
       unsigned count = 0;
+      size_t bytes_discarded = 0;
       for (auto it = discard_queued.begin();
            it != discard_queued.end() && count < MAX_LOCAL_DISCARD;
            ++count) {
         discard_processing.insert(it.get_start(), it.get_len());
+	bytes_discarded += it.get_len();
         it = discard_queued.erase(it);
       }
+      discard_queue_bytes -= bytes_discarded;
+      discard_queue_length = discard_queued.num_intervals();
 
       // there are multiple active threads -> must use a counter instead of a flag
       discard_running ++;
@@ -857,10 +865,26 @@ bool KernelDevice::_queue_discard(interval_set<uint64_t> &to_release)
 
   std::lock_guard l(discard_lock);
 
-  if (max_pending > 0 && discard_queued.num_intervals() >= max_pending)
+  if (max_pending > 0 && discard_queued.num_intervals() >= max_pending) {
+    discard_cond.notify_one();
     return false;
+  }
+
+  if(discard_queue_bytes >= cct->_conf->bdev_discard_max_bytes) {
+    discard_cond.notify_one();
+    return false;
+  }
 
   discard_queued.insert(to_release);
+
+  size_t discarded_bytes = 0;
+  for(auto p = to_release.begin(); p != to_release.end(); ++p){
+    discarded_bytes += p.get_len();
+  }
+  discard_queue_bytes += discarded_bytes;
+
+  discard_queue_length = discard_queued.num_intervals();
+
   discard_cond.notify_one();
   return true;
 }

@@ -212,7 +212,7 @@ public:
 				       bool drop_on_fork,
 				       Args&&... args) {
     static_assert(sizeof(T) <= largest_singleton,
-		  "Please increase largest singleton.");
+		  "Please increase largest_singleton.");
     std::lock_guard lg(associated_objs_lock);
     std::type_index type = typeid(T);
 
