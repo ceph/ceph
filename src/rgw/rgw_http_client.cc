@@ -316,6 +316,17 @@ std::ostream& RGWHTTPClient::gen_prefix(std::ostream& out) const
 
 void RGWHTTPClient::init()
 {
+  char* ca_bundle = std::getenv("CURL_CA_BUNDLE");
+  if (ca_bundle) {
+    size_t ca_bundle_len = strlen(ca_bundle);
+    size_t max_len = PATH_MAX + NAME_MAX;
+    if (ca_bundle_len > max_len) {
+      ldout(cct, 0) << "ERROR: " << __func__ << "(): CURL_CA_BUNDLE length exceeds the allowed maximum (" << max_len << " chars)" << dendl;
+    } else {
+      set_ca_path(ca_bundle);
+    }
+  }
+
   auto pos = url.find("://");
   if (pos == string::npos) {
     host = url;
