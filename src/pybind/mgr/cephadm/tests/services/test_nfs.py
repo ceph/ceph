@@ -922,6 +922,39 @@ def test_check_daemons_starts_keepalived_when_stopped_and_haproxy_running(
         assert keepalived_started
 
 
+def test_nfs_purge_clears_legacy_store_markers(cephadm_module: CephadmOrchestrator):
+    nfs_svc = service_registry.get_service('nfs')
+    cephadm_module.set_store('nfs_services_with_old_userid', 'nfs.foo,nfs.bar')
+    cephadm_module.set_store('nfs_services_with_old_nodeid', 'nfs.foo')
+
+    # service not in spec_store: purge clears markers then returns early
+    nfs_svc.purge('nfs.foo')
+
+    assert cephadm_module.get_store('nfs_services_with_old_userid') == 'nfs.bar'
+    assert cephadm_module.get_store('nfs_services_with_old_nodeid') is None
+
+
+@patch("cephadm.serve.CephadmServe._run_cephadm")
+@patch("cephadm.services.nfs.NFSService.fence_old_ranks", MagicMock())
+@patch("cephadm.services.nfs.NFSService.run_grace_tool", MagicMock())
+@patch("cephadm.services.nfs.NFSService.purge", MagicMock())
+@patch("cephadm.services.nfs.NFSService.create_rados_config_obj", MagicMock())
+def test_remove_service_keeps_legacy_markers_until_purge(
+        _run_cephadm, cephadm_module: CephadmOrchestrator):
+    # Markers must remain through remove_service so post_remove can still
+    # resolve legacy client.nfs.<daemon_id> entities via get_daemon_user().
+    _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
+    with with_host(cephadm_module, 'test'):
+        nfs_spec = NFSServiceSpec(service_id='foo',
+                                  placement=PlacementSpec(hosts=['test']))
+        with with_service(cephadm_module, nfs_spec):
+            cephadm_module.set_store('nfs_services_with_old_userid', 'nfs.foo')
+            cephadm_module.set_store('nfs_services_with_old_nodeid', 'nfs.foo')
+
+        assert cephadm_module.get_store('nfs_services_with_old_userid') == 'nfs.foo'
+        assert cephadm_module.get_store('nfs_services_with_old_nodeid') == 'nfs.foo'
+
+
 def test_nfs_choose_next_action_skips_legacy_default_deps():
     nfs_svc = service_registry.get_service('nfs')
     legacy_deps = [
