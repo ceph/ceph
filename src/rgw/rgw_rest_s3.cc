@@ -5986,13 +5986,23 @@ RGWRESTMgr* RGWRESTMgr_S3::get_resource_mgr_as_default(req_state* s,
                                                        const std::string& uri,
                                                        std::string* out_uri)
 {
+  // check the Host header for virtual-host style requests, and
+  // rewrite the request_uri with the subdomain as the bucket name.
+  // this applies to s3 and s3website requests, but not s3control
+  int ret = rgw_rest_transform_s3_vhost_style(s);
+  if (ret < 0) {
+    return nullptr;
+  }
+  // use the updated decoded_uri for routing
+  const std::string& new_uri = s->decoded_uri;
+
   // route matching requests to RGWRESTMgr_S3Website
   const bool in_s3website_domain = (s->prot_flags & RGW_REST_WEBSITE);
   if (s3website && in_s3website_domain) {
-    return s3website->get_resource_mgr(s, uri, out_uri);
+    return s3website->get_resource_mgr(s, new_uri, out_uri);
   }
 
-  return RGWRESTMgr::get_resource_mgr(s, uri, out_uri);
+  return RGWRESTMgr::get_resource_mgr(s, new_uri, out_uri);
 }
 
 RGWHandler_REST* RGWRESTMgr_S3::get_handler(rgw::sal::Driver* driver,
