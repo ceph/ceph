@@ -85,6 +85,7 @@ import { ProgressComponent } from './progress/progress.component';
 // Icons
 import InfoIcon from '@carbon/icons/es/information/16';
 import CopyIcon from '@carbon/icons/es/copy/32';
+import { IconComponent } from './icon/icon.component';
 
 @NgModule({
   imports: [
@@ -166,7 +167,8 @@ import CopyIcon from '@carbon/icons/es/copy/32';
     HelpTextComponent,
     FormAdvancedFieldsetComponent,
     UpgradableComponent,
-    ProgressComponent
+    ProgressComponent,
+    IconComponent
   ],
   providers: [provideCharts(withDefaultRegisterables())],
   exports: [
@@ -205,7 +207,8 @@ import CopyIcon from '@carbon/icons/es/copy/32';
     HelpTextComponent,
     FormAdvancedFieldsetComponent,
     UpgradableComponent,
-    ProgressComponent
+    ProgressComponent,
+    IconComponent
   ]
 })
 export class ComponentsModule {
