@@ -56,6 +56,7 @@ enum {
   l_rgw_kms_fetch_lat,
   l_rgw_kms_error_transient,
   l_rgw_kms_error_permanent,
+  l_rgw_kms_error_secret_store,
   l_rgw_last,
 };
 

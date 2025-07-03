@@ -1443,7 +1443,7 @@ int reconstitute_actual_key_from_kms(const DoutPrefixProvider *dpp,
 			<< "). removing from cache. disabling cache." << dendl;
       cache.remove_if(cache_key, value);
       kctx.disable_cache();
-      perfcounter->inc(l_rgw_kms_error_transient);
+      perfcounter->inc(l_rgw_kms_error_secret_store);
       return tl::unexpected(-ERR_INTERNAL_ERROR);
     }
     return std::make_shared<LinuxKeyringSecret>(
@@ -1457,12 +1457,13 @@ int reconstitute_actual_key_from_kms(const DoutPrefixProvider *dpp,
 
   if (result) {
     if (auto ret = result.value()->read(actual_key); ret.value() != 0) {
-      ldpp_dout(dpp, 5) << "KMS Cache: " << cache_key << " keyring read error ("
-			<< ret
-			<< "). removing from cache. disabling cache." << dendl;
+      ldpp_dout(dpp, 5) << "KMS Cache: " << cache_key << " keyring "
+                        << *result.value() << " read error (" << ret
+                        << "). removing from cache. disabling cache."
+                        << dendl;
       cache.remove_if(cache_key, value);
       kctx.disable_cache();
-      perfcounter->inc(l_rgw_kms_error_transient);
+      perfcounter->inc(l_rgw_kms_error_secret_store);
       return -ERR_INTERNAL_ERROR;
     }
     return 0;
