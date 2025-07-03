@@ -13754,3 +13754,67 @@ def test_delete_object_version_if_match_last_modified_time():
 
     e = assert_raises(ClientError, client.delete_object, Bucket=bucket, Key=key, VersionId=version, IfMatchLastModifiedTime=badmtime)
     assert (404, 'NoSuchKey') == _get_status_and_error_code(e.response)
+
+@pytest.mark.fails_on_aws # only supported for directory buckets
+@pytest.mark.conditional_write
+def test_delete_object_if_match_size():
+    client = get_client()
+    bucket = get_new_bucket(client)
+    key = 'obj'
+
+    size = 0
+    badsize = 9999
+
+    client.put_object(Bucket=bucket, Key=key)
+
+    e = assert_raises(ClientError, client.delete_object, Bucket=bucket, Key=key, IfMatchSize=badsize)
+    assert (412, 'PreconditionFailed') == _get_status_and_error_code(e.response)
+
+    client.delete_object(Bucket=bucket, Key=key, IfMatchSize=size)
+
+    e = assert_raises(ClientError, client.delete_object, Bucket=bucket, Key=key, IfMatchSize=badsize)
+    assert (404, 'NoSuchKey') == _get_status_and_error_code(e.response)
+
+@pytest.mark.fails_on_aws # only supported for directory buckets
+@pytest.mark.conditional_write
+def test_delete_object_current_if_match_size():
+    client = get_client()
+    bucket = get_new_bucket(client)
+    check_configure_versioning_retry(bucket, "Enabled", "Enabled")
+    key = 'obj'
+
+    size = 0
+    badsize = 9999
+
+    client.put_object(Bucket=bucket, Key=key)
+
+    e = assert_raises(ClientError, client.delete_object, Bucket=bucket, Key=key, IfMatchSize=badsize)
+    assert (412, 'PreconditionFailed') == _get_status_and_error_code(e.response)
+
+    response = client.delete_object(Bucket=bucket, Key=key, IfMatchSize=size)
+    assert response['DeleteMarker']
+
+    e = assert_raises(ClientError, client.delete_object, Bucket=bucket, Key=key, IfMatchSize=badsize)
+    assert (404, 'NoSuchKey') == _get_status_and_error_code(e.response)
+
+@pytest.mark.fails_on_aws # only supported for directory buckets
+@pytest.mark.conditional_write
+def test_delete_object_version_if_match_size():
+    client = get_client()
+    bucket = get_new_bucket(client)
+    check_configure_versioning_retry(bucket, "Enabled", "Enabled")
+    key = 'obj'
+
+    size = 0
+    badsize = 9999
+
+    version = client.put_object(Bucket=bucket, Key=key)['VersionId']
+
+    e = assert_raises(ClientError, client.delete_object, Bucket=bucket, Key=key, VersionId=version, IfMatchSize=badsize)
+    assert (412, 'PreconditionFailed') == _get_status_and_error_code(e.response)
+
+    response = client.delete_object(Bucket=bucket, Key=key, VersionId=version, IfMatchSize=size)
+    assert not response['DeleteMarker']
+
+    e = assert_raises(ClientError, client.delete_object, Bucket=bucket, Key=key, VersionId=version, IfMatchSize=badsize)
+    assert (404, 'NoSuchKey') == _get_status_and_error_code(e.response)
