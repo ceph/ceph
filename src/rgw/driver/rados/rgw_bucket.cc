@@ -150,7 +150,8 @@ bool rgw_bucket_object_check_filter(const std::string& oid)
   return rgw_obj_key::oid_to_key_in_ns(oid, &key, empty_ns);
 }
 
-int rgw_remove_object(const DoutPrefixProvider *dpp, rgw::sal::Driver* driver, rgw::sal::Bucket* bucket, rgw_obj_key& key)
+int rgw_remove_object(const DoutPrefixProvider *dpp, rgw::sal::Driver* driver, rgw::sal::Bucket* bucket, rgw_obj_key& key,
+		      const bool force)
 {
   if (key.instance.empty()) {
     key.instance = "null";
@@ -158,7 +159,9 @@ int rgw_remove_object(const DoutPrefixProvider *dpp, rgw::sal::Driver* driver, r
 
   std::unique_ptr<rgw::sal::Object> object = bucket->get_object(key);
 
-  return object->delete_object(dpp, null_yield, rgw::sal::FLAG_LOG_OP);
+  const uint32_t possible_force_flag = force ? rgw::sal::FLAG_FORCE_OP : 0;
+
+  return object->delete_object(dpp, null_yield, rgw::sal::FLAG_LOG_OP | possible_force_flag);
 }
 
 static void set_err_msg(std::string *sink, std::string msg)
