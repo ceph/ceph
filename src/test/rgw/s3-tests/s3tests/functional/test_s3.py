@@ -13878,3 +13878,70 @@ def test_delete_objects_version_if_match():
 
     response = client.delete_objects(Bucket=bucket, Delete={'Objects': [{'Key': key, 'VersionId': version, 'ETag': 'badetag'}]})
     assert 'NoSuchKey' == response['Errors'][0]['Code']
+
+@pytest.mark.fails_on_aws # only supported for directory buckets
+@pytest.mark.conditional_write
+def test_delete_objects_if_match_last_modified_time():
+    client = get_client()
+    bucket = get_new_bucket(client)
+    key = 'obj'
+
+    badmtime = datetime.datetime(2015, 1, 1)
+
+    client.put_object(Bucket=bucket, Key=key)
+    mtime = client.head_object(Bucket=bucket, Key=key)['LastModified']
+
+    response = client.delete_objects(Bucket=bucket, Delete={'Objects': [{'Key': key, 'LastModifiedTime': badmtime}]})
+    assert 'PreconditionFailed' == response['Errors'][0]['Code']
+
+    response = client.delete_objects(Bucket=bucket, Delete={'Objects': [{'Key': key, 'LastModifiedTime': mtime}]})
+    assert key == response['Deleted'][0]['Key'] # success
+
+    response = client.delete_objects(Bucket=bucket, Delete={'Objects': [{'Key': key, 'LastModifiedTime': badmtime}]})
+    assert 'NoSuchKey' == response['Errors'][0]['Code']
+
+@pytest.mark.fails_on_aws # only supported for directory buckets
+@pytest.mark.conditional_write
+def test_delete_objects_current_if_match_last_modified_time():
+    client = get_client()
+    bucket = get_new_bucket(client)
+    check_configure_versioning_retry(bucket, "Enabled", "Enabled")
+    key = 'obj'
+
+    badmtime = datetime.datetime(2015, 1, 1)
+
+    client.put_object(Bucket=bucket, Key=key)
+    mtime = client.head_object(Bucket=bucket, Key=key)['LastModified']
+
+    response = client.delete_objects(Bucket=bucket, Delete={'Objects': [{'Key': key, 'LastModifiedTime': badmtime}]})
+    assert 'PreconditionFailed' == response['Errors'][0]['Code']
+
+    response = client.delete_objects(Bucket=bucket, Delete={'Objects': [{'Key': key, 'LastModifiedTime': mtime}]})
+    assert key == response['Deleted'][0]['Key'] # success
+    assert response['Deleted'][0]['DeleteMarker']
+
+    response = client.delete_objects(Bucket=bucket, Delete={'Objects': [{'Key': key, 'LastModifiedTime': badmtime}]})
+    assert 'NoSuchKey' == response['Errors'][0]['Code']
+
+@pytest.mark.fails_on_aws # only supported for directory buckets
+@pytest.mark.conditional_write
+def test_delete_objects_version_if_match_last_modified_time():
+    client = get_client()
+    bucket = get_new_bucket(client)
+    check_configure_versioning_retry(bucket, "Enabled", "Enabled")
+    key = 'obj'
+
+    badmtime = datetime.datetime(2015, 1, 1)
+
+    version = client.put_object(Bucket=bucket, Key=key)['VersionId']
+    client.put_object(Bucket=bucket, Key=key)
+    mtime = client.head_object(Bucket=bucket, Key=key)['LastModified']
+
+    response = client.delete_objects(Bucket=bucket, Delete={'Objects': [{'Key': key, 'VersionId': version, 'LastModifiedTime': badmtime}]})
+    assert 'PreconditionFailed' == response['Errors'][0]['Code']
+
+    response = client.delete_objects(Bucket=bucket, Delete={'Objects': [{'Key': key, 'VersionId': version, 'LastModifiedTime': mtime}]})
+    assert key == response['Deleted'][0]['Key'] # success
+
+    response = client.delete_objects(Bucket=bucket, Delete={'Objects': [{'Key': key, 'VersionId': version, 'LastModifiedTime': badmtime}]})
+    assert 'NoSuchKey' == response['Errors'][0]['Code']
