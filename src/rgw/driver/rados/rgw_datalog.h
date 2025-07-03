@@ -449,7 +449,7 @@ public:
 			      bool recovery, bool watch, bool renew);
 
   int start(const DoutPrefixProvider *dpp, const RGWZone* _zone,
-	    const RGWZoneParams& zoneparams, bool background_tasks);
+	    const RGWZoneParams& zoneparams, bool background_tasks) noexcept;
   asio::awaitable<bool> establish_watch(const DoutPrefixProvider* dpp,
 					std::string_view oid);
   asio::awaitable<void> process_notification(const DoutPrefixProvider* dpp,
@@ -467,7 +467,7 @@ public:
   int add_entry(const DoutPrefixProvider *dpp,
 		const RGWBucketInfo& bucket_info,
 		const rgw::bucket_log_layout_generation& gen,
-		int shard_id, optional_yield y);
+		int shard_id, optional_yield y) noexcept;
   int get_log_shard_id(rgw_bucket& bucket, int shard_id);
   asio::awaitable<std::tuple<std::vector<rgw_data_change_log_entry>,
 			     std::string, bool>>
