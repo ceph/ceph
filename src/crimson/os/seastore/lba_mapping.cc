@@ -129,4 +129,15 @@ LBAMapping::refresh_iertr::future<LBAMapping> LBAMapping::refresh()
   });
 }
 
+bool LBAMapping::is_initial_pending() const {
+  assert(is_linked_direct());
+  ceph_assert(direct_cursor->is_viewable());
+  assert(!direct_cursor->is_end());
+  auto leaf = direct_cursor->parent->cast<LBALeafNode>();
+  return leaf->is_child_initial_pending(
+    direct_cursor->ctx,
+    direct_cursor->pos,
+    direct_cursor->key);
+}
+
 } // namespace crimson::os::seastore
