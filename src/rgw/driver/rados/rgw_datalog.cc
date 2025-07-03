@@ -440,7 +440,7 @@ int RGWDataChangesLog::start(const DoutPrefixProvider *dpp,
 			     const RGWZone* zone,
 			     const RGWZoneParams& zoneparams,
 			     rgw::sal::RadosStore* store,
-			     bool background_tasks)
+			     bool background_tasks) noexcept
 {
   log_data = zone->log_data;
   rados = &store->get_neorados();
@@ -1012,7 +1012,7 @@ void RGWDataChangesLog::add_entry(const DoutPrefixProvider* dpp,
 int RGWDataChangesLog::add_entry(const DoutPrefixProvider* dpp,
 				 const RGWBucketInfo& bucket_info,
 				 const rgw::bucket_log_layout_generation& gen,
-				 int shard_id, optional_yield y)
+				 int shard_id, optional_yield y) noexcept
 {
   try {
     if (y) {
