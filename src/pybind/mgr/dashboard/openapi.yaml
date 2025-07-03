@@ -13632,19 +13632,7 @@ paths:
       - RgwSite
   /api/rgw/topic:
     get:
-      parameters:
-      - allowEmptyValue: true
-        description: Name of the user
-        in: query
-        name: uid
-        schema:
-          type: string
-      - allowEmptyValue: true
-        description: Name of the tenant
-        in: query
-        name: tenant
-        schema:
-          type: string
+      parameters: []
       responses:
         '200':
           content:
@@ -13672,64 +13660,63 @@ paths:
           application/json:
             schema:
               properties:
-                amqp_ack_level:
-                  description: amqp ack level
+                ack_level:
+                  description: Amqp ack level
                   type: string
                 amqp_exchange:
-                  description: amqp exchange
+                  description: Amqp exchange
                   type: string
                 ca_location:
-                  description: ca location
+                  description: Ca location
                   type: string
                 cloud_events:
                   default: false
-                  description: cloud events
+                  description: Cloud events
                   type: string
                 daemon_name:
-                  type: string
-                kafka_ack_level:
-                  description: kafka ack level
+                  description: Name of the daemon
                   type: string
                 kafka_brokers:
-                  description: kafka brokers
+                  description: Kafka brokers
                   type: string
                 max_retries:
-                  description: max retries
+                  description: Max retries
                   type: string
                 mechanism:
-                  description: mechanism
+                  description: Mechanism
                   type: string
                 name:
                   description: Name of the topic
                   type: string
                 opaque_data:
-                  description: ' opaque data'
+                  description: OpaqueData
                   type: string
                 owner:
+                  description: Name of the owner
                   type: string
                 persistent:
                   default: false
-                  description: persistent
+                  description: Persistent
                   type: boolean
                 policy:
-                  description: policy
+                  description: Policy
                   type: string
                 push_endpoint:
                   description: Push Endpoint
                   type: string
                 retry_sleep_duration:
-                  description: retry sleep duration
+                  description: Retry sleep duration
                   type: string
                 time_to_live:
                   description: Time to live
                   type: string
                 use_ssl:
                   default: false
-                  description: use ssl
+                  description: Use ssl
                   type: boolean
                 verify_ssl:
                   default: false
-                  description: verify ssl
+                  description: Verify ssl
                   type: boolean
               required:
               - name
@@ -13759,19 +13746,13 @@ paths:
       summary: Create a new RGW Topic
       tags:
       - RGW Topic Management
-  /api/rgw/topic/{name}:
+  /api/rgw/topic/{key}:
     delete:
       parameters:
-      - description: Name of the user
+      - description: The metadata object key to retrieve the topic e.g topic:topic_name
         in: path
-        name: name
+        name: key
         required: true
-        schema:
-          type: string
-      - allowEmptyValue: true
-        description: Name of the tenant
-        in: query
-        name: tenant
         schema:
           type: string
       responses:
@@ -13801,16 +13782,10 @@ paths:
       - RGW Topic Management
     get:
       parameters:
-      - description: Name of the user
+      - description: The metadata object key to retrieve the topic e.g owner:topic_name
         in: path
-        name: name
+        name: key
         required: true
-        schema:
-          type: string
-      - allowEmptyValue: true
-        description: Name of the tenant
-        in: query
-        name: tenant
         schema:
           type: string
       responses:

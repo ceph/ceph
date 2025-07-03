@@ -13,7 +13,7 @@ import xml.etree.ElementTree as ET  # noqa: N814
 from collections import defaultdict
 from enum import Enum
 from subprocess import SubprocessError
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urlunparse
 
 import requests
 
@@ -22,7 +22,7 @@ try:
 except ModuleNotFoundError:
     logging.error("Module 'xmltodict' is not installed.")
 
-from mgr_util import build_url
+from mgr_util import build_url, name_to_config_section
 
 from .. import mgr
 from ..awsauth import S3Auth
@@ -1121,14 +1121,15 @@ class RgwClient(RestClient):
 
     @RestClient.api_post('?Action=CreateTopic&Name={name}')
     def create_topic(self, request=None, name: str = '',
+                     daemon_name: str = '',
                      push_endpoint: Optional[str] = '', opaque_data: Optional[str] = '',
                      persistent: Optional[bool] = False, time_to_live: Optional[str] = '',
                      max_retries: Optional[str] = '', retry_sleep_duration: Optional[str] = '',
                      policy: Optional[str] = '',
                      verify_ssl: Optional[bool] = False, cloud_events: Optional[bool] = False,
                      ca_location: Optional[str] = None, amqp_exchange: Optional[str] = None,
-                     amqp_ack_level: Optional[str] = None,
-                     use_ssl: Optional[bool] = False, kafka_ack_level: Optional[str] = None,
+                     ack_level: Optional[str] = None,
+                     use_ssl: Optional[bool] = False,
                      kafka_brokers: Optional[str] = None, mechanism: Optional[str] = None,
                      ):
         params = {'Name': name}
@@ -1155,21 +1156,31 @@ class RgwClient(RestClient):
             params['ca_location'] = ca_location
         if amqp_exchange:
             params['amqp_exchange'] = amqp_exchange
-        if amqp_ack_level:
-            params['amqp_ack_level'] = amqp_ack_level
+        if ack_level:
+            params['ack_level'] = ack_level
         if use_ssl:
             params['use_ssl'] = 'true' if use_ssl else 'false'
-        if kafka_ack_level:
-            params['kafka_ack_level'] = kafka_ack_level
         if kafka_brokers:
             params['kafka_brokers'] = kafka_brokers
         if mechanism:
             params['mechanism'] = mechanism
+        if push_endpoint and '://' in push_endpoint and '@' in push_endpoint:
+            try:
+                full_daemon_name = f'rgw.{daemon_name}'
+                CephService.send_command(
+                    'mon', 'config set',
+                    who=name_to_config_section(full_daemon_name),
+                    name='rgw_allow_notification_secrets_in_cleartext',
+                    value='true'
+                )
+            except Exception as e:
+                raise DashboardException(
+                    msg=f'Failed to set cleartext secret config: {e}', component='rgw'
+                )
         try:
             result = request(params=params)
         except RequestException as e:
             raise DashboardException(msg=str(e), component='rgw')
-
         return result
 
 
@@ -2826,58 +2837,91 @@ class RgwMultisite:
 
 
 class RgwTopicmanagement:
-    def list_topics(self, uid: Optional[str], tenant: Optional[str]):
-        rgw_topics_list = {}
-        rgw_topic_list_cmd = ['topic', 'list']
+
+    @staticmethod
+    def push_endpoint_password(push_endpoint: str) -> str:
+        parsed = urlparse(push_endpoint)
+        if parsed.username and parsed.password:
+            netloc = f"{parsed.username}:****@{parsed.hostname}"
+            if parsed.port:
+                netloc += f":{parsed.port}"
+            parsed = parsed._replace(netloc=netloc)
+            return urlunparse(parsed)
+        return push_endpoint
+
+    def list_topics(self):
         try:
-            if uid:
-                rgw_topic_list_cmd.append('--uid')
-                rgw_topic_list_cmd.append(uid)
+            list_cmd = ['metadata', 'list', 'topic']
+            exit_code, topic_keys, _ = mgr.send_rgwadmin_command(list_cmd)
 
-            if tenant:
-                rgw_topic_list_cmd.append('--tenant')
-                rgw_topic_list_cmd.append(tenant)
-
-            exit_code, rgw_topics_list, _ = mgr.send_rgwadmin_command(rgw_topic_list_cmd)
             if exit_code > 0:
-                raise DashboardException(msg='Unable to fetch topic list',
-                                         http_status_code=500, component='rgw')
-            return rgw_topics_list
+                raise DashboardException(
+                    'Unable to fetch topic list',
+                    http_status_code=500,
+                    component='rgw'
+                )
+
+            topics_info = []
+
+            for key in topic_keys:
+                get_cmd = ['metadata', 'get', f'topic:{key}']
+                exit_code, topic_info, _ = mgr.send_rgwadmin_command(get_cmd)
+
+                if exit_code == 0 and 'data' in topic_info:
+                    data = topic_info['data']
+                    modified_data = data.copy()
+                    modified_data['key'] = key
+                    push_endpoint = data.get('dest', {}).get('push_endpoint')
+                    if push_endpoint:
+                        modified_data.setdefault('dest', {})
+                        modified_data['dest']['push_endpoint'] = self.push_endpoint_password(
+                            push_endpoint
+                        )
+
+                    topics_info.append(modified_data)
+
+            return topics_info
+
         except SubprocessError as error:
-            raise DashboardException(error, http_status_code=500, component='rgw')
+            raise DashboardException(str(error), http_status_code=500, component='rgw')
 
-    def get_topic(self, name: str, tenant: Optional[str]):
-        rgw_topic_info_cmd = ['topic', 'get']
+    def get_topic(self, key):
+        rgw_topic_info_cmd = ['metadata', 'get', f'topic:{key}']
         try:
-            if tenant:
-                rgw_topic_info_cmd.append('--tenant')
-                rgw_topic_info_cmd.append(tenant)
-
-            if name:
-                rgw_topic_info_cmd.append('--topic')
-                rgw_topic_info_cmd.append(name)
-
             exit_code, topic_info, _ = mgr.send_rgwadmin_command(rgw_topic_info_cmd)
             if exit_code > 0:
-                raise DashboardException('Unable to get topic info',
-                                         http_status_code=500, component='rgw')
+                raise DashboardException(
+                    'Unable to get topic info',
+                    http_status_code=500,
+                    component='rgw'
+                )
+
+            topic_info = topic_info.get('data', {})
+            topic_info['key'] = key
+            push_endpoint = topic_info.get('dest', {}).get('push_endpoint')
+            if push_endpoint:
+                topic_info.setdefault('dest', {})
+                topic_info['dest']['push_endpoint'] = self.push_endpoint_password(push_endpoint)
+
             return topic_info
         except SubprocessError as error:
-            raise DashboardException(error, http_status_code=500, component='rgw')
+            raise DashboardException(str(error), http_status_code=500, component='rgw')
 
-    def delete_topic(self, name: str, tenant: Optional[str] = None):
-        rgw_delete_topic_cmd = ['topic', 'rm']
+    def delete_topic(self, key: str):
+        rgw_delete_metadata_cmd = ['metadata', 'rm', f'topic:{key}']
         try:
-            if tenant:
-                rgw_delete_topic_cmd.extend(['--tenant', tenant])
-
-            if name:
-                rgw_delete_topic_cmd.extend(['--topic', name])
-
-            exit_code, _, _ = mgr.send_rgwadmin_command(rgw_delete_topic_cmd)
-
+            exit_code, _, _ = mgr.send_rgwadmin_command(rgw_delete_metadata_cmd)
             if exit_code > 0:
-                raise DashboardException(msg='Unable to delete topic',
-                                         http_status_code=500, component='rgw')
+                raise DashboardException(
+                    msg=f'Unable to remove metadata for topic: {key}',
+                    http_status_code=500,
+                    component='rgw'
+                )
+
+            return {
+                "status": "success",
+                "message": f"Metadata for topic '{key}' removed successfully."
+            }
+
         except SubprocessError as error:
-            raise DashboardException(error, http_status_code=500, component='rgw')
+            raise DashboardException(str(error), http_status_code=500, component='rgw')

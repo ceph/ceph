@@ -51,6 +51,16 @@ RGW_USER_SCHEMA = {
 }
 
 
+def _get_owner(owner):
+    accounts = RgwAccounts().get_accounts()
+
+    # if the owner is present in the accounts list,
+    # then the bucket is owned by an account.
+    # hence we will use dashboard user to fetch the
+    # bucket info
+    return owner if owner not in accounts else RgwServiceManager.user
+
+
 @UIRouter('/rgw', Scope.RGW)
 @APIDoc("RGW Management API", "Rgw")
 class Rgw(BaseController):
@@ -402,15 +412,6 @@ class RgwBucket(RgwRESTController):
                 if bucket['tenant'] else bucket['bucket']
         return bucket
 
-    def _get_owner(self, owner):
-        accounts = RgwAccounts().get_accounts()
-
-        # if the owner is present in the accounts list,
-        # then the bucket is owned by an account.
-        # hence we will use dashboard user to fetch the
-        # bucket info
-        return owner if owner not in accounts else RgwServiceManager.user
-
     def _get_versioning(self, owner, daemon_name, bucket_name):
         rgw_client = RgwClient.instance(owner, daemon_name)
         return rgw_client.get_bucket_versioning(bucket_name)
@@ -548,7 +549,7 @@ class RgwBucket(RgwRESTController):
         bucket_name = RgwBucket.get_s3_bucket_name(result['bucket'],
                                                    result['tenant'])
 
-        owner = self._get_owner(result['owner'])
+        owner = _get_owner(result['owner'])
         # Append the versioning configuration.
         versioning = self._get_versioning(owner, daemon_name, bucket_name)
         encryption = self._get_encryption(bucket_name, daemon_name, owner)
@@ -636,7 +637,7 @@ class RgwBucket(RgwRESTController):
 
         uid_tenant = uid[:uid.find('$')] if uid.find('$') >= 0 else None
         bucket_name = RgwBucket.get_s3_bucket_name(bucket, uid_tenant)
-        uid = self._get_owner(uid)
+        uid = _get_owner(uid)
 
         locking = self._get_locking(uid, daemon_name, bucket_name)
         if versioning_state:
@@ -728,7 +729,7 @@ class RgwBucket(RgwRESTController):
     @allow_empty_body
     def set_lifecycle_policy(self, bucket_name: str = '', lifecycle: str = '', daemon_name=None,
                              owner=None, tenant=None):
-        owner = self._get_owner(owner)
+        owner = _get_owner(owner)
         bucket_name = RgwBucket.get_s3_bucket_name(bucket_name, tenant)
         if lifecycle == '{}':
             return self._delete_lifecycle(bucket_name, daemon_name, owner)
@@ -737,7 +738,7 @@ class RgwBucket(RgwRESTController):
     @RESTController.Collection(method='GET', path='/lifecycle')
     def get_lifecycle_policy(self, bucket_name: str = '', daemon_name=None, owner=None,
                              tenant=None):
-        owner = self._get_owner(owner)
+        owner = _get_owner(owner)
         bucket_name = RgwBucket.get_s3_bucket_name(bucket_name, tenant)
         return self._get_lifecycle(bucket_name, daemon_name, owner)
 
@@ -1439,25 +1440,23 @@ class RgwTopic(RESTController):
         "Create a new RGW Topic",
         parameters={
             "name": (str, "Name of the topic"),
+            "owner": (str, "Name of the owner"),
+            "daemon_name": (str, "Name of the daemon"),
             "push_endpoint": (str, "Push Endpoint"),
-            "opaque_data": (str, " opaque data"),
-            "persistent": (bool, "persistent"),
+            "opaque_data": (str, "OpaqueData"),
+            "persistent": (bool, "Persistent"),
             "time_to_live": (str, "Time to live"),
-            "max_retries": (str, "max retries"),
-            "retry_sleep_duration": (str, "retry sleep duration"),
-            "policy": (str, "policy"),
-            "verify_ssl": (bool, 'verify ssl'),
-            "cloud_events": (str, 'cloud events'),
-            "user": (str, 'user'),
-            "password": (str, 'password'),
-            "vhost": (str, 'vhost'),
-            "ca_location": (str, 'ca location'),
-            "amqp_exchange": (str, 'amqp exchange'),
-            "amqp_ack_level": (str, 'amqp ack level'),
-            "use_ssl": (bool, 'use ssl'),
-            "kafka_ack_level": (str, 'kafka ack level'),
-            "kafka_brokers": (str, 'kafka brokers'),
-            "mechanism": (str, 'mechanism'),
+            "max_retries": (str, "Max retries"),
+            "retry_sleep_duration": (str, "Retry sleep duration"),
+            "policy": (str, "Policy"),
+            "verify_ssl": (bool, 'Verify ssl'),
+            "cloud_events": (str, 'Cloud events'),
+            "ca_location": (str, 'Ca location'),
+            "amqp_exchange": (str, 'Amqp exchange'),
+            "ack_level": (str, 'Amqp ack level'),
+            "use_ssl": (bool, 'Use ssl'),
+            "kafka_brokers": (str, 'Kafka brokers'),
+            "mechanism": (str, 'Mechanism'),
         },
     )
     def create(
@@ -1476,15 +1475,16 @@ class RgwTopic(RESTController):
         cloud_events: Optional[bool] = False,
         ca_location: Optional[str] = None,
         amqp_exchange: Optional[str] = None,
-        amqp_ack_level: Optional[str] = None,
+        ack_level: Optional[str] = None,
         use_ssl: Optional[bool] = False,
-        kafka_ack_level: Optional[str] = None,
         kafka_brokers: Optional[str] = None,
         mechanism: Optional[str] = None
     ):
+        owner = _get_owner(owner)
         rgw_topic_instance = RgwClient.instance(owner, daemon_name=daemon_name)
         return rgw_topic_instance.create_topic(
             name=name,
+            daemon_name=daemon_name,
             push_endpoint=push_endpoint,
             opaque_data=opaque_data,
             persistent=persistent,
@@ -1496,45 +1496,38 @@ class RgwTopic(RESTController):
             cloud_events=cloud_events,
             ca_location=ca_location,
             amqp_exchange=amqp_exchange,
-            amqp_ack_level=amqp_ack_level,
+            ack_level=ack_level,
             use_ssl=use_ssl,
-            kafka_ack_level=kafka_ack_level,
             kafka_brokers=kafka_brokers,
             mechanism=mechanism
         )
 
     @EndpointDoc(
         "Get RGW Topic List",
-        parameters={
-            "uid": (str, "Name of the user"),
-            "tenant": (str, "Name of the tenant"),
-        },
     )
-    def list(self, uid: Optional[str] = None, tenant: Optional[str] = None):
+    def list(self):
         rgw_topic_instance = RgwTopicmanagement()
-        result = rgw_topic_instance.list_topics(uid, tenant)
-        return result['topics'] if 'topics' in result else []
+        result = rgw_topic_instance.list_topics()
+        return result
 
     @EndpointDoc(
         "Get RGW Topic",
         parameters={
-            "name": (str, "Name of the user"),
-            "tenant": (str, "Name of the tenant"),
+            "key": (str, "The metadata object key to retrieve the topic e.g owner:topic_name"),
         },
     )
-    def get(self, name: str, tenant: Optional[str] = None):
+    def get(self, key: str):
         rgw_topic_instance = RgwTopicmanagement()
-        result = rgw_topic_instance.get_topic(name, tenant)
+        result = rgw_topic_instance.get_topic(key)
         return result
 
     @EndpointDoc(
         "Delete RGW Topic",
         parameters={
-            "name": (str, "Name of the user"),
-            "tenant": (str, "Name of the tenant"),
+            "key": (str, "The metadata object key to retrieve the topic e.g topic:topic_name"),
         },
     )
-    def delete(self, name: str, tenant: Optional[str] = None):
+    def delete(self, key: str):
         rgw_topic_instance = RgwTopicmanagement()
-        result = rgw_topic_instance.delete_topic(name=name, tenant=tenant)
+        result = rgw_topic_instance.delete_topic(key=key)
         return result
