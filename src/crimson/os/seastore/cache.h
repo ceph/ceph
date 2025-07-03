@@ -449,22 +449,12 @@ public:
       std::forward<Func>(extent_init_func));
   }
 
-  bool is_viewable_extent_stable(
+  CachedExtentRef peek_extent_viewable_by_trans(
     Transaction &t,
     CachedExtentRef extent) final
   {
     assert(extent);
-    auto view = extent->get_transactional_view(t);
-    return view->is_stable();
-  }
-
-  bool is_viewable_extent_data_stable(
-    Transaction &t,
-    CachedExtentRef extent) final
-  {
-    assert(extent);
-    auto view = extent->get_transactional_view(t);
-    return view->is_data_stable();
+    return extent->get_transactional_view(t);
   }
 
   get_extent_iertr::future<> maybe_wait_accessible(

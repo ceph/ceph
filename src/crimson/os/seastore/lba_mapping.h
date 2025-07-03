@@ -51,6 +51,9 @@ public:
     return !is_indirect() && !is_data_stable();
   }
 
+  // whether the mapping corresponds to an initial pending extent
+  bool is_initial_pending() const;
+
   bool is_linked_direct() const {
     return (bool)direct_cursor;
   }
@@ -155,7 +158,13 @@ public:
   get_child_ret_t<lba::LBALeafNode, LogicalChildNode>
   get_logical_extent(Transaction &t) const;
 
+  LogicalChildNodeRef peek_logical_extent(Transaction &t) const;
+
   using refresh_iertr = LBACursor::base_iertr;
+  //TODO: should be changed to return future<> once all calls
+  //	  to refresh are through co_await. We return LBAMapping
+  //	  for now to avoid mandating the callers to make sure
+  //	  the life of the lba mapping survives the refresh.
   refresh_iertr::future<LBAMapping> refresh();
 
   using next_iertr = LBACursor::base_iertr;
