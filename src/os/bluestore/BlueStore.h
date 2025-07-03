@@ -4168,6 +4168,8 @@ private:
   int  reconstruct_allocations(SimpleBitmap *smbmp, read_alloc_stats_t &stats);
   int  read_allocation_from_onodes(SimpleBitmap *smbmp, read_alloc_stats_t& stats);
   int  read_allocation_from_onodes_mt(SimpleBitmap *smbmp, read_alloc_stats_t& stats);
+  class OnodeScanMT;
+  friend OnodeScanMT;
   int  commit_freelist_type();
   int  commit_to_null_manager();
   int  commit_to_real_manager();
