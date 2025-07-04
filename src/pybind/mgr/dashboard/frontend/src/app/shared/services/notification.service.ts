@@ -14,6 +14,13 @@ import { TaskMessageService } from './task-message.service';
   providedIn: 'root'
 })
 export class NotificationService {
+  private readonly NOTIFICATION_TYPE_MAP: Record<NotificationType, CarbonNotificationType> = {
+    [NotificationType.error]: 'error',
+    [NotificationType.info]: 'info',
+    [NotificationType.success]: 'success',
+    [NotificationType.warning]: 'warning'
+  };
+
   private hideToasties = false;
 
   // Data observable for saved notifications
@@ -119,7 +126,7 @@ export class NotificationService {
           arg as NotificationType,
           title,
           message,
-          options || { lowContrast: true },
+          options,
           application
         );
       }
@@ -206,22 +213,8 @@ export class NotificationService {
     }
   }
 
-  /**
-   * Map notification types to Carbon types
-   */
   private mapNotificationTypeToCarbon(type: NotificationType): CarbonNotificationType {
-    switch (type) {
-      case NotificationType.error:
-        return 'error';
-      case NotificationType.info:
-        return 'info';
-      case NotificationType.success:
-        return 'success';
-      case NotificationType.warning:
-        return 'warning';
-      default:
-        return 'info';
-    }
+    return this.NOTIFICATION_TYPE_MAP[type] || 'info';
   }
 
   /**

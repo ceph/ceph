@@ -38,8 +38,8 @@ export class Copy2ClipboardButtonComponent {
       const showSuccess = () => {
         this.notificationService.show(
           NotificationType.success,
-          'Success',
-          'Copied text to the clipboard successfully.'
+          $localize`Success`,
+          $localize`Copied text to the clipboard successfully.`
         );
       };
       if (['firefox', 'ie', 'ios', 'safari'].includes(browser.name)) {
@@ -59,8 +59,8 @@ export class Copy2ClipboardButtonComponent {
     } catch (_) {
       this.notificationService.show(
         NotificationType.error,
-        'Error',
-        'Failed to copy text to the clipboard.'
+        $localize`Error`,
+        $localize`Failed to copy text to the clipboard.`
       );
     }
   }
