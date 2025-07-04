@@ -22,13 +22,16 @@
 #include <strings.h>
 #include <string_view>
 
-using std::ostringstream;
+#include <boost/algorithm/string/predicate.hpp>
 
-bool strict_strtob(const char* str, std::string *err)
+using std::ostringstream;
+using namespace std::literals::string_view_literals;
+
+bool strict_strtob(std::string_view str, std::string *err)
 {
-  if (strcasecmp(str, "false") == 0) {
+  if (boost::iequals(str, "false"sv)) {
     return false;
-  } else if (strcasecmp(str, "true") == 0) {
+  } else if (boost::iequals(str, "true"sv)) {
     return true;
   } else {
     int b = strict_strtol(str, 10, err);
