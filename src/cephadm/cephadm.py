@@ -1384,6 +1384,8 @@ class CephadmAgent(DaemonForm):
                 self.target_port = config['target_port']
                 self.loop_interval = int(config['refresh_period'])
                 self.starting_port = int(config['listener_port'])
+                self.initial_startup_delay_max = int(config.get('initial_startup_delay_max', 0))
+                self.jitter_seconds = int(config.get('jitter_seconds', 0))
                 self.host = config['host']
                 use_lsm = config['device_enhanced_scan']
         except Exception as e:
@@ -1405,8 +1407,15 @@ class CephadmAgent(DaemonForm):
         self.volume_gatherer.update_func(lambda: self._ceph_volume(enhanced=self.device_enhanced_scan))
 
     def run(self) -> None:
+
         self.pull_conf_settings()
         self.ssl_ctx.load_verify_locations(self.ca_path)
+
+        # Introduce the randomness in the initialization (up to initial_startup_delay_max delay)
+        if self.initial_startup_delay_max:
+            delay = random.uniform(0, self.initial_startup_delay_max)
+            logger.debug(f"Delaying startup for {delay} seconds.")
+            time.sleep(delay)
 
         try:
             for _ in range(1001):
@@ -1475,7 +1484,10 @@ class CephadmAgent(DaemonForm):
             self.recent_iteration_index = (self.recent_iteration_index + 1) % 3
             run_time_average = sum(self.recent_iteration_run_times, 0.0) / len([t for t in self.recent_iteration_run_times if t])
 
-            self.event.wait(max(self.loop_interval - int(run_time_average), 0))
+            # Add ± jitter_seconds to introduce randomness
+            jitter = random.uniform(-self.jitter_seconds, self.jitter_seconds)
+            delay = max(self.loop_interval - int(run_time_average) + jitter, 0)
+            self.event.wait(delay)
             self.event.clear()
 
     def _ceph_volume(self, enhanced: bool = False) -> Tuple[str, bool]:
