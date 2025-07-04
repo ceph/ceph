@@ -111,6 +111,7 @@ EOM
     local c_compiler="${discovered_c_compiler}"
     local cmake_opts
     cmake_opts+=" -DCMAKE_CXX_COMPILER=$cxx_compiler -DCMAKE_C_COMPILER=$c_compiler"
+    cmake_opts+=" -DCMAKE_CXX_FLAGS=-std=gnu++20\ -isystem\ /usr/include/c++/11\ -isystem\ /usr/include/x86_64-linux-gnu/c++/11"
     cmake_opts+=" -DCMAKE_CXX_FLAGS_DEBUG=-Werror"
     cmake_opts+=" -DENABLE_GIT_VERSION=OFF"
     cmake_opts+=" -DWITH_GTEST_PARALLEL=ON"
