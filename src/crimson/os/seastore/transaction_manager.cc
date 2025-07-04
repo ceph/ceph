@@ -240,6 +240,47 @@ TransactionManager::ref_ret TransactionManager::remove(
   });
 }
 
+TransactionManager::ref_iertr::future<LBAMapping> TransactionManager::remove(
+  Transaction &t,
+  LBAMapping mapping)
+{
+  LOG_PREFIX(TransactionManager::remove);
+  return lba_manager->refresh_lba_mapping(t, std::move(mapping)
+  ).si_then([&t, this, FNAME](auto mapping) {
+    auto fut = base_iertr::make_ready_future<LogicalChildNodeRef>();
+    if (!mapping.is_indirect() && mapping.get_val().is_real_location()) {
+      auto ret = get_extent_if_linked<LogicalChildNode, true>(t, mapping);
+      if (ret.index() == 1) {
+        fut = std::move(std::get<1>(ret));
+      }
+    }
+    return fut.si_then([mapping=std::move(mapping),
+                        FNAME, this, &t](auto extent) mutable {
+      auto offset = mapping.get_key();
+      return lba_manager->remove_mapping(t, std::move(mapping)
+      ).si_then([FNAME, this, extent, &t, offset](auto result) {
+        auto fut = ref_iertr::now();
+        if (result.refcount == 0) {
+          if (result.addr.is_paddr() &&
+              !result.addr.get_paddr().is_zero()) {
+            if (extent) {
+              cache->retire_extent(t, extent);
+            } else {
+              fut = cache->retire_extent_addr(
+                t, result.addr.get_paddr(), result.length);
+            }
+          }
+        }
+        return fut.si_then([result=std::move(result), &t, FNAME, offset]() mutable {
+          DEBUGT("removed {}~0x{:x} refcount={} -- offset={}",
+                 t, result.addr, result.length, result.refcount, offset);
+          return std::move(result.mapping);
+        });
+      });
+    });
+  });
+}
+
 TransactionManager::refs_ret TransactionManager::remove(
   Transaction &t,
   std::vector<laddr_t> offsets)
@@ -258,6 +299,121 @@ TransactionManager::refs_ret TransactionManager::remove(
     }).si_then([&refcnts, &t, FNAME] {
       DEBUGT("removed {} offsets", t, refcnts.size());
       return ref_iertr::make_ready_future<std::vector<unsigned>>(std::move(refcnts));
+    });
+  });
+}
+
+TransactionManager::move_region_ret
+TransactionManager::move_region(
+  Transaction &t,
+  LBAMapping src,
+  LBAMapping dst,
+  laddr_t dst_prefix)
+{
+  struct state_t {
+    LBAMapping cur;
+    LBAMapping insert_pos;
+    laddr_t src_prefix;
+    laddr_t dst_prefix;
+
+    laddr_t calc_dst_key() const {
+      auto key = cur.get_key();
+      auto offset = key.get_byte_distance<loffset_t>(key.get_clone_prefix());
+      return (dst_prefix + offset).checked_to_laddr();
+    }
+  };
+  auto src_prefix = src.get_key().get_clone_prefix();
+  return seastar::do_with(
+    state_t{std::move(src), std::move(dst), src_prefix, dst_prefix},
+    [&t, this](state_t &state)
+  {
+    return lba_manager->next_mapping(t, state.insert_pos.duplicate()
+    ).si_then([&t, &state, this](LBAMapping mapping) {
+      return lba_manager->remove_mapping(t, std::move(state.insert_pos)
+      ).handle_error_interruptible(
+	move_region_iertr::pass_further(),
+	crimson::ct_error::assert_all("invalid error")
+      ).si_then([&t, &state, mapping=std::move(mapping), this](auto) mutable {
+	return lba_manager->refresh_lba_mapping(t, std::move(mapping)
+	).si_then([&t, &state, this](LBAMapping mapping) {
+	  state.insert_pos = std::move(mapping);
+	  return lba_manager->refresh_lba_mapping(t, std::move(state.cur));
+	}).si_then([&state](LBAMapping mapping) {
+	  state.cur = std::move(mapping);
+	});
+      });
+    }).si_then([&t, &state, this] {
+      return trans_intr::repeat([&t, &state, this] {
+	if (state.cur.get_key().get_clone_prefix() != state.src_prefix) {
+	  return base_iertr::make_ready_future<
+	    seastar::stop_iteration>(seastar::stop_iteration::yes);
+	}
+	return seastar::futurize_invoke([&t, &state, this] {
+	  if (!state.cur.is_indirect() && !state.cur.is_zero_reserved()) {
+	    return relocate_logical_extent(t, state.cur.duplicate());
+	  }
+	  return base_iertr::make_ready_future<LogicalChildNodeRef>();
+	}).si_then([&t, &state, this](LogicalChildNodeRef extent)
+		   -> move_mapping_ret {
+	  if (state.cur.is_zero_reserved()) {
+	    return next_mapping(t, state.cur.duplicate()
+	    ).si_then([&t, &state, this](auto next) {
+	      auto len = state.cur.get_length();
+	      auto dst_key = state.calc_dst_key();
+	      return remove(t, std::move(state.cur)
+	      ).handle_error_interruptible(
+		move_region_iertr::pass_further(),
+		crimson::ct_error::assert_all("invalid error")
+	      ).si_then([&t, next=std::move(next), this](auto) mutable {
+		return lba_manager->refresh_lba_mapping(t, std::move(next));
+	      }).si_then([&t, &state, len, dst_key, this](LBAMapping next) {
+		return lba_manager->refresh_lba_mapping(t, std::move(state.insert_pos)
+		).si_then([&t, len, next=std::move(next), dst_key, this]
+			  (LBAMapping insert_pos) mutable {
+		  return reserve_region(
+		    t, std::move(insert_pos), dst_key, len
+		  ).handle_error_interruptible(
+		    move_region_iertr::pass_further(),
+		    crimson::ct_error::assert_all("invalid error")
+		  ).si_then([&t, next=std::move(next), this]
+			    (LBAMapping insert) mutable {
+		    return lba_manager->refresh_lba_mapping(t, std::move(next)
+		    ).si_then([&t, insert=std::move(insert), this]
+			      (LBAMapping next) mutable {
+		      return next_mapping(t, std::move(insert)
+		      ).si_then([next=std::move(next)](LBAMapping insert) mutable {
+			return move_region_iertr::make_ready_future<
+			  LBAManager::move_mapping_ret_t>(
+			    std::move(next), std::move(insert));
+		      });
+		    });
+		  });
+		});
+	      });
+	    });
+	  } else if (extent) {
+	    auto laddr = state.calc_dst_key();
+	    extent->set_laddr(laddr);
+	    return lba_manager->move_direct_mapping(
+	      t,
+	      state.cur.duplicate(),
+	      laddr,
+	      state.insert_pos.duplicate(),
+	      *extent);
+	  } else {
+	    return lba_manager->move_indirect_mapping(
+	      t,
+	      state.cur.duplicate(),
+	      state.calc_dst_key(),
+	      state.insert_pos.duplicate());
+	  }
+	}).si_then([&state](LBAManager::move_mapping_ret_t ret) {
+	  state.cur = std::move(ret.src);
+	  state.insert_pos = std::move(ret.dest);
+	  return base_iertr::make_ready_future<
+	    seastar::stop_iteration>(seastar::stop_iteration::no);
+	});
+      });
     });
   });
 }
@@ -522,13 +678,19 @@ TransactionManager::rewrite_logical_extent(
      * extents since we're going to do it again once we either do the ool write
      * or allocate a relative inline addr.  TODO: refactor AsyncCleaner to
      * avoid this complication. */
-    return lba_manager->update_mapping(
-      t,
-      extent->get_laddr(),
-      extent->get_length(),
-      extent->get_paddr(),
-      *nextent
-    ).discard_result();
+    return lba_manager->get_mapping(t, *extent
+    ).si_then([this, &t, extent, nextent](auto mapping) {
+      return lba_manager->update_mapping(
+        t,
+        std::move(mapping),
+        extent->get_length(),
+        extent->get_paddr(),
+        *nextent
+      ).discard_result();
+    }).handle_error_interruptible(
+      rewrite_extent_iertr::pass_further{},
+      crimson::ct_error::assert_all{"unexpected enoent"}
+    );
   } else {
     assert(get_extent_category(extent->get_type()) == data_category_t::DATA);
     auto length = extent->get_length();
@@ -569,20 +731,28 @@ TransactionManager::rewrite_logical_extent(
           auto fut = base_iertr::now();
           if (first_extent) {
             assert(off == 0);
-            fut = lba_manager->update_mapping(
-              t,
-              extent->get_laddr(),
-              extent->get_length(),
-              extent->get_paddr(),
-              *nextent
-            ).si_then([&refcount](auto c) {
-              refcount = c;
-            });
+            fut = lba_manager->get_mapping(t, *extent
+            ).si_then([this, &t, extent, nextent,
+                      &refcount](auto mapping) {
+              return lba_manager->update_mapping(
+                t,
+                std::move(mapping),
+                extent->get_length(),
+                extent->get_paddr(),
+                *nextent
+              ).si_then([&refcount](auto c) {
+                refcount = c;
+              });
+            }).handle_error_interruptible(
+              rewrite_extent_iertr::pass_further{},
+              crimson::ct_error::assert_all{"unexpected enoent"}
+            );
           } else {
             ceph_assert(refcount != 0);
             fut = lba_manager->alloc_extent(
               t,
-              (extent->get_laddr() + off).checked_to_laddr(),
+              laddr_hint_t::create_as_fixed(
+                (extent->get_laddr() + off).checked_to_laddr()),
               *nextent,
               refcount
             ).si_then([extent, nextent, off](auto mapping) {
