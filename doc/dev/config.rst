@@ -281,3 +281,52 @@ Flags
 .. describe:: create
 
    option only affects daemon creation
+
+Documentation of Configuration Values
+=====================================
+
+Ceph configuration options are documented on-demand using the ``:confval:``
+directive rather than in a centralized location.
+
+Documenting Configuration Options
+---------------------------------
+
+To document a configuration option, use the ``:confval:`` directive:
+
+.. code-block:: rst
+
+   The check interval can be customized by the ``check_interval`` option:
+
+   .. confval:: mgr/inbox/check_interval
+
+.. note::
+   Ceph-mgr module options must include the ``mgr/<module>/``
+   namespace prefix. In the example above, ``check_interval`` belongs to the
+   ``inbox`` module, so it's documented as ``mgr/inbox/check_interval``.
+
+Referencing Configuration Options
+---------------------------------
+
+Once documented, reference options using the ``:confval:`` role:
+
+.. code-block:: rst
+
+   With the :confval:`mgr/inbox/check_interval` setting, you can customize the
+   check interval.
+
+For regular Ceph options (non-mgr modules), the process is the same but without the module prefix:
+
+.. code-block:: rst
+
+   You can set the initial monitor members with :confval:`mon_initial_members`:
+
+   .. confval:: mon_initial_members
+
+Naming Conventions
+------------------
+
+* **Mgr module options**: Use ``mgr/<module>/<option_name>`` format
+* **Regular options**: Use the option name directly (e.g., ``mon_initial_members``)
+
+This approach ensures consistent cross-referencing throughout the documentation
+while maintaining proper namespacing for different configuration contexts.
