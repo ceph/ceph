@@ -106,9 +106,9 @@ class DaemonPlacement(NamedTuple):
         if self.name and self.name != dd.daemon_id:
             return False
         if self.ports:
-            if self.ports != dd.ports and dd.ports:
+            if self.ports and dd.ports and self.ports != dd.ports:
                 return False
-            if self.ip != dd.ip and dd.ip:
+            if self.ip and dd.ip and self.ip != dd.ip:
                 return False
         return True
 

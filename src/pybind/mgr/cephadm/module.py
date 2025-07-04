@@ -93,6 +93,8 @@ from .inventory import (
     TunedProfileStore,
     NodeProxyCache,
     OrchSecretNotFound,
+    DaemonDeployQueue,
+    DaemonRemovalQueue,
 )
 from .upgrade import CephadmUpgrade
 from .template import TemplateMgr
@@ -687,6 +689,11 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         self.recently_altered_daemons: Dict[str, datetime.datetime] = {}
 
         self.ceph_volume: CephVolume = CephVolume(self)
+
+        self.daemon_deploy_queue = DaemonDeployQueue()
+        self.daemon_removal_queue = DaemonRemovalQueue()
+
+        self.created_ganesha_pool = False
 
     def shutdown(self) -> None:
         self.log.debug('shutdown')
@@ -2560,7 +2567,7 @@ Then run the following:
             daemon_spec = service_registry.get_service(daemon_type_to_service(
                 daemon_spec.daemon_type)).prepare_create(daemon_spec)
         with self.async_timeout_handler(daemon_spec.host, f'cephadm deploy ({daemon_spec.daemon_type} daemon)'):
-            self.wait_async(CephadmServe(self)._create_daemon(daemon_spec, reconfig=True))
+            self.wait_async(CephadmServe(self)._create_daemon([daemon_spec], reconfig=True))
 
         # try to be clever, or fall back to restarting the daemon
         rc = -1
@@ -2617,8 +2624,13 @@ Then run the following:
                 daemon_spec.final_config, daemon_spec.deps = self.osd_service.generate_config(
                     daemon_spec)
             with self.async_timeout_handler(daemon_spec.host, f'cephadm deploy ({daemon_spec.daemon_type} daemon)'):
-                return self.wait_async(
-                    CephadmServe(self)._create_daemon(daemon_spec, reconfig=(action == 'reconfig')))
+                successes, failures = self.wait_async(
+                    CephadmServe(self)._create_daemon([daemon_spec], reconfig=(action == 'reconfig')))
+                # we're only deploying one daemon here, so we expect successes or failures to container one entry
+                for res in [successes, failures]:
+                    if daemon_spec.name() in res:
+                        return res[daemon_spec.name()]
+                raise OrchestratorError(f'Expected results for {daemon_spec.name()} but got {successes} and {failures}')
 
         actions = {
             'start': ['reset-failed', 'start'],
@@ -2722,7 +2734,7 @@ Then run the following:
         if not args:
             raise OrchestratorError('Unable to find daemon(s) %s' % (names))
         self.log.info('Remove daemons %s' % ' '.join([a[0] for a in args]))
-        return self._remove_daemons(args)
+        return [msg for msgs in self._remove_daemons(args) for msg in msgs]
 
     @handle_orch_error
     def remove_service(self, service_name: str, force: bool = False) -> str:
@@ -3088,14 +3100,20 @@ Then run the following:
         return sorted(deps)
 
     @forall_hosts
-    def _remove_daemons(self, name: str, host: str) -> str:
-        return CephadmServe(self)._remove_daemon(name, host)
+    def _remove_daemons(self, name: str, host: str) -> List[str]:
+        return self.wait_async(CephadmServe(self)._remove_daemon([name], host))
 
     def _check_pool_exists(self, pool: str, service_name: str) -> None:
         logger.info(f'Checking pool "{pool}" exists for service {service_name}')
         if not self.rados.pool_exists(pool):
             raise OrchestratorError(f'Cannot find pool "{pool}" for '
                                     f'service {service_name}')
+
+    def create_nfs_pool(self) -> None:  # type: ignore
+        from nfs.cluster import create_ganesha_pool
+
+        create_ganesha_pool(self)
+        self.created_ganesha_pool = True
 
     def _add_daemon(self,
                     daemon_type: str,
@@ -3156,11 +3174,19 @@ Then run the following:
             )
             daemons.append(sd)
 
+        # TODO: make this one able to pass multiple daemon specs to _create_daemon
+        # as well. Currently it just ends up looping through and passing a length
+        # one list of daemon specs. I'm ignoring it for now as we only use this
+        # for manually adding daemons to unmanaged services
         @forall_hosts
         def create_func_map(*args: Any) -> str:
             daemon_spec = service_registry.get_service(daemon_type).prepare_create(*args)
             with self.async_timeout_handler(daemon_spec.host, f'cephadm deploy ({daemon_spec.daemon_type} daemon)'):
-                return self.wait_async(CephadmServe(self)._create_daemon(daemon_spec))
+                successes, failures = self.wait_async(CephadmServe(self)._create_daemon([daemon_spec]))
+                for res in [successes, failures]:
+                    if daemon_spec.name() in res:
+                        return res[daemon_spec.name()]
+                raise OrchestratorError(f'Expected results for {daemon_spec.name()} but got {successes} and {failures}')
 
         return create_func_map(args)
 
