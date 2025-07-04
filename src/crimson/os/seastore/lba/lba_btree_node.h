@@ -225,6 +225,13 @@ struct LBALeafNode
     laddr_t key) const {
     return parent_node_t::_is_child_stable(c.trans, c.cache, pos, key, true);
   }
+  bool is_child_initial_pending(
+    op_context_t c,
+    uint16_t pos,
+    laddr_t key) const {
+    return parent_node_t::_is_child_initial_pending(
+      c.trans, c.cache, pos, key);
+  }
 
   void on_split(
     Transaction &t,
