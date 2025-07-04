@@ -354,3 +354,14 @@ retention is indefinite, and notifications are retried as frequently as possible
 .. confval:: rgw_topic_persistency_sleep_duration
 
 .. _Bucket Notifications: ../notifications
+   
+Cloud Restore settings
+======================
+
+Cloud Restore feature currently enables the restoration of objects transitioned to S3-compatible cloud services into Ceph Object Gateway (RGW). The restore requests are asynchronously processed by Restore worker thread in the background. 
+
+.. confval:: rgw_restore_max_objs
+.. confval:: rgw_restore_lock_max_time
+.. confval:: rgw_restore_processor_period
+
+These values can be tuned based upon your specific workload to further increase the aggressiveness of restore processing. 
