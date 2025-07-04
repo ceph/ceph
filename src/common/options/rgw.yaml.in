@@ -4371,3 +4371,10 @@ options:
   default: false
   services:
   - rgw
+- name: rgw_bucket_persistent_notif_num_shards
+  type: uint
+  level: advanced
+  desc: Default number of shards for a persistent topic if sharding of persistent topic notifs enabled
+  default: 3
+  services: 
+    - rgw

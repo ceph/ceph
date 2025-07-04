@@ -1086,6 +1086,13 @@ static inline bool notification_match(reservation_t& res,
   return true;
 }
 
+static inline uint32_t compute_target_shard(const DoutPrefixProvider* dpp, const std::string& bucket_name, const std::string& object_key, const uint32_t num_shards){
+  std::hash<std::string> hash_fn; 
+  size_t hash = hash_fn(fmt::format("{}:{}", bucket_name, object_key)); 
+  ldpp_dout(dpp, 20) << "INFO: Hash Value (hash) is:  "<< hash << ". Hash Key: "<< bucket_name << ":"<<object_key<<dendl; 
+  return hash % num_shards; 
+}
+
 int publish_reserve(const DoutPrefixProvider* dpp,
                     const SiteConfig& site,
                     const EventTypeList& event_types,
@@ -1147,6 +1154,7 @@ int publish_reserve(const DoutPrefixProvider* dpp,
       }
 
       cls_2pc_reservation::id_t res_id = cls_2pc_reservation::NO_ID;
+      uint32_t target_shard = 0; 
       if (topic_cfg.dest.persistent) {
         // TODO: take default reservation size from conf
         constexpr auto DEFAULT_RESERVATION = 4 * 1024U;  // 4K
@@ -1154,15 +1162,21 @@ int publish_reserve(const DoutPrefixProvider* dpp,
         librados::ObjectWriteOperation op;
         bufferlist obl;
         int rval;
-        const auto& queue_name = topic_cfg.dest.persistent_queue;
+        const std::string bucket_name = res.bucket->get_name(); 
+        const std::string object_key = res.object_name ? *res.object_name : res.object->get_name();
+        const uint64_t num_shards = topic_cfg.dest.num_shards; 
+        target_shard = compute_target_shard(
+            dpp, bucket_name, object_key, num_shards); 
+        const auto& shard_name = target_shard == 0 ? topic_cfg.dest.persistent_queue : fmt::format("{}.{}", topic_cfg.dest.persistent_queue, target_shard); 
+        ldpp_dout(res.dpp, 1) << "INFO: target_shard: " + shard_name <<dendl;       
         cls_2pc_queue_reserve(op, res.size, 1, &obl, &rval);
         auto ret = rgw_rados_operate(
-            res.dpp, res.store->getRados()->get_notif_pool_ctx(), queue_name,
+            res.dpp, res.store->getRados()->get_notif_pool_ctx(), shard_name,
             std::move(op), res.yield, librados::OPERATION_RETURNVEC);
         if (ret < 0) {
           ldpp_dout(res.dpp, 1)
               << "ERROR: failed to reserve notification on queue: "
-              << queue_name << ". error: " << ret << dendl;
+              << shard_name << ". error: " << ret << dendl;
           // if no space is left in queue we ask client to slow down
           return (ret == -ENOSPC) ? -ERR_RATE_LIMITED : ret;
         }
@@ -1175,7 +1189,7 @@ int publish_reserve(const DoutPrefixProvider* dpp,
         }
       }
 
-      res.topics.emplace_back(topic_filter.s3_id, topic_cfg, res_id, event_type);
+      res.topics.emplace_back(topic_filter.s3_id, topic_cfg, res_id, event_type, target_shard);
     }
   }
   return 0;
@@ -1211,25 +1225,27 @@ int publish_commit(rgw::sal::Object* obj,
       event_entry.retry_sleep_duration = topic.cfg.dest.retry_sleep_duration;
       bufferlist bl;
       encode(event_entry, bl);
-      const auto& queue_name = topic.cfg.dest.persistent_queue;
+      uint64_t target_shard = topic.shard_id;
+      const auto& shard_name = target_shard == 0 ? topic.cfg.dest.persistent_queue : topic.cfg.dest.persistent_queue + "." + std::to_string(target_shard);     
+      ldpp_dout(res.dpp, 1) << "INFO: target_shard: " + shard_name <<dendl;   
       if (bl.length() > res.size) {
         // try to make a larger reservation, fail only if this is not possible
         ldpp_dout(dpp, 5) << "WARNING: committed size: " << bl.length()
 			  << " exceeded reserved size: " << res.size
 			  <<
-          " . trying to make a larger reservation on queue:" << queue_name
+          " . trying to make a larger reservation on queue:" << shard_name
 			  << dendl;
         // first cancel the existing reservation
         librados::ObjectWriteOperation op;
         cls_2pc_queue_abort(op, topic.res_id);
         auto ret = rgw_rados_operate(
 	  dpp, res.store->getRados()->get_notif_pool_ctx(),
-	  queue_name, std::move(op),
+	  shard_name, std::move(op),
 	  res.yield);
         if (ret < 0) {
           ldpp_dout(dpp, 1) << "ERROR: failed to abort reservation: "
 			    << topic.res_id << 
-            " when trying to make a larger reservation on queue: " << queue_name
+            " when trying to make a larger reservation on queue: " << shard_name
 			    << ". error: " << ret << dendl;
           return ret;
         }
@@ -1240,10 +1256,10 @@ int publish_commit(rgw::sal::Object* obj,
         cls_2pc_queue_reserve(op, bl.length(), 1, &obl, &rval);
         ret = rgw_rados_operate(
 	  dpp, res.store->getRados()->get_notif_pool_ctx(),
-          queue_name, std::move(op), res.yield, librados::OPERATION_RETURNVEC);
+          shard_name, std::move(op), res.yield, librados::OPERATION_RETURNVEC);
         if (ret < 0) {
           ldpp_dout(dpp, 1) << "ERROR: failed to reserve extra space on queue: "
-			    << queue_name
+			    << shard_name
 			    << ". error: " << ret << dendl;
           return (ret == -ENOSPC) ? -ERR_RATE_LIMITED : ret;
         }
@@ -1258,12 +1274,12 @@ int publish_commit(rgw::sal::Object* obj,
       librados::ObjectWriteOperation op;
       cls_2pc_queue_commit(op, bl_data_vec, topic.res_id);
       topic.res_id = cls_2pc_reservation::NO_ID;
-      auto pcc_arg = make_unique<PublishCommitCompleteArg>(queue_name, dpp->get_cct());
+      auto pcc_arg = make_unique<PublishCommitCompleteArg>(shard_name, dpp->get_cct());
       aio_completion_ptr completion{librados::Rados::aio_create_completion(pcc_arg.get(), publish_commit_completion)};
       auto& io_ctx = res.store->getRados()->get_notif_pool_ctx();
-      if (const int ret = io_ctx.aio_operate(queue_name, completion.get(), &op); ret < 0) {
+      if (const int ret = io_ctx.aio_operate(shard_name, completion.get(), &op); ret < 0) {
         ldpp_dout(dpp, 1) << "ERROR: failed to commit reservation to queue: "
-                          << queue_name << ". error: " << ret << dendl;
+                          << shard_name << ". error: " << ret << dendl;
         return ret;
       }
       // args will be released inside the callback
@@ -1306,16 +1322,18 @@ int publish_abort(reservation_t& res) {
       // nothing to abort or already committed/aborted
       continue;
     }
-    const auto& queue_name = topic.cfg.dest.persistent_queue;
+    uint64_t target_shard = topic.shard_id;   
+    const auto& shard_name = target_shard == 0 ? topic.cfg.dest.persistent_queue : topic.cfg.dest.persistent_queue + "." + std::to_string(target_shard);     
+    ldpp_dout(res.dpp, 1) << "INFO: target_shard: " + shard_name <<dendl;
     librados::ObjectWriteOperation op;
     cls_2pc_queue_abort(op, topic.res_id);
     const auto ret = rgw_rados_operate(
       res.dpp, res.store->getRados()->get_notif_pool_ctx(),
-      queue_name, std::move(op), res.yield);
+      shard_name, std::move(op), res.yield);
     if (ret < 0) {
       ldpp_dout(res.dpp, 1) << "ERROR: failed to abort reservation: "
 			    << topic.res_id <<
-        " from queue: " << queue_name << ". error: " << ret << dendl;
+        " from queue: " << shard_name << ". error: " << ret << dendl;
       return ret;
     }
     topic.res_id = cls_2pc_reservation::NO_ID;
