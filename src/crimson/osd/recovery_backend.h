@@ -19,9 +19,8 @@
 #include "osd/recovery_types.h"
 #include "osd/osd_types.h"
 
-namespace crimson::osd{
-  class PG;
-}
+namespace crimson::osd {
+class PG;
 
 class RecoveryBackend {
 public:
@@ -306,3 +305,5 @@ private:
     crimson::net::ConnectionXcoreRef conn);
   interruptible_future<> handle_backfill_remove(MOSDPGBackfillRemove& m);
 };
+
+}

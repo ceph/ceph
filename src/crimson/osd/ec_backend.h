@@ -9,6 +9,8 @@
 #include "osd/osd_types.h"
 #include "pg_backend.h"
 
+namespace crimson::osd {
+
 class ECBackend : public PGBackend
 {
 public:
@@ -39,3 +41,5 @@ private:
     return seastar::now();
   }
 };
+
+}

@@ -15,6 +15,8 @@
 
 SET_SUBSYS(osd);
 
+namespace crimson::osd {
+
 ReplicatedBackend::ReplicatedBackend(pg_t pgid,
                                      pg_shard_t whoami,
 				     crimson::osd::PG& pg,
@@ -354,4 +356,6 @@ void ReplicatedBackend::do_pct(const MOSDPGPCT &m)
   LOG_PREFIX(ReplicatedBackend::do_pct);
   DEBUGDPP("{}", dpp, m);
   pg.peering_state.update_pct(m.pg_committed_to);
+}
+
 }

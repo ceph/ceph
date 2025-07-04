@@ -16,6 +16,8 @@
 
 SET_SUBSYS(osd);
 
+namespace crimson::osd {
+
 hobject_t RecoveryBackend::get_temp_recovery_object(
   const hobject_t& target,
   eversion_t version) const
@@ -458,4 +460,6 @@ RecoveryBackend::handle_backfill_op(
 	std::invalid_argument(fmt::format("invalid request type: {}",
 					  (uint16_t)m->get_header().type)));
   }
+}
+
 }

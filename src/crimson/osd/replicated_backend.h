@@ -14,9 +14,8 @@
 #include "pg_backend.h"
 
 namespace crimson::osd {
-  class ShardServices;
-  class PG;
-}
+class ShardServices;
+class PG;
 
 class ReplicatedBackend : public PGBackend
 {
@@ -104,3 +103,5 @@ public:
   /// Handle MOSDPGPCT message
   void do_pct(const MOSDPGPCT &m);
 };
+
+}
