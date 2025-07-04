@@ -23,6 +23,7 @@ import { PrometheusListHelper } from '~/app/shared/helpers/prometheus-list-helpe
 import { PrometheusAlertService } from '~/app/shared/services/prometheus-alert.service';
 import { OrchestratorService } from '~/app/shared/api/orchestrator.service';
 import { AlertClass } from '~/app/shared/enum/health-icon.enum';
+import { OsdSettings } from '~/app/shared/models/osd-settings';
 
 @Component({
   selector: 'cd-dashboard-v3',
@@ -32,7 +33,7 @@ import { AlertClass } from '~/app/shared/enum/health-icon.enum';
 export class DashboardV3Component extends PrometheusListHelper implements OnInit, OnDestroy {
   detailsCardData: DashboardDetails = {};
   osdSettingsService: any;
-  osdSettings: any;
+  osdSettings = new OsdSettings();
   interval = new Subscription();
   permissions: Permissions;
   enabledFeature$: FeatureTogglesMap$;
@@ -90,7 +91,8 @@ export class DashboardV3Component extends PrometheusListHelper implements OnInit
     super.ngOnInit();
     this.interval = this.refreshIntervalService.intervalData$.subscribe(() => {
       this.getHealth();
-      this.getCapacityCardData();
+      this.getCapacity();
+      if (this.permissions.configOpt.read) this.getOsdSettings();
     });
     this.getPrometheusData(this.prometheusService.lastHourDateObject);
     this.getDetailsCardData();
@@ -136,16 +138,19 @@ export class DashboardV3Component extends PrometheusListHelper implements OnInit
     );
   }
 
-  getCapacityCardData() {
-    this.osdSettingsService = this.osdService
-      .getOsdSettings()
-      .pipe(take(1))
-      .subscribe((data: any) => {
-        this.osdSettings = data;
-      });
+  private getCapacity() {
     this.capacityService = this.healthService.getClusterCapacity().subscribe((data: any) => {
       this.capacity = data;
     });
+  }
+
+  private getOsdSettings() {
+    this.osdSettingsService = this.osdService
+      .getOsdSettings()
+      .pipe(take(1))
+      .subscribe((data: OsdSettings) => {
+        this.osdSettings = data;
+      });
   }
 
   public getPrometheusData(selectedTime: any) {
