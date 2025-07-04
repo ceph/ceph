@@ -60,6 +60,7 @@ int main(int argc, char* argv[])
   {
       std::cerr << "Couldn't Create RadosStriper"<< ret << std::endl;
       delete rs;
+      rs = nullptr;
   }
   uint64_t alignment = 0;
   ret = io_ctx.pool_required_alignment2(&alignment);
@@ -68,7 +69,10 @@ int main(int argc, char* argv[])
       std::cerr << "IO_CTX didn't give alignment "<< ret
           << "\n Is this an erasure coded pool? "<< std::endl;
 
-      delete rs;
+      if (rs) {
+        delete rs;
+        rs = nullptr;
+      }
       io_ctx.close();
       cluster.shutdown();
       return EXIT_FAILURE;
@@ -86,7 +90,10 @@ int main(int argc, char* argv[])
   if(err != "no_err")
   {
       std::cout << "Error reading file into bufferlist: "<< err << std::endl;
-      delete rs;
+      if (rs) {
+        delete rs;
+        rs = nullptr;
+      }
       io_ctx.close();
       cluster.shutdown();
       return EXIT_FAILURE;
@@ -96,7 +103,10 @@ int main(int argc, char* argv[])
   rs->write_full(obj_name,bl);
   std::cout << "done with: " << fname << std::endl;
 
-  delete rs;
+  if (rs) {
+    delete rs;
+    rs = nullptr;
+  }
   io_ctx.close();
   cluster.shutdown();
 }
