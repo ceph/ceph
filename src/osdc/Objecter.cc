@@ -3020,7 +3020,7 @@ int Objecter::_calc_target(op_target_t *t, Connection *con, bool any_change)
     if (pi->is_erasure()) {
       for (uint8_t i = 0; i < t->acting.size(); ++i) {
         if (t->acting[i] == acting_primary) {
-          spgid.reset_shard(shard_id_t(i));
+	  spgid.reset_shard(osdmap->pgtemp_undo_primaryfirst(*pi, actual_pgid, shard_id_t(i)));
           break;
         }
       }
