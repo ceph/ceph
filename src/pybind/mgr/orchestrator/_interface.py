@@ -454,6 +454,14 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
+    def stop_drain_host(self, hostname: str) -> OrchResult[str]:
+        """
+        stop draining daemons of a host
+
+        :param hostname: hostname
+        """
+        raise NotImplementedError()
+
     def update_host_addr(self, host: str, addr: str) -> OrchResult[str]:
         """
         Update a host's address
