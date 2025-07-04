@@ -1023,6 +1023,28 @@ auto gen_usage_log_info(std::string payer, std::string bucket, int total_usage_e
   return info;
 }
 
+static int usage_log_read(librados::IoCtx& io_ctx, const std::string& oid,
+                          const std::string& user, const std::string& bucket,
+                          uint64_t start_epoch, uint64_t end_epoch,
+                          uint32_t max_entries, std::string& read_iter,
+                          std::map<rgw_user_bucket, rgw_usage_log_entry>& usage,
+                          bool* truncated)
+{
+  librados::ObjectReadOperation op;
+  bufferlist bl;
+  int rval = 0;
+  cls_rgw_usage_log_read(op, user, bucket, start_epoch, end_epoch,
+                         max_entries, read_iter, bl, rval);
+  int ret = io_ctx.operate(oid, &op, nullptr);
+  if (ret < 0) {
+    return ret;
+  }
+  if (rval < 0) {
+    return rval;
+  }
+  return cls_rgw_usage_log_read_decode(bl, read_iter, usage, truncated);
+}
+
 TEST_F(cls_rgw, usage_basic)
 {
   string oid="usage.1";
@@ -1042,8 +1064,8 @@ TEST_F(cls_rgw, usage_basic)
   bool truncated;
 
 
-  int ret = cls_rgw_usage_log_read(ioctx, oid, user, "", start_epoch, end_epoch,
-				   max_entries, read_iter, usage, &truncated);
+  int ret = usage_log_read(ioctx, oid, user, "", start_epoch, end_epoch,
+                           max_entries, read_iter, usage, &truncated);
   // read the entries, and see that we have all the added entries
   ASSERT_EQ(0, ret);
   ASSERT_FALSE(truncated);
@@ -1053,8 +1075,8 @@ TEST_F(cls_rgw, usage_basic)
   ASSERT_EQ(0, cls_rgw_usage_log_trim(ioctx, oid, user, "", start_epoch, end_epoch));
 
 
-  ret = cls_rgw_usage_log_read(ioctx, oid, user, "", start_epoch, end_epoch,
-			       max_entries, read_iter, usage2, &truncated);
+  ret = usage_log_read(ioctx, oid, user, "", start_epoch, end_epoch,
+                       max_entries, read_iter, usage2, &truncated);
   ASSERT_EQ(0, ret);
   ASSERT_EQ(0u, usage2.size());
 
@@ -1068,16 +1090,16 @@ TEST_F(cls_rgw, usage_basic)
   info = gen_usage_log_info(payer, bucket2, 100);
   cls_rgw_usage_log_add(op, info);
   ASSERT_EQ(0, ioctx.operate(oid, &op));
-  ret = cls_rgw_usage_log_read(ioctx, oid, "", bucket1, start_epoch, end_epoch,
-                              max_entries, read_iter, usage2, &truncated);
+  ret = usage_log_read(ioctx, oid, "", bucket1, start_epoch, end_epoch,
+                       max_entries, read_iter, usage2, &truncated);
   ASSERT_EQ(0, ret);
   ASSERT_EQ(100u, usage2.size());
 
   // delete and read to assert that bucket option is valid for usage trim
   ASSERT_EQ(0, cls_rgw_usage_log_trim(ioctx, oid, "", bucket1, start_epoch, end_epoch));
 
-  ret = cls_rgw_usage_log_read(ioctx, oid, "", bucket1, start_epoch, end_epoch,
-                               max_entries, read_iter, usage2, &truncated);
+  ret = usage_log_read(ioctx, oid, "", bucket1, start_epoch, end_epoch,
+                       max_entries, read_iter, usage2, &truncated);
   ASSERT_EQ(0, ret);
   ASSERT_EQ(0u, usage2.size());
   ASSERT_EQ(0, cls_rgw_usage_log_trim(ioctx, oid, "", bucket2, start_epoch, end_epoch));
@@ -1116,8 +1138,8 @@ TEST_F(cls_rgw, usage_clear)
   bool truncated;
   uint64_t start_epoch{0}, end_epoch{(uint64_t) -1};
   string read_iter;
-  ret = cls_rgw_usage_log_read(ioctx, oid, user, "", start_epoch, end_epoch,
-			       max_entries, read_iter, usage, &truncated);
+  ret = usage_log_read(ioctx, oid, user, "", start_epoch, end_epoch,
+                       max_entries, read_iter, usage, &truncated);
   ASSERT_EQ(0, ret);
   ASSERT_EQ(0u, usage.size());
 }

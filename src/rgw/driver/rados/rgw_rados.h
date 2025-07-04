@@ -1578,7 +1578,8 @@ public:
 
 
   int cls_obj_usage_log_add(const DoutPrefixProvider *dpp, const std::string& oid, rgw_usage_log_info& info, optional_yield y);
-  int cls_obj_usage_log_read(const DoutPrefixProvider *dpp, const std::string& oid, const std::string& user, const std::string& bucket, uint64_t start_epoch,
+  int cls_obj_usage_log_read(const DoutPrefixProvider *dpp, optional_yield y,
+                             const std::string& oid, const std::string& user, const std::string& bucket, uint64_t start_epoch,
                              uint64_t end_epoch, uint32_t max_entries, std::string& read_iter,
 			     std::map<rgw_user_bucket, rgw_usage_log_entry>& usage, bool *is_truncated);
   int cls_obj_usage_log_trim(const DoutPrefixProvider *dpp, const std::string& oid, const std::string& user, const std::string& bucket, uint64_t start_epoch,
