@@ -194,9 +194,9 @@ do_join() {
 # processors
 if [ `uname` == FreeBSD -o `uname` == Darwin ]; then
   NPROC=`sysctl -n hw.ncpu`
-  max_parallel_jobs=${MAX_PARALLEL_JOBS:-${NPROC}}
+  max_parallel_jobs=${HHAX_PARALLEL_JOBS:-${NPROC}}
 else
-  max_parallel_jobs=${MAX_PARALLEL_JOBS:-$(nproc)}
+  max_parallel_jobs=${HHAX_PARALLEL_JOBS:-$(nproc)}
 fi
 
 output_file=`mktemp /tmp/output_file-XXXXXXXXX`
