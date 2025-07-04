@@ -1,0 +1,6 @@
+overrides:
+  ceph:
+    conf:
+      global:
+        enable experimental unrecoverable data corrupting features: '*'
+        osd_pool_default_flag_ec_optimizations: true
