@@ -1894,6 +1894,7 @@ CtPtr ProtocolV2::handle_auth_done(ceph::bufferlist &payload)
 }
 
 CtPtr ProtocolV2::finish_client_auth() {
+  ldout(cct, 20) << __func__ << dendl;
   if (HAVE_MSGR2_FEATURE(peer_supported_features, COMPRESSION)) {
     return send_compression_request();
   }
@@ -1902,6 +1903,7 @@ CtPtr ProtocolV2::finish_client_auth() {
 }
 
 CtPtr ProtocolV2::finish_server_auth() {
+  ldout(cct, 20) << __func__ << dendl;
   // server had sent AuthDone and client responded with correct pre-auth
   // signature. 
   // We can start conditioanl msgr protocol
@@ -1918,10 +1920,12 @@ CtPtr ProtocolV2::finish_server_auth() {
 
 CtPtr ProtocolV2::start_session_connect() {
   if (!server_cookie) {
+    ldout(cct, 20) << __func__ << " starting a new session" << dendl;
     ceph_assert(connect_seq == 0);
     state = SESSION_CONNECTING;
     return send_client_ident();
   } else {  // reconnecting to previous session
+    ldout(cct, 20) << __func__ << " reconnecting to session" << dendl;
     state = SESSION_RECONNECTING;
     ceph_assert(connect_seq > 0);
     return send_reconnect();
@@ -2669,6 +2673,17 @@ CtPtr ProtocolV2::handle_existing_connection(const AsyncConnectionRef& existing)
                   << " existing=" << existing << dendl;
     auto wait = WaitFrame::Encode();
     return WRITE(wait, "wait", read_frame);
+  }
+
+  if (peer_global_seq == 1 && 
+      exproto->client_cookie && client_cookie && 
+      exproto->client_cookie != client_cookie) {
+    ldout(cct, 1) << __func__ << " client has clearly restarted (peer_global_seq=1, cookie changed), "
+                  << "dropping existing connection=" << existing << " in favor of new one" << dendl;
+    existing->protocol->stop();
+    existing->dispatch_queue->queue_reset(existing.get());
+    l.unlock();
+    return send_server_ident();
   }
 
   if (exproto->peer_global_seq > peer_global_seq) {
