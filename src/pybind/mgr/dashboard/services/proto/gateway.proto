@@ -145,6 +145,8 @@ message namespace_add_req {
 	optional bool force = 10;
 	optional bool no_auto_visible = 11;
 	optional bool trash_image = 12;
+	optional bool disable_auto_resize = 13;
+	optional bool read_only = 14;
 }
 
 message namespace_resize_req {
@@ -255,6 +257,7 @@ message remove_host_req {
 
 message list_hosts_req {
 	string subsystem = 1;
+	optional bool clear_alerts = 2;
 }
 
 message list_connections_req {
@@ -488,6 +491,7 @@ message host {
 	string nqn = 1;
 	optional bool use_psk = 2;
 	optional bool use_dhchap = 3;
+	optional bool disconnected_due_to_keepalive_timeout = 4;
 }
 
 message hosts_info {
@@ -510,6 +514,8 @@ message connection {
 	optional bool secure = 9;
 	optional bool use_psk = 10;
 	optional bool use_dhchap = 11;
+        optional string subsystem = 12;
+	optional bool disconnected_due_to_keepalive_timeout = 13;
 }
 
 message connections_info {
@@ -536,6 +542,8 @@ message namespace_cli {
 	repeated string hosts = 14;
 	optional string ns_subsystem_nqn = 15;
 	optional bool trash_image = 16;
+	optional bool disable_auto_resize = 17;
+	optional bool read_only = 18;
 }
 
 message namespaces_info {
