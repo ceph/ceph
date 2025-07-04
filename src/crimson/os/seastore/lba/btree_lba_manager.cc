@@ -782,15 +782,12 @@ BtreeLBAManager::refresh_lba_cursor(
     });
   }
 
-  auto [viewable, state] = cursor.parent->is_viewable_by_trans(c.trans);
   auto leaf = cursor.parent->cast<LBALeafNode>();
-
-  TRACET("cursor: {} viewable: {} state: {}",
-	 c.trans, cursor, viewable, state);
-
+  auto [viewable, l] = leaf->resolve_transaction(c.trans, cursor.key);
+  TRACET("cursor: {} viewable: {}", c.trans, cursor, viewable);
   if (!viewable) {
+    leaf = l;
     stats.num_refresh_unviewable_parent++;
-    leaf = leaf->find_pending_version(c.trans, cursor.get_laddr());
     cursor.parent = leaf;
   }
 
@@ -891,7 +888,7 @@ BtreeLBAManager::_decref_intermediate(
 
       if (val.refcount == 0) {
 	return btree.remove(c, iter
-	).si_then([key, val] {
+	).si_then([key, val](auto) {
 	  return ref_iertr::make_ready_future<
 	    update_mapping_ret_bare_t>(key, val);
 	});
@@ -1077,7 +1074,7 @@ BtreeLBAManager::_update_mapping(
 	  return btree.remove(
 	    c,
 	    iter
-	  ).si_then([addr, ret] {
+	  ).si_then([addr, ret](auto) {
 	    return update_mapping_ret_bare_t(addr, ret);
 	  });
 	} else {

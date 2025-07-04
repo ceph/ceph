@@ -363,7 +363,7 @@ struct lba_btree_test : btree_test_base {
 	EXPECT_TRUE(iter.get_val().len == len);
 	return btree.remove(
 	  get_op_context(t), iter 
-	);
+        ).discard_result();
       });
     });
   }
