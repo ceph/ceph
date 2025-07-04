@@ -11,6 +11,11 @@ import { NotificationContent, NotificationType } from 'carbon-components-angular
 
 import { Icons } from '~/app/shared/enum/icons.enum';
 
+type ExtendedNotificationType = NotificationType | 'inline-tip';
+interface ExtendedNotificationContent extends Omit<NotificationContent, 'type'> {
+  type: ExtendedNotificationType;
+}
+
 @Component({
   selector: 'cd-alert-panel',
   templateUrl: './alert-panel.component.html',
@@ -25,7 +30,7 @@ export class AlertPanelComponent implements OnInit {
   @Input()
   title = '';
   @Input()
-  type: 'warning' | 'error' | 'info' | 'success' | 'danger';
+  type: 'warning' | 'error' | 'info' | 'success' | 'danger' | 'inline-tip';
   @Input()
   showTitle = true;
   @Input()
@@ -55,10 +60,12 @@ export class AlertPanelComponent implements OnInit {
 
   icons = Icons;
 
-  notificationContent: NotificationContent;
+  notificationContent: ExtendedNotificationContent;
+  isCollapsed = false;
+  isTruncated = false;
 
   ngOnInit() {
-    const type: NotificationType = this.type === 'danger' ? 'error' : this.type;
+    const type: ExtendedNotificationType = this.type === 'danger' ? 'error' : this.type;
     switch (this.type) {
       case 'warning':
         this.title = this.title || $localize`Warning`;
@@ -75,6 +82,8 @@ export class AlertPanelComponent implements OnInit {
       case 'danger':
         this.title = this.title || $localize`Danger`;
         break;
+      default:
+        this.title = this.title || '';
     }
 
     this.notificationContent = {
@@ -93,5 +102,14 @@ export class AlertPanelComponent implements OnInit {
 
   onAction(): void {
     this.action.emit();
+  }
+
+  onClick() {
+    this.isCollapsed = true;
+    this.isTruncated = true;
+  }
+
+  toggleContent() {
+    this.isTruncated = !this.isTruncated;
   }
 }
