@@ -1022,17 +1022,7 @@ $BLUESTORE_OPTS
 
         ; kstore
         kstore fsck on mount = true
-EOF
-    if [ "$crimson" -eq 1 ]; then
-        wconf <<EOF
-        crimson osd objectstore = $objectstore
-EOF
-    else
-        wconf <<EOF
         osd objectstore = $objectstore
-EOF
-    fi
-    wconf <<EOF
 $SEASTORE_OPTS
 $COSDSHORT
         $(format_conf "${extra_conf}")

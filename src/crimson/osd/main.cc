@@ -203,10 +203,10 @@ int main(int argc, const char* argv[])
                                                    true);
           }
           auto store = crimson::os::FuturizedStore::create(
-            local_conf().get_val<std::string>("crimson_osd_objectstore"),
+            local_conf().get_val<std::string>("osd_objectstore"),
             local_conf().get_val<std::string>("osd_data"),
             local_conf().get_config_values());
-
+          logger().info("passed objectstore is {}", local_conf().get_val<std::string>("osd_objectstore"));
           crimson::osd::OSD osd(
             whoami, nonce, std::ref(should_stop.abort_source()),
             std::ref(*store), cluster_msgr, client_msgr,
