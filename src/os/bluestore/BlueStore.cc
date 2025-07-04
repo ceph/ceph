@@ -2940,7 +2940,6 @@ void BlueStore::Blob::maybe_prune_tail() {
   }
 }
 
-#ifndef CACHE_BLOB_BL
 void BlueStore::Blob::decode(
   bufferptr::const_iterator& p,
   uint64_t struct_v,
@@ -2970,7 +2969,6 @@ void BlueStore::Blob::decode(
     }
   }
 }
-#endif
 
 // Extent
 
