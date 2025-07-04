@@ -83,6 +83,7 @@ import { FormAdvancedFieldsetComponent } from './form-advanced-fieldset/form-adv
 import { UpgradableComponent } from './upgradable/upgradable.component';
 import { ProgressComponent } from './progress/progress.component';
 import { SidePanelComponent } from './side-panel/side-panel.component';
+import { Toast } from './notification-toast/notification-toast.component';
 
 // Icons
 import InfoIcon from '@carbon/icons/es/information/16';
@@ -172,7 +173,8 @@ import { ChartsModule } from '@carbon/charts-angular';
     FormAdvancedFieldsetComponent,
     UpgradableComponent,
     ProgressComponent,
-    SidePanelComponent
+    SidePanelComponent,
+    Toast
   ],
   providers: [provideCharts(withDefaultRegisterables())],
   exports: [
@@ -212,7 +214,8 @@ import { ChartsModule } from '@carbon/charts-angular';
     FormAdvancedFieldsetComponent,
     UpgradableComponent,
     ProgressComponent,
-    SidePanelComponent
+    SidePanelComponent,
+    Toast
   ]
 })
 export class ComponentsModule {

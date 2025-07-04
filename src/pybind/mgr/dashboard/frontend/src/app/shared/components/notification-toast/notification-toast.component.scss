@@ -1,0 +1,90 @@
+@use '@carbon/styles/scss/theme' as *;
+@use '@carbon/styles/scss/spacing' as *;
+@use '@carbon/styles/scss/layer' as *;
+@use '@carbon/styles/scss/type' as *;
+@use '@carbon/styles/scss/motion' as *;
+
+.cds--toast-notification-container {
+  position: fixed;
+  top: $spacing-10; 
+  right: $spacing-04; 
+  max-width: $spacing-13 * 8; 
+  z-index: 9000; 
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  
+  cds-toast {
+    pointer-events: all;
+    margin-bottom: $spacing-03;
+    transform-origin: top right;
+    animation: toast-slide-in motion(entrance, productive) $duration-moderate-02;
+    opacity: 1;
+    transition: transform motion(standard, productive) $duration-moderate-01,
+                opacity motion(standard, productive) $duration-moderate-01;
+
+    &.toast-exit {
+      animation: toast-slide-out motion(exit, productive) $duration-moderate-02;
+    }
+
+    ::ng-deep {
+      .cds--toast-notification__title,
+      .cds--toast-notification__subtitle,
+      .cds--toast-notification__caption {
+        color: $text-primary;
+      }
+
+      .cds--toast-notification__close-button {
+        color: $icon-primary;
+      }
+
+      .cds--toast-notification__close-button:hover {
+        background-color: transparent;
+      }
+
+      .cds--toast-notification__close-icon {
+        fill: currentColor;
+      }
+
+      .toast-caption-container {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        width: 100%;
+        gap: $spacing-05;
+      }
+
+      .toast-caption-container .date {
+        flex-shrink: 0;
+      }
+
+      .toast-caption-container .custom-icon {
+        flex-shrink: 0;
+        margin-left: auto;
+      }
+    }
+  }
+}
+
+@keyframes toast-slide-in {
+  from {
+    opacity: 0;
+    transform: translateX(100%);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes toast-slide-out {
+  from {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(100%);
+  }
+}
