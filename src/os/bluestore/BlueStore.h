@@ -638,8 +638,6 @@ public:
     void dump(CephContext *cct);
   };
 
-//#define CACHE_BLOB_BL  // not sure if this is a win yet or not... :/
-
   /// in-memory blob metadata and associated cached buffers (if any)
   struct Blob {
     MEMPOOL_CLASS_HELPERS();
@@ -660,9 +658,6 @@ public:
   private:
     SharedBlobRef shared_blob;      ///< shared blob state (if any)
     mutable bluestore_blob_t blob;  ///< decoded blob metadata
-#ifdef CACHE_BLOB_BL
-    mutable ceph::buffer::list blob_bl;     ///< cached encoded blob, blob is dirty if empty
-#endif
     /// refs from this shard.  ephemeral if id<0, persisted if spanning.
     bluestore_blob_use_tracker_t used_in_blob;
 
@@ -731,9 +726,6 @@ public:
     void dup(Blob& o) {
       o.set_shared_blob(shared_blob);
       o.blob = blob;
-#ifdef CACHE_BLOB_BL
-      o.blob_bl = blob_bl;
-#endif
     }
     void add_tail(uint32_t new_blob_size, uint32_t min_release_size);
     void dup(const Blob& from, bool copy_used_in_blob);
@@ -747,9 +739,6 @@ public:
       return blob;
     }
     inline bluestore_blob_t& dirty_blob() {
-#ifdef CACHE_BLOB_BL
-      blob_bl.clear();
-#endif
       return blob;
     }
 
@@ -790,46 +779,6 @@ public:
 
     ~Blob();
 
-#ifdef CACHE_BLOB_BL
-    void _encode() const {
-      if (blob_bl.length() == 0 ) {
-	encode(blob, blob_bl);
-      } else {
-	ceph_assert(blob_bl.length());
-      }
-    }
-    void bound_encode(
-      size_t& p,
-      bool include_ref_map) const {
-      _encode();
-      p += blob_bl.length();
-      if (include_ref_map) {
-	used_in_blob.bound_encode(p);
-      }
-    }
-    void encode(
-      ceph::buffer::list::contiguous_appender& p,
-      bool include_ref_map) const {
-      _encode();
-      p.append(blob_bl);
-      if (include_ref_map) {
-	used_in_blob.encode(p);
-      }
-    }
-    void decode(
-      ceph::buffer::ptr::const_iterator& p,
-      bool include_ref_map,
-      Collection */*coll*/) {
-      const char *start = p.get_pos();
-      denc(blob, p);
-      const char *end = p.get_pos();
-      blob_bl.clear();
-      blob_bl.append(start, end - start);
-      if (include_ref_map) {
-	used_in_blob.decode(p);
-      }
-    }
-#else
     void bound_encode(
       size_t& p,
       uint64_t struct_v,
@@ -856,14 +805,37 @@ public:
 	used_in_blob.encode(p);
       }
     }
+    template <bool decode_csum>
     void decode(
       ceph::buffer::ptr::const_iterator& p,
       uint64_t struct_v,
       uint64_t* sbid,
       bool include_ref_map,
-      Collection *coll);
-#endif
+      Collection *coll) {
+      if constexpr (decode_csum)
+        blob.decode<true>(p, struct_v);
+      else
+        blob.decode<false>(p, struct_v);
+      if (blob.is_shared()) {
+        denc(*sbid, p);
+      }
+      if (include_ref_map) {
+        if (struct_v > 1) {
+          used_in_blob.decode(p);
+        } else {
+          used_in_blob.clear();
+          bluestore_extent_ref_map_t legacy_ref_map;
+          legacy_ref_map.decode(p);
+          if (coll) {
+            for (auto r : legacy_ref_map.ref_map) {
+              get_ref(coll, r.first, r.second.refs * r.second.length);
+            }
+          }
+        }
+      }
+    }
   };
+
   typedef boost::intrusive_ptr<Blob> BlobRef;
   typedef mempool::bluestore_cache_meta::map<int,BlobRef> blob_map_t;
 
@@ -1056,6 +1028,15 @@ public:
       uint64_t prev_len = 0;
       uint64_t extent_pos = 0;
     protected:
+      // Decodes Blob from bitstream.
+      // The returned Blob is then used in \ref consume_blob or \ref consume_spanning_blob
+      virtual BlobRef decode_create_blob(
+        bptr_c_it_t& p,
+        __u8 struct_v,
+        uint64_t* sbid,      // shared blobid, is Blob turns out to be shared blob
+        bool include_ref_map, // only spanning blobs have references stored
+        Collection* c) = 0;
+
       virtual void consume_blobid(Extent* le,
                                   bool spanning,
                                   uint64_t blobid) = 0;
@@ -1083,6 +1064,13 @@ public:
       ExtentMap& extent_map;
       std::vector<BlobRef> blobs;
     protected:
+      BlobRef decode_create_blob(
+        bptr_c_it_t& p,
+        __u8 struct_v,
+        uint64_t* sbid,
+        bool include_ref_map,
+        Collection* c) override;
+
       void consume_blobid(Extent* le, bool spanning, uint64_t blobid) override;
       void consume_blob(Extent* le,
                         uint64_t extent_no,
@@ -4093,7 +4081,12 @@ private:
     volatile_statfs* per_pool_statfs = nullptr;
     blob_map_t blobs;
     blob_map_t spanning_blobs;
-
+    virtual BlobRef decode_create_blob(
+      bptr_c_it_t& p,
+      __u8 struct_v,
+      uint64_t* sbid,
+      bool include_ref_map,
+      Collection* c) override;
     void _consume_new_blob(bool spanning,
                            uint64_t extent_no,
                            uint64_t sbid,
