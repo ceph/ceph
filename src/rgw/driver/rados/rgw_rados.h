@@ -694,7 +694,7 @@ public:
     void invalidate_state();
 
     int prepare_atomic_modification(const DoutPrefixProvider *dpp, librados::ObjectWriteOperation& op, bool reset_obj, const std::string *ptag,
-                                    const char *ifmatch, const char *ifnomatch, bool removal_op, bool modify_tail, optional_yield y);
+                                    const char *ifmatch, const char *ifnomatch, bool removal_op, bool modify_tail, bool handle_version, optional_yield y);
     int complete_atomic_modification(const DoutPrefixProvider *dpp, bool keep_tail, optional_yield y);
 
   public:
@@ -853,7 +853,11 @@ public:
         std::list<rgw_obj_index_key> *remove_objs;
         ceph::real_time expiration_time;
         ceph::real_time unmod_since;
+        ceph::real_time last_mod_time_match;
         ceph::real_time mtime; /* for setting delete marker mtime */
+        uint64_t size_match = 0;
+        const char *if_match = NULL;
+        const char *if_nomatch = NULL;
         bool high_precision_time;
         rgw_zone_set *zones_trace;
 	bool abortmp;
