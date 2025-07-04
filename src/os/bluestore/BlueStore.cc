@@ -2939,36 +2939,6 @@ void BlueStore::Blob::maybe_prune_tail() {
   }
 }
 
-void BlueStore::Blob::decode(
-  bufferptr::const_iterator& p,
-  uint64_t struct_v,
-  uint64_t* sbid,
-  bool include_ref_map,
-  Collection *coll)
-{
-  denc(blob, p, struct_v);
-  if (blob.is_shared()) {
-    denc(*sbid, p);
-  }
-  if (include_ref_map) {
-    if (struct_v > 1) {
-      used_in_blob.decode(p);
-    } else {
-      used_in_blob.clear();
-      bluestore_extent_ref_map_t legacy_ref_map;
-      legacy_ref_map.decode(p);
-      if (coll) {
-        for (auto r : legacy_ref_map.ref_map) {
-          get_ref(
-            coll,
-            r.first,
-            r.second.refs * r.second.length);
-        }
-      }
-    }
-  }
-}
-
 // Extent
 
 void BlueStore::Extent::dump(Formatter* f) const
@@ -4081,9 +4051,8 @@ void BlueStore::ExtentMap::ExtentDecoder::decode_extent(
       consume_blobid(le, false, blobid - 1);
     } else {
       // dummy onodes might not have collections, we need a check for it.
-      BlobRef b = c ? c->new_blob() : new Blob(nullptr);
       uint64_t sbid = 0;
-      b->decode(p, struct_v, &sbid, false, c);
+      BlobRef b = decode_create_blob(p, struct_v, &sbid, false, c);
       consume_blob(le, extent_pos, sbid, b);
     }
   }
@@ -4129,15 +4098,29 @@ void BlueStore::ExtentMap::ExtentDecoder::decode_spanning_blobs(
   unsigned n;
   denc_varint(n, p);
   while (n--) {
-    BlobRef b = c ? c->new_blob() : new Blob(nullptr);
-    denc_varint(b->id, p);
+    decltype(Blob::id) id;
+    denc_varint(id, p);
+
     uint64_t sbid = 0;
-    b->decode(p, struct_v, &sbid, true, c);
+    BlobRef b = decode_create_blob(p, struct_v, &sbid, true, c);
+    b->id = id;
     consume_spanning_blob(sbid, b);
   }
 }
 
 /////////////////// BlueStore::ExtentMap::DecoderExtentFull ///////////
+
+BlueStore::BlobRef BlueStore::ExtentMap::ExtentDecoderFull::decode_create_blob(
+  bptr_c_it_t& p,
+  __u8 struct_v,
+  uint64_t* sbid,
+  bool include_ref_map,
+  Collection* c) {
+  BlobRef b = c ? c->new_blob() : new Blob(nullptr);
+  b->decode<true>(p, struct_v, sbid, include_ref_map, c);
+  return b;
+}
+
 void BlueStore::ExtentMap::ExtentDecoderFull::consume_blobid(
   BlueStore::Extent* le, bool spanning, uint64_t blobid) {
   ceph_assert(le);
@@ -20458,6 +20441,16 @@ void BlueStore::set_allocation_in_simple_bmap(SimpleBitmap* sbmap, uint64_t offs
   sbmap->set(offset >> min_alloc_size_order, length >> min_alloc_size_order);
 }
 
+BlueStore::BlobRef BlueStore::ExtentDecoderPartial::decode_create_blob(
+  bptr_c_it_t& p,
+  __u8 struct_v,
+  uint64_t* sbid,
+  bool include_ref_map,
+  Collection* c) {
+  BlobRef b = c ? c->new_blob() : new Blob(nullptr);
+  b->decode<true>(p, struct_v, sbid, include_ref_map, c);
+  return b;
+}
 void BlueStore::ExtentDecoderPartial::_consume_new_blob(bool spanning,
                                                         uint64_t extent_no,
                                                         uint64_t sbid,
