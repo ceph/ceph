@@ -4307,6 +4307,42 @@ options:
   services:
   - rgw
   with_legacy: true
+- name: rgw_http_notif_message_timeout
+  type: uint
+  level: advanced
+  desc: This is the maximum time in seconds to deliver a notification
+  long_desc: This is the maximum time in seconds to deliver a notification.
+    Delivery error occurs when the message timeout is exceeded.
+    This value includes the connection time, and hence must be larger than rgw_http_notif_connection_timeout.
+    If set to zero the http client will wait indefinitely.
+    see https://curl.se/libcurl/c/CURLOPT_TIMEOUT.html
+  default: 10
+  services:
+  - rgw
+  with_legacy: true
+- name: rgw_http_notif_connection_timeout
+  type: uint
+  level: advanced
+  desc: This is the maximum time in seconds to connect to an endpoint
+  long_desc: This is the maximum time in seconds to connect to an endpoint.
+    Delivery error occurs when the message timeout is exceeded.
+    If set to zero the default value of 300 seconds will be used.
+    see https://curl.se/libcurl/c/CURLOPT_CONNECTTIMEOUT.html
+  default: 5
+  services:
+  - rgw
+  with_legacy: true
+- name: rgw_http_notif_max_inflight
+  type: uint
+  level: advanced
+  desc: This is the maximum number of messages in-flight (across all http endpoints)
+  long_desc: This is the maximum number of messages in-flight (across all http endpoints).
+    Delivery error (BUSY) occurs when the number of messages is exceeded.
+    If set to zero there is no limit on the number of messages in-flight.
+  default: 8192
+  services:
+  - rgw
+  with_legacy: true
 - name: rgw_d4n_l1_datacache_address
   type: str
   level: advanced
