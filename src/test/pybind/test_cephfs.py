@@ -845,6 +845,66 @@ def test_empty_snapshot_info(testdir):
     # remove directory
     cephfs.rmdir("/dir-1")
 
+def test_rmtree(testdir):
+    '''
+    Test rmtree() with different kinds of file hierarchies.
+    '''
+    should_cancel = lambda: False
+
+    # test dir containing only regular files
+    cephfs.mkdir('dir1', 0o755)
+    for i in range(1, 6):
+        fd = cephfs.open(f'/dir1/file{i}', 'w', 0o755)
+        cephfs.write(fd, b'abcd', 0)
+        cephfs.close(fd)
+    cephfs.rmtree('dir1', should_cancel)
+
+    # test dir containing dirs and regular files
+    cephfs.mkdir('dir2', 0o755)
+    for i in range(1, 6):
+        cephfs.mkdir(f'/dir2/dir2{i}', 0o755)
+        for j in range(1, 6):
+            fd = cephfs.open(f'/dir2/dir2{i}/file{j}', 'w', 0o755)
+            cephfs.write(fd, b'abcd', 0)
+            cephfs.close(fd)
+    cephfs.rmtree('dir2', should_cancel)
+
+    # test dir containing regular files and symlinks
+    cephfs.mkdir('dir3', 0o755)
+    for i in range(1, 6):
+        fd = cephfs.open(f'/dir3/file{i}', 'w', 0o755)
+        cephfs.write(fd, b'abcd', 0)
+        cephfs.close(fd)
+        file_name = f'/dir3/file{i}'.encode('utf-8')
+        slink_name = f'slink{i}'.encode('utf-8')
+        cephfs.link(file_name, slink_name)
+    cephfs.rmtree('dir3', should_cancel)
+
+    # test dir containing empty directories
+    cephfs.mkdir('dir4', 0o755)
+    for i in range(1, 6):
+        cephfs.mkdir(f'/dir4/dir4{i}', 0o755)
+    cephfs.rmtree('dir4', should_cancel)
+
+    # test empty dir
+    cephfs.mkdir('dir5', 0o755)
+    cephfs.rmtree('dir5', should_cancel)
+
+def test_rmtree_no_perm(testdir):
+    '''
+    Test rmtree() when certain dir/file can't be deleted.
+    '''
+    should_cancel = lambda: False
+
+    # test dir containing only regular files
+    cephfs.mkdir('dir1', 0o755)
+    for i in range(1, 6):
+        fd = cephfs.open(f'/dir1/file{i}', 'w', 0o755)
+        cephfs.write(fd, b'abcd', 0)
+        cephfs.close(fd)
+    cephfs.chmod('/dir1/file1', 0o000)
+    cephfs.rmtree('dir1', should_cancel)
+
 def test_snapshot_info(testdir):
     cephfs.mkdir("/dir-1", 0o755)
 
