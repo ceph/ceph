@@ -501,7 +501,7 @@ public:
 
   void pgb_set_object_snap_mapping(
     const hobject_t &soid,
-    const std::set<snapid_t> &snaps,
+    const std::vector<snapid_t> &snaps,
     ObjectStore::Transaction *t) override {
     return update_object_snap_mapping(t, soid, snaps);
   }
