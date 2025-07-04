@@ -19,6 +19,7 @@
 #include "mgr/Gil.h"
 
 #include "PyModule.h"
+#include "mgr/ThreadMonitor.h"
 
 /**
  * Implement the pattern of calling serve() on a module in a thread,
@@ -35,7 +36,8 @@ protected:
   PyObject *pClassInstance = nullptr;
 
   LogChannelRef clog;
-
+  pid_t m_native_tid = 0;
+  ThreadMonitor* m_thread_monitor = nullptr;
   class PyModuleRunnerThread : public Thread
   {
     PyModuleRunner *mod;
@@ -63,10 +65,12 @@ public:
 
   PyModuleRunner(
       const PyModuleRef &py_module_,
-      LogChannelRef clog_)
+      LogChannelRef clog_,
+      ThreadMonitor* monitor_ = nullptr)
     : 
       py_module(py_module_),
       clog(clog_),
+      m_thread_monitor(monitor_),
       thread(this)
   {
     // Shortened name for use as thread name, because thread names
@@ -81,6 +85,8 @@ public:
   PyModuleRunnerThread thread;
 
   std::string const &get_name() const { return py_module->get_name(); }
+  void set_native_tid(pid_t tid) { m_native_tid = tid; }
+  pid_t get_native_tid() const { return m_native_tid; }
 
 private:
   bool dead = false;
