@@ -273,7 +273,7 @@ int replay_free_dump_and_apply_raw(
 
   JSONParser p;
   std::cout << "parsing..." << std::endl;
-  bool b = p.parse(fname);
+  bool b = p.parse_file(fname);
   if (!b) {
     std::cerr << "Failed to parse json: " << fname << std::endl;
     return -1;
