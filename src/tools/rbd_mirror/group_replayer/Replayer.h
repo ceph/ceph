@@ -116,12 +116,16 @@ private:
   Context* m_on_shutdown = nullptr;
 
   AsyncOpTracker m_in_flight_op_tracker;
+  bufferlist m_out_bl;
+  std::vector<cls::rbd::GroupImageStatus> m_local_images;
 
   int m_error_code = 0;
   std::string m_error_description;
 
   bool m_stop_requested = false;
   bool m_retry_validate_snap = false;
+  bool m_resync_requested = false;
+  bool m_rename_requested = false;
 
   utime_t m_snapshot_start;
   uint64_t m_last_snapshot_complete_seconds = 0;
@@ -138,20 +142,26 @@ private:
                               int r, const std::string& desc);
   void notify_group_listener();
 
-  int local_group_image_list_by_id(
-      std::vector<cls::rbd::GroupImageStatus> *image_ids);
+  void local_group_image_list_by_id(Context* on_finish);
+  void handle_local_group_image_list_by_id(int r, Context* on_finish);
 
-  bool is_resync_requested();
-  bool is_rename_requested();
+  void is_resync_requested(Context* on_finish);
+  void handle_is_resync_requested(int r, Context* on_finish);
+  void is_rename_requested(Context* on_finish);
+  void handle_is_rename_requested(int r, Context* on_finish);
 
   void validate_image_snaps_sync_complete(std::unique_lock<ceph::mutex>* locker,
-    const cls::rbd::GroupSnapshot &local_snap);
+    const cls::rbd::GroupSnapshot &local_snap, Context *on_finish);
 
   void load_local_group_snapshots();
+  void validate_next_local_group_snapshot(size_t index);
+  void proceed_to_load_snapshots();
   void handle_load_local_group_snapshots(int r);
 
   void load_remote_group_snapshots();
   void handle_load_remote_group_snapshots(int r);
+  void handle_resync_check();
+  void handle_rename_check();
 
   void scan_for_unsynced_group_snapshots(std::unique_lock<ceph::mutex>* locker);
 
@@ -159,18 +169,25 @@ private:
                                  std::unique_lock<ceph::mutex>* locker);
   void create_group_snapshot(cls::rbd::GroupSnapshot snap,
                              std::unique_lock<ceph::mutex>* locker);
+  void handle_mirror_snapshot_create(int r, cls::rbd::GroupSnapshot snap) ;
+  void handle_group_state_updated(int r, cls::rbd::GroupSnapshot snap);
+  void handle_user_snapshot(cls::rbd::GroupSnapshot snap,
+                            std::unique_lock<ceph::mutex>* locker);
+  void handle_regular_snapshot_created(int r, cls::rbd::GroupSnapshot snap);
 
   void create_mirror_snapshot(
+    std::unique_lock<ceph::mutex>* locker,
     cls::rbd::GroupSnapshot *snap,
     const cls::rbd::MirrorSnapshotState &snap_state,
     Context *on_finish);
   void handle_create_mirror_snapshot(
     int r, const std::string &group_snap_id, Context *on_finish);
 
-  void mirror_snapshot_complete(
-    const std::string &group_snap_id,
-    std::unique_lock<ceph::mutex>* locker,
-    Context *on_finish);
+  void mirror_snapshot_complete(std::unique_lock<ceph::mutex>* locker,
+    const std::string &group_snap_id, Context *on_finish);
+  void handle_mirror_snapshot_image_list(
+    const std::string &group_snap_id, cls::rbd::GroupSnapshot &local_snap,
+    cls::rbd::GroupSnapshot &remote_snap, Context *on_finish);
   void handle_mirror_snapshot_complete(
     int r, const std::string &group_snap_id, Context *on_finish);
 
@@ -180,8 +197,13 @@ private:
   void handle_create_regular_snapshot(
       int r, const std::string &group_snap_id, Context *on_finish);
 
-  void regular_snapshot_complete(
+  void regular_snapshot_complete(std::unique_lock<ceph::mutex>* locker,
     const std::string &group_snap_id,
+    Context *on_finish);
+  void handle_regular_snapshot_image_list(
+    const std::string &group_snap_id,
+    cls::rbd::GroupSnapshot &local_snap,
+    cls::rbd::GroupSnapshot &remote_snap,
     Context *on_finish);
   void handle_regular_snapshot_complete(
     int r, const std::string &group_snap_id, Context *on_finish);
