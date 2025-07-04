@@ -91,7 +91,7 @@ void RecoveryBackend::WaitForObjectRecovery::interrupt(interrupt_cause_t why) {
     pushes.clear();
     break;
   default:
-    ceph_abort("impossible");
+    ceph_abort_msg("impossible");
     break;
   }
 }

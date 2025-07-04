@@ -68,7 +68,7 @@ class Btree {
         // we don't actually store end cursor because it will hold a reference
         // to an end leaf node and is not kept updated.
         assert(p_cursor->is_end());
-        ceph_abort("impossible");
+        ceph_abort_msg("impossible");
       }
     }
 
@@ -130,7 +130,7 @@ class Btree {
     Cursor(Btree* p_tree, Ref<tree_cursor_t> _p_cursor) : p_tree(p_tree) {
       if (_p_cursor->is_invalid()) {
         // we don't create Cursor from an invalid tree_cursor_t.
-        ceph_abort("impossible");
+        ceph_abort_msg("impossible");
       } else if (_p_cursor->is_end()) {
         // we don't actually store end cursor because it will hold a reference
         // to an end leaf node and is not kept updated.

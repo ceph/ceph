@@ -338,7 +338,7 @@ public:
     if (result == Transaction::get_extent_ret::RETIRED) {
       SUBERRORT(seastore_cache, "{} {}~0x{:x} is retired on t -- {}",
                 t, T::TYPE, offset, length, *ret);
-      ceph_abort("impossible");
+      ceph_abort_msg("impossible");
     } else if (result == Transaction::get_extent_ret::PRESENT) {
       assert(ret->get_length() == length);
       if (ret->is_fully_loaded()) {
@@ -914,7 +914,7 @@ private:
     if (status == Transaction::get_extent_ret::RETIRED) {
       SUBERRORT(seastore_cache, "{} {}~0x{:x} {} is retired on t -- {}",
                 t, type, offset, length, laddr, *ret);
-      ceph_abort("impossible");
+      ceph_abort_msg("impossible");
     } else if (status == Transaction::get_extent_ret::PRESENT) {
       assert(ret->get_length() == length);
       if (ret->is_fully_loaded()) {

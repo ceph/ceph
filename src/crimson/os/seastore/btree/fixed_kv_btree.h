@@ -707,7 +707,7 @@ public:
           }
         } else {
           ceph_assert(!child_node->is_valid());
-          ceph_abort("impossible");
+          ceph_abort_msg("impossible");
         }
       } else if (ret == Transaction::get_extent_ret::ABSENT) {
         BaseChildNode<std::remove_reference_t<decltype(*node)>,
@@ -751,7 +751,7 @@ public:
                   i->get_key())));
         }
       } else {
-        ceph_abort("impossible");
+        ceph_abort_msg("impossible");
       }
     }
   }

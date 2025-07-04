@@ -772,7 +772,7 @@ seastar::future<Ref<PG>> ShardServices::load_pg(spg_t pgid)
     });
   }).handle_exception([FNAME, pgid](auto ep) {
     INFO("pg {} saw exception on load {}", pgid, ep);
-    ceph_abort("Could not load pg" == 0);
+    ceph_abort_msg("Could not load pg");
     return seastar::make_exception_future<Ref<PG>>(ep);
   });
 }

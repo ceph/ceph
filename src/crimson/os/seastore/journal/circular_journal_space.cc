@@ -55,7 +55,7 @@ CircularJournalSpace::write(ceph::bufferlist&& to_write) {
   assert(get_written_to().segment_seq != NULL_SEG_SEQ);
   auto encoded_size = to_write.length();
   if (encoded_size > get_records_available_size()) {
-    ceph_abort("should be impossible with EPM reservation");
+    ceph_abort_msg("should be impossible with EPM reservation");
   }
   assert(encoded_size + get_rbm_addr(get_written_to())
 	 < get_journal_end());

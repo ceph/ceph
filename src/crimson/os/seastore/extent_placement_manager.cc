@@ -915,7 +915,7 @@ ExtentPlacementManager::BackgroundProcess::do_background_cycle()
     }
 
     if (!proceed_clean_main && !proceed_clean_cold) {
-      ceph_abort("no background process will start");
+      ceph_abort_msg("no background process will start");
     }
     return seastar::when_all(
       [this, FNAME, proceed_clean_main,

@@ -1000,7 +1000,7 @@ private:
           }
           break;
         default:
-          ceph_abort("impossible");
+          ceph_abort_msg("impossible");
         }
         return ret;
       }

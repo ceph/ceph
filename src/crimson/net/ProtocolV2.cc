@@ -908,7 +908,7 @@ void ProtocolV2::execute_connecting()
           logger().info("[Test] got BLOCK");
           return conn.interceptor->blocker.block();
         default:
-          ceph_abort("unexpected action from trap");
+          ceph_abort_msg("unexpected action from trap");
           return seastar::now();
         }
       });;
@@ -1041,7 +1041,7 @@ void ProtocolV2::execute_connecting()
         return seastar::now();
        }
        default: {
-        ceph_abort("impossible next step");
+        ceph_abort_msg("impossible next step");
        }
       }
     }).handle_exception([this](std::exception_ptr eptr) {
@@ -1693,7 +1693,7 @@ void ProtocolV2::execute_accepting()
         execute_server_wait();
         break;
        default:
-        ceph_abort("impossible next step");
+        ceph_abort_msg("impossible next step");
       }
     }).handle_exception([this](std::exception_ptr eptr) {
       const char *e_what;

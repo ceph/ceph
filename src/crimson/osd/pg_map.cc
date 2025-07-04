@@ -24,7 +24,7 @@ seastar::future<core_id_t> PGShardMapping::get_or_create_pg_mapping(
     if (core_expected != NULL_CORE && core_expected != core_found) {
       ERROR("the mapping is inconsistent for pg {}: core {}, expected {}",
             pgid, core_found, core_expected);
-      ceph_abort("The pg mapping is inconsistent!");
+      ceph_abort_msg("The pg mapping is inconsistent!");
     }
     return seastar::make_ready_future<core_id_t>(core_found);
   } else {
@@ -43,7 +43,7 @@ seastar::future<core_id_t> PGShardMapping::get_or_create_pg_mapping(
           if (core_expected != core_found) {
             ERROR("the mapping is inconsistent for pg {} (primary): core {}, expected {}",
                   pgid, core_found, core_expected);
-            ceph_abort("The pg mapping is inconsistent!");
+            ceph_abort_msg("The pg mapping is inconsistent!");
           }
           // core_expected == core_found
           DEBUG("mapping pg {} to core {} (primary): already mapped and expected",
@@ -94,7 +94,7 @@ seastar::future<core_id_t> PGShardMapping::get_or_create_pg_mapping(
           if (core_found != core_to_update) {
             ERROR("the mapping is inconsistent for pg {} (others): core {}, expected {}",
                   pgid, core_found, core_to_update);
-            ceph_abort("The pg mapping is inconsistent!");
+            ceph_abort_msg("The pg mapping is inconsistent!");
           }
           DEBUG("mapping pg {} to core {} (others): already mapped",
                 pgid, core_to_update);
@@ -105,13 +105,13 @@ seastar::future<core_id_t> PGShardMapping::get_or_create_pg_mapping(
       if (find_iter == pg_to_core.end()) {
         ERROR("the mapping is inconsistent for pg {}: core not found, expected {}",
               pgid, core_expected);
-        ceph_abort("The pg mapping is inconsistent!");
+        ceph_abort_msg("The pg mapping is inconsistent!");
       }
       auto core_found = find_iter->second;
       if (core_expected != NULL_CORE && core_found != core_expected) {
         ERROR("the mapping is inconsistent for pg {}: core {}, expected {}",
               pgid, core_found, core_expected);
-        ceph_abort("The pg mapping is inconsistent!");
+        ceph_abort_msg("The pg mapping is inconsistent!");
       }
       DEBUG("returning pg {} mapping to core {} after broadcasted",
             pgid, core_found);
@@ -125,7 +125,7 @@ seastar::future<> PGShardMapping::remove_pg_mapping(spg_t pgid) {
   auto find_iter = pg_to_core.find(pgid);
   if (find_iter == pg_to_core.end()) {
     ERROR("trying to remove non-exist mapping for pg {}", pgid);
-    ceph_abort("The pg mapping is inconsistent!");
+    ceph_abort_msg("The pg mapping is inconsistent!");
   }
   DEBUG("calling primary to remove mapping for pg {}", pgid);
   return container().invoke_on(
@@ -133,7 +133,7 @@ seastar::future<> PGShardMapping::remove_pg_mapping(spg_t pgid) {
     auto find_iter = primary_mapping.pg_to_core.find(pgid);
     if (find_iter == primary_mapping.pg_to_core.end()) {
       ERROR("trying to remove non-exist mapping for pg {} (primary)", pgid);
-      ceph_abort("The pg mapping is inconsistent!");
+      ceph_abort_msg("The pg mapping is inconsistent!");
     }
     assert(find_iter->second != NULL_CORE);
     auto count_iter = primary_mapping.core_to_num_pgs.find(find_iter->second);
@@ -147,7 +147,7 @@ seastar::future<> PGShardMapping::remove_pg_mapping(spg_t pgid) {
       auto find_iter = other_mapping.pg_to_core.find(pgid);
       if (find_iter == other_mapping.pg_to_core.end()) {
         ERROR("trying to remove non-exist mapping for pg {} (others)", pgid);
-        ceph_abort("The pg mapping is inconsistent!");
+        ceph_abort_msg("The pg mapping is inconsistent!");
       }
       assert(find_iter->second != NULL_CORE);
       other_mapping.pg_to_core.erase(find_iter);
