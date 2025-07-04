@@ -241,7 +241,7 @@ based on `AWS Logging Record Format`_.
   - host id taken from "x-amz-id-2" (or dash if empty)
   - signature version (or dash if empty)
   - cipher suite (or dash if empty)
-  - authentication type (or dash if empty)
+  - authentication type ("AuthHeader" for regular auth, "QueryString" for presigned URL or dash if unauthenticated)
   - host header (or dash if empty)
   - TLS version (or dash if empty)
   - access point ARN (not supported, always a dash)
