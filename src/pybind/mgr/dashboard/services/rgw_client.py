@@ -14,6 +14,9 @@ from collections import defaultdict
 from enum import Enum
 from subprocess import SubprocessError
 from urllib.parse import urlparse, urlunparse
+from xml.sax.saxutils import escape
+# from pyexpat import ExpatError
+
 
 import requests
 
@@ -100,12 +103,9 @@ def _determine_rgw_addr(daemon_info: Dict[str, Any]) -> RgwDaemon:
     Parse RGW daemon info to determine the configured host (IP address) and port.
     """
     daemon = RgwDaemon()
-    rgw_dns_name = ''
-    if (
-        Settings.RGW_HOSTNAME_PER_DAEMON
-        and daemon_info['metadata']['id'] in Settings.RGW_HOSTNAME_PER_DAEMON
-    ):
-        rgw_dns_name = Settings.RGW_HOSTNAME_PER_DAEMON[daemon_info['metadata']['id']]
+    rgw_dns_name = CephService.send_command('mon', 'config get',
+                                            who=name_to_config_section('rgw.' + daemon_info['metadata']['id']),  # noqa E501 #pylint: disable=line-too-long
+                                            key='rgw_dns_name').rstrip()
 
     daemon.port, daemon.ssl = _parse_frontend_config(daemon_info['metadata']['frontend_config#0'])
 
@@ -282,9 +282,7 @@ class RgwClient(RestClient):
         return (Settings.RGW_API_ACCESS_KEY,
                 Settings.RGW_API_SECRET_KEY,
                 Settings.RGW_API_ADMIN_RESOURCE,
-                Settings.RGW_API_SSL_VERIFY,
-                Settings.RGW_HOSTNAME_PER_DAEMON
-                )
+                Settings.RGW_API_SSL_VERIFY)
 
     @staticmethod
     def instance(userid: Optional[str] = None,
@@ -794,6 +792,75 @@ class RgwClient(RestClient):
 
         return transform(data)
 
+    @staticmethod
+    def notification_dict_to_xml(data):
+        if not data or data == '{}':
+            return ''
+
+        if isinstance(data, str):
+            try:
+                data = json.loads(data)
+            except json.JSONDecodeError:
+                raise DashboardException('Could not load json string')
+
+        def process_event(value):
+            events = value if isinstance(value, list) else [value]
+            return ''.join(f'<Event>{escape(str(event))}</Event>\n' for event in events)
+
+        def process_filter(value):
+            xml = '<Filter>\n'
+            for filter_key in ['S3Key', 'S3Metadata', 'S3Tags']:
+                if filter_key in value:
+                    xml += f'<{filter_key}>\n'
+                    for rule in value[filter_key].get('FilterRules', []):
+                        xml += (
+                            '<FilterRule>\n'
+                            f'<Name>{escape(rule["Name"])}</Name>\n'
+                            f'<Value>{escape(rule["Value"])}</Value>\n'
+                            '</FilterRule>\n'
+                        )
+                    xml += f'</{filter_key}>\n'
+            xml += '</Filter>\n'
+            return xml
+
+        def transform(data, parent_key=None):
+            xml = ''
+
+            if isinstance(data, dict):
+                for key, value in data.items():
+                    if key == 'Event':
+                        xml += process_event(value)
+                        continue
+
+                    if key == 'Filter':
+                        xml += process_filter(value)
+                        continue
+
+                    if isinstance(value, list):
+                        for item in value:
+                            xml += f'<{key}>\n{transform(item, key)}</{key}>\n'
+                        continue
+
+                    if isinstance(value, dict):
+                        xml += f'<{key}>\n{transform(value, key)}</{key}>\n'
+                        continue
+
+                    xml += f'<{key}>{escape(str(value))}</{key}>\n'
+
+                return xml
+
+            if isinstance(data, list):
+                for item in data:
+                    xml += transform(item, parent_key)
+                return xml
+
+            return escape(str(data))
+
+        xml_output = '<NotificationConfiguration xmlns="http://s3.amazonaws.com/doc/2006-03-01/">\n'
+        xml_output += transform(data)
+        xml_output += '</NotificationConfiguration>'
+        return xml_output
+
     @RestClient.api_put('/{bucket_name}?lifecycle')
     def set_lifecycle(self, bucket_name, lifecycle, request=None):
         # pylint: disable=unused-argument
@@ -1179,6 +1246,119 @@ class RgwClient(RestClient):
                 )
         try:
             result = request(params=params)
+        except RequestException as e:
+            raise DashboardException(msg=str(e), component='rgw')
+        return result
+
+    @RestClient.api_put('/{bucket_name}?notification')
+    def set_notification(self, bucket_name, notification, request=None):
+        # pylint: disable=unused-argument
+        try:
+            notification = notification.strip()
+            if notification.startswith('{'):
+                try:
+                    notification_dict = json_str_to_object(notification)
+                    notification = self.notification_dict_to_xml(notification_dict)
+                except ValueError:
+                    raise DashboardException(
+                        msg="Invalid JSON in notification configuration",
+                        component='rgw'
+                    )
+            if not notification.startswith('<NotificationConfiguration'):
+                notification = (
+                    f'<NotificationConfiguration xmlns="http://s3.amazonaws.com/doc/2006-03-01/">\n'
+                    f'{notification}\n'
+                    f'</NotificationConfiguration>'
+                )
+            result = request(data=notification)  # type: ignore
+        except RequestException as e:
+            msg = str(e)
+            content = getattr(e, 'content', None)
+
+            if content:
+                try:
+                    error_info = json_str_to_object(content)
+                    error_code = error_info.get("Code")
+                    if error_code == "MalformedXML":
+                        msg = "Invalid Notification XML format"
+                    elif error_code == "InvalidArgument":
+                        logger.info("Invalid argument details: %s", error_info)
+                        msg = "Invalid argument in notification request"
+                except json.JSONDecodeError:
+                    logger.info("Failed to parse error content from RGW")
+
+            raise DashboardException(msg=msg, component='rgw')
+
+        return result
+
+    @RestClient.api_get('/{bucket_name}?notification')
+    def get_notification(self, bucket_name, notification_id=None, request=None):
+        # pylint: disable=unused-argument
+        try:
+            result = request(raw_content=True,
+                             headers={'Accept': 'text/xml'}).decode()  # type: ignore
+            notification_config = xmltodict.parse(result)
+            notification_configuration = (
+                notification_config.get('NotificationConfiguration', {})
+                if notification_config else {}
+            )
+
+            topic_configuration = notification_configuration.get('TopicConfiguration')
+            if not topic_configuration:
+                return []
+
+            if isinstance(topic_configuration, dict):
+                topic_configuration = [topic_configuration]
+
+            def normalize_filter_rules(filter_dict):
+                if not isinstance(filter_dict, dict):
+                    return
+
+                for key in ['S3Key', 'S3Metadata', 'S3Tags']:
+                    if key in filter_dict:
+                        rules = filter_dict[key].get('FilterRule')
+                        if rules and isinstance(rules, dict):
+                            filter_dict[key]['FilterRule'] = [rules]
+            for topic in topic_configuration:
+                topic_filter = topic.get('Filter')
+                if topic_filter:
+                    normalize_filter_rules(topic_filter)
+
+            return topic_configuration
+
+        except RequestException as e:
+            logger.warning(
+                "RequestException while fetching notification for bucket '%s': %s",
+                bucket_name, str(e)
+            )
+            if e.content:
+                try:
+                    root = ET.fromstring(e.content)
+                    code = root.find('Code')
+                    if code is not None and code.text == 'NoSuchNotificationConfiguration':
+                        logger.info(
+                            "No notification configuration found for bucket '%s'",
+                            bucket_name
+                        )
+                        return []
+                except ET.ParseError as e_parse:
+                    logger.error(
+                        "Error parsing XML from exception content: %s", e_parse
+                    )
+            return []
+
+        except (UnicodeDecodeError, AttributeError, ExpatError) as e:
+            logger.error(
+                "Error processing notification config for bucket '%s': %s",
+                bucket_name, str(e)
+            )
+            return []
+
+    @RestClient.api_delete('/{bucket_name}?notification={notification_id}')
+    def delete_notification(self, bucket_name, notification_id, request=None):
+        # pylint: disable=unused-argument
+        try:
+            result = request()
         except RequestException as e:
             raise DashboardException(msg=str(e), component='rgw')
         return result
@@ -2022,14 +2202,6 @@ class RgwMultisite:
         else:
             self.update_period()
 
-    def modify_retain_head(self, tier_config: dict) -> List[str]:
-        tier_config_items = []
-        for key, value in tier_config.items():
-            if isinstance(value, bool):
-                value = str(value).lower()
-            tier_config_items.append(f'{key}={value}')
-        return tier_config_items
-
     def add_placement_targets(self, zonegroup_name: str, placement_targets: List[Dict]):
         rgw_add_placement_cmd = ['zonegroup', 'placement', 'add']
         STANDARD_STORAGE_CLASS = "STANDARD"
@@ -2048,7 +2220,9 @@ class RgwMultisite:
             ):
                 tier_config = placement_target.get('tier_config', {})
                 if tier_config:
-                    tier_config_items = self.modify_retain_head(tier_config)
+                    tier_config_items = (
+                        f'{key}={value}' for key, value in tier_config.items()
+                    )
                     tier_config_str = ','.join(tier_config_items)
                     cmd_add_placement_options += [
                         '--tier-type', 'cloud-s3', '--tier-config', tier_config_str
@@ -2121,7 +2295,9 @@ class RgwMultisite:
             ):
                 tier_config = placement_target.get('tier_config', {})
                 if tier_config:
-                    tier_config_items = self.modify_retain_head(tier_config)
+                    tier_config_items = (
+                        f'{key}={value}' for key, value in tier_config.items()
+                    )
                     tier_config_str = ','.join(tier_config_items)
                     cmd_add_placement_options += [
                         '--tier-type', 'cloud-s3', '--tier-config', tier_config_str
