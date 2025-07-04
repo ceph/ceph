@@ -46,6 +46,11 @@ class ActivePyModules
 {
   // module class instances not yet created
   std::set<std::string, std::less<>> pending_modules;
+  // This context is set during mgr initialization when
+  // modules need more time to finish starting up.
+  // See ActivePyModules::check_all_modules_started() and
+  // ActivePyModules::start_one().
+  Context *recheck_modules_start = nullptr;
   // module class instances already created
   std::map<std::string, std::shared_ptr<ActivePyModule>> modules;
   PyModuleConfig &module_config;
@@ -251,5 +256,11 @@ public:
 
   bool inject_python_on() const;
   void update_cache_metrics();
+  // Sends the "active" beacon right away if all mgr modules
+  // have finished startup. If some modules are still pending
+  // startup, the "active" beacon is scheduled to send later
+  // only after all modules are ready.
+  // See "PyModuleRegistry::check_all_modules_started()".
+  void check_all_modules_started(Context *modules_start_complete);
 };
 
