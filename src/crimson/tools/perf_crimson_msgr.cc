@@ -44,15 +44,16 @@ seastar::logger& logger() {
   return crimson::get_logger(ceph_subsys_ms);
 }
 
+template <typename T>
+static std::list<seastar::lw_shared_ptr<seastar::sharded<T>>> sharded_objects;
+
 template <typename T, typename... Args>
 seastar::future<T*> create_sharded(Args... args) {
   // seems we should only construct/stop shards on #0
   return seastar::smp::submit_to(0, [=] {
     auto sharded_obj = seastar::make_lw_shared<seastar::sharded<T>>();
+    sharded_objects<T>.push_back(sharded_obj);
     return sharded_obj->start(args...).then([sharded_obj]() {
-      seastar::engine().at_exit([sharded_obj]() {
-          return sharded_obj->stop().then([sharded_obj] {});
-        });
       return sharded_obj.get();
     });
   }).then([] (seastar::sharded<T> *ptr_shard) {
@@ -1167,8 +1168,23 @@ static seastar::future<> run(
       });
     }
   }).finally([] {
-    return crimson::common::sharded_conf().stop();
+      return seastar::smp::submit_to(0, [] {
+        return seastar::do_for_each(sharded_objects<test_state::Server>,
+	    [](auto& sharded_obj) {
+	  return sharded_obj->stop();
+        }).then([] {
+        return seastar::do_for_each(sharded_objects<test_state::Client>,
+	    [](auto& sharded_obj) {
+	    return sharded_obj->stop();
+          });
+        });
+     }).then([] {
+     sharded_objects<test_state::Server>.clear();
+     sharded_objects<test_state::Client>.clear();
+     return crimson::common::sharded_conf().stop();
+    });
   });
+
 }
 
 }
