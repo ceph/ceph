@@ -276,9 +276,6 @@ Pool specific commands
 :command:`lssnap`
   List snapshots for given pool.
 
-:command:`clonedata` *srcname* *dstname* --object-locator *key*
-  Clone object byte data from *srcname* to *dstname*.  Both objects must be stored with the locator key *key* (usually either *srcname* or *dstname*).  Object attributes and omap keys are not copied or cloned.
-
 :command:`mksnap` *foo*
   Create pool snapshot named *foo*.
 
