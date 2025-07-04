@@ -1757,13 +1757,18 @@ void get_aws_version_and_auth_type(const req_state* s, string& aws_version, stri
       aws_version = "SigV2";
     }
   } else {
-    auth_type = "QueryString";
-    if (s->info.args.get("x-amz-algorithm") == AWS4_HMAC_SHA256_STR) {
+    if (!s->info.args.get("x-amz-credential").empty()) {
+      auth_type = "QueryString";
+      if (s->info.args.get("x-amz-algorithm") == AWS4_HMAC_SHA256_STR) {
       /* AWS v4 */
-      aws_version = "SigV4";
-    } else if (!s->info.args.get("AWSAccessKeyId").empty()) {
+	aws_version = "SigV4";
+      } else if (!s->info.args.get("AWSAccessKeyId").empty()) {
       /* AWS v2 */
-      aws_version = "SigV2";
+	aws_version = "SigV2";
+      }
+    } else {
+      // Unauthenticated
+      auth_type.clear();
     }
   }
 }
