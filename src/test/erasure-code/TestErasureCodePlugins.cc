@@ -8,6 +8,7 @@
 #include "erasure-code/ErasureCodePlugin.h"
 #include "global/global_context.h"
 #include "common/config_proxy.h"
+#include "include/random.h" // for ceph::util::random_number_generator
 #include "gtest/gtest.h"
 using namespace std;
 class PluginTest: public ::testing::TestWithParam<const char *> {
