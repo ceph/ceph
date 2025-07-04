@@ -306,7 +306,7 @@ struct OMapLeafNode
   using child_node_t = ChildNode<OMapInnerNode, OMapLeafNode, std::string>;
 
   void do_on_rewrite(Transaction &t, LogicalCachedExtent &extent) final {
-    auto &other = static_cast<OMapInnerNode&>(extent);
+    auto &other = static_cast<OMapLeafNode&>(extent);
     this->init_range(other.get_begin(), other.get_end());
   }
 
