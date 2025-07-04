@@ -34,6 +34,7 @@
 #include "common/ceph_json.h"
 #include "common/ceph_time.h"
 
+#include "rgw_cksum.h"
 #include "rgw_common.h"
 #include "rgw_dmclock.h"
 #include "rgw_sal.h"
@@ -1255,6 +1256,8 @@ protected:
   RGWObjectRetention *obj_retention;
   RGWObjectLegalHold *obj_legal_hold;
 
+  std::optional<rgw::cksum::Cksum> cksum;
+
 public:
   RGWPutObj() : ofs(0),
                 supplied_md5_b64(NULL),
@@ -1334,6 +1337,7 @@ protected:
   RGWAccessControlPolicy policy;
   std::map<std::string, bufferlist> attrs;
   boost::optional<ceph::real_time> delete_at;
+  std::optional<rgw::cksum::Cksum> cksum;
 
   /* Must be called after get_data() or the result is undefined. */
   virtual std::string get_current_filename() const = 0;
@@ -1848,6 +1852,8 @@ protected:
   //object lock
   std::optional<RGWObjectRetention> obj_retention = std::nullopt;
   std::optional<RGWObjectLegalHold> obj_legal_hold = std::nullopt;
+  rgw::sal::Attrs attrs;
+  rgw::cksum::Type cksum_algo{rgw::cksum::Type::none};
 
 public:
   RGWInitMultipart() {}
@@ -1874,6 +1880,10 @@ protected:
   jspan_ptr multipart_trace;
   ceph::real_time upload_time;
   std::unique_ptr<rgw::sal::Notification> res;
+  std::unique_ptr<rgw::sal::Object> meta_obj;
+  std::optional<rgw::cksum::Cksum> cksum;
+  std::optional<std::string> armored_cksum;
+  off_t ofs = 0;
 
 public:
   RGWCompleteMultipart() {}
@@ -1917,6 +1927,7 @@ protected:
   RGWAccessControlPolicy policy;
   bool truncated;
   rgw_placement_rule* placement;
+  std::optional<rgw::cksum::Cksum> cksum;
 
 public:
   RGWListMultipart() {
@@ -2170,7 +2181,12 @@ inline int rgw_get_request_metadata(const DoutPrefixProvider *dpp,
       "x-amz-server-side-encryption-customer-algorithm",
       "x-amz-server-side-encryption-customer-key",
       "x-amz-server-side-encryption-customer-key-md5",
-      "x-amz-storage-class"
+      /* XXX agreed w/cbodley that probably a cleanup is needed here--we probably
+       * don't want to store these, esp. under user.rgw */
+      "x-amz-storage-class",
+      "x-amz-content-sha256",
+      "x-amz-checksum-algorithm",
+      "x-amz-date"
   };
 
   size_t valid_meta_count = 0;

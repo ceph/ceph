@@ -1,6 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
+#include <boost/algorithm/string/case_conv.hpp>
 #include <cstdint>
 #include <errno.h>
 #include <array>
@@ -15,6 +16,8 @@
 #include "common/safe_io.h"
 #include "common/errno.h"
 #include "auth/Crypto.h"
+#include "rgw_cksum.h"
+#include "rgw_common.h"
 #include <boost/algorithm/string.hpp>
 #include <boost/algorithm/string/replace.hpp>
 #include <boost/algorithm/string/predicate.hpp>
@@ -68,7 +71,7 @@
 #include "rgw_rest_iam.h"
 #include "rgw_sts.h"
 #include "rgw_sal_rados.h"
-
+#include "rgw_cksum_pipe.h"
 #include "rgw_s3select.h"
 
 #define dout_context g_ceph_context
@@ -306,6 +309,12 @@ int RGWGetObj_ObjStore_S3::get_params(optional_yield y)
   dst_zone_trace = s->info.args.get(RGW_SYS_PARAM_PREFIX "if-not-replicated-to");
   get_torrent = s->info.args.exists("torrent");
 
+  auto checksum_mode_hdr =
+    s->info.env->get_optional("HTTP_X_AMZ_CHECKSUM_MODE");
+  checksum_mode =
+    (checksum_mode_hdr &&
+     boost::algorithm::iequals(*checksum_mode_hdr, "enabled"));
+
   // optional part number
   auto optstr = s->info.args.get_optional("partNumber");
   if (optstr) {
@@ -473,7 +482,7 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs,
     } catch (const buffer::error&) {}
   }
 
-  if (multipart_parts_count) {
+  if (multipart_parts_count && *multipart_parts_count > 0) {
     dump_header(s, "x-amz-mp-parts-count", *multipart_parts_count);
   }
 
@@ -490,6 +499,26 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs,
         dump_etag(s, iter->second.to_str());
       }
     }
+
+    if (checksum_mode) {
+      if (auto i = attrs.find(RGW_ATTR_CKSUM); i != attrs.end()) {
+	try {
+	  rgw::cksum::Cksum cksum;
+	  decode(cksum, i->second);
+	  if (multipart_parts_count && multipart_parts_count > 0) {
+	    dump_header(s, cksum.header_name(),
+			fmt::format("{}-{}", cksum.to_armor(), *multipart_parts_count));
+	  } else {
+	    dump_header(s, cksum.header_name(), cksum.to_armor());
+	  }
+	}  catch (buffer::error& err) {
+	  ldpp_dout(this, 0) << "ERROR: failed to decode rgw::cksum::Cksum"
+			     << dendl;
+	  /* XXX agreed to handle this case as if there is no checksum
+	   * to avoid data unavailable */
+	}
+      }
+    } /* checksum_mode */
 
     for (struct response_attr_param *p = resp_attr_params; p->param; p++) {
       bool exists;
@@ -2715,12 +2744,18 @@ void RGWPutObj_ObjStore_S3::send_response()
       dump_content_length(s, 0);
       dump_header_if_nonempty(s, "x-amz-version-id", version_id);
       dump_header_if_nonempty(s, "x-amz-expiration", expires);
+      if (cksum && cksum->aws()) {
+	dump_header(s, cksum->header_name(), cksum->to_armor());
+      }
       for (auto &it : crypt_http_responses)
         dump_header(s, it.first, it.second);
     } else {
       dump_errno(s);
       dump_header_if_nonempty(s, "x-amz-version-id", version_id);
       dump_header_if_nonempty(s, "x-amz-expiration", expires);
+      if (cksum) {
+	dump_header(s, cksum->header_name(), cksum->to_armor());
+      }
       end_header(s, this, to_mime_type(s->format));
       dump_start(s);
       struct tm tmp;
@@ -2931,21 +2966,33 @@ int RGWPostObj_ObjStore_S3::get_params(optional_yield y)
   } while (!done);
 
   for (auto &p: parts) {
-    if (! boost::istarts_with(p.first, "x-amz-server-side-encryption")) {
-      continue;
+    if (boost::istarts_with(p.first, "x-amz-server-side-encryption")) {
+      bufferlist &d { p.second.data };
+      std::string v { rgw_trim_whitespace(std::string_view(d.c_str(), d.length())) };
+      rgw_set_amz_meta_header(s->info.crypt_attribute_map, p.first, v, OVERWRITE);
     }
-    bufferlist &d { p.second.data };
-    std::string v { rgw_trim_whitespace(std::string_view(d.c_str(), d.length())) };
-    rgw_set_amz_meta_header(s->info.crypt_attribute_map, p.first, v, OVERWRITE);
-  }
+    /* checksum headers */
+    auto& k = p.first;
+    auto cksum_type =  rgw::cksum::parse_cksum_type_hdr(k);
+    if (cksum_type != rgw::cksum::Type::none) {
+      put_prop("HTTP_X_AMZ_CHECKSUM_ALGORITHM",
+	       boost::to_upper_copy(to_string(cksum_type)));
+      bufferlist& d = p.second.data;
+      std::string v {
+	rgw_trim_whitespace(std::string_view(d.c_str(), d.length()))};
+      put_prop(ys_header_mangle(fmt::format("HTTP-{}", k)), v);
+    }
+  } /* each part */
+
   int r = get_encryption_defaults(s);
   if (r < 0) {
-    ldpp_dout(this, 5) << __func__ << "(): get_encryption_defaults() returned ret=" << r << dendl;
+    ldpp_dout(this, 5)
+      << __func__ << "(): get_encryption_defaults() returned ret=" << r << dendl;
     return r;
   }
 
   ldpp_dout(this, 20) << "adding bucket to policy env: " << s->bucket->get_name()
-		    << dendl;
+		      << dendl;
   env.add_var("bucket", s->bucket->get_name());
 
   string object_str;
@@ -2978,7 +3025,8 @@ int RGWPostObj_ObjStore_S3::get_params(optional_yield y)
   if (! storage_class.empty()) {
     s->dest_placement.storage_class = storage_class;
     if (!driver->valid_placement(s->dest_placement)) {
-      ldpp_dout(this, 0) << "NOTICE: invalid dest placement: " << s->dest_placement.to_str() << dendl;
+      ldpp_dout(this, 0) << "NOTICE: invalid dest placement: "
+			 << s->dest_placement.to_str() << dendl;
       err_msg = "The storage class you specified is not valid";
       return -EINVAL;
     }
@@ -3028,14 +3076,11 @@ int RGWPostObj_ObjStore_S3::get_params(optional_yield y)
   if (r < 0)
     return r;
 
-
   min_len = post_policy.min_length;
   max_len = post_policy.max_length;
 
-
-
   return 0;
-}
+} /* RGWPostObj_Objstore_S3::get_params() */
 
 int RGWPostObj_ObjStore_S3::get_tags()
 {
@@ -3979,6 +4024,11 @@ int RGWInitMultipart_ObjStore_S3::get_params(optional_yield y)
     return -ERR_INVALID_REQUEST;
   }
 
+  auto algo_hdr = rgw::putobj::cksum_algorithm_hdr(*(s->info.env));
+  if (algo_hdr.second) {
+    cksum_algo = rgw::cksum::parse_cksum_type(algo_hdr.second);
+  }
+
   return 0;
 }
 
@@ -3995,6 +4045,10 @@ void RGWInitMultipart_ObjStore_S3::send_response()
   if (exist_multipart_abort) {
     dump_time_header(s, "x-amz-abort-date", abort_date);
     dump_header_if_nonempty(s, "x-amz-abort-rule-id", rule_id);
+  }
+  if (cksum_algo != rgw::cksum::Type::none) {
+    dump_header(s, "x-amz-checksum-algorithm",
+		boost::to_upper_copy(to_string(cksum_algo)));
   }
   end_header(s, this, to_mime_type(s->format));
   if (op_ret == 0) {
@@ -4058,6 +4112,9 @@ void RGWCompleteMultipart_ObjStore_S3::send_response()
     s->formatter->dump_string("Bucket", s->bucket_name);
     s->formatter->dump_string("Key", s->object->get_name());
     s->formatter->dump_format("ETag", "\"%s\"", etag.c_str());
+    if (armored_cksum) {
+      s->formatter->dump_string(cksum->element_name(), *armored_cksum);
+    }
     s->formatter->close_section();
     rgw_flush_formatter_and_reset(s, s->formatter);
   }
@@ -4109,9 +4166,16 @@ void RGWListMultipart_ObjStore_S3::send_response()
     ACLOwner& owner = policy.get_owner();
     dump_owner(s, owner.id, owner.display_name);
 
+    /* TODO: missing initiator:
+       Container element that identifies who initiated the multipart upload. If the initiator is an AWS account, this element provides the same information as the Owner element. If the initiator is an IAM User, this element provides the user ARN and display name, see https://docs.aws.amazon.com/AmazonS3/latest/API/API_ListParts.html */
+
+    if (cksum && cksum->aws()) {
+      s->formatter->dump_string("ChecksumAlgorithm",
+				boost::to_upper_copy(std::string(cksum->type_string())));
+    }
+
     for (; iter != upload->get_parts().end(); ++iter) {
       rgw::sal::MultipartPart* part = iter->second.get();
-
       s->formatter->open_object_section("Part");
 
       dump_time(s, "LastModified", part->get_mtime());
@@ -4119,6 +4183,11 @@ void RGWListMultipart_ObjStore_S3::send_response()
       s->formatter->dump_unsigned("PartNumber", part->get_num());
       s->formatter->dump_format("ETag", "\"%s\"", part->get_etag().c_str());
       s->formatter->dump_unsigned("Size", part->get_size());
+      auto& part_cksum = part->get_cksum();
+      if (part_cksum && part_cksum->aws()) {
+	s->formatter->dump_string(part_cksum->element_name(),
+				  part_cksum->to_armor());
+      }
       s->formatter->close_section();
     }
     s->formatter->close_section();
