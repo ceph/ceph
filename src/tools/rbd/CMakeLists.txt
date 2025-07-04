@@ -68,7 +68,6 @@ target_link_libraries(rbd
   rbd_types
   librbd
   journal
-  libneorados
   librados
   ceph-common global
   ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS})
