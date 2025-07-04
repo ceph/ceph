@@ -225,6 +225,7 @@ namespace ceph {
       int rc = -ENOENT;
       std::string plg_name;
       auto registry = cct->get_plugin_registry();
+      ceph_assert(registry != nullptr);
       std::lock_guard l(registry->lock);
       auto ptype = registry->plugins.find("extblkdev");
       if (ptype == registry->plugins.end()) {
