@@ -1555,11 +1555,6 @@ PGBackend::omap_get_vals_by_keys(
   OSDOp& osd_op,
   object_stat_sum_t& delta_stats) const
 {
-  if (!os.exists || os.oi.is_whiteout()) {
-    logger().debug("{}: object does not exist: {}", __func__, os.oi.soid);
-    return crimson::ct_error::enoent::make();
-  }
-
   std::set<std::string> keys_to_get;
   try {
     auto p = osd_op.indata.cbegin();
@@ -1578,6 +1573,9 @@ PGBackend::omap_get_vals_by_keys(
       crimson::ct_error::enodata::handle([&osd_op] {
         uint32_t num = 0;
         encode(num, osd_op.outdata);
+        // Although an error should be expected here since the object doesn't exist,
+        // we want to match classic's behavior as clients possibly rely on it.
+        // Return an empty, but successful return instead.
         osd_op.rval = 0;
         return ll_read_errorator::now();
       }),
