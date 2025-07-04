@@ -73,6 +73,13 @@ function TEST_availablity_score() {
     fi
     sleep 120
 
+    # try clearing availability score: should fail as feature is disabled 
+    CLEAR_SCORE_RESPONSE=$(ceph osd pool clear-availability-status foo)
+    if [ "$CLEAR_SCORE_RESPONSE" != "" ]; then
+      echo "Failed: score clear attempted when feature is disabled"
+      return 1
+    fi
+
     # enable feature and check is score updated when it was off
     ceph config set mon enable_availability_tracking true 
     AVAILABILITY_STATUS=$(ceph osd pool availability-status | grep -w "foo")
@@ -125,7 +132,19 @@ function TEST_availablity_score() {
       echo "Failed: Availability score for the pool did not drop"
       return 1
     fi
+    UPTIME_DURATION=$(echo "$AVAILABILITY_STATUS" | awk '{print $2}')
+    UPTIME_SECONDS=$(( ${UPTIME_DURATION%[sm]} * (${UPTIME_DURATION: -1} == "m" ? 60 : 1) ))
 
+    # reset availability score for pool foo 
+    ceph osd pool clear-availability-status foo
+    AVAILABILITY_STATUS=$(ceph osd pool availability-status | grep -w "foo")
+    NEW_UPTIME_DURATION=$(echo "$AVAILABILITY_STATUS" | awk '{print $2}')
+    NEW_UPTIME_SECONDS=$(( ${UPTIME_DURATION%[sm]} * (${UPTIME_DURATION: -1} == "m" ? 60 : 1) ))
+    if [ "$NEW_UPTIME_SECONDS" -gt "$UPTIME_SECONDS" ]; then
+      echo "Failed: Availability score for the pool did not drop after clearing"
+      return 1
+    fi
+  
     echo "TEST PASSED"
     return 0
 }
