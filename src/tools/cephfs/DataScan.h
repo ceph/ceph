@@ -15,6 +15,7 @@
 
 #include "MDSUtility.h"
 #include "include/rados/librados.hpp"
+#include "ProgressTracker.h"
 
 struct inode_backtrace_t;
 class InodeStore;
@@ -243,6 +244,13 @@ class MetadataDriver : public RecoveryDriver, public MetadataTool
 
 class DataScan : public MDSUtility, public MetadataTool
 {
+  private:
+    std::unique_ptr<ProgressTracker> progress_tracker;
+    librados::Rados rados;
+    
+    uint64_t get_pool_objects(const std::vector<librados::IoCtx*>& data_ios);
+    uint64_t get_metadata_pool_objects(librados::IoCtx& metadata_io, bool worker_sliced = false);
+    
   protected:
     RecoveryDriver *driver;
     fs_cluster_id_t fscid;
@@ -336,6 +344,7 @@ class DataScan : public MDSUtility, public MetadataTool
         force_pool(false), force_corrupt(false),
         force_init(false)
     {
+      progress_tracker = std::make_unique<ProgressTracker>("Data scan");
     }
 
     ~DataScan() override
