@@ -1,0 +1,1 @@
+setuptools>=12,<60
