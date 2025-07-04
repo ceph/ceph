@@ -636,16 +636,18 @@ private:
         [this, cct=qcow_format->m_image_ctx->cct,
          image_offset=cluster_extent.image_offset,
          image_length=cluster_extent.cluster_length, ctx=read_ctx](int r) {
-          handle_read_cluster(cct, r, image_offset, image_length, ctx);
+          handle_read_clusters(cct, r, image_offset, image_length, ctx);
         });
 
       if (cluster_extent.cluster_offset == 0) {
         // QCOW header is at offset 0, implies cluster DNE
-        log_ctx->complete(-ENOENT);
+        boost::asio::post(*qcow_format->m_image_ctx->asio_engine,
+                          [log_ctx] { log_ctx->complete(-ENOENT); });
       } else if (cluster_extent.cluster_offset == QCOW_OFLAG_ZERO) {
         // explicitly zeroed section
         read_ctx->bl.append_zero(cluster_extent.cluster_length);
-        log_ctx->complete(0);
+        boost::asio::post(*qcow_format->m_image_ctx->asio_engine,
+                          [log_ctx] { log_ctx->complete(0); });
       } else {
         // request the (sub)cluster from the cluster cache
         qcow_format->m_cluster_cache->get_cluster(
@@ -657,8 +659,8 @@ private:
     delete this;
   }
 
-  void handle_read_cluster(CephContext* cct, int r, uint64_t image_offset,
-                           uint64_t image_length, Context* on_finish) const {
+  void handle_read_clusters(CephContext* cct, int r, uint64_t image_offset,
+                            uint64_t image_length, Context* on_finish) const {
     // NOTE: treat as static function, expect object has been deleted
 
     ldout(cct, 20) << "r=" << r << ", "
