@@ -545,6 +545,7 @@ namespace rgw {
     }
 
     main.init_lua();
+    main.init_dedup();
 
     return 0;
   } /* RGWLib::init() */

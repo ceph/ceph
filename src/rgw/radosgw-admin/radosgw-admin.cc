@@ -48,7 +48,6 @@ extern "C" {
 
 #include "radosgw-admin/orphan.h"
 #include "radosgw-admin/sync_checkpoint.h"
-
 #include "rgw_user.h"
 #include "rgw_otp.h"
 #include "rgw_rados.h"
@@ -78,7 +77,7 @@ extern "C" {
 #include "rgw_data_access.h"
 #include "rgw_account.h"
 #include "rgw_bucket_logging.h"
-
+#include "rgw_dedup_cluster.h"
 #include "services/svc_sync_modules.h"
 #include "services/svc_cls.h"
 #include "services/svc_bilog_rados.h"
@@ -151,6 +150,12 @@ void usage()
   cout << "  user policy list attached        list attached managed policies\n";
   cout << "  caps add                         add user capabilities\n";
   cout << "  caps rm                          remove user capabilities\n";
+  cout << "  dedup stats                      Display dedup statistics from the last run\n";
+  cout << "  dedup estimate                   Runs dedup in estimate mode (no changes will be made)\n";
+  cout << "  dedup restart                    Restart dedup\n";
+  cout << "  dedup abort                      Abort dedup\n";
+  cout << "  dedup pause                      Pause dedup\n";
+  cout << "  dedup resume                     Resume paused dedup\n";
   cout << "  subuser create                   create a new subuser\n" ;
   cout << "  subuser modify                   modify subuser\n";
   cout << "  subuser rm                       remove subuser\n";
@@ -742,6 +747,12 @@ enum class OPT {
   QUOTA_SET,
   QUOTA_ENABLE,
   QUOTA_DISABLE,
+  DEDUP_STATS,
+  DEDUP_ESTIMATE,
+  DEDUP_ABORT,
+  DEDUP_RESTART,
+  DEDUP_PAUSE,
+  DEDUP_RESUME,
   GC_LIST,
   GC_PROCESS,
   LC_LIST,
@@ -989,6 +1000,12 @@ static SimpleCmd::Commands all_cmds = {
   { "ratelimit set", OPT::RATELIMIT_SET },
   { "ratelimit enable", OPT::RATELIMIT_ENABLE },
   { "ratelimit disable", OPT::RATELIMIT_DISABLE },
+  { "dedup stats", OPT::DEDUP_STATS },
+  { "dedup estimate", OPT::DEDUP_ESTIMATE },
+  { "dedup abort", OPT::DEDUP_ABORT },
+  { "dedup restart", OPT::DEDUP_RESTART },
+  { "dedup pause", OPT::DEDUP_PAUSE },
+  { "dedup resume", OPT::DEDUP_RESUME },
   { "gc list", OPT::GC_LIST },
   { "gc process", OPT::GC_PROCESS },
   { "lc list", OPT::LC_LIST },
@@ -4509,6 +4526,12 @@ int main(int argc, const char **argv)
 			 OPT::BI_LIST,
 			 OPT::OLH_GET,
 			 OPT::OLH_READLOG,
+			 OPT::DEDUP_STATS,
+			 OPT::DEDUP_ESTIMATE,
+			 OPT::DEDUP_ABORT,     // TBD - not READ-ONLY
+			 OPT::DEDUP_RESTART,   // TBD - not READ-ONLY
+			 OPT::DEDUP_PAUSE,
+			 OPT::DEDUP_RESUME,
 			 OPT::GC_LIST,
 			 OPT::LC_LIST,
 			 OPT::ORPHANS_LIST_JOBS,
@@ -9163,6 +9186,71 @@ next:
 	return 1;
       }
       RGWBucketAdminOp::remove_bucket(driver, *site, bucket_op, null_yield, dpp(), bypass_gc, false, false);
+    }
+  }
+
+  if (opt_cmd == OPT::DEDUP_STATS    ||
+      opt_cmd == OPT::DEDUP_ESTIMATE ||
+      opt_cmd == OPT::DEDUP_ABORT    ||
+      opt_cmd == OPT::DEDUP_PAUSE    ||
+      opt_cmd == OPT::DEDUP_RESUME   ||
+      opt_cmd == OPT::DEDUP_RESTART) {
+
+    using namespace rgw::dedup;
+    rgw::sal::RadosStore *store = dynamic_cast<rgw::sal::RadosStore*>(driver);
+    if (!store) {
+      cerr << "ERROR: this command can only work when the cluster has a RADOS "
+	   << "backing store." << std::endl;
+      return EPERM;
+    }
+
+    if (opt_cmd == OPT::DEDUP_STATS) {
+      int ret = cluster::collect_all_shard_stats(store, formatter.get(), dpp());
+      if (ret == 0) {
+	formatter->flush(cout);
+      }
+      else {
+	cerr << "ERROR: Failed reading stat counters" << std::endl;
+      }
+      return ret;
+    }
+
+    if (opt_cmd == OPT::DEDUP_ABORT || opt_cmd == OPT::DEDUP_PAUSE || opt_cmd == OPT::DEDUP_RESUME) {
+      urgent_msg_t urgent_msg;
+      if (opt_cmd == OPT::DEDUP_ABORT) {
+	urgent_msg = URGENT_MSG_ABORT;
+      }
+      else if (opt_cmd == OPT::DEDUP_PAUSE) {
+	urgent_msg = URGENT_MSG_PASUE;
+      }
+      else {
+	urgent_msg = URGENT_MSG_RESUME;
+      }
+      return cluster::dedup_control(store, dpp(), urgent_msg);
+    }
+
+    if (opt_cmd == OPT::DEDUP_RESTART || opt_cmd == OPT::DEDUP_ESTIMATE) {
+      dedup_req_type_t dedup_type = dedup_req_type_t::DEDUP_TYPE_NONE;
+      if (opt_cmd == OPT::DEDUP_ESTIMATE) {
+	dedup_type = dedup_req_type_t::DEDUP_TYPE_ESTIMATE;
+      }
+      else {
+	dedup_type = dedup_req_type_t::DEDUP_TYPE_FULL;
+#ifndef FULL_DEDUP_SUPPORT
+	std::cerr << "Only dedup estimate is supported!" << std::endl;
+	return EPERM;
+#endif
+      }
+
+      int ret = cluster::dedup_restart_scan(store, dedup_type, dpp());
+      if (ret == 0) {
+	std::cout << "Dedup was restarted successfully" << std::endl;
+      }
+      else {
+	std::cerr << "Dedup failed to restart" << std::endl;
+	std::cerr << "Error is: " << ret << "::" << cpp_strerror(ret) << std::endl;
+      }
+      return ret;
     }
   }
 
