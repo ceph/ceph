@@ -21,6 +21,7 @@ if(${WITH_CEPHFS})
   target_link_libraries(ceph_test_ino_release_cb
       ceph-common
       cephfs
+      ceph-common
   )
   install(TARGETS ceph_test_ino_release_cb DESTINATION ${CMAKE_INSTALL_BINDIR})
 endif(${WITH_CEPHFS})
