@@ -1296,10 +1296,16 @@ int SessionFilter::parse(
       if (v == "*") {
         // evict all clients , by default id set to 0
         return 0;
-      } else if (v == "0") {
-        *ss << "Invalid value";
-        return -EINVAL;
-      }
+      } else {
+        try {
+          if (!std::stoi(v)) {
+            *ss << "Invalid value";
+            return -EINVAL; } 
+          } catch (...) {
+            *ss << "Invalid input";
+            return -EINVAL;
+          }
+        }
       id = strict_strtoll(v.c_str(), 10, &err);
       if (!err.empty()) {
         *ss << err;
