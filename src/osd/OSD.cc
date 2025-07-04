@@ -2677,7 +2677,7 @@ OSD::PGRefOrError OSD::locate_asok_target(const cmdmap_t& cmdmap,
     pg->unlock();
     return OSD::PGRefOrError{std::nullopt, -EAGAIN};
   } else {
-    ss << "i don't have pgid " << pgid;
+    ss << "don't have pgid " << pgid;
     return OSD::PGRefOrError{std::nullopt, -ENOENT};
   }
 }
