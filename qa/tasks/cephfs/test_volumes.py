@@ -5296,7 +5296,7 @@ class TestSubvolumeSnapshots(TestVolumesHelper):
         tests the 'fs subvolume snapshot info' command
         """
 
-        snap_md = ["created_at", "data_pool", "has_pending_clones"]
+        snap_md = ["bytes_quota", "created_at", "data_pool", "has_pending_clones"]
 
         subvolume = self._gen_subvol_name()
         snapshot, snap_missing = self._gen_subvol_snap_name(2)
@@ -5322,6 +5322,56 @@ class TestSubvolumeSnapshots(TestVolumesHelper):
             self.assertEqual(ce.exitstatus, errno.ENOENT, "invalid error code on snapshot info of non-existent snapshot")
         else:
             self.fail("expected snapshot info of non-existent snapshot to fail")
+
+        # remove snapshot
+        self._fs_cmd("subvolume", "snapshot", "rm", self.volname, subvolume, snapshot)
+
+        # remove subvolume
+        self._fs_cmd("subvolume", "rm", self.volname, subvolume)
+
+        # verify trash dir is clean
+        self._wait_for_trash_empty()
+
+    def test_subvolume_snapshot_bytes_quota_with_quota_value_set(self):
+        subvolume = self._gen_subvol_name()
+        snapshot = self._gen_subvol_snap_name()
+
+        # create subvolume
+        self._fs_cmd("subvolume", "create", self.volname, subvolume, "--mode=777", "1000000000")
+
+        # do some IO
+        self._do_subvolume_io(subvolume, number_of_files=1)
+
+        # snapshot subvolume
+        self._fs_cmd("subvolume", "snapshot", "create", self.volname, subvolume, snapshot)
+
+        snap_info = json.loads(self._get_subvolume_snapshot_info(self.volname, subvolume, snapshot))
+        self.assertEqual(snap_info["bytes_quota"], "1000000000")
+
+        # remove snapshot
+        self._fs_cmd("subvolume", "snapshot", "rm", self.volname, subvolume, snapshot)
+
+        # remove subvolume
+        self._fs_cmd("subvolume", "rm", self.volname, subvolume)
+
+        # verify trash dir is clean
+        self._wait_for_trash_empty()
+
+    def test_subvolume_snapshot_bytes_quota_with_no_quota_value_set(self):
+        subvolume = self._gen_subvol_name()
+        snapshot = self._gen_subvol_snap_name()
+
+        # create subvolume
+        self._fs_cmd("subvolume", "create", self.volname, subvolume, "--mode=777")
+
+        # do some IO
+        self._do_subvolume_io(subvolume, number_of_files=1)
+
+        # snapshot subvolume
+        self._fs_cmd("subvolume", "snapshot", "create", self.volname, subvolume, snapshot)
+
+        snap_info = json.loads(self._get_subvolume_snapshot_info(self.volname, subvolume, snapshot))
+        self.assertEqual(snap_info["bytes_quota"], "infinite")
 
         # remove snapshot
         self._fs_cmd("subvolume", "snapshot", "rm", self.volname, subvolume, snapshot)
@@ -5623,7 +5673,7 @@ class TestSubvolumeSnapshots(TestVolumesHelper):
         """
         ensure a retained subvolume can be recreated and further snapshotted
         """
-        snap_md = ["created_at", "data_pool", "has_pending_clones"]
+        snap_md = ["bytes_quota", "created_at", "data_pool", "has_pending_clones"]
 
         subvolume = self._gen_subvol_name()
         snapshot1, snapshot2 = self._gen_subvol_snap_name(2)
@@ -5686,7 +5736,7 @@ class TestSubvolumeSnapshots(TestVolumesHelper):
         ensure retain snapshots based delete of a subvolume with snapshots retains the subvolume
         also test allowed and dis-allowed operations on a retained subvolume
         """
-        snap_md = ["created_at", "data_pool", "has_pending_clones"]
+        snap_md = ["bytes_quota", "created_at", "data_pool", "has_pending_clones"]
 
         subvolume = self._gen_subvol_name()
         snapshot = self._gen_subvol_snap_name()
@@ -8936,7 +8986,7 @@ class TestMisc(TestVolumesHelper):
         subvol_md = ["atime", "bytes_pcent", "bytes_quota", "bytes_used", "created_at", "ctime",
                      "data_pool", "gid", "mode", "mon_addrs", "mtime", "path", "pool_namespace",
                      "type", "uid", "features", "state"]
-        snap_md = ["created_at", "data_pool", "has_pending_clones"]
+        snap_md = ["bytes_quota", "created_at", "data_pool", "has_pending_clones"]
 
         subvolume = self._gen_subvol_name()
         snapshot = self._gen_subvol_snap_name()
