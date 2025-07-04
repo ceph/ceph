@@ -118,6 +118,9 @@ constexpr device_id_t DEVICE_ID_SEGMENTED_MIN = 0;
 constexpr device_id_t DEVICE_ID_RANDOM_BLOCK_MIN = 
   1 << (std::numeric_limits<device_id_t>::digits - 1);
 
+constexpr const char* SUPERBLOCK_MAGIC = "seastore block device\n";
+constexpr size_t SUPERBLOCK_MAGIC_LEN = strlen(SUPERBLOCK_MAGIC);
+
 struct device_id_printer_t {
   device_id_t id;
 };
