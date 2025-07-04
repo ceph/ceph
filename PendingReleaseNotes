@@ -133,6 +133,13 @@
   ISA-L is recommended for new pools because the Jerasure library is
   no longer maintained.
 
+* CephFS: Format of name of pool namespace for CephFS volumes has been changed
+  from `fsvolumens__<subvol-name>` to `fsvolumens__<subvol-grp-name>_<subvol-name>`
+  to avoid namespace collision when two subvolumes located in different
+  subvolume groups have the same name. Even with namespace collision, there were
+  no security issues since the MDS auth cap is restricted to the subvolume path.
+  Now, with this change, the namespaces are completely isolated.
+
 * RGW: Added support for the `RestrictPublicBuckets` property of the S3 `PublicAccessBlock`
   configuration.
 
