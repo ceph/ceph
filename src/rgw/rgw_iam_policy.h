@@ -302,6 +302,7 @@ inline int op_to_perm(std::uint64_t op) {
   case s3GetReplicationConfiguration:
   case s3GetBucketObjectLockConfiguration:
   case s3GetBucketPublicAccessBlock:
+  case s3GetBucketOwnershipControls:
     return RGW_PERM_READ_ACP;
 
   case s3DeleteBucketPolicy:
@@ -325,6 +326,7 @@ inline int op_to_perm(std::uint64_t op) {
   case s3PutReplicationConfiguration:
   case s3PutBucketObjectLockConfiguration:
   case s3PutBucketPublicAccessBlock:
+  case s3PutBucketOwnershipControls:
     return RGW_PERM_WRITE_ACP;
 
   case s3All:
