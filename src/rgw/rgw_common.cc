@@ -2840,7 +2840,7 @@ void RGWUserInfo::dump(Formatter *f) const
     encode_json("admin", (bool)admin, f);
   }
   encode_json("default_placement", default_placement.name, f);
-  encode_json("default_storage_class", default_placement.storage_class, f);
+  encode_json("default_storage_class", default_placement.get_storage_class(), f);
   encode_json("placement_tags", placement_tags, f);
   encode_json("bucket_quota", quota.bucket_quota, f);
   encode_json("user_quota", quota.user_quota, f);
