@@ -39,7 +39,11 @@ class bitset_set {
     KeyT pos;
 
    public:
+    using value_type = const KeyT;
     using difference_type = std::int64_t;
+    using pointer = const value_type *;
+    using reference = const value_type &;
+    using iterator_category = std::forward_iterator_tag;
 
     const_iterator() : set(nullptr), pos(0) {
     }
