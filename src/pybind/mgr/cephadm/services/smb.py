@@ -123,7 +123,7 @@ class SMBService(CephService):
         # TODO ???
         logger.warning('config_dashboard is a no-op')
 
-    def get_auth_entity(self, daemon_id: str, host: str = "") -> AuthEntity:
+    def get_auth_entity(self, daemon_id: str, host: str = "", rados_user: str = '') -> AuthEntity:
         # We want a clear, distinct auth entity for fetching the config versus
         # data path access.
         return AuthEntity(f'client.{self.TYPE}.config.{daemon_id}')
