@@ -55,6 +55,8 @@ PerShardState::PerShardState(
 
 seastar::future<> PerShardState::dump_ops_in_flight(Formatter *f) const
 {
+  LOG_PREFIX(PerShardState::dump_ops_in_flight);
+  DEBUG("");
   registry.for_each_op([f](const auto &op) {
     op.dump(f);
   });

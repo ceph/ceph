@@ -21,6 +21,11 @@ namespace crimson {
 using core_id_t = seastar::shard_id;
 static constexpr core_id_t NULL_CORE = std::numeric_limits<core_id_t>::max();
 
+/**
+ * submit_to
+ *
+ * Transparently deal with vanilla and errorated futures
+ */
 auto submit_to(core_id_t core, auto &&f) {
   using ret_type = decltype(f());
   if constexpr (is_errorated_future_v<ret_type>) {
@@ -47,52 +52,17 @@ auto proxy_method_on_core(
 }
 
 /**
- * reactor_map_seq
+ * invoke_on_all_seq
  *
  * Invokes f on each reactor sequentially, Caller may assume that
  * f will not be invoked concurrently on multiple cores.
+ * f is copied here and is kept alive due to coroutine parameter copying.
  */
 template <typename F>
-auto reactor_map_seq(F &&f) {
-  using ret_type = decltype(f());
-  if constexpr (is_errorated_future_v<ret_type>) {
-    auto ret = crimson::do_for_each(
-      seastar::smp::all_cpus().begin(),
-      seastar::smp::all_cpus().end(),
-      [f=std::move(f)](auto core) mutable {
-	return seastar::smp::submit_to(
-	  core,
-	  [&f] {
-	    return std::invoke(f);
-	  });
-      });
-    return ret_type(ret);
-  } else {
-    return seastar::do_for_each(
-      seastar::smp::all_cpus().begin(),
-      seastar::smp::all_cpus().end(),
-      [f=std::move(f)](auto core) mutable {
-	return seastar::smp::submit_to(
-	  core,
-	  [&f] {
-	    return std::invoke(f);
-	  });
-      });
+auto invoke_on_all_seq(F f) -> decltype(seastar::futurize_invoke(f)) {
+  for (auto core: seastar::smp::all_cpus()) {
+      co_await crimson::submit_to(core, [&f] { return seastar::futurize_invoke(f);});
   }
-}
-
-/**
- * sharded_map_seq
- *
- * Invokes f on each shard of t sequentially.  Caller may assume that
- * f will not be invoked concurrently on multiple cores.
- */
-template <typename T, typename F>
-auto sharded_map_seq(T &t, F &&f) {
-  return reactor_map_seq(
-    [&t, f=std::forward<F>(f)]() mutable {
-      return std::invoke(f, t.local());
-    });
 }
 
 enum class crosscore_type_t {
