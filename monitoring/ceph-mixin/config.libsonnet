@@ -16,6 +16,7 @@
     NVMeoFMaxSubsystemsPerGateway: 128,
     NVMeoFMaxNamespaces: 2048,
     NVMeoFHighClientCount: 128,
+    NVMeoFHostKeepAliveTimeoutTrackDurationHours: 24,
     NVMeoFHighHostCPU: 80,
     //
     // Read/Write latency is defined in ms
