@@ -1032,6 +1032,7 @@ int FilterObject::copy_object(const ACLOwner& owner,
 			      std::string* etag,
 			      void (*progress_cb)(off_t, void *),
 			      void* progress_data,
+			      rgw::sal::ObjectFilter *read_filter,
 			      const DoutPrefixProvider* dpp,
 			      optional_yield y)
 {
@@ -1043,7 +1044,8 @@ int FilterObject::copy_object(const ACLOwner& owner,
 			   mod_ptr, unmod_ptr, high_precision_time, if_match,
 			   if_nomatch, attrs_mod, copy_if_newer, attrs,
 			   category, olh_epoch, delete_at, version_id, tag,
-			   etag, progress_cb, progress_data, dpp, y);
+			   etag, progress_cb, progress_data, read_filter,
+                           dpp, y);
 }
 
 RGWAccessControlPolicy& FilterObject::get_acl()

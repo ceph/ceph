@@ -778,6 +778,7 @@ public:
 	       boost::optional<ceph::real_time> delete_at,
                std::string* version_id, std::string* tag, std::string* etag,
                void (*progress_cb)(off_t, void *), void* progress_data,
+               rgw::sal::ObjectFilter *read_filter,
                const DoutPrefixProvider* dpp, optional_yield y) override;
   virtual RGWAccessControlPolicy& get_acl(void) override;
   virtual int set_acl(const RGWAccessControlPolicy& acl) override { return next->set_acl(acl); }

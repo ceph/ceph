@@ -344,6 +344,7 @@ public:
 };
 
 class RGWCopyObj_ObjStore_S3 : public RGWCopyObj_ObjStore {
+  std::map<std::string, std::string> crypt_http_responses;
   bool sent_header;
 public:
   RGWCopyObj_ObjStore_S3() : sent_header(false) {}
