@@ -364,6 +364,41 @@ This command removes the subvolume and its contents. This is done in two steps.
 First, the subvolume is moved to a trash folder. Second, the contents of that
 trash folder are purged asynchronously.
 
+The progress made by this asynchronous purge can be checked by viewing the
+output of the ``ceph status`` command. When an asynchronous purge is ongoing, a
+progress bar is printed at the bottom of the ``ceph status`` output (probably
+along with other progress bars) in a section called "progress". Following is
+an example of this progress bar::
+
+    Purging 2 subvolumes/12 files, average progress = 50.0% (6s)
+      [==============..............] (remaining: 6s)
+
+Printing of this progress bar can be disabled by setting the
+``disable_purge_progress_bars`` configuration option. To see how to use this
+config option, see :ref:`configurables`.
+
+Alternately, the ``ceph fs purge status`` command can be used to check the
+progress made by asychronous purge threads. Following is a sample output::
+
+    {
+      "status": {
+        "state": "ongoing",
+        "progress_report": {
+          "amount_purged": {
+            "subvols": "0/2",
+            "files": "6/12",
+            "size": "60M/100M"
+          },
+          "percentage_purged": {
+            "subvols": "0%",
+            "files": "50%",
+            "size": "60%"
+          },
+          "purge_rate": "0.998 unlink+rmdir per sec"
+        }
+      }
+    }
+
 Subvolume removal fails if the subvolume has snapshots or is non-existent.  The
 ``--force`` flag allows the "non-existent subvolume remove" command to succeed.
 
@@ -985,6 +1020,8 @@ state:
 .. note:: Delete the canceled cloned by supplying the ``--force`` option to the
    ``fs subvolume rm`` command.
 
+.. _configurables:
+
 Configurables
 ~~~~~~~~~~~~~
 
@@ -1019,6 +1056,13 @@ To resume cloning threads:
 .. prompt:: bash #
 
     ceph config set mgr/volumes/pause_cloning false
+
+Configure whether the progress bar for the asynchronous purge jobs should be
+printed in the output of the ``ceph status`` command.
+
+.. prompt:: bash #
+
+    ceph config set mgr/volumes/disable_purge_progress_bars true
 
 Configure the ``snapshot_clone_no_wait`` option:
 
