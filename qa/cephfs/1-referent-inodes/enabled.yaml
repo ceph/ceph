@@ -1,0 +1,4 @@
+overrides:
+  ceph:
+    cephfs:
+      allow_referent_inodes: true
