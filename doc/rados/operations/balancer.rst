@@ -82,7 +82,7 @@ run a command of the following form:
 
   .. prompt:: bash $
 
-     ceph config set mgr/balancer/upmap_max_deviation   1
+     ceph config set mgr mgr/balancer/upmap_max_deviation   1
 
 This value is reasonable and safe for most clusters.  Note that this is
 an absolute integer number of PGs, not a percentage.
