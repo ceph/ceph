@@ -9,9 +9,10 @@ import {
   StorageClassDetails,
   TARGET_ACCESS_KEY_TEXT,
   TARGET_PATH_TEXT,
-  TARGET_SECRET_KEY_TEXT
+  TARGET_SECRET_KEY_TEXT,
+  TIER_TYPE,
+  TIER_TYPE_DISPLAY
 } from '../models/rgw-storage-class.model';
-
 @Component({
   selector: 'cd-rgw-storage-class-details',
   templateUrl: './rgw-storage-class-details.component.html',
@@ -30,10 +31,14 @@ export class RgwStorageClassDetailsComponent implements OnChanges {
   targetSecretKeyText = TARGET_SECRET_KEY_TEXT;
   targetPathText = TARGET_PATH_TEXT;
   hostStyleText = HOST_STYLE;
+  TIER_TYPE = TIER_TYPE;
+  TIER_TYPE_DISPLAY = TIER_TYPE_DISPLAY;
 
   ngOnChanges() {
     if (this.selection) {
       this.storageDetails = {
+        zonegroup_name: this.selection.zonegroup_name,
+        placement_targets: this.selection.placement_targets,
         access_key: this.selection.access_key,
         secret: this.selection.secret,
         target_path: this.selection.target_path,
@@ -41,7 +46,11 @@ export class RgwStorageClassDetailsComponent implements OnChanges {
         multipart_sync_threshold: this.selection.multipart_sync_threshold,
         host_style: this.selection.host_style,
         retain_head_object: this.selection.retain_head_object,
-        allow_read_through: this.selection.allow_read_through
+        allow_read_through: this.selection.allow_read_through,
+        glacier_restore_days: this.selection.glacier_restore_days,
+        glacier_restore_tier_type: this.selection.glacier_restore_tier_type,
+        restore_storage_class: this.selection.restore_storage_class,
+        readthrough_restore_days: this.selection.readthrough_restore_days
       };
     }
   }

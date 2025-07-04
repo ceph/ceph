@@ -5,10 +5,10 @@ export interface ZoneGroupDetails {
 }
 
 export interface StorageClass {
-  storage_class: string;
-  endpoint: string;
-  region: string;
   placement_target: string;
+  storage_class?: string;
+  endpoint?: string;
+  region?: string;
   zonegroup_name?: string;
 }
 
@@ -20,22 +20,57 @@ export interface StorageClassDetails {
   multipart_sync_threshold: number;
   host_style: string;
   retain_head_object: boolean;
+  zonegroup_name?: string;
+  placement_targets?: string;
   allow_read_through: boolean;
 }
 
+export interface S3Details {
+  endpoint: string;
+  access_key: string;
+  storage_class: string;
+  target_path: string;
+  target_storage_class: string;
+  region: string;
+  secret: string;
+  multipart_min_part_size: number;
+  multipart_sync_threshold: number;
+  host_style: boolean;
+}
+
 export interface TierTarget {
+  key: string;
   val: {
     storage_class: string;
     tier_type: string;
     retain_head_object: boolean;
     allow_read_through: boolean;
-    s3: S3Details;
+    read_through_restore_days: number;
+    restore_storage_class: string;
+    s3?: S3Details;
+    's3-glacier': S3Glacier;
   };
 }
 
 export interface Target {
   name: string;
   tier_targets: TierTarget[];
+  storage_classes?: string[];
+}
+
+export interface StorageClassDetails {
+  target_path: string;
+  access_key: string;
+  secret: string;
+  multipart_min_part_size: number;
+  multipart_sync_threshold: number;
+  host_style: string;
+  glacier_restore_days?: number;
+  glacier_restore_tier_type?: string;
+  readthrough_restore_days?: number;
+  restore_storage_class?: string;
+  zonegroup_name?: string;
+  placement_targets?: string;
 }
 
 export interface ZoneGroup {
@@ -58,6 +93,13 @@ export interface S3Details {
   retain_head_object?: boolean;
   allow_read_through?: boolean;
 }
+export interface S3Glacier {
+  glacier_restore_days: number;
+  glacier_restore_tier_type: string;
+  readthrough_restore_days: number;
+  restore_storage_class: string;
+}
+
 export interface RequestModel {
   zone_group: string;
   placement_targets: PlacementTarget[];
@@ -66,8 +108,8 @@ export interface RequestModel {
 export interface PlacementTarget {
   tags: string[];
   placement_id: string;
-  tier_type: typeof CLOUD_TIER;
-  tier_config: {
+  tier_type?: TIER_TYPE;
+  tier_config?: {
     endpoint: string;
     access_key: string;
     secret: string;
@@ -77,13 +119,21 @@ export interface PlacementTarget {
     region: string;
     multipart_sync_threshold: number;
     multipart_min_part_size: number;
+    glacier_restore_days?: number;
+    glacier_restore_tier_type?: string;
+    restore_storage_class?: string;
+    readthrough_restore_days?: number;
   };
   storage_class?: string;
   name?: string;
   tier_targets?: TierTarget[];
 }
 
-export const CLOUD_TIER = 'cloud-s3';
+export const TIER_TYPE = {
+  LOCAL: 'local',
+  CLOUD_TIER: 'cloud-s3',
+  GLACIER: 'cloud-s3-glacier'
+} as const;
 
 export const DEFAULT_PLACEMENT = 'default-placement';
 
@@ -116,3 +166,17 @@ export const RETAIN_HEAD_OBJECT_TEXT = 'Retain object metadata after transition 
 export const HOST_STYLE = `The URL format for accessing the remote S3 endpoint:
   - 'Path': Use for a path-based URL
   - 'Virtual': Use for a domain-based URL`;
+
+export const TIER_TYPE_DISPLAY = {
+  LOCAL: 'Local',
+  CLOUD_TIER: 'Cloud S3',
+  GLACIER: 'Cloud S3 Glacier'
+};
+
+export type TIER_TYPE = typeof TIER_TYPE[keyof typeof TIER_TYPE];
+
+export const LOCAL_STORAGE_CLASS_TEXT = $localize`Local storage uses on-premises or directly attached devices for data storage.`;
+
+export const CLOUDS3_STORAGE_CLASS_TEXT = $localize`Cloud S3 storage uses Amazon S3-compatible cloud services for tiering.`;
+
+export const GLACIER_STORAGE_CLASS_TEXT = $localize`Glacier storage uses Amazon S3 Glacier for low-cost, long-term archival data storage.`;
