@@ -3156,6 +3156,7 @@ class SMBClusterPublicIPSpec:
 class SMBSpec(ServiceSpec):
     service_type = 'smb'
     _valid_features = {'domain', 'clustered', 'cephfs-proxy'}
+    _valid_service_names = {'smb', 'smbmetrics', 'ctdb'}
     _default_cluster_meta_obj = 'cluster.meta.json'
     _default_cluster_lock_obj = 'cluster.meta.lock'
 
@@ -3211,6 +3212,9 @@ class SMBSpec(ServiceSpec):
         # If supplied, these will be used to esatablish floating virtual ips
         # managed by Samba CTDB cluster subsystem.
         cluster_public_addrs: Optional[List[SMBClusterPublicIPSpec]] = None,
+        # custom_ports - A mapping of services to ports. If a service is
+        # not listed the default port will be used.
+        custom_ports: Optional[Dict[str, int]] = None,
         # --- genearal tweaks ---
         extra_container_args: Optional[GeneralArgList] = None,
         extra_entrypoint_args: Optional[GeneralArgList] = None,
@@ -3243,6 +3247,7 @@ class SMBSpec(ServiceSpec):
         self.cluster_public_addrs = SMBClusterPublicIPSpec.convert_list(
             cluster_public_addrs
         )
+        self.custom_ports = custom_ports
         self.validate()
 
     def validate(self) -> None:
@@ -3278,6 +3283,9 @@ class SMBSpec(ServiceSpec):
             )
         for spec in self.cluster_public_addrs or []:
             spec.validate()
+        for key in self.custom_ports or {}:
+            if key not in self._valid_service_names:
+                raise ValueError(f'{key} is not a valid service name')
 
     def _derive_cluster_uri(self, uri: str, objname: str) -> str:
         if not uri.startswith('rados://'):
@@ -3287,11 +3295,27 @@ class SMBSpec(ServiceSpec):
         uri = 'rados://' + '/'.join(parts)
         return uri
 
+    def _default_ports(self) -> Dict[str, int]:
+        return {
+            'smb': 445,
+            'smbmetrics': 9922,
+            'ctdb': 4379,
+        }
+
+    def service_ports(self) -> Dict[str, int]:
+        ports = self._default_ports()
+        if self.custom_ports:
+            ports.update(self.custom_ports)
+        return ports
+
+    def metrics_exporter_port(self) -> int:
+        return self.service_ports()['smbmetrics']
+
     def get_port_start(self) -> List[int]:
-        ports = [445, 9922]  # SMB service runs on port 445 and smbmetrics uses 9922
+        _ports = self.service_ports()
+        ports = [_ports['smb'], _ports['smbmetrics']]
         if 'clustered' in self.features:
-            # ctdb uses port 4379
-            ports.append(4379)
+            ports.append(_ports['ctdb'])
         return ports
 
     def strict_cluster_ip_specs(self) -> List[Dict[str, Any]]:
