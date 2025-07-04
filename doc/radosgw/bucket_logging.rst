@@ -202,18 +202,18 @@ extension).
   - bucket owner (or dash if empty)
   - bucket name (or dash if empty), in the format: ``[tenant:]<bucket name>``
   - time in the following format: ``[day/month/year:hour:minute:second timezone]``
-  - object key (or dash if empty)
   - operation in the following format: ``WEBSITE/REST.<HTTP method>.<resource>``
+  - object key (or dash if empty)
   - object size (or dash if empty)
-  - version id (dash if empty or question mark if unknown)
-  - eTag
+  - version id (or dash if empty)
+  - eTag (or dash if empty)
 
 For example:
 
 ::
 
-  testid fish [06/Aug/2024:09:40:09 +0000] myfile - REST.PUT.OBJECT 4cfdfc1f58e762d3e116787cb92fac60
-  testid fish [06/Aug/2024:09:40:28 +0000] myfile REST.DELETE.OBJECT 4cfdfc1f58e762d3e116787cb92fac60
+  testid fish [06/Aug/2024:09:40:09 +0000] REST.PUT.OBJECT myfile - 512 4cfdfc1f58e762d3e116787cb92fac60
+  testid fish [06/Aug/2024:09:40:28 +0000] REST.DELETE.OBJECT myfile - - 4cfdfc1f58e762d3e116787cb92fac60
 
 
 Standard
