@@ -1,4 +1,4 @@
-import { Injectable } from '@angular/core';
+import { Injectable, NgZone } from '@angular/core';
 
 import _ from 'lodash';
 import { BehaviorSubject, Subject } from 'rxjs';
@@ -42,6 +42,7 @@ export class NotificationService {
   constructor(
     private taskMessageService: TaskMessageService,
     private cdDatePipe: CdDatePipe,
+    private ngZone: NgZone
   ) {
     const stringNotifications = localStorage.getItem(this.KEY);
     let notifications: CdNotification[] = [];
@@ -197,19 +198,22 @@ export class NotificationService {
       type: carbonType,
       lowContrast: lowContrast,
       showClose: true,
-      autohide: true,
-      duration: notification.options?.timeOut ? notification.options.timeOut / 1000 : 5
+      duration: notification.options?.timeOut || 5000
     };
 
     // Add new toast to the beginning of the array
     this.activeToasts = [toast, ...this.activeToasts];
     this.activeToastsSource.next(this.activeToasts);
 
-    // Set up auto-dismissal
-    if (toast.autohide && toast.duration) {
-      setTimeout(() => {
-        this.removeToast(toast);
-      }, toast.duration * 1000);
+    // Handle duration-based auto-dismissal
+    if (toast.duration && toast.duration > 0) {
+      this.ngZone.runOutsideAngular(() => {
+        setTimeout(() => {
+          this.ngZone.run(() => {
+            this.removeToast(toast);
+          });
+        }, toast.duration);
+      });
     }
   }
 
