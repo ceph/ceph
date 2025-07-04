@@ -1132,7 +1132,7 @@ class TestCephadm(object):
             _run_cephadm.assert_any_call(
                 'test', 'osd', 'ceph-volume',
                 ['--config-json', '-', '--', 'lvm', 'batch',
-                    '--no-auto', '/dev/sdb', '--yes', '--no-systemd'],
+                    '--no-auto', '/dev/sdb', '--objectstore', 'bluestore', '--yes', '--no-systemd'],
                 env_vars=['CEPH_VOLUME_OSDSPEC_AFFINITY=foo'], error_ok=True,
                 stdin='{"config": "", "keyring": ""}')
             _run_cephadm.assert_any_call(
@@ -1178,7 +1178,7 @@ class TestCephadm(object):
                 'test', 'osd', 'ceph-volume',
                 ['--config-json', '-', '--', 'lvm', 'batch',
                     '--no-auto', '/dev/sdb', '--db-devices', '/dev/sdc',
-                    '--wal-devices', '/dev/sdd', '--yes', '--no-systemd'],
+                    '--wal-devices', '/dev/sdd', '--objectstore', 'bluestore', '--yes', '--no-systemd'],
                 env_vars=['CEPH_VOLUME_OSDSPEC_AFFINITY=noncollocated'],
                 error_ok=True, stdin='{"config": "", "keyring": ""}',
             )
@@ -1266,15 +1266,15 @@ class TestCephadm(object):
         "devices, preview, exp_commands",
         [
             # no preview and only one disk, prepare is used due the hack that is in place.
-            (['/dev/sda'], False, ["lvm batch --no-auto /dev/sda --yes --no-systemd"]),
+            (['/dev/sda'], False, ["lvm batch --no-auto /dev/sda --objectstore bluestore --yes --no-systemd"]),
             # no preview and multiple disks, uses batch
             (['/dev/sda', '/dev/sdb'], False,
-             ["CEPH_VOLUME_OSDSPEC_AFFINITY=test.spec lvm batch --no-auto /dev/sda /dev/sdb --yes --no-systemd"]),
+             ["CEPH_VOLUME_OSDSPEC_AFFINITY=test.spec lvm batch --no-auto /dev/sda /dev/sdb --objectstore bluestore --yes --no-systemd"]),
             # preview and only one disk needs to use batch again to generate the preview
-            (['/dev/sda'], True, ["lvm batch --no-auto /dev/sda --yes --no-systemd --report --format json"]),
+            (['/dev/sda'], True, ["lvm batch --no-auto /dev/sda --objectstore bluestore --yes --no-systemd --report --format json"]),
             # preview and multiple disks work the same
             (['/dev/sda', '/dev/sdb'], True,
-             ["CEPH_VOLUME_OSDSPEC_AFFINITY=test.spec lvm batch --no-auto /dev/sda /dev/sdb --yes --no-systemd --report --format json"]),
+             ["CEPH_VOLUME_OSDSPEC_AFFINITY=test.spec lvm batch --no-auto /dev/sda /dev/sdb --objectstore bluestore --yes --no-systemd --report --format json"]),
         ]
     )
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))

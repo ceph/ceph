@@ -3,8 +3,8 @@
 import argparse
 
 from ceph_volume import terminal
-from ceph_volume.objectstore.lvmbluestore import LvmBlueStore as LVMActivate
-from ceph_volume.objectstore.rawbluestore import RawBlueStore as RAWActivate
+from ceph_volume.objectstore.lvm import Lvm as LVMActivate
+from ceph_volume.objectstore.raw import Raw as RAWActivate
 from ceph_volume.devices.simple.activate import Activate as SimpleActivate
 
 
