@@ -6855,3 +6855,21 @@ options:
   level: dev
   default: 0
   desc: When EC writes should generate PDWs (development only) 0=optimal 1=never 2=when possible
+- name: osd_crush_scaling_factor
+  type: float
+  level: advanced
+  desc: Scale device sizes by this factor when calculating CRUSH weights.
+    This value is applied when new OSDs are added to the cluster,
+    or when running 'ceph osd crush reweight-by-scaling-factor'.
+    E.g. When set to 1.0, CRUSH weights will be the same as the device size in TiB and
+    the maximum cluster size is ~65.5PiB.
+    If set to 0.1, CRUSH weights will be 1/10th of the device size in TiB and
+    the maximum cluster size is ~655PiB.
+  default: 1.0
+  min: 0.001
+  max: 1.0
+  services:
+  - mon
+  - osd
+  flags:
+  - runtime
