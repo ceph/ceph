@@ -46,6 +46,7 @@ export const KAFKA_MECHANISM = {
   SCRAM256: 'SCRAM-SHA-256',
   SCRAM512: 'SCRAM-SHA-512'
 };
+
 export const END_POINT_TYPE = {
   HTTP: 'HTTP',
   AMQP: 'AMQP',

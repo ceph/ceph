@@ -17,12 +17,12 @@ describe('RgwTopicService', () => {
   beforeEach(() => {
     service = TestBed.inject(RgwTopicService);
     httpTesting = TestBed.inject(HttpTestingController);
-    RgwHelper.selectDaemon();
   });
 
   it('should be created', () => {
     expect(service).toBeTruthy();
   });
+
   it('should call list with result', () => {
     service.listTopic().subscribe((resp) => {
       let result = resp;
@@ -47,5 +47,11 @@ describe('RgwTopicService', () => {
     service.delete('foo').subscribe();
     const req = httpTesting.expectOne(`api/rgw/topic/foo`);
     expect(req.request.method).toBe('DELETE');
+  });
+
+  it('should call delete', () => {
+    service.delete('foo').subscribe();
+    const req = httpTesting.expectOne(`api/rgw/topic/foo`);
+    expect(req.request.method).toBe('GET');
   });
 });

@@ -8,10 +8,9 @@ import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import { CdTableFetchDataContext } from '~/app/shared/models/cd-table-fetch-data-context';
 import { ListWithDetails } from '~/app/shared/classes/list-with-details.class';
 import { Permission } from '~/app/shared/models/permissions';
-
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
-import { RgwTopicService } from '~/app/shared/api/rgw-topic.service';
 
+import { RgwTopicService } from '~/app/shared/api/rgw-topic.service';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 import { URLBuilderService } from '~/app/shared/services/url-builder.service';
 import { Icons } from '~/app/shared/enum/icons.enum';
@@ -147,7 +146,7 @@ export class RgwTopicListComponent extends ListWithDetails implements OnInit {
               },
               complete: () => {
                 observer.complete();
-                this.table.refreshBtn();
+                this.fetchData();
               }
             });
         });

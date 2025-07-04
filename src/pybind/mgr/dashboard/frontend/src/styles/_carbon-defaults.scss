@@ -168,6 +168,10 @@ Carbon Popover
   background-color: theme.$layer-02;
   max-height: layout.$spacing-13;
   overflow: auto;
+
+  .form-group-header {
+    @include type.type-style('heading-01');
+  }
 }
 
 /******************************************
