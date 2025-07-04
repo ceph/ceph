@@ -116,6 +116,7 @@ private:
   Context* m_on_shutdown = nullptr;
 
   AsyncOpTracker m_in_flight_op_tracker;
+  bufferlist m_out_bl;
 
   int m_error_code = 0;
   std::string m_error_description;
@@ -138,20 +139,29 @@ private:
                               int r, const std::string& desc);
   void notify_group_listener();
 
-  int local_group_image_list_by_id(
-      std::vector<cls::rbd::GroupImageStatus> *image_ids);
+  void local_group_image_list_by_id(
+    bufferlist* out_bl_ptr,
+    std::vector<cls::rbd::GroupImageStatus>* local_images_ptr,
+    Context* on_finish);
+  void handle_local_group_image_list_by_id(int r,
+    bufferlist* out_bl_ptr,
+    std::vector<cls::rbd::GroupImageStatus>* local_images_ptr,
+    Context* on_finish);
 
-  bool is_resync_requested();
-  bool is_rename_requested();
+  void validate_image_snaps_sync_complete(
+    const cls::rbd::GroupSnapshot &local_snap, Context *on_finish);
 
-  void validate_image_snaps_sync_complete(std::unique_lock<ceph::mutex>* locker,
-    const cls::rbd::GroupSnapshot &local_snap);
-
-  void load_local_group_snapshots();
+  void validate_local_group_snapshots();
+  void load_local_group_snapshots(std::unique_lock<ceph::mutex>* locker);
   void handle_load_local_group_snapshots(int r);
 
   void load_remote_group_snapshots();
   void handle_load_remote_group_snapshots(int r);
+  void is_resync_requested();
+  void handle_is_resync_requested(int r);
+  void is_rename_requested();
+  void handle_is_rename_requested(int r);
+  void check_local_group_snapshots(std::unique_lock<ceph::mutex>* locker);
 
   void scan_for_unsynced_group_snapshots(std::unique_lock<ceph::mutex>* locker);
 
@@ -167,11 +177,24 @@ private:
   void handle_create_mirror_snapshot(
     int r, const std::string &group_snap_id, Context *on_finish);
 
+  void update_local_group_state(cls::rbd::GroupSnapshot snap);
+  void handle_update_local_group_state(int r, cls::rbd::GroupSnapshot snap);
+
   void mirror_snapshot_complete(
+    const std::string &group_snap_id, Context *on_finish);
+  void handle_mirror_snapshot_image_list(
     const std::string &group_snap_id,
-    std::unique_lock<ceph::mutex>* locker,
+    const cls::rbd::GroupSnapshot &local_snap,
+    const cls::rbd::GroupSnapshot &remote_snap,
+    const std::vector<cls::rbd::GroupImageStatus>& local_images,
     Context *on_finish);
-  void handle_mirror_snapshot_complete(
+  void post_mirror_snapshot_complete(
+    const std::string &group_snap_id,
+    const cls::rbd::GroupSnapshot &local_snap,
+    const cls::rbd::GroupSnapshot &remote_snap,
+    const std::vector<cls::rbd::GroupImageStatus>& local_images,
+    Context *on_finish);
+  void handle_post_mirror_snapshot_complete(
     int r, const std::string &group_snap_id, Context *on_finish);
 
   void create_regular_snapshot(
@@ -183,7 +206,19 @@ private:
   void regular_snapshot_complete(
     const std::string &group_snap_id,
     Context *on_finish);
-  void handle_regular_snapshot_complete(
+  void handle_regular_snapshot_image_list(
+    const std::string &group_snap_id,
+    const cls::rbd::GroupSnapshot &local_snap,
+    const cls::rbd::GroupSnapshot &remote_snap,
+    const std::vector<cls::rbd::GroupImageStatus>& local_images,
+    Context *on_finish);
+  void post_regular_snapshot_complete(
+    const std::string &group_snap_id,
+    const cls::rbd::GroupSnapshot &local_snap,
+    const cls::rbd::GroupSnapshot &remote_snap,
+    const std::vector<cls::rbd::GroupImageStatus>& local_images,
+    Context *on_finish);
+  void handle_post_regular_snapshot_complete(
     int r, const std::string &group_snap_id, Context *on_finish);
 
   void mirror_group_snapshot_unlink_peer(const std::string &snap_id);
@@ -198,7 +233,7 @@ private:
   void prune_group_snapshots(std::unique_lock<ceph::mutex>* locker);
 
   void set_image_replayer_limits(const std::string &image_id,
-                                 cls::rbd::GroupSnapshot *remote_snap,
+                                 const cls::rbd::GroupSnapshot *remote_snap,
                                  std::unique_lock<ceph::mutex>* locker);
 };
 
