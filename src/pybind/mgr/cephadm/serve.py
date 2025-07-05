@@ -89,7 +89,7 @@ class CephadmServe:
                 self._check_for_strays()
 
                 self._update_paused_health()
-                self.mgr.update_maintenance_healthcheck()
+                self.mgr.update_paused_host_healthcheck()
 
                 if self.mgr.need_connect_dashboard_rgw and self.mgr.config_dashboard:
                     self.mgr.need_connect_dashboard_rgw = False
@@ -573,6 +573,9 @@ class CephadmServe:
         all_osds: DefaultDict[int, List[orchestrator.DaemonDescription]] = defaultdict(list)
         for dd in self.mgr.cache.get_daemons_by_type('osd'):
             assert dd.daemon_id
+            # Skip OSDs on paused hosts
+            if dd.hostname and self.mgr.inventory._inventory[dd.hostname].get("status", "").lower() == "paused":
+                continue
             all_osds[int(dd.daemon_id)].append(dd)
         for osd_id, dds in all_osds.items():
             if len(dds) <= 1:
@@ -848,7 +851,7 @@ class CephadmServe:
         try:
             all_slots, slots_to_add, daemons_to_remove = ha.place()
             daemons_to_remove = [d for d in daemons_to_remove if (d.hostname and self.mgr.inventory._inventory[d.hostname].get(
-                'status', '').lower() not in ['maintenance', 'offline'] and d.hostname not in self.mgr.offline_hosts)]
+                'status', '').lower() not in ['maintenance', 'offline', 'paused'] and d.hostname not in self.mgr.offline_hosts)]
             self.log.debug('Add %s, remove %s' % (slots_to_add, daemons_to_remove))
         except OrchestratorError as e:
             msg = f'Failed to apply {spec.service_name()} spec {spec}: {str(e)}'
@@ -1096,6 +1099,10 @@ class CephadmServe:
             # any action we can try will fail for a daemon on an offline host,
             # including removing the daemon
             if dd.hostname in self.mgr.offline_hosts:
+                continue
+
+            # Skip daemon operations on paused hosts
+            if self.mgr.inventory._inventory[dd.hostname].get("status", "").lower() == "paused":
                 continue
 
             if not spec and dd.daemon_type not in ['mon', 'mgr', 'osd']:

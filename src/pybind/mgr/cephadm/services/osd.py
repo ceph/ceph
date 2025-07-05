@@ -878,6 +878,12 @@ class OSDRemovalQueue(object):
         # Check all osds for their state and take action (remove, purge etc)
         new_queue: Set[OSD] = set()
         for osd in all_osds:  # type: OSD
+            # Skip OSDs on paused hosts (similar to global pause behavior)
+            if osd.hostname and self.mgr.inventory._inventory[osd.hostname].get("status", "").lower() == "paused":
+                logger.debug(f"Skipping {osd} on paused host {osd.hostname}")
+                new_queue.add(osd)
+                continue
+
             if not osd.force:
                 # skip criteria
                 if not osd.is_empty:
@@ -958,7 +964,13 @@ class OSDRemovalQueue(object):
         num_already_draining = len(self.draining_osds())
         num_to_start_draining = max(0, draining_limit - num_already_draining)
         stoppable_osds = self.rm_util.find_osd_stop_threshold(self.idling_osds())
-        return [] if stoppable_osds is None else stoppable_osds[:num_to_start_draining]
+        if stoppable_osds is None:
+            return []
+        # Skip OSDs on paused hosts
+        stoppable_osds = [osd for osd in stoppable_osds
+                          if not (osd.hostname and
+                                  self.mgr.inventory._inventory[osd.hostname].get("status", "").lower() == "paused")]
+        return stoppable_osds[:num_to_start_draining]
 
     def _save_to_store(self) -> None:
         osd_queue = [osd.to_json() for osd in self.osds]
