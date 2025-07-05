@@ -83,6 +83,9 @@ struct OMapInnerNode
 	return;
       }
       set_seen_by_users();
+      // prior's "begin" and "end" are initialized when seen by users
+      // for the first time, so we need to initialize them here
+      init_range(prior.get_begin(), prior.get_end());
     }
     this->parent_node_t::prepare_commit();
     if (is_rewrite()) {
@@ -322,6 +325,9 @@ struct OMapLeafNode
 	return;
       }
       set_seen_by_users();
+      // prior's "begin" and "end" are initialized when seen by users
+      // for the first time, so we need to initialize them here
+      init_range(prior.get_begin(), prior.get_end());
     }
     if (is_rewrite()) {
       auto &prior = *get_prior_instance()->template cast<OMapLeafNode>();
