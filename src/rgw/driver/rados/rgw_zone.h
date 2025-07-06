@@ -185,8 +185,8 @@ struct RGWZoneParams : RGWSystemMetaObj {
     encode(topics_pool, bl);
     encode(account_pool, bl);
     encode(group_pool, bl);
-    encode(dedup_pool, bl);
     encode(restore_pool, bl);
+    encode(dedup_pool, bl);
     ENCODE_FINISH(bl);
   }
 
@@ -270,14 +270,14 @@ struct RGWZoneParams : RGWSystemMetaObj {
       group_pool = name + ".rgw.meta:groups";
     }
     if (struct_v >= 16) {
-      decode(dedup_pool, bl);
-    } else {
-      dedup_pool = name + ".rgw.dedup";
-    }
-    if (struct_v >= 17) {
       decode(restore_pool, bl);
     } else {
       restore_pool = log_pool.name + ":restore";
+    }
+    if (struct_v >= 17) {
+      decode(dedup_pool, bl);
+    } else {
+      dedup_pool = name + ".rgw.dedup";
     }
     DECODE_FINISH(bl);
   }
