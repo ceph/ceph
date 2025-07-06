@@ -32,7 +32,7 @@ else:
     @APIDoc("NVMe-oF Gateway Management API", "NVMe-oF Gateway")
     class NVMeoFGateway(RESTController):
         @EndpointDoc("Get information about the NVMeoF gateway")
-        @NvmeofCLICommand("nvmeof gw info")
+        @NvmeofCLICommand("nvmeof gw info", model.GatewayInfo)
         @convert_to_model(model.GatewayInfo)
         @handle_nvmeof_error
         def list(self, gw_group: Optional[str] = None, traddr: Optional[str] = None):
@@ -55,7 +55,7 @@ else:
 
         @ReadPermission
         @Endpoint('GET', '/version')
-        @NvmeofCLICommand("nvmeof gw version")
+        @NvmeofCLICommand("nvmeof gw version", model.GatewayVersion)
         @convert_to_model(model.GatewayVersion)
         @handle_nvmeof_error
         def version(self, gw_group: Optional[str] = None, traddr: Optional[str] = None):
@@ -68,7 +68,7 @@ else:
 
         @ReadPermission
         @Endpoint('GET', '/log_level')
-        @NvmeofCLICommand("nvmeof gw get_log_level")
+        @NvmeofCLICommand("nvmeof gw get_log_level", model.GatewayLogLevelInfo)
         @convert_to_model(model.GatewayLogLevelInfo)
         @handle_nvmeof_error
         def get_log_level(self, gw_group: Optional[str] = None, traddr: Optional[str] = None):
@@ -80,7 +80,7 @@ else:
 
         @ReadPermission
         @Endpoint('PUT', '/log_level')
-        @NvmeofCLICommand("nvmeof gw set_log_level")
+        @NvmeofCLICommand("nvmeof gw set_log_level", model.RequestStatus)
         @convert_to_model(model.RequestStatus)
         @handle_nvmeof_error
         def set_log_level(self, log_level: str, gw_group: Optional[str] = None,
@@ -97,7 +97,7 @@ else:
     class NVMeoFSpdk(RESTController):
         @ReadPermission
         @Endpoint('GET', '/log_level')
-        @NvmeofCLICommand("nvmeof spdk_log_level get")
+        @NvmeofCLICommand("nvmeof spdk_log_level get", model.SpdkNvmfLogFlagsAndLevelInfo)
         @convert_to_model(model.SpdkNvmfLogFlagsAndLevelInfo)
         @handle_nvmeof_error
         def get_spdk_log_level(self, gw_group: Optional[str] = None, traddr: Optional[str] = None):
@@ -109,7 +109,7 @@ else:
 
         @ReadPermission
         @Endpoint('PUT', '/log_level')
-        @NvmeofCLICommand("nvmeof spdk_log_level set")
+        @NvmeofCLICommand("nvmeof spdk_log_level set", model.RequestStatus)
         @convert_to_model(model.RequestStatus)
         @handle_nvmeof_error
         def set_spdk_log_level(self, log_level: Optional[str] = None,
@@ -126,7 +126,7 @@ else:
 
         @ReadPermission
         @Endpoint('PUT', '/log_level/disable')
-        @NvmeofCLICommand("nvmeof spdk_log_level disable")
+        @NvmeofCLICommand("nvmeof spdk_log_level disable", model.RequestStatus)
         @convert_to_model(model.RequestStatus)
         @handle_nvmeof_error
         def disable_spdk_log_level(self, gw_group: Optional[str] = None,
@@ -142,7 +142,7 @@ else:
     class NVMeoFSubsystem(RESTController):
         @EndpointDoc("List all NVMeoF subsystems")
         @pick(field="subsystems")
-        @NvmeofCLICommand("nvmeof subsystem list")
+        @NvmeofCLICommand("nvmeof subsystem list", model.SubsystemList)
         @convert_to_model(model.SubsystemList)
         @handle_nvmeof_error
         def list(self, gw_group: Optional[str] = None, traddr: Optional[str] = None):
@@ -158,7 +158,7 @@ else:
             },
         )
         @pick(field="subsystems", first=True)
-        @NvmeofCLICommand("nvmeof subsystem get")
+        @NvmeofCLICommand("nvmeof subsystem get", model.SubsystemList)
         @convert_to_model(model.SubsystemList)
         @handle_nvmeof_error
         def get(self, nqn: str, gw_group: Optional[str] = None, traddr: Optional[str] = None):
@@ -176,7 +176,7 @@ else:
             },
         )
         @empty_response
-        @NvmeofCLICommand("nvmeof subsystem add")
+        @NvmeofCLICommand("nvmeof subsystem add", model.RequestStatus)
         @convert_to_model(model.RequestStatus)
         @handle_nvmeof_error
         def create(self, nqn: str, enable_ha: bool = True, max_namespaces: int = 1024,
@@ -196,7 +196,7 @@ else:
             },
         )
         @empty_response
-        @NvmeofCLICommand("nvmeof subsystem del")
+        @NvmeofCLICommand("nvmeof subsystem del", model.RequestStatus)
         @convert_to_model(model.RequestStatus)
         @handle_nvmeof_error
         def delete(self, nqn: str, force: Optional[str] = "false", gw_group: Optional[str] = None,
@@ -218,7 +218,7 @@ else:
             },
         )
         @pick("listeners")
-        @NvmeofCLICommand("nvmeof listener list")
+        @NvmeofCLICommand("nvmeof listener list", model.ListenerList)
         @convert_to_model(model.ListenerList)
         @handle_nvmeof_error
         def list(self, nqn: str, gw_group: Optional[str] = None, traddr: Optional[str] = None):
@@ -238,7 +238,7 @@ else:
             },
         )
         @empty_response
-        @NvmeofCLICommand("nvmeof listener add")
+        @NvmeofCLICommand("nvmeof listener add", model.RequestStatus)
         @convert_to_model(model.RequestStatus)
         @handle_nvmeof_error
         def create(
@@ -272,7 +272,7 @@ else:
             },
         )
         @empty_response
-        @NvmeofCLICommand("nvmeof listener del")
+        @NvmeofCLICommand("nvmeof listener del", model.RequestStatus)
         @convert_to_model(model.RequestStatus)
         @handle_nvmeof_error
         def delete(
@@ -307,7 +307,7 @@ else:
             },
         )
         @pick("namespaces")
-        @NvmeofCLICommand("nvmeof ns list")
+        @NvmeofCLICommand("nvmeof ns list", model.NamespaceList)
         @convert_to_model(model.NamespaceList)
         @handle_nvmeof_error
         def list(self, nqn: str, gw_group: Optional[str] = None, traddr: Optional[str] = None):
@@ -324,7 +324,7 @@ else:
             },
         )
         @pick("namespaces", first=True)
-        @NvmeofCLICommand("nvmeof ns get")
+        @NvmeofCLICommand("nvmeof ns get", model.NamespaceList)
         @convert_to_model(model.NamespaceList)
         @handle_nvmeof_error
         def get(self, nqn: str, nsid: str, gw_group: Optional[str] = None,
@@ -343,7 +343,7 @@ else:
                 "gw_group": Param(str, "NVMeoF gateway group", True, None),
             },
         )
-        @NvmeofCLICommand("nvmeof ns get_io_stats")
+        @NvmeofCLICommand("nvmeof ns get_io_stats", model.NamespaceIOStats)
         @convert_to_model(model.NamespaceIOStats)
         @handle_nvmeof_error
         def io_stats(self, nqn: str, nsid: str, gw_group: Optional[str] = None,
@@ -376,7 +376,7 @@ else:
                 )
             },
         )
-        @NvmeofCLICommand("nvmeof ns add")
+        @NvmeofCLICommand("nvmeof ns add", model.NamespaceCreation)
         @convert_to_model(model.NamespaceCreation)
         @handle_nvmeof_error
         def create(
@@ -426,7 +426,7 @@ else:
             },
         )
         @pick("namespaces", first=True)
-        @NvmeofCLICommand("nvmeof ns update")
+        @NvmeofCLICommand("nvmeof ns update", model.NamespaceList)
         @convert_to_model(model.NamespaceList)
         @handle_nvmeof_error
         def update(
@@ -510,7 +510,7 @@ else:
             },
         )
         @empty_response
-        @NvmeofCLICommand("nvmeof ns del")
+        @NvmeofCLICommand("nvmeof ns del", model.RequestStatus)
         @convert_to_model(model.RequestStatus)
         @handle_nvmeof_error
         def delete(
@@ -546,7 +546,7 @@ else:
             },
         )
         @pick('hosts')
-        @NvmeofCLICommand("nvmeof host list")
+        @NvmeofCLICommand("nvmeof host list", model.HostsInfo)
         @convert_to_model(model.HostsInfo, finalize=_update_hosts)
         @handle_nvmeof_error
         def list(self, nqn: str, gw_group: Optional[str] = None, traddr: Optional[str] = None):
@@ -563,7 +563,7 @@ else:
             },
         )
         @empty_response
-        @NvmeofCLICommand("nvmeof host add")
+        @NvmeofCLICommand("nvmeof host add", model.RequestStatus)
         @convert_to_model(model.RequestStatus)
         @handle_nvmeof_error
         def create(self, nqn: str, host_nqn: str, gw_group: Optional[str] = None,
@@ -581,7 +581,7 @@ else:
             },
         )
         @empty_response
-        @NvmeofCLICommand("nvmeof host del")
+        @NvmeofCLICommand("nvmeof host del", model.RequestStatus)
         @convert_to_model(model.RequestStatus)
         @handle_nvmeof_error
         def delete(self, nqn: str, host_nqn: str, gw_group: Optional[str] = None,
@@ -601,7 +601,7 @@ else:
             },
         )
         @pick("connections")
-        @NvmeofCLICommand("nvmeof connection list")
+        @NvmeofCLICommand("nvmeof connection list", model.ConnectionList)
         @convert_to_model(model.ConnectionList)
         @handle_nvmeof_error
         def list(self, nqn: str, gw_group: Optional[str] = None, traddr: Optional[str] = None):
