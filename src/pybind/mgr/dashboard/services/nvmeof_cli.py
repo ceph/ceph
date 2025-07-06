@@ -103,7 +103,10 @@ class AnnotatedDataTextOutputFormatter(OutputFormatter):
         for d in data:
             row = []
             for col in columns:
-                row.append(str(d.get(col)))
+                col_val = d.get(col)
+                if col_val is None:
+                    col_val = ''
+                row.append(str(col_val))
             table.add_row(row)
         return table.get_string()
 
@@ -112,7 +115,10 @@ class AnnotatedDataTextOutputFormatter(OutputFormatter):
         table = self._create_table(columns)
         row = []
         for col in columns:
-            row.append(str(data.get(col)))
+            col_val = data.get(col)
+            if col_val is None:
+                col_val = ''
+            row.append(str(col_val))
         table.add_row(row)
         return table.get_string()
 
@@ -198,19 +204,15 @@ class AnnotatedDataTextOutputFormatter(OutputFormatter):
 
 
 class NvmeofCLICommand(CLICommand):
-    def __init__(self, prefix, model: Type[NamedTuple], perm='rw', poll=False):
+    def __init__(self, prefix, model: Type[NamedTuple], alias=None, perm='rw', poll=False):
         super().__init__(prefix, perm, poll)
         self._output_formatter = AnnotatedDataTextOutputFormatter()
         self._model = model
+        self._alias = alias
 
     def __call__(self, func) -> HandlerFuncType:  # type: ignore
-        # pylint: disable=useless-super-delegation
-        """
-        This method is being overriden solely to be able to disable the linters checks for typing.
-        The NvmeofCLICommand decorator assumes a different type returned from the
-        function it wraps compared to CLICmmand, breaking a Liskov substitution principal,
-        hence triggering linters alerts.
-        """
+        if self._alias:
+            NvmeofCLICommand(self._alias, model=self._model)._register_handler(func)
         return super().__call__(func)
 
     def call(self,
