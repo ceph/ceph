@@ -124,23 +124,26 @@ class AnnotatedDataTextOutputFormatter(OutputFormatter):
             return self._get_list_text_output(data)
         return self._get_object_text_output(data)
 
+    def _get_row(self, columns, data_obj):
+        row = []
+        for col in columns:
+            col_val = data_obj.get(col)
+            if col_val is None:
+                col_val = ''
+            row.append(str(col_val))
+        return row
+
     def _get_list_text_output(self, data):
         columns = list(dict.fromkeys([key for obj in data for key in obj.keys()]))
         table = self._create_table(columns)
         for d in data:
-            row = []
-            for col in columns:
-                row.append(str(d.get(col)))
-            table.add_row(row)
+            table.add_row(self._get_row(columns, d))
         return table.get_string()
 
     def _get_object_text_output(self, data):
         columns = [k for k in data.keys() if k not in ["status", "error_message"]]
         table = self._create_table(columns)
-        row = []
-        for col in columns:
-            row.append(str(data.get(col)))
-        table.add_row(row)
+        table.add_row(self._get_row(columns, data))
         return table.get_string()
 
     def _is_list_of_complex_type(self, value):
@@ -227,27 +230,22 @@ class AnnotatedDataTextOutputFormatter(OutputFormatter):
 class NvmeofCLICommand(CLICommand):
     desc: str
 
-    def __init__(self, prefix, model: Type[NamedTuple], perm='rw', poll=False):
+    def __init__(self, prefix, model: Type[NamedTuple], alias=None, perm='rw', poll=False):
         super().__init__(prefix, perm, poll)
         self._output_formatter = AnnotatedDataTextOutputFormatter()
         self._model = model
+        self._alias = alias
 
     def _use_api_endpoint_desc_if_available(self, func):
         if not self.desc and hasattr(func, 'doc_info'):
             self.desc = func.doc_info.get('summary', '')
 
     def __call__(self, func) -> HandlerFuncType:  # type: ignore
-        # pylint: disable=useless-super-delegation
-        """
-        This method is being overriden solely to be able to disable the linters checks for typing.
-        The NvmeofCLICommand decorator assumes a different type returned from the
-        function it wraps compared to CLICmmand, breaking a Liskov substitution principal,
-        hence triggering linters alerts.
-        """
+        if self._alias:
+            NvmeofCLICommand(self._alias, model=self._model)._register_handler(func)
+
         resp = super().__call__(func)
-
         self._use_api_endpoint_desc_if_available(func)
-
         return resp
 
     def call(self,
