@@ -473,11 +473,14 @@ class CLICommand(object):
         self.desc, self.arg_spec, self.first_default, self.args = \
             self._load_func_metadata(f)
 
-    def __call__(self, func: HandlerFuncType) -> HandlerFuncType:
+    def _register_handler(self, func: HandlerFuncType) -> HandlerFuncType:
         self.store_func_metadata(func)
         self.func = func
         self.COMMANDS[self.prefix] = self
         return self.func
+
+    def __call__(self, func: HandlerFuncType) -> HandlerFuncType:
+        return self._register_handler(func)
 
     def _get_arg_value(self, kwargs_switch: bool, key: str, val: Any) -> Tuple[bool, str, Any]:
         def start_kwargs() -> bool:
