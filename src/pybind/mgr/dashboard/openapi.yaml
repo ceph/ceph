@@ -8557,6 +8557,8 @@ paths:
           application/json:
             schema:
               properties:
+                dhchap_key:
+                  type: string
                 enable_ha:
                   default: true
                   description: Enable high availability
@@ -8568,9 +8570,14 @@ paths:
                   default: 4096
                   description: Maximum number of namespaces
                   type: integer
+                no_group_append:
+                  default: true
+                  type: boolean
                 nqn:
                   description: NVMeoF subsystem NQN
                   type: string
+                serial_number:
+                  type: integer
                 traddr:
                   type: string
               required:
@@ -8740,10 +8747,10 @@ paths:
         required: true
         schema:
           type: string
-      - description: Clear any host alert signal after getting its value
+      - allowEmptyValue: true
+        description: Clear any host alert signal after getting its value
         in: query
         name: clear_alerts
-        required: true
         schema:
           type: boolean
       - allowEmptyValue: true
