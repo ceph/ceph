@@ -185,9 +185,7 @@ public:
     unsigned int chunk_length = get_chunk_size(in.length());
     bufferlist out(in);
     unsigned int width = get_chunk_count() * get_chunk_size(in.length());
-    bufferptr pad(width - in.length());
-    pad.zero(0, get_data_chunk_count());
-    out.push_back(pad);
+    out.append_zero(width - in.length());
     //
     // compute the coding chunk with first chunk ^ second chunk
     //

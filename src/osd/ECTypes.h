@@ -44,14 +44,6 @@ struct raw_shard_id_t {
 
   const static raw_shard_id_t NO_SHARD;
 
-  void encode(ceph::buffer::list &bl) const {
-    using ceph::encode;
-    encode(id, bl);
-  }
-  void decode(ceph::buffer::list::const_iterator &bl) {
-    using ceph::decode;
-    decode(id, bl);
-  }
   void dump(ceph::Formatter *f) const {
     f->dump_int("id", id);
   }
