@@ -4635,6 +4635,7 @@ int main(int argc, const char **argv)
 					false,
 					false,
 					false,
+					false,
                                         false,
 					false, // No background tasks!
                                         null_yield,
