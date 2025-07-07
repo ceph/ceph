@@ -1,6 +1,6 @@
 import { Component, Output, EventEmitter, OnInit, OnDestroy } from '@angular/core';
-import { NotificationService } from '../../../../shared/services/notification.service';
 import { Subscription } from 'rxjs';
+import { NotificationService } from '~/app/shared/services/notification.service';
 
 @Component({
   selector: 'cd-notification-header',
