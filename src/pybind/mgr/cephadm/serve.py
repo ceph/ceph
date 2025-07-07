@@ -928,10 +928,11 @@ class CephadmServe:
                 for d in daemons_to_remove:
                     assert d.hostname is not None
                     self._remove_daemon(d.name(), d.hostname)
-                daemons_to_remove = []
 
-                # fence them
-                svc.fence_old_ranks(spec, rank_map, len(all_slots))
+                # fence only when daemon has removed
+                if daemons_to_remove:
+                    svc.fence_old_ranks(spec, rank_map, len(all_slots))
+                daemons_to_remove = []
 
             # create daemons
             daemon_place_fails = []

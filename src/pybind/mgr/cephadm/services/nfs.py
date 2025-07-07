@@ -65,6 +65,11 @@ class NFSService(CephService):
                         del rank_map[rank][gen]
                         self.mgr.spec_store.save_rank_map(spec.service_name(), rank_map)
 
+                        # Restart the existing NFS daemon for that rank, as clients will be unable to
+                        # mount the export until the daemon is restarted
+                        logger.debug(f'Restarting nfs daemon {rank_map[rank][max_gen]}')
+                        self.mgr._schedule_daemon_action(f'nfs.{rank_map[rank][max_gen]}', 'restart')
+
     def config(self, spec: NFSServiceSpec) -> None:  # type: ignore
         from nfs.cluster import create_ganesha_pool
 
