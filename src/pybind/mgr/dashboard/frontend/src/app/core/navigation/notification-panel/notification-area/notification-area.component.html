@@ -1,0 +1,50 @@
+<!-- Reusable notification item template -->
+<ng-template #notificationItemTemplate
+             let-notification="notification"
+             let-last="last">
+  <div class="notification-wrapper">
+    <div class="notification-item">
+      <div class="notification-icon">
+        <cd-icon [type]="notificationIconMap[notification.type] || 'info'">
+        </cd-icon>
+      </div>
+      <div class="notification-content">
+        <div class="notification-timestamp">{{ notification.timestamp | relativeDate }}</div>
+        <div class="notification-title">{{ notification.title }}</div>
+        <div class="notification-message"
+             [innerHTML]="notification.message | sanitizeHtml"></div>
+      </div>
+      <button cdsButton="ghost"
+              size="sm"
+              class="notification-close"
+              (click)="removeNotification(notification, $event)">
+        <cd-icon type="destroy"></cd-icon>
+      </button>
+    </div>
+  @if (!last) {
+    <div class="notification-divider"></div>
+  }
+  </div>
+</ng-template>
+
+@if (todayNotifications.length > 0) {
+  <div class="notification-section-heading"
+       i18n>Today</div>
+  @for (notification of todayNotifications; track notification.timestamp; let last = $last) {
+    <ng-container *ngTemplateOutlet="notificationItemTemplate; context: { notification: notification, last: last }"></ng-container>
+  }
+}
+
+@if (previousNotifications.length > 0) {
+  <div class="notification-section-heading"
+       i18n>Previous</div>
+  @for (notification of previousNotifications; track notification.timestamp; let last = $last) {
+    <ng-container *ngTemplateOutlet="notificationItemTemplate; context: { notification: notification, last: last }"></ng-container>
+  }
+}
+
+@if (todayNotifications.length === 0 && previousNotifications.length === 0) {
+  <div class="notification-empty">
+    <div i18n>No notifications</div>
+  </div>
+}

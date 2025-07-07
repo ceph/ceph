@@ -14,7 +14,8 @@ import {
   BreadcrumbModule,
   ModalModule,
   ToggleModule,
-  ButtonModule
+  ButtonModule,
+  PlaceholderModule
 } from 'carbon-components-angular';
 
 import { AppRoutingModule } from '~/app/app-routing.module';
@@ -30,6 +31,7 @@ import { NavigationComponent } from './navigation/navigation.component';
 import { NotificationsComponent } from './notifications/notifications.component';
 import { NotificationPanelComponent } from './notification-panel/notification-panel.component';
 import { NotificationHeaderComponent } from './notification-panel/header/notification-header.component';
+import { NotificationAreaComponent } from './notification-panel/notification-area/notification-area.component';
 
 // Icons
 import UserFilledIcon from '@carbon/icons/es/user--filled/20';
@@ -67,7 +69,8 @@ import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
     BreadcrumbModule,
     ModalModule,
     ToggleModule,
-    ButtonModule
+    ButtonModule,
+    PlaceholderModule
   ],
   declarations: [
     AboutComponent,
@@ -77,13 +80,14 @@ import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
     NotificationsComponent,
     NotificationPanelComponent,
     NotificationHeaderComponent,
+    NotificationAreaComponent,
     DashboardHelpComponent,
     AdministrationComponent,
     IdentityComponent
   ],
+  providers: [ModalCdsService],
   exports: [NavigationComponent, BreadcrumbsComponent],
-  schemas: [CUSTOM_ELEMENTS_SCHEMA],
-  providers: [ModalCdsService]
+  schemas: [CUSTOM_ELEMENTS_SCHEMA]
 })
 export class NavigationModule {
   constructor(private iconService: IconService) {
