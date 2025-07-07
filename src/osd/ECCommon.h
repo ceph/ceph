@@ -401,6 +401,14 @@ struct ECCommon {
         const std::list<ec_align_t> &to_read,
         ECUtil::shard_extent_set_t &want_shard_reads);
 
+    void get_want_to_read_all_shards(
+        const std::list<ec_align_t> &to_read,
+        ECUtil::shard_extent_set_t &want_shard_reads);
+    void create_parity_read_buffer(
+        ECUtil::shard_extent_map_t buffers_read,
+        ec_align_t read,
+        bufferlist *outbl);
+
     /// Returns to_read replicas sufficient to reconstruct want
     int get_min_avail_to_read_shards(
         const hobject_t &hoid, ///< [in] object

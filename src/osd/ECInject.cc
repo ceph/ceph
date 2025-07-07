@@ -29,7 +29,7 @@ namespace ECInject {
   static std::map<ghobject_t,std::pair<int64_t,int64_t>> write_failures3;
   static std::map<ghobject_t,shard_id_t> write_failures0_shard;
   static std::set<osd_reqid_t> write_failures0_reqid;
-
+  static std::set<hobject_t> parity_reads;
   /**
    * Configure a read error inject that typically forces additional reads of
    * shards in an EC pool to recover data using the redundancy. With multiple
@@ -141,6 +141,20 @@ namespace ECInject {
   }
 
   /**
+   * Configure a parity read inject that typically forces parity shards in an
+   * EC pool to be returned along with the data shards.
+   *
+   * @brief Set up a parity read inject for an object in an EC pool.
+   * @param o Target object for the parity read inject.
+   * @return string Result of configuring the inject.
+   */
+  std::string parity_read(const hobject_t& o) {
+    std::lock_guard<ceph::recursive_mutex> l(lock);
+    parity_reads.insert(o);
+    return "ok - parity read inject set";
+  }
+
+  /**
    * @brief Clear a previously configured read error inject.
    * @param o Target object for the error inject.
    * @param type Type of error inject 0 = EIO, 1 = missing shard.
@@ -228,6 +242,20 @@ namespace ECInject {
       return "ok - 1 inject cleared";
     }
     return "ok - " + std::to_string(remaining) + " injects cleared";
+  }
+
+  /**
+   * @brief Clear a previously configured parity read inject.
+   * @param o Target object for the clear parity read inject.
+   * @return string Indication of whether the inject was cleared.
+   */
+  std::string clear_parity_read(const hobject_t& o) {
+    std::lock_guard<ceph::recursive_mutex> l(lock);
+    if (!parity_reads.count(o)) {
+      return "no outstanding parity read inject";
+    }
+    parity_reads.erase(o);
+    return "ok - parity read inject cleared";
   }
 
   static bool test_error(const ghobject_t& o,
@@ -320,4 +348,14 @@ namespace ECInject {
       &write_failures3);
   }
 
+  /**
+   * @brief Test whether parity read inject is set for a particular object.
+   * @param o Target object for the parity read inject.
+   * @return bool true if set, otherwise false.
+   */
+  bool test_parity_read(const hobject_t& o)
+  {
+    std::lock_guard<ceph::recursive_mutex> l(lock);
+    return (parity_reads.count(o));
+  }
 } // ECInject
