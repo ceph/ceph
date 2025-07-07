@@ -1917,7 +1917,7 @@ class DB {
           ceph::real_time unmod_since;
           ceph::real_time last_mod_time_match;
           ceph::real_time mtime; /* for setting delete marker mtime */
-          uint64_t size_match = 0;
+          std::optional<uint64_t> size_match;
           const char *if_match;
           const char *if_nomatch;
           bool high_precision_time;

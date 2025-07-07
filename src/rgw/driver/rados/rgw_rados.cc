@@ -6535,7 +6535,7 @@ int RGWRados::Object::Delete::delete_obj(optional_yield y,
     }
   }
 
-  if (params.size_match != 0 && state->size != params.size_match) {
+  if (params.size_match.has_value() && state->size != params.size_match) {
       return -ERR_PRECONDITION_FAILED;
   }
 
