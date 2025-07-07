@@ -46,7 +46,6 @@ struct EntityName
   void set_type(entity_type_t type_);
   int set_type(std::string_view type);
   void set_id(std::string_view id_);
-  void set_name(entity_name_t n);
 
   const char* get_type_str() const;
 
