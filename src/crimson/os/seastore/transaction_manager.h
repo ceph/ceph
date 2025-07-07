@@ -216,7 +216,7 @@ public:
       if (length != pin.get_length() || !pin.get_val().is_real_location()) {
         SUBERRORT(seastore_tm, "{}~0x{:x} {} got wrong pin {}",
                   t, offset, length, T::TYPE, pin);
-        ceph_abort("Impossible");
+        ceph_abort_msg("Impossible");
       }
       return this->read_pin<T>(t, std::move(pin), std::move(maybe_init));
     });
@@ -243,7 +243,7 @@ public:
       if (!pin.get_val().is_real_location()) {
         SUBERRORT(seastore_tm, "{} {} got wrong pin {}",
                   t, offset, T::TYPE, pin);
-        ceph_abort("Impossible");
+        ceph_abort_msg("Impossible");
       }
       return this->read_pin<T>(t, std::move(pin), std::move(maybe_init));
     });

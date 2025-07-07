@@ -79,7 +79,7 @@ class socket_blocker {
       return seastar::sleep_abortable(
         std::chrono::seconds(10), *p_unblocked
       ).then([] {
-        ceph_abort("Timeout (10s) in socket_blocker::block()");
+        ceph_abort_msg("Timeout (10s) in socket_blocker::block()");
       }).handle_exception_type([] (const seastar::sleep_aborted& e) {
         // wait done!
       });

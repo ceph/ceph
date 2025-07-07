@@ -1237,7 +1237,7 @@ record_t Cache::prepare_record(
     if (!i.ref->is_valid()) {
       SUBERRORT(seastore_t,
           "read_set got invalid extent, aborting -- {}", t, *i.ref);
-      ceph_abort("no invalid extent allowed in transactions' read_set");
+      ceph_abort_msg("no invalid extent allowed in transactions' read_set");
     }
     get_by_ext(efforts.read_by_ext,
                i.ref->get_type()).increment(i.ref->get_length());
@@ -1424,7 +1424,7 @@ record_t Cache::prepare_record(
       remove_backref_extent(extent->get_paddr());
     } else {
       ERRORT("Got unexpected extent type: {}", t, *extent);
-      ceph_abort("imposible");
+      ceph_abort_msg("imposible");
     }
   }
   alloc_deltas.emplace_back(std::move(rel_delta));
@@ -1642,7 +1642,7 @@ record_t Cache::prepare_record(
       SUBINFOT(seastore_t, "alloc_tail all trimmed, set to head {}, src={}",
                t, alloc_tail, trans_src);
     } else if (*maybe_alloc_tail == JOURNAL_SEQ_NULL) {
-      ceph_abort("impossible");
+      ceph_abort_msg("impossible");
     } else {
       alloc_tail = *maybe_alloc_tail;
     }
@@ -1859,7 +1859,7 @@ void Cache::complete_commit(
 	  i->get_type());
     } else {
       ERRORT("{}", t, *i);
-      ceph_abort("not possible");
+      ceph_abort_msg("not possible");
     }
   });
 
