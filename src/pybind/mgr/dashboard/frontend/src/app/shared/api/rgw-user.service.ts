@@ -41,9 +41,10 @@ export class RgwUserService {
    * Get the list of usernames.
    * @return {Observable<string[]>}
    */
-  enumerate() {
+  enumerate(detailed: boolean = false) {
     return this.rgwDaemonService.request((params: HttpParams) => {
-      return this.http.get(this.url, { params: params });
+      params = params.append('detailed', detailed);
+      return this.http.get(this.url, { params });
     });
   }
 
