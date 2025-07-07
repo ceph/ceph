@@ -6662,6 +6662,8 @@ ostream& operator<<(ostream& out, const object_info_t& oi)
       << " " << oi.alloc_hint_flags << "]";
   if (oi.has_manifest())
     out << " " << oi.manifest;
+  if (!oi.shard_versions.empty())
+    out << " shard_versions=" << oi.shard_versions;
   out << ")";
   return out;
 }
