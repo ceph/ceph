@@ -32,12 +32,16 @@ a {
 .notification-icon-wrapper {
   position: relative;
   display: inline-flex;
+  padding: spacing.$spacing-04;
+  cursor: pointer;
+  border-radius: spacing.$spacing-01;
+  transition: background-color 0.2s ease;
 }
 
 .notification-count {
   position: absolute;
-  top: -(spacing.$spacing-02);
-  right: -(spacing.$spacing-02);
+  top: spacing.$spacing-01;
+  right: spacing.$spacing-01;
   min-width: spacing.$spacing-04;
   height: spacing.$spacing-04;
   padding: 0 spacing.$spacing-01;

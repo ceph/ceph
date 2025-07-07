@@ -5,6 +5,7 @@
 
 .notification-panel {
   @include theme.theme(themes.$g100);
+
   position: absolute;
   top: spacing.$spacing-09; 
   right: 0;

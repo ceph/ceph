@@ -20,6 +20,7 @@
   &__title {
     h4 {
       @include type.type-style('heading-compact-01');
+
       color: theme.$text-primary;
       margin: 0;
     }
