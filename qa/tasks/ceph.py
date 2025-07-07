@@ -606,7 +606,7 @@ def skeleton_config(ctx, roles, ips, mons, cluster='ceph'):
                 conf.setdefault(name, {})
     return conf
 
-def create_simple_monmap(ctx, remote, conf, mons,
+def create_simple_monmap(ctx, remote, conf, mons, monmaptool_extra_args,
                          path=None,
                          mon_bind_addrvec=False):
     """
@@ -639,6 +639,7 @@ def create_simple_monmap(ctx, remote, conf, mons,
         'ceph-coverage',
         '{tdir}/archive/coverage'.format(tdir=testdir),
         'monmaptool',
+        *monmaptool_extra_args,
         '-c',
         '{conf}'.format(conf=tmp_conf_path),
         '--create',
@@ -712,6 +713,7 @@ def cluster(ctx, config):
 
     cephx = config['cephx']
     key_type = cephx.get('key_type', None)
+    monmaptool_extra_args = config.get('monmaptool_extra_args', [])
     auth_tool_extra_args = []
     if key_type is not None:
         auth_tool_extra_args.append(f'--key-type={key_type}')
@@ -787,10 +789,12 @@ def cluster(ctx, config):
 
     default_keyring = '/etc/ceph/{cluster}.keyring'.format(cluster=cluster_name)
     keyring_path = config.get('keyring_path', default_keyring)
+    ctx.ceph[cluster_name].keyring = keyring_path
 
     coverage_dir = '{tdir}/archive/coverage'.format(tdir=testdir)
 
     firstmon = teuthology.get_first_mon(ctx, config, cluster_name)
+    (ctx.ceph[cluster_name].admin, ) = ctx.cluster.only(firstmon).remotes.keys()
 
     log.info('Setting up %s...' % firstmon)
     authtool = [
@@ -801,14 +805,14 @@ def cluster(ctx, config):
         'ceph-authtool',
         *auth_tool_extra_args,
     ]
-    ctx.cluster.only(firstmon).run(
+    ctx.ceph[cluster_name].admin.run(
         args=[
             *authtool,
             '--create-keyring',
             keyring_path,
         ],
     )
-    ctx.cluster.only(firstmon).run(
+    ctx.ceph[cluster_name].admin.run(
         args=[
             *authtool,
             '--gen-key',
@@ -816,7 +820,7 @@ def cluster(ctx, config):
             keyring_path,
         ],
     )
-    ctx.cluster.only(firstmon).run(
+    ctx.ceph[cluster_name].admin.run(
         args=[
             'sudo',
             'chmod',
@@ -824,14 +828,14 @@ def cluster(ctx, config):
             keyring_path,
         ],
     )
-    (mon0_remote,) = ctx.cluster.only(firstmon).remotes.keys()
     monmap_path = '{tdir}/{cluster}.monmap'.format(tdir=testdir,
                                                    cluster=cluster_name)
     fsid = create_simple_monmap(
         ctx,
-        remote=mon0_remote,
-        conf=conf,
-        mons=mons,
+        ctx.ceph[cluster_name].admin,
+        conf,
+        mons,
+        monmaptool_extra_args,
         path=monmap_path,
         mon_bind_addrvec=config.get('mon_bind_addrvec'),
     )
@@ -860,8 +864,8 @@ def cluster(ctx, config):
     )
 
     log.info('Copying monmap to all nodes...')
-    keyring = mon0_remote.read_file(keyring_path)
-    monmap = mon0_remote.read_file(monmap_path)
+    keyring = ctx.ceph[cluster_name].admin.read_file(keyring_path)
+    monmap = ctx.ceph[cluster_name].admin.read_file(monmap_path)
 
     for rem in ctx.cluster.remotes.keys():
         # copy mon key and initial monmap
@@ -922,7 +926,7 @@ def cluster(ctx, config):
                 'sudo', 'chown', '-R', 'ceph:ceph', mds_dir
             ])
 
-    cclient.create_keyring(ctx, cluster_name)
+    cclient.create_keyring(ctx, cluster_name, auth_tool_extra_args)
     log.info('Running mkfs on osd nodes...')
 
     if not hasattr(ctx, 'disk_config'):
@@ -1185,8 +1189,6 @@ def cluster(ctx, config):
         ctx.summary['success'] = False
         raise
     finally:
-        (mon0_remote,) = ctx.cluster.only(firstmon).remotes.keys()
-
         log.info('Checking cluster log for badness...')
 
         def first_in_ceph_log(pattern, excludes):
@@ -1208,7 +1210,7 @@ def cluster(ctx, config):
             args.extend([
                 run.Raw('|'), 'head', '-n', '1',
             ])
-            r = mon0_remote.run(
+            r = ctx.ceph[cluster_name].admin.run(
                 stdout=BytesIO(),
                 args=args,
                 stderr=StringIO(),
@@ -2133,8 +2135,7 @@ def task(ctx, config):
             )
         )
 
-    if 'cluster' not in config:
-        config['cluster'] = 'ceph'
+    cluster_name = config.setdefault('cluster', 'ceph')
 
     validate_config(ctx, config)
 
@@ -2157,10 +2158,11 @@ def task(ctx, config):
             skip_mgr_daemons=config.get('skip_mgr_daemons', False),
             log_ignorelist=config.get('log-ignorelist', []),
             cpu_profile=set(config.get('cpu_profile', []),),
-            cluster=config['cluster'],
+            cluster=cluster_name,
             mon_bind_msgr2=config.get('mon_bind_msgr2', True),
             mon_bind_addrvec=config.get('mon_bind_addrvec', True),
             cephx=config.get('cephx', {}),
+            monmaptool_extra_args=config.get('monmaptool_extra_args', {}),
         )),
         lambda: run_daemon(ctx=ctx, config=config, type_='mon'),
         lambda: module_setup(ctx=ctx, config=config),
@@ -2180,30 +2182,29 @@ def task(ctx, config):
     with contextutil.nested(*subtasks):
         try:
             if config.get('wait-for-healthy', True):
-                healthy(ctx=ctx, config=dict(cluster=config['cluster']))
+                healthy(ctx=ctx, config=dict(cluster=cluster_name))
 
             yield
         finally:
             # set pg_num_targets back to actual pg_num, so we don't have to
             # wait for pending merges (which can take a while!)
             if not config.get('skip_stop_pg_num_changes', True):
-                ctx.managers[config['cluster']].stop_pg_num_changes()
+                ctx.managers[cluster_name].stop_pg_num_changes()
 
             if config.get('wait-for-scrub', True):
                 # wait for pgs to become active+clean in case any
                 # recoveries were triggered since the last health check
-                ctx.managers[config['cluster']].wait_for_clean()
+                ctx.managers[cluster_name].wait_for_clean()
                 osd_scrub_pgs(ctx, config)
 
             # stop logging health to clog during shutdown, or else we generate
             # a bunch of scary messages unrelated to our actual run.
-            firstmon = teuthology.get_first_mon(ctx, config, config['cluster'])
-            (mon0_remote,) = ctx.cluster.only(firstmon).remotes.keys()
-            mon0_remote.run(
+            firstmon = teuthology.get_first_mon(ctx, config, cluster_name)
+            ctx.ceph[cluster_name].admin.run(
                 args=[
                     'sudo',
                     'ceph',
-                    '--cluster', config['cluster'],
+                    '--cluster', cluster_name,
                     'config', 'set', 'global',
                     'mon_health_to_clog', 'false',
                 ],
