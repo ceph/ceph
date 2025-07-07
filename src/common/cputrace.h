@@ -97,5 +97,6 @@ void cputrace_start(ceph::Formatter* f);
 void cputrace_stop(ceph::Formatter* f);
 void cputrace_reset(ceph::Formatter* f);
 void cputrace_dump(ceph::Formatter* f, const std::string& logger = "", const std::string& counter = "");
+void cputrace_print_to_stringstream(std::stringstream& ss);
 void cputrace_flush_thread_start();
 void cputrace_flush_thread_stop();
