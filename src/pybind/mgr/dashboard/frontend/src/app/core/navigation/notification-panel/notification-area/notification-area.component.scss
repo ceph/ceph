@@ -1,0 +1,128 @@
+@use '@carbon/styles/scss/theme' as *;
+@use '@carbon/styles/scss/spacing' as *;
+@use '@carbon/type';
+
+.notification-section-heading {
+  @include type.type-style('heading-compact-01');
+
+  margin: 0;
+  color: $text-primary;
+  padding: $spacing-05 $spacing-05 $spacing-03;
+  background-color: $layer-01;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: block;
+}
+
+.notification-timestamp {
+  @include type.type-style('label-01');
+
+  color: $text-secondary;
+  line-height: 1;
+  margin-top: 0;
+  display: block;
+}
+
+.notification-title {
+  @include type.type-style('body-short-01');
+
+  margin: 0;
+  color: $text-primary;
+  line-height: 1.25;
+  display: block;
+}
+
+.notification-message {
+  @include type.type-style('body-short-01');
+
+  color: $text-helper;
+  margin: 0;
+  line-height: 1.4;
+  margin-top: -$spacing-01;
+  display: block;
+}
+
+.notification-icon {
+  flex-shrink: 0;
+  margin-top: 0;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  svg {
+    width: 16px;
+    height: 16px;
+  }
+}
+
+.notification-empty {
+  margin: 0;
+  padding: $spacing-05;
+  color: $text-secondary;
+  text-align: center;
+
+  @include type.type-style('body-short-01');
+}
+
+.notification-wrapper {
+  padding: 0 $spacing-05;
+  position: relative;
+  z-index: 1;
+  background-color: $layer-01;
+
+  &:last-child {
+    padding-bottom: $spacing-05;
+  }
+}
+
+.notification-item {
+  display: flex;
+  gap: $spacing-05;
+  padding: $spacing-03 0;
+  align-items: flex-start;
+  position: relative;
+
+  .notification-close {
+    position: absolute;
+    right: 0;
+    top: $spacing-03;
+    padding: $spacing-02;
+    min-height: 0;
+    color: $text-helper;
+    opacity: 0;
+    transition: opacity 0.2s ease-in-out;
+
+    &:hover {
+      background-color: $layer-hover;
+    }
+  }
+
+  &:hover {
+    .notification-close {
+      opacity: 1;
+    }
+  }
+}
+
+.notification-content {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-02;
+  padding-right: $spacing-06;
+}
+
+.notification-divider {
+  border-bottom: 1px solid $border-subtle-01;
+}
+
+:host {
+  display: block;
+  height: 100%;
+  overflow-y: auto;
+  background-color: $layer-01;
+}
