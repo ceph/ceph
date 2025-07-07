@@ -67,11 +67,17 @@ struct HW_conf {
 };
 
 struct HW_ctx {
+    int parent_fd;
     int fd_swi;
     int fd_cyc;
     int fd_cmiss;
     int fd_bmiss;
     int fd_ins;
+    uint64_t id_swi;
+    uint64_t id_cyc;
+    uint64_t id_cmiss;
+    uint64_t id_bmiss;
+    uint64_t id_ins;
     struct HW_conf conf;
 };
 
