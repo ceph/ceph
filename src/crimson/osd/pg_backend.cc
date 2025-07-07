@@ -43,6 +43,8 @@ using std::string;
 using std::string_view;
 using crimson::common::local_conf;
 
+namespace crimson::osd {
+
 std::unique_ptr<PGBackend>
 PGBackend::create(pg_t pgid,
 		  const pg_shard_t pg_shard,
@@ -1852,3 +1854,4 @@ void PGBackend::clone_for_write(
   txn.rmattr(coll->get_cid(), ghobject_t{to}, SS_ATTR);
 }
 
+}
