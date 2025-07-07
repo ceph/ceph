@@ -19,3 +19,6 @@
     >Tasks and Notifications</span
   >
 </a>
+
+<cd-notification-panel *ngIf="isPanelOpen && useNewPanel"></cd-notification-panel>
+<cd-notifications-sidebar *ngIf="isPanelOpen && !useNewPanel"></cd-notifications-sidebar>
