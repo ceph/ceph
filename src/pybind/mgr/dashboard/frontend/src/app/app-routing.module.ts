@@ -59,6 +59,7 @@ import { SmbClusterListComponent } from './ceph/smb/smb-cluster-list/smb-cluster
 import { SmbJoinAuthListComponent } from './ceph/smb/smb-join-auth-list/smb-join-auth-list.component';
 import { SmbUsersgroupsListComponent } from './ceph/smb/smb-usersgroups-list/smb-usersgroups-list.component';
 import { SmbOverviewComponent } from './ceph/smb/smb-overview/smb-overview.component';
+import { NotificationsPageComponent } from './core/navigation/notification-panel/notifications-page/notifications-page.component';
 
 @Injectable()
 export class PerformanceCounterBreadcrumbsResolver extends BreadcrumbsResolver {
@@ -105,6 +106,14 @@ const routes: Routes = [
       { path: 'overview', component: DashboardComponent },
       { path: 'error', component: ErrorComponent },
 
+      // Notifications
+      {
+        path: 'notifications',
+        data: {
+          breadcrumbs: 'Cluster/Notifications'
+        },
+        component: NotificationsPageComponent
+      },
       // Cluster
       {
         path: 'add-storage',

@@ -4,8 +4,13 @@
    (click)="togglePanel($event)">
   <div class="notification-icon-wrapper">
     <cd-icon type="notification"
+             *ngIf="!isMuted"
              size="20">
     </cd-icon>
+    <svg *ngIf="isMuted"
+         cdsIcon="notification--off"
+         size="20"
+         title="Notifications muted"></svg>
     <span class="notification-count"
           *ngIf="notificationCount > 0">
       {{ notificationCount }}
@@ -14,6 +19,6 @@
   <span class="d-md-none"
         i18n>Tasks and Notifications</span>
 </a>
-
+<s-v><main></main></s-v>
 <cd-notification-panel *ngIf="isPanelOpen && useNewPanel"></cd-notification-panel>
 <cd-notifications-sidebar *ngIf="isPanelOpen && !useNewPanel"></cd-notifications-sidebar>

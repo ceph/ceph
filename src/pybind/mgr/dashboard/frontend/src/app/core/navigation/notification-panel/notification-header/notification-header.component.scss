@@ -1,28 +1,57 @@
+@use '@carbon/styles/scss/type';
 @use '@carbon/styles/scss/spacing';
+@use '@carbon/styles/scss/theme';
 
 .notification-header {
-  background-color: var(--cds-layer-01);
-  border-block-end: 1px solid var(--cds-border-subtle-01);
-  height: var(--header-height);
-  inset-block-start: 0;
-  padding: spacing.$spacing-03 spacing.$spacing-05;
-  position: sticky;
-  top: 0;
-  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  padding: spacing.$spacing-04;
+  border-bottom: 1px solid theme.$border-subtle-01;
+  background-color: theme.$layer-01;
+  flex-shrink: 0;
+
+  &__top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+    margin-bottom: spacing.$spacing-03;
+  }
 
   &__title {
-    margin-top: 0.4rem;
+    h4 {
+      @include type.type-style('heading-compact-01');
+
+      color: theme.$text-primary;
+      margin: 0;
+    }
   }
 
   &__dismiss-btn {
-    color: var(--cds-text-primary);
-    padding-left: spacing.$spacing-06;
-    padding-top: 0;
+    color: theme.$text-primary;
+
+    &:hover {
+      color: theme.$link-primary;
+    }
   }
 
-  &__heading-and-button {
-    display: flex;
-    flex-direction: row;
-    justify-content: space-between;
+  &__toggle {
+    cds-toggle {
+      margin: 0;
+
+      ::ng-deep {
+        .cds--toggle__label-text {
+          color: theme.$text-primary;
+        }
+
+        .cds--toggle__label {
+          color: theme.$text-primary;
+        }
+
+        .cds--toggle__text {
+          color: theme.$text-primary;
+        }
+      }
+    }
   }
 }

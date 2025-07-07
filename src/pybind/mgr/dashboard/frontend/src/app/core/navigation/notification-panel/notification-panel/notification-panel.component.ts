@@ -1,5 +1,5 @@
 import { Component, ElementRef, HostListener } from '@angular/core';
-import { NotificationService } from '../../../shared/services/notification.service';
+import { NotificationService } from '~/app/shared/services/notification.service';
 
 @Component({
   selector: 'cd-notification-panel',

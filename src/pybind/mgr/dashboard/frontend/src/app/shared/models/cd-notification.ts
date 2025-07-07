@@ -13,7 +13,19 @@ export class CdNotificationConfig {
     caption: ''
   };
 
-  private classes = {
+  // Prometheus-specific metadata
+  prometheusAlert?: {
+    alertName: string;
+    status: string;
+    severity: string;
+    instance?: string;
+    job?: string;
+    description: string;
+    sourceUrl?: string;
+    fingerprint?: string;
+  };
+
+  private classes: { [key: string]: string } = {
     Ceph: 'ceph-icon',
     Prometheus: 'prometheus-icon'
   };
@@ -48,6 +60,12 @@ export class CdNotification extends CdNotificationConfig {
 
   constructor(private config: CdNotificationConfig = new CdNotificationConfig()) {
     super(config.type, config.title, config.message, config.options, config.application);
+
+    // Copy Prometheus metadata if present
+    if (config.prometheusAlert) {
+      this.prometheusAlert = config.prometheusAlert;
+    }
+
     delete this.config;
     /* string representation of the Date object so it can be directly compared
     with the timestamps parsed from localStorage */
