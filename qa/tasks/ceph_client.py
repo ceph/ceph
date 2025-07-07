@@ -8,7 +8,7 @@ from teuthology.orchestra import run
 
 log = logging.getLogger(__name__)
 
-def create_keyring(ctx, cluster_name):
+def create_keyring(ctx, cluster_name, auth_tool_extra_args):
     """
     Set up key ring on remote sites
     """
@@ -28,6 +28,7 @@ def create_keyring(ctx, cluster_name):
                     'ceph-coverage',
                     coverage_dir,
                     'ceph-authtool',
+                    *auth_tool_extra_args,
                     '--create-keyring',
                     '--gen-key',
                     # TODO this --name= is not really obeyed, all unknown "types" are munged to "client"
