@@ -52,17 +52,17 @@ class DummyNodeExtent final: public NodeExtent {
 
  protected:
   NodeExtentRef mutate(context_t, DeltaRecorderURef&&) override {
-    ceph_abort("impossible path"); }
+    ceph_abort_msg("impossible path"); }
   DeltaRecorder* get_recorder() const override {
     return nullptr; }
   CachedExtentRef duplicate_for_write(Transaction&) override {
-    ceph_abort("impossible path"); }
+    ceph_abort_msg("impossible path"); }
   extent_types_t get_type() const override {
     return extent_types_t::TEST_BLOCK; }
   ceph::bufferlist get_delta() override {
-    ceph_abort("impossible path"); }
+    ceph_abort_msg("impossible path"); }
   void apply_delta(const ceph::bufferlist&) override {
-    ceph_abort("impossible path"); }
+    ceph_abort_msg("impossible path"); }
 };
 
 template <bool SYNC>
