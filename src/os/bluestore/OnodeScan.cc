@@ -64,6 +64,7 @@ class BlueStore::Decoder_AllocationsAndStatFS : public BlueStore::ExtentMap::Ext
   volatile_statfs *per_pool_statfs = nullptr;
   bool_vector_t is_local_blob_compressed;
   bool_vector_t is_spanning_blob_compressed;
+  BlobRef blob = new Blob(nullptr);
 
   void _consume_new_blob(bool spanning, uint64_t extent_no, uint64_t sbid, BlobRef b);
 
@@ -98,9 +99,9 @@ BlueStore::BlobRef BlueStore::Decoder_AllocationsAndStatFS::decode_create_blob(
   uint64_t* sbid,
   bool include_ref_map,
   Collection* c) {
-  BlobRef b = c ? c->new_blob() : new Blob(nullptr);
-  b->decode<false>(p, struct_v, sbid, include_ref_map, c);
-  return b;
+  // reuse same blob all over
+  blob->decode<false>(p, struct_v, sbid, include_ref_map, c);
+  return blob;
 }
 
 void BlueStore::Decoder_AllocationsAndStatFS::_consume_new_blob(
