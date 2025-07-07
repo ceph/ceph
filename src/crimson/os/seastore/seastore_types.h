@@ -1294,7 +1294,6 @@ using laddr_offset_t = laddr_t::laddr_offset_t;
 constexpr laddr_t L_ADDR_MAX = laddr_t::from_raw_uint(laddr_t::RAW_VALUE_MAX);
 constexpr laddr_t L_ADDR_MIN = laddr_t::from_raw_uint(0);
 constexpr laddr_t L_ADDR_NULL = L_ADDR_MAX;
-constexpr laddr_t L_ADDR_ROOT = laddr_t::from_raw_uint(laddr_t::RAW_VALUE_MAX - 1);
 
 struct __attribute__((packed)) laddr_le_t {
   ceph_le64 laddr;
