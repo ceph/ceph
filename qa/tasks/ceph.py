@@ -1539,6 +1539,7 @@ def healthy(ctx, config):
     """
     config = config if isinstance(config, dict) else dict()
     cluster_name = config.get('cluster', 'ceph')
+    expected_checks = config.get('expected_checks', [])
     log.info('Waiting until %s daemons up and pgs clean...', cluster_name)
     manager = ctx.managers[cluster_name]
     try:
@@ -1556,7 +1557,7 @@ def healthy(ctx, config):
 
     if config.get('wait-for-healthy', True):
         log.info('Waiting until ceph cluster %s is healthy...', cluster_name)
-        manager.wait_until_healthy(timeout=300)
+        manager.wait_until_healthy(timeout=300, expected_checks=expected_checks)
 
     if ctx.cluster.only(teuthology.is_type('mds', cluster_name)).remotes:
         # Some MDSs exist, wait for them to be healthy
