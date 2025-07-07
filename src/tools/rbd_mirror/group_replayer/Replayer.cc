@@ -416,22 +416,38 @@ void Replayer<I>::load_local_group_snapshots() {
   }
 
   if (!m_local_group_snaps.empty()) {
+    prune_group_snapshots(&locker);
     for (auto &local_snap : m_local_group_snaps) {
       // skip validation for already complete snapshots
       if (local_snap.state == cls::rbd::GROUP_SNAPSHOT_STATE_COMPLETE) {
         continue;
       }
-
       // skip validation for primary snapshots
       auto ns = std::get_if<cls::rbd::GroupSnapshotNamespaceMirror>(
           &local_snap.snapshot_namespace);
-      if (ns != nullptr &&
-          ns->state == cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY) {
-        continue;
+      if (ns != nullptr) {
+        if(ns->state == cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY) {
+          continue;
+        }
+        // validate incomplete non-primary mirror snapshots
+        validate_image_snaps_sync_complete(&locker, local_snap);
+      } else {
+        // its a user snapshot
+        bool found = false;
+        for (auto &remote_snap : m_remote_group_snaps) {
+          if (local_snap.id == remote_snap.id) {
+            found = true;
+            break;
+          }
+        }
+        if (found) { // user snap added
+          validate_image_snaps_sync_complete(&locker, local_snap);
+          continue;
+        } else { // user snap removed immediately on remote, cannot sync it.
+          prune_user_group_snapshots(&locker);
+          continue;
+        }
       }
-
-      // validate incomplete non-primary mirror or regular snapshots
-      validate_image_snaps_sync_complete(&locker, local_snap);
     }
   }
 
@@ -569,7 +585,6 @@ void Replayer<I>::handle_load_remote_group_snapshots(int r) {
   }
 
   if (!m_local_group_snaps.empty()) {
-    prune_group_snapshots(&locker);
     auto last_local_snap = get_latest_group_snapshot(m_local_group_snaps);
     auto last_local_snap_ns = std::get_if<cls::rbd::GroupSnapshotNamespaceMirror>(
         &last_local_snap->snapshot_namespace);
@@ -942,6 +957,41 @@ void Replayer<I>::mirror_snapshot_complete(
     derr << "remote group snapshot doesnt exist: " << group_snap_id << dendl;
     on_finish->complete(-ENOENT);
     return;
+  }
+
+  // User snap is added and not yet turned complete, wait for it.
+  for (auto local_snap = m_local_group_snaps.begin();
+      local_snap != m_local_group_snaps.end(); ++local_snap) {
+    if (local_snap->id == group_snap_id) {
+      break;
+    } else if (local_snap->state == cls::rbd::GROUP_SNAPSHOT_STATE_INCOMPLETE) {
+      // there would definitely be a regular group snap newly added, so lets wait for it.
+      on_finish->complete(-EAGAIN);
+      return;
+    }
+  }
+
+  // User snap is removed and not yet reflecting locally, wait for it.
+  bool user_snap_found;
+  for (auto local_snap = m_local_group_snaps.begin();
+       local_snap != m_local_group_snaps.end(); ++local_snap) {
+    auto snap_type = cls::rbd::get_group_snap_namespace_type(
+        local_snap->snapshot_namespace);
+    if (snap_type == cls::rbd::GROUP_SNAPSHOT_NAMESPACE_TYPE_USER) {
+      user_snap_found = false;
+      for (auto remote_snap = m_remote_group_snaps.begin();
+           remote_snap != m_remote_group_snaps.end(); ++remote_snap) {
+        if (local_snap->id == remote_snap->id) {
+          user_snap_found = true;
+          continue;
+        }
+      }
+      if (!user_snap_found) {
+        // there is a regular group snap removed on remote, so lets wait for it to removed locally
+        on_finish->complete(-EAGAIN);
+        return;
+      }
+    }
   }
 
   if (itr->snaps.size() == local_image_snap_specs.size()) {
