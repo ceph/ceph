@@ -50,7 +50,7 @@ struct OSDPoolGetRequest {
 
 struct OSDPoolGetReply {
   std::string erasure_code_profile;
-
+  bool allow_ec_optimizations;
   void dump(Formatter* f) const;
   void decode_json(JSONObj* obj);
 };
@@ -189,6 +189,20 @@ struct InjectECClearErrorRequest {
     JSONDecoder::decode_json("shardid", shardid, obj);
     JSONDecoder::decode_json("type", type, obj);
   }
+};
+struct InjectECParityRead {
+  std::string pool;
+  std::string objname;
+
+  void dump(Formatter* f) const;
+  void decode_json(JSONObj* obj);
+};
+struct InjectECClearParityRead {
+  std::string pool;
+  std::string objname;
+
+  void dump(Formatter* f) const;
+  void decode_json(JSONObj* obj);
 };
 }  // namespace osd
 }  // namespace messaging
