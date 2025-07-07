@@ -847,6 +847,8 @@ const std::string ceph::io_sequence::tester::SelectErasurePool::select() {
       configureServices(allow_pool_autoscaling, allow_pool_balancer,
                         allow_pool_deep_scrubbing, allow_pool_scrubbing,
                         test_recovery);
+
+      setApplication(created_pool_name);
     }
   }
 
@@ -870,6 +872,21 @@ std::string ceph::io_sequence::tester::SelectErasurePool::create() {
   ceph_assert(rc == 0);
 
   return pool_name;
+}
+
+void ceph::io_sequence::tester::SelectErasurePool::setApplication(
+    const std::string& pool_name) {
+  bufferlist inbl, outbl;
+  auto formatter = std::make_shared<JSONFormatter>(false);
+
+  ceph::messaging::osd::OSDEnableApplicationRequest
+  enableApplicationRequest{pool_name, "rados"};
+
+  int rc = send_mon_command(enableApplicationRequest, rados,
+                            "OSDEnableApplicationRequest", inbl, &outbl,
+                            formatter.get());
+
+  ceph_assert(rc == 0);
 }
 
 void ceph::io_sequence::tester::SelectErasurePool::configureServices(
@@ -1081,7 +1098,7 @@ ceph::io_sequence::tester::TestRunner::TestRunner(
           vm.contains("allow_pool_balancer"),
           vm.contains("allow_pool_deep_scrubbing"),
           vm.contains("allow_pool_scrubbing"),
-          vm.contains("test_recovery"),
+          vm.contains("testrecovery"),
           vm.contains("disable_pool_ec_optimizations")},
       snt{rng, vm, "threads", true},
       ssr{vm} {
@@ -1104,6 +1121,11 @@ ceph::io_sequence::tester::TestRunner::TestRunner(
   allow_pool_deep_scrubbing = vm.contains("allow_pool_deep_scrubbing");
   allow_pool_scrubbing = vm.contains("allow_pool_scrubbing");
   disable_pool_ec_optimizations = vm.contains("disable_pool_ec_optimizations");
+
+  if (testrecovery && (num_objects > 1)) {
+    throw std::invalid_argument("testrecovery option not allowed if parallel is"
+                                " specified, except when parallel=1 is used");
+  }
 
   if (!dryrun) {
     guard.emplace(boost::asio::make_work_guard(asio));
