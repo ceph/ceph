@@ -2161,6 +2161,43 @@ def test_zap_init_bucket_sync_run():
             secondary.zone.start()
 
     zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
+    
+def test_list_bucket_key_marker_encoding():
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+    primary = zonegroup_conns.rw_zones[0]
+    secondary = zonegroup_conns.rw_zones[1]
+
+    bucket = primary.create_bucket(gen_bucket_name())
+    log.debug('created bucket=%s', bucket.name)
+    zonegroup_meta_checkpoint(zonegroup)
+
+    # test for object names with '%' character.
+    for obj in range(1, 1100):
+        k = new_key(primary, bucket.name, f'obj%{obj * 11}')
+        k.set_contents_from_string('foo')
+
+    # wait for the secondary to catch up
+    zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
+
+    cmd = ['bucket', 'sync', 'init'] + secondary.zone.zone_args()
+    cmd += ['--bucket', bucket.name]
+    cmd += ['--source-zone', primary.name]
+    secondary.zone.cluster.admin(cmd)
+
+    cmd = ['bucket', 'sync', 'run'] + secondary.zone.zone_args()
+    cmd += ['--bucket', bucket.name, '--source-zone', primary.name]
+    secondary.zone.cluster.admin(cmd)
+    
+    # write an object during incremental sync.
+    objname = 'test_incremental'
+    k = new_key(primary, bucket, objname)
+    k.set_contents_from_string('foo')
+    zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
+    
+    # the object uploaded after bucket sync init should be replicated
+    check_object_exists(bucket, objname)
+    
 
 def test_role_sync():
     zonegroup = realm.master_zonegroup()
