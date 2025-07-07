@@ -565,41 +565,45 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs,
 	}
       }
     } /* checksum_mode */
-    auto attr_iter = attrs.find(RGW_ATTR_RESTORE_TYPE);
-    if (attr_iter != attrs.end()) {
-      rgw::sal::RGWRestoreType rt;
-      bufferlist bl = attr_iter->second;
-      auto iter = bl.cbegin();
-      decode(rt, iter);
+     
+    rgw::sal::RGWRestoreStatus restore_status;
+    auto r_iter = attrs.find(RGW_ATTR_RESTORE_STATUS);
+    if (r_iter != attrs.end()) {
+      bufferlist rbl = r_iter->second;
+      auto iter = rbl.cbegin();
+      decode(restore_status, iter);
 
-      rgw::sal::RGWRestoreStatus restore_status;
-      attr_iter = attrs.find(RGW_ATTR_RESTORE_STATUS);
-      if (attr_iter != attrs.end()) {
-        bufferlist bl = attr_iter->second;
-        auto iter = bl.cbegin();
-        decode(restore_status, iter);
-      }
-      
       //restore status
       if (restore_status == rgw::sal::RGWRestoreStatus::RestoreAlreadyInProgress) {
-          dump_header(s, "x-amz-restore", "ongoing-request=\"true\"");
-      }
-      if (rt == rgw::sal::RGWRestoreType::Temporary) {
-        auto expire_iter = attrs.find(RGW_ATTR_RESTORE_EXPIRY_DATE);
-        ceph::real_time expiration_date;
-        
-        if (expire_iter != attrs.end()) {
-          bufferlist bl = expire_iter->second;
+        dump_header(s, "x-amz-restore", "ongoing-request=\"true\"");
+      } else {
+        auto attr_iter = attrs.find(RGW_ATTR_RESTORE_TYPE);
+        if (attr_iter != attrs.end()) {
+          rgw::sal::RGWRestoreType rt;
+          bufferlist bl = attr_iter->second;
           auto iter = bl.cbegin();
-          decode(expiration_date, iter);
-        }
-        //restore status
-        dump_header_if_nonempty(s, "x-amz-restore", "ongoing-request=\"false\", expiry-date=\""+ dump_time_to_str(expiration_date) +"\"");
-        // temporary restore; set storage-class to cloudtier storage class
-        auto c_iter = attrs.find(RGW_ATTR_CLOUDTIER_STORAGE_CLASS);
+	   decode(rt, iter);
 
-        if (c_iter != attrs.end()) {
-          attrs[RGW_ATTR_STORAGE_CLASS] = c_iter->second;
+          if (rt == rgw::sal::RGWRestoreType::Temporary) {
+            auto expire_iter = attrs.find(RGW_ATTR_RESTORE_EXPIRY_DATE);
+            ceph::real_time expiration_date;
+
+  	    if (expire_iter != attrs.end()) {
+              bufferlist bl = expire_iter->second;
+              auto iter = bl.cbegin();
+              decode(expiration_date, iter);
+            }
+
+            //restore status
+            dump_header_if_nonempty(s, "x-amz-restore", "ongoing-request=\"false\", expiry-date=\""+ dump_time_to_str(expiration_date) +"\"");
+
+            // temporary restore; set storage-class to cloudtier storage class
+            auto c_iter = attrs.find(RGW_ATTR_CLOUDTIER_STORAGE_CLASS);
+
+            if (c_iter != attrs.end()) {
+              attrs[RGW_ATTR_STORAGE_CLASS] = c_iter->second;
+            }
+          }
         }
       }
     }
@@ -3670,35 +3674,40 @@ void RGWRestoreObj_ObjStore_S3::send_response()
 
   if (restore_ret == 0) {
     s->err.http_ret = 202; // OK
-  } else if (restore_ret == 1) {
-    restore_ret = -ERR_RESTORE_ALREADY_IN_PROGRESS;
-    set_req_state_err(s, restore_ret);
-    dump_header(s, "x-amz-restore", "ongoing-request=\"true\"");
-  } else if (restore_ret == 2) {
-    rgw::sal::Attrs attrs;
-    ceph::real_time expiration_date;
-    rgw::sal::RGWRestoreType rt;
-    attrs = s->object->get_attrs();
-    auto expire_iter = attrs.find(RGW_ATTR_RESTORE_EXPIRY_DATE);
-    auto type_iter = attrs.find(RGW_ATTR_RESTORE_TYPE);
+ } else {
+    rgw::sal::RGWRestoreStatus st = static_cast<rgw::sal::RGWRestoreStatus>(restore_ret);
 
-    if (expire_iter != attrs.end()) {
-      bufferlist bl = expire_iter->second;
-      auto iter = bl.cbegin();
-      decode(expiration_date, iter);
-    }
-    
-    if (type_iter != attrs.end()) {
-      bufferlist bl = type_iter->second;
-      auto iter = bl.cbegin();
-      decode(rt, iter);
-    }
-    if (rt == rgw::sal::RGWRestoreType::Temporary) {
-      s->err.http_ret = 200; // OK
-      dump_header(s, "x-amz-restore", "ongoing-request=\"false\", expiry-date=\""+ dump_time_to_str(expiration_date) +"\"");
-    } else {
-      s->err.http_ret = 200;
-      dump_header(s, "x-amz-restore", "ongoing-request=\"false\"");
+    if (st == rgw::sal::RGWRestoreStatus::RestoreAlreadyInProgress) {
+      restore_ret = -ERR_RESTORE_ALREADY_IN_PROGRESS;
+      set_req_state_err(s, restore_ret);
+      dump_header(s, "x-amz-restore", "ongoing-request=\"true\"");
+    } else if (st == rgw::sal::RGWRestoreStatus::CloudRestored) {
+      rgw::sal::Attrs attrs;
+      ceph::real_time expiration_date;
+      rgw::sal::RGWRestoreType rt;
+      attrs = s->object->get_attrs();
+      auto expire_iter = attrs.find(RGW_ATTR_RESTORE_EXPIRY_DATE);
+      auto type_iter = attrs.find(RGW_ATTR_RESTORE_TYPE);
+
+      if (expire_iter != attrs.end()) {
+        bufferlist bl = expire_iter->second;
+        auto iter = bl.cbegin();
+        decode(expiration_date, iter);
+      }
+
+      if (type_iter != attrs.end()) {
+        bufferlist bl = type_iter->second;
+        auto iter = bl.cbegin();
+        decode(rt, iter);
+      }
+
+      if (rt == rgw::sal::RGWRestoreType::Temporary) {
+        s->err.http_ret = 200; // OK
+        dump_header(s, "x-amz-restore", "ongoing-request=\"false\", expiry-date=\""+ dump_time_to_str(expiration_date) +"\"");
+      } else {
+        s->err.http_ret = 200;
+        dump_header(s, "x-amz-restore", "ongoing-request=\"false\"");
+      }
     }
   } 
 

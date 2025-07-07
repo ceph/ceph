@@ -566,6 +566,7 @@ class RGWLC : public DoutPrefixProvider {
   CephContext *cct;
   rgw::sal::Driver* driver;
   std::unique_ptr<rgw::sal::Lifecycle> sal_lc;
+  std::unique_ptr<rgw::sal::Restore> sal_restore;
   int max_objs{0};
   std::string *obj_names{nullptr};
   std::atomic<bool> down_flag = { false };
@@ -664,6 +665,7 @@ public:
 
   CephContext *get_cct() const override { return cct; }
   rgw::sal::Lifecycle* get_lc() const { return sal_lc.get(); }
+  rgw::sal::Restore* get_restore() const { return sal_restore.get(); }
   unsigned get_subsys() const;
   std::ostream& gen_prefix(std::ostream& out) const;
 
