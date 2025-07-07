@@ -128,13 +128,6 @@ void EntityName::set_id(std::string_view id_) {
   set(type, id_);
 }
 
-void EntityName::set_name(entity_name_t n)
-{
-  char s[40];
-  sprintf(s, "%lld", (long long)n.num());
-  set(n.type(), s);
-}
-
 const char* EntityName::get_type_str() const {
   return ceph_entity_type_name(type);
 }
