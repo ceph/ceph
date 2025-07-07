@@ -114,5 +114,8 @@ export const ICON_TYPE = {
   danger: 'danger',
   infoCircle: 'info-circle',
   success: 'success',
-  warning: 'warning'
+  warning: 'warning',
+  error: 'error',
+  info: 'info',
+  notification: 'notification'
 } as const;
