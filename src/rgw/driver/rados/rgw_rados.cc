@@ -3213,8 +3213,22 @@ int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_si
   if (!ptag && !index_op->get_optag()->empty()) {
     ptag = index_op->get_optag();
   }
-  r = target->prepare_atomic_modification(rctx.dpp, op, reset_obj, ptag, meta.if_match, meta.if_nomatch, false,
-                                          meta.modify_tail, !target->obj.key.instance.empty(), rctx.y);
+
+  r = target->get_state(rctx.dpp, &target->state, &target->manifest, false, rctx.y);
+  if (r < 0)
+    return r;
+  RGWObjState* current_state = target->state;
+  if (!target->obj.key.instance.empty()) {
+    r = target->versioned_bucket_get_state(rctx.dpp, current_state, rctx.y);
+    if (r < 0) {
+      return r;
+    }
+  }
+
+  r = target->preconditional_checks(rctx.dpp, op, meta.if_match, meta.if_nomatch, *current_state, rctx.y);
+  if (r < 0)
+    return r;
+  r = target->prepare_atomic_modification(rctx.dpp, op, reset_obj, ptag, meta.modify_tail, *current_state, rctx.y);
   if (r < 0)
     return r;
 
@@ -6347,8 +6361,19 @@ int RGWRados::Object::Delete::delete_obj(optional_yield y,
         meta.mtime = params.mtime;
       }
 
+      int r = target->get_state(dpp, &target->state, &target->manifest, false, y);
+      if (r < 0)
+        return r;
+      RGWObjState* current_state = target->state;
+      r = target->versioned_bucket_get_state(dpp, current_state, y);
+      if (r == -ENOENT) {
+        current_state = target->state;
+      } else if (r < 0) {
+        return r;
+      }
+
       ObjectWriteOperation op;
-      int r = target->prepare_atomic_modification(dpp, op, false, nullptr, params.if_match, params.if_nomatch, true, false, true, y);
+      r = target->preconditional_checks(dpp, op, params.if_match, params.if_nomatch, *current_state, y);
       if (r < 0) {
         return r;
       }
@@ -6367,6 +6392,7 @@ int RGWRados::Object::Delete::delete_obj(optional_yield y,
         return r;
       }
 
+      // TODO: use preconditional checks
       if (params.if_match && dirent.meta.etag != params.if_match) {
         return -ERR_PRECONDITION_FAILED;
       }
@@ -6492,7 +6518,11 @@ int RGWRados::Object::Delete::delete_obj(optional_yield y,
     }
   }
 
-  r = target->prepare_atomic_modification(dpp, op, false, nullptr, params.if_match, params.if_nomatch, true, false, false, y);
+  r = target->get_state(dpp, &target->state, &target->manifest, false, y);
+  if (r < 0)
+    return r;
+
+  r = target->preconditional_checks(dpp, op, params.if_match, params.if_nomatch, *target->state, y);
   if (r < 0) {
     return r;
   }
@@ -7061,67 +7091,52 @@ void RGWRados::Object::invalidate_state()
   ctx.invalidate(obj);
 }
 
-int RGWRados::Object::prepare_atomic_modification(const DoutPrefixProvider *dpp,
-                                                  ObjectWriteOperation& op, bool reset_obj, const string *ptag,
-                                                  const char *if_match, const char *if_nomatch, bool removal_op,
-                                                  bool modify_tail, bool handle_version, optional_yield y)
+int RGWRados::Object::versioned_bucket_get_state(const DoutPrefixProvider *dpp, RGWObjState*& current_state, optional_yield y)
 {
-  int r = get_state(dpp, &state, &manifest, false, y);
-  if (r < 0)
+  // objects in versioning-enabled buckets don't get overwritten.
+  // preconditions refer to the current version instead
+  current_state = state;
+  rgw_obj current_obj = obj;
+  current_obj.key.instance.clear();
+  constexpr bool follow_olh = true; // look up current version
+  int r = store->get_obj_state(dpp, &ctx, bucket_info, current_obj,
+                           &current_state, nullptr, follow_olh, y);
+  if (r < 0) {
+    ldpp_dout(dpp, 4) << "failed to load current version or no current object version for preconditions on " << current_obj << dendl;
+    current_state = nullptr;
     return r;
-
-  bool need_guard = ((manifest) || (state->obj_tag.length() != 0) ||
-                     if_match != NULL || if_nomatch != NULL) &&
-                     (!state->fake_tag);
-
-  if (!state->is_atomic) {
-    ldpp_dout(dpp, 20) << "prepare_atomic_modification: state is not atomic. state=" << (void *)state << dendl;
-
-    if (reset_obj) {
-      op.create(false);
-      store->remove_rgw_head_obj(op); // we're not dropping reference here, actually removing object
-    }
-
-    return 0;
+  } else {
+    ldpp_dout(dpp, 4) << "loaded current object " << current_state->obj
+                      << " for preconditions" << dendl;
   }
 
-  if (need_guard) {
-    RGWObjState* current_state = state;
+  return 0;
+}
 
-    using namespace std::string_literals;
-    if (handle_version) {
-      // objects in versioning-enabled buckets don't get overwritten.
-      // preconditions refer to the current version instead
-      rgw_obj current_obj = obj;
-      current_obj.key.instance.clear();
-      constexpr bool follow_olh = true; // look up current version
-      r = store->get_obj_state(dpp, &ctx, bucket_info, current_obj,
-                               &current_state, nullptr, follow_olh, y);
-      if (r == -ENOENT) {
-        ldpp_dout(dpp, 4) << "no current object version for preconditions on "
-            << current_obj << dendl;
-      } else if (r < 0) {
-        ldpp_dout(dpp, 4) << "failed to load current version for " << current_obj << dendl;
-        return r;
-      } else {
-        ldpp_dout(dpp, 4) << "loaded current object " << current_state->obj
-            << " for preconditions" << dendl;
-      }
-    } else if (if_nomatch == NULL || if_nomatch != "*"sv) {
+int RGWRados::Object::preconditional_checks(const DoutPrefixProvider *dpp, ObjectWriteOperation& op, const char *if_match,
+                                            const char *if_nomatch, RGWObjState& current_state, optional_yield y)
+{
+  bool need_guard = ((manifest) || (current_state.obj_tag.length() != 0) ||
+                     if_match != NULL || if_nomatch != NULL) &&
+                     (!current_state.fake_tag);
+
+  using namespace std::string_literals;
+  if (need_guard) {
+    if (if_nomatch == NULL || if_nomatch != "*"sv) {
       /* first verify that the object wasn't replaced under */
       op.cmpxattr(RGW_ATTR_ID_TAG, LIBRADOS_CMPXATTR_OP_EQ, state->obj_tag);
       // FIXME: need to add FAIL_NOTEXIST_OK for racing deletion
     }
 
     if (if_match) {
-      if (strcmp(if_match, "*") == 0) {
+      if (if_match == "*"sv) {
         // test the object is existing
-        if (!current_state->exists) {
-          return -ERR_PRECONDITION_FAILED;
+        if (!current_state.exists) {
+          return -ENOENT;
         }
       } else {
         bufferlist bl;
-        if (current_state->get_attr(RGW_ATTR_ETAG, bl)) {
+        if (current_state.get_attr(RGW_ATTR_ETAG, bl)) {
           string if_match_str = rgw_string_unquote(if_match);
           string etag = string(bl.c_str(), bl.length());
           if (if_match_str.compare(0, etag.length(), etag.c_str(), etag.length()) != 0) {
@@ -7134,14 +7149,14 @@ int RGWRados::Object::prepare_atomic_modification(const DoutPrefixProvider *dpp,
     }
 
     if (if_nomatch) {
-      if (strcmp(if_nomatch, "*") == 0) {
+      if (if_nomatch == "*"sv) {
         // test the object is NOT existing
-        if (current_state->exists) {
-          return -ERR_PRECONDITION_FAILED;
+        if (current_state.exists) {
+          return -ENOENT;
         }
       } else {
         bufferlist bl;
-        if (current_state->get_attr(RGW_ATTR_ETAG, bl)) {
+        if (current_state.get_attr(RGW_ATTR_ETAG, bl)) {
           string if_nomatch_str = rgw_string_unquote(if_nomatch);
           string etag = string(bl.c_str(), bl.length());
           if (if_nomatch_str.compare(0, etag.length(), etag.c_str(), etag.length()) == 0) {
@@ -7154,8 +7169,25 @@ int RGWRados::Object::prepare_atomic_modification(const DoutPrefixProvider *dpp,
     }
   }
 
+  return 0;
+}
+
+int RGWRados::Object::prepare_atomic_modification(const DoutPrefixProvider *dpp, ObjectWriteOperation& op, bool reset_obj,
+                                                  const string *ptag, bool modify_tail, RGWObjState& current_state, optional_yield y)
+{
+  if (!current_state.is_atomic) {
+    ldpp_dout(dpp, 20) << "prepare_atomic_modification: state is not atomic. state=" << (void *) &current_state << dendl;
+
+    if (reset_obj) {
+      op.create(false);
+      store->remove_rgw_head_obj(op); // we're not dropping reference here, actually removing object
+    }
+
+    return 0;
+  }
+
   if (reset_obj) {
-    if (state->exists) {
+    if (current_state.exists) {
       op.create(false);
       store->remove_rgw_head_obj(op);
     } else {
@@ -7163,20 +7195,15 @@ int RGWRados::Object::prepare_atomic_modification(const DoutPrefixProvider *dpp,
     }
   }
 
-  if (removal_op) {
-    /* the object is being removed, no need to update its tag */
-    return 0;
-  }
-
   if (ptag) {
-    state->write_tag = *ptag;
+    current_state.write_tag = *ptag;
   } else {
-    append_rand_alpha(store->ctx(), state->write_tag, state->write_tag, 32);
+    append_rand_alpha(store->ctx(), current_state.write_tag, current_state.write_tag, 32);
   }
   bufferlist bl;
-  bl.append(state->write_tag.c_str(), state->write_tag.size() + 1);
+  bl.append(current_state.write_tag.c_str(), current_state.write_tag.size() + 1);
 
-  ldpp_dout(dpp, 10) << "setting object write_tag=" << state->write_tag << dendl;
+  ldpp_dout(dpp, 10) << "setting object write_tag=" << current_state.write_tag << dendl;
 
   op.setxattr(RGW_ATTR_ID_TAG, bl);
   if (modify_tail) {
