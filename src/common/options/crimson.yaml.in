@@ -2,17 +2,6 @@
 ---
 
 options:
-- name: crimson_osd_objectstore
-  type: str
-  level: advanced
-  desc: backend type for a Crimson OSD (e.g seastore or bluestore)
-  default: bluestore
-  enum_values:
-  - bluestore
-  - seastore
-  - cyanstore
-  flags:
-  - create
 - name: crimson_osd_obc_lru_size
   type: uint
   level: advanced

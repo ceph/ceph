@@ -4,7 +4,7 @@ overrides:
     conf:
       osd:
         # crimson's osd objectstore option
-        crimson osd objectstore: bluestore
+        osd objectstore: bluestore
         debug alienstore: 20
         bluestore block size: 96636764160
         debug bluestore: 20
