@@ -20,6 +20,7 @@ export class NotificationsComponent implements OnInit, OnDestroy {
   isPanelOpen = false;
   useNewPanel = true;
   notificationCount = 0;
+  isMuted = false;
   private subs = new Subscription();
 
   constructor(
@@ -45,6 +46,11 @@ export class NotificationsComponent implements OnInit, OnDestroy {
       this.notificationService.panelState$.subscribe((state) => {
         this.isPanelOpen = state.isOpen;
         this.useNewPanel = state.useNewPanel;
+      })
+    );
+    this.subs.add(
+      this.notificationService.muteState$.subscribe((isMuted) => {
+        this.isMuted = isMuted;
       })
     );
   }

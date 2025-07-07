@@ -97,7 +97,11 @@ import { ToastComponent } from './notification-toast/notification-toast.componen
 import InfoIcon from '@carbon/icons/es/information/16';
 import CopyIcon from '@carbon/icons/es/copy/32';
 import downloadIcon from '@carbon/icons/es/download/16';
-import IdeaIcon from '@carbon/icons/es/idea/20';
+import CheckmarkFilledIcon from '@carbon/icons/es/checkmark--filled/16';
+import ErrorFilledIcon from '@carbon/icons/es/error--filled/16';
+import InformationFilledIcon from '@carbon/icons/es/information--filled/16';
+import WarningFilledIcon from '@carbon/icons/es/warning--filled/16';
+import NotificationFilledIcon from '@carbon/icons/es/notification--filled/16';
 import CloseIcon from '@carbon/icons/es/close/16';
 
 @NgModule({
@@ -244,7 +248,11 @@ export class ComponentsModule {
       EditIcon,
       CodeIcon,
       downloadIcon,
-      IdeaIcon,
+      CheckmarkFilledIcon,
+      ErrorFilledIcon,
+      InformationFilledIcon,
+      WarningFilledIcon,
+      NotificationFilledIcon,
       CloseIcon
     ]);
   }

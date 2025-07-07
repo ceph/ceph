@@ -35,7 +35,9 @@ export class PrometheusAlertFormatter {
           url: alert.generatorURL,
           description: alert.annotations.description,
           fingerprint: _.isObject(alert.status) && (alert as AlertmanagerAlert).fingerprint,
-          severity: alert.labels.severity
+          // Store additional metadata for later use
+          labels: alert.labels,
+          annotations: alert.annotations
         };
       }),
       _.isEqual
@@ -51,29 +53,55 @@ export class PrometheusAlertFormatter {
   }
 
   convertAlertToNotification(alert: PrometheusCustomAlert): CdNotificationConfig {
-    return new CdNotificationConfig(
-      this.formatType(alert.status, alert.severity),
+    const config = new CdNotificationConfig(
+      this.formatType(alert.status),
       `${alert.name} (${alert.status})`,
       this.appendSourceLink(alert, alert.description),
       undefined,
       'Prometheus'
     );
+
+    // Add Prometheus-specific metadata
+    config['prometheusAlert'] = {
+      alertName: alert.name,
+      status: alert.status,
+      severity: alert.labels?.severity || this.mapStatusToSeverity(alert.status),
+      instance: alert.labels?.instance,
+      job: alert.labels?.job,
+      description: alert.description,
+      sourceUrl: alert.url,
+      fingerprint: alert.fingerprint ? String(alert.fingerprint) : undefined
+    };
+
+    return config;
   }
 
-  private formatType(status: string, severity?: string): NotificationType {
-    if (status === 'active' && severity === 'warning') {
-      return NotificationType.warning;
-    }
-
+  private formatType(status: string): any {
     const types = {
       error: ['firing', 'active'],
       info: ['suppressed', 'unprocessed'],
       success: ['resolved']
     };
-    return NotificationType[_.findKey(types, (type) => type.includes(status))];
+    return NotificationType[_.findKey(types, (type: any) => type.includes(status))];
   }
 
   private appendSourceLink(alert: PrometheusCustomAlert, message: string): string {
     return `${message} <a href="${alert.url}" target="_blank"><svg cdsIcon="${Icons.lineChart}" size="${Icons.size16}" ></svg></a>`;
+  }
+
+  private mapStatusToSeverity(status: string): string {
+    switch (status) {
+      case 'active':
+      case 'firing':
+        return 'critical';
+      case 'resolved':
+        return 'resolved';
+      case 'suppressed':
+        return 'suppressed';
+      case 'unprocessed':
+        return 'warning';
+      default:
+        return 'unknown';
+    }
   }
 }

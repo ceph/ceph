@@ -1,8 +1,8 @@
 import { Component, OnInit, OnDestroy } from '@angular/core';
 import { Subscription } from 'rxjs';
-import { NotificationService } from '../../../../shared/services/notification.service';
-import { CdNotification } from '../../../../shared/models/cd-notification';
-import { NotificationType } from '../../../../shared/enum/notification-type.enum';
+import { NotificationType } from '~/app/shared/enum/notification-type.enum';
+import { CdNotification } from '~/app/shared/models/cd-notification';
+import { NotificationService } from '~/app/shared/services/notification.service';
 
 @Component({
   selector: 'cd-notification-area',
