@@ -99,7 +99,7 @@ BlueStore::BlobRef BlueStore::Decoder_AllocationsAndStatFS::decode_create_blob(
   bool include_ref_map,
   Collection* c) {
   BlobRef b = c ? c->new_blob() : new Blob(nullptr);
-  b->decode<true>(p, struct_v, sbid, include_ref_map, c);
+  b->decode<false>(p, struct_v, sbid, include_ref_map, c);
   return b;
 }
 
