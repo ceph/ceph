@@ -431,8 +431,7 @@ endif(WITH_LZ4)
 CMAKE_DEPENDENT_OPTION(WITH_CEPH_DEBUG_MUTEX "Use debug ceph::mutex with lockdep" ON
   "CMAKE_BUILD_TYPE STREQUAL Debug" OFF)
 
-CMAKE_DEPENDENT_OPTION(WITH_CPUTRACE "Enable cputrace support in admin socket" OFF
-  "CMAKE_BUILD_TYPE STREQUAL Debug" OFF)
+option(WITH_CPUTRACE "Enable cputrace support in admin socket" OFF)
 
 #if allocator is set on command line make sure it matches below strings
 set(ALLOCATOR "" CACHE STRING
