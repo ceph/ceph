@@ -2,4 +2,5 @@ roles:
 - [mon.a, mds.a, mgr.x, osd.0, osd.1]
 - [mon.b, mon.c, mds.b, mgr.y, osd.2, osd.3]
 - [client.0]
-- [client.1]
+# need to handle pruning if we want a client with older binaries
+#- [client.1]
