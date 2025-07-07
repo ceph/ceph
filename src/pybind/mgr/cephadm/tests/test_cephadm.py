@@ -2664,6 +2664,16 @@ Traceback (most recent call last):
             cephadm_module.drain_host('host1', force=True, zap_osd_devices=True)
             _rm_osds.assert_called_with([], zap=True)
 
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
+    @mock.patch("cephadm.CephadmOrchestrator.stop_remove_osds")
+    @mock.patch("cephadm.inventory.HostCache.get_daemons_by_host", lambda *a, **kw: [])
+    def test_stop_host_drain(self, _stop_rm_osds, cephadm_module):
+        # pass force=true in these tests to bypass _admin label check
+        with with_host(cephadm_module, 'host1', refresh_hosts=False, rm_with_force=True):
+            cephadm_module.drain_host('host1')
+            cephadm_module.stop_drain_host('host1')
+            _stop_rm_osds.assert_called_with([])
+
     def test_process_ls_output(self, cephadm_module):
         sample_ls_output = """[
     {
