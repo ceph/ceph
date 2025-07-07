@@ -15,6 +15,7 @@
 #include "common/likely.h"
 #include "crimson/common/errorator.h"
 #include "crimson/common/utility.h"
+#include "crimson/common/coroutine.h"
 
 namespace crimson {
 
