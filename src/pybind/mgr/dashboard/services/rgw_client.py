@@ -1097,7 +1097,7 @@ class RgwClient(RestClient):
         destination = ET.SubElement(rule, 'Destination')
 
         bucket = ET.SubElement(destination, 'Bucket')
-        bucket.text = bucket_name
+        bucket.text = 'arn:aws:s3:::'f'{bucket_name}'
 
         replication_config = ET.tostring(root, encoding='utf-8', method='xml').decode()
 
