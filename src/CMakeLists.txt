@@ -131,7 +131,7 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL GNU)
     if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS 10)
       message(FATAL_ERROR "C++20 support for win32 requires a minimum GCC version of 10.")
     endif()
-  elseif(HAVE_SEASTAR)
+  elseif(WITH_CRIMSON)
     if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS 13)
       # see https://tracker.ceph.com/issues/64375 for details
       message(FATAL_ERROR "crimson/seastar require minimum GCC version of 13 for C++20 and coroutine support")
@@ -153,7 +153,7 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL GNU)
   # cmake does not add '-pie' for executables even if
   # CMAKE_POSITION_INDEPENDENT_CODE is TRUE.
   if(EXE_LINKER_USE_PIE)
-    if (NOT WITH_OSD_INSTRUMENT_FUNCTIONS AND NOT HAVE_SEASTAR)
+    if (NOT WITH_OSD_INSTRUMENT_FUNCTIONS AND NOT WITH_CRIMSON)
       string(APPEND CMAKE_EXE_LINKER_FLAGS " -pie")
     endif()
   endif()
