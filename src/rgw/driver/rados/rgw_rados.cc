@@ -6450,12 +6450,45 @@ int RGWRados::Object::Delete::delete_obj(optional_yield y,
         return r;
       }
 
-      // TODO: use preconditional checks
-      if (params.if_match && dirent.meta.etag != params.if_match) {
-        return -ERR_PRECONDITION_FAILED;
+      using namespace std::string_literals;
+      if (params.if_match) {
+        if (params.if_match == "*"sv) {
+          if (!dirent.exists) {
+            return -ENOENT;
+          }
+        } else if(dirent.meta.etag != params.if_match) {
+          return -ERR_PRECONDITION_FAILED;
+        }
       }
-      if (params.if_nomatch && dirent.meta.etag == params.if_nomatch) {
-        return -ERR_PRECONDITION_FAILED;
+
+      if (params.if_nomatch) {
+        if (params.if_nomatch == "*"sv) {
+          if (dirent.exists) {
+            return -ENOENT;
+          }
+        } else if(dirent.meta.etag == params.if_nomatch) {
+          return -ERR_PRECONDITION_FAILED;
+        }
+      }
+
+      if (params.size_match.has_value()) {
+        if (params.size_match != dirent.meta.size) {
+          return -ERR_PRECONDITION_FAILED;
+        }
+      }
+
+      if (!real_clock::is_zero(params.last_mod_time_match)) {
+        struct timespec ctime = ceph::real_clock::to_timespec(dirent.meta.mtime);
+        struct timespec last_mod_time = ceph::real_clock::to_timespec(params.last_mod_time_match);
+        if (!params.high_precision_time) {
+          ctime.tv_nsec = 0;
+          last_mod_time.tv_nsec = 0;
+        }
+
+        ldpp_dout(dpp, 10) << "If-Match-Last-Modified-Time: " << params.last_mod_time_match << " Last-Modified: " << ctime << dendl;
+        if (ctime != last_mod_time) {
+          return -ERR_PRECONDITION_FAILED;
+        }
       }
 
       result.delete_marker = dirent.is_delete_marker();
