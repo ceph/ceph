@@ -192,7 +192,7 @@ export class NavigationComponent implements OnInit, OnDestroy {
     );
   }
   toggleSidebar() {
-    this.notificationService.toggleSidebar();
+    this.notificationService.toggleSidebar(true, true);
   }
   trackByFn(item: any) {
     return item;

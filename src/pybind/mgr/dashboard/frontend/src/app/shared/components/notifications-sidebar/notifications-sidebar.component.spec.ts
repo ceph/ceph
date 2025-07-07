@@ -180,14 +180,14 @@ describe('NotificationsSidebarComponent', () => {
     it('should always close if sidebarSubject value is true', fakeAsync(() => {
       // Closed before next value
       expect(component.isSidebarOpened).toBeFalsy();
-      notificationService.sidebarSubject.next(true);
+      notificationService.toggleSidebar(true, true);
       tick();
       expect(component.isSidebarOpened).toBeFalsy();
 
       // Opened before next value
       component.isSidebarOpened = true;
       expect(component.isSidebarOpened).toBeTruthy();
-      notificationService.sidebarSubject.next(true);
+      notificationService.toggleSidebar(true, true);
       tick();
       expect(component.isSidebarOpened).toBeFalsy();
     }));
@@ -195,13 +195,13 @@ describe('NotificationsSidebarComponent', () => {
     it('should toggle sidebar visibility if sidebarSubject value is false', () => {
       // Closed before next value
       expect(component.isSidebarOpened).toBeFalsy();
-      notificationService.sidebarSubject.next(false);
+      notificationService.toggleSidebar(true, false);
       expect(component.isSidebarOpened).toBeTruthy();
 
       // Opened before next value
       component.isSidebarOpened = true;
       expect(component.isSidebarOpened).toBeTruthy();
-      notificationService.sidebarSubject.next(false);
+      notificationService.toggleSidebar(false, false);
       expect(component.isSidebarOpened).toBeFalsy();
     });
   });
