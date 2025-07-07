@@ -12,9 +12,9 @@ import {
   DialogModule,
   GridModule,
   BreadcrumbModule,
-  ModalModule,
   ToggleModule,
-  ButtonModule
+  ButtonModule,
+  PlaceholderModule
 } from 'carbon-components-angular';
 
 import { AppRoutingModule } from '~/app/app-routing.module';
@@ -30,12 +30,15 @@ import { NavigationComponent } from './navigation/navigation.component';
 import { NotificationsComponent } from './notifications/notifications.component';
 import { NotificationPanelComponent } from './notification-panel/notification-panel.component';
 import { NotificationHeaderComponent } from './notification-panel/header/notification-header.component';
+import { NotificationAreaComponent } from './notification-panel/notification-area/notification-area.component';
+import { NotificationFooterComponent } from './notification-panel/notification-footer/notification-footer.component';
 
 // Icons
 import UserFilledIcon from '@carbon/icons/es/user--filled/20';
 import SettingsIcon from '@carbon/icons/es/settings/20';
 import HelpIcon from '@carbon/icons/es/help/20';
 import NotificationIcon from '@carbon/icons/es/notification/20';
+import NotificationOffIcon from '@carbon/icons/es/notification--off/20';
 import LaunchIcon from '@carbon/icons/es/launch/16';
 import DashboardIcon from '@carbon/icons/es/template/20';
 import ClusterIcon from '@carbon/icons/es/web-services--cluster/20';
@@ -47,7 +50,12 @@ import ObservabilityIcon from '@carbon/icons/es/observed--hail/20';
 import AdminIcon from '@carbon/icons/es/network--admin-control/20';
 import LockedIcon from '@carbon/icons/es/locked/16';
 import LogoutIcon from '@carbon/icons/es/logout/16';
-import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
+import CheckmarkFilledIcon from '@carbon/icons/es/checkmark--filled/16';
+import ErrorFilledIcon from '@carbon/icons/es/error--filled/16';
+import InformationFilledIcon from '@carbon/icons/es/information--filled/16';
+import WarningFilledIcon from '@carbon/icons/es/warning--filled/16';
+import NotificationFilledIcon from '@carbon/icons/es/notification--filled/16';
+import CloseIcon from '@carbon/icons/es/close/16';
 
 @NgModule({
   imports: [
@@ -65,9 +73,9 @@ import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
     DialogModule,
     GridModule,
     BreadcrumbModule,
-    ModalModule,
     ToggleModule,
-    ButtonModule
+    ButtonModule,
+    PlaceholderModule
   ],
   declarations: [
     AboutComponent,
@@ -77,13 +85,14 @@ import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
     NotificationsComponent,
     NotificationPanelComponent,
     NotificationHeaderComponent,
+    NotificationAreaComponent,
+    NotificationFooterComponent,
     DashboardHelpComponent,
     AdministrationComponent,
     IdentityComponent
   ],
   exports: [NavigationComponent, BreadcrumbsComponent],
-  schemas: [CUSTOM_ELEMENTS_SCHEMA],
-  providers: [ModalCdsService]
+  schemas: [CUSTOM_ELEMENTS_SCHEMA]
 })
 export class NavigationModule {
   constructor(private iconService: IconService) {
@@ -92,6 +101,7 @@ export class NavigationModule {
       SettingsIcon,
       HelpIcon,
       NotificationIcon,
+      NotificationOffIcon,
       LaunchIcon,
       DashboardIcon,
       ClusterIcon,
@@ -102,7 +112,13 @@ export class NavigationModule {
       ObservabilityIcon,
       AdminIcon,
       LockedIcon,
-      LogoutIcon
+      LogoutIcon,
+      CheckmarkFilledIcon,
+      ErrorFilledIcon,
+      InformationFilledIcon,
+      WarningFilledIcon,
+      NotificationFilledIcon,
+      CloseIcon
     ]);
   }
 }

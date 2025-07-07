@@ -105,6 +105,15 @@ const routes: Routes = [
       { path: 'dashboard', component: DashboardComponent },
       { path: 'error', component: ErrorComponent },
 
+      // Notifications
+      {
+        path: 'notifications',
+        loadChildren: () =>
+          import('./core/notifications/notifications.module').then(
+            (m) => m.RoutedNotificationsModule
+          )
+      },
+
       // Cluster
       {
         path: 'expand-cluster',

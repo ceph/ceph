@@ -146,7 +146,7 @@ export class NotificationsSidebarComponent implements OnInit, OnDestroy {
   }
 
   private triggerPrometheusAlerts() {
-    this.prometheusAlertService.refresh();
+    this.prometheusAlertService.refresh(false);
     this.prometheusNotificationService.refresh();
   }
 
