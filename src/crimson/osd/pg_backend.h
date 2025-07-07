@@ -29,10 +29,9 @@ namespace ceph::os {
 }
 
 namespace crimson::osd {
-  class ShardServices;
-  class PG;
-  class ObjectContextLoader;
-}
+class ShardServices;
+class PG;
+class ObjectContextLoader;
 
 class PGBackend
 {
@@ -517,3 +516,5 @@ private:
 
   friend class RecoveryBackend;
 };
+
+}

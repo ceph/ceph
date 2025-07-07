@@ -19,6 +19,8 @@ using std::less;
 using std::map;
 using std::string;
 
+namespace crimson::osd {
+
 RecoveryBackend::interruptible_future<>
 ReplicatedRecoveryBackend::recover_object(
   const hobject_t& soid,
@@ -1378,4 +1380,6 @@ ReplicatedRecoveryBackend::get_md_from_push_op(PushOp &push_op)
     }
   }
   return std::make_pair(std::move(oi), std::move(ssc));
+}
+
 }

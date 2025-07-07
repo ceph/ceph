@@ -47,8 +47,6 @@
 
 class MQuery;
 class OSDMap;
-class PGBackend;
-class ReplicatedBackend;
 class PGPeeringEvent;
 class osd_op_params_t;
 
@@ -68,6 +66,8 @@ namespace crimson::osd {
 class OpsExecuter;
 class SnapTrimEvent;
 class PglogBasedRecovery;
+class PGBackend;
+class ReplicatedBackend;
 
 class PG : public boost::intrusive_ref_counter<
   PG,
@@ -1014,7 +1014,7 @@ private:
 
 private:
   friend class IOInterruptCondition;
-  friend class ::ReplicatedBackend;
+  friend class ReplicatedBackend;
   struct log_update_t {
     std::set<pg_shard_t> waiting_on;
     seastar::shared_promise<> all_committed;
