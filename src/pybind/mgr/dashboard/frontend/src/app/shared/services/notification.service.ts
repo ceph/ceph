@@ -21,15 +21,20 @@ export class NotificationService {
   data$ = this.dataSource.asObservable();
 
   // Panel state observable
-  private panelStateSource = new BehaviorSubject<{isOpen: boolean; useNewPanel: boolean}>({
+  private panelStateSource = new BehaviorSubject<{ isOpen: boolean; useNewPanel: boolean }>({
     isOpen: false,
     useNewPanel: true
   });
   panelState$ = this.panelStateSource.asObservable();
 
+  // Mute state observable
+  private muteStateSource = new BehaviorSubject<boolean>(false);
+  muteState$ = this.muteStateSource.asObservable();
+
   private queued: CdNotificationConfig[] = [];
   private queuedTimeoutId: number;
   KEY = 'cdNotifications';
+  MUTE_KEY = 'cdNotificationsMuted';
 
   constructor(
     public toastr: ToastrService,
@@ -49,6 +54,11 @@ export class NotificationService {
     }
 
     this.dataSource.next(notifications);
+
+    // Load mute state from localStorage
+    const isMuted = localStorage.getItem(this.MUTE_KEY) === 'true';
+    this.hideToasties = isMuted;
+    this.muteStateSource.next(isMuted);
   }
 
   /**
@@ -60,27 +70,34 @@ export class NotificationService {
   }
 
   /**
-   * Removes a single saved notifications
+   * Removes a single saved notification
    */
   remove(index: number) {
-    const recent = this.dataSource.getValue();
-    recent.splice(index, 1);
-    this.dataSource.next(recent);
-    localStorage.setItem(this.KEY, JSON.stringify(recent));
+    const notifications = this.dataSource.getValue();
+    notifications.splice(index, 1);
+    this.dataSource.next(notifications);
+    this.persistNotifications(notifications);
   }
 
   /**
    * Method used for saving a shown notification (check show() method).
    */
   save(notification: CdNotification) {
-    const recent = this.dataSource.getValue();
-    recent.push(notification);
-    recent.sort((a, b) => (a.timestamp > b.timestamp ? -1 : 1));
-    while (recent.length > 10) {
-      recent.pop();
+    const notifications = this.dataSource.getValue();
+    notifications.push(notification);
+    notifications.sort((a, b) => (a.timestamp > b.timestamp ? -1 : 1));
+    while (notifications.length > 10) {
+      notifications.pop();
     }
-    this.dataSource.next(recent);
-    localStorage.setItem(this.KEY, JSON.stringify(recent));
+    this.dataSource.next(notifications);
+    this.persistNotifications(notifications);
+  }
+
+  /**
+   * Persists notifications to localStorage
+   */
+  private persistNotifications(notifications: CdNotification[]) {
+    localStorage.setItem(this.KEY, JSON.stringify(notifications));
   }
 
   /**
@@ -146,6 +163,7 @@ export class NotificationService {
       }
       this.showToasty(notification);
     });
+    this.queued = [];
   }
 
   private getUnifiedTitleQueue(): CdNotificationConfig[] {
@@ -175,7 +193,14 @@ export class NotificationService {
     if (this.hideToasties) {
       return;
     }
-    this.toastr[['error', 'info', 'success'][notification.type]](
+    const toastrFn =
+      notification.type === NotificationType.error
+        ? this.toastr.error.bind(this.toastr)
+        : notification.type === NotificationType.info
+        ? this.toastr.info.bind(this.toastr)
+        : this.toastr.success.bind(this.toastr);
+
+    toastrFn(
       (notification.message ? notification.message + '<br>' : '') +
         this.renderTimeAndApplicationHtml(notification),
       notification.title,
@@ -233,6 +258,8 @@ export class NotificationService {
    */
   suspendToasties(suspend: boolean) {
     this.hideToasties = suspend;
+    this.muteStateSource.next(suspend);
+    localStorage.setItem(this.MUTE_KEY, suspend.toString());
   }
 
   /**

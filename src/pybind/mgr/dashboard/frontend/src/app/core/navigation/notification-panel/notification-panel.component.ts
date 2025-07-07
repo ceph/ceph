@@ -7,10 +7,7 @@ import { NotificationService } from '../../../shared/services/notification.servi
   styleUrls: ['./notification-panel.component.scss']
 })
 export class NotificationPanelComponent {
-  constructor(
-    public notificationService: NotificationService,
-    private elementRef: ElementRef
-  ) {}
+  constructor(public notificationService: NotificationService, private elementRef: ElementRef) {}
 
   @HostListener('document:click', ['$event'])
   handleClickOutside(event: Event) {
@@ -19,4 +16,4 @@ export class NotificationPanelComponent {
       this.notificationService.toggleSidebar(false, true);
     }
   }
-} 
+}

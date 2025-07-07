@@ -8,6 +8,7 @@
   padding: spacing.$spacing-04;
   border-bottom: 1px solid theme.$border-subtle-01;
   background-color: theme.$layer-01;
+  flex-shrink: 0;
 
   &__top {
     display: flex;
@@ -20,8 +21,17 @@
   &__title {
     h4 {
       @include type.type-style('heading-compact-01');
+
       color: theme.$text-primary;
       margin: 0;
+    }
+  }
+
+  &__dismiss-btn {
+    color: theme.$text-primary;
+
+    &:hover {
+      color: theme.$link-primary;
     }
   }
 
@@ -44,4 +54,4 @@
       }
     }
   }
-} 
+}

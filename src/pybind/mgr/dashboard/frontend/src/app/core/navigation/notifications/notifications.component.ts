@@ -18,6 +18,7 @@ export class NotificationsComponent implements OnInit, OnDestroy {
   hasNotifications = false;
   isPanelOpen = false;
   useNewPanel = true;
+  notificationCount = 0;
   private subs = new Subscription();
 
   constructor(
@@ -35,6 +36,7 @@ export class NotificationsComponent implements OnInit, OnDestroy {
     this.subs.add(
       this.notificationService.data$.subscribe((notifications: CdNotification[]) => {
         this.hasNotifications = notifications.length > 0;
+        this.notificationCount = notifications.length;
       })
     );
 
