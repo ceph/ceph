@@ -2,7 +2,7 @@ import { Injectable } from '@angular/core';
 
 import _ from 'lodash';
 import { IndividualConfig, ToastrService } from 'ngx-toastr';
-import { BehaviorSubject, Subject } from 'rxjs';
+import { BehaviorSubject } from 'rxjs';
 
 import { NotificationType } from '../enum/notification-type.enum';
 import { CdNotification, CdNotificationConfig } from '../models/cd-notification';
@@ -20,8 +20,12 @@ export class NotificationService {
   private dataSource = new BehaviorSubject<CdNotification[]>([]);
   data$ = this.dataSource.asObservable();
 
-  // Sidebar observable
-  sidebarSubject = new Subject();
+  // Panel state observable
+  private panelStateSource = new BehaviorSubject<{isOpen: boolean; useNewPanel: boolean}>({
+    isOpen: false,
+    useNewPanel: true
+  });
+  panelState$ = this.panelStateSource.asObservable();
 
   private queued: CdNotificationConfig[] = [];
   private queuedTimeoutId: number;
@@ -231,7 +235,15 @@ export class NotificationService {
     this.hideToasties = suspend;
   }
 
-  toggleSidebar(forceClose = false) {
-    this.sidebarSubject.next(forceClose);
+  /**
+   * Toggle the sidebar/panel visibility
+   * @param isOpen whether to open or close the panel
+   * @param useNewPanel which panel type to use
+   */
+  toggleSidebar(isOpen: boolean, useNewPanel: boolean = true) {
+    this.panelStateSource.next({
+      isOpen: isOpen,
+      useNewPanel: useNewPanel
+    });
   }
 }
