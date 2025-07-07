@@ -377,6 +377,69 @@ void cputrace_dump(ceph::Formatter* f, const std::string& logger, const std::str
     pthread_mutex_unlock(&g_profiler.global_lock);
 }
 
+void cputrace_print_to_stringstream(std::stringstream& ss) {
+    pthread_mutex_lock(&g_profiler.global_lock);
+    ss << "cputrace:\n";
+    bool dumped = false;
+
+    for (int i = 0; i < CPUTRACE_MAX_ANCHORS; ++i) {
+        const auto& anchor = g_profiler.anchors[i];
+        if (!anchor.name) {
+            continue;
+        }
+
+        for (int j = 0; j < CPUTRACE_MAX_THREADS; ++j) {
+            if (active_contexts[i][j]) {
+                read_perf_event(active_contexts[i][j], &g_profiler.anchors[i], j);
+            }
+            aggregate_thread_results(&g_profiler.anchors[i], j);
+        }
+
+        ss << "  " << anchor.name << ":\n";
+        ss << "    call_count: " << anchor.call_count << "\n";
+
+        if (anchor.flags & HW_PROFILE_SWI) {
+            ss << "    context_switches: " << anchor.global_sum[CPUTRACE_RESULT_SWI];
+            if (anchor.call_count) {
+                ss << "\n    avg_context_switches: " << (double)anchor.global_sum[CPUTRACE_RESULT_SWI] / anchor.call_count;
+            }
+            ss << "\n";
+        }
+        if (anchor.flags & HW_PROFILE_CYC) {
+            ss << "    cpu_cycles: " << anchor.global_sum[CPUTRACE_RESULT_CYC];
+            if (anchor.call_count) {
+                ss << "\n    avg_cpu_cycles: " << (double)anchor.global_sum[CPUTRACE_RESULT_CYC] / anchor.call_count;
+            }
+            ss << "\n";
+        }
+        if (anchor.flags & HW_PROFILE_CMISS) {
+            ss << "    cache_misses: " << anchor.global_sum[CPUTRACE_RESULT_CMISS];
+            if (anchor.call_count) {
+                ss << "\n    avg_cache_misses: " << (double)anchor.global_sum[CPUTRACE_RESULT_CMISS] / anchor.call_count;
+            }
+            ss << "\n";
+        }
+        if (anchor.flags & HW_PROFILE_BMISS) {
+            ss << "    branch_misses: " << anchor.global_sum[CPUTRACE_RESULT_BMISS];
+            if (anchor.call_count) {
+                ss << "\n    avg_branch_misses: " << (double)anchor.global_sum[CPUTRACE_RESULT_BMISS] / anchor.call_count;
+            }
+            ss << "\n";
+        }
+        if (anchor.flags & HW_PROFILE_INS) {
+            ss << "    instructions: " << anchor.global_sum[CPUTRACE_RESULT_INS];
+            if (anchor.call_count) {
+                ss << "\n    avg_instructions: " << (double)anchor.global_sum[CPUTRACE_RESULT_INS] / anchor.call_count;
+            }
+            ss << "\n";
+        }
+        dumped = true;
+    }
+
+    ss << "status: " << (dumped ? "Profiling data dumped" : "No profiling data available") << "\n";
+    pthread_mutex_unlock(&g_profiler.global_lock);
+}
+
 __attribute__((constructor)) static void cputrace_init() {
     g_profiler.anchors = (cputrace_anchor*)calloc(CPUTRACE_MAX_ANCHORS, sizeof(cputrace_anchor));
     if (!g_profiler.anchors) {
