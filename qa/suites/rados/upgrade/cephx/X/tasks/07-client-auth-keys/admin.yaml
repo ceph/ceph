@@ -1,0 +1,34 @@
+teuthology:
+  variables:
+    clients_all_rotated: false
+  postmerge:
+    - | 
+      if yaml.teuthology.variables.workload == 'none' then
+        reject()
+      end
+
+
+tasks:
+  - exec:
+      mon.a:
+        - ceph --log-to-stderr=true --log_to_file=true --debug_ms=5 --debug_auth=30 --debug_monc=30 health unmute AUTH_INSECURE_CLIENT_KEY_TYPE
+        - ceph --log-to-stderr=true --log_to_file=true --debug_ms=5 --debug_auth=30 --debug_monc=30 health detail
+  - ceph.healthy:
+      expected_checks: [AUTH_INSECURE_CLIENT_KEY_TYPE]
+  - ceph.key_rotate:
+      daemons: []
+      clients: [client.admin]
+      key_type: aes256k
+  - exec:
+      mon.a:
+        - |
+          ceph --log-to-stderr=true --log_to_file=true --debug_ms=5 --debug_auth=30 --debug_monc=30 auth --format=json-pretty dump-keys | \
+          jq '
+            .data.secrets[] |
+            select(
+              .entity.type_str == "client" and .entity.id == "admin"
+            ) | .auth.key.type == 2
+          '
+        - ceph --log-to-stderr=true --log_to_file=true --debug_ms=5 --debug_auth=30 --debug_monc=30 health detail
+        - ceph --log-to-stderr=true --log_to_file=true --debug_ms=5 --debug_auth=30 --debug_monc=30 health mute AUTH_INSECURE_CLIENT_KEY_TYPE --sticky
+  - ceph.healthy:

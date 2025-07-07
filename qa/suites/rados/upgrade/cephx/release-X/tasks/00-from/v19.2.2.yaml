@@ -16,20 +16,15 @@ tasks:
 - print: "**** done installing squid v19.2.2"
 - ceph:
     log-ignorelist:
-      - overall HEALTH_
-      - \(FS_
-      - \(MDS_
-      - \(OSD_
-      - \(MON_DOWN\)
-      - \(CACHE_POOL_
-      - \(POOL_
-      - \(MGR_DOWN\)
-      - \(PG_
-      - \(SMALLER_PGP_NUM\)
-      - Monitor daemon marked osd
-      - Behind on trimming
-      - Manager daemon
+      - AUTH_INSECURE_KEYS_ALLOWED
+      - AUTH_INSECURE_KEYS_CREATABLE
+      - AUTH_INSECURE_SERVICE_TICKETS
+      - AUTH_INSECURE_CLIENT_KEY_TYPE
+      - AUTH_INSECURE_SERVICE_KEY_TYPE
+      - AUTH_INSECURE_ROTATING_SERVICE_KEY_TYPE
     conf:
+      mon:
+        mon_health_to_clog: false
       global:
         mon warn on pool no app: false
 - exec:

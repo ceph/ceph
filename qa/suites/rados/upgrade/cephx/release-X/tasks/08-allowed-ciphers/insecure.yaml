@@ -1,0 +1,19 @@
+teuthology:
+  postmerge:
+    - | 
+      if yaml.teuthology.variables.clients_all_rotated then
+        reject()
+      end
+
+tasks:
+  - exec:
+      mon.a:
+        - ceph --log-to-stderr=true --log_to_file=true --debug_ms=5 --debug_auth=30 --debug_monc=30 health unmute AUTH_INSECURE_KEYS_ALLOWED
+        - ceph --log-to-stderr=true --log_to_file=true --debug_ms=5 --debug_auth=30 --debug_monc=30 health detail
+  - ceph.healthy:
+      expected_checks: [AUTH_INSECURE_KEYS_ALLOWED]
+  - exec:
+      mon.a:
+        - ceph --log-to-stderr=true --log_to_file=true --debug_ms=5 --debug_auth=30 --debug_monc=30 mon dump --format=json | jq '.auth_allowed_ciphers | (map(.name) | sort) == ["aes", "aes256k"]'
+        - ceph --log-to-stderr=true --log_to_file=true --debug_ms=5 --debug_auth=30 --debug_monc=30 health mute AUTH_INSECURE_KEYS_ALLOWED --sticky
+  - ceph.healthy:
