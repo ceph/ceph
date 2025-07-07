@@ -1,0 +1,27 @@
+<div class="notification-header">
+  <div class="notification-header__top">
+    <div class="notification-header__title">
+      <cds-text i18n>Tasks and Notifications</cds-text>
+    </div>
+
+    <button
+      i18n
+      cdsButton="ghost"
+      size="sm"
+      (click)="onDismissAll()"
+      class="notification-header__dismiss-btn">
+      Dismiss all
+    </button>
+  </div>
+
+  <div class="notification-header__toggle">
+    <cds-toggle
+      [checked]="isMuted"
+      size="sm"
+      (checkedChange)="onToggleMute()"
+      label="Mute notifications"
+      i18n-label
+      hideLabel="true"> <!--hides the toggle state values (like "On/Off" in the toggle button)-->
+    </cds-toggle>
+  </div>
+</div>
