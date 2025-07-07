@@ -795,3 +795,12 @@ downtime, the ``enable_availability_tracking`` config option can be set to ``fal
 
 While the feature is turned off, the last calculated score will be preserved. The 
 score will again start updating once the feature is turned on again. 
+
+It's also possible to clear the data availability score for a specific 
+pool if needed with a command of the following form:
+
+.. prompt:: bash $
+
+   ceph osd pool clear-availability-status <pool-name>
+
+Note: Clearing a score is not allowed if the feature itself is disabled. 
