@@ -10,7 +10,6 @@ import { RgwStorageClassService } from '~/app/shared/api/rgw-storage-class.servi
 import { RgwZonegroupService } from '~/app/shared/api/rgw-zonegroup.service';
 import {
   ALLOW_READ_THROUGH_TEXT,
-  CLOUD_TIER,
   DEFAULT_PLACEMENT,
   MULTIPART_MIN_PART_TEXT,
   MULTIPART_SYNC_THRESHOLD_TEXT,
@@ -25,11 +24,15 @@ import {
   TARGET_REGION_TEXT,
   TARGET_SECRET_KEY_TEXT,
   TierTarget,
+  TIER_TYPE,
   ZoneGroup,
-  ZoneGroupDetails
+  ZoneGroupDetails,
+  CLOUDS3_STORAGE_CLASS_TEXT,
+  LOCAL_STORAGE_CLASS_TEXT
 } from '../models/rgw-storage-class.model';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { NotificationService } from '~/app/shared/services/notification.service';
+import { CdValidators } from '~/app/shared/forms/cd-validators';
 
 @Component({
   selector: 'cd-rgw-storage-class-form',
@@ -49,6 +52,7 @@ export class RgwStorageClassFormComponent extends CdForm implements OnInit {
   zonegroupNames: ZoneGroup[];
   placementTargets: string[] = [];
   multipartMinPartText: string;
+  storageClassText: string;
   multipartSyncThreholdText: string;
   selectedZoneGroup: string;
   defaultZonegroup: ZoneGroup;
@@ -60,6 +64,7 @@ export class RgwStorageClassFormComponent extends CdForm implements OnInit {
   tierTargetInfo: TierTarget;
   allowReadThroughText: string;
   allowReadThrough: boolean = false;
+  TIER_TYPE = TIER_TYPE;
 
   constructor(
     public actionLabels: ActionLabelsI18n,
@@ -86,6 +91,8 @@ export class RgwStorageClassFormComponent extends CdForm implements OnInit {
     this.targetSecretKeyText = TARGET_SECRET_KEY_TEXT;
     this.retainHeadObjectText = RETAIN_HEAD_OBJECT_TEXT;
     this.allowReadThroughText = ALLOW_READ_THROUGH_TEXT;
+    this.storageClassText = LOCAL_STORAGE_CLASS_TEXT;
+    this.storageClassTypeText();
     this.createForm();
     this.loadingReady();
     this.loadZoneGroup();
@@ -100,36 +107,57 @@ export class RgwStorageClassFormComponent extends CdForm implements OnInit {
             placementTargetInfo,
             this.storageClassInfo.storage_class
           );
-          let response = this.tierTargetInfo.val.s3;
+          let response = this.tierTargetInfo?.val?.s3;
           this.storageClassForm.get('zonegroup').disable();
           this.storageClassForm.get('placement_target').disable();
           this.storageClassForm.get('storage_class').disable();
-          this.storageClassForm.get('zonegroup').setValue(this.storageClassInfo.zonegroup_name);
-          this.storageClassForm.get('region').setValue(response.region);
-          this.storageClassForm
-            .get('placement_target')
-            .setValue(this.storageClassInfo.placement_target);
-          this.storageClassForm.get('endpoint').setValue(response.endpoint);
-          this.storageClassForm.get('storage_class').setValue(this.storageClassInfo.storage_class);
-          this.storageClassForm.get('access_key').setValue(response.access_key);
-          this.storageClassForm.get('secret_key').setValue(response.secret);
-          this.storageClassForm.get('target_path').setValue(response.target_path);
-          this.storageClassForm
-            .get('retain_head_object')
-            .setValue(this.tierTargetInfo?.val?.retain_head_object || false);
-          this.storageClassForm
-            .get('multipart_sync_threshold')
-            .setValue(response.multipart_sync_threshold || '');
-          this.storageClassForm
-            .get('multipart_min_part_size')
-            .setValue(response.multipart_min_part_size || '');
-          this.storageClassForm
-            .get('allow_read_through')
-            .setValue(this.tierTargetInfo?.val?.allow_read_through || false);
+          this.storageClassForm.patchValue({
+            zonegroup: this.storageClassInfo?.zonegroup_name,
+            region: response?.region,
+            placement_target: this.storageClassInfo?.placement_target,
+            storageClassType: this.tierTargetInfo?.val?.tier_type ?? TIER_TYPE.LOCAL,
+            endpoint: response?.endpoint,
+            storage_class: this.storageClassInfo?.storage_class,
+            access_key: response?.access_key,
+            secret_key: response?.secret,
+            target_path: response?.target_path,
+            retain_head_object: this.tierTargetInfo?.val?.retain_head_object || false,
+            multipart_sync_threshold: response?.multipart_sync_threshold || '',
+            multipart_min_part_size: response?.multipart_min_part_size || '',
+            allow_read_through: this.tierTargetInfo?.val?.allow_read_through || false
+          });
         });
     }
+    this.storageClassForm?.get('storageClassType')?.valueChanges.subscribe((value) => {
+      const controlsToUpdate = ['region', 'endpoint', 'access_key', 'secret_key', 'target_path'];
+      controlsToUpdate.forEach((field) => {
+        const control = this.storageClassForm.get(field);
+        if (
+          value === TIER_TYPE.CLOUD_TIER &&
+          ['region', 'endpoint', 'access_key', 'secret_key', 'target_path'].includes(field)
+        ) {
+          control.setValidators([Validators.required]);
+        } else {
+          control.clearValidators();
+        }
+
+        control.updateValueAndValidity();
+      });
+    });
     this.storageClassForm.get('allow_read_through').valueChanges.subscribe((value) => {
       this.onAllowReadThroughChange(value);
+    });
+  }
+
+  storageClassTypeText() {
+    this.storageClassForm?.get('storageClassType')?.valueChanges.subscribe((value) => {
+      if (value === TIER_TYPE.LOCAL) {
+        this.storageClassText = LOCAL_STORAGE_CLASS_TEXT;
+      } else if (value === TIER_TYPE.CLOUD_TIER) {
+        this.storageClassText = CLOUDS3_STORAGE_CLASS_TEXT;
+      } else {
+        this.storageClassText = LOCAL_STORAGE_CLASS_TEXT;
+      }
     });
   }
 
@@ -141,24 +169,29 @@ export class RgwStorageClassFormComponent extends CdForm implements OnInit {
       zonegroup: new FormControl(this.selectedZoneGroup, {
         validators: [Validators.required]
       }),
-      region: new FormControl('', {
-        validators: [Validators.required]
-      }),
+      region: new FormControl('', [
+        CdValidators.composeIf({ storageClassType: TIER_TYPE.CLOUD_TIER }, [Validators.required])
+      ]),
       placement_target: new FormControl('', {
         validators: [Validators.required]
       }),
-      endpoint: new FormControl(null, {
-        validators: [Validators.required]
-      }),
-      access_key: new FormControl(null, Validators.required),
-      secret_key: new FormControl(null, Validators.required),
-      target_path: new FormControl('', {
-        validators: [Validators.required]
-      }),
+      endpoint: new FormControl(null, [
+        CdValidators.composeIf({ storageClassType: TIER_TYPE.CLOUD_TIER }, [Validators.required])
+      ]),
+      access_key: new FormControl(null, [
+        CdValidators.composeIf({ storageClassType: TIER_TYPE.CLOUD_TIER }, [Validators.required])
+      ]),
+      secret_key: new FormControl(null, [
+        CdValidators.composeIf({ storageClassType: TIER_TYPE.CLOUD_TIER }, [Validators.required])
+      ]),
+      target_path: new FormControl('', [
+        CdValidators.composeIf({ storageClassType: TIER_TYPE.CLOUD_TIER }, [Validators.required])
+      ]),
       retain_head_object: new FormControl(true),
       multipart_sync_threshold: new FormControl(33554432),
       multipart_min_part_size: new FormControl(33554432),
-      allow_read_through: new FormControl(false)
+      allow_read_through: new FormControl(false),
+      storageClassType: new FormControl(TIER_TYPE.LOCAL, Validators.required)
     });
   }
 
@@ -268,33 +301,71 @@ export class RgwStorageClassFormComponent extends CdForm implements OnInit {
   }
 
   buildRequest() {
+    if (this.storageClassForm.errors) return null;
+
     const rawFormValue = _.cloneDeep(this.storageClassForm.value);
     const zoneGroup = this.storageClassForm.get('zonegroup').value;
     const storageClass = this.storageClassForm.get('storage_class').value;
     const placementId = this.storageClassForm.get('placement_target').value;
-    const headObject = this.storageClassForm.get('retain_head_object').value;
-    const requestModel: RequestModel = {
-      zone_group: zoneGroup,
-      placement_targets: [
-        {
-          tags: [],
-          placement_id: placementId,
-          storage_class: storageClass,
-          tier_type: CLOUD_TIER,
-          tier_config: {
-            endpoint: rawFormValue.endpoint,
-            access_key: rawFormValue.access_key,
-            secret: rawFormValue.secret_key,
-            target_path: rawFormValue.target_path,
-            retain_head_object: headObject,
-            allow_read_through: rawFormValue.allow_read_through,
-            region: rawFormValue.region,
-            multipart_sync_threshold: rawFormValue.multipart_sync_threshold,
-            multipart_min_part_size: rawFormValue.multipart_min_part_size
-          }
-        }
-      ]
-    };
-    return requestModel;
+    const storageClassType = this.storageClassForm.get('storageClassType').value;
+    const retain_head_object = this.storageClassForm.get('retain_head_object').value;
+
+    return this.buildPlacementTargets(
+      storageClassType,
+      zoneGroup,
+      placementId,
+      storageClass,
+      retain_head_object,
+      rawFormValue
+    );
+  }
+
+  private buildPlacementTargets(
+    storageClassType: string,
+    zoneGroup: string,
+    placementId: string,
+    storageClass: string,
+    retain_head_object: boolean,
+    rawFormValue: any
+  ): RequestModel {
+    switch (storageClassType) {
+      case TIER_TYPE.LOCAL:
+        return {
+          zone_group: zoneGroup,
+          placement_targets: [
+            {
+              tags: [],
+              placement_id: placementId,
+              storage_class: storageClass
+            }
+          ]
+        };
+
+      case TIER_TYPE.CLOUD_TIER:
+        return {
+          zone_group: zoneGroup,
+          placement_targets: [
+            {
+              tags: [],
+              placement_id: placementId,
+              storage_class: storageClass,
+              tier_type: TIER_TYPE.CLOUD_TIER,
+              tier_config: {
+                endpoint: rawFormValue.endpoint,
+                access_key: rawFormValue.access_key,
+                secret: rawFormValue.secret_key,
+                target_path: rawFormValue.target_path,
+                retain_head_object: retain_head_object,
+                allow_read_through: rawFormValue.allow_read_through,
+                region: rawFormValue.region,
+                multipart_sync_threshold: rawFormValue.multipart_sync_threshold,
+                multipart_min_part_size: rawFormValue.multipart_min_part_size
+              }
+            }
+          ]
+        };
+      default:
+        return null;
+    }
   }
 }

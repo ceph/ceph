@@ -8,6 +8,8 @@
   columnMode="flex"
   [columns]="columns"
   (fetchData)="loadStorageClass()"
+  identifier="uniqueId"
+  [forceIdentifier]="true"
   selectionType="single"
   [hasDetails]="true"
   (setExpandedRow)="setExpandedRow($event)"
