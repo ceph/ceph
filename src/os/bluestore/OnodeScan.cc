@@ -68,6 +68,8 @@ class BlueStore::Decoder_AllocationsAndStatFS : public BlueStore::ExtentMap::Ext
   void _consume_new_blob(bool spanning, uint64_t extent_no, uint64_t sbid, BlobRef b);
 
 protected:
+  BlobRef decode_create_blob(
+  bptr_c_it_t& p, __u8 struct_v, uint64_t* sbid, bool include_ref_map, Collection* c) override;
   void consume_blobid(Extent *, bool spanning, uint64_t blobid) override;
   void consume_blob(Extent *le, uint64_t extent_no, uint64_t sbid, BlobRef b) override;
   void consume_spanning_blob(uint64_t sbid, BlobRef b) override;
@@ -89,6 +91,17 @@ public:
   void reset(const ghobject_t _oid, volatile_statfs *_per_pool_statfs);
   void reset_new_shard();
 };
+
+BlueStore::BlobRef BlueStore::Decoder_AllocationsAndStatFS::decode_create_blob(
+  bptr_c_it_t& p,
+  __u8 struct_v,
+  uint64_t* sbid,
+  bool include_ref_map,
+  Collection* c) {
+  BlobRef b = c ? c->new_blob() : new Blob(nullptr);
+  b->decode<true>(p, struct_v, sbid, include_ref_map, c);
+  return b;
+}
 
 void BlueStore::Decoder_AllocationsAndStatFS::_consume_new_blob(
   bool spanning,
