@@ -13,7 +13,7 @@ class RGWMultiDelObject : public XMLObj
   std::string version_id;
   const char *if_match;
   ceph::real_time last_mod_time;
-  uint64_t size_match = 0;
+  std::optional<uint64_t> size_match;
 public:
   RGWMultiDelObject() {}
   ~RGWMultiDelObject() override {}
@@ -23,7 +23,7 @@ public:
   const std::string& get_version_id() const { return version_id; }
   const char* get_if_match() const { return if_match; }
   const ceph::real_time& get_last_mod_time() const { return last_mod_time; }
-  const uint64_t get_size_match() const { return size_match; }
+  const std::optional<uint64_t> get_size_match() const { return size_match; }
 };
 
 class RGWMultiDelDelete : public XMLObj
