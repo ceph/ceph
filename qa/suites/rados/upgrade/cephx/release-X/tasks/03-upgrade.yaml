@@ -1,0 +1,44 @@
+tasks:
+- install.upgrade:
+    mon.a:
+    mon.b:
+    client.0:
+- ceph.restart:
+    daemons: [mgr.*]
+    mon-health-to-clog: false
+    wait-for-healthy: true
+- ceph.restart:
+    daemons: [mon.*]
+    mon-health-to-clog: false
+    wait-for-healthy: false
+- ceph.key_prune: ["client.bootstrap-*"]
+- exec:
+    mon.a:
+      - ceph --log-to-stderr=true --log_to_file=true --debug_ms=5 --debug_auth=30 --debug_monc=30 config set mon mon_auth_allow_insecure_key true
+      - ceph --log-to-stderr=true --log_to_file=true --debug_ms=5 --debug_auth=30 --debug_monc=30 health mute AUTH_INSECURE_KEYS_ALLOWED --sticky
+      - ceph --log-to-stderr=true --log_to_file=true --debug_ms=5 --debug_auth=30 --debug_monc=30 health mute AUTH_INSECURE_KEYS_CREATABLE --sticky
+      - ceph --log-to-stderr=true --log_to_file=true --debug_ms=5 --debug_auth=30 --debug_monc=30 health mute AUTH_INSECURE_SERVICE_TICKETS --sticky
+      - ceph --log-to-stderr=true --log_to_file=true --debug_ms=5 --debug_auth=30 --debug_monc=30 health mute AUTH_INSECURE_CLIENT_KEY_TYPE --sticky
+      - ceph --log-to-stderr=true --log_to_file=true --debug_ms=5 --debug_auth=30 --debug_monc=30 health mute AUTH_INSECURE_SERVICE_KEY_TYPE --sticky
+      - ceph --log-to-stderr=true --log_to_file=true --debug_ms=5 --debug_auth=30 --debug_monc=30 health mute AUTH_INSECURE_ROTATING_SERVICE_KEY_TYPE --sticky
+- ceph.healthy:
+- ceph.restart:
+    daemons: [osd.*]
+    mon-health-to-clog: false
+    wait-for-osds-up: true
+    wait-for-healthy: false
+- exec:
+    mon.a:
+      - ceph versions
+      - ceph osd dump -f json-pretty
+      - ceph osd require-osd-release tentacle
+      - for f in `ceph osd pool ls` ; do ceph osd pool set $f pg_autoscale_mode off ; done
+- ceph.healthy:
+- ceph.restart:
+    daemons: [mds.*]
+    mon-health-to-clog: false
+    wait-for-healthy: true
+- exec:
+    mon.a:
+      - ceph versions
+      - ceph fs dump
