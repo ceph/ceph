@@ -717,8 +717,11 @@ public:
     int get_state(const DoutPrefixProvider *dpp, RGWObjState **pstate, RGWObjManifest **pmanifest, bool follow_olh, optional_yield y, bool assume_noent = false);
     void invalidate_state();
 
-    int prepare_atomic_modification(const DoutPrefixProvider *dpp, librados::ObjectWriteOperation& op, bool reset_obj, const std::string *ptag,
-                                    const char *ifmatch, const char *ifnomatch, bool removal_op, bool modify_tail, bool handle_version, optional_yield y);
+    int versioned_bucket_get_state(const DoutPrefixProvider *dpp, RGWObjState*& current_state, optional_yield y);
+    int preconditional_checks(const DoutPrefixProvider *dpp, librados::ObjectWriteOperation& op, const char *if_match,
+                              const char *if_nomatch, RGWObjState& current_state, optional_yield y);
+    int prepare_atomic_modification(const DoutPrefixProvider *dpp, librados::ObjectWriteOperation& op, bool reset_obj,
+                                    const std::string *ptag, bool modify_tail, RGWObjState& current_state, optional_yield y);
     int complete_atomic_modification(const DoutPrefixProvider *dpp, bool keep_tail, optional_yield y);
 
   public:
