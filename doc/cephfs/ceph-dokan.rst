@@ -1,5 +1,4 @@
 .. _ceph-dokan:
-
 =======================
 Mount CephFS on Windows
 =======================
@@ -8,7 +7,9 @@ Mount CephFS on Windows
 It leverages Dokany, a Windows driver that allows implementing filesystems in
 userspace, pretty much like FUSE.
 
-Please check the `installation guide`_ to get started.
+Please see the `installation guide`_ to get started.
+
+Please see the `OS recommendations`_ regarding client support.
 
 Usage
 =====
@@ -85,8 +86,8 @@ Be aware that Windows ACLs are ignored. Posix ACLs are supported but cannot be
 modified using the current CLI. In the future, we may add some command actions
 to change file ownership or permissions.
 
-Another thing to note is that cephfs doesn't support mandatory file locks, which
-Windows is heavily rely upon. At the moment, we're letting Dokan handle file
+Another thing to note is that CephFS doesn't support mandatory file locks, which
+Windows relies heavily upon. At present Ceph lets Dokan handle file
 locks, which are only enforced locally.
 
 Unlike ``rbd-wnbd``, ``ceph-dokan`` doesn't currently provide a ``service``
@@ -100,3 +101,4 @@ Please consult the `Windows troubleshooting`_ page.
 
 .. _Windows troubleshooting: ../../install/windows-troubleshooting
 .. _installation guide: ../../install/windows-install
+.. _OS recommendations: ../../start/os-recommendations
