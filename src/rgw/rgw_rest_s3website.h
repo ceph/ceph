@@ -97,4 +97,5 @@ public:
         return RGWGetObj_ObjStore_S3::get_params(y);
       }
   }
+  std::string canonical_name() const override { return fmt::format("WEBSITE.{}.OBJECT", s->info.method); }
 };
