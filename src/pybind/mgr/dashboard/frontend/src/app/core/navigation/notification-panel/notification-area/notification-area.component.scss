@@ -107,6 +107,11 @@
   }
 }
 
+.notification-icon {
+  flex-shrink: 0;
+  margin-top: 0;
+}
+
 .notification-content {
   flex: 1;
   min-width: 0;

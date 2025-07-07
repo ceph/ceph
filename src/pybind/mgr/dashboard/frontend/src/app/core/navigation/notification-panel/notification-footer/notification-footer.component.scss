@@ -1,0 +1,17 @@
+@use '@carbon/styles/scss/spacing';
+@use '@carbon/styles/scss/theme';
+
+.notification-footer {
+  display: flex;
+  justify-content: flex-start;
+  padding: spacing.$spacing-03;
+  border-top: 1px solid theme.$border-subtle-01;
+
+  cds-button {
+    color: theme.$text-primary;
+
+    &:hover {
+      color: theme.$link-primary;
+    }
+  }
+}

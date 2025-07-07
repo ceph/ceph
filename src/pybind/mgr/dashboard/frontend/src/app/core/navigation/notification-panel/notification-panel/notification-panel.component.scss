@@ -6,7 +6,7 @@
 .notification-panel {
   @include theme.theme(themes.$g10);
 
-  position: absolute;
+  position: fixed;
   top: spacing.$spacing-09;
   right: 0;
   width: 400px;
@@ -18,7 +18,7 @@
   color: $text-primary;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  overflow-y: auto;
 
   cd-notification-header {
     flex: 0 0 auto;
