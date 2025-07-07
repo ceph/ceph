@@ -11,6 +11,7 @@ import argparse
 import configobj
 import contextlib
 import errno
+import fnmatch
 import logging
 import os
 import json
@@ -1633,11 +1634,50 @@ def _wait_for_up_and_clean(ctx, manager):
     manager.wait_for_clean()
 
 @contextlib.contextmanager
-def key_rotate(ctx, config):
+def key_prune(ctx, config):
     """
-   rotate keys on ceph daemons
+   prune keys
 
    For example::
+      tasks:
+      - ceph.key_prune: [client.bootstrap-.*]
+
+    :param ctx: Context
+    :param config: Configuration
+    """
+    if config is None:
+        config = {}
+    elif isinstance(config, list):
+        config = {'keys': config}
+
+    testdir = teuthology.get_testdir(ctx)
+
+    cluster_name = config.setdefault('cluster', 'ceph')
+    manager = ctx.managers[cluster_name]
+
+    for key_glob in config['keys']:
+        log.info("removing keys matching {}", key_glob)
+
+        p = manager.ceph("auth ls --format=json")
+        credentials = json.loads(p.stdout.getvalue())
+        entities = [c['entity'] for c in credentials['auth_dump']]
+
+        log.debug("entities: {}", entities)
+
+        matches = fnmatch.filter(entities, key_glob)
+
+        for m in matches:
+            log.info("removing key {}", m)
+            manager.ceph(f"auth rm {m}")
+
+    yield
+
+@contextlib.contextmanager
+def key_rotate(ctx, config):
+    """
+    rotate keys on ceph daemons
+
+    For example::
       tasks:
       - ceph.key_rotate: [all]
 
