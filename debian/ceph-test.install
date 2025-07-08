@@ -2,6 +2,7 @@ usr/bin/ceph-client-debug
 usr/bin/ceph-coverage
 usr/bin/ceph_bench_log
 usr/bin/ceph_erasure_code_benchmark
+usr/bin/ceph_ec_consistency_checker
 usr/bin/ceph_multi_stress_watch
 usr/bin/ceph_omapbench
 usr/bin/ceph_perf_local
