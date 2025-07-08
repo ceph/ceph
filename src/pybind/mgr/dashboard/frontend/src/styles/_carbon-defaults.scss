@@ -164,8 +164,18 @@ Tooltip
 /******************************************
 Carbon Popover
 ******************************************/
+.cds--popover {
+  .cds--popover-content {
+    padding: layout.$spacing-05;
+  }
+
+  .cds--popover-caret {
+    background-color: theme.$background;
+  }
+}
+
 .cds--popover-content {
-  background-color: theme.$layer-02;
+  background-color: theme.$background;
   max-height: layout.$spacing-13;
   overflow: auto;
 }
