@@ -3005,12 +3005,16 @@ cdef class LibCephFS(object):
                 de = curr_dir.read_dir()
 
             if curr_dir.has_any_fs_op_failed():
-                delete_root = False
                 notify_parent_dir()
                 stack.pop()
 
             if curr_dir.is_empty:
-                stack.pop()
+                try:
+                    self.rmdir(curr_dir.path)
+                # If curr_dir is empty and yet if ObjectNotFound is raised while
+                # running rmdir(), then it implies that curr_dir contains a
+                # snapshot in its snap dir.
+                except ObjectNotEmpty:
+                    notify_parent_dir()
 
-        if delete_root:
-                self.rmdir(curr_dir.path)
+                stack.pop()
