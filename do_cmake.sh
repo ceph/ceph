@@ -72,6 +72,7 @@ elif type ccache > /dev/null 2>&1 ; then
     ARGS+=" -DWITH_CCACHE=ON"
 fi
 
+echo "Finding gcc version"
 cxx_compiler="g++"
 c_compiler="gcc"
 # 20 is used for more future-proof
@@ -82,8 +83,12 @@ for i in $(seq 20 -1 11); do
     break
   fi
 done
-ARGS+=" -DCMAKE_CXX_COMPILER=$cxx_compiler"
-ARGS+=" -DCMAKE_C_COMPILER=$c_compiler"
+if [[ ! "$@" =~ "-DCMAKE_CXX_COMPILER" ]]; then
+    ARGS+=" -DCMAKE_CXX_COMPILER=$cxx_compiler"
+fi
+if [[ ! "$@" =~ "-DCMAKE_C_COMPILER" ]]; then
+    ARGS+=" -DCMAKE_C_COMPILER=$c_compiler"
+fi
 
 mkdir $BUILD_DIR
 cd $BUILD_DIR
