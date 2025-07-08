@@ -72,8 +72,13 @@ elif type ccache > /dev/null 2>&1 ; then
     ARGS+=" -DWITH_CCACHE=ON"
 fi
 
-if [[ "$ARGS $@" =~ "-DCMAKE_C_COMPILER" ]] && [[ "$ARGS $@" =~ "-DCMAKE_CXX_COMPILER" ]]; then
-    echo "Using passed compiler flags (DCMAKE_C_COMPILER, DCMAKE_CXX_COMPILER)"
+if [[ "$ARGS $@" =~ "-DCMAKE_C_COMPILER" ]] || [[ "$ARGS $@" =~ "-DCMAKE_CXX_COMPILER" ]]; then
+    if [[ "$ARGS $@" =~ "-DCMAKE_C_COMPILER" ]] && [[ "$ARGS $@" =~ "-DCMAKE_CXX_COMPILER" ]]; then
+        echo "Using passed compiler flags (DCMAKE_C_COMPILER, DCMAKE_CXX_COMPILER)"
+    else
+        echo "When setting a compiler, please set both C and CXX falgs. Otherwise, let do_cmake find the latest compiler"
+        exit 1
+    fi
 else
     echo "Finding gcc version"
     cxx_compiler="g++"
