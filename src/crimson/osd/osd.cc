@@ -1147,11 +1147,11 @@ seastar::future<> OSD::_handle_osd_map(Ref<MOSDMap> m)
   INFO("{}", *m);
   if (m->fsid != superblock.cluster_fsid) {
     WARN("fsid mismatched");
-    return seastar::now();
+    co_return;
   }
   if (pg_shard_manager.is_initializing()) {
     WARN("i am still initializing");
-    return seastar::now();
+    co_return;
   }
 
   const auto first = m->get_first();
@@ -1172,7 +1172,7 @@ seastar::future<> OSD::_handle_osd_map(Ref<MOSDMap> m)
   // make sure there is something new, here, before we bother flushing
   // the queues and such
   if (last <= superblock.get_newest_map()) {
-    return seastar::now();
+    co_return;
   }
   // missing some?
   epoch_t start = superblock.get_newest_map() + 1;
@@ -1180,51 +1180,45 @@ seastar::future<> OSD::_handle_osd_map(Ref<MOSDMap> m)
     INFO("message skips epochs {}..{}",
 	 start, first - 1);
     if (m->cluster_osdmap_trim_lower_bound <= start) {
-      return get_shard_services().osdmap_subscribe(start, false);
+      co_return co_await get_shard_services().osdmap_subscribe(start, false);
     }
     // always try to get the full range of maps--as many as we can.  this
     //  1- is good to have
     //  2- is at present the only way to ensure that we get a *full* map as
     //     the first map!
     if (m->cluster_osdmap_trim_lower_bound < first) {
-      return get_shard_services().osdmap_subscribe(
+      co_return co_await get_shard_services().osdmap_subscribe(
         m->cluster_osdmap_trim_lower_bound - 1, true);
     }
   }
 
-  return seastar::do_with(ceph::os::Transaction{},
-                          [=, this](auto& t) {
-    return pg_shard_manager.store_maps(t, start, m).then([=, this, &t] {
-      // even if this map isn't from a mon, we may have satisfied our subscription
-      monc->sub_got("osdmap", last);
+  ceph::os::Transaction t;
+  co_await pg_shard_manager.store_maps(t, start, m);
 
-      if (!superblock.is_maps_empty()) {
-        pg_shard_manager.trim_maps(t, superblock);
-        // TODO: once we support pg splitting, update pg_num_history here
-        //pg_num_history.prune(superblock.get_oldest_map());
-      }
+  // even if this map isn't from a mon, we may have satisfied our subscription
+  monc->sub_got("osdmap", last);
 
-      superblock.insert_osdmap_epochs(first, last);
-      superblock.current_epoch = last;
+  if (!superblock.is_maps_empty()) {
+    pg_shard_manager.trim_maps(t, superblock);
+  }
 
-      // note in the superblock that we were clean thru the prior epoch
-      if (boot_epoch && boot_epoch >= superblock.mounted) {
-        superblock.mounted = boot_epoch;
-        superblock.clean_thru = last;
-      }
-      pg_shard_manager.get_meta_coll().store_superblock(t, superblock);
-      return pg_shard_manager.set_superblock(superblock).then(
-      [FNAME, this, &t] {
-        DEBUG("submitting transaction");
-        return store.get_sharded_store().do_transaction(
-          pg_shard_manager.get_meta_coll().collection(),
-          std::move(t));
-      });
-    });
-  }).then([=, this] {
-    // TODO: write to superblock and commit the transaction
-    return committed_osd_maps(start, last, m);
-  });
+  superblock.insert_osdmap_epochs(first, last);
+  superblock.current_epoch = last;
+
+  // note in the superblock that we were clean thru the prior epoch
+  if (boot_epoch && boot_epoch >= superblock.mounted) {
+    superblock.mounted = boot_epoch;
+    superblock.clean_thru = last;
+  }
+  pg_shard_manager.get_meta_coll().store_superblock(t, superblock);
+  co_await pg_shard_manager.set_superblock(superblock);
+
+  DEBUG("submitting transaction");
+  co_await store.get_sharded_store().do_transaction(
+    pg_shard_manager.get_meta_coll().collection(), std::move(t));
+
+  // TODO: write to superblock and commit the transaction
+  co_await committed_osd_maps(start, last, m);
 }
 
 seastar::future<> OSD::committed_osd_maps(
