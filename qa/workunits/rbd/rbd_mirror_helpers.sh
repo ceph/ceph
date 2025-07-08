@@ -213,7 +213,7 @@ setup_cluster()
 {
     local cluster=$1
 
-    CEPH_ARGS='' MDS=0 ${CEPH_SRC}/mstart.sh ${cluster} -n ${RBD_MIRROR_VARGS}
+    CEPH_ARGS='' MDS=0 ${CEPH_SRC}/mstart.sh ${cluster} -n ${RBD_MIRROR_VARGS} --without-dashboard
 
     cd ${CEPH_ROOT}
     rm -f ${TEMPDIR}/${cluster}.conf
