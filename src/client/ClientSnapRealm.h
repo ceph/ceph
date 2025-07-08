@@ -29,6 +29,7 @@ struct SnapRealm {
   std::set<SnapRealm*> pchildren;
   utime_t last_modified;
   uint64_t change_attr;
+  bool is_snapdir_visible = true;
 
 private:
   SnapContext cached_snap_context;  // my_snaps + parent snaps + past_parent_snaps
@@ -62,6 +63,7 @@ inline std::ostream& operator<<(std::ostream& out, const SnapRealm& r) {
 	     << " cached_snapc=" << r.cached_snap_context
 	     << " last_modified=" << r.last_modified
 	     << " change_attr=" << r.change_attr
+             << " is_snapdir_visible=" << r.is_snapdir_visible
 	     << ")";
 }
 
