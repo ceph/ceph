@@ -23,7 +23,7 @@ class ReusingTCPServer(http.server.SimpleHTTPRequestHandler):
         return http.server.SimpleHTTPRequestHandler.send_head(self)
 
 httpd = socketserver.TCPServer(
-    ("", 8080),
+    ("", 41000),
     ReusingTCPServer,
     )
 try:
