@@ -602,6 +602,13 @@ readonly
 browseable
     Optional boolean, defaulting to true. If true the share will be included in
     share listings visible to clients
+comment
+    Optional string. A single line description used to provide human-readable
+    explanation or notes about the share.
+max_connections
+    Optional integer. Specifies the maximum number of simultaneous client
+    connections to a specific share. The default value is 0 and it indicates
+    that there is no limit on the number of connections
 cephfs
     Required object. Fields:
 
