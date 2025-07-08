@@ -5293,13 +5293,16 @@ static bool has_new_snaps(const SnapContext& old_snapc,
 }
 
 struct SnapRealmInfoMeta {
-  SnapRealmInfoMeta(utime_t last_modified, uint64_t change_attr)
+  SnapRealmInfoMeta(utime_t last_modified,
+                    uint64_t change_attr,
+                    bool is_snapdir_visible)
     : last_modified(last_modified),
-      change_attr(change_attr) {
-  }
+      change_attr(change_attr),
+      is_snapdir_visible(is_snapdir_visible) {}
 
   utime_t last_modified;
   uint64_t change_attr;
+  bool is_snapdir_visible;
 };
 
 static std::pair<SnapRealmInfo, std::optional<SnapRealmInfoMeta>> get_snap_realm_info(
@@ -5307,7 +5310,8 @@ static std::pair<SnapRealmInfo, std::optional<SnapRealmInfoMeta>> get_snap_realm
   if (session->mds_features.test(CEPHFS_FEATURE_NEW_SNAPREALM_INFO)) {
     SnapRealmInfoNew ninfo;
     decode(ninfo, p);
-    return std::make_pair(ninfo.info, SnapRealmInfoMeta(ninfo.last_modified, ninfo.change_attr));
+    return std::make_pair(ninfo.info, SnapRealmInfoMeta(ninfo.last_modified,
+                          ninfo.change_attr, ninfo.flags & SnapRealmInfoNew::SNAPDIR_VISIBILITY));
   } else {
     SnapRealmInfo info;
     decode(info, p);
@@ -5365,6 +5369,7 @@ void Client::update_snap_trace(MetaSession *session, const bufferlist& bl, SnapR
       if (realm_info_meta) {
         realm->last_modified = (*realm_info_meta).last_modified;
         realm->change_attr = (*realm_info_meta).change_attr;
+        realm->is_snapdir_visible = (*realm_info_meta).is_snapdir_visible;
       }
       realm->my_snaps = info.my_snaps;
       invalidate = true;
