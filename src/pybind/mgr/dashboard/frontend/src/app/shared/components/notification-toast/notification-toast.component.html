@@ -1,6 +1,7 @@
 <div class="cds--toast-notification-container">
   <cds-toast
     *ngFor="let toast of activeToasts"
+    [@toastAnimation]="'in'"
     [notificationObj]="{
       type: toast.type,
       title: toast.title,

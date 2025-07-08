@@ -186,7 +186,6 @@ export class NotificationService {
 
     // Map notification types to Carbon types
     const carbonType = this.mapNotificationTypeToCarbon(notification.type);
-    
     // Get lowContrast setting from options, default to false
     const lowContrast = notification.options?.lowContrast || false;
     
