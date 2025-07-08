@@ -59,6 +59,7 @@ inline std::ostream& operator<<(std::ostream& out, const SnapRealm& r) {
 	     << " cached_snapc=" << r.cached_snap_context
 	     << " last_modified=" << r.last_modified
 	     << " change_attr=" << r.change_attr
+             << " is_snapdir_visible=" << r.is_snapdir_visible
 	     << ")";
 }
 
