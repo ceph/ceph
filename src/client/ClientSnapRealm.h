@@ -25,6 +25,7 @@ struct SnapRealm {
   std::set<SnapRealm*> pchildren;
   utime_t last_modified;
   uint64_t change_attr;
+  bool is_snapdir_visible = true;
 
 private:
   SnapContext cached_snap_context;  // my_snaps + parent snaps + past_parent_snaps

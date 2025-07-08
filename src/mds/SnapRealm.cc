@@ -445,7 +445,8 @@ void SnapRealm::build_snap_trace() const
 
     dout(10) << "build_snap_trace my_snaps " << info.my_snaps << dendl;
 
-    SnapRealmInfoNew ninfo(info, srnode.last_modified, srnode.change_attr);
+    SnapRealmInfoNew ninfo(info, srnode.last_modified,
+                           srnode.change_attr, srnode.is_snapdir_visible());
     encode(info, cached_snap_trace);
     encode(ninfo, cached_snap_trace_new);
     return;
@@ -480,7 +481,8 @@ void SnapRealm::build_snap_trace() const
     info.my_snaps.push_back(p->first);
   dout(10) << "build_snap_trace my_snaps " << info.my_snaps << dendl;
 
-  SnapRealmInfoNew ninfo(info, srnode.last_modified, srnode.change_attr);
+  SnapRealmInfoNew ninfo(info, srnode.last_modified,
+                         srnode.change_attr, srnode.is_snapdir_visible());
 
   encode(info, cached_snap_trace);
   encode(ninfo, cached_snap_trace_new);
