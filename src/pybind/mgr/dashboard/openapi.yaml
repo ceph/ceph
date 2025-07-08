@@ -9082,7 +9082,7 @@ paths:
                   description: NVMeoF namespace block size
                   type: integer
                 create_image:
-                  default: true
+                  default: false
                   description: Create RBD image
                   type: boolean
                 force:
