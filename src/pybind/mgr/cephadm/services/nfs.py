@@ -29,23 +29,6 @@ class NFSService(CephService):
     def ranked(self, spec: ServiceSpec) -> bool:
         return True
 
-    def fence(self, service_name: str, daemon_id: str) -> None:
-        logger.info(f'Fencing old nfs.{daemon_id}')
-
-        rados_user = self.get_daemon_user(service_name, daemon_id)
-        entity = self.get_auth_entity(daemon_id, rados_user=rados_user)
-
-        # as new auth entity is common across cluster, we will need to delete it for last daemon
-        if rados_user == service_name and self.mgr.cache.get_daemons_by_service(service_name):
-            logger.debug(f'Not removing key for {entity} as daemons still exists')
-            return
-
-        logger.info(f'Removing key for {entity}')
-        ret, out, err = self.mgr.mon_command({
-            'prefix': 'auth rm',
-            'entity': entity,
-        })
-
         # TODO: block/fence this entity (in case it is still running somewhere)
 
     def fence_old_ranks(self,
@@ -56,7 +39,7 @@ class NFSService(CephService):
             if rank >= num_ranks:
                 for daemon_id in m.values():
                     if daemon_id is not None:
-                        self.fence(spec.service_name(), daemon_id)
+                        self.remove_nfs_keyring(spec.service_name(), daemon_id)
                 del rank_map[rank]
                 nodeid = f'{rank}'
                 self.mgr.log.info(f'Removing {nodeid} from the ganesha grace table')
@@ -67,7 +50,7 @@ class NFSService(CephService):
                 for gen, daemon_id in list(m.items()):
                     if gen < max_gen:
                         if daemon_id is not None:
-                            self.fence(spec.service_name(), daemon_id)
+                            self.remove_nfs_keyring(spec.service_name(), daemon_id)
                         del rank_map[rank][gen]
                         self.mgr.spec_store.save_rank_map(spec.service_name(), rank_map)
 
@@ -311,11 +294,7 @@ class NFSService(CephService):
             'entity': entity,
         })
 
-    def remove_keyring(self, daemon: DaemonDescription) -> None:
-        assert daemon.daemon_id is not None
-        daemon_id: str = daemon.daemon_id
-        service_name = daemon.service_name()
-
+    def remove_nfs_keyring(self, service_name: str, daemon_id: str) -> None:
         rados_user = self.get_daemon_user(service_name, daemon_id)
         entity = self.get_auth_entity(daemon_id, rados_user=rados_user)
 
@@ -329,6 +308,13 @@ class NFSService(CephService):
             'prefix': 'auth rm',
             'entity': entity,
         })
+
+    def remove_keyring(self, daemon: DaemonDescription) -> None:
+        assert daemon.daemon_id is not None
+        daemon_id: str = daemon.daemon_id
+        service_name = daemon.service_name()
+
+        self.remove_nfs_keyring(service_name, daemon_id)
 
     def post_remove(self, daemon: DaemonDescription, is_failed_deploy: bool) -> None:
         super().post_remove(daemon, is_failed_deploy=is_failed_deploy)
