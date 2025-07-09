@@ -7704,7 +7704,8 @@ void OSD::dispatch_session_waiting(const ceph::ref_t<Session>& session, OSDMapRe
     op->put();
 
     spg_t pgid;
-    if (m->get_type() == CEPH_MSG_OSD_OP) {
+    if (m->get_type() == CEPH_MSG_OSD_OP &&
+	!m->get_connection()->has_features(CEPH_FEATUREMASK_RESEND_ON_SPLIT)) {
       pg_t actual_pgid = osdmap->raw_pg_to_pg(
 	static_cast<const MOSDOp*>(m)->get_pg());
       if (!osdmap->get_primary_shard(actual_pgid, &pgid)) {
@@ -7712,6 +7713,12 @@ void OSD::dispatch_session_waiting(const ceph::ref_t<Session>& session, OSDMapRe
       }
     } else {
       pgid = m->get_spg();
+      //Pre-tentacle clients encode the shard_id_t incorrectly for optimized EC
+      //pools with pg_temp set. Correct the mistake here.
+      if (!m->get_connection()->has_features(CEPH_FEATUREMASK_SERVER_TENTACLE)) {
+        auto pi = osdmap->get_pg_pool(pgid.pool());
+	pgid.reset_shard(osdmap->pgtemp_undo_primaryfirst(*pi, pgid.pgid, pgid.shard));
+      }
     }
     enqueue_op(pgid, std::move(op), m->get_map_epoch());
   }
@@ -7797,11 +7804,25 @@ void OSD::ms_fast_dispatch(Message *m)
 
   service.maybe_inject_dispatch_delay();
 
-  if (m->get_connection()->has_features(CEPH_FEATUREMASK_RESEND_ON_SPLIT) ||
-      m->get_type() != CEPH_MSG_OSD_OP) {
+  // Pre-tentacle clients sending requests to EC shards other than 0 may
+  // set the shard incorrectly because of how pg_temp encodes primary
+  // shards first. These requests need to be routed through
+  // dispatch_session_waiting which uses the OSDMap to correct the shard.
+  bool legacy = !m->get_connection()->has_features(CEPH_FEATUREMASK_SERVER_TENTACLE);
+  spg_t spg = static_cast<MOSDFastDispatchOp*>(m)->get_spg();
+  if (legacy) {
+    // Optimization - replica pools and EC shard 0 are never remapped
+    if ((spg.shard == shard_id_t::NO_SHARD) ||
+	(spg.shard == shard_id_t(0))) {
+      legacy = false;
+    }
+  }
+  if (!legacy &&
+      (m->get_connection()->has_features(CEPH_FEATUREMASK_RESEND_ON_SPLIT) ||
+       m->get_type() != CEPH_MSG_OSD_OP)) {
     // queue it directly
     enqueue_op(
-      static_cast<MOSDFastDispatchOp*>(m)->get_spg(),
+      spg,
       std::move(op),
       static_cast<MOSDFastDispatchOp*>(m)->get_map_epoch());
   } else {
