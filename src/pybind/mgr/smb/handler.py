@@ -1198,6 +1198,7 @@ def _generate_share(
             'x:ceph:id': f'{share.cluster_id}.{share.share_id}',
             'comment': '',
             'max connections': '0',
+            'smbd profiling share': 'yes',
         }
     }
     if proxy_val:
