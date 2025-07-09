@@ -817,7 +817,6 @@ class TestImage(object):
         self._test_copy(features, self.image.stat()['order'],
                         self.image.stripe_unit(), self.image.stripe_count())
 
-    @pytest.mark.skip_if_crimson
     def test_deep_copy(self):
         global ioctx
         global features
@@ -2450,7 +2449,6 @@ class TestExclusiveLock(object):
             image.lock_acquire(RBD_LOCK_MODE_EXCLUSIVE)
             image.lock_release()
 
-    @pytest.mark.skip_if_crimson
     def test_break_lock(self):
         blocklist_rados = Rados(conffile='')
         blocklist_rados.connect()
