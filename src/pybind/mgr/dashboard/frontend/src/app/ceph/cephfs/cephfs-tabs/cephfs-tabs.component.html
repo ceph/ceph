@@ -80,14 +80,14 @@
     <ng-container ngbNavItem="performance-details">
       <a
       ngbNavLink
-      i18n>Performance Details</a>
+      i18n>Overview</a>
       <ng-template ngbNavContent>
         <cd-grafana
           i18n-title
-          title="CephFS MDS performance"
-          [grafanaPath]="'mds-performance?var-mds_servers=mds.' + grafanaId"
+          title="CephFS performance"
+          [grafanaPath]="'ceph-filesystem-overview?var-name=' + details.name"
           [type]="'metrics'"
-          uid="tbO9LAiZz"
+          uid="718Bruins"
           grafanaStyle="one"
         >
         </cd-grafana>
