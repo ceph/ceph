@@ -5,15 +5,15 @@
 
 .cds--toast-notification-container {
   position: fixed;
-  top: $spacing-10; 
-  right: $spacing-04; 
-  max-width: $spacing-13 * 8; 
-  z-index: 9000; 
+  top: $spacing-10;
+  right: $spacing-04;
+  max-width: $spacing-13 * 8;
+  z-index: 9000;
   pointer-events: none;
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  
+
   cds-toast {
     pointer-events: all;
     margin-bottom: $spacing-03;
@@ -35,7 +35,7 @@
       }
 
       .cds--toast-notification__close-icon {
-        fill: currentColor;
+        fill: currentcolor;
       }
 
       .toast-caption-container {
@@ -63,6 +63,7 @@
     opacity: 0;
     transform: translateX(100%);
   }
+
   to {
     opacity: 1;
     transform: translateX(0);
@@ -74,6 +75,7 @@
     opacity: 1;
     transform: translateX(0);
   }
+
   to {
     opacity: 0;
     transform: translateX(100%);

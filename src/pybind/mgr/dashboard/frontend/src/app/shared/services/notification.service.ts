@@ -2,7 +2,10 @@ import { Injectable, NgZone } from '@angular/core';
 
 import _ from 'lodash';
 import { BehaviorSubject, Subject } from 'rxjs';
-import { ToastContent, NotificationType as CarbonNotificationType } from 'carbon-components-angular';
+import {
+  ToastContent,
+  NotificationType as CarbonNotificationType
+} from 'carbon-components-angular';
 
 import { NotificationType } from '../enum/notification-type.enum';
 import { CdNotification, CdNotificationConfig } from '../models/cd-notification';
@@ -188,7 +191,7 @@ export class NotificationService {
     const carbonType = this.mapNotificationTypeToCarbon(notification.type);
     // Get lowContrast setting from options, default to false
     const lowContrast = notification.options?.lowContrast || false;
-    
+
     // Create toast object using Carbon's ToastContent type
     const toast: ToastContent = {
       title: notification.title,
@@ -230,12 +233,10 @@ export class NotificationService {
 
   renderTimeAndApplicationHtml(notification: CdNotification): string {
     return `<div class="toast-caption-container">
-      <small class="date">${this.cdDatePipe.transform(
-        notification.timestamp
-      )}</small>
+      <small class="date">${this.cdDatePipe.transform(notification.timestamp)}</small>
       <i class="custom-icon ${notification.applicationClass}" title="${
-        notification.application
-      }"></i>
+      notification.application
+    }"></i>
     </div>`;
   }
 

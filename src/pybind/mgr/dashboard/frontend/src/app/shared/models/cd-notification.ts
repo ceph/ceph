@@ -5,7 +5,13 @@ import { ToastContent } from 'carbon-components-angular';
 export class CdNotificationConfig {
   applicationClass: string;
   isFinishedTask = false;
-  options: ToastContent = { lowContrast: true, type: undefined, title: '', subtitle: '', caption: '' };
+  options: ToastContent = {
+    lowContrast: true,
+    type: undefined,
+    title: '',
+    subtitle: '',
+    caption: ''
+  };
 
   private classes = {
     Ceph: 'ceph-icon',
@@ -19,7 +25,8 @@ export class CdNotificationConfig {
     options?: ToastContent,
     public application: string = 'Ceph'
   ) {
-    this.applicationClass = this.classes[this.application as keyof typeof this.classes] || 'ceph-icon';
+    this.applicationClass =
+      this.classes[this.application as keyof typeof this.classes] || 'ceph-icon';
     if (options) {
       this.options = { ...this.options, ...options };
     }
