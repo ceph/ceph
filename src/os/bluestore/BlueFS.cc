@@ -533,7 +533,7 @@ int BlueFS::add_block_device(unsigned id, const string& path, bool trim,
   if (trim) {
     interval_set<uint64_t> whole_device;
     whole_device.insert(0, b->get_size());
-    b->try_discard(whole_device, false);
+    b->try_discard(whole_device, false, true);
   }
 
   dout(1) << __func__ << " bdev " << id << " path " << path
