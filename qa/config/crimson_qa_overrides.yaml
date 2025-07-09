@@ -12,6 +12,7 @@ overrides:
         debug ms: 20
         seastore cache lru size: 64M
         seastore max concurrent transactions: 8
+        osd op complaint time: 60
   workunit:
     env:
       CRIMSON_COMPAT: '1'
