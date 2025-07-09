@@ -45,6 +45,8 @@ cherrypy.log.access_log.propagate = False
 
 class AgentEndpoint:
 
+    DEFAULT_AGENT_TASK_DURATION_SECONDS = 2
+
     def __init__(self, mgr: "CephadmOrchestrator") -> None:
         self.mgr = mgr
         self.server_port = 7150
@@ -89,7 +91,7 @@ class AgentEndpoint:
         """
         Compute the average number of agents allowed to report metadata per second (M).
 
-        - If user-specified value is -1, use an adaptive formula: sqrt(N)/2 (capped at 10).
+        - If user-specified value is -1, use an adaptive formula: sqrt(N)/2 (capped at 20).
         - Ensures a minimum of 2 agents/sec to avoid unnecessary serialization.
         - This helps spread load while avoiding bursts, especially on small clusters.
         """
@@ -107,7 +109,7 @@ class AgentEndpoint:
 
         - If the user has specified a fixed `agent_refresh_rate`, use that.
         - If `agent_refresh_rate` is set to -1 (auto mode), compute it dynamically as:
-            refresh_rate = num_agents // avg_concurrency
+            refresh_rate = (num_agents × task_duration) // avg_concurrency
             where:
               - num_agents = total number of agents in the cluster
               - avg_concurrency = average number of agents allowed to report per second,
@@ -124,7 +126,7 @@ class AgentEndpoint:
         if self.mgr.agent_refresh_rate == -1:  # auto-refresh rate
             num_agents = len(self.mgr.cache.get_hosts())
             agents_avg_concurrency = self.compute_agents_avg_concurrency()
-            refresh_rate = num_agents // agents_avg_concurrency
+            refresh_rate = (num_agents * self.DEFAULT_AGENT_TASK_DURATION_SECONDS) // agents_avg_concurrency
         else:
             refresh_rate = self.mgr.agent_refresh_rate
 
