@@ -1361,7 +1361,16 @@ void bluestore_shared_blob_t::dump(Formatter *f) const
 void bluestore_shared_blob_t::generate_test_instances(
   list<bluestore_shared_blob_t*>& ls)
 {
-  ls.push_back(new bluestore_shared_blob_t(1));
+  std::list<bluestore_extent_ref_map_t*> extent_ref_maps;
+  bluestore_extent_ref_map_t::generate_test_instances(extent_ref_maps);
+  // use 0 for sbid, as this field is not persited, and is always set during
+  // instance construction, so including a non-default value in dumps would
+  // cause ceph-dencoder verification failures when comparing original and
+  // re-encoded value.
+  ls.push_back(new bluestore_shared_blob_t{0, std::move(*extent_ref_maps.front())});
+  for (auto* m : extent_ref_maps) {
+    delete m;
+  }
 }
 
 ostream& operator<<(ostream& out, const bluestore_shared_blob_t& sb)
