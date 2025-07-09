@@ -37,6 +37,9 @@ class NvmeofService(CephService):
         # go forward deploying the daemon and then retry later. For
         # that reason we make no attempt to catch the OrchestratorError
         # this may raise
+        self.required_certs = ['nvmeof_server_key', 'nvmeof_server_cert',
+                               'nvmeof_client_key', 'nvmeof_client_cert',
+                               'nvmeof_root_ca_cert']
         self.mgr._check_pool_exists(spec.pool, spec.service_name())
 
     def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
@@ -94,25 +97,15 @@ class NvmeofService(CephService):
                 logger.error(f"Invalid value for SPDK huge pages: {spec.spdk_huge_pages}")
 
         if spec.enable_auth:
-            if (
-                not spec.client_cert
-                or not spec.client_key
-                or not spec.server_cert
-                or not spec.server_key
-                or not spec.root_ca_cert
-            ):
-                err_msg = 'enable_auth is true but '
-                for cert_key_attr in ['server_key', 'server_cert', 'client_key', 'client_cert', 'root_ca_cert']:
-                    if not hasattr(spec, cert_key_attr):
-                        err_msg += f'{cert_key_attr}, '
-                err_msg += 'attribute(s) missing from nvmeof spec'
+            missing_certs = [cert for cert in self.required_certs if not getattr(spec, cert, None)]
+            if missing_certs:
+                err_msg = f"enable_auth is true but missing attribute(s): {', '.join(missing_certs)} in nvmeof spec"
                 self.mgr.log.error(err_msg)
             else:
-                daemon_spec.extra_files['server_cert'] = spec.server_cert
-                daemon_spec.extra_files['client_cert'] = spec.client_cert
-                daemon_spec.extra_files['server_key'] = spec.server_key
-                daemon_spec.extra_files['client_key'] = spec.client_key
-                daemon_spec.extra_files['root_ca_cert'] = spec.root_ca_cert
+                for cert_name in self.required_certs:
+                    cert = getattr(spec, cert_name)
+                    self.mgr.cert_mgr.save_cert(cert_name, cert, spec.service_name(), daemon_spec.host, user_made=True)
+                    daemon_spec.extra_files[cert_name] = cert
 
         if spec.encryption_key:
             daemon_spec.extra_files['encryption_key'] = spec.encryption_key
@@ -249,6 +242,10 @@ class NvmeofService(CephService):
         _, _, err = self.mgr.mon_command(cmd)
         if err:
             self.mgr.log.error(f"Unable to send monitor command {cmd}, error {err}")
+
+        if spec.enable_auth:
+            for cert_name in self.required_certs:
+                self.mgr.cert_mgr.rm_cert(cert_name, spec.service_name(), daemon.hostname)
 
     def get_blocking_daemon_hosts(self, service_name: str) -> List[HostSpec]:
         # we should not deploy nvmeof daemons on hosts that already have nvmeof daemons
