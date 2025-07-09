@@ -19,6 +19,10 @@ on:
         type: boolean
   schedule:
     - cron: '*/30 * * * *'
+  pull_request:
+    types: [closed]
+    branches:
+      - main
 # TODO enable/setup after upkeep has caught up
 #  push:
 #    tags:
@@ -51,11 +55,42 @@ jobs:
       - name: install dependencies
         run: pip install -r ceph/src/script/requirements.redmine-upkeep.txt
 
-      - run: >
+      - name: Run redmine-upkeep via workflow_dispatch
+        if: github.event_name == 'workflow_dispatch'
+        run: >
              python3 ceph/src/script/redmine-upkeep.py
              --github-action
              --git-dir=./ceph/
-             ${{ github.event_name == 'workflow_dispatch' && (inputs.debug && '--debug' || '') || '' }}
-             ${{ github.event_name == 'workflow_dispatch' && format('--limit={0}', inputs.limit) || '' }}
+             (inputs.debug && '--debug' || '')
+             format('--limit={0}', inputs.limit)
+        env:
+          REDMINE_API_KEY: ${{ secrets.REDMINE_API_KEY_BACKPORT_BOT }}
+
+      - name: Run redmine-upkeep via schedule
+        if: github.event_name == 'schedule'
+        run: >
+             python3 ceph/src/script/redmine-upkeep.py
+             --github-action
+             --git-dir=./ceph/
+        env:
+          REDMINE_API_KEY: ${{ secrets.REDMINE_API_KEY_BACKPORT_BOT }}
+
+      - name: Run redmine-upkeep via test push
+        if: github.event_name == 'push' && github.ref == 'refs/heads/feature/redmine-upkeep'
+        run: >
+             python3 ceph/src/script/redmine-upkeep.py
+             --github-action
+             --git-dir=./ceph/
+        env:
+          REDMINE_API_KEY: ${{ secrets.REDMINE_API_KEY_BACKPORT_BOT }}
+
+      - name: Run redmine-upkeep via merge
+        if: github.event.pull_request.merged == true
+        run: >
+             python3 ceph/src/script/redmine-upkeep.py
+             --github-action
+             --git-dir=./ceph/
+             --pull-request=${{ github.event.pull_request.number }}
+             --merge-commit=${{ github.event.pull_request.merge_commit_sha }}
         env:
           REDMINE_API_KEY: ${{ secrets.REDMINE_API_KEY_BACKPORT_BOT }}
