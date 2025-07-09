@@ -23,7 +23,8 @@ std::ostream &ProtocolV2::_conn_prefix(std::ostream *_dout) {
 		<< " " << ceph_con_mode_name(auth_meta->con_mode)
 		<< " :" << connection->port
                 << " s=" << get_state_name(state) << " pgs=" << peer_global_seq
-                << " cs=" << connect_seq << " l=" << connection->policy.lossy
+                << " gs=" << global_seq << " cs=" << connect_seq
+                << " l=" << connection->policy.lossy
                 << " rev1=" << HAVE_MSGR2_FEATURE(peer_supported_features,
                                                   REVISION_1)
                 << " crypto rx=" << session_stream_handlers.rx.get()
