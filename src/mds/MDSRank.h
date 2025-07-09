@@ -100,6 +100,7 @@ enum {
   l_mdss_handle_client_caps_dirty,
   l_mdss_handle_client_cap_release,
   l_mdss_process_request_cap_release,
+  l_mdsss_request_cap_release_dropped,
   l_mds_last,
 };
 

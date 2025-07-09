@@ -3729,11 +3729,17 @@ void Locker::process_request_cap_release(const MDRequestRef& mdr, client_t clien
     
   if (ceph_seq_cmp(mseq, cap->get_mseq()) < 0) {
     dout(7) << " mseq " << mseq << " < " << cap->get_mseq() << ", dropping" << dendl;
+    if (mds->logger) {
+      mds->logger->inc(l_mdsss_request_cap_release_dropped);
+    }
     return;
   }
 
   if (cap->get_cap_id() != cap_id) {
     dout(7) << " cap_id " << cap_id << " != " << cap->get_cap_id() << ", dropping" << dendl;
+    if (mds->logger) {
+      mds->logger->inc(l_mdsss_request_cap_release_dropped);
+    }
     return;
   }
 

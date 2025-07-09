@@ -3722,6 +3722,8 @@ void MDSRank::create_logger()
                            "Client cap release msg", "hccr", PerfCountersBuilder::PRIO_INTERESTING);
     mds_plb.add_u64_counter(l_mdss_process_request_cap_release, "process_request_cap_release",
                            "Process request cap release", "prcr", PerfCountersBuilder::PRIO_INTERESTING);
+    mds_plb.add_u64_counter(l_mdsss_request_cap_release_dropped, "process_request_cap_release_dropped",
+			    "Process request cap release dropped", "prcd", PerfCountersBuilder::PRIO_INTERESTING);
     mds_plb.add_u64_counter(l_mdss_ceph_cap_op_revoke, "ceph_cap_op_revoke",
                            "Revoke caps", "crev", PerfCountersBuilder::PRIO_INTERESTING);
     mds_plb.add_u64_counter(l_mdss_ceph_cap_op_grant, "ceph_cap_op_grant",
