@@ -1787,7 +1787,7 @@ private:
   void update_blocked_by();
   void update_calc_stats();
 
-  void add_log_entry(const pg_log_entry_t& e, bool applied);
+  void add_log_entry(const pg_log_entry_t& e, ObjectStore::Transaction &t, bool applied);
 
   void calc_trim_to();
   void calc_trim_to_aggressive();
