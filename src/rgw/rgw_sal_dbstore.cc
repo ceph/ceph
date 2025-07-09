@@ -734,7 +734,7 @@ namespace rgw::sal {
     DB::Object del_target(store->getDB(), bucket->get_info(), get_obj());
     DB::Object::Delete del_op(&del_target);
 
-    del_op.params.versioning_status = bucket->get_info().versioning_status();
+    del_op.params.versioning_status = bucket->get_info().versioning_status_ext();
 
     return del_op.delete_obj(dpp);
   }

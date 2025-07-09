@@ -7807,16 +7807,6 @@ int main(int argc, const char **argv)
 
       snap_mgr.set_enabled(true);
 
-      if ((bucket_info.flags & BUCKET_VERSIONED) == 0) {
-        /* need to enable bucket versioning for snapshotsi,
-         * we're setting it to suspended, which means that the
-         * objects will be handled as versioned object but version IDs
-         * will not be generated for them
-         */
-
-        bucket_info.flags |= (BUCKET_VERSIONED | BUCKET_VERSIONS_SUSPENDED);
-      }
-
       return bucket->put_info(dpp(), false, real_time(), null_yield);
     }, null_yield);
 

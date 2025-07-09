@@ -2260,7 +2260,7 @@ static int fix_bucket_obj_expiry(const DoutPrefixProvider *dpp,
   rgw::sal::Bucket::ListParams params;
   rgw::sal::Bucket::ListResults results;
 
-  params.list_versions = bucket->versioned();
+  params.list_versions = bucket->get_info().versioned_index();
   params.allow_unordered = true;
 
   do {

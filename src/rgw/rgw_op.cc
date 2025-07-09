@@ -4421,7 +4421,7 @@ void RGWPutObj::execute(optional_yield y)
 				   s->owner, pdest_placement,
 				   multipart_part_num, multipart_part_str);
   } else if(append) {
-    if (s->bucket->versioned()) {
+    if (s->bucket->get_info().versioned_index()) {
       op_ret = -ERR_INVALID_BUCKET_STATE;
       return;
     }
@@ -5526,12 +5526,15 @@ void RGWDeleteObj::execute(optional_yield y)
       }
 
       auto& obj_key = s->object->get_key();
-      if (!orig_obj_key.snap_id.is_set() &&
+      if (s->bucket->get_info().versioned() &&
+          !orig_obj_key.snap_id.is_set() &&
           orig_obj_key.instance.empty() &&
           obj_key.snap_id.is_set()) {
         /* no version id was specified originally so if it's a versioned bucket the request is
          * to create a delete marker. We shouldn't have snap_id set, otherwise we'll
          * try to remove that specific instance.
+         * This only applies when the bucket is versioned. If bucket is not versioned but
+         * has snapshots on we don't want to create a delete marker.
          */
         obj_key.snap_id.reset();
       }
@@ -5612,7 +5615,7 @@ void RGWDeleteObj::execute(optional_yield y)
       std::unique_ptr<rgw::sal::Object::DeleteOp> del_op = s->object->get_delete_op();
       del_op->params.obj_owner = s->owner;
       del_op->params.bucket_owner = s->bucket_owner.id;
-      del_op->params.versioning_status = s->bucket->get_info().versioning_status();
+      del_op->params.versioning_status = s->bucket->get_info().versioning_status_ext();
       del_op->params.unmod_since = unmod_since;
       del_op->params.high_precision_time = s->system_request;
       del_op->params.olh_epoch = epoch;
@@ -7533,7 +7536,7 @@ void RGWDeleteMultiObj::handle_individual_object(const rgw_obj_key& o, optional_
 
   std::string version_id; // empty
   std::unique_ptr<rgw::sal::Object::DeleteOp> del_op = obj->get_delete_op();
-  del_op->params.versioning_status = obj->get_bucket()->get_info().versioning_status();
+  del_op->params.versioning_status = obj->get_bucket()->get_info().versioning_status_ext();
   del_op->params.obj_owner = s->owner;
   del_op->params.bucket_owner = s->bucket_owner.id;
   del_op->params.marker_version_id = version_id;
@@ -7699,7 +7702,7 @@ bool RGWBulkDelete::Deleter::delete_single(const acct_path_t& path, optional_yie
     obj->set_atomic();
 
     std::unique_ptr<rgw::sal::Object::DeleteOp> del_op = obj->get_delete_op();
-    del_op->params.versioning_status = obj->get_bucket()->get_info().versioning_status();
+    del_op->params.versioning_status = obj->get_bucket()->get_info().versioning_status_ext();
     del_op->params.obj_owner = bowner;
     del_op->params.bucket_owner = bucket_owner.id;
 

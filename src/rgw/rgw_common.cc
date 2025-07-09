@@ -2473,6 +2473,10 @@ void RGWBucketInfo::decode(bufferlist::const_iterator& bl) {
 
   if (struct_v >= 25) {
     decode(local, bl);
+
+    if (local.snap_mgr.is_enabled()) {
+      ext_flags |= BUCKET_VERSIONED_INDEX;
+    }
   }
   DECODE_FINISH(bl);
 }

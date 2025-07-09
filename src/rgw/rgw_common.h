@@ -1054,6 +1054,15 @@ inline std::ostream& operator<<(std::ostream& out, const RGWObjVersionTracker &o
   return out;
 }
 
+/*
+ * why do we need to have two separate flag enums that overlap?
+ * The RGWBucketInfo structure has a flags field that is part of its metadata. This metadata
+ * is replicated across multisite zones.
+ * There is the ext_flags field that is in-memory only that adds more information about
+ * the local status of the bucket (such as whether there is a versioned index due to
+ * existence of snapshots). There are cases where we want to merge these, and it's easier
+ * that they have a single trivial mapping.
+ */
 enum RGWBucketFlags {
   BUCKET_SUSPENDED = 0x1,
   BUCKET_VERSIONED = 0x2,
@@ -1062,6 +1071,18 @@ enum RGWBucketFlags {
   BUCKET_MFA_ENABLED = 0X10,
   BUCKET_OBJ_LOCK_ENABLED = 0X20,
   BUCKET_DELETED = 0X40,
+  _RESERVED_BUCKET_VERSIONED_INDEX = 0X80,
+};
+
+enum RGWBucketFlagsExt {
+  _RESERVED_BUCKET_SUSPENDED = 0x1,
+  _RESERVED_BUCKET_VERSIONED = 0x2,
+  _RESERVED_BUCKET_VERSIONS_SUSPENDED = 0x4,
+  _RESERVED_BUCKET_DATASYNC_DISABLED = 0X8,
+  _RESERVED_BUCKET_MFA_ENABLED = 0X10,
+  _RESERVED_BUCKET_OBJ_LOCK_ENABLED = 0X20,
+  _RESERVED_BUCKET_DELETED = 0X40,
+  BUCKET_VERSIONED_INDEX = 0X80,
 };
 
 class RGWSI_Zone;
@@ -1125,6 +1146,8 @@ struct RGWBucketInfo {
 
   rgw_bucket_local_info local;
 
+  uint32_t ext_flags{0}; /* in-memory */
+
   void encode(bufferlist& bl) const;
   void decode(bufferlist::const_iterator& bl);
   void dump(Formatter *f) const;
@@ -1135,6 +1158,9 @@ struct RGWBucketInfo {
   bool versioned() const { return (flags & BUCKET_VERSIONED) != 0; }
   int versioning_status() const { return flags & (BUCKET_VERSIONED | BUCKET_VERSIONS_SUSPENDED | BUCKET_MFA_ENABLED); }
   bool versioning_enabled() const { return (versioning_status() & (BUCKET_VERSIONED | BUCKET_VERSIONS_SUSPENDED)) == BUCKET_VERSIONED; }
+  int versioned_index_status() const { return (flags & BUCKET_VERSIONED) | (ext_flags & BUCKET_VERSIONED_INDEX); }
+  bool versioned_index() const { return (versioned_index_status() != 0); }
+  int versioning_status_ext() const { return versioning_status() | (ext_flags & BUCKET_VERSIONED_INDEX); }
   bool mfa_enabled() const { return (versioning_status() & BUCKET_MFA_ENABLED) != 0; }
   bool datasync_flag_enabled() const { return (flags & BUCKET_DATASYNC_DISABLED) == 0; }
   bool obj_lock_enabled() const { return (flags & BUCKET_OBJ_LOCK_ENABLED) != 0; }

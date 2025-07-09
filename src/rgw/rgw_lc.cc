@@ -363,7 +363,7 @@ class LCObjsLister {
 public:
   LCObjsLister(rgw::sal::Driver* _driver, rgw::sal::Bucket* _bucket, rgw_bucket_snap_id _snap_id = rgw_bucket_snap_id()) :
       driver(_driver), bucket(_bucket), snap_id(_snap_id) {
-    list_params.list_versions = bucket->versioned();
+    list_params.list_versions = bucket->get_info().versioned_index();
     list_params.allow_unordered = true; // XXX can be unconditionally true, so long as all versions of one object are assured to be on one shard and always ordered on that shard (true today in RADOS)
     if (snap_id.is_set()) {
       list_params.snap_range.end = snap_id;
@@ -503,7 +503,7 @@ struct lc_op_ctx {
        * instance empty should have instance set to "null" to be able
        * to correctly read its olh version entry.
        */
-      if (o.key.instance.empty() && bucket->versioned() && !o.is_current()) {
+      if (o.key.instance.empty() && bucket->get_info().versioned_index() && !o.is_current()) {
         rgw_obj_key& obj_key = obj->get_key();
         obj_key.instance = "null";
       }
@@ -647,7 +647,7 @@ static int remove_expired_obj(const DoutPrefixProvider* dpp,
   std::unique_ptr<rgw::sal::Object::DeleteOp> del_op
     = obj->get_delete_op();
   del_op->params.versioning_status
-    = obj->get_bucket()->get_info().versioning_status();
+    = obj->get_bucket()->get_info().versioning_status_ext();
   del_op->params.obj_owner.id = rgw_user{meta.owner};
   del_op->params.obj_owner.display_name = meta.owner_display_name;
   del_op->params.bucket_owner = bucket_info.owner;

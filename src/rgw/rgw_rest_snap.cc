@@ -143,17 +143,6 @@ void RGWConfigureBucketSnapshots_ObjStore_S3::execute(optional_yield y)
   }
   snap_mgr.set_enabled(enabled);
 
-  auto& bucket_info = s->bucket->get_info();
-  if ((bucket_info.flags & BUCKET_VERSIONED) == 0) {
-    /* need to enable bucket versioning for snapshotsi,
-     * we're setting it to suspended, which means that the
-     * objects will be handled as versioned object but version IDs
-     * will not be generated for them
-     */
-
-    bucket_info.flags |= (BUCKET_VERSIONED | BUCKET_VERSIONS_SUSPENDED);
-  }
-
   op_ret = s->bucket->put_info(this, false, real_time(), y);
   if (op_ret < 0) {
     s->err.message = "Error";

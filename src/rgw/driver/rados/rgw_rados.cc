@@ -3979,7 +3979,7 @@ int RGWRados::reindex_obj(rgw::sal::Driver* driver,
   }
 
   const int64_t pool_id = head_obj_ctx.get_id();
-  const bool is_versioned = bucket_info.versioned();
+  const bool is_versioned = bucket_info.versioned_index();
   const bool has_instance = ! head_obj.key.instance.empty();
 
   ldpp_dout(dpp, 20) << "INFO: " << __func__ << ": reindexing " <<
@@ -4094,7 +4094,7 @@ int RGWRados::reindex_obj(rgw::sal::Driver* driver,
     return ret;
   }
 
-  if (bucket_info.versioned()) {
+  if (bucket_info.versioned_index()) {
     ldpp_dout(dpp, 20) << "INFO: " << __func__ << ": since " <<
       bucket_info.bucket << " appears to be versioned, setting OLH for " <<
       p(head_obj) << dendl;
@@ -6392,10 +6392,15 @@ int RGWRados::Object::Delete::delete_obj(optional_yield y,
 
   bool explicit_marker_version = (!params.marker_version_id.empty());
 
-  if (params.versioning_status & BUCKET_VERSIONED || explicit_marker_version) {
+  bool versioned_bucket = params.versioning_status & BUCKET_VERSIONED;
+  bool versioned_index = params.versioning_status & BUCKET_VERSIONED_INDEX;
+
+
+  if (versioned_bucket || versioned_index || explicit_marker_version) {
     bool add_log = log_op && store->svc.zone->need_to_log_data();
 
-    if ((instance.empty() && !obj.key.snap_id.is_set()) || explicit_marker_version) {
+    if ((versioned_bucket || explicit_marker_version) &&
+        ((instance.empty() && !obj.key.snap_id.is_set()) || explicit_marker_version)) {
       rgw_obj marker = obj;
       marker.key.instance.clear();
 
@@ -6801,7 +6806,7 @@ int RGWRados::get_obj_state_impl(const DoutPrefixProvider *dpp, RGWObjectCtx *oc
   }
 
   if (r == -ENOENT &&
-      bucket_info.versioned() &&
+      bucket_info.versioned_index() &&
       obj.key.get_snap_id().is_set() &&
       follow_snap) {
     rgw_obj olh_obj(obj.bucket, obj.key.name);
@@ -11472,7 +11477,7 @@ int RGWRados::check_bucket_shards(const RGWBucketInfo& bucket_info,
 
   bool need_resharding = false;
   uint32_t suggested_num_shards = 0;
-  const bool is_versioned = bucket_info.versioned();
+  const bool is_versioned = bucket_info.versioned_index();
   const uint32_t num_source_shards =
     rgw::current_num_shards(bucket_info.layout);
   const uint32_t min_layout_shards =

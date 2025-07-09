@@ -3537,7 +3537,7 @@ int RadosObject::delete_object(const DoutPrefixProvider* dpp,
   del_op.params.versioning_status =
     (flags & FLAG_PREVENT_VERSIONING)
     ? 0
-    : bucket->get_info().versioning_status();
+    : bucket->get_info().versioning_status_ext();
   del_op.params.remove_objs = remove_objs;
   if (objv) {
       del_op.params.check_objv = objv->version_for_check();
