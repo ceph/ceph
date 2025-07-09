@@ -1163,8 +1163,8 @@ class Object {
         ceph::real_time last_mod_time_match;
         ceph::real_time mtime;
         std::optional<uint64_t> size_match;
-        const char *if_match;
-        const char *if_nomatch;
+        const char *if_match{NULL};
+        const char *if_nomatch{NULL};
         bool high_precision_time{false};
         rgw_zone_set* zones_trace{nullptr};
 	bool abortmp{false};

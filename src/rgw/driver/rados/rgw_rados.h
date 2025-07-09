@@ -785,8 +785,8 @@ public:
         bool high_precision_time;
         uint32_t mod_zone_id;
         uint64_t mod_pg_ver;
-        const char *if_match;
-        const char *if_nomatch;
+        const char *if_match{NULL};
+        const char *if_nomatch{NULL};
 
         ConditionParams() :
                  mod_ptr(NULL), unmod_ptr(NULL), high_precision_time(false), mod_zone_id(0), mod_pg_ver(0),
@@ -832,8 +832,8 @@ public:
         ACLOwner owner; // owner/owner_display_name for bucket index
         RGWObjCategory category;
         int flags;
-        const char *if_match;
-        const char *if_nomatch;
+        const char *if_match{NULL};
+        const char *if_nomatch{NULL};
         std::optional<uint64_t> olh_epoch;
         ceph::real_time delete_at;
         bool canceled;
@@ -883,8 +883,8 @@ public:
         ceph::real_time last_mod_time_match;
         ceph::real_time mtime; /* for setting delete marker mtime */
         std::optional<uint64_t> size_match;
-        const char *if_match = NULL;
-        const char *if_nomatch = NULL;
+        const char *if_match{NULL};
+        const char *if_nomatch{NULL};
         bool high_precision_time;
         rgw_zone_set *zones_trace;
 	bool abortmp;

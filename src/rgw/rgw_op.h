@@ -383,8 +383,8 @@ protected:
   const char *range_str;
   const char *if_mod;
   const char *if_unmod;
-  const char *if_match;
-  const char *if_nomatch;
+  const char *if_match{NULL};
+  const char *if_nomatch{NULL};
   uint32_t mod_zone_id;
   uint64_t mod_pg_ver;
   off_t ofs;
@@ -1252,8 +1252,8 @@ protected:
   off_t ofs;
   const char *supplied_md5_b64;
   const char *supplied_etag;
-  const char *if_match;
-  const char *if_nomatch;
+  const char *if_match{NULL};
+  const char *if_nomatch{NULL};
   std::string copy_source;
   const char *copy_source_range;
   RGWBucketInfo copy_source_bucket_info;
@@ -1535,8 +1535,8 @@ protected:
   ceph::real_time unmod_since; /* if unmodified since */
   ceph::real_time last_mod_time_match; /* if modified time match */
   std::optional<uint64_t> size_match; /* if size match */
-  const char *if_match; /* if etag match */
-  const char *if_nomatch; /* if size doesn't match */
+  const char *if_match{NULL}; /* if etag match */
+  const char *if_nomatch{NULL}; /* if size doesn't match */
   bool no_precondition_error;
   std::unique_ptr<RGWBulkDelete::Deleter> deleter;
   bool bypass_perm;
@@ -1573,8 +1573,8 @@ protected:
   RGWAccessControlPolicy dest_policy;
   const char *if_mod;
   const char *if_unmod;
-  const char *if_match;
-  const char *if_nomatch;
+  const char *if_match{NULL};
+  const char *if_nomatch{NULL};
   // Required or it is not a copy operation
   std::string_view copy_source;
   // Not actually required
