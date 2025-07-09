@@ -51,6 +51,11 @@ public:
     return !is_indirect() && !is_data_stable();
   }
 
+  // whether the mapping represents a real extent
+  bool is_real() const {
+    return !is_indirect() && !is_zero_reserved();
+  }
+
   // whether the mapping corresponds to an initial pending extent
   bool is_initial_pending() const;
 
