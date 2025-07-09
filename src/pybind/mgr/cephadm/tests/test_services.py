@@ -390,6 +390,7 @@ max_hosts = 2048
 max_namespaces = 2048
 max_namespaces_per_subsystem = 256
 max_hosts_per_subsystem = 128
+subsystem_cache_expiration = 5
 
 [gateway-logs]
 log_level = INFO
