@@ -1400,6 +1400,7 @@ class NvmeofServiceSpec(ServiceSpec):
                  verify_nqns: Optional[bool] = True,
                  verify_keys: Optional[bool] = True,
                  verify_listener_ip: Optional[bool] = True,
+                 default_listeners: Optional[str] = None,
                  allowed_consecutive_spdk_ping_failures: Optional[int] = 1,
                  spdk_ping_interval_in_seconds: Optional[float] = 2.0,
                  ping_spdk_under_lock: Optional[bool] = False,
@@ -1509,6 +1510,8 @@ class NvmeofServiceSpec(ServiceSpec):
         self.verify_keys = verify_keys
         #: ``verify_listener_ip`` enables verification of listener IP address
         self.verify_listener_ip = verify_listener_ip
+        #: ``default_listeners`` list of default listeners for new subsystems ("subnets:port,subnet2:port")
+        self.default_listeners = default_listeners
         #: ``abort_on_errors`` abort gateway in case of errors
         self.abort_on_errors = abort_on_errors
         #: ``omap_file_ignore_unlock_errors`` ignore errors when unlocking the OMAP file
