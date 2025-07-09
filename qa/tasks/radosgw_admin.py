@@ -546,11 +546,11 @@ def task(ctx, config):
     # TESTCASE 'bucket-stats','bucket','stats','no session/buckets','succeeds, empty list'
     (err, out) = rgwadmin(ctx, client, ['bucket', 'stats', '--uid', user1],
         check_status=True)
-    assert len(out) == 0
+    assert len(out['buckets']) == 0
 
     # TESTCASE 'bucket-stats2','bucket','stats','no buckets','succeeds, empty list'
     (err, out) = rgwadmin(ctx, client, ['bucket', 'list', '--uid', user1], check_status=True)
-    assert len(out) == 0
+    assert len(out['buckets']) == 0
 
     # create a first bucket
     bucket = connection.create_bucket(bucket_name)
