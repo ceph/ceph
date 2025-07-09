@@ -4129,7 +4129,7 @@ options:
   default: false
   with_legacy: true
 - name: bdev_enable_discard
-  desc: send discards to the block device
+  desc: enable OSD devices trimming during in runtime
   type: bool
   level: advanced
   default: false
@@ -4138,6 +4138,7 @@ options:
   - runtime
   see_also:
   - bdev_async_discard_threads
+  - bluestore_discard_on_mkfs
 - name: bdev_async_discard_threads
   desc: number of discard threads used to issue discards to the device
   type: uint
@@ -5322,6 +5323,16 @@ options:
   desc: Run deep fsck after mkfs
   default: false
   with_legacy: true
+- name: bluestore_discard_on_mkfs
+  desc: trim OSD devices after deployment
+  type: bool
+  level: advanced
+  default: true
+  with_legacy: false
+  flags:
+  - create
+  see_also:
+  - bdev_enable_discard
 - name: bluestore_sync_submit_transaction
   type: bool
   level: dev
