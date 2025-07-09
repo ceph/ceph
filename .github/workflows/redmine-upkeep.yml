@@ -56,6 +56,6 @@ jobs:
              --github-action
              --git-dir=./ceph/
              ${{ github.event_name == 'workflow_dispatch' && (inputs.debug && '--debug' || '') || '' }}
-             ${{ github.event_name == 'workflow_dispatch' && format('--limit={}', inputs.limit) || '' }}
+             ${{ github.event_name == 'workflow_dispatch' && format('--limit={0}', inputs.limit) || '' }}
         env:
           REDMINE_API_KEY: ${{ secrets.REDMINE_API_KEY_BACKPORT_BOT }}
