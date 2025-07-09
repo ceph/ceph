@@ -57,7 +57,7 @@ public:
     }
   }
 
-  ~ErasureCodeJerasure() override {}
+  ~ErasureCodeJerasure() override;
 
   uint64_t get_supported_optimizations() const override {
     return flags;

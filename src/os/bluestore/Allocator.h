@@ -26,7 +26,7 @@ public:
   Allocator(std::string_view name,
 	    int64_t _capacity,
 	    int64_t _block_size);
-  virtual ~Allocator();
+  virtual ~Allocator() = default;
 
   /*
   * returns allocator type name as per names in config

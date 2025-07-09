@@ -163,12 +163,14 @@ void resource_metadata::dump(ceph::Formatter* f) const
   encode_json("role_id", role_id, f);
 }
 
-void resource_metadata::generate_test_instances(std::list<resource_metadata*>& o)
+std::list<resource_metadata> resource_metadata::generate_test_instances()
 {
-  o.push_back(new resource_metadata);
-  auto m = new resource_metadata;
-  m->role_id = "id";
-  o.push_back(m);
+  std::list<resource_metadata> o;
+  o.push_back(resource_metadata{});
+  resource_metadata m;
+  m.role_id = "id";
+  o.push_back(std::move(m));
+  return o;
 }
 
 } // namespace rgwrados::roles
