@@ -89,6 +89,7 @@ class CephadmServe:
                 self._check_for_strays()
 
                 self._update_paused_health()
+                self.mgr.update_maintenance_healthcheck()
 
                 if self.mgr.need_connect_dashboard_rgw and self.mgr.config_dashboard:
                     self.mgr.need_connect_dashboard_rgw = False
