@@ -1265,6 +1265,10 @@ def _generate_config(
         cluster_global_opts['workgroup'] = wg
         cluster_global_opts['idmap config * : backend'] = 'autorid'
         cluster_global_opts['idmap config * : range'] = '2000-9999999'
+    if cluster.is_clustered() and cluster.custom_ports:
+        # a ctdb enabled cluster (w/ host networking) with custom ports needs
+        # to change the port at the smbd level
+        cluster_global_opts['smb ports'] = str(_smb_port(cluster))
 
     share_configs = {
         share.name: _generate_share(share, resolver, cephx_entity)
@@ -1358,6 +1362,7 @@ def _generate_smb_service_spec(
         custom_dns=cluster.custom_dns,
         include_ceph_users=user_entities,
         cluster_public_addrs=cluster.service_spec_public_addrs(),
+        custom_ports=cluster.custom_ports,
     )
 
 
@@ -1492,3 +1497,7 @@ def _has_proxied_vfs(change_group: ClusterChangeGroup) -> bool:
         == CephFSStorageProvider.SAMBA_VFS_PROXIED
         for s in change_group.shares
     )
+
+
+def _smb_port(cluster: resources.Cluster, default: int = 445) -> int:
+    return (cluster.custom_ports or {}).get("smb", default)

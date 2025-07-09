@@ -112,3 +112,25 @@ def check_access_name(name: str) -> None:
         )
     if len(name) > 128:
         raise ValueError('login name may not exceed 128 characters')
+
+
+PORT_SERVICES = {"smb", "ctdb", "smbmetrics"}
+_MAX_PORT = (1 << 16) - 1
+
+
+def check_custom_ports(ports: Optional[Dict[str, int]]) -> None:
+    if ports is None:
+        return
+    other = set(ports) - PORT_SERVICES
+    if other:
+        raise ValueError(
+            "invalid service names for custom ports:"
+            f' {", ".join(sorted(other))}'
+        )
+    invalid = {str(p) for p in ports.values() if not 0 < p <= _MAX_PORT}
+    if invalid:
+        raise ValueError(
+            f'invalid port number(s): {", ".join(sorted(invalid))}'
+        )
+    if len(ports) != len(set(ports.values())):
+        raise ValueError('port numbers must not be repeated')

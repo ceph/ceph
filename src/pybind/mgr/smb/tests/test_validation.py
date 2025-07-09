@@ -130,3 +130,27 @@ def test_check_access_name(value, ok, err_match):
     else:
         with pytest.raises(ValueError, match=err_match):
             smb.validation.check_access_name(value)
+
+
+@pytest.mark.parametrize(
+    'value,err_match',
+    [
+        (None, None),
+        ({}, None),
+        ({'smb': 4455}, None),
+        ({'smb': 4455, 'smbmetrics': 9009, 'ctdb': 9999}, None),
+        ({'smb': 0}, 'invalid port'),
+        ({'smb': 1 << 16}, 'invalid port'),
+        ({'smb': 4455, 'sbmetrics': 9009}, 'invalid service names'),
+        (
+            {'smb': 4455, 'smbmetrics': 9999, 'ctdb': 9999},
+            'must not be repeated',
+        ),
+    ],
+)
+def test_check_custom_ports(value, err_match):
+    if err_match is None:
+        smb.validation.check_custom_ports(value)
+    else:
+        with pytest.raises(ValueError, match=err_match):
+            smb.validation.check_custom_ports(value)
