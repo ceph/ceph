@@ -96,6 +96,8 @@ the configuration. Just like with set_val, you should call apply_changes after
 calling these functions to make sure your changes get applied.
 
 
+.. _dev config defining options:
+
 Defining config options
 =======================
 
@@ -103,6 +105,13 @@ Config options are defined in ``common/options/*.yaml.in``. The options are cate
 by their consumers. If an option is only used by ceph-osd, it should go to
 ``osd.yaml.in``. All the ``.yaml.in`` files are translated into ``.cc`` and ``.h`` files
 at build time by ``y2c.py``.
+
+.. note::
+   Ceph-mgr modules use the same configuration system as other Ceph components,
+   but their configuration options are defined within each module's Python
+   implementation. For details on defining mgr module configuration options,
+   see :ref:`mgr module dev configuration options`.
+
 
 Each option is represented using a YAML mapping (dictionary). A typical option looks like
 
