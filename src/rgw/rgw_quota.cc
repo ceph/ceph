@@ -631,9 +631,8 @@ static int get_owner_tenant(const DoutPrefixProvider* dpp,
       },
       [&] (const rgw_account_id& account) {
         RGWAccountInfo info;
-        rgw::sal::Attrs attrs;
         RGWObjVersionTracker objv;
-        int ret = driver->load_account_by_id(dpp, y, account, info, attrs, objv);
+        int ret = driver->load_account_by_id(dpp, y, account, info, objv);
         if (ret >= 0) {
           tenant = std::move(info.tenant);
         }
