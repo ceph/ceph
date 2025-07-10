@@ -19,6 +19,7 @@ import random
 import re
 import signal
 import sys
+import textwrap
 
 from datetime import datetime, timedelta, timezone
 from getpass import getuser
@@ -100,6 +101,31 @@ log.setLevel(logging.INFO)
 
 def gitauth():
     return (GITHUB_USER, GITHUB_TOKEN)
+
+def post_github_comment(session, pr_id, body):
+    """Helper to post a comment to a GitHub PR."""
+    if RedmineUpkeep.GITHUB_RATE_LIMITED:
+        log.warning("GitHub API rate limit hit previously. Skipping posting comment.")
+        return False
+
+    log.info(f"Posting a comment to GitHub PR #{pr_id}.")
+    endpoint = f"{GITHUB_API_ENDPOINT}/issues/{pr_id}/comments"
+    payload = {'body': body}
+    try:
+        response = session.post(endpoint, auth=gitauth(), json=payload)
+        response.raise_for_status()
+        log.info(f"Successfully posted comment to PR #{pr_id}.")
+        return True
+    except requests.exceptions.HTTPError as e:
+        if e.response.status_code == 403 and "rate limit exceeded" in e.response.text:
+            log.error(f"GitHub API rate limit exceeded when commenting on PR #{pr_id}.")
+            RedmineUpkeep.GITHUB_RATE_LIMITED = True
+        else:
+            log.error(f"GitHub API error posting comment to PR #{pr_id}: {e} - Response: {e.response.text}")
+        return False
+    except requests.exceptions.RequestException as e:
+        log.error(f"Network or request error posting comment to GitHub PR #{pr_id}: {e}")
+        return False
 
 class IssueUpdate:
     def __init__(self, issue, github_session, git_repo):
@@ -266,8 +292,10 @@ class RedmineUpkeep:
         self.R = self._redmine_connect()
         self.limit = args.limit
         self.session = requests.Session()
-        self.issue_id = args.issue # Store issue_id from args
-        self.revision_range = args.revision_range # Store revision_range from args
+        self.issue_id = args.issue
+        self.revision_range = args.revision_range
+        self.pull_request_id = args.pull_request
+        self.merge_commit = args.merge_commit
 
         self.issues_inspected = 0
         self.issues_modified = 0
@@ -699,9 +727,89 @@ class RedmineUpkeep:
         elif self.revision_range is not None:
             log.info(f"Processing in revision-range mode for range: {self.revision_range}.")
             self._execute_revision_range()
+        elif self.pull_request_id is not None:
+            log.info(f"Processing in pull-request mode for PR #{self.pull_request_id}.")
+            self._execute_pull_request()
         else:
             log.info(f"Processing in filter-based mode with a limit of {self.limit} issues.")
             self._execute_filters()
+
+    def _execute_pull_request(self):
+        """
+        Handles the --pull-request logic.
+        1. Finds Redmine issues linked to the PR and runs transforms on them.
+        2. If none, inspects the local merge commit for "Fixes:" tags.
+        3. If tags are found, comments on the GH PR to ask the author to link the ticket.
+        """
+        pr_id = self.pull_request_id
+        merge_commit_sha = self.merge_commit
+        log.info(f"Querying Redmine for issues linked to PR #{pr_id} and merge commit {merge_commit_sha}")
+
+        filters = {
+            "project_id": self.project_id,
+            "status_id": "*",
+            f"cf_{REDMINE_CUSTOM_FIELD_ID_PULL_REQUEST_ID}": pr_id,
+        }
+        issues = self.R.issue.filter(**filters)
+
+        processed_issue_ids = set()
+        if len(issues) > 0:
+            log.info(f"Found {len(issues)} linked issue(s). Applying transformations.")
+            for issue in issues:
+                self._process_issue_transformations(issue)
+                processed_issue_ids.add(issue.id)
+            # Still, check commit logs.
+        else:
+            log.warning(f"No Redmine issues found linked to PR #{pr_id}. Inspecting local merge commit {merge_commit_sha} for 'Fixes:' tags.")
+
+        found_tracker_ids = set()
+        try:
+            revrange = f"{merge_commit_sha}^..{merge_commit_sha}"
+            log.info(f"Iterating commits {revrange}")
+            for commit in self.G.iter_commits(revrange):
+                log.info(f"Inspecting commit {commit.hexsha}")
+
+                fixes_regex = re.compile(r"Fixes: https://tracker.ceph.com/issues/(\d+)", re.MULTILINE)
+                commit_fixes = set(fixes_regex.findall(commit.message))
+                for tracker_id in commit_fixes:
+                    log.info(f"Commit {commit.hexsha} claims to fix https://tracker.ceph.com/issues/{tracker_id}")
+                    found_tracker_ids.add(int(tracker_id))
+        except git.exc.GitCommandError as e:
+            log.error(f"Git command failed for commit SHA '{merge_commit_sha}': {e}. Ensure the commit exists in the local repository.")
+            return
+
+        # Are the found_tracker_ids (including empty set) a proper subset of processed_issue_ids?
+        log.debug(f"found_tracker_ids = {found_tracker_ids}")
+        log.debug(f"processed_issue_ids = {processed_issue_ids}")
+        if found_tracker_ids <= processed_issue_ids:
+            log.info("All commits reference trackers already processed or no tracker referenced to be fixed.")
+            return
+
+        log.info(f"Found 'Fixes:' tags for tracker(s) #{', '.join([str(x) for x in found_tracker_ids])} in commits.")
+
+        tracker_links = "\n".join([f"https://tracker.ceph.com/issues/{tid}" for tid in found_tracker_ids])
+        comment_body = f"""
+
+            This is an automated message by src/script/redmine-upkeep.py.
+
+            I found one or more 'Fixes:' tags in the commit messages in
+
+            `git log {revrange}`
+
+            The referenced tickets are:
+
+            {tracker_links}
+
+            Those tickets do not reference this merged Pull Request. If this
+            Pull Request merge resolves any of those tickets, please update the
+            "Pull Request ID" field on each ticket. A future run of this
+            script will appropriately update them.
+
+        """
+        comment_body = textwrap.dedent(comment_body)
+        log.debug(f"Leaving comment:\n{comment_body}")
+
+        post_github_comment(self.session, pr_id, comment_body)
 
     def _execute_revision_range(self):
         log.info(f"Processing issues based on revision range: {self.revision_range}")
@@ -736,9 +844,6 @@ class RedmineUpkeep:
                         log.info(f"No issues found for commit {commit}.")
                 except redminelib.exceptions.ResourceAttrError as e:
                     log.error(f"Redmine API error for merge commit {commit}: {e}")
-                    raise
-                except Exception as e:
-                    log.exception(f"Error processing issues for merge commit {commit}: {e}")
                     raise
         except git.exc.GitCommandError as e:
             log.error(f"Git command error for revision range '{self.revision_range}': {e}")
@@ -792,12 +897,24 @@ def main():
     parser.add_argument('--limit', dest='limit', action='store', type=int, default=200, help='limit processed issues')
     parser.add_argument('--git-dir', dest='git', action='store', default=".", help='git directory')
 
+    # Mutually exclusive group for different modes of operation
     group = parser.add_mutually_exclusive_group()
-    group.add_argument('--issue', dest='issue', action='store', help='issue to check')
+    group.add_argument('--issue', dest='issue', action='store', help='Single issue ID to check.')
     group.add_argument('--revision-range', dest='revision_range', action='store',
-                       help='Git revision range (e.g., "v12.2.2..v12.2.3") to find merge commits and process related issues.')
+                       help='Git revision range to find merge commits and process related issues.')
+    group.add_argument('--pull-request', dest='pull_request', type=int, action='store',
+                       help='Pull Request ID to lookup (requires --merge-commit).')
+
+    parser.add_argument('--merge-commit', dest='merge_commit', action='store',
+                       help='Merge commit SHA for the PR (requires --pull-request).')
 
     args = parser.parse_args(sys.argv[1:])
+
+    # Ensure --pull-request and --merge-commit are used together
+    if args.pull_request and not args.merge_commit:
+        parser.error("--pull-request and --merge-commit must be used together.")
+        sys.exit(1)
+
     log.info("Redmine Upkeep Script starting.")
 
     global IS_GITHUB_ACTION
