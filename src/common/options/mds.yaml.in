@@ -1803,3 +1803,12 @@ options:
   services:
   - mds
   min: 1
+- name: subv_metrics_window_interval
+  type: secs
+  level: dev
+  desc: subvolume metrics sliding window interval, seconds
+  long_desc: interval in seconds to hold values in sliding window for subvolume metrics, in the metrics aggregator
+  default: 60
+  min: 30
+  services:
+  - mds
