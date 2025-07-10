@@ -281,7 +281,7 @@ class BlueStore::OnodeScanMT {
         edecoder.reset(oid,
                        &stats.actual_pool_vstatfs[oid.hobj.get_logical_pool()]);
         Onode dummy_on(cct);
-        Onode::decode_raw(&dummy_on, it->value(), edecoder, store.segment_size != 0);
+        Onode::decode_raw(&dummy_on, it->value_as_sv(), edecoder, store.segment_size != 0);
         ++stats.onode_count;
       } else {
         edecoder.reset_new_shard();
@@ -297,7 +297,7 @@ class BlueStore::OnodeScanMT {
         if (oid != edecoder.get_oid()) {
           continue;
         }
-        edecoder.decode_some(it->value(), nullptr);
+        edecoder.decode_some(it->value_as_sv(), nullptr);
         ++stats.shard_count;
       }
     }

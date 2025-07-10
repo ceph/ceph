@@ -4087,6 +4087,30 @@ unsigned BlueStore::ExtentMap::ExtentDecoder::decode_some(
   return num;
 }
 
+unsigned BlueStore::ExtentMap::ExtentDecoder::decode_some(
+  std::string_view sv, Collection* c)
+{
+  __u8 struct_v;
+  uint32_t num;
+
+  auto p = buffer::ptr::begin_deep_detached(sv.begin(), sv.end());
+  denc(struct_v, p);
+  // Version 2 differs from v1 in blob's ref_map
+  // serialization only. Hence there is no specific
+  // handling at ExtentMap level below.
+  ceph_assert(struct_v == 1 || struct_v == 2);
+  denc_varint(num, p);
+
+  extent_pos = 0;
+  while (!p.end()) {
+    Extent* le = get_next_extent();
+    decode_extent(le, struct_v, p, c);
+    add_extent(le);
+  }
+  ceph_assert(extent_pos == num);
+  return num;
+}
+
 void BlueStore::ExtentMap::ExtentDecoder::decode_spanning_blobs(
   bptr_c_it_t& p, Collection* c)
 {
@@ -4861,6 +4885,32 @@ void BlueStore::Onode::decode_raw(
     edecoder.decode_some(on->extent_map.inline_bl, on->c);
   }
 }
+
+void BlueStore::Onode::decode_raw(
+  BlueStore::Onode* on,
+  std::string_view v,
+  BlueStore::ExtentMap::ExtentDecoder& edecoder,
+  bool use_onode_segmentation)
+{
+  on->exists = true;
+  auto p = buffer::ptr::begin_deep_detached(v.begin(), v.end());
+  on->onode.decode(p, use_onode_segmentation ? 0 : bluestore_onode_t::FLAG_DEBUG_FORCE_V2);
+
+  // initialize extent_map
+  edecoder.decode_spanning_blobs(p, on->c);
+  ceph_assert(on->prev_spanning_cnt == 0);
+  if (on->c) {
+    on->prev_spanning_cnt = on->extent_map.spanning_blob_map.size();
+    if (on->prev_spanning_cnt != 0) {
+      on->c->store->logger->inc(l_bluestore_spanning_blobs, on->prev_spanning_cnt);
+    }
+  }
+  if (on->onode.extent_map_shards.empty()) {
+    denc(on->extent_map.inline_bl, p);
+    edecoder.decode_some(on->extent_map.inline_bl, on->c);
+  }
+}
+
 
 BlueStore::Onode* BlueStore::Onode::create_decode(
   CollectionRef c,

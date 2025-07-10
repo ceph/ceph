@@ -1057,6 +1057,7 @@ public:
       }
 
       unsigned decode_some(const ceph::buffer::list& bl, Collection* c);
+      unsigned decode_some(std::string_view sv, Collection* c);
       void decode_spanning_blobs(bptr_c_it_t& p, Collection* c);
     };
 
@@ -1405,6 +1406,11 @@ public:
     static void decode_raw(
       BlueStore::Onode* on,
       const bufferlist& v,
+      ExtentMap::ExtentDecoder& dencoder,
+      bool use_onode_segmentation);
+    static void decode_raw(
+      BlueStore::Onode* on,
+      std::string_view v,
       ExtentMap::ExtentDecoder& dencoder,
       bool use_onode_segmentation);
 
