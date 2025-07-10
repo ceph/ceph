@@ -1234,3 +1234,26 @@ void BlockDiff::print(ostream& out) const
 {
   out << "{rval: " << rval << ", scan_idx=" << scan_idx << ", blocks=" << blocks << "}";
 }
+
+void SubvolumeMetric::dump(Formatter *f) const {
+  f->dump_string("subvolume_path", subvolume_path);
+  f->dump_unsigned("read_ops", read_ops);
+  f->dump_unsigned("write_ops", write_ops);
+  f->dump_unsigned("read_size", read_size);
+  f->dump_unsigned("write_size", write_size);
+  f->dump_unsigned("avg_read_latency", avg_read_latency);
+  f->dump_unsigned("avg_write_latency", avg_write_latency);
+  f->dump_unsigned("time_window_sec", time_stamp);
+}
+
+std::ostream& operator<<(std::ostream& os, const SubvolumeMetric &m) {
+  os << "{subv_path=" << m.subvolume_path
+     << ", read_ops=" << m.read_ops
+     << ", write_ops=" << m.write_ops
+     << ", read_size=" << m.read_size
+     << ", write_size=" << m.write_size
+     << ", avg_read_lat=" << m.avg_read_latency
+     << ", avg_write_lat=" << m.avg_write_latency
+     << ", time_window_sec=" << m.time_stamp << "}";
+  return os;
+}

@@ -1151,7 +1151,7 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
    * @returns a pool ID >=0
    */
   int64_t get_backtrace_pool() const;
-
+  inodeno_t get_subvolume_id() const;
 protected:
   ceph_lock_state_t *get_fcntl_lock_state() {
     if (!fcntl_locks)
