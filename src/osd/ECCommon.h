@@ -32,8 +32,6 @@ struct ECTransaction {
     bool invalidates_cache = false; // Yes, both are possible
     std::map<hobject_t,extent_set> to_read;
     std::map<hobject_t,extent_set> will_write;
-
-    std::map<hobject_t,ECUtil::HashInfoRef> hash_infos;
   };
 };
 
@@ -635,30 +633,6 @@ struct ECCommon {
         ec_backend(ec_backend),
         extent_cache(*this, ec_extent_cache_lru, sinfo, cct),
         ec_pdw_write_mode(cct->_conf.get_val<uint64_t>("ec_pdw_write_mode")) {}
-  };
-
-  class UnstableHashInfoRegistry {
-    CephContext *cct;
-    ceph::ErasureCodeInterfaceRef ec_impl;
-    /// If modified, ensure that the ref is held until the update is applied
-    SharedPtrRegistry<hobject_t, ECUtil::HashInfo> registry;
-
-   public:
-    UnstableHashInfoRegistry(
-        CephContext *cct,
-        ceph::ErasureCodeInterfaceRef ec_impl)
-      : cct(cct),
-        ec_impl(std::move(ec_impl)) {}
-
-    ECUtil::HashInfoRef maybe_put_hash_info(
-        const hobject_t &hoid,
-        ECUtil::HashInfo &&hinfo);
-
-    ECUtil::HashInfoRef get_hash_info(
-        const hobject_t &hoid,
-        bool create,
-        const std::map<std::string, ceph::buffer::list, std::less<>> &attrs,
-        uint64_t size);
   };
 };
 
