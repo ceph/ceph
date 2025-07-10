@@ -7572,7 +7572,7 @@ bool BlueStore::_use_rotational_settings()
   if (cct->_conf->bluestore_debug_enforce_settings == "ssd") {
     return false;
   }
-  return bdev->is_rotational();
+  return is_rotational();
 }
 
 bool BlueStore::is_statfs_recoverable() const
