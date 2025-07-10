@@ -47,6 +47,19 @@ enum {
   l_mds_per_client_metrics_last
  };
 
+enum {
+  l_subvolume_metrics_first = 30000,
+  l_subvolume_metrics_read_iops,
+  l_subvolume_metrics_read_tp_Bps,
+  l_subvolume_metrics_avg_read_latency,
+  l_subvolume_metrics_write_iops,
+  l_subvolume_metrics_write_tp_Bps,
+  l_subvolume_metrics_avg_write_latency,
+  l_subvolume_metrics_last_window_end,
+  l_subvolume_metrics_last_window,
+  l_subvolume_metrics_last
+};
+
 MetricAggregator::MetricAggregator(CephContext *cct, MDSRank *mds, MgrClient *mgrc)
   : Dispatcher(cct),
     m_cct(cct),
@@ -96,6 +109,10 @@ int MetricAggregator::init() {
       return get_perf_reports();
     });
 
+  subv_window_sec = g_conf().get_val<std::chrono::seconds>("subv_metrics_window_interval").count();
+  if (!subv_window_sec)
+    return -EINVAL;
+
   return 0;
 }
 
@@ -144,6 +161,200 @@ Dispatcher::dispatch_result_t MetricAggregator::ms_dispatch2(const ref_t<Message
     return true;
   }
   return false;
+}
+
+void MetricAggregator::refresh_subvolume_metrics_for_rank(
+        mds_rank_t rank, const std::vector<SubvolumeMetric> &metrics) {
+  for (const auto &m : metrics) {
+    // Register labeled PerfCounters if needed
+    if (!subvolume_perf_counters.contains(m.subvolume_path)) {
+      std::string labels = ceph::perf_counters::key_create(
+              "mds_subvolume_metrics",
+              {{"subvolume_path", m.subvolume_path},
+               {"fs_name", std::string(mds->mdsmap->get_fs_name())}});
+      PerfCountersBuilder plb(m_cct, labels,
+                              l_subvolume_metrics_first,
+                              l_subvolume_metrics_last);
+      plb.add_u64(l_subvolume_metrics_read_iops, "avg_read_iops",
+                  "Average read IOPS", "rops", PerfCountersBuilder::PRIO_CRITICAL);
+      plb.add_u64(l_subvolume_metrics_read_tp_Bps, "avg_read_tp_Bps",
+                  "Average read throughput (Bps)", "rbps", PerfCountersBuilder::PRIO_CRITICAL);
+      plb.add_u64(l_subvolume_metrics_avg_read_latency, "avg_read_lat_msec",
+                  "Average read latency (ms)", "rlav", PerfCountersBuilder::PRIO_CRITICAL);
+      plb.add_u64(l_subvolume_metrics_write_iops, "avg_write_iops",
+                  "Average write IOPS", "wops", PerfCountersBuilder::PRIO_CRITICAL);
+      plb.add_u64(l_subvolume_metrics_write_tp_Bps, "avg_write_tp_Bps",
+                  "Average write throughput (Bps)", "wbps", PerfCountersBuilder::PRIO_CRITICAL);
+      plb.add_u64(l_subvolume_metrics_avg_write_latency, "avg_write_lat_msec",
+                  "Average write latency (ms)", "wlav", PerfCountersBuilder::PRIO_CRITICAL);
+
+      auto perf_counter = plb.create_perf_counters();
+      subvolume_perf_counters[m.subvolume_path] = perf_counter;
+      m_cct->get_perfcounters_collection()->add(perf_counter);
+
+      subvolume_aggregated_metrics.try_emplace(m.subvolume_path, subv_window_sec);
+    }
+
+    // Update sliding window
+    auto &tracker = subvolume_aggregated_metrics.at(m.subvolume_path);
+    tracker.add_value(m);
+  }
+
+  // Aggregate, update metrics, and clean stale subvolumes
+  for (auto it = subvolume_aggregated_metrics.begin(); it != subvolume_aggregated_metrics.end(); ) {
+    const std::string &path = it->first;
+    auto &tracker = it->second;
+    tracker.update();
+
+    if (tracker.is_empty()) {
+      dout(10) << "Removing stale subv_metric for path=" << path  << ", window size:=" << subv_window_sec << dendl;
+
+      // Remove PerfCounters
+      auto counter_it = subvolume_perf_counters.find(path);
+      if (counter_it != subvolume_perf_counters.end()) {
+        m_cct->get_perfcounters_collection()->remove(counter_it->second);
+        delete counter_it->second;
+        subvolume_perf_counters.erase(counter_it);
+      }
+
+      // Remove PerfQuery entries
+      for (auto &[query, perf_key_map] : query_metrics_map) {
+        MDSPerfMetricKey key;
+        auto sub_key_func_cleanup = [this, &path](const MDSPerfMetricSubKeyDescriptor &desc,
+                                                  MDSPerfMetricSubKey *sub_key) {
+            if (desc.type == MDSPerfMetricSubKeyType::SUBVOLUME_PATH) {
+              std::smatch match;
+              if (std::regex_search(path, match, desc.regex) && match.size() > 1) {
+                for (size_t i = 1; i < match.size(); ++i) {
+                  sub_key->push_back(match[i].str());
+                }
+                return true;
+              }
+            } else if (desc.type == MDSPerfMetricSubKeyType::MDS_RANK) {
+              sub_key->push_back(std::to_string(mds->get_nodeid()));
+              return true;
+            }
+            return false;
+        };
+
+        if (query.get_key(sub_key_func_cleanup, &key)) {
+          if (perf_key_map.erase(key)) {
+            dout(15) << __func__ << ": Removed PerfQuery entry for subv_metric=" << path << dendl;
+          }
+        }
+      }
+
+      it = subvolume_aggregated_metrics.erase(it);
+      // removed stale, continue to the next one, no need to increment the iterator since erase returns the next one
+      continue;
+    } else {
+      tracker.update();
+
+      AggregatedSubvolumeMetric aggr_metric;
+      aggr_metric.subvolume_path = path;
+      aggr_metric.time_window_last_dur_sec = tracker.get_current_window_duration_sec();
+      aggr_metric.time_window_last_end_sec = tracker.get_time_from_last_sample();
+      if (aggr_metric.time_window_last_dur_sec == 0)
+        aggr_metric.time_window_last_dur_sec = 1; // avoid div-by-zero
+
+      uint64_t total_read_ops = 0, total_write_ops = 0;
+      uint64_t total_read_bytes = 0, total_write_bytes = 0;
+      uint64_t weighted_read_latency_sum = 0, weighted_write_latency_sum = 0;
+
+      tracker.for_each_value([&](const SubvolumeMetric &m) {
+          total_read_ops += m.read_ops;
+          total_write_ops += m.write_ops;
+          total_read_bytes += m.read_size;
+          total_write_bytes += m.write_size;
+          weighted_read_latency_sum += m.avg_read_latency * m.read_ops;
+          weighted_write_latency_sum += m.avg_write_latency * m.write_ops;
+      });
+
+      aggr_metric.read_iops = total_read_ops / aggr_metric.time_window_last_dur_sec;
+      aggr_metric.write_iops = total_write_ops / aggr_metric.time_window_last_dur_sec;
+      aggr_metric.read_tpBs = total_read_bytes / aggr_metric.time_window_last_dur_sec;
+      aggr_metric.write_tBps = total_write_bytes / aggr_metric.time_window_last_dur_sec;
+
+      aggr_metric.avg_read_latency = (total_read_ops > 0)
+                                     ? (weighted_read_latency_sum / total_read_ops) / 1000
+                                     : 0;
+      aggr_metric.avg_write_latency = (total_write_ops > 0)
+                                      ? (weighted_write_latency_sum / total_write_ops) / 1000
+                                      : 0;
+
+      // update PerfCounters
+      auto counter = subvolume_perf_counters[path];
+      ceph_assert(counter);
+      counter->set(l_subvolume_metrics_read_iops, aggr_metric.read_iops);
+      counter->set(l_subvolume_metrics_read_tp_Bps, aggr_metric.read_tpBs);
+      counter->set(l_subvolume_metrics_avg_read_latency, aggr_metric.avg_read_latency);
+      counter->set(l_subvolume_metrics_write_iops, aggr_metric.write_iops);
+      counter->set(l_subvolume_metrics_write_tp_Bps, aggr_metric.write_tBps);
+      counter->set(l_subvolume_metrics_avg_write_latency, aggr_metric.avg_write_latency);
+      counter->set(l_subvolume_metrics_last_window_end, aggr_metric.time_window_last_end_sec);
+      counter->set(l_subvolume_metrics_last_window, aggr_metric.time_window_last_dur_sec);
+
+      // Update query_metrics_map
+      auto sub_key_func_subvolume = [this, &path](const MDSPerfMetricSubKeyDescriptor &desc,
+                                                  MDSPerfMetricSubKey *sub_key) {
+          if (desc.type == MDSPerfMetricSubKeyType::SUBVOLUME_PATH) {
+            std::smatch match;
+            if (std::regex_search(path, match, desc.regex) && match.size() > 1) {
+              for (size_t i = 1; i < match.size(); ++i) {
+                sub_key->push_back(match[i].str());
+              }
+              return true;
+            }
+          } else if (desc.type == MDSPerfMetricSubKeyType::MDS_RANK) {
+            sub_key->push_back(std::to_string(mds->get_nodeid()));
+            return true;
+          }
+          return false;
+      };
+
+      for (auto &[query, perf_key_map] : query_metrics_map) {
+        MDSPerfMetricKey key;
+        bool matched = query.get_key(sub_key_func_subvolume, &key);
+        if (!matched)
+          continue;
+
+        auto &perf_counters = perf_key_map[key];
+        if (perf_counters.empty()) {
+          perf_counters.resize(query.performance_counter_descriptors.size());
+        }
+
+        query.update_counters(
+                [&](const MDSPerformanceCounterDescriptor &desc, PerformanceCounter *counter) {
+                    switch (desc.type) {
+                      case MDSPerformanceCounterType::SUBV_READ_IOPS_METRIC:
+                        counter->first = aggr_metric.read_iops;
+                        break;
+                      case MDSPerformanceCounterType::SUBV_WRITE_IOPS_METRIC:
+                        counter->first = aggr_metric.write_iops;
+                        break;
+                      case MDSPerformanceCounterType::SUBV_READ_THROUGHPUT_METRIC:
+                        counter->first = aggr_metric.read_tpBs;
+                        break;
+                      case MDSPerformanceCounterType::SUBV_WRITE_THROUGHPUT_METRIC:
+                        counter->first = aggr_metric.write_tBps;
+                        break;
+                      case MDSPerformanceCounterType::SUBV_AVG_READ_LATENCY_METRIC:
+                        counter->first = aggr_metric.avg_read_latency;
+                        break;
+                      case MDSPerformanceCounterType::SUBV_AVG_WRITE_LATENCY_METRIC:
+                        counter->first = aggr_metric.avg_write_latency;
+                        break;
+                      default:
+                        break;
+                    }
+                },
+                &perf_counters);
+      }
+
+      // non stale metric, continue to the next one
+      ++it;
+    }
+  }
 }
 
 void MetricAggregator::refresh_metrics_for_rank(const entity_inst_t &client,
@@ -359,6 +570,14 @@ void MetricAggregator::refresh_metrics_for_rank(const entity_inst_t &client,
         c->second = metrics.metadata_latency_metric.count;
       }
       break;
+    // subvolume metrics are handled in refresh_subvolume_metrics_for_rank()
+    case MDSPerformanceCounterType::SUBV_AVG_READ_LATENCY_METRIC:
+    case MDSPerformanceCounterType::SUBV_AVG_WRITE_LATENCY_METRIC:
+    case MDSPerformanceCounterType::SUBV_READ_IOPS_METRIC:
+    case MDSPerformanceCounterType::SUBV_WRITE_IOPS_METRIC:
+    case MDSPerformanceCounterType::SUBV_READ_THROUGHPUT_METRIC:
+    case MDSPerformanceCounterType::SUBV_WRITE_THROUGHPUT_METRIC:
+      break;
     default:
       ceph_abort_msg("unknown counter type");
     }
@@ -377,6 +596,10 @@ void MetricAggregator::refresh_metrics_for_rank(const entity_inst_t &client,
       break;
     case MDSPerfMetricSubKeyType::CLIENT_ID:
       match_string = stringify(client);
+      break;
+    // subvolumes metrics are handled in refresh_subvolume_metrics_for_rank()
+    case MDSPerfMetricSubKeyType::SUBVOLUME_PATH:
+      return false;
       break;
     default:
       ceph_abort_msg("unknown counter type");
@@ -437,6 +660,9 @@ void MetricAggregator::remove_metrics_for_rank(const entity_inst_t &client,
     case MDSPerfMetricSubKeyType::CLIENT_ID:
       match_string = stringify(client);
       break;
+        // subvolume metrics are handled in refresh_subvolume_metrics_for_rank()
+    case MDSPerfMetricSubKeyType::SUBVOLUME_PATH:
+        break;
     default:
       ceph_abort_msg("unknown counter type");
     }
@@ -497,6 +723,8 @@ void MetricAggregator::handle_mds_metrics(const cref_t<MMDSMetrics> &m) {
       ceph_abort();
     }
   }
+
+  refresh_subvolume_metrics_for_rank(rank, metrics_message.subvolume_metrics);
 }
 
 void MetricAggregator::cull_metrics_for_rank(mds_rank_t rank) {
@@ -554,11 +782,12 @@ void MetricAggregator::set_perf_queries(const ConfigPayload &config_payload) {
   const MDSConfigPayload &mds_config_payload = std::get<MDSConfigPayload>(config_payload);
   const std::map<MDSPerfMetricQuery, MDSPerfMetricLimits> &queries = mds_config_payload.config;
 
-  dout(10) << ": setting " << queries.size() << " queries" << dendl;
+  dout(10) << ": setting " << queries.size() << " perf_queries" << dendl;
 
   std::scoped_lock locker(lock);
   std::map<MDSPerfMetricQuery, std::map<MDSPerfMetricKey, PerformanceCounters>> new_data;
   for (auto &p : queries) {
+    dout(10) << ": perf_query " << p << dendl;
     std::swap(new_data[p.first], query_metrics_map[p.first]);
   }
   std::swap(query_metrics_map, new_data);

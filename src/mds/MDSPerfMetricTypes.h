@@ -5,6 +5,7 @@
 #define CEPH_MDS_PERF_METRIC_TYPES_H
 
 #include <ostream>
+#include <shared_mutex>
 
 #include "common/Formatter.h"
 #include "include/cephfs/types.h" // for mds_rank_t
@@ -298,6 +299,7 @@ WRITE_CLASS_DENC(PinnedIcapsMetric)
 WRITE_CLASS_DENC(OpenedInodesMetric)
 WRITE_CLASS_DENC(ReadIoSizesMetric)
 WRITE_CLASS_DENC(WriteIoSizesMetric)
+WRITE_CLASS_DENC(SubvolumeMetric)
 
 // metrics that are forwarded to the MDS by client(s).
 struct Metrics {
@@ -312,12 +314,13 @@ struct Metrics {
   OpenedInodesMetric opened_inodes_metric;
   ReadIoSizesMetric read_io_sizes_metric;
   WriteIoSizesMetric write_io_sizes_metric;
+  SubvolumeMetric subvolume_metrics;
 
   // metric update type
   uint32_t update_type = UpdateType::UPDATE_TYPE_REFRESH;
 
   DENC(Metrics, v, p) {
-    DENC_START(4, 1, p);
+    DENC_START(5, 1, p);
     denc(v.update_type, p);
     denc(v.cap_hit_metric, p);
     denc(v.read_latency_metric, p);
@@ -335,6 +338,9 @@ struct Metrics {
       denc(v.read_io_sizes_metric, p);
       denc(v.write_io_sizes_metric, p);
     }
+    if (struct_v >= 5) {
+      denc(v.subvolume_metrics, p);
+    }
     DENC_FINISH(p);
   }
 
@@ -350,6 +356,7 @@ struct Metrics {
     f->dump_object("opened_inodes_metric", opened_inodes_metric);
     f->dump_object("read_io_sizes_metric", read_io_sizes_metric);
     f->dump_object("write_io_sizes_metric", write_io_sizes_metric);
+    f->dump_object("subvolume_metrics", subvolume_metrics);
   }
 
   friend std::ostream& operator<<(std::ostream& os, const Metrics& metrics) {
@@ -364,6 +371,7 @@ struct Metrics {
        << ", opened_inodes_metric=" << metrics.opened_inodes_metric
        << ", read_io_sizes_metric=" << metrics.read_io_sizes_metric
        << ", write_io_sizes_metric=" << metrics.write_io_sizes_metric
+       << ", subvolume_metrics=" << metrics.subvolume_metrics
        << "}]";
     return os;
   }
@@ -374,6 +382,7 @@ struct metrics_message_t {
   version_t seq = 0;
   mds_rank_t rank = MDS_RANK_NONE;
   std::map<entity_inst_t, Metrics> client_metrics_map;
+  std::vector<SubvolumeMetric> subvolume_metrics;
 
   metrics_message_t() {
   }
@@ -383,19 +392,23 @@ struct metrics_message_t {
 
   void encode(bufferlist &bl, uint64_t features) const {
     using ceph::encode;
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
     encode(seq, bl);
     encode(rank, bl);
     encode(client_metrics_map, bl, features);
+    encode(subvolume_metrics, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::const_iterator &iter) {
     using ceph::decode;
-    DECODE_START(1, iter);
+    DECODE_START(2, iter);
     decode(seq, iter);
     decode(rank, iter);
     decode(client_metrics_map, iter);
+    if (struct_v >= 2) {
+      decode(subvolume_metrics, iter);
+    }
     DECODE_FINISH(iter);
   }
 
@@ -406,13 +419,21 @@ struct metrics_message_t {
       f->dump_object("client", client);
       f->dump_object("metrics", metrics);
     }
+    f->open_array_section("subvolume_metrics");
+    for (const auto &metric : subvolume_metrics) {
+      f->open_object_section("metric");
+      metric.dump(f);
+      f->close_section();
+    }
+    f->close_section();
   }
 
-  friend std::ostream& operator<<(std::ostream& os, const metrics_message_t &metrics_message) {
-    os << "[sequence=" << metrics_message.seq << ", rank=" << metrics_message.rank
-       << ", metrics=" << metrics_message.client_metrics_map << "]";
-    return os;
-  }
+    friend std::ostream& operator<<(std::ostream& os, const metrics_message_t &m) {
+      os << "[sequence=" << m.seq << ", rank=" << m.rank
+         << ", client_metrics=" << m.client_metrics_map
+         << ", subvolume_metrics=" << m.subvolume_metrics << "]";
+      return os;
+    }
 };
 
 WRITE_CLASS_ENCODER_FEATURES(metrics_message_t)
