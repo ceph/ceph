@@ -8774,14 +8774,17 @@ static uint16_t get_olh_op_bilog_flags()
 }
 
 struct BILogUpdateBatchFIFO {
-
+  const DoutPrefixProvider *dpp;
   std::unique_ptr<rgw::cls::fifo::FIFO> fifo;
 
-  BILogUpdateBatchFIFO(RGWRados& store, const RGWBucketInfo& bucket_info);
+  BILogUpdateBatchFIFO(const DoutPrefixProvider *dpp, RGWRados& store, const RGWBucketInfo& bucket_info);
 
   void add_maybe_flush(const uint64_t olh_epoch,
                        const cls_rgw_bi_log_related_op& bi_log_client_info)
   {
+    ldpp_dout(dpp, 20) << __PRETTY_FUNCTION__
+                   << ": the cls_rgw_bi_log_related_op-taking variant"
+                   << dendl;
     rgw_bi_log_entry entry;
 
     entry.object = bi_log_client_info.key.name;
@@ -8821,6 +8824,7 @@ struct BILogUpdateBatchFIFO {
                        const bool delete_marker,
                        const rgw_bucket_olh_log_bi_log_entry& bi_log_replay_data)
   {
+    ldpp_dout(dpp, 20) << __PRETTY_FUNCTION__ << ": the OLH-specific variant" << dendl;
     rgw_bi_log_entry entry;
 
     entry.object = key.name;
@@ -8855,8 +8859,10 @@ struct BILogUpdateBatchFIFO {
   }
 };
 
-BILogUpdateBatchFIFO::BILogUpdateBatchFIFO(RGWRados& store,
-                                           const RGWBucketInfo& bucket_info) {
+BILogUpdateBatchFIFO::BILogUpdateBatchFIFO(const DoutPrefixProvider *dpp,
+                                           const RGWRados& store,
+                                           const RGWBucketInfo& bucket_info)
+                    : dpp(dpp) {
   ceph_assert(store.svc.bi_rados);
   fifo = RGWSI_BILog_RADOS_FIFO::open_fifo(bucket_info, *store.svc.bi_rados);
   if (!fifo) {
@@ -8864,14 +8870,20 @@ BILogUpdateBatchFIFO::BILogUpdateBatchFIFO(RGWRados& store,
   }
 }
 
-static BILogUpdateBatchFIFO get_or_create_fifo_bilog_op(RGWRados& store,
+static BILogUpdateBatchFIFO get_or_create_fifo_bilog_op(const DoutPrefixProvider *dpp,
+                                                        RGWRados& store,
                                                         const RGWBucketInfo& binfo)
 {
-  return { store, binfo };
+  return { dpp, store, binfo };
 }
 
 struct BILogNopHandler {
+  const DoutPrefixProvider *dpp;
+  CephContext* const cct;
   void add_maybe_flush(const uint64_t, const cls_rgw_bi_log_related_op&) {
+    ldpp_dout(dpp, 20) << __PRETTY_FUNCTION__
+                   << ": the cls_rgw_bi_log_related_op-taking variant"
+                   << dendl;
     /* NOP */
   }
 
@@ -8880,13 +8892,15 @@ struct BILogNopHandler {
                        const std::string& op_tag,
                        const bool delete_marker,
                        const rgw_bucket_olh_log_bi_log_entry&) {
+    ldpp_dout(dpp, 20) << __PRETTY_FUNCTION__ << ": the OLH-specific variant" << dendl;
     /* NOP */
   }
 };
 
 template <class CLSRGWBucketModifyOpT, class F, class... Args>
-int RGWRados::with_bilog(F&& func, const RGWBucketInfo& bucket_info, Args&&... args)
+int RGWRados::with_bilog(F&& func, const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, Args&&... args)
 {
+  ldpp_dout(dpp, 20) << __func__ << ": zone.log_data=" << svc.zone->get_zone().log_data << dendl;
   constexpr bool is_inindex = true;
  // there are actually two variants of with_bilog():
   //   1. CLSRGWBucketModifyOpT-taking one in which the passed lambda gets
@@ -8894,21 +8908,21 @@ int RGWRados::with_bilog(F&& func, const RGWBucketInfo& bucket_info, Args&&... a
   //   2. void-taking one -- the lambda is called with `bilog_handler` only.
   if constexpr (std::is_same_v<CLSRGWBucketModifyOpT, void>) {
      if (svc.zone->get_zone().log_data && !is_inindex) {
-       return std::forward<F>(func)(get_or_create_fifo_bilog_op(*this, bucket_info));
+       return std::forward<F>(func)(get_or_create_fifo_bilog_op(dpp, *this, bucket_info));
      } else {
-       return std::forward<F>(func)(BILogNopHandler{});
+       return std::forward<F>(func)(BILogNopHandler{dpp});
      }
   } else {
     if (is_inindex) {
       return std::move(func)(CLSRGWBucketModifyOpT{
                                svc.zone->get_zone().log_data, std::forward<Args>(args)...},
-                             BILogNopHandler{});
+                             BILogNopHandler{dpp});
     } else if (svc.zone->get_zone().log_data) {
       // BILog is stored externally to the BI (bucket index)
       return std::move(func)(CLSRGWBucketModifyOpT{
                                false /* log_data -- never log in-index */,
                                std::forward<Args>(args)...},
-                             get_or_create_fifo_bilog_op(*this, bucket_info));
+                             get_or_create_fifo_bilog_op(dpp, *this, bucket_info));
     } else {
       // no log at all
       return std::move(func)(CLSRGWBucketModifyOpT{
@@ -8921,8 +8935,8 @@ int RGWRados::with_bilog(F&& func, const RGWBucketInfo& bucket_info, Args&&... a
 
 
 template <bool DeleteMarkerV, class OpIssuerT>
-int RGWRados::bucket_index_link_olh(const DoutPrefixProvider *dpp,
-                                    OpIssuerT& op_issuer,
+int RGWRados::bucket_index_link_olh(OpIssuerT& op_issuer,
+                                    const DoutPrefixProvider *dpp,
                                     RGWBucketInfo& bucket_info,
                                     RGWObjState& olh_state, const rgw_obj& obj_instance,
                                     struct rgw_bucket_dir_entry_meta *meta,
@@ -9520,7 +9534,7 @@ int RGWRados::set_olh(const DoutPrefixProvider *dpp, RGWObjectCtx& obj_ctx,
       // fail here to simulate the scenario of an unlinked object instance
       ret = -cct->_conf->rgw_debug_inject_set_olh_err;
     } else {
-      ret = bucket_index_link_olh<DeleteMarkerV>(dpp, op_issuer, bucket_info, *state, target_obj,
+      ret = bucket_index_link_olh<DeleteMarkerV>(op_issuer, dpp, bucket_info, *state, target_obj,
 		                              op_tag, meta, olh_epoch, unmod_since,
 		                              high_precision_time, y, _zones_trace, log_data_change);
     }
@@ -9567,6 +9581,7 @@ int RGWRados::set_olh(const DoutPrefixProvider *dpp, RGWObjectCtx& obj_ctx,
     }
     return ret;
   },
+  dpp,
   bucket_info,
   cls_rgw_obj_key {
     target_obj.key.get_index_key_name(), target_obj.key.instance},
@@ -9671,6 +9686,7 @@ int RGWRados::unlink_obj_instance(const DoutPrefixProvider* dpp,
   }
     return ret;
   },
+    dpp,
     bucket_info,
     cls_rgw_obj_key {
       target_obj.key.get_index_key_name(), target_obj.key.instance},
@@ -9780,9 +9796,9 @@ int RGWRados::remove_olh_pending_entries(const DoutPrefixProvider *dpp, const RG
   return 0;
 }
 
-static auto get_bilog_handler(const RGWBucketInfo& bucket_info)
+static auto get_bilog_handler(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info)
 {
-  return BILogNopHandler{};
+  return BILogNopHandler{dpp};
 }
 
 int RGWRados::follow_olh(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_info, RGWObjectCtx& obj_ctx, RGWObjState *state, const rgw_obj& olh_obj, rgw_obj *target, optional_yield y)
@@ -9803,7 +9819,7 @@ int RGWRados::follow_olh(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_in
   if (!pending_entries.empty()) {
     ldpp_dout(dpp, 20) << __func__ << "(): found pending entries, need to update_olh() on bucket=" << olh_obj.bucket << dendl;
 
-    int ret = update_olh(dpp, obj_ctx, state, bucket_info, olh_obj, get_bilog_handler(bucket_info), y);
+    int ret = update_olh(dpp, obj_ctx, state, bucket_info, olh_obj, get_bilog_handler(dpp, bucket_info), y);
     if (ret < 0) {
       if (ret == -ECANCELED) {
         // In this context, ECANCELED means that the OLH tag changed in either the bucket index entry or the OLH object.
@@ -10542,6 +10558,7 @@ int RGWRados::cls_obj_complete_op(const RGWBucketInfo& bucket_info, BucketShard&
       completion->release(); /* can't reference arg here, as it might have already been released */
       return ret;
     },
+    dpp,
     bucket_info,
     cls_rgw_obj_key { ent.key.name, ent.key.instance },
     tag,

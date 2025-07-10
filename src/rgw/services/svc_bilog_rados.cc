@@ -452,13 +452,13 @@ int RGWSI_BILog_RADOS_FIFO::log_stop(const DoutPrefixProvider *dpp, optional_yie
 }
 
 std::unique_ptr<rgw::cls::fifo::FIFO>
-RGWSI_BILog_RADOS_FIFO::_open_fifo(const DoutPrefixProvider *dpp,
+RGWSI_BILog_RADOS_FIFO::open_fifo(const DoutPrefixProvider *dpp,
                                    const RGWBucketInfo& bucket_info,
                                    RGWSI_BucketIndex_RADOS& bi_rados)
 {
   librados::IoCtx index_pool;
   std::string bucket_oid;
-  if (const int ret = bi_rados->open_bucket_index(dpp, bucket_info,
+  if (const int ret = bi_rados.open_bucket_index(dpp, bucket_info,
                                                 &index_pool,
                                                 &bucket_oid);
       ret < 0) {

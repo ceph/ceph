@@ -1414,10 +1414,10 @@ int restore_obj_from_cloud(RGWLCCloudTierCtx& tier_ctx,
   int olh_init_modification(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, RGWObjState& state, const rgw_obj& olh_obj, std::string *op_tag, optional_yield y);
   int olh_init_modification_impl(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, RGWObjState& state, const rgw_obj& olh_obj, std::string *op_tag, optional_yield y);
   template <class CLSRGWBucketModifyOpT, class F, class... Args>
-  int with_bilog(F&& on_flushed, const RGWBucketInfo& bucket_info, Args&&... args);
+  int with_bilog(F&& on_flushed, const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, Args&&... args);
   template <bool DeleteMarkerV, class OpIssuerT>
-  int bucket_index_link_olh(const DoutPrefixProvider *dpp,
-                            OpIssuerT& op_issuer,
+  int bucket_index_link_olh(OpIssuerT& op_issuer,
+                            const DoutPrefixProvider *dpp,
                             RGWBucketInfo& bucket_info, RGWObjState& olh_state,
                             const rgw_obj& obj_instance,
                             const std::string& op_tag, struct rgw_bucket_dir_entry_meta *meta,
