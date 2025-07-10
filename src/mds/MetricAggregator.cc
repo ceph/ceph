@@ -291,8 +291,6 @@ void MetricAggregator::refresh_subvolume_metrics_for_rank(
       counter->set(l_subvolume_metrics_write_iops, aggr_metric.write_iops);
       counter->set(l_subvolume_metrics_write_tp_Bps, aggr_metric.write_tBps);
       counter->set(l_subvolume_metrics_avg_write_latency, aggr_metric.avg_write_latency);
-      counter->set(l_subvolume_metrics_last_window_end, aggr_metric.time_window_last_end_sec);
-      counter->set(l_subvolume_metrics_last_window, aggr_metric.time_window_last_dur_sec);
 
       // Update query_metrics_map
       auto sub_key_func_subvolume = [this, &path](const MDSPerfMetricSubKeyDescriptor &desc,
