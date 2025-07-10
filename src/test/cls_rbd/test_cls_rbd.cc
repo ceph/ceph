@@ -2,18 +2,13 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "include/compat.h"
-#include "common/ceph_context.h"
-#include "common/config.h"
 #include "common/snap_types.h"
 #include "common/Clock.h"
 #include "common/bit_vector.hpp"
-#include "include/encoding.h"
-#include "include/types.h"
-#include "include/rados/librados.h"
+#include "include/rados/librados.hpp"
 #include "include/rbd/object_map_types.h"
 #include "include/rbd_types.h"
 #include "include/stringify.h"
-#include "cls/rbd/cls_rbd.h"
 #include "cls/rbd/cls_rbd_client.h"
 #include "cls/rbd/cls_rbd_types.h"
 #include "librbd/Types.h"
@@ -31,8 +26,6 @@ using cls::rbd::MIRROR_PEER_DIRECTION_RX;
 using cls::rbd::MIRROR_PEER_DIRECTION_TX;
 using cls::rbd::MIRROR_PEER_DIRECTION_RX_TX;
 using ::librbd::ParentImageInfo;
-using ceph::encode;
-using ceph::decode;
 
 static int snapshot_add(librados::IoCtx *ioctx, const std::string &oid,
                         uint64_t snap_id, const std::string &snap_name) {

@@ -2,7 +2,6 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "cls/rbd/cls_rbd_client.h"
-#include "cls/lock/cls_lock_client.h"
 #include "include/buffer.h"
 #include "include/encoding.h"
 #include "include/rbd_types.h"
