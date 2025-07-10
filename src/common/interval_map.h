@@ -30,7 +30,7 @@
  * commutativity, which doesn't work if we want more recent insertions
  * to overwrite previous ones.
  */
-template <typename K, typename V, typename S, template<typename, typename, typename ...> class C = std::map>
+template <typename K, typename V, typename S, template<typename, typename, typename ...> class C = std::map, bool nonconst_iterator = false>
 class interval_map {
   S s;
   using Map = C<K, std::pair<K, V> >;
@@ -215,6 +215,7 @@ public:
       set.insert(i.get_off(), i.get_len());
     }
   }
+
   class const_iterator {
     Cmapiter it;
     const_iterator(Cmapiter &&it) : it(std::move(it)) {}
@@ -268,6 +269,77 @@ public:
   }
   const_iterator end() const {
     return const_iterator(m.end());
+  }
+
+  const_iterator cbegin() const {
+    return const_iterator(m.begin());
+  }
+  const_iterator cend() const {
+    return const_iterator(m.end());
+  }
+
+  class iterator {
+    Mapiter it;
+    bool end;
+    iterator(Mapiter &&it, bool end) : it(std::move(it)), end(end) {}
+
+    friend class interval_map;
+  public:
+    iterator(const iterator &) = default;
+    iterator &operator=(const iterator &) = default;
+
+    iterator &operator++() {
+      /* While the buffer can be modified with a non-const iterator, it
+       * not change size. Allow changes in size would allow for the interval
+       * to be merged into the next one, which would allow for unexpected
+       * behaviour.
+       */
+      if (!end && get_val().length() != get_len()) {
+        throw std::out_of_range("buffer length has changed");
+      }
+      ++it;
+      return *this;
+    }
+    iterator operator++(int) {
+      return const_iterator(it++);
+    }
+    iterator &operator--() {
+      --it;
+      return *this;
+    }
+    iterator operator--(int) {
+      return const_iterator(it--);
+    }
+    bool operator==(const iterator &rhs) const {
+      return it == rhs.it;
+    }
+    bool operator!=(const iterator &rhs) const {
+      return it != rhs.it;
+    }
+    K get_off() const {
+      return it->first;
+    }
+    K get_len() const {
+      return it->second.first;
+    }
+    V &get_val() {
+      return it->second.second;
+    }
+    iterator &operator*() {
+      return *this;
+    }
+    constexpr bool contains(K _off, K _len) const {
+      K off = get_off();
+      K len = get_len();
+      return off <= _off && _off + _len <= off + len;
+    }
+  };
+  static constexpr bool nonconst_iterator_cond() { return nonconst_iterator; }
+  iterator begin() requires (nonconst_iterator) {
+    return iterator(m.begin(), false);
+  }
+  iterator end() requires (nonconst_iterator) {
+    return iterator(m.end(), true);
   }
   std::pair<const_iterator, const_iterator> get_containing_range(
     K off,

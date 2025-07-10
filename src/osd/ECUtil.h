@@ -58,7 +58,7 @@ struct bl_split_merge {
 
 using extent_set = interval_set<uint64_t, boost::container::flat_map, false>;
 using extent_map = interval_map<uint64_t, ceph::buffer::list, bl_split_merge,
-                                boost::container::flat_map>;
+                                boost::container::flat_map, true>;
 
 /* Slice iterator.  This looks for contiguous buffers which are common
  * across all shards in the out_set.
@@ -74,8 +74,8 @@ class slice_iterator {
   uint64_t length = std::numeric_limits<uint64_t>::max();
   uint64_t start = std::numeric_limits<uint64_t>::max();
   uint64_t end = std::numeric_limits<uint64_t>::max();
-  shard_id_map<std::pair<extent_map::const_iterator,
-                         bufferlist::const_iterator>> iters;
+  shard_id_map<std::pair<extent_map::iterator,
+                         bufferlist::iterator>> iters;
   shard_id_map<bufferptr> in;
   shard_id_map<bufferptr> out;
   const shard_id_set &out_set;
@@ -992,10 +992,10 @@ public:
   size_t shard_count() { return extent_maps.size(); }
 
 
-  void assert_buffer_contents_equal(shard_extent_map_t other) const {
+  void assert_buffer_contents_equal(shard_extent_map_t other) {
     for (auto &&[shard, emap] : extent_maps) {
       for (auto &&i : emap) {
-        bufferlist bl = i.get_val();
+        bufferlist &bl = i.get_val();
         bufferlist otherbl;
         other.get_buffer(shard, i.get_off(), i.get_len(), otherbl);
         ceph_assert(bl.contents_equal(otherbl));
