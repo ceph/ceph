@@ -2298,7 +2298,9 @@ TEST_P(tm_single_device_intergrity_check_test_t, move_mapping)
       t = create_transaction();
       auto src_mapping = get_pin(t, extent->get_laddr());
       auto dest_mapping = get_end(t);
-      auto new_laddr = get_laddr_hint(8192);
+      auto new_laddr = src_mapping.get_key();
+      new_laddr = new_laddr.with_local_clone_id(
+	new_laddr.get_local_clone_id() + 1);
       auto ret = move_mapping(t, src_mapping, new_laddr, dest_mapping);
       submit_transaction(std::move(t));
     }
