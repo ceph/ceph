@@ -3,6 +3,7 @@
 
 #include "common/TracepointProvider.h"
 #include "common/config.h"
+#include "common/dout.h"
 
 TracepointProvider::TracepointProvider(CephContext *cct, const char *library,
                                        const char *config_key)
@@ -41,8 +42,8 @@ void TracepointProvider::verify_config(const ConfigProxy& conf) {
 
   m_handle = dlopen(m_library.c_str(), RTLD_NOW | RTLD_NODELETE);
   if (!m_handle) {
-    lderr(cct) << __func__ << " failed dlopen(): "<< m_library.c_str() <<", "
-      << dlerror() << " << dendl;
+    lderr(m_cct) << __func__ << " failed dlopen(): "<< m_library.c_str() <<", "
+      << dlerror()  << dendl;
   }
   ceph_assert(m_handle);
 }
