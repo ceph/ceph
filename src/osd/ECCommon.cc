@@ -63,12 +63,6 @@ static ostream &_prefix(std::ostream *_dout,
 }
 
 static ostream &_prefix(std::ostream *_dout,
-                        ECCommon::UnstableHashInfoRegistry *
-                        unstable_hash_info_registry) {
-  return *_dout;
-}
-
-static ostream &_prefix(std::ostream *_dout,
                         struct ClientReadCompleter const *read_completer
   );
 
@@ -747,16 +741,6 @@ void ECCommon::RMWPipeline::cache_ready(Op &op) {
 
   dout(20) << __func__ << ": written: " << written << ", op: " << op << dendl;
 
-  if (!sinfo.supports_ec_overwrites()) {
-    for (auto &&i: op.log_entries) {
-      if (i.requires_kraken()) {
-        derr << __func__ << ": log entry " << i << " requires kraken"
-             << " but overwrites are not enabled!" << dendl;
-        ceph_abort();
-      }
-    }
-  }
-
   ObjectStore::Transaction empty;
   bool should_write_local = false;
   ECSubWrite local_write_op;
@@ -967,52 +951,4 @@ void ECCommon::RMWPipeline::on_change2() {
 
 void ECCommon::RMWPipeline::call_write_ordered(std::function<void(void)> &&cb) {
   extent_cache.add_on_write(std::move(cb));
-}
-
-ECUtil::HashInfoRef ECCommon::UnstableHashInfoRegistry::maybe_put_hash_info(
-    const hobject_t &hoid,
-    ECUtil::HashInfo &&hinfo) {
-  return registry.lookup_or_create(hoid, hinfo);
-}
-
-ECUtil::HashInfoRef ECCommon::UnstableHashInfoRegistry::get_hash_info(
-    const hobject_t &hoid,
-    bool create,
-    const map<string, bufferlist, less<>> &attrs,
-    uint64_t size) {
-  dout(10) << __func__ << ": Getting attr on " << hoid << dendl;
-  auto ref = registry.lookup(hoid);
-  if (!ref) {
-    dout(10) << __func__ << ": not in cache " << hoid << dendl;
-    ECUtil::HashInfo hinfo(ec_impl->get_chunk_count());
-    bufferlist bl;
-    if (attrs.contains(ECUtil::get_hinfo_key())) {
-      bl = attrs.at(ECUtil::get_hinfo_key());
-    } else {
-      dout(30) << __func__ << " " << hoid << " missing hinfo attr" << dendl;
-    }
-    if (bl.length() > 0) {
-      auto bp = bl.cbegin();
-      try {
-        decode(hinfo, bp);
-      }
-      catch (...) {
-        dout(0) << __func__ << ": Can't decode hinfo for " << hoid << dendl;
-        return ECUtil::HashInfoRef();
-      }
-      if (hinfo.get_total_chunk_size() != size) {
-        dout(0) << __func__ << ": Mismatch of total_chunk_size "
-      		       << hinfo.get_total_chunk_size() << dendl;
-        return ECUtil::HashInfoRef();
-      }
-      create = true;
-    } else if (size == 0) {
-      // If empty object and no hinfo, create it
-      create = true;
-    }
-    if (create) {
-      ref = registry.lookup_or_create(hoid, hinfo);
-    }
-  }
-  return ref;
 }
