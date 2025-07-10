@@ -120,8 +120,9 @@ podman build --pull=newer --squash -f $CFILE -t build.sh.output \
     --build-arg CEPH_REF=${BRANCH:-main} \
     --build-arg OSD_FLAVOR=${FLAVOR:-default} \
     --build-arg CI_CONTAINER=${CI_CONTAINER:-default} \
+    --build-arg CUSTOM_CEPH_REPO_URL="${CUSTOM_CEPH_REPO_URL}" \
     --secret=id=prerelease_creds,src=./prerelease.secret.txt \
-    2>&1 
+    2>&1
 
 rm ./prerelease.secret.txt
 
