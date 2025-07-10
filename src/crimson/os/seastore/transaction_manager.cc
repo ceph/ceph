@@ -4,6 +4,7 @@
 #include "include/denc.h"
 #include "include/intarith.h"
 
+#include "crimson/common/coroutine.h"
 #include "crimson/os/seastore/logging.h"
 #include "crimson/os/seastore/transaction_manager.h"
 #include "crimson/os/seastore/journal.h"
@@ -300,6 +301,67 @@ TransactionManager::refs_ret TransactionManager::remove(
       return ref_iertr::make_ready_future<std::vector<unsigned>>(std::move(refcnts));
     });
   });
+}
+
+TransactionManager::move_region_ret
+TransactionManager::move_region(
+  Transaction &t,
+  LBAMapping src,
+  LBAMapping dst,
+  laddr_t dst_prefix)
+{
+  auto src_prefix = src.get_key().get_clone_prefix();
+  auto calc_dst_key = [&src, dst_prefix] {
+    auto key = src.get_key();
+    auto offset = key.get_byte_distance<loffset_t>(key.get_clone_prefix());
+    return (dst_prefix + offset).checked_to_laddr();
+  };
+
+  // remove the reserved mapping at dst
+
+  auto remove_ret = co_await lba_manager->remove_mapping(
+    t, std::move(dst)
+  ).handle_error_interruptible(
+    move_region_iertr::pass_further(),
+    crimson::ct_error::assert_all("invalid error"));
+  assert(remove_ret.addr.is_paddr());
+  assert(remove_ret.addr.get_paddr() == P_ADDR_ZERO);
+  dst = std::move(remove_ret.mapping);
+  src = co_await src.refresh();
+
+  // move mapping from src to dst
+  while (src.get_key().get_clone_prefix() == src_prefix) {
+    if (src.is_indirect()) {
+      auto ret = co_await lba_manager->move_indirect_mapping(
+	t, src, calc_dst_key(), dst);
+      src = std::move(ret.src);
+      dst = std::move(ret.dest);
+    } else if (!src.is_zero_reserved()) {
+      auto extent = co_await relocate_logical_extent(t, src);
+      auto laddr = calc_dst_key();
+      extent->set_laddr(laddr);
+      auto ret = co_await lba_manager->move_direct_mapping(
+	t, src, laddr, dst, *extent);
+      src = std::move(ret.src);
+      dst = std::move(ret.dest);
+    } else {
+      auto len = src.get_length();
+      auto dst_key = calc_dst_key();
+      auto remove_ret = co_await lba_manager->remove_mapping(t, src
+      ).handle_error_interruptible(
+	move_region_iertr::pass_further(),
+	crimson::ct_error::assert_all("invalid error"));
+      src = std::move(remove_ret.mapping);
+      dst = co_await dst.refresh();
+      auto insert = co_await reserve_region(t, std::move(dst), dst_key, len
+      ).handle_error_interruptible(
+	move_region_iertr::pass_further(),
+	crimson::ct_error::assert_all("invalid error"));
+      src = co_await src.refresh();
+      dst = co_await insert.next();
+    }
+  }
+  co_return;
 }
 
 TransactionManager::submit_transaction_iertr::future<>
