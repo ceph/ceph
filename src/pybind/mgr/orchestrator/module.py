@@ -2515,7 +2515,8 @@ Usage:
     @_cli_write_command('orch upgrade check')
     def _upgrade_check(self,
                        image: Optional[str] = None,
-                       ceph_version: Optional[str] = None) -> HandleCommandResult:
+                       ceph_version: Optional[str] = None,
+                       no_mon_flags: bool = False) -> HandleCommandResult:
         """Check service versions vs available and target containers"""
         self._upgrade_check_image_name(image, ceph_version)
         completion = self.upgrade_check(image=image, version=ceph_version)
@@ -2569,7 +2570,7 @@ Usage:
         self._upgrade_check_image_name(image, ceph_version)
         dtypes = daemon_types.split(',') if daemon_types is not None else None
         service_names = services.split(',') if services is not None else None
-        completion = self.upgrade_start(image, ceph_version, dtypes, hosts, service_names, limit)
+        completion = self.upgrade_start(image, ceph_version, dtypes, hosts, service_names, limit, no_mon_flags)
         raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())
 
