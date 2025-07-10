@@ -22,6 +22,8 @@ ARG OSD_FLAVOR="default"
 # (optional) Should be 'true' for CI builds (pull from shaman, etc.)
 ARG CI_CONTAINER="true"
 
+# (optional, for hackers) Use the following URL for ceph repo.
+ARG CUSTOM_CEPH_REPO_URL
 
 RUN /bin/echo -e "\
 FROM_IMAGE: ${FROM_IMAGE}\n\
@@ -85,6 +87,11 @@ RUN set -ex && \
 
 # Ceph repo
 RUN --mount=type=secret,id=prerelease_creds set -ex && \
+    if [ "$CUSTOM_CEPH_REPO_URL" ]; then \
+        curl -L -o /tmp/custom-ceph.repo "$CUSTOM_CEPH_REPO_URL" && \
+        mv /tmp/custom-ceph.repo  /etc/yum.repos.d/custom-ceph.repo && \
+        exit 0 ; \
+    fi && \
     rpm --import 'https://download.ceph.com/keys/release.asc' && \
     ARCH=$(arch); if [ "${ARCH}" == "aarch64" ]; then ARCH="arm64"; fi ;\
     IS_RELEASE=0 ;\
