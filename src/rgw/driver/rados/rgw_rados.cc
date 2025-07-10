@@ -8779,7 +8779,7 @@ struct BILogUpdateBatchFIFO {
 
   BILogUpdateBatchFIFO(const DoutPrefixProvider *dpp, RGWRados& store, const RGWBucketInfo& bucket_info);
 
-  void add_maybe_flush(const uint64_t olh_epoch,
+  void add_maybe_flush(const uint64_t olh_epoch, const ceph::real_time set_mtime,
                        const cls_rgw_bi_log_related_op& bi_log_client_info)
   {
     ldpp_dout(dpp, 20) << __PRETTY_FUNCTION__
@@ -8789,7 +8789,7 @@ struct BILogUpdateBatchFIFO {
 
     entry.object = bi_log_client_info.key.name;
     entry.instance = bi_log_client_info.key.instance;
-    // TODO: entry.timestamp
+    entry.timestamp = set_mtime;
     entry.op = bi_log_client_info.op;
     // olh epoch
     {
@@ -8880,7 +8880,7 @@ static BILogUpdateBatchFIFO get_or_create_fifo_bilog_op(const DoutPrefixProvider
 struct BILogNopHandler {
   const DoutPrefixProvider *dpp;
   CephContext* const cct;
-  void add_maybe_flush(const uint64_t, const cls_rgw_bi_log_related_op&) {
+  void add_maybe_flush(const uint64_t, ceph::real_time, const cls_rgw_bi_log_related_op&) {
     ldpp_dout(dpp, 20) << __PRETTY_FUNCTION__
                    << ": the cls_rgw_bi_log_related_op-taking variant"
                    << dendl;
@@ -10528,6 +10528,7 @@ int RGWRados::cls_obj_complete_op(const RGWBucketInfo& bucket_info, BucketShard&
       // Index or externally (e.g. in cls_fifo).
       bilog_handler.add_maybe_flush(
         rgw_bucket_entry_ver{}.epoch,
+        ent.meta.mtime,
         static_cast<const cls_rgw_bi_log_related_op&>(op_issuer));
 
       // handle the BI::complete part. It happens ONLY after ensuring
