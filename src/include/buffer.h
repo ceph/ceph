@@ -187,7 +187,13 @@ struct error_code;
 	  end_ptr(p->end_c_str()),
 	  deep(d)
       {}
-
+      iterator_impl(const char* start, const char* end_ptr)
+        : bp(nullptr),
+          start(start),
+          pos(start),
+          end_ptr(end_ptr),
+          deep(true)
+      {}
       friend class ptr;
 
     public:
@@ -262,7 +268,12 @@ struct error_code;
     const_iterator begin_deep(size_t offset=0) const {
       return const_iterator(this, offset, true);
     }
-
+    // A specific iterator that is just pointing memory, and not attached to any buffer::ptr.
+    // The use for it is decoding using denc data coming from RocksDB keys without a need to
+    // pack it into buffer::ptr.
+    static const_iterator begin_deep_detached(const char* start, const char* end_ptr) {
+      return const_iterator(start, end_ptr);
+    }
     // misc
     bool is_aligned(unsigned align) const {
       return ((uintptr_t)c_str() & (align-1)) == 0;
