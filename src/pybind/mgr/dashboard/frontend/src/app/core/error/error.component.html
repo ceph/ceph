@@ -68,9 +68,9 @@
 
 <ng-template #enableButton>
   <div class="mt-4 text-center"
-       *ngIf="buttonToEnableModule && !(buttonName && buttonRoute)">
+       *ngIf="module_name && !(buttonName && buttonRoute)">
     <button class="btn btn-primary"
             (click)="enableModule()"
-            i18n>Enable {{ buttonToEnableModule | upperFirst }} module</button>
+            i18n>Enable {{ module_name | upperFirst }} module</button>
   </div>
 </ng-template>
