@@ -105,6 +105,9 @@ DISK_OCCUPATION = ('ceph_daemon', 'device', 'db_device',
 
 NUM_OBJECTS = ['degraded', 'misplaced', 'unfound']
 
+SMB_METADATA = ('smb_version', 'volume',
+                'subvolume_group', 'subvolume', 'netbiosname')
+
 alert_metric = namedtuple('alert_metric', 'name description')
 HEALTH_CHECKS = [
     alert_metric('SLOW_OPS', 'OSD or Monitor requests taking a long time to process'),
@@ -766,6 +769,13 @@ class Module(MgrModule, OrchestratorClientMixin):
             'daemon_health_metrics',
             'Health metrics for Ceph daemons',
             ('type', 'ceph_daemon',)
+        )
+
+        metrics['smb_metadata'] = Metric(
+            'untyped',
+            'smb_metadata',
+            'SMB Metadata',
+            SMB_METADATA
         )
 
         for flag in OSD_FLAGS:
@@ -1700,6 +1710,66 @@ class Module(MgrModule, OrchestratorClientMixin):
                     self.metrics[path].set(value, labels)
         self.add_fixed_name_metrics()
 
+    @profile_method()
+    def get_smb_metadata(self) -> None:
+        try:
+            mgr_map = self.get('mgr_map')
+            available_modules = [m['name'] for m in mgr_map['available_modules']]
+            if 'smb' not in available_modules:
+                self.log.debug("SMB module is not available, skipping SMB metadata collection")
+                return
+
+            if not self.available()[0]:
+                self.log.debug("Orchestrator not available")
+                return
+
+            smb_version = ""
+
+            try:
+                daemons = raise_if_exception(self.list_daemons(daemon_type='smb'))
+                if daemons:
+                    smb_version = str(daemons[0].version)
+            except Exception as e:
+                self.log.error(f"Failed to get SMB daemons: {str(e)}")
+                return
+
+            ret, out, err = self.mon_command({
+                'prefix': 'smb show',
+                'format': 'json'
+            })
+            if ret != 0:
+                self.log.error(f"Failed to get SMB info: {err}")
+                return
+
+            try:
+                smb_data = json.loads(out)
+
+                for resource in smb_data.get('resources', []):
+                    if resource.get('resource_type') == 'ceph.smb.share':
+                        self.log.info("Processing SMB share resource")
+                        cluster_id = resource.get('cluster_id')
+                        if not cluster_id:
+                            self.log.debug("Skipping share with missing cluster_id")
+                            continue
+
+                        cephfs = resource.get('cephfs', {})
+                        cephfs_volume = cephfs.get('volume', '')
+                        cephfs_subvolumegroup = cephfs.get('subvolumegroup', '_nogroup')
+                        cephfs_subvolume = cephfs.get('subvolume', '')
+                        self.metrics['smb_metadata'].set(1, (
+                            smb_version,
+                            cephfs_volume,
+                            cephfs_subvolumegroup,
+                            cephfs_subvolume,
+                            cluster_id
+                        ))
+            except json.JSONDecodeError:
+                self.log.error("Failed to decode SMB module output")
+            except Exception as e:
+                self.log.error(f"Error processing SMB metadata: {str(e)}")
+        except Exception as e:
+            self.log.error(f"Failed to get SMB metadata: {str(e)}")
+
     @profile_method(True)
     def collect(self) -> str:
         # Clear the metrics before scraping
@@ -1719,6 +1789,7 @@ class Module(MgrModule, OrchestratorClientMixin):
         self.get_pool_repaired_objects()
         self.get_num_objects()
         self.get_all_daemon_health_metrics()
+        self.get_smb_metadata()
 
         if not self.get_module_option('exclude_perf_counters'):
             self.get_perf_counters()
