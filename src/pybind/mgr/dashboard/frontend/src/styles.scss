@@ -244,3 +244,14 @@ formly-form {
 legend {
   float: none;
 }
+
+// Fix for overridden browser autofill CSS.
+// This needs to be removed when using Carbon forms.
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+input:-webkit-autofill:active {
+  box-shadow: 0 0 0 10px $white inset;
+  -webkit-text-fill-color: inherit;
+  transition: background-color 5000s ease-in-out 0s;
+}
