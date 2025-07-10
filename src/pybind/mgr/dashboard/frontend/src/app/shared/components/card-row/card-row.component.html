@@ -62,7 +62,7 @@
       {{ data.info }}
     </span>
     <cd-icon
-       type="info">
+       type="infoCircle">
     </cd-icon >
   </span>
   <span *ngIf="data.warn || data.categoryPgAmount?.warning"
@@ -99,9 +99,7 @@
     </i>
   </span>
 </ng-template>
-<cd-icon
-       type="progress">
-    </cd-icon >
+
 <ng-template #osdSummary>
   <span *ngIf="data.up === data.in">
     {{ data.up }}

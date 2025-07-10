@@ -8,7 +8,9 @@
   color: theme.$support-error;
 }
 
-.info-icon {
+//@TODO: this naming needs to be changed
+// Do this after converting Icons enum to const
+.infoCircle-icon {
   color: theme.$support-info;
 }
 
