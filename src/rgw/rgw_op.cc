@@ -4101,9 +4101,9 @@ int RGWPutObj::init_processing(optional_yield y) {
 
   // reject public canned acls
   if (s->bucket_access_conf && s->bucket_access_conf->block_public_acls() &&
-      (s->canned_acl.compare("public-read") ||
-       s->canned_acl.compare("public-read-write") ||
-       s->canned_acl.compare("authenticated-read"))) {
+      (s->canned_acl == "public-read" ||
+       s->canned_acl == "public-read-write" ||
+       s->canned_acl == "authenticated-read")) {
     return -EACCES;
   }
 
