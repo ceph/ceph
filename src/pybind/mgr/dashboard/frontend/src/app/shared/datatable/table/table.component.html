@@ -379,23 +379,20 @@
 
 <ng-template #pathTpl
              let-value="data.value">
-  <span data-toggle="tooltip"
-        [title]="value"
-        class="font-monospace">{{ value | path }}
-    <cd-copy-2-clipboard-button *ngIf="value"
-                                [source]="value"
-                                [byId]="false"
-                                [showIconOnly]="true">
-    </cd-copy-2-clipboard-button>
-  </span>
+  <cd-copy-2-clipboard-button *ngIf="value"
+                              [source]="value"
+                              [byId]="false"
+                              size="lg"
+                              text="{{ value | path }}">
+  </cd-copy-2-clipboard-button>
 </ng-template>
 
 <ng-template #copyTpl
              let-value="data.value">
-  <span class="font-monospace">{{value}}</span>
   <cd-copy-2-clipboard-button *ngIf="value"
                               [source]="value"
                               [byId]="false"
-                              [showIconOnly]="true">
+                              [size]="lg"
+                              [text]="value">
   </cd-copy-2-clipboard-button>
 </ng-template>
