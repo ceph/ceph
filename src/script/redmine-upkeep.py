@@ -20,6 +20,7 @@ import re
 import signal
 import sys
 import textwrap
+import traceback
 
 from datetime import datetime, timedelta, timezone
 from getpass import getuser
@@ -127,6 +128,33 @@ def post_github_comment(session, pr_id, body):
         log.error(f"Network or request error posting comment to GitHub PR #{pr_id}: {e}")
         return False
 
+
+class UpkeepException(Exception):
+    def __init__(self, issue_update, exception=None, traceback=None):
+        self.issue_update = issue_update
+        self.exception = exception
+        self.traceback = traceback
+
+    def comment(self):
+        raise NotImplementedError()
+
+class PRInvalidException(UpkeepException):
+    def __init__(self, issue_update, pr_id, **kwargs):
+        super().__init__(issue_update, **kwargs)
+        self.pr_id = pr_id
+
+    def __str__(self):
+        return "PR is invalid"
+
+    def comment(self):
+        return f"""
+Issue #{self.issue_update.issue.id} referenced "PR #{self.pr_id}":https://github.com/ceph/ceph/pull/{self.pr_id} is invalid:
+
+<pre>
+{self.traceback.strip()}
+</pre>
+"""
+
 class IssueUpdate:
     def __init__(self, issue, github_session, git_repo):
         self.issue = issue
@@ -135,6 +163,7 @@ class IssueUpdate:
         self.git_repo = git_repo
         self._pr_cache = {}
         self.has_changes = False # New flag to track if changes are made
+        self.transform = None
         logger_extra = {
           'issue_id': issue.id,
           'current_transform': None,
@@ -142,6 +171,7 @@ class IssueUpdate:
         self.logger = IssueLoggerAdapter(logging.getLogger(__name__), extra=logger_extra)
 
     def set_transform(self, transform):
+        self.transform = transform
         self.logger.extra['current_transform'] = transform
 
     def get_custom_field(self, field_id):
@@ -251,6 +281,7 @@ class IssueUpdate:
         except requests.exceptions.HTTPError as e:
             if response.status_code == 404:
                 self.logger.warning(f"GitHub PR #{pr_id} not found (404).")
+                raise PRInvalidException(self, pr_id, exception=e, traceback=traceback.format_exc())
             elif response.status_code == 403 and "rate limit exceeded" in response.text:
                 self.logger.error(f"GitHub API rate limit exceeded for PR #{pr_id}. Further GitHub API calls will be skipped.")
                 RedmineUpkeep.GITHUB_RATE_LIMITED = True  # Set the global flag
@@ -286,6 +317,7 @@ class IssueUpdate:
 class RedmineUpkeep:
     # Class-level flag to track GitHub API rate limit status
     GITHUB_RATE_LIMITED = False
+    MAX_UPKEEP_FAILURES = 5
 
     def __init__(self, args):
         self.G = git.Repo(args.git)
@@ -297,6 +329,7 @@ class RedmineUpkeep:
         self.pull_request_id = args.pull_request
         self.merge_commit = args.merge_commit
 
+        self.upkeep_failures = 0
         self.issues_inspected = 0
         self.issues_modified = 0
         self.modifications_made = {} # Dictionary to store what transformations were applied
@@ -604,16 +637,13 @@ class RedmineUpkeep:
         try:
             applied_transformations = []
             for transform_method in self.transform_methods:
-                try:
-                    # Each transformation method modifies the same issue_update object
-                    transform_name = transform_method.__name__.removeprefix("_transform_")
-                    issue_update.logger.debug(f"Calling transformation: {transform_name}")
-                    issue_update.set_transform(transform_name)
-                    if transform_method(issue_update):
-                        issue_update.logger.info(f"Transformation {transform_method.__name__} resulted in a change.")
-                        applied_transformations.append(transform_method.__name__)
-                finally:
-                    issue_update.set_transform(None)
+                # Each transformation method modifies the same issue_update object
+                transform_name = transform_method.__name__.removeprefix("_transform_")
+                issue_update.logger.debug(f"Calling transformation: {transform_name}")
+                issue_update.set_transform(transform_name)
+                if transform_method(issue_update):
+                    issue_update.logger.info(f"Transformation {transform_method.__name__} resulted in a change.")
+                    applied_transformations.append(transform_method.__name__)
 
             if issue_update.has_changes:
                 issue_update.logger.info("Changes detected. Sending update to Redmine...")
@@ -637,26 +667,31 @@ class RedmineUpkeep:
                     return True
                 except requests.exceptions.HTTPError as err:
                     issue_update.logger.error("API PUT failure during upkeep.", exc_info=True)
-                    self._handle_update_failure(issue_update, err)
-                    return False
-                except Exception as e:
-                    issue_update.logger.exception(f"Failed to update Redmine issue during upkeep: {e}")
-                    self._handle_update_failure(issue_update, e)
+                    self._handle_upkeep_failure(issue_update, err)
                     return False
             else:
                 issue_update.logger.info("No changes detected after all transformations. No Redmine update sent.")
                 return False
+        except UpkeepException as e:
+            self._handle_upkeep_failure(issue_update, e)
+            return False
         finally:
+            issue_update.set_transform(None)
             if IS_GITHUB_ACTION:
                 log_stream.flush()
                 print(f"::endgroup::", file=sys.stderr, flush=False) # End GitHub Actions group
 
-    def _handle_update_failure(self, issue_update, error):
+    def _handle_upkeep_failure(self, issue_update, error):
         """
-        Adds a tag and an unsilenced comment to the issue when an update fails.
+        Adds a tag and an unsilenced comment to the issue when upkeep fails.
         """
+
+        self.upkeep_failures += 1
+        if self.upkeep_failures > self.MAX_UPKEEP_FAILURES:
+            raise RuntimeError("too many upkeep failures: assuming systemic bug and quitting!")
+
         issue_id = issue_update.issue.id
-        issue_update.logger.error(f"Update failed for issue #{issue_id}. Attempting to add 'upkeep-failed' tag and comment.")
+        issue_update.logger.error(f"Upkeep failed for issue #{issue_id}. Attempting to add 'upkeep-failed' tag and comment.")
 
         # Prepare payload for failure update
         failure_payload = {
@@ -665,14 +700,33 @@ class RedmineUpkeep:
         }
 
         # Add comment
-        failure_payload['issue']['notes'] = f"""
-            Redmine Upkeep script failed to update this issue on {datetime.now(timezone.utc).isoformat(timespec='seconds')}.
-            Error: {error}
-            Payload was:
-            <pre>
-            {json.dumps(issue_update.get_update_payload(suppress_mail=True), indent=4)}
-            </pre>
-            """
+        comment = f"""
+h1. Redmine Upkeep failure
+
+The "redmine-upkeep.py script":https://github.com/ceph/ceph/blob/main/src/script/redmine-upkeep.py failed to update this issue.
+
+Please manually fix the issue and remove "upkeep-failed" tag to allow future upkeep operations.
+
+h2. Transformation
+
+The script was in the *{issue_update.transform}* transformation.
+
+h2. Error
+
+{error.comment()}
+"""
+
+        if issue_update.has_changes:
+            comment += f"""
+h2. Update Payload
+
+<pre>
+{json.dumps(issue_update.get_update_payload(suppress_mail=True), indent=4)}
+</pre>
+"""
+        comment = comment.strip()
+        issue_update.logger.debug("Created update failure comment:\n%s", comment)
+        failure_payload['issue']['notes'] = comment
 
         # Get existing tags or initialize if none
         current_tags_str = issue_update.get_custom_field(REDMINE_CUSTOM_FIELD_ID_TAGS)
@@ -950,7 +1004,7 @@ def main():
 
     log.info("Redmine Upkeep Script finished.")
     if RU:
-        log.info(f"Summary: Issues Inspected: {RU.issues_inspected}, Issues Modified: {RU.issues_modified}")
+        log.info(f"Summary: Issues Inspected: {RU.issues_inspected}, Issues Modified: {RU.issues_modified}, Issues Failed: {RU.upkeep_failures}")
         if RU.issues_modified > 0:
             log.info(f"Modifications by Transformation: {RU.modifications_made}")
         if RedmineUpkeep.GITHUB_RATE_LIMITED:
@@ -965,6 +1019,8 @@ def main():
                 f.write(f"### Redmine Upkeep Summary\n")
                 f.write(f"- Issues Inspected: {RU.issues_inspected}\n")
                 f.write(f"- Issues Modified: {RU.issues_modified}\n")
+                if RU.upkeep_failures > 0:
+                    f.write(f"- Issues upkeep failures: {RU.upkeep_failures}\n")
                 if RedmineUpkeep.GITHUB_RATE_LIMITED:
                     f.write(f"- **Warning:** GitHub API rate limit was encountered. Some GitHub-related transformations might have been skipped.\n")
                 if RU.issues_modified > 0:
