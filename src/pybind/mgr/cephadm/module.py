@@ -505,6 +505,13 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             default='169.254.1.1',
             desc="Default IP address for RedFish API (OOB management)."
         ),
+        Option(
+            'upgrade_unset_mon_flags',
+            type='str',
+            default='',
+            desc='Comma separated list of mon flags to unset when --unset-mon-flags '
+            'is passed to the upgrade command'
+        ),
     ]
     for image in DefaultImages:
         MODULE_OPTIONS.append(Option(image.key, default=image.image_ref, desc=image.desc))
@@ -611,6 +618,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             self.certificate_automated_rotation_enabled = False
             self.certificate_check_debug_mode = False
             self.certificate_check_period = 0
+            self.upgrade_unset_mon_flags: str = ''
 
         self.notify(NotifyType.mon_map, None)
         self.config_notify()
@@ -3007,6 +3015,65 @@ Then run the following:
 
         return osd[0]
 
+    def set_global_mon_flag(self, flag: str) -> None:
+        # attempt to set a mon flag. If we get a nonzero return code,
+        # raise an OrchestratorError
+        rc, out, err = self.mon_command({
+            'prefix': 'config set',
+            'who': 'mon', 
+            'name': f'{flag}',
+            'value': 'true', 
+        })
+        if rc:
+            self.log.warning(
+                f"Setting mon flag {flag} failed with return code {rc}: {err}")
+            raise OrchestratorError(
+                f"Setting mon flag {flag} failed with return code {rc}: {err}")
+        else:
+            self.log.info(
+                f"Set global mon flag {flag}")
+
+    def unset_global_mon_flag(self, flag: str) -> None:
+        # attempt to unset an mon flag. If we get a nonzero return code,
+        # raise an OrchestratorError
+        rc, out, err = self.mon_command({
+            'prefix': 'config set',
+            'who': 'mon', 
+            'name': f'{flag}',
+            'value': 'false', 
+        })
+        if rc:
+            self.log.warning(
+                f"Unsetting mon flag {flag} failed with return code {rc}: {err}")
+            raise OrchestratorError(
+                f"Unsetting mon flag {flag} failed with return code {rc}: {err}")
+        else:
+            self.log.info(
+                f"Unset global mon flag {flag}")
+
+    def is_global_mon_flag_set(self, flag: str) -> bool:
+        # returns if the given mon flag is set or not. If we get a
+        # nonzero return code, raise an OrchestratorError
+        rc, out, err = self.mon_command({
+            'prefix': 'config get',
+            'who': 'mon',
+            'key': f'{flag}',
+        })
+        if rc:
+            self.log.warning(
+                f"Failed trying to find set mon flags with `ceph config get mon` (rc: {rc}): {err}")
+            raise OrchestratorError(
+                f"Failed trying to find set mon flags with `ceph config get mon` (rc: {rc}): {err}")
+
+        try:
+            s = (out or "").strip().lower()
+            if s in {"true", "yes", "on", "enabled", "enable", "set"}:
+                return True
+            if s in {"false", "no", "off", "disabled", "disable", "unset"}:
+                return False
+        except Exception as e:
+            raise OrchestratorError(f'Failed to get set mon flags: {e}')
+
     def _trigger_preview_refresh(self,
                                  specs: Optional[List[DriveGroupSpec]] = None,
                                  service_name: Optional[str] = None,
@@ -4078,7 +4145,7 @@ Then run the following:
 
     @handle_orch_error
     def upgrade_start(self, image: str, version: str, daemon_types: Optional[List[str]] = None, host_placement: Optional[str] = None,
-                      services: Optional[List[str]] = None, limit: Optional[int] = None) -> str:
+                      services: Optional[List[str]] = None, limit: Optional[int] = None, unset_mon_flags: bool = False) -> str:
         if self.inventory.get_host_with_state("maintenance"):
             raise OrchestratorError("Upgrade aborted - you have host(s) in maintenance state")
         if self.offline_hosts:
@@ -4110,7 +4177,7 @@ Then run the following:
                 raise OrchestratorError(
                     f'Upgrade aborted - --limit arg must be a positive integer, not {limit}')
 
-        return self.upgrade.upgrade_start(image, version, daemon_types, hosts, services, limit)
+        return self.upgrade.upgrade_start(image, version, daemon_types, hosts, services, limit, unset_mon_flags)
 
     @handle_orch_error
     def upgrade_pause(self) -> str:
