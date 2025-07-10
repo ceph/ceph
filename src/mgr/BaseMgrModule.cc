@@ -1150,6 +1150,7 @@ ceph_add_mds_perf_query(BaseMgrModule *self, PyObject *args)
   static const std::map<std::string, MDSPerfMetricSubKeyType> sub_key_types = {
     {"mds_rank", MDSPerfMetricSubKeyType::MDS_RANK},
     {"client_id", MDSPerfMetricSubKeyType::CLIENT_ID},
+    {"subvolume_path", MDSPerfMetricSubKeyType::SUBVOLUME_PATH},
   };
   static const std::map<std::string, MDSPerformanceCounterType> counter_types = {
     {"cap_hit", MDSPerformanceCounterType::CAP_HIT_METRIC},
@@ -1168,6 +1169,12 @@ ceph_add_mds_perf_query(BaseMgrModule *self, PyObject *args)
     {"stdev_write_latency", MDSPerformanceCounterType::STDEV_WRITE_LATENCY_METRIC},
     {"avg_metadata_latency", MDSPerformanceCounterType::AVG_METADATA_LATENCY_METRIC},
     {"stdev_metadata_latency", MDSPerformanceCounterType::STDEV_METADATA_LATENCY_METRIC},
+    {"subv_read_iops", MDSPerformanceCounterType::SUBV_READ_IOPS_METRIC},
+    {"subv_write_iops", MDSPerformanceCounterType::SUBV_WRITE_IOPS_METRIC},
+    {"subv_read_throughput", MDSPerformanceCounterType::SUBV_READ_THROUGHPUT_METRIC},
+    {"subv_write_throughput", MDSPerformanceCounterType::SUBV_WRITE_THROUGHPUT_METRIC},
+    {"subv_avg_read_latency", MDSPerformanceCounterType::SUBV_AVG_READ_LATENCY_METRIC},
+    {"subv_avg_write_latency", MDSPerformanceCounterType::SUBV_AVG_WRITE_LATENCY_METRIC},
   };
 
   PyObject *py_query = nullptr;
@@ -1260,7 +1267,7 @@ ceph_add_mds_perf_query(BaseMgrModule *self, PyObject *args)
               Py_RETURN_NONE;
             }
             if (d.regex.mark_count() == 0) {
-              derr << __func__ << " query " << query_param_name << " item " << j
+              dout(20) << __func__ << " query " << query_param_name << " item " << j
                    << " regex " << d.regex_str << ": no capturing groups"
                    << dendl;
               Py_RETURN_NONE;
@@ -1287,7 +1294,7 @@ ceph_add_mds_perf_query(BaseMgrModule *self, PyObject *args)
       for (int j = 0; j < PyList_Size(query_param_val); j++) {
         PyObject *py_type = PyList_GET_ITEM(query_param_val, j);
         if (!PyUnicode_Check(py_type)) {
-          derr << __func__ << " query " << query_param_name << " item " << j
+          dout(20) << __func__ << " query " << query_param_name << " item " << j
                << " not a string" << dendl;
           Py_RETURN_NONE;
         }
