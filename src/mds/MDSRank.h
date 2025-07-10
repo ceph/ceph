@@ -394,6 +394,8 @@ class MDSRank {
       return inject_journal_corrupt_dentry_first;
     }
 
+    std::string get_path(inodeno_t ino);
+
     // Reference to global MDS::mds_lock, so that users of MDSRank don't
     // carry around references to the outer MDS, and we can substitute
     // a separate lock here in future potentially.
