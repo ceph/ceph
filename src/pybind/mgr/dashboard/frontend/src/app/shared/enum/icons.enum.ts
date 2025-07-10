@@ -98,7 +98,7 @@ export enum Icons {
   inverse = 'fa fa-inverse' // To get an alternative icon color
 }
 
-export enum IconsSize {
+export enum IconSize {
   size16 = '16',
   size20 = '20',
   size24 = '24',
@@ -107,7 +107,7 @@ export enum IconsSize {
 
 export const ICON_TYPE = {
   danger: 'warning--filled',
-  info: 'information--filled',
+  infoCircle: 'information--filled',
   success: 'checkmark--filled',
   warning: 'warning--alt--filled'
 } as const;
