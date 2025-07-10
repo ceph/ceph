@@ -1564,6 +1564,25 @@ public:
   using ent_map_t =
     boost::container::flat_map<std::string, rgw_bucket_dir_entry>;
 
+  template <class BILogHandlerT>
+  int _do_cls_bucket_list_ordered(const DoutPrefixProvider *dpp,
+                                            RGWBucketInfo& bucket_info,
+                                            const rgw::bucket_index_layout_generation& idx_layout,
+                                            const int shard_id,
+                                            const rgw_obj_index_key& start_after,
+                                            const std::string& prefix,
+                                            const std::string& delimiter,
+                                            const uint32_t num_entries,
+                                            const bool list_versions,
+                                            const uint16_t expansion_factor,
+                                            ent_map_t& m,
+                                            bool* is_truncated,
+                                            bool* cls_filtered,
+                                            rgw_obj_index_key* last_entry,
+                                            optional_yield y,
+                                            RGWBucketListNameFilter force_check_filter,
+                                            BILogHandlerT&& bilog_handler);
+
   int cls_bucket_list_ordered(const DoutPrefixProvider *dpp,
                               RGWBucketInfo& bucket_info,
                               const rgw::bucket_index_layout_generation& idx_layout,
@@ -1580,6 +1599,23 @@ public:
 			      rgw_obj_index_key *last_entry,
                               optional_yield y,
 			      RGWBucketListNameFilter force_check_filter = {});
+
+  template <class BILogHandlerT>
+  int _do_cls_bucket_list_unordered(const DoutPrefixProvider *dpp,
+                                        RGWBucketInfo& bucket_info,
+                                        const rgw::bucket_index_layout_generation& idx_layout,
+                                        int shard_id,
+                                        const rgw_obj_index_key& start_after,
+                                        const std::string& prefix,
+                                        uint32_t num_entries,
+                                        bool list_versions,
+                                        std::vector<rgw_bucket_dir_entry>& ent_list,
+                                        bool *is_truncated,
+                                        rgw_obj_index_key *last_entry,
+                                        optional_yield y,
+                                        RGWBucketListNameFilter force_check_filter,
+                                        BILogHandlerT&& bilog_handler);
+
   int cls_bucket_list_unordered(const DoutPrefixProvider *dpp,
                                 RGWBucketInfo& bucket_info,
                                 const rgw::bucket_index_layout_generation& idx_layout,
@@ -1715,13 +1751,15 @@ public:
    * and -errno on other failures. (-ENOENT is not a failure, and it
    * will encode that info as a suggested update.)
    */
+  template< class BILogHandlerT>
   int check_disk_state(const DoutPrefixProvider *dpp,
                        RGWBucketInfo& bucket_info,
                        const rgw_bucket_entry_ver& index_ver,
                        rgw_bucket_dir_entry& list_state,
                        rgw_bucket_dir_entry& object,
                        bufferlist& suggested_updates,
-                       optional_yield y);
+                       optional_yield y,
+                       BILogHandlerT& bilog_handler);
 
   /**
    * Init pool iteration
