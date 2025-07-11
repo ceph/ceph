@@ -19,7 +19,7 @@ on:
         type: boolean
   schedule:
     - cron: '*/30 * * * *'
-  pull_request:
+  pull_request_target:
     types: [closed]
     branches:
       - main
@@ -39,10 +39,19 @@ jobs:
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/feature/redmine-upkeep'
     steps:
-      - name: checkout main
+      - name: Checkout main branch for pull_request_target
+        if: github.event_name == 'pull_request_target'
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
-          path: ceph
+          ref: 'refs/heads/main'
+          path: 'ceph'
+          fetch-depth: 0
+
+      - name: Checkout default branch for other events
+        if: github.event_name != 'pull_request_target'
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          path: 'ceph'
           fetch-depth: 0
 
       - name: Setup Python
@@ -52,7 +61,7 @@ jobs:
           cache: 'pip'
           cache-dependency-path: ceph/src/script/requirements.redmine-upkeep.txt
 
-      - name: install dependencies
+      - name: Install dependencies
         run: pip install -r ceph/src/script/requirements.redmine-upkeep.txt
 
       - name: Run redmine-upkeep via workflow_dispatch
@@ -84,8 +93,8 @@ jobs:
         env:
           REDMINE_API_KEY: ${{ secrets.REDMINE_API_KEY_BACKPORT_BOT }}
 
-      - name: Run redmine-upkeep via merge
-        if: github.event.pull_request.merged == true
+      - name: Run redmine-upkeep via merge on pull_request_target
+        if: github.event_name == 'pull_request_target' && github.event.pull_request.merged == true
         run: >
              python3 ceph/src/script/redmine-upkeep.py
              --github-action
