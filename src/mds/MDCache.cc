@@ -13852,7 +13852,10 @@ void MDCache::add_quiesce(CInode* parent, CInode* in)
   auto& qs = *qis->qs;
   auto& qops = qrmdr->more()->quiesce_ops;
 
-  if (auto it = qops.find(in->ino()); it != qops.end()) {
+  if (!in->is_head()) {
+    dout(25) << " skipping non-head inode: " << *in << dendl;
+    return;
+  } else if (auto it = qops.find(in->ino()); it != qops.end()) {
     dout(25) << __func__ << ": existing quiesce metareqid: "  << it->second << dendl;
     return;
   }
