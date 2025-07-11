@@ -161,8 +161,9 @@ void ECCommon::ReadPipeline::get_all_avail_shards(
 
   if (for_recovery) {
     for (auto &&pg_shard: get_parent()->get_backfill_shards()) {
-      if (error_shards && error_shards->contains(pg_shard))
+      if (error_shards && error_shards->contains(pg_shard)) {
         continue;
+      }
       const shard_id_t &shard = pg_shard.shard;
       if (have.contains(shard)) {
         ceph_assert(shards.contains(shard));
@@ -241,9 +242,7 @@ int ECCommon::ReadPipeline::get_min_avail_to_read_shards(
         (*need_sub_chunks)[i] = subchunks_list;
       }
     }
-    for (auto &&i: have) {
-      need_set.insert(i);
-    }
+    need_set.insert(have);
   }
 
   extent_set extra_extents;
@@ -281,7 +280,7 @@ int ECCommon::ReadPipeline::get_min_avail_to_read_shards(
       extents.union_of(read_request.shard_want_to_read.at(shard));
     }
 
-    extents.align(CEPH_PAGE_SIZE);
+    extents.align(EC_ALIGN_SIZE);
     if (read_mask.contains(shard)) {
       shard_read.extents.intersection_of(extents, read_mask.at(shard));
     }
@@ -488,18 +487,17 @@ struct ClientReadCompleter final : ECCommon::ReadCompleter {
     extent_map result;
     if (res.r == 0) {
       ceph_assert(res.errors.empty());
-#if DEBUG_EC_BUFFERS
-      dout(20) << __func__ << ": before decode: " << res.buffers_read.debug_string(2048, 8) << dendl;
-#endif
+      dout(30) << __func__ << ": before decode: "
+               << res.buffers_read.debug_string(2048, 8)
+               << dendl;
       /* Decode any missing buffers */
       int r = res.buffers_read.decode(read_pipeline.ec_impl,
                                   req.shard_want_to_read,
                                   req.object_size);
       ceph_assert( r == 0 );
-
-#if DEBUG_EC_BUFFERS
-      dout(20) << __func__ << ": after decode: " << res.buffers_read.debug_string(2048, 8) << dendl;
-#endif
+      dout(30) << __func__ << ": after decode: "
+               << res.buffers_read.debug_string(2048, 8)
+               << dendl;
 
       for (auto &&read: req.to_read) {
         result.insert(read.offset, read.size,
@@ -617,7 +615,7 @@ int ECCommon::ReadPipeline::send_all_remaining_reads(
   // reset the old shard reads, we are going to read them again.
   read_request.shard_reads.clear();
   return get_remaining_shards(hoid, rop.complete.at(hoid), read_request,
-                              rop.do_redundant_reads, want_attrs);
+                              rop.for_recovery, want_attrs);
 }
 
 void ECCommon::ReadPipeline::kick_reads() {
@@ -725,6 +723,8 @@ void ECCommon::RMWPipeline::cache_ready(Op &op) {
     if (transaction.empty()) {
       dout(20) << __func__ << " Transaction for osd." << pg_shard.osd << " shard " << shard << " is empty" << dendl;
     } else {
+      // NOTE: All code between dout and dendl is executed conditionally on
+      //       debug level.
       dout(20) << __func__ << " Transaction for osd." << pg_shard.osd << " shard " << shard << " contents ";
       Formatter *f = Formatter::create("json");
       f->open_object_section("t");
@@ -734,14 +734,20 @@ void ECCommon::RMWPipeline::cache_ready(Op &op) {
       delete f;
       *_dout << dendl;
     }
-    if (op.skip_transaction(pending_roll_forward, shard, transaction)) {
+    bool should_send = get_parent()->should_send_op(pg_shard, op.hoid);
+    /* should_send being false indicates that a recovery is going on to this
+     * object this makes it critical that the log on the non-primary shards is
+     * complete:- We may need to update "missing" with the latest version.
+     * As such we must never skip a transaction completely.  Note that if
+     * should_send is false, then an empty transaction is sent.
+     */
+    if (should_send && op.skip_transaction(pending_roll_forward, shard, transaction)) {
       // Must be an empty transaction
       ceph_assert(transaction.empty());
-      dout(20) << __func__ << " Skipping transaction for osd." << shard << dendl;
+      dout(20) << __func__ << " Skipping transaction for shard " << shard << dendl;
       continue;
     }
     op.pending_commits++;
-    bool should_send = get_parent()->should_send_op(pg_shard, op.hoid);
     const pg_stat_t &stats =
         (should_send || !backfill_shards.contains(pg_shard))
           ? get_info().stats
@@ -822,7 +828,7 @@ struct ECDummyOp final : ECCommon::RMWPipeline::Op {
       DoutPrefixProvider *dpp,
       const OSDMapRef &osdmap
     ) override {
-    // NOP, as -- in constrast to ECClassicalOp -- there is no
+    // NOP, as -- in contrast to ECClassicalOp -- there is no
     // transaction involved
   }
 
@@ -867,10 +873,7 @@ void ECCommon::RMWPipeline::finish_rmw(OpRef const &op) {
 
   if (extent_cache.idle()) {
     if (op->version > get_parent()->get_log().get_can_rollback_to()) {
-      const int transactions_since_last_idle = extent_cache.
-          get_and_reset_counter();
-      dout(20) << __func__ << " version=" << op->version << " ec_counter=" <<
-          transactions_since_last_idle << dendl;
+      dout(20) << __func__ << " cache idle " << op->version << dendl;
       // submit a dummy, transaction-empty op to kick the rollforward
       const auto tid = get_parent()->get_tid();
       const auto nop = std::make_shared<ECDummyOp>();
