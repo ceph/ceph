@@ -109,7 +109,7 @@ class NFSGaneshaExports(RESTController):
         export['fsal'] = schema_fsal_info
         return export
 
-    @EndpointDoc("List all NFS-Ganesha exports",
+    @EndpointDoc("List all or cluster specific NFS-Ganesha exports",
                  responses={200: [EXPORT_SCHEMA]})
     def list(self) -> List[Dict[str, Any]]:
         exports = []
