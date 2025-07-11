@@ -405,7 +405,7 @@ int rgw_cloud_tier_get_object(RGWLCCloudTierCtx& tier_ctx, bool head,
     }
   }
 
-  ldpp_dout(tier_ctx.dpp, 20) << __func__ << "(): Sucessfully fetched object from cloud bucket:" << dest_bucket << ", object: " << target_obj_name << dendl;
+  ldpp_dout(tier_ctx.dpp, 20) << __func__ << "(): Successfully fetched object from cloud bucket:" << dest_bucket << ", object: " << target_obj_name << dendl;
   return ret;
 }
 
