@@ -25,12 +25,15 @@
 #include <fmt/core.h>
 
 #include "common/async/blocked_completion.h"
+#include "neorados/cls/fifo.h"
 
 #include "common/ceph_time.h"
 #include "common/Clock.h"
 #include "common/errno.h"
+#include "common/async/blocked_completion.h"
 
 #include "librados/AioCompletionImpl.h"
+#include "rgw_asio_thread.h"
 
 #include "cls/rgw/cls_rgw_client.h"
 
@@ -60,6 +63,7 @@
 #include "rgw_tools.h"
 #include "rgw_tracer.h"
 #include "rgw_zone.h"
+#include "rgw_restore.h"
 
 #include "services/svc_bilog_rados.h"
 #include "services/svc_bi_rados.h"
@@ -2025,6 +2029,11 @@ std::unique_ptr<Lifecycle> RadosStore::get_lifecycle(void)
   return std::make_unique<RadosLifecycle>(this);
 }
 
+std::unique_ptr<Restore> RadosStore::get_restore(void)	
+{
+  return std::make_unique<RadosRestore>(this);
+}
+
 bool RadosStore::process_expired_objects(const DoutPrefixProvider *dpp,
 	       				 optional_yield y)
 {
@@ -3031,15 +3040,11 @@ int RadosObject::transition(Bucket* bucket,
 
 int RadosObject::restore_obj_from_cloud(Bucket* bucket,
                                   rgw::sal::PlacementTier* tier,
-                                  rgw_placement_rule& placement_rule,
-                            	  rgw_bucket_dir_entry& o,
                           	  CephContext* cct,
-                                  RGWObjTier& tier_config,
-                                  uint64_t olh_epoch,
                                   std::optional<uint64_t> days,
+				  bool& in_progress,
                                   const DoutPrefixProvider* dpp, 
-                                  optional_yield y,
-                                  uint32_t flags)
+                                  optional_yield y)
 {
   /* init */
   rgw::sal::RadosPlacementTier* rtier = static_cast<rgw::sal::RadosPlacementTier*>(tier);
@@ -3051,7 +3056,23 @@ int RadosObject::restore_obj_from_cloud(Bucket* bucket,
   string bucket_name = rtier->get_rt().t.s3.target_path;
   const rgw::sal::ZoneGroup& zonegroup = store->get_zone()->get_zonegroup();
   int ret = 0;
-  string src_storage_class = o.meta.storage_class; // or take src_placement also as input
+
+  auto& attrs = get_attrs();
+  RGWObjTier tier_config;
+
+  auto attr_iter = attrs.find(RGW_ATTR_MANIFEST);
+  if (attr_iter != attrs.end()) {
+    RGWObjManifest m;
+    try {
+      using ceph::decode;
+      decode(m, attr_iter->second);
+      m.get_tier_config(&tier_config);
+    } catch (const std::exception& e) {
+      ldpp_dout(dpp, -1) << "Error reading manifest of object:" << get_key() << dendl;
+      return -EIO;
+    }
+  }
+
   // update tier_config in case tier params are updated
   tier_config.tier_placement = rtier->get_rt();
 
@@ -3060,11 +3081,22 @@ int RadosObject::restore_obj_from_cloud(Bucket* bucket,
                     "-cloud-bucket";
     boost::algorithm::to_lower(bucket_name);
   }
+
+  rgw_bucket_dir_entry ent;
+  ent.key.name = get_key().name;
+  ent.key.instance = get_key().instance;
+  ent.meta.accounted_size = ent.meta.size = get_size();
+  ent.meta.etag = "" ;
+
+  if (!ent.key.instance.empty()) { // non-current versioned object
+    ent.flags |= rgw_bucket_dir_entry::FLAG_VER;
+  }
+
   /* Create RGW REST connection */
   S3RESTConn conn(cct, id, { endpoint }, key, zonegroup.get_id(), region, host_style);
 
   // save source cloudtier storage class
-  RGWLCCloudTierCtx tier_ctx(cct, dpp, o, store, bucket->get_info(),
+  RGWLCCloudTierCtx tier_ctx(cct, dpp, ent, store, bucket->get_info(),
            this, conn, bucket_name,
            rtier->get_rt().t.s3.target_storage_class);
   tier_ctx.acl_mappings = rtier->get_rt().t.s3.acl_mappings;
@@ -3074,51 +3106,39 @@ int RadosObject::restore_obj_from_cloud(Bucket* bucket,
   tier_ctx.restore_storage_class = rtier->get_rt().restore_storage_class;
   tier_ctx.tier_type = rtier->get_rt().tier_type;
 
-  ldpp_dout(dpp, 20) << "Restoring object(" << o.key << ") from the cloud endpoint(" << endpoint << ")" << dendl;
+  ldpp_dout(dpp, 20) << "Restoring object(" << get_key() << ") from the cloud endpoint(" << endpoint << ")" << dendl;
 
   if (days && days == 0) {
-    ldpp_dout(dpp, 0) << "Days = 0 not valid; Not restoring object (" << o.key << ") from the cloud endpoint(" << endpoint << ")" << dendl;
+    ldpp_dout(dpp, 0) << "Days = 0 not valid; Not restoring object (" << get_key() << ") from the cloud endpoint(" << endpoint << ")" << dendl;
     return 0;
-  }
-
-  // Note: For non-versioned objects, below should have already been set by the callers-
-  // o.current should be false; this(obj)->instance should have version-id.
-
-  // set restore_status as RESTORE_ALREADY_IN_PROGRESS
-  ret = set_cloud_restore_status(dpp, y, RGWRestoreStatus::RestoreAlreadyInProgress);
-  if (ret < 0) {
-    ldpp_dout(dpp, 0) << " Setting cloud restore status to RESTORE_ALREADY_IN_PROGRESS for the object(" << o.key << ") from the cloud endpoint(" << endpoint << ") failed, ret=" << ret << dendl;
-    return ret;
   }
 
   /* Restore object from the cloud endpoint.
    * All restore related status and attrs are set as part of object download to
    * avoid any races */
   ret = store->getRados()->restore_obj_from_cloud(tier_ctx, *rados_ctx,
-                                bucket->get_info(), get_obj(), placement_rule,
-                                tier_config,
-                                olh_epoch, days, dpp, y, flags & FLAG_LOG_OP);
+                                bucket->get_info(), get_obj(),
+                                tier_config, days, in_progress, dpp, y);
 
   if (ret < 0) { //failed to restore
-    ldpp_dout(dpp, 0) << "Restoring object(" << o.key << ") from the cloud endpoint(" << endpoint << ") failed, ret=" << ret << dendl;
-    auto reset_ret = set_cloud_restore_status(dpp, y, RGWRestoreStatus::RestoreFailed);
+    ldpp_dout(dpp, 0) << "Restoring object(" << get_key() << ") from the cloud endpoint(" << endpoint << ") failed, ret=" << ret << dendl;
 
     rgw_placement_rule target_placement;
     target_placement.inherit_from(tier_ctx.bucket_info.placement_rule);
     target_placement.storage_class = tier->get_storage_class();
 
     /* Reset HEAD object as CloudTiered */
-    reset_ret = write_cloud_tier(dpp, y, tier_ctx.o.versioned_epoch,
+    int reset_ret = write_cloud_tier(dpp, y, tier_ctx.o.versioned_epoch,
 			   tier, tier_ctx.is_multipart_upload,
 			   target_placement, tier_ctx.obj);
 
     if (reset_ret < 0) {
-      ldpp_dout(dpp, 0) << " Reset to cloud_tier of object(" << o.key << ") from the cloud endpoint(" << endpoint << ") failed, ret=" << reset_ret << dendl;
+      ldpp_dout(dpp, 0) << " Reset to cloud_tier of object(" << get_key() << ") from the cloud endpoint(" << endpoint << ") failed, ret=" << reset_ret << dendl;
     }
     return ret;
   }
 
-  ldpp_dout(dpp, 20) << "Sucessfully restored object(" << o.key << ") from the cloud endpoint(" << endpoint << ")" << dendl;
+  ldpp_dout(dpp, 20) << "Sucessfully restored object(" << get_key() << ") from the cloud endpoint(" << endpoint << ")" << dendl;
 
   return ret;
 }
@@ -3196,21 +3216,6 @@ int RadosObject::transition_to_cloud(Bucket* bucket,
 			   target_placement, tier_ctx.obj);
 
   }
-
-  return ret;
-}
-
-int RadosObject::set_cloud_restore_status(const DoutPrefixProvider* dpp,
-				  optional_yield y,
-			          rgw::sal::RGWRestoreStatus restore_status)
-{
-  int ret = 0;
-  set_atomic(true);
- 
-  bufferlist bl;
-  using ceph::encode;
-  encode(restore_status, bl);
-  ret = modify_obj_attrs(RGW_ATTR_RESTORE_STATUS, bl, y, dpp, false);
 
   return ret;
 }
@@ -4622,6 +4627,239 @@ std::unique_ptr<LCSerializer> RadosLifecycle::get_serializer(const std::string& 
 							     const std::string& cookie)
 {
   return std::make_unique<LCRadosSerializer>(store, oid, lock_name, cookie);
+}
+
+RadosRestoreSerializer::RadosRestoreSerializer(RadosStore* store, const std::string& _oid, const std::string& lock_name, const std::string& cookie) :
+  StoreRestoreSerializer(_oid),
+  ioctx(*store->getRados()->get_restore_pool_ctx()),
+  lock(lock_name)
+{
+  lock.set_cookie(cookie);
+}
+
+int RadosRestoreSerializer::try_lock(const DoutPrefixProvider *dpp, utime_t dur, optional_yield y)
+{
+  lock.set_duration(dur);
+  return lock.lock_exclusive((librados::IoCtx*)(&ioctx), oid);
+}
+
+RadosRestore::RadosRestore(RadosStore* _st) : store(_st),
+       	ioctx(*store->getRados()->get_restore_pool_ctx()),
+	r(store->get_neorados()),
+	neo_ioctx(*store->getRados()->get_restore_pool_neo_ctx()) {}
+
+std::unique_ptr<RestoreSerializer> RadosRestore::get_serializer(
+							const std::string& lock_name,
+							const std::string& oid,
+							const std::string& cookie)
+{
+  return std::make_unique<RadosRestoreSerializer>(store, oid, lock_name, cookie);
+}
+
+int RadosRestore::initialize(const DoutPrefixProvider* dpp, optional_yield y,
+		int n_objs, std::vector<std::string>& o_names)
+{
+  num_objs = n_objs;
+  obj_names = o_names;
+
+  maybe_warn_about_blocking(dpp);
+  for (auto i=0; i < num_objs; i++) {
+    std::unique_ptr<fifo::FIFO> fifo_tmp;
+    try {
+      fifo_tmp = fifo::FIFO::create(dpp, r, obj_names[i], neo_ioctx, ceph::async::use_blocked);
+    } catch (const sys::system_error& e) {
+      ldpp_dout(dpp, -1) << "creating fifo object for index=" << i
+	   << ", objname=" << obj_names[i] << " failed : " << e.what() << dendl;
+      return ceph::from_error_code(e.code());
+    }
+
+    if (!fifo_tmp) {
+      return -ENOMEM;
+    }
+    ldpp_dout(dpp, 20) << "created fifo object for index=" << i
+	   << ", objname=" << obj_names[i] << dendl;
+
+    fifos.push_back(std::move(fifo_tmp));
+  }
+
+  return 0;
+}
+
+void RadosRestore::finalize() {
+  obj_names.clear();
+  fifos.clear();
+}
+
+
+int RadosRestore::add_entries(const DoutPrefixProvider* dpp, optional_yield y,
+		int index, const std::vector<rgw::restore::RestoreEntry>& restore_entries) {
+  std::deque<ceph::buffer::list> ent_list;
+
+  for (auto& entry : restore_entries) {
+    bufferlist bl;
+
+    encode(entry, bl);
+    ent_list.push_back(std::move(bl));
+
+  }
+
+  ldpp_dout(dpp, 20) << __PRETTY_FUNCTION__
+		 << "Adding " << restore_entries.size() << " entries to FIFO:"
+		 << obj_names[index] << dendl;
+
+  int ret = push(dpp, y, index, std::move(ent_list));
+
+  if (ret < 0) {
+    ldpp_dout(dpp, -1) << "ERROR: push() returned " << ret << dendl;
+    return ret;
+  }
+
+  return 0;
+}
+
+int RadosRestore::push(const DoutPrefixProvider *dpp, optional_yield y,
+		int index, std::deque<ceph::buffer::list>&& items) {
+  ldpp_dout(dpp, 20) << __PRETTY_FUNCTION__
+		 << "Pushing entries to FIFO:" << obj_names[index] << dendl;
+  maybe_warn_about_blocking(dpp);
+  try {
+    fifos[index]->push(dpp, items, ceph::async::use_blocked);
+  } catch (const sys::system_error& e) {
+    ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__
+		 << ": unable to push to FIFO: " << obj_names[index]
+		 << ": " << e.what() << dendl;
+    return ceph::from_error_code(e.code());
+  }
+  return 0;
+}
+
+int RadosRestore::push(const DoutPrefixProvider *dpp, optional_yield y,
+		int index, ceph::buffer::list&& bl) {
+  ldpp_dout(dpp, 20) << __PRETTY_FUNCTION__
+		 << "Pushing entry to FIFO:" << obj_names[index] << dendl;
+
+  maybe_warn_about_blocking(dpp);
+  try {
+    fifos[index]->push(dpp, std::move(bl), ceph::async::use_blocked);
+  } catch (const sys::system_error& e) {
+    ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__
+		 << ": unable to push to FIFO: " << obj_names[index]
+		 << ": " << e.what() << dendl;
+    return ceph::from_error_code(e.code());
+  }
+  return 0;
+}
+
+struct rgw_restore_fifo_entry {
+  std::string id;
+  ceph::real_time mtime;
+  rgw::restore::RestoreEntry entry;
+  rgw_restore_fifo_entry() {}
+
+  void encode(ceph::buffer::list& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(id, bl);
+    encode(mtime, bl);
+    encode(entry, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(ceph::buffer::list::const_iterator& bl) {
+     DECODE_START(1, bl);
+     decode(id, bl);
+     decode(mtime, bl);
+     decode(entry, bl);
+     DECODE_FINISH(bl);
+  }
+
+  void dump(ceph::Formatter* f) const;
+  void decode_json(JSONObj* obj);
+};
+WRITE_CLASS_ENCODER(rgw_restore_fifo_entry)
+
+int RadosRestore::list(const DoutPrefixProvider *dpp, optional_yield y,
+	       	   int index, const std::string& marker, std::string* out_marker,
+		   uint32_t max_entries, std::vector<rgw::restore::RestoreEntry>& entries,
+		   bool* truncated)
+{
+  std::vector<fifo::entry> restore_entries{max_entries};
+  std::string omark = {};
+  bool more = false;
+
+  ldpp_dout(dpp, 20) << __PRETTY_FUNCTION__
+		 << "Listing entries from FIFO:" << obj_names[index] << dendl;
+
+  maybe_warn_about_blocking(dpp);
+  try {
+    auto [lentries, lmark] = fifos[index]->list(dpp, marker,
+			  	 restore_entries, ceph::async::use_blocked);
+    entries.clear();
+
+    for (const auto& entry : lentries) {
+      rgw_restore_fifo_entry r_entry;
+      r_entry.id = entry.marker;
+      r_entry.mtime = entry.mtime;
+
+      auto liter = entry.data.cbegin();
+      decode(r_entry.entry, liter);
+      rgw::restore::RestoreEntry& e = r_entry.entry;
+      entries.push_back(std::move(e));
+      omark = entry.marker;
+    }
+    if (!lmark.empty()) {
+      more = true;
+    }
+  } catch (const sys::system_error& e) {
+    if (e.code() == sys::errc::no_such_file_or_directory) {
+    } else {
+      ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__
+		 << ": unable to list FIFO: " << obj_names[index]
+		 << ": " << e.what() << dendl;
+      return ceph::from_error_code(e.code());
+    }
+  }
+
+  if (truncated) {
+    *truncated = more;
+  }				 
+
+  if (out_marker) {
+    *out_marker = omark;
+  }
+
+  ldpp_dout(dpp, 20) << __PRETTY_FUNCTION__
+		 << "Listing from FIFO:" << obj_names[index] << ", returned:"
+		 << restore_entries.size() << " entries, truncated:"
+		 << (truncated ? *truncated : false) 
+		 << ", out_marker:" << (out_marker ? *out_marker : "") << dendl;
+
+  return 0;
+}
+
+int RadosRestore::trim_entries(const DoutPrefixProvider *dpp, optional_yield y,
+			int index, const std::string_view& marker)
+{
+  assert(index < num_objs);
+
+  int ret = trim(dpp, y, index, marker);
+  return ret;
+}
+
+int RadosRestore::trim(const DoutPrefixProvider *dpp, optional_yield y,
+		int index, const std::string_view& marker) {
+  ldpp_dout(dpp, 20) << __PRETTY_FUNCTION__
+		 << "Trimming FIFO:" << obj_names[index] << " upto marker:" << marker << dendl;
+
+  maybe_warn_about_blocking(dpp);
+  try {
+    fifos[index]->trim(dpp, std::string(marker), false, ceph::async::use_blocked);
+  } catch (const sys::system_error& e) {
+    ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__
+		 << ": unable to trim FIFO: " << obj_names[index]
+		 << ": " << e.what() << dendl;
+    return ceph::from_error_code(e.code());
+  }
+  return 0;
 }
 
 int RadosNotification::publish_reserve(const DoutPrefixProvider *dpp, RGWObjTags* obj_tags)
