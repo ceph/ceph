@@ -1,21 +1,23 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { NotificationHeaderComponent } from './notification-header.component';
 import { NotificationService } from '../../../../shared/services/notification.service';
-import { of } from 'rxjs';
+import { BehaviorSubject, of } from 'rxjs';
 
 describe('NotificationHeaderComponent', () => {
   let component: NotificationHeaderComponent;
   let fixture: ComponentFixture<NotificationHeaderComponent>;
   let notificationService: NotificationService;
+  let muteStateSubject: BehaviorSubject<boolean>;
 
   beforeEach(async () => {
+    muteStateSubject = new BehaviorSubject<boolean>(false);
     await TestBed.configureTestingModule({
       declarations: [NotificationHeaderComponent],
       providers: [
         {
           provide: NotificationService,
           useValue: {
-            muteState$: of(false),
+            muteState$: muteStateSubject.asObservable(),
             removeAll: jasmine.createSpy('removeAll'),
             suspendToasties: jasmine.createSpy('suspendToasties')
           }
@@ -34,15 +36,13 @@ describe('NotificationHeaderComponent', () => {
   });
 
   it('should initialize with default mute state', () => {
-    expect(component.isMuted).toBeFalse();
+    expect(component.isMuted).toBe(false);
   });
 
   it('should update mute state when subscription emits', () => {
-    const muteState$ = of(true);
-    spyOnProperty(notificationService, 'muteState$').and.returnValue(muteState$);
-
-    component.ngOnInit();
-    expect(component.isMuted).toBeTrue();
+    muteStateSubject.next(true);
+    fixture.detectChanges();
+    expect(component.isMuted).toBe(true);
   });
 
   it('should emit dismissAll event and call removeAll on dismiss', () => {

@@ -26,6 +26,14 @@
     }
   }
 
+  &__dismiss-btn {
+    color: theme.$text-primary;
+
+    &:hover {
+      color: theme.$link-primary;
+    }
+  }
+
   &__toggle {
     cds-toggle {
       margin: 0;
