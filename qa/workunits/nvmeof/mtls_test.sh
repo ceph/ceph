@@ -23,7 +23,7 @@ wait_for_service() {
     MAX_RETRIES=30
     for ((RETRY_COUNT=1; RETRY_COUNT<=MAX_RETRIES; RETRY_COUNT++)); do
 
-        if ceph orch ls --refresh | grep -q "nvmeof"; then
+        if ceph orch ls | grep -q "nvmeof"; then
             echo "Found nvmeof in the output!"
             break
         fi
@@ -34,7 +34,7 @@ wait_for_service() {
         sleep 5
     done
     ceph orch ps
-    ceph orch ls --refresh
+    ceph orch ls
 }
 
 # deploy mtls
