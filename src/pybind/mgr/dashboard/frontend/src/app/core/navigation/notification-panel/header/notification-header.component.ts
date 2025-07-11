@@ -9,7 +9,7 @@ import { Subscription } from 'rxjs';
 })
 export class NotificationHeaderComponent implements OnInit, OnDestroy {
   @Output() dismissAll = new EventEmitter<void>();
-  
+
   isMuted = false;
   private subs = new Subscription();
 
@@ -17,11 +17,9 @@ export class NotificationHeaderComponent implements OnInit, OnDestroy {
 
   ngOnInit(): void {
     this.subs.add(
-      this.notificationService.muteState$.subscribe(
-        (isMuted) => {
-          this.isMuted = isMuted;
-        }
-      )
+      this.notificationService.muteState$.subscribe((isMuted) => {
+        this.isMuted = isMuted;
+      })
     );
   }
 
@@ -37,4 +35,4 @@ export class NotificationHeaderComponent implements OnInit, OnDestroy {
   onToggleMute(): void {
     this.notificationService.suspendToasties(!this.isMuted);
   }
-} 
+}

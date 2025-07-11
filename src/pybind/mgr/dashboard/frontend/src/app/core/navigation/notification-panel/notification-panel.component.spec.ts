@@ -53,11 +53,11 @@ describe('NotificationPanelComponent', () => {
         bubbles: true,
         cancelable: true
       });
-      
+
       const componentElement = fixture.nativeElement;
       componentElement.dispatchEvent(insideClickEvent);
 
       expect(notificationService.toggleSidebar).not.toHaveBeenCalled();
     });
   });
-}); 
+});

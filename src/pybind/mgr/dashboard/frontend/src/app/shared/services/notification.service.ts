@@ -21,7 +21,7 @@ export class NotificationService {
   data$ = this.dataSource.asObservable();
 
   // Panel state observable
-  private panelStateSource = new BehaviorSubject<{isOpen: boolean; useNewPanel: boolean}>({
+  private panelStateSource = new BehaviorSubject<{ isOpen: boolean; useNewPanel: boolean }>({
     isOpen: false,
     useNewPanel: true
   });
@@ -185,11 +185,12 @@ export class NotificationService {
     if (this.hideToasties) {
       return;
     }
-    const toastrFn = notification.type === NotificationType.error
-      ? this.toastr.error.bind(this.toastr)
-      : notification.type === NotificationType.info
-      ? this.toastr.info.bind(this.toastr)
-      : this.toastr.success.bind(this.toastr);
+    const toastrFn =
+      notification.type === NotificationType.error
+        ? this.toastr.error.bind(this.toastr)
+        : notification.type === NotificationType.info
+        ? this.toastr.info.bind(this.toastr)
+        : this.toastr.success.bind(this.toastr);
 
     toastrFn(
       (notification.message ? notification.message + '<br>' : '') +

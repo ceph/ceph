@@ -69,4 +69,4 @@ describe('NotificationHeaderComponent', () => {
     component.ngOnDestroy();
     expect(component['subs'].unsubscribe).toHaveBeenCalled();
   });
-}); 
+});

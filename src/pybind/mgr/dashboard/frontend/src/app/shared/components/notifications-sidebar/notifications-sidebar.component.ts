@@ -104,7 +104,7 @@ export class NotificationsSidebarComponent implements OnInit, OnDestroy {
     this.subs.add(
       this.notificationService.panelState$.subscribe((state) => {
         this.isSidebarOpened = state.isOpen && !state.useNewPanel;
-          this.cdRef.detectChanges();
+        this.cdRef.detectChanges();
       })
     );
 
