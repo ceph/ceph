@@ -34,6 +34,7 @@ class RGWWatcher : public DoutPrefixProvider , public librados::WatchCtx2 {
   int register_ret{0};
   bool unregister_done{false};
   librados::AioCompletion *register_completion{nullptr};
+  uint64_t retries = 0;
 
   class C_ReinitWatch : public Context {
     RGWWatcher *watcher;
@@ -86,15 +87,28 @@ public:
   }
 
   void reinit() {
+    if (retries > 100) {
+      lderr(cct) << "ERROR: Looping in attempt to reinit watch. Halting."
+		 << dendl;
+      abort();
+    }
     if(!unregister_done) {
       int ret = unregister_watch();
       if (ret < 0) {
         ldout(cct, 0) << "ERROR: unregister_watch() returned ret=" << ret << dendl;
+	if (-2 == ret) {
+	  // Going down there is no such watch.
+	  return;
+	} else {
+	  ++retries;
+	  svc->schedule_context(new C_ReinitWatch(this));
+	}
       }
     }
     int ret = register_watch();
     if (ret < 0) {
       ldout(cct, 0) << "ERROR: register_watch() returned ret=" << ret << dendl;
+      ++retries;
       svc->schedule_context(new C_ReinitWatch(this));
       return;
     }
