@@ -84,6 +84,7 @@
           <span i18n>
             <i [ngClass]="[icons.areaChart]"></i>
             Dashboard</span>
+<<<<<<< HEAD
           <i
             *ngIf="summaryData?.health_status !== 'HEALTH_OK'"
             [ngClass]="[icons.circle]"
@@ -181,6 +182,93 @@
               *ngIf="permissions.rbdMirroring.read && enabledFeature.mirroring">
             <a routerLink="/block/mirroring">
               <ng-container i18n>Mirroring</ng-container>
+=======
+        </cds-sidenav-item>
+        <!-- Multi-cluster Dashboard -->
+        <cds-sidenav-menu title="Multi-Cluster"
+                          *ngIf="permissions.configOpt.read"
+                          i18n-title>
+          <svg cdsIcon="edge-cluster"
+               icon
+               size="20"></svg>
+          <cds-sidenav-item route="/multi-cluster/overview"
+                            title="Overview"
+                            i18n-title
+                            [useRouter]="true"
+                            class="tc_submenuitem tc_submenuitem_multiCluster_overview"><span i18n>Overview</span></cds-sidenav-item>
+          <cds-sidenav-item route="/multi-cluster/manage-clusters"
+                            title="Manage Clusters"
+                            i18n-title
+                            [useRouter]="true"
+                            class="tc_submenuitem tc_submenuitem_multiCluster_manage_clusters"><span i18n>Manage Clusters</span></cds-sidenav-item>
+        </cds-sidenav-menu>
+        <!-- Cluster -->
+        <cds-sidenav-menu title="Cluster"
+                          i18n-title
+                          *ngIf="permissions.hosts.read || permissions.monitor.read || permissions.osd.read || permissions.pool.read"
+                          class="tc_menuitem_cluster">
+          <svg cdsIcon="web-services--cluster"
+               icon
+               size="20"></svg>
+          <cds-sidenav-item route="/pool"
+                            [useRouter]="true"
+                            title="Pools"
+                            i18n-title
+                            *ngIf="permissions.pool.read"
+                            class="tc_submenuitem tc_submenuitem_cluster_pool"><span i18n>Pools</span></cds-sidenav-item>
+          <cds-sidenav-item route="/hosts"
+                            [useRouter]="true"
+                            title="Hosts"
+                            i18n-title
+                            *ngIf="permissions.hosts.read"
+                            class="tc_submenuitem tc_submenuitem_cluster_hosts"><span i18n>Hosts</span></cds-sidenav-item>
+          <cds-sidenav-item route="/osd"
+                            [useRouter]="true"
+                            title="OSDs"
+                            i18n-title
+                            *ngIf="permissions.osd.read"
+                            class="tc_submenuitem tc_submenuitem_cluster_osds"><span i18n>OSDs</span></cds-sidenav-item>
+          <cds-sidenav-item route="/inventory"
+                            [useRouter]="true"
+                            title="Physical Disks"
+                            i18n-title
+                            *ngIf="permissions.hosts.read"
+                            class="tc_submenuitem tc_submenuitem_cluster_inventory"><span i18n>Physical Disks</span></cds-sidenav-item>
+          <cds-sidenav-item route="/crush-map"
+                            [useRouter]="true"
+                            title="CRUSH Map"
+                            i18n-title
+                            *ngIf="permissions.osd.read"
+                            class="tc_submenuitem tc_submenuitem_cluster_crush"><span i18n>CRUSH Map</span></cds-sidenav-item>
+          <cds-sidenav-item route="/monitor"
+                            [useRouter]="true"
+                            title="Monitors"
+                            i18n-title
+                            *ngIf="permissions.monitor.read"
+                            class="tc_submenuitem tc_submenuitem_cluster_monitor"><span i18n>Monitors</span></cds-sidenav-item>
+        </cds-sidenav-menu>
+        <!-- Block Storage -->
+        <cds-sidenav-menu title="Block"
+                          i18n-title
+                          *ngIf="(permissions.rbdImage.read || permissions.rbdMirroring.read|| permissions.iscsi.read) && (enabledFeature.rbd || enabledFeature.mirroring || enabledFeature.iscsi)"
+                          class="tc_menuitem_block">
+          <svg cdsIcon="datastore"
+               icon
+               size="20"></svg>
+          <cds-sidenav-item route="/block/rbd"
+                            [useRouter]="true"
+                            title="Images"
+                            i18n-title
+                            *ngIf="permissions.rbdImage.read && enabledFeature.rbd"
+                            class="tc_submenuitem tc_submenuitem_block_images"><span i18n>Images</span></cds-sidenav-item>
+          <cds-sidenav-item route="/block/mirroring"
+                            [useRouter]="true"
+                            title="Mirroring"
+                            i18n-title
+                            *ngIf="permissions.rbdMirroring.read && enabledFeature.mirroring"
+                            class="tc_submenuitem tc_submenuitem_block_mirroring">
+            <span i18n>Mirroring
+>>>>>>> f4bc03e4040 (mgr/dashboard: fix access control permissions for roles)
               <small *ngIf="summaryData?.rbd_mirroring?.warnings !== 0"
                      class="badge badge-warning">{{ summaryData?.rbd_mirroring?.warnings }}</small>
               <small *ngIf="summaryData?.rbd_mirroring?.errors !== 0"
