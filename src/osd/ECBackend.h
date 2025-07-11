@@ -447,10 +447,6 @@ class ECBackend : public ECCommon {
     return sinfo.is_nonprimary_shard(shard);
   }
 
-  bool get_is_hinfo_required() const {
-    return sinfo.get_is_hinfo_required();
-  }
-
   /**
    * ECReadPred
    *
