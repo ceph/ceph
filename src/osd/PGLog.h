@@ -1404,11 +1404,7 @@ public:
       invalidate_stats = invalidate_stats || !p->is_error();
       if (log) {
 	ldpp_dout(dpp, 20) << "update missing, append " << *p << dendl;
-        // Skip the log entry if it is a partial write that did not involve
-        // this shard
-        if (!pool.is_nonprimary_shard(shard) || p->is_written_shard(shard)) {
-	  log->add(*p);
-	}
+	log->add(*p);
       }
       if (p->soid <= last_backfill &&
 	  !p->is_error()) {
