@@ -4095,9 +4095,16 @@ struct bilog_list_result {
   std::optional<next_bilog_result> next_log;
 
   void decode_json(JSONObj *obj) {
-    JSONDecoder::decode_json("entries", entries, obj);
-    JSONDecoder::decode_json("truncated", truncated, obj);
-    JSONDecoder::decode_json("next_log", next_log, obj);
+    if (obj->is_array()) {
+      // Remote RGW ignored our request for format-ver=2 and returned an
+      // array of entries, it must be pre-reef. Decode the old format.
+      decode_json_obj(entries, obj);
+    } else {
+      // It's not an array so assume it's the new format.
+      JSONDecoder::decode_json("entries", entries, obj);
+      JSONDecoder::decode_json("truncated", truncated, obj);
+      JSONDecoder::decode_json("next_log", next_log, obj);
+    }
   }
 };
 
@@ -4911,6 +4918,7 @@ int RGWBucketShardIncrementalSyncCR::operate(const DoutPrefixProvider *dpp)
         return set_cr_error(retcode);
       }
       list_result = std::move(extended_result.entries);
+      tn->log(20, SSTR("got " << list_result.size() << " bilog entries to sync"));
       truncated = extended_result.truncated;
       if (extended_result.next_log) {
         next_gen = extended_result.next_log->generation;
