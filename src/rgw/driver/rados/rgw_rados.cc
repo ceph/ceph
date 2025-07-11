@@ -9089,6 +9089,7 @@ int RGWRados::apply_olh_log(const DoutPrefixProvider *dpp,
   op.mtime2(&mtime_ts);
 
   bool need_to_link = false;
+  bool need_to_store_snap_info = false;
   uint64_t link_epoch = 0;
   cls_rgw_obj_key key;
   rgw_bucket_snap_id snap_id;
@@ -9143,10 +9144,16 @@ int RGWRados::apply_olh_log(const DoutPrefixProvider *dpp,
       case CLS_RGW_OLH_OP_REMOVE_INSTANCE:
         {
           remove_instances.push_back(entry.key);
-          auto snap_iter = snap_info.snap_map.find(entry.snap_id);
+          auto snap_iter = snap_info.snap_map.find(entry.snap_id.get_or(rgw_bucket_snap_id::SNAP_MIN));
+          auto snap_iter_key = snap_iter->second.key;
+          if (snap_iter_key.snap_id.snap_id == rgw_bucket_snap_id::SNAP_MIN) {
+            /* treat keys with rgw_bucket_snap_id::SNAP_MIN the same as ones without any snap set */
+            snap_iter_key.snap_id.reset();
+          }
           if (snap_iter != snap_info.snap_map.end()
-              && snap_iter->second.key == entry.key) {
+              && snap_iter_key == entry.key) {
             snap_info.snap_map.erase(snap_iter);
+            need_to_store_snap_info = true;
           }
         }
         break;
@@ -9157,6 +9164,7 @@ int RGWRados::apply_olh_log(const DoutPrefixProvider *dpp,
           ldpp_dout(dpp, 20) << "apply_olh_log applying key=" << entry.key << " epoch=" << iter->first << " delete_marker=" << entry.delete_marker
               << " over current=" << key << " snap_id=" << entry.snap_id << " epoch=" << link_epoch << " delete_marker=" << delete_marker << dendl;
           need_to_link = true;
+          need_to_store_snap_info = true;
           need_to_remove = false;
           key = entry.key;
           snap_id = entry.snap_id;
@@ -9205,10 +9213,12 @@ int RGWRados::apply_olh_log(const DoutPrefixProvider *dpp,
     bufferlist bl;
     encode(info, bl);
     op.setxattr(RGW_ATTR_OLH_INFO, bl);
+  }
 
-    bufferlist bl2;
-    encode(snap_info, bl2);
-    op.setxattr(RGW_ATTR_OLH_SNAP_INFO, bl2);
+  if (need_to_store_snap_info) {
+    bufferlist bl;
+    encode(snap_info, bl);
+    op.setxattr(RGW_ATTR_OLH_SNAP_INFO, bl);
   }
 
   /* first remove object instances */
