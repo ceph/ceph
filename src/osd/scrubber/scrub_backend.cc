@@ -1809,50 +1809,52 @@ std::vector<snap_mapper_fix_t> ScrubBackend::scan_snaps(
   // in this function
   dout(15) << "_scan_snaps starts" << dendl;
 
-  for (auto i = smap.objects.rbegin(); i != smap.objects.rend(); ++i) {
+  if (!m_pg.get_is_nonprimary_shard(m_pg_whoami)) {
+    for (auto i = smap.objects.rbegin(); i != smap.objects.rend(); ++i) {
 
-    const hobject_t& hoid = i->first;
-    ScrubMap::object& o = i->second;
+      const hobject_t& hoid = i->first;
+      ScrubMap::object& o = i->second;
 
-    dout(20) << __func__ << " " << hoid << dendl;
+      dout(20) << __func__ << " " << hoid << dendl;
 
-    ceph_assert(!hoid.is_snapdir());
+      ceph_assert(!hoid.is_snapdir());
 
-    if (hoid.is_head()) {
-      // parse the SnapSet
-      if (o.attrs.find(SS_ATTR) == o.attrs.end()) {
-	// no snaps for this head
-	continue;
-      }
-      auto p = o.attrs[SS_ATTR].cbegin();
-      try {
-	decode(snapset, p);
-      } catch (...) {
-	dout(20) << fmt::format("{}: failed to decode the snapset ({})",
-				__func__,
-				hoid)
-		 << dendl;
-	continue;
-      }
-      head = hoid.get_head();
-      continue;
-    }
-
-    /// \todo document why guaranteed to have initialized 'head' at this point
-
-    if (hoid.snap < CEPH_MAXSNAP) {
-
-      if (hoid.get_head() != head) {
-        derr << __func__ << " no head for " << hoid << " (have " << head << ")"
-             << dendl;
+      if (hoid.is_head()) {
+        // parse the SnapSet
+        if (o.attrs.find(SS_ATTR) == o.attrs.end()) {
+          // no snaps for this head
+          continue;
+        }
+        auto p = o.attrs[SS_ATTR].cbegin();
+        try {
+          decode(snapset, p);
+        } catch (...) {
+          dout(20) << fmt::format("{}: failed to decode the snapset ({})",
+                                  __func__,
+                                  hoid)
+                   << dendl;
+          continue;
+        }
+        head = hoid.get_head();
         continue;
       }
 
-      // the 'hoid' is a clone hoid at this point. The 'snapset' below was taken
-      // from the corresponding head hoid.
-      auto maybe_fix_order = scan_object_snaps(hoid, snapset, snaps_getter);
-      if (maybe_fix_order) {
-        out_orders.push_back(std::move(*maybe_fix_order));
+      /// \todo document why guaranteed to have initialized 'head' at this point
+
+      if (hoid.snap < CEPH_MAXSNAP) {
+
+        if (hoid.get_head() != head) {
+          derr << __func__ << " no head for " << hoid << " (have " << head << ")"
+               << dendl;
+          continue;
+        }
+
+        // the 'hoid' is a clone hoid at this point. The 'snapset' below was taken
+        // from the corresponding head hoid.
+        auto maybe_fix_order = scan_object_snaps(hoid, snapset, snaps_getter);
+        if (maybe_fix_order) {
+          out_orders.push_back(std::move(*maybe_fix_order));
+        }
       }
     }
   }
