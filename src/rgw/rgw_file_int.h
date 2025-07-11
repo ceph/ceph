@@ -37,6 +37,7 @@
 #include "rgw_aio_throttle.h"
 #include "rgw_compression.h"
 #include "rgw_perf_counters.h"
+#include "rgw_cksum.h"
 
 
 /* XXX

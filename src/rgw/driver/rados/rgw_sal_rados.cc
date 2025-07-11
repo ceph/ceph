@@ -3287,6 +3287,7 @@ int RadosMultipartUpload::init(const DoutPrefixProvider *dpp, optional_yield y, 
 
     multipart_upload_info upload_info;
     upload_info.dest_placement = dest_placement;
+    upload_info.cksum_type = cksum_type;
     
     if (obj_legal_hold) {
       upload_info.obj_legal_hold_exist = true;
@@ -3626,6 +3627,7 @@ int RadosMultipartUpload::get_info(const DoutPrefixProvider *dpp, optional_yield
     return 0;
   }
 
+  /* Handle caching */
   if (rule) {
     if (!placement.empty()) {
       *rule = &placement;
@@ -3635,6 +3637,14 @@ int RadosMultipartUpload::get_info(const DoutPrefixProvider *dpp, optional_yield
       }
     } else {
       *rule = nullptr;
+    }
+  }
+
+  if (attrs) {
+    if (!cached_attrs.empty()) {
+      *attrs = cached_attrs;
+      if (!rule || *rule != nullptr)
+        return 0;
     }
   }
 
@@ -3658,11 +3668,13 @@ int RadosMultipartUpload::get_info(const DoutPrefixProvider *dpp, optional_yield
     return ret;
   }
 
+  /* Cache attrs filled in by prepare */
+  cached_attrs = meta_obj->get_attrs();
+
   extract_span_context(meta_obj->get_attrs(), trace_ctx);
 
   if (attrs) {
-    /* Attrs are filled in by prepare */
-    *attrs = meta_obj->get_attrs();
+    *attrs = cached_attrs;
     if (!rule || *rule != nullptr) {
       /* placement was cached; don't actually read */
       return 0;
@@ -3690,6 +3702,7 @@ int RadosMultipartUpload::get_info(const DoutPrefixProvider *dpp, optional_yield
     ldpp_dout(dpp, 0) << "ERROR: failed to decode multipart upload info" << dendl;
     return -EIO;
   }
+  cksum_type = upload_info.cksum_type;
   placement = upload_info.dest_placement;
   upload_information = upload_info;
   *rule = &placement;
@@ -3889,6 +3902,7 @@ int RadosAtomicWriter::process(bufferlist&& data, uint64_t offset)
 int RadosAtomicWriter::complete(size_t accounted_size, const std::string& etag,
                        ceph::real_time *mtime, ceph::real_time set_mtime,
                        std::map<std::string, bufferlist>& attrs,
+		       const std::optional<rgw::cksum::Cksum>& cksum,
                        ceph::real_time delete_at,
                        const char *if_match, const char *if_nomatch,
                        const std::string *user_data,
@@ -3896,8 +3910,9 @@ int RadosAtomicWriter::complete(size_t accounted_size, const std::string& etag,
                        const req_context& rctx,
                        uint32_t flags)
 {
-  return processor.complete(accounted_size, etag, mtime, set_mtime, attrs, delete_at,
-			    if_match, if_nomatch, user_data, zones_trace, canceled, rctx, flags);
+  return processor.complete(accounted_size, etag, mtime, set_mtime, attrs,
+			    cksum, delete_at, if_match, if_nomatch,
+			    user_data, zones_trace, canceled, rctx, flags);
 }
 
 int RadosAppendWriter::prepare(optional_yield y)
@@ -3913,6 +3928,7 @@ int RadosAppendWriter::process(bufferlist&& data, uint64_t offset)
 int RadosAppendWriter::complete(size_t accounted_size, const std::string& etag,
                        ceph::real_time *mtime, ceph::real_time set_mtime,
                        std::map<std::string, bufferlist>& attrs,
+		       const std::optional<rgw::cksum::Cksum>& cksum,
                        ceph::real_time delete_at,
                        const char *if_match, const char *if_nomatch,
                        const std::string *user_data,
@@ -3920,8 +3936,9 @@ int RadosAppendWriter::complete(size_t accounted_size, const std::string& etag,
                        const req_context& rctx,
                        uint32_t flags)
 {
-  return processor.complete(accounted_size, etag, mtime, set_mtime, attrs, delete_at,
-			    if_match, if_nomatch, user_data, zones_trace, canceled, rctx, flags);
+  return processor.complete(accounted_size, etag, mtime, set_mtime, attrs,
+			    cksum, delete_at, if_match, if_nomatch,
+			    user_data, zones_trace, canceled, rctx, flags);
 }
 
 int RadosMultipartWriter::prepare(optional_yield y)
@@ -3934,9 +3951,12 @@ int RadosMultipartWriter::process(bufferlist&& data, uint64_t offset)
   return processor.process(std::move(data), offset);
 }
 
-int RadosMultipartWriter::complete(size_t accounted_size, const std::string& etag,
+int RadosMultipartWriter::complete(
+		       size_t accounted_size,
+		       const std::string& etag,
                        ceph::real_time *mtime, ceph::real_time set_mtime,
                        std::map<std::string, bufferlist>& attrs,
+		       const std::optional<rgw::cksum::Cksum>& cksum,
                        ceph::real_time delete_at,
                        const char *if_match, const char *if_nomatch,
                        const std::string *user_data,
@@ -3944,8 +3964,9 @@ int RadosMultipartWriter::complete(size_t accounted_size, const std::string& eta
                        const req_context& rctx,
                        uint32_t flags)
 {
-  return processor.complete(accounted_size, etag, mtime, set_mtime, attrs, delete_at,
-                            if_match, if_nomatch, user_data, zones_trace, canceled, rctx, flags);
+  return processor.complete(accounted_size, etag, mtime, set_mtime, attrs,
+			    cksum, delete_at, if_match, if_nomatch,
+			    user_data, zones_trace, canceled, rctx, flags);
 }
 
 bool RadosZoneGroup::placement_target_exists(std::string& target) const
