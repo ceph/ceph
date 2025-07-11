@@ -8784,11 +8784,15 @@ paths:
           application/json:
             schema:
               properties:
+                dhchap_key:
+                  type: string
                 gw_group:
                   description: NVMeoF gateway group
                   type: string
                 host_nqn:
                   description: NVMeoF host NQN. Use "*" to allow any host.
+                  type: string
+                psk:
                   type: string
                 traddr:
                   type: string
