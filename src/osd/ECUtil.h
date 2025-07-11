@@ -659,10 +659,6 @@ public:
       ErasureCodeInterface::FLAG_EC_PLUGIN_REQUIRE_SUB_CHUNKS) != 0;
   }
 
-  bool get_is_hinfo_required() const {
-    return !supports_ec_overwrites();
-  }
-
   bool supports_partial_reads() const {
     return (plugin_flags &
       ErasureCodeInterface::FLAG_EC_PLUGIN_PARTIAL_READ_OPTIMIZATION) != 0;
