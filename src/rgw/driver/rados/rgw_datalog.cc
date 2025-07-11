@@ -510,7 +510,7 @@ RGWDataChangesLog::start(const DoutPrefixProvider *dpp,
   if (renew) {
     renew_future = asio::co_spawn(
       renew_strand,
-      renew_run(shared_from_this()),
+      renew_run(),
       asio::bind_cancellation_slot(renew_signal.slot(),
 				   asio::bind_executor(renew_strand,
 						       asio::use_future)));
@@ -525,7 +525,7 @@ RGWDataChangesLog::start(const DoutPrefixProvider *dpp,
     }
     watch_future = asio::co_spawn(
       watch_strand,
-      watch_loop(shared_from_this()),
+      watch_loop(),
       asio::bind_cancellation_slot(watch_signal.slot(),
 				   asio::bind_executor(watch_strand,
 						       asio::use_future)));
@@ -535,7 +535,7 @@ RGWDataChangesLog::start(const DoutPrefixProvider *dpp,
     // have to block startup while we do all that I/O.
     recovery_future = asio::co_spawn(
       recovery_strand,
-      recover(dpp, shared_from_this()),
+      recover(dpp),
       asio::bind_cancellation_slot(recovery_signal.slot(),
 				   asio::bind_executor(recovery_strand,
 						       asio::use_future)));
@@ -665,7 +665,7 @@ RGWDataChangesLog::process_notification(const DoutPrefixProvider* dpp,
 }
 
 asio::awaitable<void>
-RGWDataChangesLog::watch_loop(std::shared_ptr<RGWDataChangesLog>)
+RGWDataChangesLog::watch_loop()
 {
   const DoutPrefix dp(cct, dout_subsys, "rgw data changes log: ");
   const auto oid = get_sem_set_oid(0);
@@ -1456,8 +1456,7 @@ RGWDataChangesLog::~RGWDataChangesLog() {
   }
 }
 
-asio::awaitable<void> RGWDataChangesLog::renew_run(
-  std::shared_ptr<RGWDataChangesLog>) {
+asio::awaitable<void> RGWDataChangesLog::renew_run() {
   static constexpr auto runs_per_prune = 150;
   auto run = 0;
   renew_timer.emplace(co_await asio::this_coro::executor);
@@ -1762,8 +1761,7 @@ RGWDataChangesLog::recover_shard(const DoutPrefixProvider* dpp, int index)
 }
 
 asio::awaitable<void> RGWDataChangesLog::recover(
-  const DoutPrefixProvider* dpp,
-  std::shared_ptr<RGWDataChangesLog>)
+  const DoutPrefixProvider* dpp)
 {
   co_await asio::co_spawn(
     recovery_strand,

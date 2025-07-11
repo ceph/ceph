@@ -352,8 +352,7 @@ struct hash<BucketGen> {
 };
 }
 
-class RGWDataChangesLog
-  : public std::enable_shared_from_this<RGWDataChangesLog> {
+class RGWDataChangesLog {
   friend class DataLogTestBase;
   friend DataLogBackends;
   CephContext *cct;
@@ -419,8 +418,7 @@ class RGWDataChangesLog
 		      ceph::real_time expiration);
 
   std::optional<asio::steady_timer> renew_timer;
-  asio::awaitable<void> renew_run(
-    std::shared_ptr<RGWDataChangesLog> renew_signal);
+  asio::awaitable<void> renew_run();
   void renew_stop();
 
   std::function<bool(const rgw_bucket& bucket, optional_yield y,
@@ -456,7 +454,7 @@ public:
 					std::string_view oid);
   asio::awaitable<void> process_notification(const DoutPrefixProvider* dpp,
 					     std::string_view oid);
-  asio::awaitable<void> watch_loop(std::shared_ptr<RGWDataChangesLog>);
+  asio::awaitable<void> watch_loop();
   int choose_oid(const rgw_bucket_shard& bs);
   asio::awaitable<void> add_entry(const DoutPrefixProvider *dpp,
 				  const RGWBucketInfo& bucket_info,
@@ -537,8 +535,7 @@ public:
 		 ceph::mono_time fetch_time,
 		 bc::flat_map<std::string, uint64_t>&& semcount);
   asio::awaitable<void> recover_shard(const DoutPrefixProvider* dpp, int index);
-  asio::awaitable<void> recover(const DoutPrefixProvider* dpp,
-				std::shared_ptr<RGWDataChangesLog>);
+  asio::awaitable<void> recover(const DoutPrefixProvider* dpp);
   asio::awaitable<void> async_shutdown();
   void blocking_shutdown();
 
