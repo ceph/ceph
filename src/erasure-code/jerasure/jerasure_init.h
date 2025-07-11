@@ -19,6 +19,7 @@
 #define CEPH_JERASURE_INIT_H
 
 extern "C" int jerasure_init(int count, int *words);
+void jerasure_finish() __attribute__((destructor));
 
 #endif
 
