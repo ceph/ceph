@@ -47,7 +47,7 @@ TEST(FairMutex, fair)
                                        scoreboard.end(),
                                        0);
       for (unsigned score : scoreboard) {
-        if (total < NR_ROUNDS) {
+        if (std::cmp_less(total, NR_ROUNDS)) {
           // not quite statistically significant. to reduce the false positive,
           // just consider it fair
           continue;
