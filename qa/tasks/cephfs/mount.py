@@ -782,6 +782,10 @@ class CephFSMount(object):
                                       stdout=stdout, stderr=stderr,
                                       omit_sudo=omit_sudo, **kwargs)
 
+    def get_shell_stdout(self, args, timeout=300, **kwargs):
+        return self.run_shell(args=args, timeout=timeout, **kwargs).stdout.\
+            getvalue()
+
     def run_shell_payload(self, payload, **kwargs):
         kwargs['args'] = ["bash", "-c", Raw(f"'{payload}'")]
         if kwargs.pop('sudo', False):
