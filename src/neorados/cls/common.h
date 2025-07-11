@@ -12,7 +12,6 @@
 #pragma once
 
 #include <concepts>
-#include <coroutine>
 #include <cstddef>
 #include <string>
 #include <type_traits>
@@ -34,6 +33,8 @@
 
 #include "include/buffer.h"
 #include "include/encoding.h"
+
+#define STUCK_ON_JAMMY 1
 
 /// \file neorados/cls/common.h
 ///
