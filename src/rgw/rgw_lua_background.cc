@@ -174,7 +174,7 @@ void Background::run() {
       if (!lguard) {
         return;
       }
-      ldpp_dout(dpp, 10) << "Lua state restarted seccessfully." << dendl;
+      ldpp_dout(dpp, 10) << "Lua state restarted successfully." << dendl;
     }
     lguard->set_max_runtime(max_runtime);
     lguard->reset_start_time();

@@ -357,7 +357,7 @@ int SSDDriver::restore_blocks_objects(const DoutPrefixProvider* dpp, ObjectDataC
                             }
                         }//end - try
                         catch(...) {
-                            ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): Execption while parsing entry: " << file_entry.path() << dendl;
+                            ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): Exception while parsing entry: " << file_entry.path() << dendl;
                             continue;
                         }
                     }
