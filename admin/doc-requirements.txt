@@ -13,7 +13,6 @@ sphinx-autodoc-typehints == 1.18.3
 sphinx-prompt
 sphinx_rtd_theme
 Sphinx-Substitution-Extensions
-typed-ast
 sphinxcontrib-mermaid
 sphinxcontrib-openapi
 sphinxcontrib-seqdiag
