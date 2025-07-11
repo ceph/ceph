@@ -216,6 +216,46 @@ else:
                 )
             )
 
+        @EndpointDoc(
+            "Change subsystem inband authentication key",
+            parameters={
+                "nqn": Param(str, "NVMeoF subsystem NQN"),
+                "dhchap_key": Param(str, "Subsystem DH-HMAC-CHAP key"),
+                "gw_group": Param(str, "NVMeoF gateway group", True, None),
+                "traddr": Param(str, "NVMeoF gateway address", True, None),
+            },
+        )
+        @empty_response
+        @NvmeofCLICommand("nvmeof subsystem change_key", model.RequestStatus)
+        @convert_to_model(model.RequestStatus)
+        @handle_nvmeof_error
+        def change_key(self, nqn: str, dhchap_key: str, gw_group: Optional[str] = None,
+                       traddr: Optional[str] = None):
+            return NVMeoFClient(gw_group=gw_group, traddr=traddr).stub.change_subsystem_key(
+                NVMeoFClient.pb2.change_subsystem_key_req(
+                    subsystem_nqn=nqn, dhchap_key=dhchap_key
+                )
+            )
+
+        @EndpointDoc(
+            "Delete subsystem inband authentication key",
+            parameters={
+                "nqn": Param(str, "NVMeoF subsystem NQN"),
+                "gw_group": Param(str, "NVMeoF gateway group", True, None),
+                "traddr": Param(str, "NVMeoF gateway address", True, None),
+            },
+        )
+        @empty_response
+        @NvmeofCLICommand("nvmeof subsystem del_key", model.RequestStatus)
+        @convert_to_model(model.RequestStatus)
+        @handle_nvmeof_error
+        def del_key(self, nqn: str, gw_group: Optional[str] = None, traddr: Optional[str] = None):
+            return NVMeoFClient(gw_group=gw_group, traddr=traddr).stub.change_subsystem_key(
+                NVMeoFClient.pb2.change_subsystem_key_req(
+                    subsystem_nqn=nqn, dhchap_key=None
+                )
+            )
+
     @APIRouter("/nvmeof/subsystem/{nqn}/listener", Scope.NVME_OF)
     @APIDoc("NVMe-oF Subsystem Listener Management API", "NVMe-oF Subsystem Listener")
     class NVMeoFListener(RESTController):
@@ -896,10 +936,13 @@ else:
         @NvmeofCLICommand("nvmeof host add", model.RequestStatus)
         @convert_to_model(model.RequestStatus)
         @handle_nvmeof_error
-        def create(self, nqn: str, host_nqn: str, gw_group: Optional[str] = None,
-                   traddr: Optional[str] = None):
+        def create(
+            self, nqn: str, host_nqn: str, dhchap_key: Optional[str] = None,
+            psk: Optional[str] = None, gw_group: Optional[str] = None, traddr: Optional[str] = None
+        ):
             return NVMeoFClient(gw_group=gw_group, traddr=traddr).stub.add_host(
-                NVMeoFClient.pb2.add_host_req(subsystem_nqn=nqn, host_nqn=host_nqn)
+                NVMeoFClient.pb2.add_host_req(subsystem_nqn=nqn, host_nqn=host_nqn,
+                                              dhchap_key=dhchap_key, psk=psk)
             )
 
         @EndpointDoc(
