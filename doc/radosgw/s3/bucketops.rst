@@ -523,6 +523,11 @@ Parameters are XML encoded in the body of the request, in the following format:
                         <Value></Value>
                     </FilterRule>
                 </S3Tags>
+                <S3Zone>
+                    <FilterRule>
+                        <Name></Name>
+                    </FilterRule>
+                </S3Zone>
             </Filter>
        </TopicConfiguration>
    </NotificationConfiguration>
@@ -556,6 +561,9 @@ Parameters are XML encoded in the body of the request, in the following format:
 |                               |           | All filter rules in the list must match the tags defined on the object. However,     |          |
 |                               |           | the object still match it it has other tags not listed in the filter.                |          |
 +-------------------------------+-----------+--------------------------------------------------------------------------------------+----------+
+| ``S3Zone``                    | Container | Holding a list of ``FilterRule`` entities, for filtering based on zone name. The     | No       |
+|                                           | zone the radosgw resides in must match for notifications to be sent.                 |          |
++-------------------------------+-----------+--------------------------------------------------------------------------------------+----------+
 | ``S3Key.FilterRule``          | Container | Holding ``Name`` and ``Value`` entities. ``Name`` would  be: ``prefix``, ``suffix``  | Yes      |
 |                               |           | or ``regex``. The ``Value`` would hold the key prefix, key suffix or a regular       |          |
 |                               |           | expression for matching the key, accordingly.                                        |          |
@@ -564,10 +572,11 @@ Parameters are XML encoded in the body of the request, in the following format:
 |                               |           | attribute (e.g. ``x-amz-meta-xxx``). The ``Value`` would be the expected value for   |          | 
 |                               |           | this attribute.                                                                      |          |
 +-------------------------------+-----------+--------------------------------------------------------------------------------------+----------+
-| ``S3Tags.FilterRule``         | Container | Holding ``Name`` and ``Value`` entities. ``Name`` would be the tag key,              |  Yes     |
+| ``S3Tags.FilterRule``         | Container | Holding ``Name`` and ``Value`` entities. ``Name`` would be the tag key,              | Yes      |
 |                               |           | and ``Value`` would be the tag value.                                                |          | 
 +-------------------------------+-----------+--------------------------------------------------------------------------------------+----------+
-
+| ``S3Zone.FilterRule``         | Container | Holds the ``Name`` entity, which is the zone name to filter on.                      | Yes      | 
++-------------------------------+-----------+--------------------------------------------------------------------------------------+----------+
 
 HTTP Response
 ~~~~~~~~~~~~~
