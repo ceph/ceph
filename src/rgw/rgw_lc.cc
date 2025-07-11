@@ -2161,6 +2161,37 @@ int RGWLC::bucket_lc_process_snap(string& bucket_tenant,
       }
     }
     worker->workpool->drain();
+
+    /* we're here, so we already processed the entire deleted snapshot, need to remove it */
+
+    bool again = false;
+    int i;
+#define MAX_TRIES 20
+    for (i = 0; i < MAX_TRIES; ++i) {
+      if (again) {
+        ret = bucket->load_bucket(this, null_yield);
+        if (ret < 0) {
+          ldpp_dout(this, 0) << "ERROR: failed to load bucket: ret=" << ret << dendl;
+          return ret;
+        }
+      }
+      auto& bucket_info = bucket->get_info();
+      bucket_info.local.snap_mgr.cleanup_snap(snap_id);
+
+      ret = bucket->put_info(this, false, real_time(), null_yield);
+      if (ret < 0 &&
+          ret != -ECANCELED) {
+        ldpp_dout(this, 0) << "ERROR: failed to store bucket info (bucket=" << bucket << "): ret=" << ret << dendl;
+        return ret;
+      }
+      if (ret == 0) {
+        break;
+      }
+    }
+    if (i == MAX_TRIES) {
+      ldpp_dout(this, 0) << "failed to store bucket info too many times (bucket=" << bucket << "), likely a bug" << dendl;
+      return -EIO;
+    }
   } while (false); /* run once */
 
   return 0;

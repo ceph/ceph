@@ -110,6 +110,19 @@ int RGWBucketSnapMgr::remove_snap(rgw_bucket_snap_id snap_id)
   return 0;
 }
 
+void RGWBucketSnapMgr::cleanup_snap(rgw_bucket_snap_id snap_id)
+{
+  auto iter = rm_snaps.find(snap_id);
+  if (iter == rm_snaps.end()) {
+    return;
+  }
+
+  auto& info = iter->second.info;
+  names_to_ids.erase(info.name);
+
+  rm_snaps.erase(snap_id);
+}
+
 bool RGWBucketSnapMgr::live_snapshot_at_range(rgw_bucket_snap_id min, rgw_bucket_snap_id max) const
 {
   if (!min.is_set()) {
