@@ -940,3 +940,246 @@ def test_multi_target_command():
     if isinstance(mds_status, list): # if multi target command result
         for mds_sessions in session_map:
             assert(list(mds_sessions.keys())[0].startswith('mds.'))
+
+
+class TestRmtree:
+    '''
+    Test rmtree() method of CephFS python bindings.
+    '''
+
+    def test_rmtree_when_tree_contains_only_regfiles(self, testdir):
+        '''
+        Test rmtree() successfully deletes the entire file hierarchy that contains
+        only regular files.
+        '''
+        should_cancel = lambda: False
+
+        cephfs.mkdir('dir1', 0o755)
+        for i in range(1, 6):
+            fd = cephfs.open(f'/dir1/file{i}', 'w', 0o755)
+            cephfs.write(fd, b'abcd', 0)
+            cephfs.close(fd)
+
+        cephfs.rmtree('dir1', should_cancel)
+        assert_raises(libcephfs.ObjectNotFound, cephfs.stat, 'dir1')
+
+    def test_rmtree_when_tree_contains_dirs_and_regfiles(self, testdir):
+        '''
+        Test that rmtree() successfully deletes the entire file hierarchy that
+        contains only directories and regular files.
+        '''
+        should_cancel = lambda: False
+
+        cephfs.mkdir('dir2', 0o755)
+        for i in range(1, 6):
+            cephfs.mkdir(f'/dir2/dir2{i}', 0o755)
+            for j in range(1, 6):
+                fd = cephfs.open(f'/dir2/dir2{i}/file{j}', 'w', 0o755)
+                cephfs.write(fd, b'abcd', 0)
+                cephfs.close(fd)
+
+        cephfs.rmtree('dir2', should_cancel)
+        assert_raises(libcephfs.ObjectNotFound, cephfs.stat, 'dir2')
+
+    def test_rmtree_when_tree_contains_dirs_regfiles_and_symlinks(self, testdir):
+        '''
+        Test that rmtree() successfully deletes entire file hierarchy that
+        contains directories, regular files as well as symbolic links.
+        '''
+        should_cancel = lambda: False
+
+        cephfs.mkdir('dir3', 0o755)
+        for i in range(1, 6):
+            fd = cephfs.open(f'/dir3/file{i}', 'w', 0o755)
+            cephfs.write(fd, b'abcd', 0)
+            cephfs.close(fd)
+
+            file_name = f'/dir3/file{i}'.encode('utf-8')
+            slink_name = f'slink{i}'.encode('utf-8')
+            cephfs.link(file_name, slink_name)
+
+        cephfs.rmtree('dir3', should_cancel)
+        assert_raises(libcephfs.ObjectNotFound, cephfs.stat, 'dir3')
+
+    def test_rmtree_when_tree_contains_only_empty_dirs(self, testdir):
+        '''
+        Test that rmtree() successfully deletes entire file hierarchy that contains
+        only empty directories.
+        '''
+        should_cancel = lambda: False
+
+        cephfs.mkdir('dir4', 0o755)
+        for i in range(1, 6):
+            cephfs.mkdir(f'/dir4/dir4{i}', 0o755)
+
+        cephfs.rmtree('dir4', should_cancel)
+        assert_raises(libcephfs.ObjectNotFound, cephfs.stat, 'dir4')
+
+    def test_rmtree_when_root_is_empty_dir(self, testdir):
+        '''
+        Test that rmtree() successfully deletes entire file hierarchy when it is
+        only an empty directory.
+        '''
+        should_cancel = lambda: False
+
+        cephfs.mkdir('dir5', 0o755)
+
+        cephfs.rmtree('dir5', should_cancel)
+        assert_raises(libcephfs.ObjectNotFound, cephfs.stat, 'dir5')
+
+    def get_file_count(self, dir_path):
+        '''
+        Return the number of files present in the given directory.
+        '''
+        i = 0
+        with cephfs.opendir(dir_path) as dir_handle:
+            de = cephfs.readdir(dir_handle)
+            while de:
+                i += 1
+                de = cephfs.readdir(dir_handle)
+        return i
+
+    def test_rmtree_no_perm_on_nonroot_dir(self, testdir):
+        '''
+        Test that rmtree() successfully deletes the entire file hierarchy except the
+        branch where permission for one of the (non-root) directories is not
+        granted.
+        '''
+        should_cancel = lambda: False
+
+        cephfs.mkdir('dir1', 0o755)
+
+        cephfs.mkdir('dir1/dir2', 0o755)
+        for i in range(1, 6):
+            fd = cephfs.open(f'/dir1/dir2/file{i}', 'w', 0o755)
+            cephfs.write(fd, b'abcd', 0)
+            cephfs.close(fd)
+
+        cephfs.mkdir('dir1/dir3', 0o755)
+        for i in range(1, 6):
+            fd = cephfs.open(f'/dir1/dir3/file{i}', 'w', 0o755)
+            cephfs.write(fd, b'abcd', 0)
+            cephfs.close(fd)
+
+        cephfs.mkdir('dir1/dir4', 0o755)
+        for i in range(1, 6):
+            fd = cephfs.open(f'/dir1/dir4/file{i}', 'w', 0o755)
+            cephfs.write(fd, b'abcd', 0)
+            cephfs.close(fd)
+
+        # actual test
+        cephfs.chmod('/dir1/dir3', 0o000)
+        cephfs.rmtree('dir1', should_cancel)
+        # ensure /dir1/dir3 wasn't deleted
+        cephfs.stat('dir1/dir3')
+
+        # cleanup
+        cephfs.chmod('/dir1/dir3', 0o755)
+        cephfs.rmtree('dir1', should_cancel)
+        assert_raises(libcephfs.ObjectNotFound, cephfs.stat, 'dir1')
+
+    def test_rmtree_no_perm_on_root(self, testdir):
+        '''
+        Test rmtree() exits when permission is not granted for the root of the file
+        hierarchy.
+        '''
+        should_cancel = lambda: False
+
+        cephfs.mkdir('dir1', 0o755)
+        for i in range(1, 6):
+            fd = cephfs.open(f'/dir1/file{i}', 'w', 0o755)
+            cephfs.write(fd, b'abcd', 0)
+            cephfs.close(fd)
+
+        cephfs.chmod('/dir1', 0o000)
+        cephfs.rmtree('dir1', should_cancel)
+        # ensure /dir1 wasn't deleted
+        cephfs.stat('dir1')
+
+        # cleanup
+        cephfs.chmod('/dir1', 0o755)
+        cephfs.rmtree('dir1', should_cancel)
+        assert_raises(libcephfs.ObjectNotFound, cephfs.stat, 'dir1')
+
+    def test_rmtree_on_tree_with_snaps(self, testdir):
+        '''
+        Test that rmtree() successfully deletes the entire file hierarchy except
+        the branch where one of the directories contains one or many snapshots.
+        '''
+        should_cancel = lambda: False
+
+        cephfs.mkdir('dir1', 0o755)
+        cephfs.mkdir('dir1/dir2', 0o755)
+        for i in range(1, 6):
+            fd = cephfs.open(f'/dir1/dir2/file{i}', 'w', 0o755)
+            cephfs.write(fd, b'abcd', 0)
+            cephfs.close(fd)
+        cephfs.mksnap('/dir1/dir2', 'snap1', 0o755)
+
+        cephfs.rmtree('dir1', should_cancel)
+        # ensure dir1 wasn't deleted
+        cephfs.stat('dir1')
+
+        # cleanup
+        cephfs.rmsnap('/dir1/dir2', 'snap1')
+        cephfs.rmtree('dir1', should_cancel)
+        assert_raises(libcephfs.ObjectNotFound, cephfs.stat, 'dir1')
+
+    def test_rmtree_on_tree_with_snaps_on_root(self, testdir):
+        '''
+        Test that rmtree() successfully deletes the entire file hierarchy except
+        the branch where one of the directories contains one or many snapshots.
+        '''
+        should_cancel = lambda: False
+
+        cephfs.mkdir('dir1', 0o755)
+        for i in range(1, 6):
+            fd = cephfs.open(f'/dir1/file{i}', 'w', 0o755)
+            cephfs.write(fd, b'abcd', 0)
+            cephfs.close(fd)
+        cephfs.mksnap('/dir1', 'snap1', 0o755)
+
+        cephfs.rmtree('dir1', should_cancel)
+        # ensure dir1 wasn't deleted
+        cephfs.stat('dir1')
+
+        # cleanup
+        cephfs.rmsnap('/dir1', 'snap1')
+        cephfs.rmtree('dir1', should_cancel)
+        assert_raises(libcephfs.ObjectNotFound, cephfs.stat, 'dir1')
+
+    def test_rmtree_aborts_when_should_cancel_is_true(self, testdir):
+        '''
+        Test that rmtree() stops deleting the file hierarchy when the return
+        value of "should_cancel" becomes True.
+        '''
+        cancel_flag = False
+        should_cancel = lambda: cancel_flag
+
+        cephfs.mkdir('dir6', 0o755)
+        for i in range(1, 1001):
+            fd = cephfs.open(f'/dir6/file{i}', 'w', 0o755)
+            cephfs.write(fd, b'abcd', 0)
+            cephfs.close(fd)
+
+        from threading import Thread
+        Thread(target=cephfs.rmtree, args=('dir6', should_cancel)).start()
+        time.sleep(0.5)
+
+        # this will change return value of should_cancel and therefore halt
+        # execution of rmtree()
+        cancel_flag = True
+        # ensure dir6 wasn't deleted
+        cephfs.stat('dir6')
+        # ensure that deletion had begun but hadn't finished and was halted
+        file_count = self.get_file_count('dir6')
+        assert file_count > 0 and file_count < 1000
+
+        time.sleep(2)
+        file_count = self.get_file_count('dir6')
+        assert file_count > 0 and file_count < 1000
+
+        # cleanup
+        cancel_flag = False
+        cephfs.rmtree('dir6', should_cancel)
+        assert_raises(libcephfs.ObjectNotFound, cephfs.stat, 'dir1')
