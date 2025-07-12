@@ -331,7 +331,7 @@ void PG::clear_object_snap_mapping(
 }
 
 void PG::update_object_snap_mapping(
-  ObjectStore::Transaction *t, const hobject_t &soid, const set<snapid_t> &snaps)
+  ObjectStore::Transaction *t, const hobject_t &soid, const vector<snapid_t> &snaps)
 {
   OSDriver::OSTransaction _t(osdriver.get_transaction(t));
   ceph_assert(soid.snap < CEPH_MAXSNAP);
@@ -878,9 +878,10 @@ void PG::upgrade(ObjectStore *store)
 
   // update infover_key
   if (info_struct_v < pg_latest_struct_v) {
-    map<string,bufferlist> v;
+    vector<std::pair<string, bufferlist>> v(1);
+    v[0].first = string(infover_key);
     __u8 ver = pg_latest_struct_v;
-    encode(ver, v[string(infover_key)]);
+    encode(ver, v[0].second);
     t.omap_setkeys(coll, pgmeta_oid, v);
   }
 
@@ -916,7 +917,7 @@ void PG::prepare_write(
 {
   info.stats.stats.add(unstable_stats);
   unstable_stats.clear();
-  map<string,bufferlist> km;
+  vector<pair<string,bufferlist>> km;
   string key_to_remove;
   if (dirty_big_info || dirty_info) {
     int ret = prepare_info_keymap(
@@ -953,8 +954,7 @@ bool PG::_has_removal_flag(ObjectStore *store,
   ghobject_t pgmeta_oid(pgid.make_pgmeta_oid());
 
   // first try new way
-  set<string> keys;
-  keys.insert("_remove");
+  vector<string> keys(1, "_remove");
   map<string,bufferlist> values;
   auto ch = store->open_collection(coll);
   ceph_assert(ch);
@@ -977,9 +977,9 @@ int PG::peek_map_epoch(ObjectStore *store,
   ceph_assert(coll.is_pg());
 
   // try for v8
-  set<string> keys;
-  keys.insert(string(infover_key));
-  keys.insert(string(epoch_key));
+  vector<string> keys(2);
+  keys[0] = string(infover_key);
+  keys[1] = string(epoch_key);
   map<string,bufferlist> values;
   auto ch = store->open_collection(coll);
   ceph_assert(ch);
@@ -1037,11 +1037,11 @@ int PG::read_info(
   pg_info_t &info, PastIntervals &past_intervals,
   __u8 &struct_v)
 {
-  set<string> keys;
-  keys.insert(string(infover_key));
-  keys.insert(string(info_key));
-  keys.insert(string(biginfo_key));
-  keys.insert(string(fastinfo_key));
+  vector<string> keys(4);
+  keys[0] = string(infover_key);
+  keys[1] = string(info_key);
+  keys[2] = string(biginfo_key);
+  keys[3] = string(fastinfo_key);
   ghobject_t pgmeta_oid(pgid.make_pgmeta_oid());
   map<string,bufferlist> values;
   auto ch = store->open_collection(coll);
