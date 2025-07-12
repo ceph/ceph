@@ -635,14 +635,31 @@ to the cluster.
 Receiving notifications
 -----------------------
 
-The manager daemon calls the ``notify`` function on all active modules
-when certain important pieces of cluster state are updated, such as the
-cluster maps.
+The manager daemon can call the ``notify`` method on active modules
+when key pieces of cluster state are update such as the cluster maps.
 
-The actual data is not passed into this function, rather it is a cue for
-the module to go and read the relevant structure if it is interested.  Most
-modules ignore most types of notification: to ignore a notification
-simply return from this function without doing anything.
+.. important::
+    Only modules that explicitly declare interest in a given
+    notification type will receive it.
+
+To receive notifications, a module must declare the NOTIFY_TYPES list:
+
+.. code:: python
+
+    NOTIFY_TYPES = [
+        NotifyType.mon_map,
+        NotifyType.osd_map,
+        NotifyType.crush_map,
+        ...
+    ]
+
+The manager will call the module ``notify`` method only for types listed
+in that array. Internally, it checks ``should_notify`` before dispatching
+the notification.
+
+The notification does not include the actual data - it's just a cue to
+tell the module that something has changed. It's up to the module to retrieve 
+fresh data using mgr.get(...) if needed.
 
 .. automethod:: MgrModule.notify
 
