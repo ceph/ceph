@@ -86,7 +86,7 @@ export class ModuleStatusGuardService {
               secondary_button_name: config.secondary_button_name,
               secondary_button_route: config.secondary_button_route,
               secondary_button_title: config.secondary_button_title,
-              button_to_enable_module: config.button_to_enable_module,
+              module_name: config.module_name,
               navigate_to: config.navigate_to,
               uiConfig: config.uiConfig,
               uiApiPath: config.uiApiPath,
