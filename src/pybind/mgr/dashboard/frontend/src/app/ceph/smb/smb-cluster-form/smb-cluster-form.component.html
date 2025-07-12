@@ -28,6 +28,7 @@
             type="text"
             id="cluster_id"
             formControlName="cluster_id"
+            data-testid="cluster_id"
             [invalid]="smbForm.controls.cluster_id.invalid && smbForm.controls.cluster_id.dirty"
           />
         </cds-text-label>
@@ -96,6 +97,7 @@
               />
               <cds-icon-button kind="ghost"
                                (click)="editDomainSettingsModal()"
+                               data-testid="editDomainSettingsModal"
                                size="md">
                 <svg cdsIcon="edit"
                      size="32"
@@ -140,6 +142,7 @@
             <cds-select
               label="Standalone user access resources"
               i18n-label
+              [id]="i"
               [formControlName]="i"
               [invalid]="smbForm.controls.joinSources.controls[i].invalid && smbForm.controls.joinSources.controls[i].dirty"
               [invalidText]="ugError"
@@ -298,6 +301,7 @@
               >DNS
               <input cdsText
                      [formControlName]="i"
+                     [id]="i"
                      placeholder="192.168.76.204"/>
               </cds-text-label>
             </div>
@@ -326,6 +330,7 @@
           <button cdsButton="tertiary"
                   type="button"
                   (click)="addCustomDns()"
+                  data-testid="custom-dns"
                   i18n>
             Add custom DNS
             <svg
