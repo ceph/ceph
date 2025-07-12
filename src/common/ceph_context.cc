@@ -17,6 +17,7 @@
 
 #include <mutex>
 #include <iostream>
+#include <sstream>
 
 #include <pthread.h>
 
@@ -54,6 +55,12 @@
 #include "include/spinlock.h"
 #ifndef WITH_CRIMSON
 #include "mon/MonMap.h"
+#endif
+
+#ifdef WITH_CRIMSON
+#include "crimson/common/perf_counters_collection.h"
+#else
+#include "common/perf_counters_collection.h"
 #endif
 
 // for CINIT_FLAGS
