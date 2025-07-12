@@ -146,6 +146,59 @@ public:
   int process(bufferlist&& data, uint64_t logical_offset) override;
 }; /* RGWPutObj_BlockEncrypt */
 
+struct RGWDecryptContext {
+  const DoutPrefixProvider *dpp;
+  CephContext* cct;
+  std::string &error_message;
+  bool get_or_head;
+  bool secure_channel;
+  const RGWEnv *env;
+  const char *sse_ca;
+  const char *sse_c_key;
+  const char *sse_c_md5;
+  const char *get_customer_algorithm(const char *def_val = nullptr) {
+    return env->get(sse_ca, def_val);
+  }
+  const char *get_customer_key(const char *def_val = nullptr) {
+    return env->get(sse_c_key, def_val);
+  }
+  const char *get_customer_key_md5(const char *def_val = nullptr) {
+    return env->get(sse_c_md5, def_val);
+  }
+  RGWDecryptContext(req_state *s) : dpp(s), cct(s->cct), error_message(s->err.message),
+	get_or_head(s->op == OP_GET || s->op == OP_HEAD),
+	secure_channel(!s->cct->_conf->rgw_crypt_require_ssl ||
+		rgw_transport_is_secure(s->cct, *s->info.env)),
+	env(s->info.env),
+	sse_ca("HTTP_X_AMZ_SERVER_SIDE_ENCRYPTION_CUSTOMER_ALGORITHM"),
+	sse_c_key("HTTP_X_AMZ_SERVER_SIDE_ENCRYPTION_CUSTOMER_KEY"),
+	sse_c_md5("HTTP_X_AMZ_SERVER_SIDE_ENCRYPTION_CUSTOMER_KEY_MD5") {
+  };
+#if 0
+  RGWDecryptContext(req_state *s, bool customer_side) : dpp(s), cct(s->cct),
+        error_message(s->err.message),
+	get_or_head(s->op == OP_GET || s->op == OP_HEAD),
+	secure_channel(customer_side),
+	env(s->info.env),
+	sse_ca("HTTP_X_AMZ_COPY_SOURCE_SERVER_SIDE_ENCRYPTION_CUSTOMER_ALGORITHM"),
+	sse_c_key("HTTP_X_AMZ_COPY_SOURCE_SERVER_SIDE_ENCRYPTION_CUSTOMER_KEY"),
+	sse_c_md5("HTTP_X_AMZ_COPY_SOURCE_SERVER_SIDE_ENCRYPTION_CUSTOMER_KEY_MD5") {
+  };
+#endif
+  RGWDecryptContext(const DoutPrefixProvider* _dpp, CephContext* _cct,
+            std::string &_error_message,
+            bool _get_or_head, bool _secure_channel,
+            const RGWEnv *env)
+        : dpp(_dpp), cct(_cct), error_message(_error_message),
+	get_or_head(_get_or_head),
+	secure_channel(_secure_channel),
+	env(env),
+        sse_ca("HTTP_X_AMZ_COPY_SOURCE_SERVER_SIDE_ENCRYPTION_CUSTOMER_ALGORITHM"),
+        sse_c_key("HTTP_X_AMZ_COPY_SOURCE_SERVER_SIDE_ENCRYPTION_CUSTOMER_KEY"),
+        sse_c_md5("HTTP_X_AMZ_COPY_SOURCE_SERVER_SIDE_ENCRYPTION_CUSTOMER_KEY_MD5") {
+  };
+}; /* RGWDecryptContext */
+
 
 int rgw_s3_prepare_encrypt(req_state* s, optional_yield y,
                            std::map<std::string, ceph::bufferlist>& attrs,
@@ -154,6 +207,12 @@ int rgw_s3_prepare_encrypt(req_state* s, optional_yield y,
                                     std::string>& crypt_http_responses);
 
 int rgw_s3_prepare_decrypt(req_state* s, optional_yield y,
+                           std::map<std::string, ceph::bufferlist>& attrs,
+                           std::unique_ptr<BlockCrypt>* block_crypt,
+                           std::map<std::string,
+                                    std::string>& crypt_http_responses);
+
+int rgw_s3_prepare_decrypt(RGWDecryptContext &cb, optional_yield y,
                            std::map<std::string, ceph::bufferlist>& attrs,
                            std::unique_ptr<BlockCrypt>* block_crypt,
                            std::map<std::string,
@@ -179,3 +238,5 @@ static inline std::string get_str_attribute(const std::map<std::string, bufferli
 }
 
 int rgw_remove_sse_s3_bucket_key(req_state *s, optional_yield y);
+bool rgw_need_copy_data( std::map<std::string, ceph::bufferlist>& src_attrs,
+                    req_state *s);
