@@ -2,7 +2,7 @@ import { Injectable } from '@angular/core';
 
 import _ from 'lodash';
 import { IndividualConfig, ToastrService } from 'ngx-toastr';
-import { BehaviorSubject, Subject } from 'rxjs';
+import { BehaviorSubject } from 'rxjs';
 
 import { NotificationType } from '../enum/notification-type.enum';
 import { CdNotification, CdNotificationConfig } from '../models/cd-notification';
@@ -20,12 +20,21 @@ export class NotificationService {
   private dataSource = new BehaviorSubject<CdNotification[]>([]);
   data$ = this.dataSource.asObservable();
 
-  // Sidebar observable
-  sidebarSubject = new Subject();
+  // Panel state observable
+  private panelStateSource = new BehaviorSubject<{ isOpen: boolean; useNewPanel: boolean }>({
+    isOpen: false,
+    useNewPanel: true
+  });
+  panelState$ = this.panelStateSource.asObservable();
+
+  // Mute state observable
+  private muteStateSource = new BehaviorSubject<boolean>(false);
+  muteState$ = this.muteStateSource.asObservable();
 
   private queued: CdNotificationConfig[] = [];
   private queuedTimeoutId: number;
   KEY = 'cdNotifications';
+  MUTE_KEY = 'cdNotificationsMuted';
 
   constructor(
     public toastr: ToastrService,
@@ -45,6 +54,11 @@ export class NotificationService {
     }
 
     this.dataSource.next(notifications);
+
+    // Load mute state from localStorage
+    const isMuted = localStorage.getItem(this.MUTE_KEY) === 'true';
+    this.hideToasties = isMuted;
+    this.muteStateSource.next(isMuted);
   }
 
   /**
@@ -171,7 +185,14 @@ export class NotificationService {
     if (this.hideToasties) {
       return;
     }
-    this.toastr[['error', 'info', 'success'][notification.type]](
+    const toastrFn =
+      notification.type === NotificationType.error
+        ? this.toastr.error.bind(this.toastr)
+        : notification.type === NotificationType.info
+        ? this.toastr.info.bind(this.toastr)
+        : this.toastr.success.bind(this.toastr);
+
+    toastrFn(
       (notification.message ? notification.message + '<br>' : '') +
         this.renderTimeAndApplicationHtml(notification),
       notification.title,
@@ -229,9 +250,19 @@ export class NotificationService {
    */
   suspendToasties(suspend: boolean) {
     this.hideToasties = suspend;
+    this.muteStateSource.next(suspend);
+    localStorage.setItem(this.MUTE_KEY, suspend.toString());
   }
 
-  toggleSidebar(forceClose = false) {
-    this.sidebarSubject.next(forceClose);
+  /**
+   * Toggle the sidebar/panel visibility
+   * @param isOpen whether to open or close the panel
+   * @param useNewPanel which panel type to use
+   */
+  toggleSidebar(isOpen: boolean, useNewPanel: boolean = true) {
+    this.panelStateSource.next({
+      isOpen: isOpen,
+      useNewPanel: useNewPanel
+    });
   }
 }
