@@ -108,24 +108,42 @@ int OSDriver::get_next(
 {
   CRIMSON_DEBUG("OSDriver::{} key {}", __func__, key);
   using crimson::os::FuturizedStore;
-  return interruptor::green_get(os->omap_get_values(
-    ch, hoid, key
-  ).safe_then_unpack([&key, next] (bool, FuturizedStore::Shard::omap_values_t&& vals) {
+  ObjectStore::omap_iter_seek_t start_from{
+    key,
+    ObjectStore::omap_iter_seek_t::UPPER_BOUND
+  };
+  std::function<ObjectStore::omap_iter_ret_t(std::string_view, std::string_view)> callback =
+    [key, next] (std::string_view _key, std::string_view _value)
+  {
     CRIMSON_DEBUG("OSDriver::get_next key {} got omap values", key);
-    if (auto nit = std::begin(vals);
-        nit == std::end(vals) || !SnapMapper::is_mapping(nit->first)) {
+    if (!SnapMapper::is_mapping(std::string(_key))) {
       CRIMSON_DEBUG("OSDriver::get_next key {} no more values", key);
-      return -ENOENT;
+      return ObjectStore::omap_iter_ret_t::NEXT;
     } else {
-      CRIMSON_DEBUG("OSDriver::get_next returning next: {}, ", nit->first);
-      ceph_assert(nit->first > key);
-      *next = *nit;
-      return 0;
+      CRIMSON_DEBUG("OSDriver::get_next returning next: {}, ", _key);
+      ceph_assertf(_key > key,
+        "Key order violation: input_key='%s' got_key='%s'",
+         key.c_str(), std::string(_key).c_str());
+      ceph::bufferlist bl;
+      bl.append(_value);
+      *next = std::make_pair(_key, bl);
+      return ObjectStore::omap_iter_ret_t::STOP;
     }
-  }, FuturizedStore::Shard::read_errorator::all_same_way([] {
-    CRIMSON_DEBUG("OSDriver::get_next saw error returning EINVAL");
-    return -EINVAL;
-  }))); // this requires seastar::thread
+  };
+  return interruptor::green_get(
+    os->omap_iterate(ch, hoid, start_from, callback
+    ).safe_then([key] (auto ret) {
+      if (ret == ObjectStore::omap_iter_ret_t::NEXT) {
+        CRIMSON_DEBUG("OSDriver::get_next key {} no more values", key);
+        return -ENOENT;
+      }
+      return 0; // found and Stopped
+    }, FuturizedStore::Shard::read_errorator::all_same_way([] {
+        CRIMSON_DEBUG("OSDriver::get_next saw error returning EINVAL");
+        return -EINVAL;
+      })
+    )
+  ); // this requires seastar::thread
 }
 
 int OSDriver::get_next_or_current(
