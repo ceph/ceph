@@ -41,6 +41,10 @@ Custom theme
 Datatable
 ******************************************/
 
+:root {
+  @include type.type-classes();
+}
+
 tr.cds--expandable-row > td:first-of-type {
   background-color: vv.$white !important;
   padding-inline-start: 1rem !important;
@@ -175,10 +179,6 @@ Tabs
 ******************************************/
 .cds--tab-content {
   background: var(--cds-layer-01);
-}
-
-.cds-success-color {
-  fill: theme.$support-success;
 }
 
 .cds-danger-color {
