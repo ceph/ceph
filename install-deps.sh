@@ -349,6 +349,7 @@ if [ x$(uname)x = xFreeBSDx ]; then
         devel/libedit \
         devel/libtool \
         devel/google-perftools \
+        devel/onetbb \
         lang/cython \
         net/openldap24-client \
         archivers/snappy \
@@ -413,6 +414,8 @@ else
                 $SUDO apt-get install -y $INSTALL_EXTRA_PACKAGES
             fi
         fi
+        # TBB package
+        $SUDO apt-get install -y libtbb-dev
         $SUDO apt-get install -y devscripts equivs
         $SUDO apt-get install -y dpkg-dev
         ensure_python3_sphinx_on_ubuntu

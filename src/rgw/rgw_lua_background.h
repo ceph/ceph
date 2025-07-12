@@ -6,6 +6,9 @@
 #include <variant>
 #include "rgw_lua_utils.h"
 #include "rgw_realm_reloader.h"
+#ifdef WITH_RADOSGW_INTEL_TBB
+#include <tbb/concurrent_hash_map.h>
+#endif
 
 namespace rgw::lua {
 
@@ -13,8 +16,93 @@ namespace rgw::lua {
 constexpr const int INIT_EXECUTE_INTERVAL = 5;
 
 //Writeable meta table named RGW with mutex protection
-using BackgroundMapValue = std::variant<std::string, long long int, double, bool>;
-using BackgroundMap  = std::unordered_map<std::string, BackgroundMapValue>;
+using BackgroundMapValue =
+    std::variant<std::string, long long int, double, bool>;
+
+class ProtectedMap {
+ private:
+ static const BackgroundMapValue empty_table_value;
+#ifdef WITH_RADOSGW_INTEL_TBB
+ mutable tbb::concurrent_hash_map<std::string, BackgroundMapValue> map;
+#else
+ mutable std::unordered_map<std::string, BackgroundMapValue> map;
+ mutable std::mutex mtx;
+#endif
+ public:
+#ifndef WITH_RADOSGW_INTEL_TBB
+  std::mutex& get_mutex() const { return mtx; }
+#endif
+
+  BackgroundMapValue& get(const std::string& key) const {
+#ifdef WITH_RADOSGW_INTEL_TBB
+    tbb::concurrent_hash_map<std::string, BackgroundMapValue>::accessor acc;
+    if (map.find(acc, key)) {
+      return acc->second;
+    }
+#else
+    std::lock_guard l(mtx);
+    const auto it = map.find(key);
+    if (it != map.end()) {
+      return it->second;
+    }
+#endif
+    return const_cast<BackgroundMapValue&>(empty_table_value);
+  }
+
+  #ifdef WITH_RADOSGW_INTEL_TBB
+  tbb::concurrent_hash_map<std::string, BackgroundMapValue>& get_map() const {
+    return map;
+  }
+  #else
+  std::unordered_map<std::string, BackgroundMapValue>& get_map() const {
+    return map;
+  }
+  #endif
+
+  bool find(const std::string& key) const {
+#ifdef WITH_RADOSGW_INTEL_TBB
+    tbb::concurrent_hash_map<std::string, BackgroundMapValue>::accessor acc;
+    return map.find(acc, key);
+#else
+    std::lock_guard l(mtx);
+    return map.find(key) != map.end();
+#endif
+  }
+
+  void erase(lua_State* L, const std::string& key, const char* name) {
+#ifdef WITH_RADOSGW_INTEL_TBB
+    map.erase(key);
+#else
+    std::lock_guard l(mtx);
+    if (const auto it = map.find(key); it != map.end()) {
+      update_erased_iterator<
+          std::unordered_map<std::string, BackgroundMapValue> >(L, name, it,
+                                                                map.erase(it));
+    }
+#endif
+  }
+
+  void insert(const std::string& key, BackgroundMapValue value) {
+#ifdef WITH_RADOSGW_INTEL_TBB
+    tbb::concurrent_hash_map<std::string, BackgroundMapValue>::accessor acc;
+    if (map.find(acc, key)) {
+      acc->second = value;
+    } else {
+      map.insert(acc, key);
+      acc->second = value;
+    }
+#else
+    map.insert_or_assign(key, value);
+#endif
+  }
+
+  int size() const {
+#ifndef WITH_RADOSGW_INTEL_TBB
+    std::lock_guard l(mtx);
+#endif
+    return map.size();
+  }
+};
 
 struct RGWTable : EmptyMetaTable {
 
@@ -25,42 +113,35 @@ struct RGWTable : EmptyMetaTable {
 
   static int IndexClosure(lua_State* L) {
     std::ignore = table_name_upvalue(L);
-    const auto map = reinterpret_cast<BackgroundMap*>(lua_touserdata(L, lua_upvalueindex(SECOND_UPVAL)));
-    auto& mtx = *reinterpret_cast<std::mutex*>(lua_touserdata(L, lua_upvalueindex(THIRD_UPVAL)));
+    const auto map = reinterpret_cast<ProtectedMap*>(
+        lua_touserdata(L, lua_upvalueindex(SECOND_UPVAL)));
     const char* index = luaL_checkstring(L, 2);
 
     if (strcasecmp(index, INCREMENT) == 0) {
       lua_pushlightuserdata(L, map);
-      lua_pushlightuserdata(L, &mtx);
       lua_pushboolean(L, false /*increment*/);
-      lua_pushcclosure(L, increment_by, THREE_UPVALS);
+      lua_pushcclosure(L, increment_by, TWO_UPVALS);
       return ONE_RETURNVAL;
     } 
     if (strcasecmp(index, DECREMENT) == 0) {
       lua_pushlightuserdata(L, map);
-      lua_pushlightuserdata(L, &mtx);
       lua_pushboolean(L, true /*decrement*/);
-      lua_pushcclosure(L, increment_by, THREE_UPVALS);
+      lua_pushcclosure(L, increment_by, TWO_UPVALS);
       return ONE_RETURNVAL;
     }
 
-    std::lock_guard l(mtx);
-
-    const auto it = map->find(std::string(index));
-    if (it == map->end()) {
-      lua_pushnil(L);
+    if (map->find(std::string(index))) {
+      std::visit([L](auto&& value) { pushvalue(L, value); },
+                 map->get(std::string(index)));
     } else {
-      std::visit([L](auto&& value) { pushvalue(L, value); }, it->second);
+      lua_pushnil(L);
     }
     return ONE_RETURNVAL;
   }
 
   static int LenClosure(lua_State* L) {
-    const auto map = reinterpret_cast<BackgroundMap*>(lua_touserdata(L, lua_upvalueindex(FIRST_UPVAL)));
-    auto& mtx = *reinterpret_cast<std::mutex*>(lua_touserdata(L, lua_upvalueindex(SECOND_UPVAL)));
-
-    std::lock_guard l(mtx);
-
+    const auto map = reinterpret_cast<ProtectedMap*>(
+        lua_touserdata(L, lua_upvalueindex(FIRST_UPVAL)));
     lua_pushinteger(L, map->size());
 
     return ONE_RETURNVAL;
@@ -68,15 +149,13 @@ struct RGWTable : EmptyMetaTable {
 
   static int NewIndexClosure(lua_State* L) {
     const auto name = table_name_upvalue(L);
-    const auto map = reinterpret_cast<BackgroundMap*>(lua_touserdata(L, lua_upvalueindex(SECOND_UPVAL)));
-    auto& mtx = *reinterpret_cast<std::mutex*>(lua_touserdata(L, lua_upvalueindex(THIRD_UPVAL)));
+    const auto map = reinterpret_cast<ProtectedMap*>(
+        lua_touserdata(L, lua_upvalueindex(SECOND_UPVAL)));
     const auto index = luaL_checkstring(L, 2);
     
     if (strcasecmp(index, INCREMENT) == 0 || strcasecmp(index, DECREMENT) == 0) {
         return luaL_error(L, "increment/decrement are reserved function names for RGW");
     }
-
-    std::unique_lock l(mtx);
 
     size_t len;
     BackgroundMapValue value;
@@ -85,9 +164,8 @@ struct RGWTable : EmptyMetaTable {
     switch (value_type) {
       case LUA_TNIL:
         // erase the element. since in lua: "t[index] = nil" is removing the entry at "t[index]"
-        if (const auto it = map->find(index); it != map->end()) {
-          // index was found
-          update_erased_iterator<BackgroundMap>(L, name, it, map->erase(it));
+        if (map->find(std::string(index))) {
+          map->erase(L, std::string(index), name);
         }
         return NO_RETURNVAL;
       case LUA_TBOOLEAN:
@@ -110,7 +188,6 @@ struct RGWTable : EmptyMetaTable {
         break;
       }
       default:
-        l.unlock();
         return luaL_error(L, "unsupported value type for RGW table");
     }
 
@@ -118,26 +195,25 @@ struct RGWTable : EmptyMetaTable {
       > MAX_LUA_VALUE_SIZE) {
       return luaL_error(L, "Lua maximum size of entry limit exceeded");
     } else if (map->size() > MAX_LUA_KEY_ENTRIES) {
-      l.unlock();
       return luaL_error(L, "Lua max number of entries limit exceeded");
     } else {
-      map->insert_or_assign(index, value);
+      map->insert(std::string(index), value);
     }
 
     return NO_RETURNVAL;
   }
 
-  static int PairsClosure(lua_State* L) {
-    return Pairs<BackgroundMap>(L);
-  }
+#ifndef WITH_RADOSGW_INTEL_TBB
+  static int PairsClosure(lua_State* L) { return Pairs<ProtectedMap>(L); }
+#endif
 };
 
 class Background : public RGWRealmReloader::Pauser {
-public:
+ public:
   static const BackgroundMapValue empty_table_value;
 
-private:
-  BackgroundMap rgw_map;
+ private:
+  ProtectedMap rgw_map;
   bool stopped = false;
   bool started = false;
   bool paused = false;
@@ -146,7 +222,9 @@ private:
   rgw::sal::LuaManager* lua_manager; 
   CephContext* const cct;
   std::thread runner;
+#ifndef WITH_RADOSGW_INTEL_TBB
   mutable std::mutex table_mutex;
+#endif
   std::mutex cond_mutex;
   std::mutex pause_mutex;
   std::condition_variable cond;
@@ -168,10 +246,15 @@ private:
   void shutdown();
   void create_background_metatable(lua_State* L);
   const BackgroundMapValue& get_table_value(const std::string& key) const;
-  template<typename T>
+  template <typename T>
   void put_table_value(const std::string& key, T value) {
+#ifdef WITH_RADOSGW_INTEL_TBB
+    rgw_map.insert(key, value);
+#else
     std::unique_lock cond_lock(table_mutex);
-    rgw_map[key] = value;
+    auto map = rgw_map.get_map();
+    map[key] = value;
+#endif
   }
 
   // update the manager after 
