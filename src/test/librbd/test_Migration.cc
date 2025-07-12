@@ -4,6 +4,7 @@
 #include "test/librados/test.h"
 #include "test/librbd/test_fixture.h"
 #include "test/librbd/test_support.h"
+#include "test/librados/crimson_utils.h"
 #include "librbd/ImageState.h"
 #include "librbd/Operations.h"
 #include "librbd/api/Group.h"
@@ -1102,6 +1103,8 @@ TEST_F(TestMigration, CloneFlatten)
 
 TEST_F(TestMigration, TriggerAssertSnapcSeq)
 {
+  // https://tracker.ceph.com/issues/72041
+  SKIP_IF_CRIMSON();
   auto size = m_ictx->size;
 
   write((size >> 1) + 0, 10, 'A');
