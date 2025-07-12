@@ -3,6 +3,7 @@
 /*
  * Ceph - scalable distributed file system
  *
+ * Copyright (C) 2025 IBM
  * Copyright (C) 2018 Red Hat Inc.
  *
  *  This library is free software; you can redistribute it and/or
@@ -23,13 +24,11 @@
 
 using namespace std;
 
+const string outstring = 
+"{\"pg_ready\":true, \"pg_stats\":[ { \"pgid\":\"1.0\", \"version\":\"16'56\",\"reported_seq\":\"62\",\"reported_epoch\":\"20\",\"state\":\"active+clean+inconsistent\",\"last_fresh\":\"2018-12-18 15:21:22.173804\",\"last_change\":\"2018-12-18 15:21:22.173804\",\"last_active\":\"2018-12-18 15:21:22.173804\",\"last_peered\":\"2018-12-18 15:21:22.173804\",\"last_clean\":\"2018-12-18 15:21:22.173804\",\"last_became_active\":\"2018-12-18 15:21:21.347685\",\"last_became_peered\":\"2018-12-18 15:21:21.347685\",\"last_unstale\":\"2018-12-18 15:21:22.173804\",\"last_undegraded\":\"2018-12-18 15:21:22.173804\",\"last_fullsized\":\"2018-12-18 15:21:22.173804\",\"mapping_epoch\":19,\"log_start\":\"0'0\",\"ondisk_log_start\":\"0'0\",\"created\":7,\"last_epoch_clean\":20,\"parent\":\"0.0\",\"parent_split_bits\":0,\"last_scrub\":\"16'56\",\"last_scrub_stamp\":\"2018-12-18 15:21:22.173684\",\"last_deep_scrub\":\"0'0\",\"last_deep_scrub_stamp\":\"2018-12-18 15:21:06.514438\",\"last_clean_scrub_stamp\":\"2018-12-18 15:21:06.514438\",\"log_size\":56,\"ondisk_log_size\":56,\"stats_invalid\":false,\"dirty_stats_invalid\":false,\"omap_stats_invalid\":false,\"hitset_stats_invalid\":false,\"hitset_bytes_stats_invalid\":false,\"pin_stats_invalid\":false,\"manifest_stats_invalid\":false,\"snaptrimq_len\":0,\"stat_sum\":{\"num_bytes\":24448,\"num_objects\":36,\"num_object_clones\":20,\"num_object_copies\":36,\"num_objects_missing_on_primary\":0,\"num_objects_missing\":0,\"num_objects_degraded\":0,\"num_objects_misplaced\":0,\"num_objects_unfound\":0,\"num_objects_dirty\":36,\"num_whiteouts\":3,\"num_read\":0,\"num_read_kb\":0,\"num_write\":36,\"num_write_kb\":50,\"num_scrub_errors\":20,\"num_shallow_scrub_errors\":20,\"num_deep_scrub_errors\":0,\"num_objects_recovered\":0,\"num_bytes_recovered\":0,\"num_keys_recovered\":0,\"num_objects_omap\":0,\"num_objects_hit_set_archive\":0,\"num_bytes_hit_set_archive\":0,\"num_flush\":0,\"num_flush_kb\":0,\"num_evict\":0,\"num_evict_kb\":0,\"num_promote\":0,\"num_flush_mode_high\":0,\"num_flush_mode_low\":0,\"num_evict_mode_some\":0,\"num_evict_mode_full\":0,\"num_objects_pinned\":0,\"num_legacy_snapsets\":0,\"num_large_omap_objects\":0,\"num_objects_manifest\":0},\"up\":[0],\"acting\":[0],\"blocked_by\":[],\"up_primary\":0,\"acting_primary\":0,\"purged_snaps\":[] }]}";
 
 TEST(formatter, bug_37706) {
   vector<std::string> pgs;
-
-   string outstring = 
-"{\"pg_ready\":true, \"pg_stats\":[ { \"pgid\":\"1.0\", \"version\":\"16'56\",\"reported_seq\":\"62\",\"reported_epoch\":\"20\",\"state\":\"active+clean+inconsistent\",\"last_fresh\":\"2018-12-18 15:21:22.173804\",\"last_change\":\"2018-12-18 15:21:22.173804\",\"last_active\":\"2018-12-18 15:21:22.173804\",\"last_peered\":\"2018-12-18 15:21:22.173804\",\"last_clean\":\"2018-12-18 15:21:22.173804\",\"last_became_active\":\"2018-12-18 15:21:21.347685\",\"last_became_peered\":\"2018-12-18 15:21:21.347685\",\"last_unstale\":\"2018-12-18 15:21:22.173804\",\"last_undegraded\":\"2018-12-18 15:21:22.173804\",\"last_fullsized\":\"2018-12-18 15:21:22.173804\",\"mapping_epoch\":19,\"log_start\":\"0'0\",\"ondisk_log_start\":\"0'0\",\"created\":7,\"last_epoch_clean\":20,\"parent\":\"0.0\",\"parent_split_bits\":0,\"last_scrub\":\"16'56\",\"last_scrub_stamp\":\"2018-12-18 15:21:22.173684\",\"last_deep_scrub\":\"0'0\",\"last_deep_scrub_stamp\":\"2018-12-18 15:21:06.514438\",\"last_clean_scrub_stamp\":\"2018-12-18 15:21:06.514438\",\"log_size\":56,\"ondisk_log_size\":56,\"stats_invalid\":false,\"dirty_stats_invalid\":false,\"omap_stats_invalid\":false,\"hitset_stats_invalid\":false,\"hitset_bytes_stats_invalid\":false,\"pin_stats_invalid\":false,\"manifest_stats_invalid\":false,\"snaptrimq_len\":0,\"stat_sum\":{\"num_bytes\":24448,\"num_objects\":36,\"num_object_clones\":20,\"num_object_copies\":36,\"num_objects_missing_on_primary\":0,\"num_objects_missing\":0,\"num_objects_degraded\":0,\"num_objects_misplaced\":0,\"num_objects_unfound\":0,\"num_objects_dirty\":36,\"num_whiteouts\":3,\"num_read\":0,\"num_read_kb\":0,\"num_write\":36,\"num_write_kb\":50,\"num_scrub_errors\":20,\"num_shallow_scrub_errors\":20,\"num_deep_scrub_errors\":0,\"num_objects_recovered\":0,\"num_bytes_recovered\":0,\"num_keys_recovered\":0,\"num_objects_omap\":0,\"num_objects_hit_set_archive\":0,\"num_bytes_hit_set_archive\":0,\"num_flush\":0,\"num_flush_kb\":0,\"num_evict\":0,\"num_evict_kb\":0,\"num_promote\":0,\"num_flush_mode_high\":0,\"num_flush_mode_low\":0,\"num_evict_mode_some\":0,\"num_evict_mode_full\":0,\"num_objects_pinned\":0,\"num_legacy_snapsets\":0,\"num_large_omap_objects\":0,\"num_objects_manifest\":0},\"up\":[0],\"acting\":[0],\"blocked_by\":[],\"up_primary\":0,\"acting_primary\":0,\"purged_snaps\":[] }]}";
-
 
    JSONParser parser;
    ASSERT_TRUE(parser.parse(outstring.c_str(), outstring.size()));
@@ -126,3 +125,80 @@ TEST(formatter, dump_large_item) {
   EXPECT_TRUE(parser.parse(bl.c_str(), bl.length()));
   EXPECT_EQ(parser.find_obj("Location")->get_data(), full_url);
 }
+
+TEST(formatter, parse_types) {
+  // Check that JSONParser::parse() works with expected data types 
+  // (otherwise at least indirectly tested elsewhere):
+
+  const auto json_input = R"({"expiration": "2025-01-17T10:26:46Z", "conditions": [{"bucket": "user-hqfadib9zxyj2pygevewzf45t-1"}, ["starts-with", "$key", "foo"], {"acl": "private"}, ["starts-with", "$Content-Type", "text/plain"], ["content-length-range", 0, 1024]]})";
+  
+  { 
+  JSONParser parser;
+
+  ASSERT_TRUE(parser.parse(outstring));
+
+  JSONObj *pgstat_obj = parser.find_obj("pg_stats");
+  EXPECT_TRUE(pgstat_obj);
+  }
+
+  { 
+  JSONParser parser;
+
+  ASSERT_TRUE(parser.parse(std::string_view { outstring }));
+
+  JSONObj *pgstat_obj = parser.find_obj("pg_stats");
+  EXPECT_TRUE(pgstat_obj);
+  }
+
+  {
+  JSONParser parser;
+
+  buffer::list bl;
+  bl.append(outstring);
+  EXPECT_TRUE(parser.parse(bl.c_str(), bl.length()));
+  
+  JSONObj *pgstat_obj = parser.find_obj("pg_stats");
+  EXPECT_TRUE(pgstat_obj);
+  }
+
+  {
+  JSONParser parser;
+ 
+  buffer::list bl;
+  bl.append(json_input);
+
+  ASSERT_TRUE(parser.parse(bl.c_str(), bl.length()));
+
+  JSONObjIter oi = parser.find_first();
+
+  JSONObj *o0 = *oi;
+  ASSERT_TRUE(nullptr != o0);
+
+  ++oi;
+  JSONObj *o1 = *oi;
+  ASSERT_TRUE(nullptr != o1);
+  JSONObj *conditions = parser.find_obj("conditions");
+  ASSERT_TRUE(nullptr != conditions);
+
+  JSONObj *expiration = parser.find_obj("expiration");
+  ASSERT_TRUE(nullptr != expiration);
+  }
+}
+
+TEST(formatter_malformed0, parse_types) {
+
+ // Address a "malformed json" message; it should :
+
+ const auto json_input = 
+R"({"token": {"methods": ["password"], "user": {"domain": {"id": "default", "name": "Default"}, "id": "ad4fe82ccdcd411bbdfb19dd58f4dd6b", "name": "tempest-ContainerQuotasTest-212225503-project-member", "password_expires_at": null}, "audit_ids": ["fLe_8GEsSAiaeH963hNWSw"], "expires_at": "2025-03-27T01:01:59.000000Z", "issued_at": "2025-03-27T00:01:59.000000Z", "project": {"domain": {"id": "default", "name": "Default"}, "id": "b20a7518e719409d8da9872032d02eb7", "name": "tempest-ContainerQuotasTest-212225503"}, "is_domain": false, "roles": [{"id": "cde208786b8849f99e1b27ac367bf585", "name": "reader"}, {"id": "7b7da0cff34e4d55b0bd0f9d67c4a2da", "name": "manager"}, {"id": "bbe2a1d2436f4e3faa8fa25b4161e5f5", "name": "member"}, {"id": "da1960cc046a4413814890a54fba8f97", "name": "admin"}], "catalog": [{"endpoints": [{"id": "ccf75eb71fe14e3ca663c84aebd701be", "interface": "public", "region_id": null, "url": "http://smithi146.front.sepia.ceph.com:80/v1/KEY_b20a7518e719409d8da9872032d02eb7", "region": null}], "id": "37c2769bfaf849d58b64ee794a1c59e5", "type": "object-store", "name": "swift"}, {"endpoints": [{"id": "8b744175c5914e06b567ee2c8e8c4840", "interface": "admin", "region_id": "RegionOne", "url": "http://smithi146.front.sepia.ceph.com:5000/v3", "region": "RegionOne"}, {"id": "88550e082d2a43d4a0d2c6937550a33f", "interface": "internal", "region_id": "RegionOne", "url": "http://smithi146.front.sepia.ceph.com:5000/v3", "region": "RegionOne"}, {"id": "7c83dd5d80c646deb2af7c017e86ca11", "interface": "public", "region_id": "RegionOne", "url": "http://smithi146.front.sepia.ceph.com:5000/v3", "region": "RegionOne"}], "id": "6e2fa31121dc42e49c675871e9121146", "type": "identity", "name": "keystone"}]}})";
+
+ JSONParser parser;
+
+ EXPECT_FALSE(parser.parse(json_input, strlen(json_input) - 1)); 
+
+ EXPECT_TRUE(parser.parse(json_input)); 
+ EXPECT_TRUE(parser.parse(std::string_view(json_input)));
+ EXPECT_TRUE(parser.parse(json_input, strlen(json_input)));
+}
+
+
