@@ -1713,4 +1713,7 @@ class CephFSMountBase(object):
             path_to_mount = subvol_paths[mount_subvol_num]
             self.cephfs_mntpt = path_to_mount
 
+    def get_snap_dir_name(self):
+        raise NotImplementedError()
+
 CephFSMount = CephFSMountBase
