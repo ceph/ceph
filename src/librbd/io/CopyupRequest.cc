@@ -83,7 +83,7 @@ public:
 
     bool sent = image_ctx.object_map->template aio_update<Context>(
       CEPH_NOSNAP, m_object_no, m_head_object_map_state, {}, m_trace, false,
-      this);
+      false, this);
     return (sent ? 0 : 1);
   }
 
@@ -100,7 +100,7 @@ public:
     }
 
     bool sent = image_ctx.object_map->template aio_update<Context>(
-      snap_id, m_object_no, state, {}, m_trace, true, this);
+      snap_id, m_object_no, state, {}, m_trace, true, false, this);
     ceph_assert(sent);
     return 0;
   }
