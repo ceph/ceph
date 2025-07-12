@@ -1,0 +1,94 @@
+# This workflow's intent is to send 'make check' and 'API test' success statuses
+# to Pull Requests in ceph.git that do not require actually running those checks.
+# This workflow should only be triggered by other workflows.
+
+name: PR Status Check Faker
+
+on:
+  workflow_call:
+    inputs:
+      pr_number:
+        description: "Pull Request Number"
+        required: true
+        type: string
+      pr_sha:
+        description: "Pull Request SHA"
+        required: true
+        type: string
+      triggered_by:
+        description: "URL of workflow that triggered the Check Faker"
+        required: true
+        type: string
+
+jobs:
+  send-status-checks:
+    runs-on: ubuntu-latest
+    permissions:
+      statuses: write
+      pull-requests: read
+
+    steps:
+      - name: Get commit SHA for PR
+        id: pr
+        uses: octokit/request-action@dad4362715b7fb2ddedf9772c8670824af564f0d
+        with:
+          route: GET /repos/${{ github.repository }}/pulls/${{ inputs.pr_number }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract commit SHA
+        id: extract
+        env:
+          PR_SHA: ${{ steps.pr.outputs.data }}
+        run: |
+          sha=$(echo "$PR_SHA" | jq -r .head.sha)
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+
+      - name: Send fake status checks with retry
+        env:
+          SHA: ${{ steps.extract.outputs.sha }}
+          REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TRIGGERED_BY: ${{ inputs.triggered_by }}
+        run: |
+          post_status() {
+            local context="$1"
+            local attempts=0
+            local max_attempts=5
+            local delay=2
+
+            while (( attempts < max_attempts )); do
+              response=$(curl -s -o /dev/null -w "%{http_code}" -X POST \
+                -H "Authorization: Bearer $GH_TOKEN" \
+                -H "Accept: application/vnd.github.v3+json" \
+                https://api.github.com/repos/$REPO/statuses/$SHA \
+                -d "$(jq -n \
+                  --arg state "success" \
+                  --arg context "$context" \
+                  --arg description "pr-job-dispatcher workflow detected doc/container PR" \
+                  --arg target_url "$TRIGGERED_BY" \
+                  '{state: $state, context: $context, description: $description, target_url: $target_url}')")
+
+              if [[ "$response" == "201" ]]; then
+                echo "Posted status for '$context'"
+                break
+              else
+                echo "Failed to post status for '$context' (HTTP $response), retrying..."
+                (( attempts++ ))
+                sleep $(( delay ** attempts ))
+              fi
+            done
+
+            if (( attempts == max_attempts )); then
+              echo "Giving up on '$context' after $max_attempts attempts"
+              exit 1
+            fi
+          }
+
+          for context in \
+            "make check" \
+            "ceph API tests" \
+            "ceph windows tests" \
+            "make check (arm64)"; do
+            post_status "$context"
+          done
