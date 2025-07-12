@@ -576,7 +576,7 @@ int log_record(rgw::sal::Driver* driver,
         dash_if_empty(fqdn),
         s->info.env->get("TLS_VERSION", "-"),
         "-", // no access point ARN
-        (s->has_acl_header) ? "Yes" : "-");
+        (s->granted_by_acl) ? "Yes" : "-");
       break;
     case LoggingType::Journal:
       record = fmt::format("{} {} [{:%d/%b/%Y:%H:%M:%S %z}] {} {} {} {} {}",
