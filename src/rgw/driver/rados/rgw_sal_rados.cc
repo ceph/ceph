@@ -3650,6 +3650,7 @@ int RadosObject::copy_object(const ACLOwner& owner,
 				std::string* etag,
 				void (*progress_cb)(off_t, void *),
 				void* progress_data,
+				rgw::sal::DataProcessorFactory* dp_factory,
 				const DoutPrefixProvider* dpp,
 				optional_yield y)
 {
@@ -3682,6 +3683,7 @@ int RadosObject::copy_object(const ACLOwner& owner,
 				     etag,
 				     progress_cb,
 				     progress_data,
+				     dp_factory,
 				     dpp,
 				     y,
                                      dest_object->get_trace());

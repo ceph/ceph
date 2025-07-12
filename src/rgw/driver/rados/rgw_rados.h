@@ -1249,6 +1249,7 @@ public:
                std::string *petag,
                void (*progress_cb)(off_t, void *),
                void *progress_data,
+               rgw::sal::DataProcessorFactory *dp_factory,
                const DoutPrefixProvider *dpp,
                optional_yield y,
                jspan_context& trace);
@@ -1265,6 +1266,7 @@ public:
                uint64_t olh_epoch,
 	       ceph::real_time delete_at,
                std::string *petag,
+               rgw::sal::DataProcessorFactory *dp_factory,
                const DoutPrefixProvider *dpp,
                optional_yield y,
                bool log_op = true);
