@@ -24,6 +24,7 @@ import { SummaryService } from '~/app/shared/services/summary.service';
   styleUrls: ['./navigation.component.scss']
 })
 export class NavigationComponent implements OnInit, OnDestroy {
+  useCarbonNotificationPanel = false; // Feature flag for new Carbon notification panel
   clusterDetails: any[] = [];
 
   permissions: Permissions;
