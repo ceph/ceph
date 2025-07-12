@@ -822,14 +822,13 @@ options:
   desc: Crypto accelerator library to use
   default: crypto_isal
   with_legacy: true
-- name: openssl_engine_opts
+- name: openssl_conf
   type: str
   level: advanced
-  desc: Use engine for specific openssl algorithm
-  long_desc: 'Pass opts in this way: engine_id=engine1,dynamic_path=/some/path/engine1.so,default_algorithms=DIGESTS:engine_id=engine2,dynamic_path=/some/path/engine2.so,default_algorithms=CIPHERS,other_ctrl=other_value'
+  desc: Use openssl_conf for specific openssl algorithm
+  long_desc: 'Pass opts in this way: openssl_conf=/path/to/openssl.conf'
   flags:
   - startup
-  with_legacy: true
 - name: mempool_debug
   type: bool
   level: dev
