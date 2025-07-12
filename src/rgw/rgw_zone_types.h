@@ -545,12 +545,13 @@ WRITE_CLASS_ENCODER(RGWZoneGroupPlacementTierS3)
 enum GlacierRestoreTierType : uint8_t {
   Standard = 0,
   Expedited = 1,
+  None = 2,
 };
 
 struct RGWZoneGroupTierS3Glacier {
 #define DEFAULT_GLACIER_RESTORE_DAYS 1
   uint64_t glacier_restore_days = DEFAULT_GLACIER_RESTORE_DAYS;
-  GlacierRestoreTierType glacier_restore_tier_type{Standard};
+  GlacierRestoreTierType glacier_restore_tier_type{None};
 
   int update_params(const JSONFormattable& config);
   int clear_params(const JSONFormattable& config);
