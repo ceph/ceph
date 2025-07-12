@@ -94,7 +94,7 @@ Cache::retire_extent_ret Cache::retire_extent_addr(
   return retire_extent_iertr::now();
 }
 
-void Cache::retire_absent_extent_addr(
+CachedExtentRef Cache::retire_absent_extent_addr(
   Transaction &t, paddr_t paddr, extent_len_t length)
 {
   assert(paddr.is_absolute());
@@ -117,6 +117,7 @@ void Cache::retire_absent_extent_addr(
 	 t, paddr, length, *ext);
   add_extent(ext);
   t.add_absent_to_retired_set(ext);
+  return ext;
 }
 
 void Cache::dump_contents()
@@ -173,7 +174,8 @@ void Cache::register_metrics()
     {extent_types_t::TEST_BLOCK,          sm::label_instance("ext", "TEST_BLOCK")},
     {extent_types_t::TEST_BLOCK_PHYSICAL, sm::label_instance("ext", "TEST_BLOCK_PHYSICAL")},
     {extent_types_t::BACKREF_INTERNAL,    sm::label_instance("ext", "BACKREF_INTERNAL")},
-    {extent_types_t::BACKREF_LEAF,        sm::label_instance("ext", "BACKREF_LEAF")}
+    {extent_types_t::BACKREF_LEAF,        sm::label_instance("ext", "BACKREF_LEAF")},
+    {extent_types_t::REMAPPED_PLACEHOLDER,sm::label_instance("ext", "REMAPPED_PLACEHOLDER")}
   };
   assert(labels_by_ext.size() == (std::size_t)extent_types_t::NONE);
 
@@ -213,6 +215,26 @@ void Cache::register_metrics()
           return stats.access.get_cache_hit();
         },
         sm::description("total number of cache hits")
+      ),
+      sm::make_counter(
+        "refresh_parent_total",
+        cursor_stats.num_refresh_parent_total,
+        sm::description("total number of refreshed cursors")
+      ),
+      sm::make_counter(
+        "refresh_invalid_parent",
+        cursor_stats.num_refresh_invalid_parent,
+        sm::description("total number of refreshed cursors with invalid parents")
+      ),
+      sm::make_counter(
+        "refresh_unviewable_parent",
+        cursor_stats.num_refresh_unviewable_parent,
+        sm::description("total number of refreshed cursors with unviewable parents")
+      ),
+      sm::make_counter(
+        "refresh_modified_viewable_parent",
+        cursor_stats.num_refresh_modified_viewable_parent,
+        sm::description("total number of refreshed cursors with viewable but modified parents")
       ),
     }
   );
@@ -1117,6 +1139,69 @@ CachedExtentRef Cache::alloc_new_non_data_extent_by_type(
   }
 }
 
+CachedExtentRef Cache::alloc_remapped_extent_by_type(
+  Transaction &t,
+  extent_types_t type,
+  laddr_t remap_laddr,
+  paddr_t remap_paddr,
+  extent_len_t remap_offset,
+  extent_len_t remap_length,
+  const std::optional<ceph::bufferptr> &original_bptr)
+{
+  ceph_assert(is_logical_type(type));
+  switch (type) {
+  case extent_types_t::ROOT_META:
+    return alloc_remapped_extent<RootMetaBlock>(
+      t, remap_laddr, remap_paddr, remap_offset, remap_length, original_bptr);
+  case extent_types_t::OMAP_INNER:
+    return alloc_remapped_extent<omap_manager::OMapInnerNode>(
+      t, remap_laddr, remap_paddr, remap_offset, remap_length, original_bptr);
+  case extent_types_t::OMAP_LEAF:
+    return alloc_remapped_extent<omap_manager::OMapLeafNode>(
+      t, remap_laddr, remap_paddr, remap_offset, remap_length, original_bptr);
+  case extent_types_t::ONODE_BLOCK_STAGED:
+    return alloc_remapped_extent<onode::SeastoreNodeExtent>(
+      t, remap_laddr, remap_paddr, remap_offset, remap_length, original_bptr);
+  case extent_types_t::COLL_BLOCK:
+    return alloc_remapped_extent<collection_manager::CollectionNode>(
+      t, remap_laddr, remap_paddr, remap_offset, remap_length, original_bptr);
+  case extent_types_t::OBJECT_DATA_BLOCK:
+    return alloc_remapped_extent<ObjectDataBlock>(
+      t, remap_laddr, remap_paddr, remap_offset, remap_length, original_bptr);
+  case extent_types_t::TEST_BLOCK:
+    return alloc_remapped_extent<TestBlock>(
+      t, remap_laddr, remap_paddr, remap_offset, remap_length, original_bptr);
+  case extent_types_t::REMAPPED_PLACEHOLDER:
+    ceph_abort("use Cache::alloc_remapped_placeholder");
+    return CachedExtentRef();
+  default:
+    ceph_abort("invalid extent type");
+    return CachedExtentRef();
+  }
+}
+
+RemappedExtentPlaceholderRef
+Cache::alloc_remapped_placeholder(
+  Transaction &t,
+  laddr_t laddr,
+  paddr_t paddr,
+  extent_len_t length)
+{
+  LOG_PREFIX(Cache::alloc_remapped_placeholder);
+  SUBTRACET(seastore_cache, "remap {}~{} to {}", t, paddr, length, laddr);
+  auto ext = CachedExtent::make_cached_extent_ref<
+    RemappedExtentPlaceholder>(length);
+
+  ext->init(CachedExtent::extent_state_t::EXIST_CLEAN,
+	    paddr,
+	    PLACEMENT_HINT_NULL,
+	    NULL_GENERATION,
+	    t.get_trans_id());
+  ext->set_laddr(laddr);
+  t.add_fresh_extent(ext);
+  return ext;
+}
+
 std::vector<CachedExtentRef> Cache::alloc_new_data_extents_by_type(
   Transaction &t,        ///< [in, out] current transaction
   extent_types_t type,   ///< [in] type tag
@@ -1578,12 +1663,17 @@ record_t Cache::prepare_record(
     }
 
     // exist mutation pending extents must be in t.mutated_block_list
-    add_extent(i);
-    const auto t_src = t.get_src();
-    if (i->is_stable_dirty()) {
-      add_to_dirty(i, &t_src);
+    if (!is_remapped_placeholder_type(i->get_type())) {
+      add_extent(i);
+      const auto t_src = t.get_src();
+      if (i->is_stable_dirty()) {
+	add_to_dirty(i, &t_src);
+      } else {
+	touch_extent(*i, &t_src, t.get_cache_hint());
+      }
     } else {
-      touch_extent(*i, &t_src, t.get_cache_hint());
+      auto e = i->template cast<RemappedExtentPlaceholder>();
+      e->unlink_parent();
     }
 
     alloc_delta.alloc_blk_ranges.emplace_back(
@@ -1756,6 +1846,7 @@ record_t Cache::prepare_record(
     assert(rewrite_stats.is_clear());
   }
 
+  cursor_stats.apply(t.cursor_stats);
   return record;
 }
 

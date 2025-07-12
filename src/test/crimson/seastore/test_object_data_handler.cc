@@ -12,8 +12,6 @@ using namespace crimson::os;
 using namespace crimson::os::seastore;
 
 #define MAX_OBJECT_SIZE (16<<20)
-#define DEFAULT_OBJECT_DATA_RESERVATION (16<<20)
-#define DEFAULT_OBJECT_METADATA_RESERVATION (16<<20)
 
 namespace {
   [[maybe_unused]] seastar::logger& logger() {
@@ -25,7 +23,7 @@ class TestOnode final : public Onode {
   onode_layout_t layout;
 
 public:
-  TestOnode(uint32_t ddr, uint32_t dmr) : Onode(ddr, dmr, hobject_t()) {}
+  TestOnode() : Onode(hobject_t()) {}
   const onode_layout_t &get_layout() const final {
     return layout;
   }
@@ -36,8 +34,34 @@ public:
   bool is_alive() const final {
     return true;
   }
-  laddr_t get_hint() const final {return L_ADDR_MIN; }
+  laddr_hint_t get_hint() const {
+    laddr_hint_t hint;
+    hint.addr = laddr_t::from_byte_offset(0);
+    hint.condition = laddr_conflict_condition_t::all_at_object_content;
+    hint.policy = laddr_conflict_policy_t::linear_search;
+    hint.block_size = laddr_t::UNIT_SIZE;
+    return hint;
+  }
+  laddr_hint_t init_hint(
+    extent_len_t block_size,
+    bool is_metadata) const final {
+    return get_hint();
+  }
+  laddr_hint_t generate_clone_hint(
+    local_object_id_t object_id,
+    extent_len_t block_size,
+    bool is_metadata) const final {
+    return get_hint();
+  }
   ~TestOnode() final = default;
+
+  void update_shared_clone_id(Transaction &t, local_clone_id_t id) final {
+    assert(id != LOCAL_CLONE_ID_NULL);
+    with_mutable_layout(t, [id](onode_layout_t &mlayout) {
+      assert(local_clone_id_t(mlayout.shared_clone_id) != LOCAL_CLONE_ID_NULL);
+      mlayout.shared_clone_id = id;
+    });
+  }
 
   void update_onode_size(Transaction &t, uint32_t size) final {
     with_mutable_layout(t, [size](onode_layout_t &mlayout) {
@@ -281,9 +305,7 @@ struct object_data_handler_test_t:
   }
 
   seastar::future<> set_up_fut() final {
-    onode = new TestOnode(
-      DEFAULT_OBJECT_DATA_RESERVATION,
-      DEFAULT_OBJECT_METADATA_RESERVATION);
+    onode = new TestOnode();
     known_contents = buffer::create(4<<20 /* 4MB */);
     memset(known_contents.c_str(), 0, known_contents.length());
     size = 0;
@@ -452,12 +474,12 @@ struct object_data_handler_test_t:
 
   void write_right() {
     write(0, 128<<10, 'x');
-    write(64<<10, 60<<10, 'a');
+    write(64<<10, 64<<10, 'a');
   }
 
   void write_left() {
     write(0, 128<<10, 'x');
-    write(4<<10, 60<<10, 'a');
+    write(0, 64<<10, 'a');
   }
 
   void write_right_left() {
@@ -469,17 +491,11 @@ struct object_data_handler_test_t:
     write(0, 128<<10, 'x');
 
     auto t = create_mutate_transaction();
-    // normal split
     write(*t, 120<<10, 4<<10, 'a');
-    // not aligned right
     write(*t, 4<<10, 5<<10, 'b');
-    // split right extent of last split result
     write(*t, 32<<10, 4<<10, 'c');
-    // non aligned overwrite
     write(*t, 13<<10, 4<<10, 'd');
-
     write(*t, 64<<10, 32<<10, 'e');
-    // not split right
     write(*t, 60<<10, 8<<10, 'f');
 
     submit_transaction(std::move(t));
@@ -742,13 +758,13 @@ TEST_P(object_data_handler_test_t, multiple_remap) {
     disable_max_extent_size();
     multiple_write();
     auto pins = get_mappings(0, 128<<10);
-    EXPECT_EQ(pins.size(), 3);
+    EXPECT_EQ(pins.size(), 11);
 
-    size_t res[3] = {0, 120<<10, 124<<10};
+    size_t res[11] = {0, 4<<10, 12<<10, 20<<10, 32<<10, 36<<10, 60<<10, 64<<10, 96<<10, 120<<10, 124<<10};
     auto base = pins.front().get_key();
     int i = 0;
     for (auto &pin : pins) {
-      EXPECT_EQ(pin.get_key().get_byte_distance<size_t>(base), res[i]);
+      assert(pin.get_key().get_byte_distance<size_t>(base) == res[i]);
       i++;
     }
     read(0, 128<<10);

@@ -1,6 +1,8 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
 // vim: ts=8 sw=2 smarttab
 
+#include "crimson/common/coroutine.h"
+
 #include "crimson/os/seastore/logging.h"
 
 #include "crimson/os/seastore/onode_manager/staged-fltree/fltree_onode_manager.h"
@@ -20,6 +22,10 @@ void FLTreeOnode::Recorder::apply_value_delta(
     ceph::decode(op, bliter);
     auto &mlayout = *reinterpret_cast<onode_layout_t*>(value.get_write());
     switch (op) {
+    case delta_op_t::UPDATE_SHARED_CLONE_ID:
+      DEBUG("update shared clone id");
+      bliter.copy(sizeof(mlayout.shared_clone_id), (char *)&mlayout.shared_clone_id);
+      break;
     case delta_op_t::UPDATE_ONODE_SIZE:
       DEBUG("update onode size");
       bliter.copy(sizeof(mlayout.size), (char *)&mlayout.size);
@@ -80,6 +86,12 @@ void FLTreeOnode::Recorder::encode_update(
   auto &encoded = get_encoded(payload_mut);
   ceph::encode(op, encoded);
   switch(op) {
+  case delta_op_t::UPDATE_SHARED_CLONE_ID:
+    DEBUG("update shared clone id");
+    encoded.append(
+      (const char *)&layout.shared_clone_id,
+      sizeof(layout.shared_clone_id));
+    break;
   case delta_op_t::UPDATE_ONODE_SIZE:
     DEBUG("update onode size");
     encoded.append(
@@ -158,15 +170,27 @@ FLTreeOnodeManager::get_onode_ret FLTreeOnodeManager::get_onode(
       DEBUGT("no entry for {}", trans, hoid);
       return crimson::ct_error::enoent::make();
     }
-    auto val = OnodeRef(new FLTreeOnode(
-	default_data_reservation,
-	default_metadata_range,
-	hoid.hobj,
-	cursor.value()));
+    auto val = OnodeRef(new FLTreeOnode(hoid.hobj, cursor.value()));
+    assert(val->get_clone_prefix());
     return get_onode_iertr::make_ready_future<OnodeRef>(
       val
     );
   });
+}
+
+namespace {
+struct ghobj_cmp_t {
+  bool same_object;
+  bool equal;
+};
+ghobj_cmp_t compare_ghobj(ghobject_t &identity, const ghobject_t &base) {
+  auto snap_bak = identity.hobj.snap;
+  identity.hobj.snap = base.hobj.snap;
+  bool same_object = (identity == base);
+  bool equal = same_object && (snap_bak == base.hobj.snap);
+  identity.hobj.snap = snap_bak;
+  return {same_object, equal};
+}
 }
 
 FLTreeOnodeManager::get_or_create_onode_ret
@@ -175,23 +199,53 @@ FLTreeOnodeManager::get_or_create_onode(
   const ghobject_t &hoid)
 {
   LOG_PREFIX(FLTreeOnodeManager::get_or_create_onode);
-  return tree.insert(
+  auto [cursor, created] = co_await tree.insert(
     trans, hoid,
-    OnodeTree::tree_value_config_t{sizeof(onode_layout_t)}
-  ).si_then([this, &trans, &hoid, FNAME](auto p)
-              -> get_or_create_onode_ret {
-    auto [cursor, created] = std::move(p);
-    auto onode = new FLTreeOnode(
-	default_data_reservation,
-	default_metadata_range,
-	hoid.hobj,
-	cursor.value());
-    if (created) {
-      DEBUGT("created onode for entry for {}", trans, hoid);
-      onode->create_default_layout(trans);
+    OnodeTree::tree_value_config_t{sizeof(onode_layout_t)});
+
+  auto flonode = new FLTreeOnode(hoid.hobj, cursor.value());
+  if (!created) {
+    DEBUGT("onode exists for {}", trans, hoid);
+    assert(flonode->get_clone_prefix());
+    co_return flonode;
+  }
+  assert(!cursor.is_end());
+  DEBUGT("created onode for entry for {}", trans, hoid);
+  flonode->create_default_layout(trans);
+
+  // new onode created, try to retrieve the object id from siblings
+  auto onode = OnodeRef(flonode);
+  if (!hoid.hobj.is_head()) {
+    auto next = co_await tree.get_next(trans, cursor);
+    if (!next.is_end()) {
+      auto nxt_oid = next.get_ghobj();
+      auto ret = compare_ghobj(nxt_oid, hoid);
+      assert(!ret.equal);
+      if (ret.same_object) {
+        auto nxt_onode = next.value();
+        auto prefix = nxt_onode.get_clone_prefix();
+        auto object_id = prefix->get_local_object_id();
+        onode->set_sibling_object_id(object_id);
+        co_return onode;
+      }
     }
-    return get_or_create_onode_iertr::make_ready_future<OnodeRef>(onode);
-  });
+  }
+
+  auto hint = hoid;
+  hint.hobj.snap = 0;
+  // FIXME: implement the get_prev() to speed up retrieving the previous sibling
+  cursor = co_await tree.lower_bound(trans, hint);
+  assert(!cursor.is_end());
+  auto prv_oid = cursor.get_ghobj();
+  auto ret = compare_ghobj(prv_oid, hoid);
+  if (!ret.equal && ret.same_object) {
+    // sibling clone onode exists
+    auto prv_onode = cursor.value();
+    auto prefix = prv_onode.get_clone_prefix();
+    auto object_id = prefix->get_local_object_id();
+    onode->set_sibling_object_id(object_id);
+  } // else sibling clone onode not found, hoid is the first clone
+  co_return onode;
 }
 
 FLTreeOnodeManager::get_or_create_onodes_ret
