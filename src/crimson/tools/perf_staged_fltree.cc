@@ -5,6 +5,7 @@
 
 #include <seastar/core/app-template.hh>
 #include <seastar/core/thread.hh>
+#include <seastar/util/closeable.hh>
 
 #include "crimson/common/config_proxy.h"
 #include "crimson/common/log.h"
@@ -116,15 +117,11 @@ seastar::future<> run(const bpo::variables_map& config) {
 
     using crimson::common::sharded_conf;
     sharded_conf().start(EntityName{}, std::string_view{"ceph"}).get();
-    seastar::engine().at_exit([] {
-      return sharded_conf().stop();
-    });
+    auto sharded_conf_stop = seastar::deferred_stop(sharded_conf());
 
     using crimson::common::sharded_perf_coll;
     sharded_perf_coll().start().get();
-    seastar::engine().at_exit([] {
-      return sharded_perf_coll().stop();
-    });
+    auto sharded_perf_stop = seastar::deferred_stop(sharded_perf_coll());
 
     auto kvs = KVPool<test_item_t>::create_raw_range(
         ns_sizes, oid_sizes, onode_sizes,
