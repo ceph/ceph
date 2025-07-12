@@ -1001,6 +1001,7 @@ void ScrubStack::handle_scrub(const cref_t<MMDSScrub> &m)
       ceph_assert(diri);
 
       std::vector<CDir*> dfs;
+      bool has_dirty_dirfrag = false;
       MDSGatherBuilder gather(g_ceph_context);
       frag_vec_t frags;
       diri->dirfragtree.get_leaves(frags);
@@ -1023,6 +1024,10 @@ void ScrubStack::handle_scrub(const cref_t<MMDSScrub> &m)
 	    dout(10) << __func__ << " can't auth pin " << *dir <<  dendl;
 	    dir->add_waiter(CDir::WAIT_UNFREEZE, gather.new_sub());
 	    continue;
+	  }
+          if (dir->is_dirty()) {
+            dout(10) << __func__ << " found dirty remote dirfrag " << *dir <<  dendl;
+            has_dirty_dirfrag = true;
 	  }
 	  dfs.push_back(dir);
 	}
@@ -1056,7 +1061,8 @@ void ScrubStack::handle_scrub(const cref_t<MMDSScrub> &m)
       }
 
       auto r = make_message<MMDSScrub>(MMDSScrub::OP_QUEUEDIR_ACK, m->get_ino(),
-				       std::move(queued), m->get_tag());
+				       std::move(queued), m->get_tag(),
+				       inodeno_t(), false, false, false, false, has_dirty_dirfrag);
       mdcache->mds->send_message_mds(r, from);
     }
     break;
@@ -1078,6 +1084,8 @@ void ScrubStack::handle_scrub(const cref_t<MMDSScrub> &m)
 
 	    const auto& header = diri->get_scrub_header();
 	    header->set_epoch_last_forwarded(scrub_epoch);
+	    if (m->is_remote_dirfrag_dirty())
+	      diri->mark_dirty_remote_dirfrag_scrubbed();
 	    remove_from_waiting(diri);
 	  }
 	}
