@@ -126,26 +126,7 @@ public:
              optional_yield y);
   } timelog;
 
-  class Lock : public ClsSubService {
-    int init_obj(const std::string& oid, rgw_rados_ref& obj);
-    public:
-    Lock(CephContext *cct): ClsSubService(cct) {}
-    int lock_exclusive(const DoutPrefixProvider *dpp,
-                       const rgw_pool& pool,
-                       const std::string& oid,
-                       timespan& duration,
-                       std::string& zone_id,
-                       std::string& owner_id,
-                       std::optional<std::string> lock_name = std::nullopt);
-    int unlock(const DoutPrefixProvider *dpp,
-               const rgw_pool& pool,
-               const std::string& oid,
-               std::string& zone_id,
-               std::string& owner_id,
-               std::optional<std::string> lock_name = std::nullopt);
-  } lock;
-
-  RGWSI_Cls(CephContext *cct): RGWServiceInstance(cct), mfa(cct), timelog(cct), lock(cct) {}
+  RGWSI_Cls(CephContext *cct): RGWServiceInstance(cct), mfa(cct), timelog(cct) {}
 
   void init(RGWSI_Zone *_zone_svc, librados::Rados* rados_) {
     rados = rados_;
@@ -153,7 +134,6 @@ public:
 
     mfa.init(this);
     timelog.init(this);
-    lock.init(this);
   }
 
   int do_start(optional_yield, const DoutPrefixProvider *dpp) override;

@@ -182,20 +182,6 @@ int RGWMetadataLog::trim(const DoutPrefixProvider *dpp, int shard_id, const real
   return svc.cls->timelog.trim(dpp, oid, from_time, end_time, start_marker,
                                end_marker, nullptr, y);
 }
-  
-int RGWMetadataLog::lock_exclusive(const DoutPrefixProvider *dpp, int shard_id, timespan duration, string& zone_id, string& owner_id) {
-  string oid;
-  get_shard_oid(shard_id, oid);
-
-  return svc.cls->lock.lock_exclusive(dpp, svc.zone->get_zone_params().log_pool, oid, duration, zone_id, owner_id);
-}
-
-int RGWMetadataLog::unlock(const DoutPrefixProvider *dpp, int shard_id, string& zone_id, string& owner_id) {
-  string oid;
-  get_shard_oid(shard_id, oid);
-
-  return svc.cls->lock.unlock(dpp, svc.zone->get_zone_params().log_pool, oid, zone_id, owner_id);
-}
 
 void RGWMetadataLog::mark_modified(int shard_id)
 {
