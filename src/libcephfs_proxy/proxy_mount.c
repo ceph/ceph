@@ -1,5 +1,6 @@
 
 #include "proxy_mount.h"
+#include "proxy_inode.h"
 #include "proxy_helpers.h"
 
 #include <stdio.h>
@@ -34,18 +35,15 @@ struct _proxy_linked_str {
  * inode. */
 typedef struct _proxy_path_iterator {
 	struct ceph_statx stx;
-	struct ceph_mount_info *cmount;
+	proxy_instance_t *instance;
 	proxy_linked_str_t *lstr;
 	UserPerm *perms;
-	struct Inode *root;
-	struct Inode *base;
+	proxy_inode_t *root;
+	proxy_inode_t *base;
 	char *realpath;
-	uint64_t root_ino;
-	uint64_t base_ino;
 	uint32_t realpath_size;
 	uint32_t realpath_len;
 	uint32_t symlinks;
-	bool release;
 	bool follow;
 } proxy_path_iterator_t;
 
@@ -117,25 +115,6 @@ static proxy_mount_pool_t instance_pool = {
  * and in the same order, the Ceph client instance will be shared.
  */
 
-int32_t proxy_inode_ref(proxy_mount_t *mount, uint64_t inode)
-{
-	inodeno_t ino;
-	struct Inode *tmp;
-	int32_t err;
-
-	/* There's no way to tell libcephfs to increase the reference counter of
-	 * an inode, so we do a full lookup for now. */
-
-	ino.val = inode;
-
-	err = ceph_ll_lookup_inode(proxy_cmount(mount), ino, &tmp);
-	if (err < 0) {
-		proxy_log(LOG_ERR, -err, "ceph_ll_loolkup_inode() failed");
-	}
-
-	return err;
-}
-
 static proxy_linked_str_t *proxy_linked_str_create(const char *str,
 						   proxy_linked_str_t *next)
 {
@@ -192,7 +171,7 @@ static char *proxy_linked_str_scan(proxy_linked_str_t *lstr, char ch)
 	return current;
 }
 
-static int32_t 	proxy_path_iterator_init(proxy_path_iterator_t *iter,
+static int32_t proxy_path_iterator_init(proxy_path_iterator_t *iter,
 					proxy_mount_t *mount, const char *path,
 					UserPerm *perms, bool realpath,
 					bool follow)
@@ -205,14 +184,11 @@ static int32_t 	proxy_path_iterator_init(proxy_path_iterator_t *iter,
 	}
 
 	memset(&iter->stx, 0, sizeof(iter->stx));
-	iter->cmount = proxy_cmount(mount);
+	iter->instance = mount->instance;
 	iter->perms = perms;
-	iter->root = mount->root;
-	iter->root_ino = mount->root_ino;
-	iter->base = mount->cwd;
-	iter->base_ino = mount->cwd_ino;
+	iter->root = proxy_inode_get(mount->root);
+	iter->base = proxy_inode_get(mount->cwd);
 	iter->symlinks = 0;
-	iter->release = false;
 	iter->follow = follow;
 
 	len = strlen(path) + 1;
@@ -220,7 +196,6 @@ static int32_t 	proxy_path_iterator_init(proxy_path_iterator_t *iter,
 	ch = *path;
 	if (ch == '/') {
 		iter->base = mount->root;
-		iter->base_ino = mount->root_ino;
 		path++;
 	}
 
@@ -288,10 +263,7 @@ static bool proxy_path_iterator_is_last(proxy_path_iterator_t *iter)
 
 static void proxy_path_iterator_destroy(proxy_path_iterator_t *iter)
 {
-	if (iter->release) {
-		ceph_ll_put(iter->cmount, iter->base);
-	}
-
+	proxy_inode_put(iter->instance, iter->base);
 	proxy_free(iter->realpath);
 	proxy_linked_str_destroy(iter->lstr);
 }
@@ -307,20 +279,17 @@ static int32_t proxy_path_iterator_resolve(proxy_path_iterator_t *iter)
 		return proxy_log(LOG_ERR, ELOOP, "Too many symbolic links");
 	}
 
-	err = ceph_ll_readlink(iter->cmount, iter->base, path, sizeof(path),
-			       iter->perms);
+	err = ceph_ll_readlink(iter->instance->cmount, iter->base->in, path,
+			       sizeof(path), iter->perms);
 	if (err < 0) {
 		return proxy_log(LOG_ERR, -err, "ceph_ll_readlink() failed");
 	}
 
 	ptr = path;
 	if (*ptr == '/') {
-		if (iter->release) {
-			ceph_ll_put(iter->cmount, iter->base);
-		}
-		iter->base = iter->root;
-		iter->base_ino = iter->root_ino;
-		iter->release = false;
+		proxy_inode_put(iter->instance, iter->base);
+
+		iter->base = proxy_inode_get(iter->root);
 		if (iter->realpath != NULL) {
 			iter->realpath[1] = 0;
 			iter->realpath_len = 1;
@@ -373,35 +342,19 @@ static void proxy_path_iterator_remove(proxy_path_iterator_t *iter)
 	}
 }
 
-static int32_t proxy_path_lookup(struct ceph_mount_info *cmount,
-				 struct Inode *parent, const char *name,
-				 struct Inode **inode, struct ceph_statx *stx,
-				 uint32_t want, uint32_t flags, UserPerm *perms)
-{
-	int32_t err;
-
-	err = ceph_ll_lookup(cmount, parent, name, inode, stx, want, flags,
-			     perms);
-	if (err < 0) {
-		return proxy_log(LOG_ERR, -err, "ceph_ll_lookup() failed");
-	}
-
-	return err;
-}
-
 static int32_t proxy_path_iterator_lookup(proxy_path_iterator_t *iter,
 					  const char *name)
 {
-	struct Inode *inode;
+	proxy_inode_t *inode;
 	int32_t err;
 
 	if (S_ISLNK(iter->stx.stx_mode)) {
 		return proxy_path_iterator_resolve(iter);
 	}
 
-	err = proxy_path_lookup(iter->cmount, iter->base, name, &inode,
-				&iter->stx, CEPH_STATX_INO | CEPH_STATX_MODE,
-				AT_SYMLINK_NOFOLLOW, iter->perms);
+	err = proxy_inode_lookup(iter->instance, iter->base, name, &inode,
+				 &iter->stx, CEPH_STATX_INO | CEPH_STATX_MODE,
+				 AT_SYMLINK_NOFOLLOW, iter->perms);
 	if (err < 0) {
 		return err;
 	}
@@ -412,18 +365,14 @@ static int32_t proxy_path_iterator_lookup(proxy_path_iterator_t *iter,
 		} else {
 			err = proxy_path_iterator_append(iter, name);
 			if (err < 0) {
-				ceph_ll_put(iter->cmount, inode);
+				proxy_inode_put(iter->instance, inode);
 				return err;
 			}
 		}
 	}
 
-	if (iter->release) {
-		ceph_ll_put(iter->cmount, iter->base);
-	}
+	proxy_inode_put(iter->instance, iter->base);
 	iter->base = inode;
-	iter->base_ino = iter->stx.stx_ino;
-	iter->release = true;
 
 	if (iter->follow && S_ISLNK(iter->stx.stx_mode) &&
 	    proxy_path_iterator_is_last(iter)) {
@@ -438,7 +387,7 @@ static int32_t proxy_path_iterator_lookup(proxy_path_iterator_t *iter,
  * paths and ".." entries in a special way, including paths found in symbolic
  * links. */
 int32_t proxy_path_resolve(proxy_mount_t *mount, const char *path,
-			   struct Inode **inode, struct ceph_statx *stx,
+			   proxy_inode_t **inode, struct ceph_statx *stx,
 			   uint32_t want, uint32_t flags, UserPerm *perms,
 			   char **realpath)
 {
@@ -458,7 +407,7 @@ int32_t proxy_path_resolve(proxy_mount_t *mount, const char *path,
 		c = *name;
 		if (c == '.') {
 			c = name[1];
-			if ((c == '.') && (iter.base == mount->root)) {
+			if ((c == '.') && (iter.base->in == mount->root->in)) {
 				c = name[2];
 			}
 		}
@@ -470,13 +419,15 @@ int32_t proxy_path_resolve(proxy_mount_t *mount, const char *path,
 	}
 
 	if (err >= 0) {
-		err = proxy_path_lookup(proxy_cmount(mount), iter.base, "",
-					inode, stx, want, flags, iter.perms);
-	}
-
-	if ((err >= 0) && (realpath != NULL)) {
-		*realpath = iter.realpath;
-		iter.realpath = NULL;
+		err = proxy_inode_getattr(iter.instance, iter.base, stx, want,
+					  flags, perms);
+		if (err >= 0) {
+			*inode = proxy_inode_get(iter.base);
+			if (realpath != NULL) {
+				*realpath = iter.realpath;
+				iter.realpath = NULL;
+			}
+		}
 	}
 
 	proxy_path_iterator_destroy(&iter);
@@ -823,8 +774,7 @@ static int32_t proxy_instance_release(proxy_instance_t *instance)
 }
 
 /* Assign a configuration file to the instance. */
-static int32_t proxy_instance_config(proxy_instance_t *instance,
-				     const char *config)
+int32_t proxy_instance_config(proxy_instance_t *instance, const char *config)
 {
 	char path[128], *ppath;
 	int32_t err;
@@ -856,9 +806,8 @@ static int32_t proxy_instance_config(proxy_instance_t *instance,
 	return err;
 }
 
-static int32_t proxy_instance_option_get(proxy_instance_t *instance,
-					 const char *name, char *value,
-					 size_t size)
+int32_t proxy_instance_get(proxy_instance_t *instance, const char *name,
+			   char *value, size_t size)
 {
 	int32_t err, res;
 
@@ -881,8 +830,8 @@ static int32_t proxy_instance_option_get(proxy_instance_t *instance,
 	return res;
 }
 
-static int32_t proxy_instance_option_set(proxy_instance_t *instance,
-					 const char *name, const char *value)
+int32_t proxy_instance_set(proxy_instance_t *instance, const char *name,
+			   const char *value)
 {
 	int32_t err;
 
@@ -910,7 +859,7 @@ static int32_t proxy_instance_option_set(proxy_instance_t *instance,
 	return err;
 }
 
-static int32_t proxy_instance_select(proxy_instance_t *instance, const char *fs)
+int32_t proxy_instance_select(proxy_instance_t *instance, const char *fs)
 {
 	int32_t err;
 
@@ -935,7 +884,7 @@ static int32_t proxy_instance_select(proxy_instance_t *instance, const char *fs)
 	return err;
 }
 
-static int32_t proxy_instance_init(proxy_instance_t *instance)
+int32_t proxy_instance_init(proxy_instance_t *instance)
 {
 	if (instance->mounted || instance->inited) {
 		return 0;
@@ -973,15 +922,14 @@ static int32_t proxy_instance_hash(void **ptr, void *data, int32_t idx)
 
 /* Check if an existing instance matches the configuration used for the current
  * one. If so, share the mount. Otherwise, create a new mount. */
-static int32_t proxy_instance_mount(proxy_instance_t **pinstance)
+static int32_t proxy_instance_mount(proxy_mount_t *mount)
 {
 	proxy_instance_t *instance, *existing;
 	proxy_iter_t iter;
 	list_t *list;
 	int32_t err;
 
-	instance = *pinstance;
-
+	instance = mount->instance;
 	if (instance->mounted) {
 		return proxy_log(LOG_ERR, EISCONN,
 				 "Cannot mount and already mounted instance");
@@ -1022,7 +970,7 @@ static int32_t proxy_instance_mount(proxy_instance_t **pinstance)
 	 * path. */
 	err = ceph_mount(instance->cmount, "/");
 	if (err >= 0) {
-		err = ceph_ll_lookup_root(instance->cmount, &instance->root);
+		err = proxy_inode_lookup_root(instance, &instance->root);
 		if (err >= 0) {
 			instance->inited = true;
 			instance->mounted = true;
@@ -1044,7 +992,7 @@ found:
 	if (existing != NULL) {
 		proxy_log(LOG_INFO, 0, "Shared a client instance (%p)",
 			  existing);
-		*pinstance = existing;
+		mount->instance = existing;
 	} else {
 		proxy_log(LOG_INFO, 0, "Created a new client instance (%p)",
 			  instance);
@@ -1053,13 +1001,12 @@ found:
 	return 0;
 }
 
-static int32_t proxy_instance_unmount(proxy_instance_t **pinstance)
+static int32_t proxy_instance_unmount(proxy_mount_t *mount)
 {
 	proxy_instance_t *instance, *sibling;
 	int32_t err;
 
-	instance = *pinstance;
-
+	instance = mount->instance;
 	if (!instance->mounted) {
 		return proxy_log(LOG_ERR, ENOTCONN,
 				 "Cannot unmount an already unmount instance");
@@ -1085,7 +1032,7 @@ static int32_t proxy_instance_unmount(proxy_instance_t **pinstance)
 	proxy_mutex_unlock(&instance_pool.mutex);
 
 	if (sibling == NULL) {
-		ceph_ll_put(instance->cmount, instance->root);
+		proxy_inode_put(instance, instance->root);
 
 		err = ceph_unmount(instance->cmount);
 		if (err < 0) {
@@ -1093,7 +1040,7 @@ static int32_t proxy_instance_unmount(proxy_instance_t **pinstance)
 					 "ceph_unmount() failed");
 		}
 	} else {
-		*pinstance = sibling;
+		mount->instance = sibling;
 	}
 
 	return 0;
@@ -1121,40 +1068,13 @@ int32_t proxy_mount_create(proxy_mount_t **pmount, const char *id)
 	return 0;
 }
 
-int32_t proxy_mount_config(proxy_mount_t *mount, const char *config)
-{
-	return proxy_instance_config(mount->instance, config);
-}
-
-int32_t proxy_mount_set(proxy_mount_t *mount, const char *name,
-			const char *value)
-{
-	return proxy_instance_option_set(mount->instance, name, value);
-}
-
-int32_t proxy_mount_get(proxy_mount_t *mount, const char *name, char *value,
-			size_t size)
-{
-	return proxy_instance_option_get(mount->instance, name, value, size);
-}
-
-int32_t proxy_mount_select(proxy_mount_t *mount, const char *fs)
-{
-	return proxy_instance_select(mount->instance, fs);
-}
-
-int32_t proxy_mount_init(proxy_mount_t *mount)
-{
-	return proxy_instance_init(mount->instance);
-}
-
 int32_t proxy_mount_mount(proxy_mount_t *mount, const char *root)
 {
 	struct ceph_statx stx;
 	struct ceph_mount_info *cmount;
 	int32_t err;
 
-	err = proxy_instance_mount(&mount->instance);
+	err = proxy_instance_mount(mount);
 	if (err < 0) {
 		return err;
 	}
@@ -1170,10 +1090,7 @@ int32_t proxy_mount_mount(proxy_mount_t *mount, const char *root)
 	/* Temporarily set the root and cwd inodes to make proxy_path_resolve()
 	 * to work correctly. */
 	mount->root = mount->instance->root;
-	mount->root_ino = CEPH_INO_ROOT;
-
 	mount->cwd = mount->instance->root;
-	mount->cwd_ino = CEPH_INO_ROOT;
 
 	/* Resolve the desired root directory. */
 	err = proxy_path_resolve(mount, root, &mount->root, &stx,
@@ -1194,43 +1111,30 @@ int32_t proxy_mount_mount(proxy_mount_t *mount, const char *root)
 	}
 	mount->cwd_path_len = 1;
 
-	mount->root_ino = stx.stx_ino;
-
-	err = proxy_inode_ref(mount, stx.stx_ino);
-	if (err < 0) {
-		goto failed_path;
-	}
-
-	mount->cwd = mount->root;
-	mount->cwd_ino = stx.stx_ino;
+	mount->cwd = proxy_inode_get(mount->root);
 
 	return 0;
 
-failed_path:
-	proxy_free(mount->cwd_path);
-
 failed_root:
-	ceph_ll_put(proxy_cmount(mount), mount->root);
+	proxy_inode_put(mount->instance, mount->root);
 
 failed:
-	proxy_instance_unmount(&mount->instance);
+	proxy_instance_unmount(mount);
 
 	return err;
 }
 
 int32_t proxy_mount_unmount(proxy_mount_t *mount)
 {
-	ceph_ll_put(proxy_cmount(mount), mount->root);
+	proxy_inode_put(mount->instance, mount->root);
 	mount->root = NULL;
-	mount->root_ino = 0;
 
-	ceph_ll_put(proxy_cmount(mount), mount->cwd);
+	proxy_inode_put(mount->instance, mount->cwd);
 	mount->cwd = NULL;
-	mount->cwd_ino = 0;
 
 	proxy_free(mount->cwd_path);
 
-	return proxy_instance_unmount(&mount->instance);
+	return proxy_instance_unmount(mount);
 }
 
 int32_t proxy_mount_release(proxy_mount_t *mount)
