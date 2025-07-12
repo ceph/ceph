@@ -2693,6 +2693,7 @@ int RGWUserPermHandler::Bucket::init(RGWUserPermHandler *handler,
              info->env,
              info->identity.get(),
              bucket_info,
+             rgw::s3::ObjectOwnership::ObjectWriter,
              info->identity->get_perm_mask(),
              false, /* defer to bucket acls */
              nullptr, /* referer */
