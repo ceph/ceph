@@ -1058,6 +1058,21 @@ void AsyncMessenger::mark_down_addrs(const entity_addrvec_t& addrs)
   }
 }
 
+__u32 AsyncMessenger::get_global_seq(__u32 old)
+{
+  std::lock_guard<ceph::spinlock> lg(global_seq_lock);
+
+  if (old > global_seq) {
+      ldout(cct, 10) << __func__ << " old=" << old
+        << " > global_seq=" << global_seq
+        << "; new global_seq=" << old << dendl;
+    global_seq = old;
+  }
+  __u32 ret = ++global_seq;
+  ldout(cct, 10) << __func__ << " increment to global_seq=" << global_seq << dendl;
+  return ret;
+}
+
 int AsyncMessenger::get_proto_version(int peer_type, bool connect) const
 {
   int my_type = my_name.type();
