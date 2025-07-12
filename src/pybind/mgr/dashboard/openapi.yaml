@@ -12343,6 +12343,136 @@ paths:
       - jwt: []
       tags:
       - RgwBucket
+  /api/rgw/bucket/notification:
+    delete:
+      parameters:
+      - default: ''
+        in: query
+        name: bucket_name
+        schema:
+          type: string
+      - default: ''
+        in: query
+        name: notification_id
+        schema:
+          type: string
+      - allowEmptyValue: true
+        in: query
+        name: daemon_name
+        schema:
+          type: string
+      - allowEmptyValue: true
+        in: query
+        name: owner
+        schema:
+          type: string
+      responses:
+        '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
+          description: Operation is still executing. Please check the task queue.
+        '204':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
+          description: Resource deleted.
+        '400':
+          description: Operation exception. Please check the response body for details.
+        '401':
+          description: Unauthenticated access. Please login first.
+        '403':
+          description: Unauthorized access. Please check your permissions.
+        '500':
+          description: Unexpected error. Please check the response body for the stack
+            trace.
+      security:
+      - jwt: []
+      tags:
+      - RgwBucket
+    get:
+      parameters:
+      - default: ''
+        in: query
+        name: bucket_name
+        schema:
+          type: string
+      - allowEmptyValue: true
+        in: query
+        name: notification_id
+        schema:
+          type: string
+      - allowEmptyValue: true
+        in: query
+        name: daemon_name
+        schema:
+          type: string
+      - allowEmptyValue: true
+        in: query
+        name: owner
+        schema:
+          type: string
+      responses:
+        '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
+          description: OK
+        '400':
+          description: Operation exception. Please check the response body for details.
+        '401':
+          description: Unauthenticated access. Please login first.
+        '403':
+          description: Unauthorized access. Please check your permissions.
+        '500':
+          description: Unexpected error. Please check the response body for the stack
+            trace.
+      security:
+      - jwt: []
+      tags:
+      - RgwBucket
+    put:
+      parameters: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              properties:
+                bucket_name:
+                  default: ''
+                  type: string
+                daemon_name:
+                  type: string
+                notification:
+                  default: ''
+                  type: string
+                owner:
+                  type: string
+              type: object
+      responses:
+        '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
+          description: Resource updated.
+        '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
+          description: Operation is still executing. Please check the task queue.
+        '400':
+          description: Operation exception. Please check the response body for details.
+        '401':
+          description: Unauthenticated access. Please login first.
+        '403':
+          description: Unauthorized access. Please check your permissions.
+        '500':
+          description: Unexpected error. Please check the response body for the stack
+            trace.
+      security:
+      - jwt: []
+      tags:
+      - RgwBucket
   /api/rgw/bucket/ratelimit:
     get:
       parameters: []
@@ -13664,63 +13794,82 @@ paths:
           application/json:
             schema:
               properties:
+<<<<<<< HEAD
                 ack_level:
+=======
+                amqp_ack_level:
+<<<<<<< HEAD
+>>>>>>> fac004c0532 (mgr/dashboard: Add RGW topics endpoint creation for create ,delete and list in dashboard)
                   description: Amqp ack level
+=======
+                  description: amqp ack level
+>>>>>>> 14a0ebe66fe (mgr/dashboard: Create and delete and update s3 notification in dashboard)
                   type: string
                 amqp_exchange:
-                  description: Amqp exchange
+                  description: amqp exchange
                   type: string
                 ca_location:
-                  description: Ca location
+                  description: ca location
                   type: string
                 cloud_events:
                   default: false
-                  description: Cloud events
+                  description: cloud events
                   type: string
                 daemon_name:
+<<<<<<< HEAD
                   description: Name of the daemon
+<<<<<<< HEAD
+=======
+                  type: string
+                kafka_ack_level:
+                  description: Kafka ack level
+>>>>>>> fac004c0532 (mgr/dashboard: Add RGW topics endpoint creation for create ,delete and list in dashboard)
+=======
+                  type: string
+                kafka_ack_level:
+                  description: kafka ack level
+>>>>>>> 14a0ebe66fe (mgr/dashboard: Create and delete and update s3 notification in dashboard)
                   type: string
                 kafka_brokers:
-                  description: Kafka brokers
+                  description: kafka brokers
                   type: string
                 max_retries:
-                  description: Max retries
+                  description: max retries
                   type: string
                 mechanism:
-                  description: Mechanism
+                  description: mechanism
                   type: string
                 name:
                   description: Name of the topic
                   type: string
                 opaque_data:
-                  description: OpaqueData
+                  description: ' opaque data'
                   type: string
                 owner:
-                  description: Name of the owner
                   type: string
                 persistent:
                   default: false
-                  description: Persistent
+                  description: persistent
                   type: boolean
                 policy:
-                  description: Policy
+                  description: policy
                   type: string
                 push_endpoint:
                   description: Push Endpoint
                   type: string
                 retry_sleep_duration:
-                  description: Retry sleep duration
+                  description: retry sleep duration
                   type: string
                 time_to_live:
                   description: Time to live
                   type: string
                 use_ssl:
                   default: false
-                  description: Use ssl
+                  description: use ssl
                   type: boolean
                 verify_ssl:
                   default: false
-                  description: Verify ssl
+                  description: verify ssl
                   type: boolean
               required:
               - name
