@@ -67,9 +67,8 @@ using extent_map = interval_map<uint64_t, ceph::buffer::list, bl_split_merge,
  * K must a key suitable for a mini_flat_map.
  * T must be either an extent map or a reference to an extent map.
  */
-template <typename K, typename T>
 class slice_iterator {
-  mini_flat_map<K, T> &input;
+  mini_flat_map<shard_id_t, extent_map> &input;
   uint64_t offset = std::numeric_limits<uint64_t>::max();
   uint64_t length = std::numeric_limits<uint64_t>::max();
   uint64_t start = std::numeric_limits<uint64_t>::max();
@@ -79,8 +78,81 @@ class slice_iterator {
   shard_id_map<bufferptr> in;
   shard_id_map<bufferptr> out;
   const shard_id_set &out_set;
+  const shard_id_set *dedup_set;
+  DoutPrefixProvider *dpp;
+
+  /* zero dedup is used by the slice iterator to detect zero buffers and reaplce
+ *  them with the dedup'd zero buffer. It keeps a replacement buffer which
+ *  once full (bl.length() == len) can be used to swap out the input buffer.
+ */
+  struct zeros {
+    uint64_t off;
+    uint64_t len;
+    bufferlist bl;
+
+    zeros(uint64_t _off, uint64_t _len) : off(_off), len(_len) {}
+
+    bool dedup(bufferptr &bp) {
+      bool is_zeros = false;
+      uint64_t bp_len = bp.length();
+      uint64_t off = 0;
+      char *c_str = bp.c_str();
+      // Skip any non-aligned chunk.
+      uint64_t analysed = p2roundup((uintptr_t)c_str, EC_ALIGN_SIZE) - (uintptr_t)c_str;
+
+      while (off + analysed <= bp_len) {
+        bool new_is_zeros;
+        if (bp_len - off - analysed < EC_ALIGN_SIZE) {
+          new_is_zeros = false;
+        } else {
+          new_is_zeros = mem_is_zero(c_str + off + analysed, EC_ALIGN_SIZE);
+        }
+        if (new_is_zeros != is_zeros && analysed) {
+          if (is_zeros) {
+            bl.append_zero2(analysed);
+          } else {
+            bl.append(bufferptr(bp, off, analysed));
+          }
+          off += analysed;
+          analysed = 0;
+        }
+        is_zeros = new_is_zeros;
+        analysed += EC_ALIGN_SIZE;
+      }
+      if (is_zeros) {
+        bl.append_zero2(bp_len - off);
+      } else {
+        bl.append(bufferptr(bp, off, bp_len - off));
+      }
+
+      return bl.length() == len;
+    }
+  };
+
+  std::optional<shard_id_map<zeros>> zeros;
+
+  void zeros_dedup() {
+    for (auto &&[shard, _zeros] : *zeros) {
+
+      if (!out.contains(shard) && !in.contains(shard)) {
+        continue;
+      }
+
+      bufferptr &bp = out.contains(shard)?out.at(shard):in.at(shard);
+      if (_zeros.dedup(bp)) {
+        ldpp_dout(dpp, 20) << __func__ << ": overwrite input[" << shard << "]="
+                           << _zeros.off << "~" << _zeros.len
+                           << " with bl=" << _zeros.bl << dendl;
+        input.at(shard).insert(_zeros.off, _zeros.len, _zeros.bl);
+        zeros->erase(shard);
+      }
+    }
+  }
 
   void advance() {
+    if (dedup_set) {
+      zeros_dedup();
+    }
     in.clear();
     out.clear();
     offset = start;
@@ -121,9 +193,15 @@ class slice_iterator {
         // Create a new buffer pointer for the result. We don't want the client
         // manipulating the ptr.
         if (out_set.contains(shard)) {
+          ldpp_dout(dpp, 20) << __func__ << " out[" << shard << "]="
+                             << start << "~" << (end - start)
+                             << dendl;
           out.emplace(
             shard, bufferptr(bl_iter.get_current_ptr(), 0, end - start));
         } else {
+          ldpp_dout(dpp, 20) << __func__ << " in[" << shard << "]="
+                   << start << "~" << (end - start)
+                   << dendl;
           in.emplace(
             shard, bufferptr(bl_iter.get_current_ptr(), 0, end - start));
         }
@@ -133,19 +211,26 @@ class slice_iterator {
 
         // If we have reached the end of the extent, we need to move that on too.
         if (bl_iter == emap_iter.get_val().end()) {
+          // NOTE: Despite appearances, the following is happening BEFORE
+          // the caller gets to use the buffer pointers (since the in/out is
+          // set a few lines above).  This means that the caller must not
+          // check the CRC.
+          if (out_set.contains(shard)) {
+            invalidate_crcs(shard);
+          }
           ++emap_iter;
           if (emap_iter == input[shard].end()) {
             erase = true;
           } else {
-            if (out_set.contains(shard)) {
-              bufferlist bl = emap_iter.get_val();
-              bl.invalidate_crc();
-            }
             iters.at(shard).second = emap_iter.get_val().begin();
+            if (zeros) {
+              zeros->emplace(shard, emap_iter.get_off(), emap_iter.get_len());
+            }
           }
         }
-      } else
+      } else {
         ceph_assert(iter_offset > start);
+      }
 
       if (erase) {
         iter = iters.erase(iter);
@@ -168,16 +253,35 @@ class slice_iterator {
     }
   }
 
+  void invalidate_crcs(shard_id_t shard) {
+    bufferlist bl = iters.at(shard).first.get_val();
+    bl.invalidate_crc();
+  }
+
 public:
-  slice_iterator(mini_flat_map<K, T> &_input, const shard_id_set &out_set) :
+  slice_iterator(
+      mini_flat_map<shard_id_t, extent_map> &_input,
+      const shard_id_set &out_set,
+      DoutPrefixProvider *_dpp,
+      const shard_id_set *dedup_set) :
     input(_input),
     iters(input.max_size()),
     in(input.max_size()),
     out(input.max_size()),
-    out_set(out_set) {
+    out_set(out_set),
+    dedup_set(dedup_set),
+    dpp(_dpp) {
+
+    if (dedup_set) {
+      zeros.emplace(input.max_size());
+    }
+
     for (auto &&[shard, emap] : input) {
       auto emap_iter = emap.begin();
       auto bl_iter = emap_iter.get_val().begin();
+      if (zeros) {
+        zeros->emplace(shard, emap_iter.get_off(), emap_iter.get_len());
+      }
       auto p = std::make_pair(std::move(emap_iter), std::move(bl_iter));
       iters.emplace(shard, std::move(p));
 
@@ -555,10 +659,6 @@ public:
       ErasureCodeInterface::FLAG_EC_PLUGIN_REQUIRE_SUB_CHUNKS) != 0;
   }
 
-  bool get_is_hinfo_required() const {
-    return !supports_ec_overwrites();
-  }
-
   bool supports_partial_reads() const {
     return (plugin_flags &
       ErasureCodeInterface::FLAG_EC_PLUGIN_PARTIAL_READ_OPTIMIZATION) != 0;
@@ -756,8 +856,10 @@ public:
   uint64_t end_offset;
   shard_id_map<extent_map> extent_maps;
 
-  slice_iterator<shard_id_t, extent_map> begin_slice_iterator(
-      const shard_id_set &out_set);
+  slice_iterator begin_slice_iterator(
+      const shard_id_set &out,
+      DoutPrefixProvider *dpp,
+      const shard_id_set *dedup_zeros = nullptr);
 
   /* This caculates the ro offset for an offset into a particular shard */
   uint64_t calc_ro_offset(raw_shard_id_t raw_shard, int shard_offset) const {
@@ -890,10 +992,12 @@ public:
   void append_zeros_to_ro_offset(uint64_t ro_offset);
   void insert_ro_extent_map(const extent_map &host_extent_map);
   extent_set get_extent_superset() const;
-  int encode(const ErasureCodeInterfaceRef &ec_impl);
-  int _encode(const ErasureCodeInterfaceRef &ec_impl);
+  int encode(const ErasureCodeInterfaceRef &ec_impl,
+    DoutPrefixProvider *dpp = nullptr,
+    shard_id_set *dedup_zeros = nullptr);
   int encode_parity_delta(const ErasureCodeInterfaceRef &ec_impl,
-                          shard_extent_map_t &old_sem);
+                          shard_extent_map_t &old_sem,
+                          DoutPrefixProvider *dpp);
 
   void pad_on_shards(const shard_extent_set_t &pad_to,
                      const shard_id_set &shards);
@@ -904,10 +1008,13 @@ public:
   void trim(const shard_extent_set_t &trim_to);
   int decode(const ErasureCodeInterfaceRef &ec_impl,
              const shard_extent_set_t &want,
-             uint64_t object_size);
+             uint64_t object_size,
+             DoutPrefixProvider *dpp = nullptr,
+             bool dedup_zeros = false);
   int _decode(const ErasureCodeInterfaceRef &ec_impl,
               const shard_id_set &want_set,
-              const shard_id_set &need_set);
+              const shard_id_set &need_set,
+              DoutPrefixProvider *dpp);
   void get_buffer(shard_id_t shard, uint64_t offset, uint64_t length,
                   buffer::list &append_to) const;
   void get_shard_first_buffer(shard_id_t shard, buffer::list &append_to) const;
@@ -952,16 +1059,9 @@ public:
     }
   }
 
-  bool add_zero_padding_for_decode(uint64_t object_size, shard_id_set &exclude_set) {
-    shard_extent_set_t zeros(sinfo->get_k_plus_m());
-    sinfo->ro_size_to_zero_mask(object_size, zeros);
-    extent_set superset = get_extent_superset();
+  void add_zero_padding_for_decode(ECUtil::shard_extent_set_t &zeros) {
     bool changed = false;
     for (auto &&[shard, z] : zeros) {
-      if (exclude_set.contains(shard)) {
-        continue;
-      }
-      z.intersection_of(superset);
       for (auto [off, len] : z) {
         changed = true;
         bufferlist bl;
@@ -973,8 +1073,30 @@ public:
     if (changed) {
       compute_ro_range();
     }
+  }
 
-    return changed;
+  template <typename ISET> requires is_interval_set_v<ISET>
+  void get_sparse_buffer(shard_id_t shard, bufferlist &bl_out, ISET &iset) {
+    ceph_assert(bl_out.length() == 0);
+    if (!extent_maps.contains(shard)) {
+      return;
+    }
+    for (auto iter = extent_maps.at(shard).begin(); iter != extent_maps.at(shard).end(); ++iter) {
+      uint64_t off = iter.get_off();
+      bufferlist &bl = iter.get_val();
+
+      auto bl_iter = bl.begin();
+      while (bl_iter != bl.end()) {
+        auto bp = bl_iter.get_current_ptr();
+        uint64_t len = bp.length();
+        if (!bp.is_zero_fast()) {
+          iset.insert(off, bp.length());
+          bl_out.append(bp);
+        }
+        off += len;
+        bl_iter += len;
+      }
+    }
   }
 
   friend std::ostream &operator<<(std::ostream &lhs,

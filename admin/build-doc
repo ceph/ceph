@@ -3,6 +3,7 @@
 cd "$(dirname "$0")"
 cd ..
 TOPDIR=`pwd`
+date
 
 install -d -m0755 build-doc
 
@@ -57,11 +58,11 @@ if test -f $md5 && md5sum --check $md5 > /dev/null; then
 else
     python3 -m venv $vdir
 
-    $vdir/bin/pip install --quiet wheel
-    $vdir/bin/pip install --quiet \
+    $vdir/bin/pip install  wheel
+    $vdir/bin/pip install \
               -r $TOPDIR/admin/doc-requirements.txt \
               -r $TOPDIR/admin/doc-python-common-requirements.txt
-    BUILD_DOC=1 $vdir/bin/pip install --quiet \
+    BUILD_DOC=1 $vdir/bin/pip install \
          -r $TOPDIR/admin/doc-pybind.txt
     md5sum \
         $TOPDIR/admin/doc-requirements.txt \
