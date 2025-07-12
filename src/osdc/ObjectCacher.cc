@@ -1416,6 +1416,7 @@ int ObjectCacher::_readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
   ceph_assert(ceph_mutex_is_locked(lock));
   bool success = true;
   int error = 0;
+  uint64_t rsize = 0;
   uint64_t bytes_in_cache = 0;
   uint64_t bytes_not_in_cache = 0;
   uint64_t total_bytes_read = 0;
@@ -1626,6 +1627,10 @@ int ObjectCacher::_readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
 			 << f_it->second << " +" << foff << "~" << len
 			 << dendl;
 
+          if (rd->len && len > rd->len - rsize) {
+            len = rd->len - rsize;
+          }
+
 	  bufferlist bit;
 	  // put substr here first, since substr_of clobbers, and we
 	  // may get multiple bh's at this stripe_map position
@@ -1641,6 +1646,7 @@ int ObjectCacher::_readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
 	  opos += len;
 	  bhoff += len;
 	  foff += len;
+          rsize += len;
 	  if (opos == bh->end()) {
 	    ++bh_it;
 	    bhoff = 0;
@@ -1649,12 +1655,15 @@ int ObjectCacher::_readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
 	    ++f_it;
 	    foff = 0;
 	  }
+	  if (rd->len && rsize == rd->len) break;
 	  if (bh_it == hits.end()) break;
 	  if (f_it == ex_it->buffer_extents.end())
 	    break;
 	}
-	ceph_assert(f_it == ex_it->buffer_extents.end());
-	ceph_assert(opos == (loff_t)ex_it->offset + (loff_t)ex_it->length);
+        if (rd->len == 0) {
+          ceph_assert(f_it == ex_it->buffer_extents.end());
+          ceph_assert(opos == (loff_t)ex_it->offset + (loff_t)ex_it->length);
+        }
       }
 
       if (dontneed && o->include_all_cached_data(ex_it->offset, ex_it->length))
