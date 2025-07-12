@@ -16,7 +16,7 @@ import * as xml2js from 'xml2js';
 import { RgwBucketService } from '~/app/shared/api/rgw-bucket.service';
 import { RgwSiteService } from '~/app/shared/api/rgw-site.service';
 import { RgwUserService } from '~/app/shared/api/rgw-user.service';
-import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
+import { ActionLabelsI18n, AppConstants, URLVerbs } from '~/app/shared/constants/app.constants';
 import { Icons } from '~/app/shared/enum/icons.enum';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { CdForm } from '~/app/shared/forms/cd-form';
@@ -41,6 +41,8 @@ import { TextAreaXmlFormatterService } from '~/app/shared/services/text-area-xml
 import { RgwRateLimitComponent } from '../rgw-rate-limit/rgw-rate-limit.component';
 import { RgwRateLimitConfig } from '../models/rgw-rate-limit';
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
+import { RgwUserAccountsService } from '~/app/shared/api/rgw-user-accounts.service';
+import { RgwUser } from '../models/rgw-user';
 
 @Component({
   selector: 'cd-rgw-bucket-form',
@@ -55,7 +57,9 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
 
   bucketForm: CdFormGroup;
   editing = false;
-  owners: string[] = null;
+  owners: RgwUser[] = null;
+  accounts: string[] = [];
+  accountUsers: RgwUser[] = [];
   kmsProviders: string[] = null;
   action: string;
   resource: string;
@@ -104,7 +108,8 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
     public actionLabels: ActionLabelsI18n,
     private readonly changeDetectorRef: ChangeDetectorRef,
     private rgwMultisiteService: RgwMultisiteService,
-    private rgwDaemonService: RgwDaemonService
+    private rgwDaemonService: RgwDaemonService,
+    private rgwAccountsService: RgwUserAccountsService
   ) {
     super();
     this.editing = this.router.url.startsWith(`/rgw/bucket/${URLVerbs.EDIT}`);
@@ -137,7 +142,14 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
           ? []
           : [CdValidators.bucketName(), CdValidators.bucketExistence(false, this.rgwBucketService)]
       ],
-      owner: [null, [Validators.required]],
+      owner: [
+        null,
+        [
+          CdValidators.requiredIf({
+            isAccountOwner: false
+          })
+        ]
+      ],
       kms_provider: ['vault'],
       'placement-target': [null],
       versioning: [null],
@@ -169,13 +181,23 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
       lifecycle: ['{}', CdValidators.jsonOrXml()],
       grantee: [Grantee.Owner, [Validators.required]],
       aclPermission: [[aclPermission.FullControl], [Validators.required]],
-      replication: [false]
+      replication: [false],
+      isAccountOwner: [false],
+      accountUser: [
+        null,
+        [
+          CdValidators.requiredIf({
+            isAccountOwner: true
+          })
+        ]
+      ]
     });
   }
 
   ngOnInit() {
     const promises = {
-      owners: this.rgwUserService.enumerate()
+      owners: this.rgwUserService.enumerate(true),
+      accounts: this.rgwAccountsService.list()
     };
     this.multisiteStatus$ = this.rgwMultisiteService.status();
     this.isDefaultZoneGroup$ = this.rgwDaemonService.selectedDaemon$.pipe(
@@ -217,8 +239,9 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
 
       forkJoin(promises).subscribe((data: any) => {
         // Get the list of possible owners.
-        this.owners = (<string[]>data.owners).sort();
-
+        this.accounts = data.accounts;
+        this.accountUsers = data.owners.filter((owner: RgwUser) => owner.account_id);
+        this.owners = data.owners.filter((owner: RgwUser) => !owner.account_id);
         // Get placement targets:
         if (data['getPlacementTargets']) {
           const placementTargets = data['getPlacementTargets'];
@@ -269,13 +292,21 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
           }
           this.bucketForm.setValue(value);
           if (this.editing) {
-            // temporary fix until the s3 account management is implemented in
-            // the frontend. Disable changing the owner of the bucket in case
+            // Disable changing the owner of the bucket in case
             // its owned by the account.
-            // @TODO: Introduce account selection for a bucket.
-            if (!this.owners.includes(value['owner'])) {
-              this.owners.push(value['owner']);
-              this.bucketForm.get('owner').disable();
+            const ownersList = data.owners.map((owner: RgwUser) => owner.uid);
+            if (!ownersList.includes(value['owner'])) {
+              // creating dummy user object to show the account owner
+              // here value['owner] is the account user id
+              const user = Object.assign(
+                { uid: value['owner'] },
+                ownersList.find((owner: RgwUser) => owner.uid === AppConstants.defaultUser)
+              );
+              this.accountUsers.push(user);
+              this.bucketForm.get('isAccountOwner').setValue(true);
+              this.bucketForm.get('isAccountOwner').disable();
+              this.bucketForm.get('accountUser').setValue(value['owner']);
+              this.bucketForm.get('accountUser').disable();
             }
             this.isVersioningAlreadyEnabled = this.isVersioningEnabled;
             this.isMfaDeleteAlreadyEnabled = this.isMfaDeleteEnabled;
@@ -340,7 +371,19 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
       // make the owner empty if the field is disabled.
       // this ensures the bucket doesn't gets updated with owner when
       // the bucket is owned by the account.
-      const owner = this.bucketForm.get('owner').disabled === true ? '' : values['owner'];
+      let owner;
+      if (this.bucketForm.get('accountUser').disabled) {
+        // If the bucket is owned by the account, then set the owner as account user.
+        owner = '';
+      } else if (values['isAccountOwner']) {
+        const accountUser: RgwUser = this.accountUsers.filter(
+          (user) => values['accountUser'] === user.uid
+        )[0];
+        owner = accountUser?.account_id ?? values['owner'];
+      } else {
+        owner = values['owner'];
+      }
+
       this.rgwBucketService
         .update(
           values['bid'],
@@ -376,11 +419,12 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
           }
         );
     } else {
+      const owner = values['isAccountOwner'] ? values['accountUser'] : values['owner'];
       // Add
       this.rgwBucketService
         .create(
           values['bid'],
-          values['owner'],
+          owner,
           this.zonegroup,
           values['placement-target'],
           values['lock_enabled'],
@@ -421,7 +465,8 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
      * Scenario 2: Changing the bucket owner from non-tenanted to tenanted
      * Scenario 3: Keeping the owner(tenanted) same and changing only rate limit
      */
-    const owner = this.bucketForm.getValue('owner');
+    // in case of creating bucket with account user, owner will be empty
+    const owner = this.bucketForm.getValue('owner') || '';
     const bidInput = this.bucketForm.getValue('bid');
 
     let bid: string;

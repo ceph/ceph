@@ -23,6 +23,7 @@ import { CheckboxModule, SelectModule } from 'carbon-components-angular';
 import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { By } from '@angular/platform-browser';
 import { LoadingStatus } from '~/app/shared/forms/cd-form';
+import { RgwUserAccountsService } from '~/app/shared/api/rgw-user-accounts.service';
 
 describe('RgwBucketFormComponent', () => {
   let component: RgwBucketFormComponent;
@@ -31,6 +32,7 @@ describe('RgwBucketFormComponent', () => {
   let getPlacementTargetsSpy: jasmine.Spy;
   let rgwBucketServiceGetSpy: jasmine.Spy;
   let enumerateSpy: jasmine.Spy;
+  let accountListSpy: jasmine.Spy;
   let formHelper: FormHelper;
   let childComponent: RgwRateLimitComponent;
 
@@ -55,6 +57,7 @@ describe('RgwBucketFormComponent', () => {
     rgwBucketServiceGetSpy = spyOn(rgwBucketService, 'get');
     getPlacementTargetsSpy = spyOn(TestBed.inject(RgwSiteService), 'get');
     enumerateSpy = spyOn(TestBed.inject(RgwUserService), 'enumerate');
+    accountListSpy = spyOn(TestBed.inject(RgwUserAccountsService), 'list');
     formHelper = new FormHelper(component.bucketForm);
   });
 
@@ -85,6 +88,7 @@ describe('RgwBucketFormComponent', () => {
       };
       getPlacementTargetsSpy.and.returnValue(observableOf(payload));
       enumerateSpy.and.returnValue(observableOf([]));
+      accountListSpy.and.returnValue(observableOf([]));
       fixture.detectChanges();
 
       expect(component.zonegroup).toBe(payload.zonegroup);
