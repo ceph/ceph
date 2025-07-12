@@ -537,19 +537,19 @@ ceph::io_sequence::tester::SelectErasureChunkSize::generate_selections() {
   if (4096 % minimum_chunksize == 0) {
     choices.push_back(4096);
   } else {
-    choices.push_back(minimum_chunksize * rng(4));
+    choices.push_back(minimum_chunksize * (rng(4) + 1));
   }
 
   if ((64 * 1024) % minimum_chunksize == 0) {
     choices.push_back(64 * 1024);
   } else {
-    choices.push_back(minimum_chunksize * rng(64));
+    choices.push_back(minimum_chunksize * (rng(64) + 1));
   }
 
   if ((256 * 1024) % minimum_chunksize == 0) {
     choices.push_back(256 * 1024);
   } else {
-    choices.push_back(minimum_chunksize * rng(256));
+    choices.push_back(minimum_chunksize * (rng(256) + 1));
   }
 
   return choices;
