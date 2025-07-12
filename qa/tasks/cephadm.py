@@ -282,6 +282,7 @@ def _fetch_cephadm_from_rpm(ctx):
 def _fetch_cephadm_from_github(ctx, config, ref):
     ref = config.get('cephadm_branch', ref)
     git_url = config.get('cephadm_git_url', teuth_config.get_ceph_git_url())
+    file_path = config.get('cephadm_file_path', 'src/cephadm/cephadm')
     log.info('Downloading cephadm (repo %s ref %s)...' % (git_url, ref))
     if git_url.startswith('https://github.com/'):
         # git archive doesn't like https:// URLs, which we use with github.
@@ -290,7 +291,7 @@ def _fetch_cephadm_from_github(ctx, config, ref):
         ctx.cluster.run(
             args=[
                 'curl', '--silent',
-                'https://raw.githubusercontent.com/' + rest + '/' + ref + '/src/cephadm/cephadm',
+                f'https://raw.githubusercontent.com/{rest}/{ref}/{file_path}',
                 run.Raw('>'),
                 ctx.cephadm,
                 run.Raw('&&'),
@@ -305,7 +306,7 @@ def _fetch_cephadm_from_github(ctx, config, ref):
                 run.Raw('&&'),
                 'cd', 'testrepo',
                 run.Raw('&&'),
-                'git', 'show', f'{ref}:src/cephadm/cephadm',
+                'git', 'show', f'{ref}:{file_path}',
                 run.Raw('>'),
                 ctx.cephadm,
                 run.Raw('&&'),
