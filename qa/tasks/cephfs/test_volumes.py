@@ -2887,11 +2887,33 @@ class TestSubvolumes(TestVolumesHelper):
 
         self.assertEqual(subvol_info["earmark"], earmark)
         
+        self.assertNotIn('source', subvol_info)
+
         # remove subvolumes
         self._fs_cmd("subvolume", "rm", self.volname, subvolume)
 
         # verify trash dir is clean
         self._wait_for_trash_empty()
+
+    def test_subvol_src_info_with_custom_group(self):
+        '''
+        Test that source info is NOT printed by "subvolume info" command for a
+        subvolume that is not created by cloning even when it is located in a
+        custom group.
+        '''
+        subvol_name = self._gen_subvol_name()
+        group_name = self._gen_subvol_grp_name()
+
+        self.run_ceph_cmd(f'fs subvolumegroup create {self.volname} '
+                          f'{group_name}')
+        self.run_ceph_cmd(f'fs subvolume create {self.volname} {subvol_name} '
+                          f'{group_name}')
+
+        subvol_info = self.get_ceph_cmd_stdout(
+            f'fs subvolume info {self.volname} {subvol_name} {group_name}')
+        subvol_info = json.loads(subvol_info)
+
+        self.assertNotIn('source', subvol_info)
 
     def test_subvolume_ls(self):
         # tests the 'fs subvolume ls' command
@@ -6810,6 +6832,7 @@ class TestSubvolumeSnapshotClones(TestVolumesHelper):
         # remove snapshot
         self._fs_cmd("subvolume", "snapshot", "rm", self.volname, subvolume, snapshot)
 
+        # actual testing begins now...
         subvol_info = json.loads(self._get_subvolume_info(self.volname, clone))
         if len(subvol_info) == 0:
             raise RuntimeError("Expected the 'fs subvolume info' command to list metadata of subvolume")
@@ -6819,12 +6842,47 @@ class TestSubvolumeSnapshotClones(TestVolumesHelper):
         if subvol_info["type"] != "clone":
             raise RuntimeError("type should be set to clone")
 
+        self.assertEqual(subvol_info['source']['volume'], self.volname)
+        self.assertEqual(subvol_info['source']['subvolume'], subvolume)
+        self.assertEqual(subvol_info['source']['snapshot'], snapshot)
+        self.assertEqual(subvol_info['source']['group'], '_nogroup')
+
         # remove subvolumes
         self._fs_cmd("subvolume", "rm", self.volname, subvolume)
         self._fs_cmd("subvolume", "rm", self.volname, clone)
 
         # verify trash dir is clean
         self._wait_for_trash_empty()
+
+    def test_clone_src_info_with_custom_group(self):
+        '''
+        Test that clone's source subvolume's group is printed properly when
+        "subvolume info" command is run for clone.
+        '''
+        subvol_name = self._gen_subvol_name()
+        group_name = self._gen_subvol_grp_name()
+        snap_name = self._gen_subvol_snap_name()
+        clone_name = self._gen_subvol_clone_name()
+
+        self.run_ceph_cmd(f'fs subvolumegroup create {self.volname} '
+                          f'{group_name} --mode=777')
+        self.run_ceph_cmd(f'fs subvolume create {self.volname} {subvol_name} '
+                          f'{group_name} --mode=777')
+        self._do_subvolume_io(subvol_name, group_name, number_of_files=1)
+        self.run_ceph_cmd(f'fs subvolume snapshot create {self.volname} '
+                          f'{subvol_name} {snap_name} {group_name}')
+        self.run_ceph_cmd(f'fs subvolume snapshot clone {self.volname} '
+                          f'{subvol_name} {snap_name} {clone_name} '
+                          f'--group-name {group_name}')
+        self._wait_for_clone_to_complete(clone_name)
+
+        subvol_info = self.get_ceph_cmd_stdout(
+            f'fs subvolume info {self.volname} {clone_name}')
+        subvol_info = json.loads(subvol_info)
+        self.assertEqual(subvol_info['source']['volume'], self.volname)
+        self.assertEqual(subvol_info['source']['subvolume'], subvol_name)
+        self.assertEqual(subvol_info['source']['snapshot'], snap_name)
+        self.assertEqual(subvol_info['source']['group'], group_name)
 
     def test_subvolume_snapshot_info_without_snapshot_clone(self):
         """
