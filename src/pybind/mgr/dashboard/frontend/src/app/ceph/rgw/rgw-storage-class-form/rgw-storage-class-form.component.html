@@ -24,10 +24,10 @@
         >
           <option value=""
                   i18n>-- Select Storage Class --</option>
-          <option value="local"
-                  i18n>Local</option>
-          <option value="cloud-s3"
-                  i18n>Cloud S3</option>
+          <option *ngFor="let opt of storageClassOptions"
+                  [value]="opt.value">
+            {{ opt.label }}
+          </option>
         </cds-select>
         <ng-template #storageError>
           <span
@@ -129,7 +129,15 @@
           >
         </ng-template>
       </div>
-      <div *ngIf="storageClassForm.getValue('storageClassType') === TIER_TYPE.CLOUD_TIER">
+      <div
+        *ngIf="
+          isTierMatch(
+            storageClassForm.getValue('storageClassType'),
+            TIER_TYPE.CLOUD_TIER,
+            TIER_TYPE.GLACIER
+          )
+        "
+      >
         <div class="form-item form-item-append"
              cdsRow>
           <div cdsCol>
@@ -189,7 +197,6 @@
             </ng-template>
           </div>
         </div>
-
         <!-- Access Key  -->
         <div class="form-item">
           <div cdsCol
@@ -221,7 +228,6 @@
             </ng-template>
           </div>
         </div>
-
         <!-- Secret Key  -->
         <div class="form-item">
           <div cdsCol
@@ -253,7 +259,6 @@
             </ng-template>
           </div>
         </div>
-
         <!-- Target Path -->
         <div class="form-item">
           <cds-text-label
@@ -280,82 +285,179 @@
             >
           </ng-template>
         </div>
-      </div>
-      <div *ngIf="storageClassForm.getValue('storageClassType') === TIER_TYPE.CLOUD_TIER">
-        <ng-template #title>
-          <h5 class="cds--accordion__title cd-header">Advanced</h5>
-        </ng-template>
-        <fieldset>
-          <cds-accordion size="lg"
-                         class="form-item">
-            <cds-accordion-item
-              [title]="title"
-              id="advanced-fieldset"
-              (selected)="showAdvanced = !showAdvanced"
+        <div class="form-item">
+          <cds-checkbox
+            id="allow_read_through"
+            formControlName="allow_read_through"
+            cdOptionalField="Allow Read Through"
+            i18n
+            (change)="onAllowReadThroughChange($event)"
+            >Allow Read Through
+            <cd-help-text>{{ allowReadThroughText }}</cd-help-text>
+          </cds-checkbox>
+        </div>
+        <div class="form-item">
+          <cds-checkbox
+            id="retain_head_object"
+            formControlName="retain_head_object"
+            cdOptionalField="Head Object (Stub File)"
+            i18n
+            >Head Object (Stub File)
+            <cd-help-text>{{ retainHeadObjectText }}</cd-help-text>
+          </cds-checkbox>
+        </div>
+        <div class="form-item form-item-append"
+             cdsRow>
+          <div cdsCol>
+            <cds-number
+              [id]="'read_through_restore_days'"
+              [formControlName]="'read_through_restore_days'"
+              [label]="'ReadThrough Restore Days'"
+              [helperText]="readthroughrestoreDaysText"
+              [min]="1"
+            ></cds-number>
+          </div>
+          <div cdsCol>
+            <cds-select
+              formControlName="restore_storage_class"
+              label="Restore Storage Class"
+              id="restore_storage_class"
+              [helperText]="restoreStorageClassText"
+              i18n-label
             >
-              <!-- Multi Part Sync Threshold -->
-              <div class="form-item form-item-append"
-                   cdsRow>
-                <div cdsCol>
-                  <cds-text-label
-                    labelInputID="multipart_sync_threshold"
-                    i18n
-                    [helperText]="multipartSyncThreholdText"
-                    cdOptionalField="Multipart Sync Threshold"
-                    >Multipart Sync Threshold
-                    <input
-                      cdsText
-                      type="text"
-                      id="multipart_sync_threshold"
-                      formControlName="multipart_sync_threshold"
-                    />
-                  </cds-text-label>
-                </div>
-                <div cdsCol>
-                  <cds-text-label
-                    labelInputID="multipart_min_part_size"
-                    i18n
-                    [helperText]="multipartMinPartText"
-                    cdOptionalField="Multipart Minimum Part Size"
-                    >Multipart Minimum Part Size
-                    <input
-                      cdsText
-                      type="text"
-                      id="multipart_min_part_size"
-                      formControlName="multipart_min_part_size"
-                    />
-                  </cds-text-label>
-                </div>
-              </div>
-              <div class="form-item">
-                <cds-checkbox
-                  id="allow_read_through"
-                  formControlName="allow_read_through"
-                  cdOptionalField="Allow Read Through"
-                  i18n
-                  (change)="onAllowReadThroughChange($event)"
-                  >Allow Read Through
-                  <cd-help-text>{{ allowReadThroughText }}</cd-help-text>
-                </cds-checkbox>
-              </div>
-              <div class="form-item">
-                <cds-checkbox
-                  id="retain_head_object"
-                  formControlName="retain_head_object"
-                  cdOptionalField="Head Object (Stub File)"
-                  i18n
-                  >Head Object (Stub File)
-                  <cd-help-text>{{ retainHeadObjectText }}</cd-help-text>
-                </cds-checkbox>
-              </div>
-            </cds-accordion-item>
-          </cds-accordion>
-        </fieldset>
+              <option value=""
+                      i18n>-- Select the glacier restore storage class --</option>
+              <option [ngValue]="standard"
+                      i18n>Standard</option>
+            </cds-select>
+          </div>
+        </div>
       </div>
+      <div *ngIf="
+      isTierMatch(
+        storageClassForm.getValue('storageClassType'),
+        TIER_TYPE.GLACIER
+      )
+    ">
+      <legend class="cd-header"
+      i18n>
+Glacier Storage Class
+</legend>
+<div class="form-item form-item-append"
+                 cdsRow>
+              <div cdsCol>
+                <cds-select
+                  formControlName="glacier_restore_tier_type"
+                  label="Glacier Restore Tier Type"
+                  cdRequiredField="Glacier Restore Tier Type"
+                  id="glacier_restore_tier_type"
+                  [invalid]="
+                    storageClassForm.controls.glacier_restore_tier_type.invalid &&
+                    storageClassForm.controls.glacier_restore_tier_type.dirty
+                  "
+                  [invalidText]="glacierError"
+                  [helperText]="tiertypeText"
+                  i18n-label
+                >
+                  <option value=""
+                          i18n>-- Select the glacier restore tier type --</option>
+                  <option [ngValue]="standard"
+                          i18n>Standard</option>
+                  <option [ngValue]="expedited"
+                          i18n>Expedited</option>
+                </cds-select>
+                <ng-template #glacierError>
+                  <span
+                    class="invalid-feedback"
+                    *ngIf="
+                      storageClassForm.showError('glacier_restore_tier_type', formDir, 'required')
+                    "
+                    i18n
+                    >This field is required.</span
+                  >
+                </ng-template>
+              </div>
+              <div cdsCol>
+                <cds-number
+                  [id]="'glacier_restore_days'"
+                  [formControlName]="'glacier_restore_days'"
+                  [label]="'Glacier Restore Days'"
+                  [helperText]="restoreDaysText"
+                  [min]="1"
+                ></cds-number>
+              </div>
+              </div>
+            </div>
+      <fieldset>
+        <div
+          *ngIf="
+            isTierMatch(
+              storageClassForm.getValue('storageClassType'),
+              TIER_TYPE.CLOUD_TIER,
+              TIER_TYPE.GLACIER
+            )
+          "
+        >
+          <ng-template #title>
+            <h5 class="cds--accordion__title cd-header">Advanced</h5>
+          </ng-template>
+          <fieldset>
+            <cds-accordion size="lg"
+                           class="form-item">
+              <cds-accordion-item
+                [title]="title"
+                id="advanced-fieldset"
+                (selected)="showAdvanced = !showAdvanced"
+              >
+                <!-- Multi Part Sync Threshold -->
+                <div class="form-item form-item-append"
+                     cdsRow>
+                  <div cdsCol>
+                    <cds-text-label
+                      labelInputID="multipart_sync_threshold"
+                      i18n
+                      [helperText]="multipartSyncThreholdText"
+                      cdOptionalField="Multipart Sync Threshold"
+                      >Multipart Sync Threshold
+                      <input
+                        cdsText
+                        type="text"
+                        id="multipart_sync_threshold"
+                        formControlName="multipart_sync_threshold"
+                      />
+                    </cds-text-label>
+                  </div>
+                  <div cdsCol>
+                    <cds-text-label
+                      labelInputID="multipart_min_part_size"
+                      i18n
+                      [helperText]="multipartMinPartText"
+                      cdOptionalField="Multipart Minimum Part Size"
+                      >Multipart Minimum Part Size
+                      <input
+                        cdsText
+                        type="text"
+                        id="multipart_min_part_size"
+                        formControlName="multipart_min_part_size"
+                      />
+                    </cds-text-label>
+                  </div>
+                </div>
+              </cds-accordion-item>
+            </cds-accordion>
+          </fieldset>
+        </div>
+      </fieldset>
       <cd-alert-panel
         type="warning"
         spacingClass="mb-2"
-        *ngIf="storageClassForm.getValue('storageClassType') === TIER_TYPE.CLOUD_TIER"
+        *ngIf="
+          isTierMatch(
+            storageClassForm.getValue('storageClassType'),
+            TIER_TYPE.CLOUD_TIER,
+            TIER_TYPE.GLACIER
+          )
+        "
       >
         <span i18n>RGW service would be restarted after creating the storage class.</span>
       </cd-alert-panel>

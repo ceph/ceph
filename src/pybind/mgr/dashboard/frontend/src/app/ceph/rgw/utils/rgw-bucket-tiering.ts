@@ -32,13 +32,28 @@ export class BucketTieringUtils {
 
   private static getTierTargets(tierTarget: TierTarget, zoneGroup: string, targetName: string) {
     const val = tierTarget.val;
-    if (val.tier_type === TIER_TYPE.CLOUD_TIER) {
+    if (tierTarget.val.tier_type === TIER_TYPE.GLACIER) {
       return {
         zonegroup_name: zoneGroup,
         placement_target: targetName,
         storage_class: val.storage_class,
         retain_head_object: val.retain_head_object,
         allow_read_through: val.allow_read_through,
+        restore_storage_class: val.restore_storage_class,
+        read_through_restore_days: val.read_through_restore_days,
+        tier_type: val.tier_type,
+        ...val.s3,
+        ...val['s3-glacier']
+      };
+    } else if (val.tier_type === TIER_TYPE.CLOUD_TIER) {
+      return {
+        zonegroup_name: zoneGroup,
+        placement_target: targetName,
+        storage_class: val.storage_class,
+        retain_head_object: val.retain_head_object,
+        allow_read_through: val.allow_read_through,
+        restore_storage_class: val.restore_storage_class,
+        read_through_restore_days: val.read_through_restore_days,
         tier_type: val.tier_type,
         ...val.s3
       };

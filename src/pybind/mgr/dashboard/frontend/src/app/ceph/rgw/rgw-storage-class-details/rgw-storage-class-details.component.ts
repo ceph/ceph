@@ -10,7 +10,14 @@ import {
   TARGET_ACCESS_KEY_TEXT,
   TARGET_PATH_TEXT,
   TARGET_SECRET_KEY_TEXT,
-  TIER_TYPE_DISPLAY
+  TIER_TYPE_DISPLAY,
+  TIER_TYPE,
+  GLACIER_RESTORE_DAY_TEXT,
+  GLACIER_RESTORE_TIER_TYPE_TEXT,
+  RESTORE_DAYS_TEXT,
+  READTHROUGH_RESTORE_DAYS_TEXT,
+  RESTORE_STORAGE_CLASS_TEXT,
+  ZONEGROUP_TEXT
 } from '../models/rgw-storage-class.model';
 @Component({
   selector: 'cd-rgw-storage-class-details',
@@ -31,6 +38,13 @@ export class RgwStorageClassDetailsComponent implements OnChanges {
   targetPathText = TARGET_PATH_TEXT;
   hostStyleText = HOST_STYLE;
   TIER_TYPE_DISPLAY = TIER_TYPE_DISPLAY;
+  TIER_TYPE = TIER_TYPE;
+  glacierRestoreDayText = GLACIER_RESTORE_DAY_TEXT;
+  glacierRestoreTiertypeText = GLACIER_RESTORE_TIER_TYPE_TEXT;
+  restoreDaysText = RESTORE_DAYS_TEXT;
+  readthroughrestoreDaysText = READTHROUGH_RESTORE_DAYS_TEXT;
+  restoreStorageClassText = RESTORE_STORAGE_CLASS_TEXT;
+  zoneGroupText = ZONEGROUP_TEXT;
 
   ngOnChanges() {
     if (this.selection) {
@@ -44,8 +58,17 @@ export class RgwStorageClassDetailsComponent implements OnChanges {
         multipart_sync_threshold: this.selection.multipart_sync_threshold,
         host_style: this.selection.host_style,
         retain_head_object: this.selection.retain_head_object,
-        allow_read_through: this.selection.allow_read_through
+        allow_read_through: this.selection.allow_read_through,
+        glacier_restore_days: this.selection.glacier_restore_days,
+        glacier_restore_tier_type: this.selection.glacier_restore_tier_type,
+        restore_storage_class: this.selection.restore_storage_class,
+        read_through_restore_days: this.selection.read_through_restore_days
       };
     }
+  }
+
+  isTierMatch(tierType: string, ...types: string[]): boolean {
+    const tier_type = tierType?.toLowerCase();
+    return types.some((type) => type.toLowerCase() === tier_type);
   }
 }
