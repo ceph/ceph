@@ -15,7 +15,8 @@ std::unique_ptr<IoSequence> EcIoSequence::generate_sequence(
     Sequence sequence, std::pair<int, int> obj_size_range,
     std::optional<std::pair<int, int>> km,
     std::optional<std::pair<std::string_view, std::string_view>> mappinglayers,
-    int seed) {
+    int seed,
+    bool check_consistency) {
   switch (sequence) {
     case Sequence::SEQUENCE_SEQ0:
       [[fallthrough]];
@@ -45,16 +46,16 @@ std::unique_ptr<IoSequence> EcIoSequence::generate_sequence(
       [[fallthrough]];
     case Sequence::SEQUENCE_SEQ14:
       return std::make_unique<ReadInjectSequence>(obj_size_range, seed,
-                                                  sequence, km, mappinglayers);
+                                                  sequence, km, mappinglayers, check_consistency);
     case Sequence::SEQUENCE_SEQ10:
-      return std::make_unique<Seq10>(obj_size_range, seed, km, mappinglayers);
+      return std::make_unique<Seq10>(obj_size_range, seed, km, mappinglayers, check_consistency);
     default:
       ceph_abort_msg("Unrecognised sequence");
   }
 }
 
-EcIoSequence::EcIoSequence(std::pair<int, int> obj_size_range, int seed)
-    : IoSequence(obj_size_range, seed),
+EcIoSequence::EcIoSequence(std::pair<int, int> obj_size_range, int seed, bool check_consistency)
+    : IoSequence(obj_size_range, seed, check_consistency),
       setup_inject(false),
       clear_inject(false),
       shard_to_inject(std::nullopt) {}
@@ -172,9 +173,10 @@ ceph::io_exerciser::ReadInjectSequence::ReadInjectSequence(
     int seed,
     Sequence s,
     std::optional<std::pair<int, int>> km,
-    std::optional<std::pair<std::string_view, std::string_view>> mappinglayers)
-    : EcIoSequence(obj_size_range, seed) {
-  child_sequence = IoSequence::generate_sequence(s, obj_size_range, seed);
+    std::optional<std::pair<std::string_view, std::string_view>> mappinglayers,
+    bool check_consistency)
+    : EcIoSequence(obj_size_range, seed, check_consistency) {
+  child_sequence = IoSequence::generate_sequence(s, obj_size_range, seed, check_consistency);
   select_random_data_shard_to_inject_read_error(km, mappinglayers);
   generate_random_read_inject_type();
 }
@@ -267,8 +269,9 @@ ceph::io_exerciser::ReadInjectSequence::_next() {
 ceph::io_exerciser::Seq10::Seq10(
     std::pair<int, int> obj_size_range, int seed,
     std::optional<std::pair<int, int>> km,
-    std::optional<std::pair<std::string_view, std::string_view>> mappinglayers)
-    : EcIoSequence(obj_size_range, seed),
+    std::optional<std::pair<std::string_view, std::string_view>> mappinglayers,
+    bool check_consistency)
+    : EcIoSequence(obj_size_range, seed, check_consistency),
       offset(0),
       length(1),
       inject_error_done(false),
