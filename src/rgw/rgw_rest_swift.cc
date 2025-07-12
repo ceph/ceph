@@ -1030,6 +1030,8 @@ int RGWPutObj_ObjStore_SWIFT::get_params(optional_yield y)
   }
 
   supplied_etag = s->info.env->get("HTTP_ETAG");
+  if_match = s->info.env->get("HTTP_IF_MATCH");
+  if_nomatch = s->info.env->get("HTTP_IF_NONE_MATCH");
 
   if (!s->generic_attrs.count(RGW_ATTR_CONTENT_TYPE)) {
     ldpp_dout(this, 5) << "content type wasn't provided, trying to guess" << dendl;
