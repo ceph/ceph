@@ -1368,7 +1368,7 @@ bool MgrMonitor::prepare_command(MonOpRequestRef op)
     }
 
     if (pending_map.force_disabled_modules.contains(mod)) {
-      ss << "Module \"" << mod << "\"is already disabled";
+      ss << "Module \"" << mod << "\" is already disabled";
       r = 0;
       goto out;
     }
