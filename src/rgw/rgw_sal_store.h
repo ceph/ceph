@@ -25,6 +25,7 @@ struct RGWObjState {
   bool is_atomic{false};
   bool has_attrs{false};
   bool exists{false};
+  bool is_dm{false};
   uint64_t size{0}; //< size of raw object
   uint64_t accounted_size{0}; //< size before compression, encryption
   ceph::real_time mtime;
@@ -279,7 +280,6 @@ class StoreObject : public Object {
   protected:
     RGWObjState state;
     Bucket* bucket = nullptr;
-    bool delete_marker{false};
     jspan_context trace_ctx{false, false};
 
   public:
@@ -299,6 +299,7 @@ class StoreObject : public Object {
     virtual bool is_prefetch_data() override { return state.prefetch_data; }
     virtual void set_compressed() override { state.compressed = true; }
     virtual bool is_compressed() override { return state.compressed; }
+    virtual bool is_delete_marker() override { return state.is_dm; }
     virtual void invalidate() override {
       rgw_obj obj = state.obj;
       bool is_atomic = state.is_atomic;
@@ -342,7 +343,6 @@ class StoreObject : public Object {
     virtual std::string get_hash_source(void) override { return state.obj.index_hash_source; }
     virtual void set_hash_source(std::string s) override { state.obj.index_hash_source = s; }
     virtual std::string get_oid(void) const override { return state.obj.key.get_oid(); }
-    virtual bool get_delete_marker(void) override { return delete_marker; }
     virtual bool get_in_extra_data(void) override { return state.obj.is_in_extra_data(); }
     virtual bool exists(void) override { return state.exists; }
     virtual void set_in_extra_data(bool i) override { state.obj.set_in_extra_data(i); }

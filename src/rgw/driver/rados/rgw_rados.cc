@@ -6921,11 +6921,11 @@ int RGWRados::get_obj_state(const DoutPrefixProvider *dpp, RGWObjectCtx *rctx,
   RGWObjStateManifest* sm = nullptr;
   int r = get_obj_state(dpp, rctx, bucket_info, obj, &sm,
                         follow_olh, y, assume_noent);
-  if (r < 0) {
-    return r;
-  }
   if (pstate) {
     *pstate = &sm->state;
+  }
+  if (r < 0) {
+    return r;
   }
   if (pmanifest) {
     if (sm->manifest) {
@@ -9532,6 +9532,8 @@ int RGWRados::follow_olh(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_in
   }
 
   if (olh.removed) {
+    /* the object is a delete marker */
+    state->is_dm = true;
     return -ENOENT;
   }
 

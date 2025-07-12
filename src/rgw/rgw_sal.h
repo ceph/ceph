@@ -1223,6 +1223,8 @@ class Object {
     virtual void set_compressed() = 0;
     /** Check if this object is compressed */
     virtual bool is_compressed() = 0;
+    /** True if this object is a delete marker (newest version is deleted) */
+    virtual bool is_delete_marker() = 0;
     /** Check if object is synced */
     virtual bool is_sync_completed(const DoutPrefixProvider* dpp,
                                    optional_yield y,
@@ -1344,8 +1346,6 @@ class Object {
     virtual void set_hash_source(std::string s) = 0;
     /** Build an Object Identifier string for this object */
     virtual std::string get_oid(void) const = 0;
-    /** True if this object is a delete marker (newest version is deleted) */
-    virtual bool get_delete_marker(void) = 0;
     /** True if this object is stored in the extra data pool */
     virtual bool get_in_extra_data(void) = 0;
     /** True if this object exists in the store */
