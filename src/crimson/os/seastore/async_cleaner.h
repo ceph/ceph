@@ -1259,12 +1259,16 @@ public:
     double available_ratio_hard_limit = 0;
     /// Ratio of minimum reclaimable space to stop reclaiming.
     double reclaim_ratio_gc_threshold = 0;
+    /// Minimum ratio of reclaimable space of segments to skip reclaiming.
+    /// Should be less than or equal to reclaim_ration_gc_threshold.
+    double segment_min_reclaim_ratio = 0;
     /// Number of bytes to reclaim per cycle
     std::size_t reclaim_bytes_per_cycle = 0;
 
     void validate() const {
       ceph_assert(available_ratio_gc_max > available_ratio_hard_limit);
       ceph_assert(reclaim_bytes_per_cycle > 0);
+      ceph_assert(segment_min_reclaim_ratio <= reclaim_ratio_gc_threshold);
     }
 
     static config_t get_default() {
@@ -1272,6 +1276,7 @@ public:
         .15,  // available_ratio_gc_max
         .1,   // available_ratio_hard_limit
         .1,   // reclaim_ratio_gc_threshold
+	.1,   // segment_min_reclaim_ratio
         1<<20 // reclaim_bytes_per_cycle
       };
     }
@@ -1281,6 +1286,7 @@ public:
         .99,  // available_ratio_gc_max
         .2,   // available_ratio_hard_limit
         .6,   // reclaim_ratio_gc_threshold
+	.6,   // segment_min_reclaim_ratio
         1<<20 // reclaim_bytes_per_cycle
       };
     }

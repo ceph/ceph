@@ -1104,6 +1104,9 @@ double SegmentCleaner::calc_gc_benefit_cost(
 {
   double util = calc_utilization(id);
   ceph_assert(util >= 0 && util < 1);
+  if (util > 1 - config.segment_min_reclaim_ratio) {
+    return std::numeric_limits<double>::min();
+  }
   if constexpr (gc_formula == gc_formula_t::GREEDY) {
     return 1 - util;
   }
