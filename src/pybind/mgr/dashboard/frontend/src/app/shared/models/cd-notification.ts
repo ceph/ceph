@@ -1,11 +1,17 @@
-import { IndividualConfig } from 'ngx-toastr';
-
 import { Icons } from '../enum/icons.enum';
 import { NotificationType } from '../enum/notification-type.enum';
+import { ToastContent } from 'carbon-components-angular';
 
 export class CdNotificationConfig {
   applicationClass: string;
   isFinishedTask = false;
+  options: ToastContent = {
+    lowContrast: true,
+    type: undefined,
+    title: '',
+    subtitle: '',
+    caption: ''
+  };
 
   private classes = {
     Ceph: 'ceph-icon',
@@ -16,10 +22,14 @@ export class CdNotificationConfig {
     public type: NotificationType = NotificationType.info,
     public title?: string,
     public message?: string, // Use this for additional information only
-    public options?: any | IndividualConfig,
+    options?: ToastContent,
     public application: string = 'Ceph'
   ) {
-    this.applicationClass = this.classes[this.application];
+    this.applicationClass =
+      this.classes[this.application as keyof typeof this.classes] || 'ceph-icon';
+    if (options) {
+      this.options = { ...this.options, ...options };
+    }
   }
 }
 
