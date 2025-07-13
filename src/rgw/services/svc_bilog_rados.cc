@@ -3,6 +3,7 @@
 
 #include "svc_bilog_rados.h"
 #include "svc_bi_rados.h"
+#include "rgw_bucket_layout.h"
 
 #include "rgw_asio_thread.h"
 #include "driver/rados/shard_io.h"
@@ -623,10 +624,12 @@ RGWSI_BILog_RADOS_BackendDispatcher::RGWSI_BILog_RADOS_BackendDispatcher(
 RGWSI_BILog_RADOS& RGWSI_BILog_RADOS_BackendDispatcher::get_backend(
   const RGWBucketInfo& bucket_info)
 {
-  // TODO: teach this method about bilog layout
-  if constexpr(true) {
+ if (bucket_info.layout.logs.empty() /* no layout means the old way */ || \
+     bucket_info.layout.logs.back().layout.type == rgw::BucketLogType::InIndex) {
     return backend_inindex;
-  } else {
+  } else if (bucket_info.layout.logs.back().layout.type == rgw::BucketLogType::FIFO) {
     return backend_fifo;
+  } else {
+    ceph_abort_msg("Unknown BILog layout. This shouldn't happen!");
   }
 }

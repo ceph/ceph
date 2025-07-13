@@ -8920,7 +8920,9 @@ template <class CLSRGWBucketModifyOpT, class F, class... Args>
 int RGWRados::with_bilog(F&& func, const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, Args&&... args)
 {
   ldpp_dout(dpp, 20) << __func__ << ": zone.log_data=" << svc.zone->get_zone().log_data << dendl;
-  constexpr bool is_inindex = true;
+  const bool is_inindex = \
+    bucket_info.layout.logs.empty() ||
+    bucket_info.layout.logs.back().layout.type == rgw::BucketLogType::InIndex;
  // there are actually two variants of with_bilog():
   //   1. CLSRGWBucketModifyOpT-taking one in which the passed lambda gets
   //      both `op_issuer` and `bilog_handler`:

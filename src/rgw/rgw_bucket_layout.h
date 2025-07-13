@@ -136,7 +136,9 @@ void decode_json_obj(bucket_index_layout_generation& l, JSONObj *obj);
 enum class BucketLogType : uint8_t {
   // colocated with bucket index, so the log layout matches the index layout
   InIndex,
-  Deleted
+  Deleted,
+  // located externally to bucket index, in a cls_fifo instance
+  FIFO
 };
 
 std::string_view to_string(const BucketLogType& t);
@@ -151,6 +153,8 @@ inline std::ostream& operator<<(std::ostream& out, const BucketLogType &log_type
       return out << "InIndex";
     case BucketLogType::Deleted:
       return out << "Deleted";
+    case BucketLogType::FIFO:
+      return out << "FIFO";
     default:
       return out << "Unknown";
   }
