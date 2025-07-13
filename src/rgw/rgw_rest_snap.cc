@@ -253,7 +253,7 @@ void RGWCreateBucketSnapshot_ObjStore_S3::execute(optional_yield y)
 
   rgw_bucket_snap_id snap_id;
 
-  op_ret = s->bucket->get_info().local.snap_mgr.create_snap(snap.info, &snap.id);
+  op_ret = s->bucket->get_info().local.snap_mgr.create_snap(s->cct, snap.info, &snap.id);
   if (op_ret < 0) {
     if (op_ret == -EEXIST) {
       op_ret = -ERR_BUCKET_SNAP_EXISTS;

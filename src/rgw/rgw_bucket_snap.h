@@ -52,7 +52,8 @@ public:
     return cur_snap;
   }
 
-  int create_snap(const rgw_bucket_snap_info& info, rgw_bucket_snap_id *psnap_id);
+  int create_snap(CephContext *cct,
+                  const rgw_bucket_snap_info& info, rgw_bucket_snap_id *psnap_id);
   int remove_snap(rgw_bucket_snap_id snap_id);
   void cleanup_snap(rgw_bucket_snap_id snap_id);
 

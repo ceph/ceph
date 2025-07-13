@@ -96,6 +96,7 @@ rgw_http_errors rgw_http_s3_errors({
     { ERR_QUOTA_EXCEEDED, {403, "QuotaExceeded" }},
     { ERR_MFA_REQUIRED, {403, "AccessDenied" }},
     { ERR_FORBIDDEN, {403, "Forbidden" }},
+    { ERR_TOO_MANY_SNAPS, {400, "TooManySnapshots" }},
     { ENOENT, {404, "NoSuchKey" }},
     { ERR_NO_SUCH_BUCKET, {404, "NoSuchBucket" }},
     { ERR_NO_SUCH_WEBSITE_CONFIGURATION, {404, "NoSuchWebsiteConfiguration" }},

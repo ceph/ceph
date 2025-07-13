@@ -294,7 +294,7 @@ int RGWBucket::snap_create(RGWBucketAdminOpState& op_state, const rgw_bucket_sna
 {
   bucket = op_state.get_bucket()->clone();
 
-  int r = bucket->get_info().local.snap_mgr.create_snap(snap_info, psnap_id);
+  int r = bucket->get_info().local.snap_mgr.create_snap(dpp->get_cct(), snap_info, psnap_id);
   if (r < 0) {
     set_err_msg(err_msg, "ERROR: failed creating new snapshot: " + cpp_strerror(-r));
     return r;

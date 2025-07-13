@@ -4349,3 +4349,17 @@ options:
   flags:
   - startup
   with_legacy: true
+- name: rgw_bucket_max_snaps_live
+  type: uint
+  level: advanced
+  desc: maximum number of live snapshots per bucket
+  default: 256
+  services:
+  - rgw
+- name: rgw_bucket_max_snaps_total
+  type: uint
+  level: advanced
+  desc: maximum number of total snapshots per bucket (live and deleted)
+  default: 384
+  services:
+  - rgw

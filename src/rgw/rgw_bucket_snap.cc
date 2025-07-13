@@ -65,9 +65,23 @@ void RGWBucketSnapMgr::dump_xml(Formatter *f) const {
   }
 }
 
-int RGWBucketSnapMgr::create_snap(const rgw_bucket_snap_info& info,
+int RGWBucketSnapMgr::create_snap(CephContext *cct,
+                                  const rgw_bucket_snap_info& info,
                                   rgw_bucket_snap_id *psnap_id)
 {
+  auto max_total = cct->_conf.get_val<uint64_t>("rgw_bucket_max_snaps_total");
+  auto max_live = cct->_conf.get_val<uint64_t>("rgw_bucket_max_snaps_live");
+
+  uint32_t live_total = snaps.size();
+  if (live_total >= max_live) {
+    return -ERR_TOO_MANY_SNAPS;
+  }
+
+  uint32_t cur_total = live_total + rm_snaps.size();
+  if (cur_total >= max_total) {
+    return -ERR_TOO_MANY_SNAPS;
+  }
+
   auto iter = names_to_ids.find(info.name);
   if (iter != names_to_ids.end()) {
     return -EEXIST;
