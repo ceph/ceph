@@ -372,31 +372,7 @@ inline std::ostream& operator<<(std::ostream& out, const cls_rgw_obj_key& o) {
   return out;
 }
 
-struct rgw_bucket_snap_skip_entry {
-  rgw_bucket_snap_id snap_id;
-  std::string index_key;
-
-  void dump(ceph::Formatter *f) const;
-  void decode_json(JSONObj *obj);
-
-  void encode(ceph::buffer::list &bl) const {
-    ENCODE_START(1, 1, bl);
-    encode(snap_id, bl);
-    encode(index_key, bl);
-    ENCODE_FINISH(bl);
-  }
-
-  void decode(ceph::buffer::list::const_iterator &bl) {
-    DECODE_START(1, bl);
-    decode(snap_id, bl);
-    decode(index_key, bl);
-    DECODE_FINISH(bl);
-  }
-};
-WRITE_CLASS_ENCODER(rgw_bucket_snap_skip_entry)
-
 struct rgw_bucket_dirent_snap_info {
-  rgw_bucket_snap_skip_entry skip;
   rgw_bucket_snap_id removed_at;
   std::map<rgw_bucket_snap_id, bool> current_flag_map;
 
@@ -405,7 +381,6 @@ struct rgw_bucket_dirent_snap_info {
 
   void encode(ceph::buffer::list &bl) const {
     ENCODE_START(2, 1, bl);
-    encode(skip, bl);
     encode(removed_at, bl);
     encode(current_flag_map, bl);
     ENCODE_FINISH(bl);
@@ -414,7 +389,6 @@ struct rgw_bucket_dirent_snap_info {
   void decode(ceph::buffer::list::const_iterator &bl) {
     DECODE_START(2, bl);
     if (struct_v >= 2) {
-      decode(skip, bl);
       decode(removed_at, bl);
       decode(current_flag_map, bl);
     }
@@ -577,17 +551,6 @@ struct rgw_bucket_dir_entry {
       snap_info.emplace(rgw_bucket_dirent_snap_info());
     }
     return *snap_info;
-  }
-  void set_snap_skip_from(const rgw_bucket_dir_entry& entry) {
-    if (!snap_info && !entry.snap_info) {
-      return;
-    }
-    auto& info = set_snap_info();
-    if (!entry.snap_info) {
-      info.skip = rgw_bucket_snap_skip_entry();
-    } else {
-      info.skip = entry.snap_info->skip;
-    }
   }
 
   void dump(ceph::Formatter *f) const;

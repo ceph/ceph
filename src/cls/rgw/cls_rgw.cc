@@ -620,16 +620,6 @@ static void encode_snap_header_index_key(rgw_bucket_snap_id snap_id, string *ind
   index_key->append(buf);
 }
 
-static void encode_snap_index_key(const cls_rgw_obj_key& key, rgw_bucket_snap_id snap_id, string *index_key)
-{
-  *index_key = BI_PREFIX_CHAR;
-  index_key->append(bucket_index_prefixes[BI_BUCKET_SNAP_INDEX]);
-  char buf[32];
-  snprintf(buf, sizeof(buf), "%lld_", (long long)snap_id.snap_id);
-  index_key->append(buf);
-  _append_obj_versioned_data_key(index_key, key, false);
-}
-
 template <class T>
 static int read_index_entry(ClsOmapAccess *omap, string& name, T *entry);
 
@@ -2142,16 +2132,6 @@ public:
     instance_entry.versioned_epoch = epoch;
   }
 
-  void set_snap_skip(rgw_bucket_snap_id snap_id, const string& next_index_key) {
-    auto& snap_skip = instance_entry.set_snap_info().skip;
-    snap_skip.snap_id = snap_id;
-    snap_skip.index_key = next_index_key;
-  }
-
-  void set_snap_skip_from(const rgw_bucket_dir_entry& next) {
-    instance_entry.set_snap_skip_from(next);
-  }
-
   int unlink_list_entry(rgw_bucket_dir_header& header) {
     string list_idx, list_sub_ver;
     /* this instance has a previous list entry, remove that entry */
@@ -2884,25 +2864,6 @@ static int _rgw_bucket_link_olh(ClsOmapAccess *omap, bufferlist *in, bufferlist 
   if (ret < 0) {
     CLS_LOG(0, "ERROR: failed to update olh ret=%d", ret);
     return ret;
-  }
-
-  if (op.meta.snap_id.is_set()) {
-    rgw_bucket_dir_entry next_entry;
-    std::string next_idx;
-    bool found;
-    ret = obj.find_next_dir_entry(olh.get_epoch(), &next_entry, &next_idx, &found);
-    if (ret < 0) {
-      return ret;
-    }
-    if (found) {
-      CLS_LOG(20, "next dir entry found idx=%s", escape_str(next_idx).c_str());
-      if (!next_entry.meta.snap_id.is_set() ||
-          next_entry.meta.snap_id < op.meta.snap_id) {
-        obj.set_snap_skip(next_entry.meta.snap_id, next_idx);
-      } else {
-        obj.set_snap_skip_from(next_entry);
-      }
-    }
   }
 
   /* write the instance and list entries */
