@@ -56,9 +56,8 @@ constexpr unsigned char BI_PREFIX_CHAR = 0x80;
 #define BI_BUCKET_OLH_DATA_INDEX      3
 #define BI_BUCKET_RESHARD_LOG_INDEX   4
 #define BI_BUCKET_SNAP_HEADER_INDEX   5
-#define BI_BUCKET_SNAP_INDEX          6
 
-#define BI_BUCKET_LAST_INDEX          6
+#define BI_BUCKET_LAST_INDEX          5
 
 static std::string bucket_index_prefixes[] = { "", /* special handling for the objs list index */
 					       "0_",     /* bucket log index */
@@ -66,7 +65,6 @@ static std::string bucket_index_prefixes[] = { "", /* special handling for the o
 					       "1001_",  /* olh data index */
 					       "2001_",   /* reshard log index */
 					       "3000_",   /* snapshot headers */
-					       "3001_",   /* snapshot data index */
 
 					       /* this must be the last index */
 					       "9999_",};
@@ -1218,21 +1216,6 @@ static int write_entry(ClsOmapAccess *omap, T& entry, const string& key,
   return ret;
 }
 
-template <class T>
-static int write_snap_entry(ClsOmapAccess *omap, T& entry, cls_rgw_obj_key& key, rgw_bucket_snap_id snap_id)
-{
-  string snap_index_key;
-  encode_snap_index_key(key, snap_id, &snap_index_key);
-      
-  bufferlist bl;
-  encode(entry, bl);
-  int ret = omap->set_val(snap_index_key, &bl);
-  if (ret < 0) {
-    return ret;
-  }
-  return 0;
-}
-
 static int remove_entry(ClsOmapAccess *omap, const string& idx,
                         const cls_rgw_obj_key& key,
                         rgw_bucket_dir_header& header)
@@ -1990,15 +1973,6 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
 		   "ERROR: %s: unable to set map value at key=%s, rc=%d",
 		   __func__, escape_str(idx).c_str(), rc);
       return rc;
-    }
-    if (entry.meta.snap_id.is_set()) {
-      rc = write_snap_entry(&omap, entry, op.key, entry.meta.snap_id);
-      if (rc < 0) {
-        CLS_LOG_BITX(bitx_inst, 1,
-                 "ERROR: %s: unable to set write snap index value at key=%s, rc=%d",
-                 __func__, op.key.to_string().c_str(), rc);
-        return rc;
-      }
     }
   } // CLS_RGW_OP_ADD
 
