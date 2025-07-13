@@ -4,12 +4,7 @@
 #include "formatter.h"
 
 #include <chrono>
-#include <fmt/format.h>
-#if FMT_VERSION >= 60000
 #include <fmt/chrono.h>
-#else
-#include <fmt/time.h>
-#endif
 
 
 template <>
