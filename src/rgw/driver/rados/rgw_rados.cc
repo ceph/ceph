@@ -6766,6 +6766,8 @@ int RGWRados::get_olh_target_state(const DoutPrefixProvider *dpp, RGWObjectCtx&
                        follow_snap);
 }
 
+static int decode_olh_snap_info(const DoutPrefixProvider *dpp, const bufferlist& bl, RGWOLHSnapInfo *snap_info);
+
 int RGWRados::get_obj_state_impl(const DoutPrefixProvider *dpp, RGWObjectCtx *octx,
                                  RGWBucketInfo& bucket_info, const rgw_obj& obj,
                                  RGWObjStateManifest** psm, bool follow_olh,
@@ -6844,6 +6846,29 @@ int RGWRados::get_obj_state_impl(const DoutPrefixProvider *dpp, RGWObjectCtx *oc
   bool has_snap_info = s->attrset.find(RGW_ATTR_OLH_SNAP_INFO) != s->attrset.end();
   bool avoid_snap_olh = obj.key.snap_id.is_min();
   bool need_follow_olh = follow_olh && (obj.key.instance.empty() || has_snap_info) && !avoid_snap_olh;
+
+  if (avoid_snap_olh) {
+    /* we don't want to follow olh because snap_id.is_min() which means that the instance is
+     * embedded in the olh, however, we need to make sure that this instance actually
+     * exists
+     */
+    auto iter = s->attrset.find(RGW_ATTR_OLH_SNAP_INFO);
+    if (iter != s->attrset.end()) {
+      RGWOLHSnapInfo snap_info;
+      int r = decode_olh_snap_info(dpp, iter->second, &snap_info);
+      if (r < 0) {
+        ldpp_dout(dpp, 0) << "ERROR: failed to decode_olh_snap_info() r=" << r << dendl;
+        return r;
+      }
+
+      if (snap_info.snap_map.empty() ||
+          snap_info.snap_map.find(obj.key.snap_id) == snap_info.snap_map.end()) {
+        ldpp_dout(dpp, 20) << "olh snap_map doesn't have requested min instance" << dendl;
+        s->exists = false;
+        return -ENOENT;
+      }
+    }
+  }
 
   auto iter = s->attrset.find(RGW_ATTR_ETAG);
   if (iter != s->attrset.end()) {
@@ -9122,7 +9147,7 @@ int RGWRados::apply_olh_log(const DoutPrefixProvider *dpp,
     if (r < 0) {
       return r;
     }
-  } else {
+  } else if (state.attrset.find(RGW_ATTR_MANIFEST) != state.attrset.end()) {
     /* plain object exists, update the snap_info.snap_map to reflect that */
     rgw_bucket_snap_id snap_id;
     snap_id = rgw_bucket_snap_id::SNAP_MIN;
