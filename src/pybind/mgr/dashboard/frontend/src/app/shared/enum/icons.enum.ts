@@ -36,7 +36,6 @@ export enum Icons {
   infoCircle = 'information--filled', // Info on landing page
   questionCircle = 'help',
   danger = 'warning--filled',
-  // success = 'fa fa-check-circle',
   success = 'checkmark--filled',
   check = 'checkmark', // Notification check
   show = 'view', // Show
@@ -99,3 +98,18 @@ export enum Icons {
   spin = 'fa fa-spin', //  To get any icon to rotate
   inverse = 'fa fa-inverse' // To get an alternative icon color
 }
+
+export enum IconSize {
+  size16 = '16',
+  size20 = '20',
+  size24 = '24',
+  size32 = '32'
+}
+
+export const ICON_TYPE = {
+  copy: 'copy',
+  danger: 'danger',
+  infoCircle: 'info-circle',
+  success: 'success',
+  warning: 'warning'
+} as const;

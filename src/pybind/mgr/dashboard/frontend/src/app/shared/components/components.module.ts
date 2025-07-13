@@ -89,6 +89,7 @@ import InfoIcon from '@carbon/icons/es/information/16';
 import CopyIcon from '@carbon/icons/es/copy/32';
 import downloadIcon from '@carbon/icons/es/download/16';
 import { ChartsModule } from '@carbon/charts-angular';
+import { IconComponent } from './icon/icon.component';
 
 @NgModule({
   imports: [
@@ -172,7 +173,8 @@ import { ChartsModule } from '@carbon/charts-angular';
     FormAdvancedFieldsetComponent,
     UpgradableComponent,
     ProgressComponent,
-    SidePanelComponent
+    SidePanelComponent,
+    IconComponent
   ],
   providers: [provideCharts(withDefaultRegisterables())],
   exports: [
@@ -212,7 +214,8 @@ import { ChartsModule } from '@carbon/charts-angular';
     FormAdvancedFieldsetComponent,
     UpgradableComponent,
     ProgressComponent,
-    SidePanelComponent
+    SidePanelComponent,
+    IconComponent
   ]
 })
 export class ComponentsModule {
