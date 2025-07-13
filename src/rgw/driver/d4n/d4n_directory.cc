@@ -329,7 +329,8 @@ void D4NTransaction::create_rw_temp_keys(std::string key)
     m_original_key = key;
     // in case the content of m_original_key was changed(by other transaction),the temp keys are deleted on end-transaction phase.
     std::string temp_key = create_unique_temp_keys(m_original_key);
-  
+ 
+    // the temp key structure is as follows: _<original_key>_<transaction_id>_temp_<read|write|test_write>
     m_temp_key_read = temp_key + "_read";
     m_temp_key_write = temp_key + "_write";  
     m_temp_key_test_write = temp_key + "_test_write";
@@ -351,6 +352,7 @@ std::string D4NTransaction::create_unique_temp_keys(std::string key)
 {
   if(m_trx_id.empty()) {
 	//note: there are cases where the trx_id is empty (such as update_field), this is a temporary solution.
+	//TODO: what is flow for this case?
 	m_trx_id = std::to_string(99999);
   }
   // the trx_id is a 5 digit number, it should be unique for each transaction.
@@ -909,6 +911,7 @@ bool D4NTransaction::is_trx_started(const DoutPrefixProvider* dpp,std::shared_pt
 	if(op == redis_operation_type::READ_OP){
 	  clone_key_for_transaction(m_original_key, m_temp_key_read, conn, y);
 
+	  //m_temp_read_keys stores the temp key that is used for read operations. a single transaction can have multiple read keys.
 	  m_temp_read_keys.insert(m_temp_key_read);
 	  key = m_temp_key_read;
 	}
@@ -917,13 +920,16 @@ bool D4NTransaction::is_trx_started(const DoutPrefixProvider* dpp,std::shared_pt
 	  ldpp_dout(dpp, 0) << "Directory::is_trx_started cloning " << m_original_key << " into " << m_temp_key_write << dendl;
 
 	  clone_key_for_transaction(m_original_key, m_temp_key_write, conn, y);
+	  //m_temp_write_keys stores the temp key that is used for write operations. a single transaction can have multiple write keys.
 	  m_temp_write_keys.insert(m_temp_key_write);
 
 	  //upon end transaction, the m_temp_key_test_write should be compared to the originl key.
 	  ldpp_dout(dpp, 0) << "Directory::is_trx_started cloning " << m_original_key << " into " << m_temp_key_test_write << dendl;
 	  clone_key_for_transaction(m_original_key, m_temp_key_test_write, conn, y);
+	  // the same as m_temp_write_keys, but for test write operations.
 	  m_temp_test_write_keys.insert(m_temp_key_test_write);
-	  
+	 
+	  //the key that is used for write operations. 
 	  key = m_temp_key_write;
 	}
 	return true;
@@ -1061,7 +1067,7 @@ int D4NTransaction::init_trx(const DoutPrefixProvider* dpp,std::shared_ptr<conne
   return 0;
 }
 
-std::string lua_script_end_trx  = R"( 
+std::string lua_script_end_trx  = R"(
 
 --- this LUA script is used to compare the cloned keys with the original keys, in case keys are different, it means that other request has updated the key.
 --- the script recives the keys that are related to the unique transaction.
@@ -1154,11 +1160,12 @@ local function rename_all_write_keys()
 	local baseKey = key:gsub("_%d%d%d%d%d_temp_write$", "")
 	local trx_id = string.sub(key,string.find(key,"_%d%d%d%d%d_"))
 	local tempWriteKey = baseKey .. trx_id .. "temp_write"
-	-- local testWriteKey = baseKey .. trx_id .. "temp_test_write"
+	local testWriteKey = baseKey .. trx_id .. "temp_test_write"
 	if redis.call('EXISTS', tempWriteKey) ~= 0 then
+		-- the clone key replaces the original key
 	  redis.call('RENAME', tempWriteKey, baseKey)
 	end
-	-- redis.call('DEL', testWriteKey)
+	redis.call('DEL', testWriteKey)
       end
     end
 end
@@ -1186,6 +1193,7 @@ for _, key in ipairs(KEYS) do
 	local trx_id = string.sub(key,string.find(key,"_%d%d%d%d%d_"))
         local values1 = getKeyValues(key)
         local values2 = getKeyValues(baseKey)
+	log_message("read operation" .. " baseKey: " .. baseKey .. " key: " .. key .. " trx_id: " .. trx_id)
 
 	log_message("compring 2 keys of baseKey: " .. baseKey .. " key: " .. key .. " trx_id: " .. trx_id)
         if not compareTables(values1, values2) then
@@ -1199,11 +1207,18 @@ for _, key in ipairs(KEYS) do
 	  log_message("<KEY>_temp_read is OK " .. "baseKey: " .. baseKey .. " key: " .. key .. " trx_id: " .. trx_id)
 	end	
 
+    elseif key:match("_temp_test_write$") then
+	    -- skip the _temp_test_write keys, the _temp_write keys is the one that should be processed
+	    log_message(" do nothing with _temp_test_write key: " .. key)
     elseif key:match("_temp_write$") then
+
+	    -- NOTE: is it possible to have only _temp_test_write without _temp_write? (no,both are set by D4N application, at the same time)
 
         local baseKey = key:gsub("_%d%d%d%d%d_temp_write$", "")
 	local trx_id = string.sub(key,string.find(key,"_%d%d%d%d%d_"))
+	-- testkey is the key that is used to test if the base key has been written to
         local testKey = baseKey .. trx_id .. "temp_test_write"
+	log_message("write operation" .. " baseKey: " .. baseKey .. " key: " .. key .. " trx_id: " .. trx_id)
 
         log_message("in _temp_write :  baseKey: " .. baseKey .. " testKey: " .. testKey .. " trx_id: " .. trx_id)
 
@@ -1226,7 +1241,7 @@ for _, key in ipairs(KEYS) do
 	      allComparisonsSuccessful = false
 	  end -- end of if values1 and values2 and compareTables(values1, values2)
 	end -- end of if redis.call('EXISTS', baseKey) == 0
-    end -- end of if key:match("_temp_write$") 
+    end -- end of if key:match("_temp_write$")
 end -- end of for _, key in ipairs(KEYS)
 
 
@@ -1238,13 +1253,14 @@ if allComparisonsSuccessful == true then
 
 	log_message("allComparisonsSuccessful is true, renaming all write keys")
 	rename_all_write_keys()
-	return {true, "Processing complete"}
+	return {true, "Processing complete - commit transaction"}
 else
 -- the transaction should be rolled back, all temp keys should be deleted
+	log_message("allComparisonsSuccessful is false")
 	deleteKeysWithSuffix("_temp_write")
 	deleteKeysWithSuffix("_temp_test_write")
 	deleteKeysWithSuffix("_temp_read") 
-	return {false, "Processing failed"}
+	return {false, "Processing failed - rolling back"}
 end
 
 
@@ -1253,6 +1269,7 @@ end
 std::string D4NTransaction::get_trx_id(const DoutPrefixProvider* dpp,std::shared_ptr<connection> conn, optional_yield y)
 {
 
+  //purpose : the trx_id makes sure that the transaction is unique, and it is used to create the temporary keys.
   if(!m_trx_id.empty()) {
     return m_trx_id;
   }
@@ -1314,9 +1331,7 @@ int D4NTransaction::end_trx(const DoutPrefixProvider* dpp, std::shared_ptr<conne
 {
   trxState = TrxState::ENDED;
 
-    //note: this is a temporary solution, the dpp should be passed as a non NULL value.
-    //the end_trx is currently called from the destructor, and the dpp is not available.
-
+   //the end_trx is currently called from the destructor, and the dpp is not available.
   if(dpp) {ldpp_dout(dpp, 0) << "Directory::end_trx this = " << this << dendl;}
   if(dpp) {ldpp_dout(dpp, 0) << "Directory::end_trx evalsha " << m_evalsha_end_trx << dendl;}
   save_trx_info(dpp,conn, "test_debug_key", "test_debug_value", y);
@@ -1354,6 +1369,7 @@ int D4NTransaction::end_trx(const DoutPrefixProvider* dpp, std::shared_ptr<conne
     std::string debug_all_keys;
     std::list<std::string> trx_keys;
     trx_keys.push_back(std::to_string(num_keys));
+    //concatenate all keys into a single string into trx_keys, the end-trx script will use this string to compare the keys (read,write,test-write).
     for(auto const& key : m_temp_read_keys) {
       debug_all_keys += key + " ";
       trx_keys.push_back(key);
@@ -1377,6 +1393,13 @@ int D4NTransaction::end_trx(const DoutPrefixProvider* dpp, std::shared_ptr<conne
 	ldpp_dout(dpp, 0) << "Directory::end_trx the end-trx script had failed " << "with ec =" << ec  << dendl;
 	return -ec.value();
       }
+
+      // the response contain whether the transaction was successful or not
+      auto result = std::get<0>(resp).value();
+      if (result.starts_with("ERR") || result.starts_with("NOSCRIPT")) {
+         return -EINVAL;
+      }
+
     } catch (std::exception &e) {
       return -EINVAL;
     }
