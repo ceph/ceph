@@ -3,6 +3,7 @@
 
 #include "formatter.h"
 
+#include <chrono>
 #include <fmt/format.h>
 #if FMT_VERSION >= 60000
 #include <fmt/chrono.h>
@@ -20,12 +21,15 @@ struct fmt::formatter<seastar::lowres_system_clock::time_point> {
   template <typename FormatContext>
   auto format(const seastar::lowres_system_clock::time_point& t,
               FormatContext& ctx) const {
-    std::time_t tt = std::chrono::duration_cast<std::chrono::seconds>(
-      t.time_since_epoch()).count();
-    auto milliseconds = (t.time_since_epoch() %
-                         std::chrono::seconds(1)).count();
-    return fmt::format_to(ctx.out(), "{:%Y-%m-%d %H:%M:%S} {:03d}",
-                          fmt::localtime(tt), milliseconds);
+    auto milliseconds = std::chrono::duration_cast<std::chrono::milliseconds>(
+      t.time_since_epoch() % std::chrono::seconds(1)).count();
+
+    std::time_t time = seastar::lowres_system_clock::to_time_t(t);
+    std::tm tm_local;
+    if (!localtime_r(&time, &tm_local)) {
+      throw fmt::format_error("time_t value out of range");
+    }
+    return fmt::format_to(ctx.out(), "{:%F %T} {:03d}", tm_local, milliseconds);
   }
 };
 
