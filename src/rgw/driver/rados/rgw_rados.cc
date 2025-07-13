@@ -3269,19 +3269,19 @@ int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_si
   RGWObjState* current_state = target->state;
   if (!target->obj.key.instance.empty()) {
     r = target->versioned_bucket_get_state(rctx.dpp, current_state, rctx.y);
-    if (r < 0) {
+    if (r == -ENOENT) {
+      current_state = target->state;
+    } else if (r < 0) {
       return r;
     }
   }
 
-  bool guard = ((target->manifest) || (target->state->obj_tag.length() != 0) ||
-               meta.if_match != NULL || meta.if_nomatch != NULL) &&
-               (!target->state->fake_tag);
-  if (guard) {
+  if (meta.if_match != NULL || meta.if_nomatch != NULL) {
     r = target->preconditional_checks(rctx.dpp, meta.if_match, meta.if_nomatch, *current_state, rctx.y);
     if (r < 0)
       return r;
   }
+  bool guard = ((target->manifest) || (target->state->obj_tag.length() != 0)) && (!target->state->fake_tag);
   bool set_attr_id_tag = guard && target->obj.key.instance.empty() && (meta.if_nomatch == NULL || meta.if_nomatch != "*"sv);
   r = target->prepare_atomic_modification(rctx.dpp, op, reset_obj, ptag, meta.modify_tail, set_attr_id_tag, rctx.y);
   if (r < 0)
@@ -6436,13 +6436,28 @@ int RGWRados::Object::Delete::delete_obj(optional_yield y,
         return r;
       }
 
-      bool guard = ((target->manifest) || (target->state->obj_tag.length() != 0) ||
-                   params.if_match != NULL || params.if_nomatch != NULL) &&
-                   (!target->state->fake_tag);
-      if (guard) {
+      if (params.if_match != NULL || params.if_nomatch != NULL) {
         r = target->preconditional_checks(dpp, params.if_match, params.if_nomatch, *current_state, y);
         if (r < 0) {
           return r;
+        }
+      }
+
+      if (params.size_match.has_value() && current_state->size != params.size_match) {
+        return -ERR_PRECONDITION_FAILED;
+      }
+
+      if (!real_clock::is_zero(params.last_mod_time_match)) {
+        struct timespec ctime = ceph::real_clock::to_timespec(current_state->mtime);
+        struct timespec last_mod_time = ceph::real_clock::to_timespec(params.last_mod_time_match);
+        if (!params.high_precision_time) {
+          ctime.tv_nsec = 0;
+          last_mod_time.tv_nsec = 0;
+        }
+
+        ldpp_dout(dpp, 10) << "If-Match-Last-Modified-Time: " << params.last_mod_time_match << " Last-Modified: " << ctime << dendl;
+        if (ctime != last_mod_time) {
+          return -ERR_PRECONDITION_FAILED;
         }
       }
 
@@ -6466,7 +6481,7 @@ int RGWRados::Object::Delete::delete_obj(optional_yield y,
           if (!dirent.exists) {
             return -ENOENT;
           }
-        } else if(dirent.meta.etag != params.if_match) {
+        } else if(string if_match = rgw_string_unquote(params.if_match); dirent.meta.etag != if_match) {
           return -ERR_PRECONDITION_FAILED;
         }
       }
@@ -6476,7 +6491,7 @@ int RGWRados::Object::Delete::delete_obj(optional_yield y,
           if (dirent.exists) {
             return -ENOENT;
           }
-        } else if(dirent.meta.etag == params.if_nomatch) {
+        } else if(string if_nomatch = rgw_string_unquote(params.if_nomatch); dirent.meta.etag == if_nomatch) {
           return -ERR_PRECONDITION_FAILED;
         }
       }
@@ -6542,8 +6557,18 @@ int RGWRados::Object::Delete::delete_obj(optional_yield y,
     return r;
   }
 
-  ObjectWriteOperation op;
+  if (!state->exists) {
+    if (!force) {
+      target->invalidate_state();
+      return -ENOENT;
+    } else {
+      ldpp_dout(dpp, 5) << "WARNING: head for \"" << src_obj <<
+                        "\" does not exist; will continue with deleting bucket "
+                        "index entry(ies)" << dendl;
+    }
+  }
 
+  ObjectWriteOperation op;
   if (!real_clock::is_zero(params.unmod_since)) {
     struct timespec ctime = ceph::real_clock::to_timespec(state->mtime);
     struct timespec unmod = ceph::real_clock::to_timespec(params.unmod_since);
@@ -6619,24 +6644,11 @@ int RGWRados::Object::Delete::delete_obj(optional_yield y,
     }
   }
 
-  r = target->get_state(dpp, &target->state, &target->manifest, false, y);
-  if (r < 0)
-    return r;
-
-  bool guard = ((target->manifest) || (target->state->obj_tag.length() != 0) ||
-               params.if_match != NULL || params.if_nomatch != NULL) &&
-               (!target->state->fake_tag);
-  if (guard) {
-    r = target->preconditional_checks(dpp, params.if_match, params.if_nomatch, *target->state, y);
+  if (params.if_match != NULL || params.if_nomatch != NULL) {
+    r = target->preconditional_checks(dpp, params.if_match, params.if_nomatch, *state, y);
     if (r < 0) {
       return r;
     }
-  }
-
-  // is this a nessacry code?
-  if (params.if_nomatch == NULL || params.if_nomatch == "*"sv) {
-    /* first verify that the object wasn't replaced under */
-    op.cmpxattr(RGW_ATTR_ID_TAG, LIBRADOS_CMPXATTR_OP_EQ, state->obj_tag);
   }
 
   RGWBucketInfo& bucket_info = target->get_bucket_info();
@@ -7244,7 +7256,7 @@ int RGWRados::Object::preconditional_checks(const DoutPrefixProvider *dpp, const
           return -ERR_PRECONDITION_FAILED;
         }
       } else {
-        return -ERR_PRECONDITION_FAILED;
+        return (!current_state.exists)? -ENOENT: -ERR_PRECONDITION_FAILED;
       }
     }
   }
@@ -7263,8 +7275,6 @@ int RGWRados::Object::preconditional_checks(const DoutPrefixProvider *dpp, const
         if (if_nomatch_str.compare(0, etag.length(), etag.c_str(), etag.length()) == 0) {
           return -ERR_PRECONDITION_FAILED;
         }
-      } else {
-        return -ERR_PRECONDITION_FAILED;
       }
     }
   }
