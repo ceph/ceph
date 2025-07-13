@@ -1807,8 +1807,8 @@ options:
   type: secs
   level: dev
   desc: subvolume metrics sliding window interval, seconds
-  long_desc: interval in seconds to hold values in sliding window for subvolume metrics, in the metrics aggregator
-  default: 60
+  long_desc: interval in seconds to hold values in sliding window for subvolume metrics
+  default: 30
   min: 30
   services:
   - mds
