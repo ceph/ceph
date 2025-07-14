@@ -342,6 +342,10 @@ public:
   void apply_stats(
     const hobject_t &soid,
     const object_stat_sum_t &delta_stats) override;
+  void log_stats(hobject_t soid,
+                 const object_stat_sum_t& stats,
+                 ObjectStore::Transaction& t,
+                 bool is_delta) override;
 
   bool primary_error(const hobject_t& soid, eversion_t v);
 

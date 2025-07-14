@@ -167,6 +167,11 @@ struct ECListener {
      const hobject_t &soid,
      const object_stat_sum_t &delta_stats) = 0;
 
+  virtual void log_stats(hobject_t soid,
+                         const object_stat_sum_t& stats,
+                         ObjectStore::Transaction& t,
+                         bool is_delta) = 0;
+
   // new batch
   virtual bool is_missing_object(const hobject_t& oid) const = 0;
   virtual void add_local_next_event(const pg_log_entry_t& e) = 0;
