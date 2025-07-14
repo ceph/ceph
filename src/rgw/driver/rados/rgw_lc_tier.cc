@@ -360,6 +360,10 @@ int rgw_cloud_tier_get_object(RGWLCCloudTierCtx& tier_ctx, bool head,
       return ret;
     }
 
+    if (req_params.cb) {
+      req_params.cb->set_in_stream_req(in_req);
+    }
+
     /* fetch headers */
     // accounted_size in complete_request() reads from RGWX_OBJECT_SIZE which is set
     // only for internal ops/sync. So instead read from headers[CONTENT_LEN].
