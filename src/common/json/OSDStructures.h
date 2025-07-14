@@ -41,7 +41,7 @@ struct OSDMapReply {
 
 struct OSDPoolGetRequest {
   std::string pool;
-  std::string var = "erasure_code_profile";
+  std::string var;
   std::string format = "json";
 
   void dump(Formatter* f) const;
@@ -49,8 +49,21 @@ struct OSDPoolGetRequest {
 };
 
 struct OSDPoolGetReply {
-  std::string erasure_code_profile;
-  bool allow_ec_optimizations;
+  std::optional<int> size;
+  std::optional<int> min_size;
+  std::optional<int> pg_num;
+  std::optional<int> pgp_num;
+  std::optional<std::string> crush_rule;
+  std::optional<bool> allow_ec_overwrites;
+  std::optional<bool> nodelete;
+  std::optional<bool> nopgchange;
+  std::optional<bool> nosizechange;
+  std::optional<bool> noscrub;
+  std::optional<bool> nodeep_scrub;
+  std::optional<std::string> erasure_code_profile;
+  std::optional<int> fast_read;
+  std::optional<bool> allow_ec_optimizations;
+
   void dump(Formatter* f) const;
   void decode_json(JSONObj* obj);
 };
