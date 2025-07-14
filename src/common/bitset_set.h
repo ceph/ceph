@@ -283,6 +283,29 @@ class bitset_set {
     return end();
   }
 
+  /** @return a const_iterator to the nth key or end if it does not exist.
+   *
+   * This is called "find_nth" rather an overloading find, as its clearer
+   * what it is doing find(4) may imply "find(Key(4))"
+   */
+  const_iterator find_nth(unsigned int n) const {
+    for (size_t i = 0; i < word_count; ++i) {
+      unsigned int bits_set = std::popcount(words[i]);
+      if (bits_set > n) {
+        uint64_t tmp = words[i];
+        // This could be optimised with BMI _pdep_u64
+        for (unsigned int j = 0; j < n; ++j) {
+          // This clears the least significant bit that is set to 1.
+          tmp &= tmp - 1;
+        }
+        return const_iterator(this,
+          std::countr_zero(tmp) + i * bits_per_uint64_t);
+      }
+      n -= bits_set;
+    }
+    return end();
+  }
+
   /** @return number of keys in the container. O(1) complexity on most
    * modern CPUs.
    */
