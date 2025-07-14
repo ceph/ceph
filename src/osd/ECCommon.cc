@@ -346,6 +346,7 @@ int ECCommon::ReadPipeline::get_remaining_shards(
   }
 
   bool need_attr_request = want_attrs;
+  read_request.want_attrs = want_attrs;
 
   // Rather than repeating whole read, we can remove everything we already have.
   for (auto iter = read_request.shard_reads.begin();
