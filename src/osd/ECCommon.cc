@@ -842,6 +842,11 @@ void ECCommon::RMWPipeline::cache_ready(Op &op) {
     get_parent()->get_dpp(),
     get_osdmap());
 
+  get_parent()->log_stats(op.hoid,
+                          op.delta_stats,
+                          trans[get_parent()->whoami_shard().shard],
+                          true);
+
   dout(20) << __func__ << ": written: " << written << ", op: " << op << dendl;
 
   ObjectStore::Transaction empty;
