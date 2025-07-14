@@ -958,7 +958,7 @@
         {
           alert: 'NVMeoFHighClientCount',
           'for': '1m',
-          expr: 'ceph_nvmeof_subsystem_host_count > %.2f' % [$._config.NVMeoFHighClientCount],
+          expr: 'ceph_nvmeof_subsystem_host_count >= %.2f' % [$._config.NVMeoFHighClientCount],
           labels: { severity: 'warning', type: 'ceph_default' },
           annotations: {
             summary: 'The number of clients connected to {{ $labels.nqn }} is too high%(cluster)s' % $.MultiClusterSummary(),

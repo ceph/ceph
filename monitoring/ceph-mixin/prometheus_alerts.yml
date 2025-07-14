@@ -859,7 +859,7 @@ groups:
         annotations:
           description: "The supported limit for clients connecting to a subsystem is 128"
           summary: "The number of clients connected to {{ $labels.nqn }} is too high on cluster {{ $labels.cluster }}"
-        expr: "ceph_nvmeof_subsystem_host_count > 128.00"
+        expr: "ceph_nvmeof_subsystem_host_count >= 128.00"
         for: "1m"
         labels:
           severity: "warning"
