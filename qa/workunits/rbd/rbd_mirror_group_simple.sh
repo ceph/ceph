@@ -1561,7 +1561,7 @@ declare -a test_create_group_with_images_then_mirror_with_regular_snapshots_2=("
 declare -a test_create_group_with_images_then_mirror_with_regular_snapshots_3=("${CLUSTER2}" "${CLUSTER1}" "${pool0}" "${group0}" "${image_prefix}" 2 'force_disable')
 
 # TODO scenario 1 is sometimes failing so is disabled - see issue on line 45
-test_create_group_with_images_then_mirror_with_regular_snapshots_scenarios='2 3'
+test_create_group_with_images_then_mirror_with_regular_snapshots_scenarios=3
 
 test_create_group_with_images_then_mirror_with_regular_snapshots()
 {
@@ -1601,8 +1601,6 @@ test_create_group_with_images_then_mirror_with_regular_snapshots()
   if [ "${scenario}" = 'remove_snap' ]; then
     group_snap_remove "${primary_cluster}" "${pool}/${group}" "${snap}"
     check_group_snap_doesnt_exist "${primary_cluster}" "${pool}/${group}" "${snap}"
-    # this next extra mirror_group_snapshot should not be needed - waiting for fix TODO - coding leftover 38
-    mirror_group_snapshot "${primary_cluster}" "${pool}/${group}"
     mirror_group_snapshot_and_wait_for_sync_complete "${secondary_cluster}" "${primary_cluster}" "${pool}"/"${group}"
     check_group_snap_doesnt_exist "${secondary_cluster}" "${pool}/${group}" "${snap}"
   else
@@ -1897,9 +1895,7 @@ test_create_group_with_multiple_images_do_io()
   # this next extra mirror_group_snapshot should not be needed - waiting for fix TODO - coding leftover 38
   mirror_group_snapshot "${primary_cluster}" "${pool}/${group}"
   mirror_group_snapshot_and_wait_for_sync_complete "${secondary_cluster}" "${primary_cluster}" "${pool}"/"${group}"
-  # FIXME: Issues#45 should help uncomment below
-  # Context: currently there is a delay in the prune of the regular group snaps.
-  #check_group_snap_doesnt_exist "${secondary_cluster}" "${pool}/${group}" "${snap}"
+  check_group_snap_doesnt_exist "${secondary_cluster}" "${pool}/${group}" "${snap}"
 
   for loop_instance in $(seq 0 $(("${image_count}"-1))); do
       compare_images "${primary_cluster}" "${secondary_cluster}" "${pool}" "${pool}" "${image_prefix}${loop_instance}"
