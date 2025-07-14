@@ -8881,7 +8881,7 @@ int Client::chownat(int dirfd, const char *relpath, uid_t new_uid, gid_t new_gid
       goto out;
     }
 #endif
-    return -CEPHFS_ENOENT;
+    return -ENOENT;
   } else {
     filepath path(relpath);
     r = path_walk(path, &in, perms, !(flags & AT_SYMLINK_NOFOLLOW), 0, dirinode);
@@ -11566,7 +11566,7 @@ int Client::statxat(int dirfd, const char *relpath,
       goto out;
     }
 #endif
-    return -CEPHFS_ENOENT;
+    return -ENOENT;
   } else {
     filepath path(relpath);
     r = path_walk(path, &in, perms, !(flags & AT_SYMLINK_NOFOLLOW), mask, dirinode);
