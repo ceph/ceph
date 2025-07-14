@@ -298,6 +298,9 @@ public:
 };
 
 class ECListenerStub : public ECListener {
+
+
+private:
   OSDMapRef osd_map_ref;
   pg_info_t pg_info;
   set<pg_shard_t> backfill_shards;
@@ -525,6 +528,10 @@ public:
   uint64_t min_peer_features() const {
     return 0;
   }
+
+  void log_stats(hobject_t soid, const object_stat_sum_t &stats,
+      ObjectStore::Transaction &t, bool is_delta
+    ) override {}
 };
 
 TEST(ECCommon, get_min_want_to_read_shards)
