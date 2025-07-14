@@ -415,7 +415,7 @@ class RedmineUpkeep:
 
         try:
             issue_update.logger.info(f"Running git describe for commit {commit}")
-            ref = issue_update.git_repo.git.describe('--always', commit)
+            ref = issue_update.git_repo.git.describe('--always', '--abbrev=10', commit)
             issue_update.logger.info(f"Git describe output: {ref}")
             changed = issue_update.add_or_update_custom_field(REDMINE_CUSTOM_FIELD_ID_FIXED_IN, ref)
             return changed
