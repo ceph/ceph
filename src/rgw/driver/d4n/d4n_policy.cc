@@ -678,6 +678,8 @@ void LFUDAPolicy::cleaning(const DoutPrefixProvider* dpp)
 	  }
 	}
       } else {
+	      objDir->m_d4n_trx->start_trx();//upon invalid state(should write to backend), we need to start a transaction
+
 	rgw_user c_rgw_user = e->user; 
 	//writing data to the backend
 	//we need to create an atomic_writer
@@ -972,6 +974,9 @@ void LFUDAPolicy::cleaning(const DoutPrefixProvider* dpp)
 	}
 	//remove entry from map and queue, erase_dirty_object locks correctly
 	erase_dirty_object(dpp, e->key, null_yield);
+
+	auto end_trx_status = objDir->m_d4n_trx->end_trx(dpp,objDir->get_connection(), y); //end transaction
+	//TODO: handle end_trx_status (success or failure)
       }
     } else if (diff < interval) { //end-if std::difftime(time(NULL), e->creationTime) > interval
       {

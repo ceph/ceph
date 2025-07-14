@@ -1327,13 +1327,18 @@ std::string D4NTransaction::get_end_trx_script(const DoutPrefixProvider* dpp, st
   return m_evalsha_end_trx;
 }
 
+#ifndef dout_subsys
+#define dout_subsys ceph_subsys_rgw
+#endif
+
 int D4NTransaction::end_trx(const DoutPrefixProvider* dpp, std::shared_ptr<connection> conn, optional_yield y)
 {
   trxState = TrxState::ENDED;
 
+  
    //the end_trx is currently called from the destructor, and the dpp is not available.
-  if(dpp) {ldpp_dout(dpp, 0) << "Directory::end_trx this = " << this << dendl;}
-  if(dpp) {ldpp_dout(dpp, 0) << "Directory::end_trx evalsha " << m_evalsha_end_trx << dendl;}
+  if(!dpp) {ldout(g_ceph_context, 0) << "Directory::end_trx this = " << this << dendl;}
+  if(!dpp) {ldout(g_ceph_context, 0) << "Directory::end_trx evalsha " << m_evalsha_end_trx << dendl;}
   save_trx_info(dpp,conn, "test_debug_key", "test_debug_value", y);
 
     // load the lua script that implements the end of the transaction.
@@ -1345,15 +1350,15 @@ int D4NTransaction::end_trx(const DoutPrefixProvider* dpp, std::shared_ptr<conne
 	  req.push("script","load", lua_script_end_trx);
 	  redis_exec(conn, ec, req, resp, y);
 	  if (ec) {
-	    if(dpp){ldpp_dout(dpp, 0) << "Directory::end_trx failed to load script " << " ERROR: " << ec.what() << dendl;}
+	    if(!dpp){ldout(g_ceph_context, 0) << "Directory::end_trx failed to load script " << " ERROR: " << ec.what() << dendl;}
 	    return -ec.value();
 	  }
 	  m_evalsha_end_trx = std::get<0>(resp).value().value()[0];
-	  if(dpp){ldpp_dout(dpp, 0) << "Directory::end_trx loading evalsha script = " << "evalsha " << m_evalsha_end_trx << dendl;}
+	  if(!dpp){ldout(g_ceph_context, 0) << "Directory::end_trx loading evalsha script = " << "evalsha " << m_evalsha_end_trx << dendl;}
    
 	  save_trx_info(dpp,conn, "m_evalsha_end_trx", m_evalsha_end_trx, y);	
       } catch(std::exception &e){
-	if(dpp){ldpp_dout(dpp, 0) << "Directory::end_trx failed to load script " << " ERROR: " << e.what() << dendl;}
+	if(!dpp){ldout(g_ceph_context, 0) << "Directory::end_trx failed to load script " << " ERROR: " << e.what() << dendl;}
 	return -EINVAL;
       }
     }
@@ -1383,14 +1388,14 @@ int D4NTransaction::end_trx(const DoutPrefixProvider* dpp, std::shared_ptr<conne
       trx_keys.push_back(key);
     }		
 
-    ldpp_dout(dpp, 0) << "Directory::end_trx running evalsha script = " << "evalsha " << m_evalsha_end_trx << "with the following keys " << debug_all_keys << dendl;
+    ldout(g_ceph_context, 0) << "Directory::end_trx running evalsha script = " << "evalsha " << m_evalsha_end_trx << "with the following keys " << debug_all_keys << dendl;
     req.push_range("EVALSHA",m_evalsha_end_trx, trx_keys);
 
     redis_exec(conn, ec, req, resp, y);
 
 
       if (ec) {
-	ldpp_dout(dpp, 0) << "Directory::end_trx the end-trx script had failed " << "with ec =" << ec  << dendl;
+	ldout(g_ceph_context, 0) << "Directory::end_trx the end-trx script had failed " << "with ec =" << ec  << dendl;
 	return -ec.value();
       }
 

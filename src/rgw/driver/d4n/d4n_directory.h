@@ -231,6 +231,9 @@ class ObjectDirectory: public Directory {
   public:
     ObjectDirectory(std::shared_ptr<connection>& conn) : conn(conn) {}
 
+    //get a connection
+    std::shared_ptr<connection> get_connection() { return conn; } 
+
     int exist_key(const DoutPrefixProvider* dpp, CacheObj* object, optional_yield y);
 
     int set(const DoutPrefixProvider* dpp, CacheObj* object, optional_yield y); /* If nx is true, set only if key doesn't exist */
