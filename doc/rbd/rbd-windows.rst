@@ -10,7 +10,9 @@ unmap images exactly like it would on Linux. Make sure to check the
 
 Please check the `installation guide`_ to get started.
 
-Please see the `OS recommendations`_ regarding client package support.
+.. note:: 
+
+   Please see the `OS recommendations`_ regarding client package support.
 
 Windows service
 ===============
