@@ -342,6 +342,11 @@ static int get_obj_policy_from_attr(const DoutPrefixProvider *dpp,
 
   std::unique_ptr<rgw::sal::Object::ReadOp> rop = obj->get_read_op();
 
+  ret = rop->prepare(y, dpp);
+  if (ret < 0) {
+    return ret;
+  }
+
   ret = rop->get_attr(dpp, RGW_ATTR_ACL, bl, y);
   if (ret >= 0) {
     ret = decode_policy(dpp, cct, bl, policy);
