@@ -15,6 +15,7 @@ from ceph.deployment.service_spec import AlertManagerSpec, GrafanaSpec, ServiceS
 from cephadm.services.cephadmservice import CephadmService, CephadmDaemonDeploySpec, get_dashboard_urls
 from mgr_util import build_url, password_hash
 from ceph.deployment.utils import wrap_ipv6
+from cephadm.tlsobject_store import TLSObjectScope
 from .. import utils
 
 if TYPE_CHECKING:
@@ -27,11 +28,6 @@ logger = logging.getLogger(__name__)
 class GrafanaService(CephadmService):
     TYPE = 'grafana'
     DEFAULT_SERVICE_PORT = 3000
-
-    def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
-        assert self.TYPE == daemon_spec.daemon_type
-        daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
-        return daemon_spec
 
     def generate_data_sources(self, security_enabled: bool, mgmt_gw_enabled: bool, cert: str, pkey: str) -> str:
         prometheus_user, prometheus_password = self.mgr._get_prometheus_credentials()
@@ -139,12 +135,16 @@ class GrafanaService(CephadmService):
 
         return ''
 
+    def get_grafana_certificates(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[str, str]:
+        host_ips = [self.mgr.inventory.get_addr(daemon_spec.host)]
+        host_fqdns = [self.mgr.get_fqdn(daemon_spec.host), 'grafana_servers']
+        cert, key = self.get_certificates(daemon_spec, host_ips, host_fqdns)
+        return cert, key
+
     def generate_config(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[Dict[str, Any], List[str]]:
         assert self.TYPE == daemon_spec.daemon_type
 
-        host_fqdns = [socket.getfqdn(daemon_spec.host), 'grafana_servers']
-        host_ips = self.mgr.inventory.get_addr(daemon_spec.host)
-        cert, pkey = self.mgr.cert_mgr.prepare_certificate('grafana_cert', 'grafana_key', host_fqdns, host_ips, target_host=daemon_spec.host)
+        cert, pkey = self.get_grafana_certificates(daemon_spec)
         if not cert or not pkey:
             logger.error(f'Cannot generate the needed certificates to deploy Grafana on {daemon_spec.host}')
             cert, pkey = ('', '')  # this will lead to an error in the daemon as certificates are needed
