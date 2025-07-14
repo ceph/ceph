@@ -401,6 +401,12 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             desc='Enable compression of metadata sent from agent to reduce payload size'
         ),
         Option(
+            'agent_metadata_payload_optimization_enabled',
+            type='bool',
+            default=True,
+            desc='Reduce agent-produced metadata payload by excluding sections that have not changed (such as ls, networks, and volumes).'
+        ),
+        Option(
             'agent_down_multiplier',
             type='float',
             default=3.0,
@@ -593,6 +599,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             self.agent_avg_concurrency = 0
             self.agent_initial_startup_delay_max = 0
             self.agent_jitter_seconds = 0
+            self.agent_metadata_payload_optimization_enabled = True
             self.agent_down_multiplier = 0.0
             self.agent_starting_port = 0
             self.agent_metadata_compresion_enabled = True

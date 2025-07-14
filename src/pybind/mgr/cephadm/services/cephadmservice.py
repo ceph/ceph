@@ -1512,6 +1512,7 @@ class CephadmAgent(CephService):
         agent_options = [
             'device_enhanced_scan',
             'agent_metadata_compresion_enabled',
+            'agent_metadata_payload_optimization_enabled',
             'agent_starting_port',
         ]
         agent_static_cfg_opts = [f"{opt}: {mgr.get_module_option(opt)}" for opt in agent_options]
@@ -1564,6 +1565,7 @@ class CephadmAgent(CephService):
                'host': daemon_spec.host,
                'device_enhanced_scan': str(self.mgr.device_enhanced_scan),
                'metadata_compresion_enabled': self.mgr.agent_metadata_compresion_enabled,
+               'metadata_payload_optimization_enabled': self.mgr.agent_metadata_payload_optimization_enabled,
                'refresh_period': agent.compute_agents_refrsh_rate(),
                'initial_startup_delay_max': agent.get_initial_delay(),
                'jitter_seconds': agent.get_jitter()}
