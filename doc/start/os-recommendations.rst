@@ -31,12 +31,17 @@ Linux Kernel
   or CentOS 8.2 is the minimum necessary for reasonable support for RBD image
   features.
 
+- **Ceph MS Windows Client**
+
+  Ceph's MS Windows native client support is "best effort".  There is no
+  full-time maintainer. As of July 2025 there are no plans to remove this
+  client but the future is uncertain.
 
 Platforms
 =========
 
-The chart below shows which Linux platforms Ceph provides packages for, and
-which platforms Ceph has been tested on. 
+The chart below shows the platforms for which Ceph provides packages, and
+the platforms on which Ceph has been tested. 
 
 Ceph does not require a specific Linux distribution. Ceph can run on any
 distribution that includes a supported kernel and supported system startup
@@ -68,10 +73,13 @@ non-Linux systems but these are not supported by the core Ceph effort.
 +---------------+----------------+---------------+------------------+------------------+------------------+
 | Ubuntu 22.04  | A              |    A          |                  |                  |                  |
 +---------------+----------------+---------------+------------------+------------------+------------------+
+| MS Windows    | D              | D             | D                | D                |                  |
++---------------+----------------+---------------+------------------+------------------+------------------+
 
 - **A**: Ceph provides packages and has done comprehensive tests on the software in them.
 - **B**: Ceph provides packages and has done basic tests on the software in them.
 - **C**: Ceph provides packages only. No tests have been done on these releases.
+- **D**: Client packages are available from an external site but are not maintained or tested by the core Ceph team.
 - **1**: Testing has been done on Centos 9 starting on version 17.2.8 for Quincy.
 
 Container Hosts
