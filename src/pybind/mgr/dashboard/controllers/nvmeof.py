@@ -195,7 +195,7 @@ else:
             "Create a new NVMeoF subsystem",
             parameters={
                 "nqn": Param(str, "NVMeoF subsystem NQN"),
-                "max_namespaces": Param(int, "Maximum number of namespaces", True, 1024),
+                "max_namespaces": Param(int, "Maximum number of namespaces", True, 4096),
                 "enable_ha": Param(bool, "Enable high availability"),
                 "gw_group": Param(str, "NVMeoF gateway group", True, None),
             },
