@@ -67,38 +67,67 @@
       </ng-template>
     </div>
 
-    <!-- Owner -->
-    <div class="form-item">
-      <cds-select label="Owner"
-                  for="owner"
-                  formControlName="owner"
-                  name="owner"
-                  id="owner"
-                  [invalidText]="ownerError"
-                  [invalid]="!bucketForm.controls.owner.valid && bucketForm.controls.owner.dirty"
-                  cdRequiredField="Owner"
-                  i18n>Owner
-        <option *ngIf="owners === null"
-                [ngValue]="null">Loading...</option>
-        <option *ngIf="owners !== null"
-                value="">-- Select a user --</option>
-        <option *ngFor="let owner of owners"
-                [value]="owner">{{ owner }}</option>
-      </cds-select>
-      <ng-template #ownerError>
-        <span class="invalid-feedback"
-              *ngIf="bucketForm.showError('owner', frm, 'required')"
-              i18n>This field is required.</span>
-      </ng-template>
-      <cd-alert-panel
-        type="info"
-        *ngIf="bucketForm.get('owner').disabled"
-        spacingClass="me-1 mt-1"
-        i18n>
-          The bucket is owned by an account. UI does not support changing
-          the ownership of bucket owned by an account.
-      </cd-alert-panel>
-    </div>
+    <!-- Accounts -->
+    @if(accounts.length && accountUsers.length > 0){
+      <cds-checkbox formControlName="isAccountOwner"
+                    i18n>Select account user
+      </cds-checkbox>
+    }
+
+    @if (bucketForm.get('isAccountOwner').value) {
+      <!-- Account user -->
+      <div class="form-item">
+        <cds-select label="Account user"
+                    id="acc_user"
+                    formControlName="accountUser"
+                    [invalidText]="accountUserError"
+                    [invalid]="!bucketForm.controls.accountUser.valid && bucketForm.controls.accountUser.dirty"
+                    cdRequiredField="Account user"
+                    i18n>Account user
+          <option *ngIf="accountusers === null"
+                  [ngValue]="null">Loading...</option>
+          <option *ngIf="accountusers !== null"
+                  value="">-- Select a user --</option>
+          <option *ngFor="let user of accountUsers"
+                  [value]="user.uid">{{ user.uid }}</option>
+        </cds-select>
+        <ng-template #accountUserError>
+          <span class="invalid-feedback"
+                *ngIf="bucketForm.showError('accountUser', frm, 'required')"
+                i18n>This field is required.</span>
+        </ng-template>
+        <cd-alert-panel
+          type="info"
+          *ngIf="bucketForm.get('accountUser').disabled"
+          i18n>
+            The bucket is owned by an account. UI does not support changing
+            the ownership of bucket owned by an account.
+        </cd-alert-panel>
+      </div>
+    } @else {
+      <!-- Owner -->
+      <div class="form-item">
+        <cds-select label="Owner"
+                    formControlName="owner"
+                    id="owner"
+                    [invalidText]="ownerError"
+                    [invalid]="!bucketForm.controls.owner.valid && bucketForm.controls.owner.dirty"
+                    cdRequiredField="Owner"
+                    i18n>Owner
+          <option *ngIf="owners === null"
+                  [ngValue]="null">Loading...</option>
+          <option *ngIf="owners !== null"
+                  value="">-- Select a user --</option>
+          <option *ngFor="let owner of owners"
+                  [value]="owner.uid">{{ owner.uid }}</option>
+        </cds-select>
+        <ng-template #ownerError>
+          <span class="invalid-feedback"
+                *ngIf="bucketForm.showError('owner', frm, 'required')"
+                i18n>This field is required.</span>
+        </ng-template>
+      </div>
+    }
 
     <!-- Versioning -->
     <fieldset *ngIf="editing">
