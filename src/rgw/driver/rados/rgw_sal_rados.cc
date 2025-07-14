@@ -3519,6 +3519,11 @@ RadosObject::RadosReadOp::RadosReadOp(RadosObject *_source, RGWObjectCtx *_octx)
 int RadosObject::RadosReadOp::prepare(optional_yield y, const DoutPrefixProvider* dpp)
 {
   uint64_t obj_size;
+  ceph::real_time mtime;
+
+  if (!params.lastmod) {
+    params.lastmod = &mtime;
+  }
 
   parent_op.conds.mod_ptr = params.mod_ptr;
   parent_op.conds.unmod_ptr = params.unmod_ptr;
@@ -3539,6 +3544,7 @@ int RadosObject::RadosReadOp::prepare(optional_yield y, const DoutPrefixProvider
 
   source->set_instance(parent_op.state.obj.key.instance);
   source->set_obj_size(obj_size);
+  source->set_mtime(*params.lastmod);
   params.parts_count = parent_op.params.parts_count;
 
   return ret;
