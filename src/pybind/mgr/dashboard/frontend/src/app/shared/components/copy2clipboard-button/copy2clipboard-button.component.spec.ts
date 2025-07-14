@@ -2,6 +2,7 @@ import { TestBed } from '@angular/core/testing';
 
 import * as BrowserDetect from 'detect-browser';
 import { NotificationService } from '~/app/shared/services/notification.service';
+import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 
 import { configureTestBed } from '~/testing/unit-test-helper';
 import { Copy2ClipboardButtonComponent } from './copy2clipboard-button.component';
@@ -46,7 +47,7 @@ describe('Copy2ClipboardButtonComponent', () => {
     it('should not call permissions API', async () => {
       jest.spyOn(BrowserDetect, 'detect').mockReturnValue({ name: 'firefox' });
       writeTextFn = jest.spyOn(navigator.clipboard, 'writeText').mockResolvedValue(undefined);
-      
+
       await component.onClick();
       expect(queryFn).not.toHaveBeenCalled();
       expect(writeTextFn).toHaveBeenCalledWith('foo');
@@ -57,21 +58,23 @@ describe('Copy2ClipboardButtonComponent', () => {
       jest.spyOn(BrowserDetect, 'detect').mockReturnValue({ name: 'chrome' });
       jest.spyOn(navigator.permissions, 'query').mockResolvedValue({ state: 'granted' } as any);
       jest.spyOn(navigator.clipboard, 'writeText').mockResolvedValue(undefined);
-      
+
       component.onClick();
       expect(queryFn).toHaveBeenCalled();
     });
 
     it('should show error notification when clipboard fails', async () => {
-      jest.spyOn(BrowserDetect, 'detect').mockReturnValue({ name: 'firefox' });
+      jest.spyOn(BrowserDetect, 'detect').mockReturnValue({ name: 'firefox' } as any);
       jest.spyOn(navigator.clipboard, 'writeText').mockRejectedValue(new Error('Failed'));
-      
+
       await component.onClick();
-      expect(notificationService.show).toHaveBeenCalledWith(
-        expect.any(String),
+      await Promise.resolve();
+      const calls = (notificationService.show as jest.Mock).mock.calls;
+      expect(calls).toContainEqual([
+        NotificationType.error,
         'Error',
         'Failed to copy text to the clipboard.'
-      );
+      ]);
     });
   });
 });

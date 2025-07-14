@@ -42,19 +42,33 @@ export class Copy2ClipboardButtonComponent {
           $localize`Copied text to the clipboard successfully.`
         );
       };
+      const showError = () => {
+        this.notificationService.show(
+          NotificationType.error,
+          $localize`Error`,
+          $localize`Failed to copy text to the clipboard.`
+        );
+      };
       if (['firefox', 'ie', 'ios', 'safari'].includes(browser.name)) {
         // Various browsers do not support the `Permissions API`.
         // https://developer.mozilla.org/en-US/docs/Web/API/Permissions_API#Browser_compatibility
-        navigator.clipboard.writeText(text).then(() => showSuccess());
+        navigator.clipboard
+          .writeText(text)
+          .then(() => showSuccess())
+          .catch(() => showError());
       } else {
         // Checking if we have the clipboard-write permission
         navigator.permissions
           .query({ name: 'clipboard-write' as PermissionName })
           .then((result: any) => {
             if (result.state === 'granted' || result.state === 'prompt') {
-              navigator.clipboard.writeText(text).then(() => showSuccess());
+              navigator.clipboard
+                .writeText(text)
+                .then(() => showSuccess())
+                .catch(() => showError());
             }
-          });
+          })
+          .catch(() => showError());
       }
     } catch (_) {
       this.notificationService.show(

@@ -29,7 +29,7 @@ import { NotificationService } from '../../services/notification.service';
     ])
   ]
 })
-export class Toast implements OnInit, OnDestroy {
+export class ToastComponent implements OnInit, OnDestroy {
   activeToasts: ToastContent[] = [];
   private subscription: Subscription;
 

@@ -1,5 +1,5 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
-import { fakeAsync, TestBed, tick } from '@angular/core/testing';
+import { fakeAsync, TestBed, tick, flush } from '@angular/core/testing';
 import _ from 'lodash';
 import { ToastContent } from 'carbon-components-angular';
 
@@ -12,7 +12,6 @@ import { CdDatePipe } from '../pipes/cd-date.pipe';
 import { NotificationService } from './notification.service';
 import { TaskMessageService } from './task-message.service';
 import { NgZone } from '@angular/core';
-
 
 describe('NotificationService', () => {
   let service: NotificationService;
@@ -231,7 +230,7 @@ describe('NotificationService', () => {
 
     it('wont filter out duplicated notifications if timeout was reached before', fakeAsync(() => {
       showArray([n1, n2]);
-      tick(510); 
+      tick(510);
       (service.save as jasmine.Spy).calls.reset();
       showArray([n1, n2]);
       tick(510);
@@ -241,46 +240,33 @@ describe('NotificationService', () => {
   });
 
   describe('showToasty', () => {
-    let toastr: ToastrService;
     const time = '2022-02-22T00:00:00.000Z';
-  
+
     beforeEach(() => {
       const baseTime = new Date(time);
       spyOn(global, 'Date').and.returnValue(baseTime);
-      spyOn(window, 'setTimeout').and.callFake((fn) => fn());
-
-      toastr = TestBed.inject(ToastrService);
-      // spyOn needs to know the methods before spying and can't read the array for clarification
-      ['error', 'info', 'success'].forEach((method: 'error' | 'info' | 'success') =>
-        spyOn(toastr, method).and.stub()
-      );
     });
-  
-    it('should show with only title defined', () => {
+
+    it('should show with only title defined', fakeAsync(() => {
       service.show(NotificationType.info, 'Some info');
-      expect(toastr.info).toHaveBeenCalledWith(
-        `<small class="date">${time}</small>` +
-          '<i class="float-end custom-icon ceph-icon" title="Ceph"></i>',
-        'Some info',
-        undefined
-      );
-    });
+      tick(510);
+      const toasts = service['activeToastsSource'].getValue();
+      expect(toasts.length).toBe(1);
+      expect(toasts[0].title).toBe('Some info');
+      flush();
+    }));
 
-    it('should show with title and message defined', () => {
-      service.show(
-        () =>
-          new CdNotificationConfig(NotificationType.error, 'Some error', 'Some operation failed')
-      );
-      expect(toastr.error).toHaveBeenCalledWith(
-        'Some operation failed<br>' +
-          `<small class="date">${time}</small>` +
-          '<i class="float-end custom-icon ceph-icon" title="Ceph"></i>',
-        'Some error',
-        undefined
-      );
-    });
-  
-    it('should show with title, message and application defined', () => {
+    it('should show with title and message defined', fakeAsync(() => {
+      service.show(() => new CdNotificationConfig(NotificationType.error, 'Some error', 'Some operation failed'));
+      tick(510);
+      const toasts = service['activeToastsSource'].getValue();
+      expect(toasts.length).toBe(1);
+      expect(toasts[0].title).toBe('Some error');
+      expect(toasts[0].subtitle).toBe('Some operation failed');
+      flush();
+    }));
+
+    it('should show with title, message and application defined', fakeAsync(() => {
       service.show(
         new CdNotificationConfig(
           NotificationType.success,
@@ -290,13 +276,13 @@ describe('NotificationService', () => {
           'Prometheus'
         )
       );
-      expect(toastr.success).toHaveBeenCalledWith(
-        'Some alert resolved<br>' +
-          `<small class="date">${time}</small>` +
-          '<i class="float-end custom-icon prometheus-icon" title="Prometheus"></i>',
-        'Alert resolved',
-        undefined
-      );
-    });
+      tick(510);
+      const toasts = service['activeToastsSource'].getValue();
+      expect(toasts.length).toBe(1);
+      expect(toasts[0].title).toBe('Alert resolved');
+      expect(toasts[0].subtitle).toBe('Some alert resolved');
+      expect(toasts[0].caption).toContain('Prometheus');
+      flush();
+    }));
   });
-});  
+});
