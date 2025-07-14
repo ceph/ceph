@@ -80,7 +80,7 @@ describe('NvmeofSubsystemsFormComponent', () => {
     });
 
     it(`should give error on max_namespaces greater than ${MAX_NAMESPACE}`, () => {
-      formHelper.setValue('max_namespaces', 2000);
+      formHelper.setValue('max_namespaces', 6000);
       component.onSubmit();
       formHelper.expectError('max_namespaces', 'max');
     });
