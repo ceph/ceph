@@ -19,7 +19,9 @@ function(add_npm_command)
   string(REPLACE " " ";" command "${command}")
   add_custom_command(
     OUTPUT "${NC_OUTPUT}"
+    COMMAND date
     COMMAND ${command}
+    COMMAND date
     DEPENDS ${NC_DEPENDS}
     WORKING_DIRECTORY "${NC_WORKING_DIRECTORY}"
     COMMENT ${NC_COMMENT})
