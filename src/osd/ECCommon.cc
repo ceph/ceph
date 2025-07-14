@@ -776,11 +776,14 @@ void ECCommon::RMWPipeline::cache_ready(Op &op) {
      * As such we must never skip a transaction completely.  Note that if
      * should_send is false, then an empty transaction is sent.
      */
-    if (should_send && op.skip_transaction(pending_roll_forward, shard, transaction)) {
+    if (!next_write_all_shards && should_send && op.skip_transaction(pending_roll_forward, shard, transaction)) {
       // Must be an empty transaction
       ceph_assert(transaction.empty());
       dout(20) << __func__ << " Skipping transaction for shard " << shard << dendl;
       continue;
+    }
+    if (!should_send || transaction.empty()) {
+      dout(20) << __func__ << " Sending empty transaction for shard " << shard << dendl;
     }
     op.pending_commits++;
     const pg_stat_t &stats =
@@ -829,6 +832,8 @@ void ECCommon::RMWPipeline::cache_ready(Op &op) {
       messages.push_back(std::make_pair(pg_shard.osd, r));
     }
   }
+
+  next_write_all_shards = false;
 
   if (!messages.empty()) {
     get_parent()->send_message_osd_cluster(messages, get_osdmap_epoch());
@@ -941,6 +946,7 @@ void ECCommon::RMWPipeline::on_change() {
   tid_to_op_map.clear();
   oid_to_version.clear();
   waiting_commit.clear();
+  next_write_all_shards = false;
 }
 
 void ECCommon::RMWPipeline::on_change2() {
@@ -948,5 +954,6 @@ void ECCommon::RMWPipeline::on_change2() {
 }
 
 void ECCommon::RMWPipeline::call_write_ordered(std::function<void(void)> &&cb) {
+  next_write_all_shards = true;
   extent_cache.add_on_write(std::move(cb));
 }
