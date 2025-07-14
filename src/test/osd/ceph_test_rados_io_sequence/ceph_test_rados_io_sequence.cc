@@ -831,7 +831,8 @@ const std::string ceph::io_sequence::tester::SelectErasurePool::select() {
       bufferlist inbl, outbl;
       auto formatter = std::make_shared<JSONFormatter>(false);
 
-      ceph::messaging::osd::OSDPoolGetRequest osdPoolGetRequest{*force_value};
+      ceph::messaging::osd::OSDPoolGetRequest osdPoolGetRequest{*force_value,
+                                                                "all"};
       rc = send_mon_command(osdPoolGetRequest, rados, "OSDPoolGetRequest", inbl,
                             &outbl, formatter.get());
       ceph_assert(rc == 0);

@@ -54,7 +54,7 @@ int RadosCommands::get_primary_osd(const std::string& pool_name,
  */
 bool RadosCommands::get_pool_allow_ec_optimizations(const std::string& pool_name)
 {
-  ceph::messaging::osd::OSDPoolGetRequest osd_pool_get_request{pool_name, "allow_ec_optimizations"};
+  ceph::messaging::osd::OSDPoolGetRequest osd_pool_get_request{pool_name, "all"};
   encode_json("OSDPoolGetRequest", osd_pool_get_request, formatter.get());
 
   std::ostringstream oss;
@@ -71,7 +71,7 @@ bool RadosCommands::get_pool_allow_ec_optimizations(const std::string& pool_name
   ceph::messaging::osd::OSDPoolGetReply osd_pool_get_reply;
   osd_pool_get_reply.decode_json(&p);
 
-  return osd_pool_get_reply.allow_ec_optimizations;
+  return osd_pool_get_reply.allow_ec_optimizations.value_or(false);
 }
 
 /**
@@ -83,7 +83,7 @@ bool RadosCommands::get_pool_allow_ec_optimizations(const std::string& pool_name
  */
 std::string RadosCommands::get_pool_ec_profile_name(const std::string& pool_name)
 {
-  ceph::messaging::osd::OSDPoolGetRequest osd_pool_get_request{pool_name};
+  ceph::messaging::osd::OSDPoolGetRequest osd_pool_get_request{pool_name, "all"};
   encode_json("OSDPoolGetRequest", osd_pool_get_request, formatter.get());
 
   std::ostringstream oss;
@@ -100,7 +100,12 @@ std::string RadosCommands::get_pool_ec_profile_name(const std::string& pool_name
   ceph::messaging::osd::OSDPoolGetReply osd_pool_get_reply;
   osd_pool_get_reply.decode_json(&p);
 
-  return osd_pool_get_reply.erasure_code_profile;
+  if (!osd_pool_get_reply.erasure_code_profile) {
+    throw std::runtime_error("No profile for given pool. "
+                             "Is it an Erasure Coded pool?");
+  }
+
+  return *osd_pool_get_reply.erasure_code_profile;
 }
 
 /**
