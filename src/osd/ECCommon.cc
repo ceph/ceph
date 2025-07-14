@@ -220,6 +220,22 @@ int ECCommon::ReadPipeline::get_min_avail_to_read_shards(
 
   read_request.shard_want_to_read.populate_shard_id_set(want);
 
+  if (sinfo.supports_partial_reads() && want.size() > sinfo.get_k()) {
+    // If we support partial reads, we are making the assumption that only
+    // K shards need to be read to recover data.  We opt here for minimising
+    // the number of reads over minimising the amount of parity calculations
+    // that are needed.
+    shard_id_set old_want = want;
+    want.clear();
+    int i=0;
+    for (auto shard : old_want) {
+      want.insert(shard);
+      if (++i == sinfo.get_k()) {
+        break;
+      }
+    }
+  }
+
   int r = ec_impl->minimum_to_decode(want, have, need_set,
                                      need_sub_chunks.get());
   if (r < 0) {
