@@ -9161,6 +9161,157 @@ void PrimaryLogPG::finish_ctx(OpContext *ctx, int log_op_type, int result)
   }
 }
 
+void PrimaryLogPG::log_stats(hobject_t soid,
+                             const object_stat_sum_t& stats,
+                             ObjectStore::Transaction& t,
+                             bool is_delta)
+{
+  std::map<hobject_t, int> soid_oi_set_count_map;
+
+  dout(20) << __func__ << ", soid: " << soid << " pg_stats ";
+
+  std::string operation = "updated to ";
+  if (is_delta)
+  {
+    operation = "delta applied ";
+  }
+
+  *_dout << operation;
+
+  std::unique_ptr<Formatter> f(Formatter::create("json"));
+  f->open_object_section("stats");
+  stats.dump(f.get());
+  f->close_section();
+
+  f->flush(*_dout);
+
+  ObjectStore::Transaction::iterator i = t.begin();
+
+  for (int pos = 0; i.have_op(); ++pos)
+  {
+    ObjectStore::Transaction::Op *op = i.decode_op();
+    int r = 0;
+
+    if (op->op == ObjectStore::Transaction::OP_COLL_HINT) {
+      uint32_t type = op->hint;
+      bufferlist hint;
+      i.decode_bl(hint);
+      auto hiter = hint.cbegin();
+      if (type == ObjectStore::Transaction::COLL_HINT_EXPECTED_NUM_OBJECTS) {
+        uint32_t pg_num;
+        uint64_t num_objs;
+        decode(pg_num, hiter);
+        decode(num_objs, hiter);
+      }
+    }
+
+    switch (op->op) {
+    case ObjectStore::Transaction::OP_WRITE:
+      {
+        bufferlist bl;
+        i.decode_bl(bl);
+      }
+      break;
+
+    case ObjectStore::Transaction::OP_SETATTR:
+      {
+        string name = i.decode_string();
+        if (name == OI_ATTR)
+        {
+          bufferlist bl;
+          f->open_object_section("oi");
+          i.decode_bl(bl);
+          object_info_t oi(bl);
+          oi.dump(f.get());
+          f->close_section();
+
+          dout(20) << "\n" << __func__ << ", soid: " << soid
+                   << " setattr - OI set to ";
+          f->flush(*_dout);
+          *_dout << dendl;
+
+          soid_oi_set_count_map[soid]++;
+        }
+      }
+      break;
+
+    case ObjectStore::Transaction::OP_SETATTRS:
+      {
+        map<string, bufferptr> aset;
+        i.decode_attrset(aset);
+        for (map<string,bufferptr>::iterator p = aset.begin();
+             p != aset.end(); ++p)
+        {
+          if (p->first == OI_ATTR) {
+            bufferlist bl;
+            f->open_object_section("oi");
+            bl.append(p->second);
+            object_info_t oi_decode(bl);
+            oi_decode.dump(f.get());
+            f->close_section();
+
+            *_dout << "\n" <<__func__ << ", soid: " << soid
+                     << " setattrs - OI set to ";
+            f->flush(*_dout);
+
+            soid_oi_set_count_map[soid]++;
+          }
+        }
+      }
+      break;
+
+    case ObjectStore::Transaction::OP_RMATTR:
+      {
+        string name = i.decode_string();
+      }
+      break;
+
+    case ObjectStore::Transaction::OP_OMAP_SETKEYS:
+      {
+        bufferlist bl;
+        i.decode_attrset_bl(&bl);
+      }
+      break;
+    case ObjectStore::Transaction::OP_OMAP_RMKEYS:
+      {
+        bufferlist keys_bl;
+        i.decode_keyset_bl(&keys_bl);
+      }
+      break;
+    case ObjectStore::Transaction::OP_OMAP_RMKEYRANGE:
+      {
+        i.decode_string();
+        i.decode_string();
+      }
+      break;
+    case ObjectStore::Transaction::OP_OMAP_SETHEADER:
+      {
+        bufferlist bl;
+        i.decode_bl(bl);
+      }
+      break;
+    }
+  }
+
+  *_dout << dendl;
+
+  for (const auto&[soid, oi_set_count] : soid_oi_set_count_map)
+  {
+    if (oi_set_count > 1)
+    {
+      std::unique_ptr<Formatter> f(Formatter::create("json"));
+      f->open_object_section("t");
+      t.dump(f.get());
+      f->close_section();
+      dout(10) << __func__ << ", soid: " << soid
+               << " INFO: oi set multiple ("
+               << oi_set_count << ") times in transaction ";
+      f->flush(*_dout);
+      *_dout << dendl;
+    }
+  }
+}
+
 void PrimaryLogPG::apply_stats(
   const hobject_t &soid,
   const object_stat_sum_t &delta_stats) {
