@@ -28,12 +28,13 @@ class IngressService(CephService):
 
     @classmethod
     def get_dependencies(cls, mgr: "CephadmOrchestrator",
-                         spec: Optional[ServiceSpec] = None,
+                         spec: ServiceSpec,
                          daemon_type: Optional[str] = None) -> List[str]:
+        parent_deps = super().get_dependencies(mgr, spec, daemon_type)
         if daemon_type == 'haproxy':
-            return IngressService.get_haproxy_dependencies(mgr, spec)
+            return parent_deps + IngressService.get_haproxy_dependencies(mgr, spec)
         elif daemon_type == 'keepalived':
-            return IngressService.get_keepalived_dependencies(mgr, spec)
+            return parent_deps + IngressService.get_keepalived_dependencies(mgr, spec)
         return []
 
     def primary_daemon_type(self, spec: Optional[ServiceSpec] = None) -> str:

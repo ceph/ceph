@@ -305,9 +305,10 @@ class CephadmService(metaclass=ABCMeta):
 
     @classmethod
     def get_dependencies(cls, mgr: "CephadmOrchestrator",
-                         spec: Optional[ServiceSpec] = None,
+                         spec: ServiceSpec,
                          daemon_type: Optional[str] = None) -> List[str]:
-        return []
+
+        return [f'spec:{spec.spec_hash()}'] if spec is not None else []
 
     def __init__(self, mgr: "CephadmOrchestrator"):
         self.mgr: "CephadmOrchestrator" = mgr
@@ -764,7 +765,8 @@ class CephService(CephadmService):
         if daemon_spec.config_get_files():
             cephadm_config.update({'files': daemon_spec.config_get_files()})
 
-        return cephadm_config, []
+        spec = self.mgr.spec_store[daemon_spec.service_name].spec
+        return cephadm_config, self.get_dependencies(self.mgr, spec, daemon_spec.daemon_type)
 
     def post_remove(self, daemon: DaemonDescription, is_failed_deploy: bool) -> None:
         super().post_remove(daemon, is_failed_deploy=is_failed_deploy)
@@ -1166,9 +1168,10 @@ class RgwService(CephService):
 
     @classmethod
     def get_dependencies(cls, mgr: "CephadmOrchestrator",
-                         spec: Optional[ServiceSpec] = None,
+                         spec: ServiceSpec,
                          daemon_type: Optional[str] = None) -> List[str]:
         deps = []
+        parent_deps = super().get_dependencies(mgr, spec, daemon_type)
         rgw_spec = cast(RGWSpec, spec)
         ssl_cert = getattr(rgw_spec, 'rgw_frontend_ssl_certificate', None)
         if ssl_cert:
@@ -1176,7 +1179,7 @@ class RgwService(CephService):
                 ssl_cert = '\n'.join(ssl_cert)
             deps.append(f'ssl-cert:{str(utils.md5_hash(ssl_cert))}')
 
-        return sorted(deps)
+        return sorted(parent_deps + deps)
 
     def set_realm_zg_zone(self, spec: RGWSpec) -> None:
         assert self.TYPE == spec.service_type
@@ -1565,12 +1568,13 @@ class CephExporterService(CephService):
 
     @classmethod
     def get_dependencies(cls, mgr: "CephadmOrchestrator",
-                         spec: Optional[ServiceSpec] = None,
+                         spec: ServiceSpec,
                          daemon_type: Optional[str] = None) -> List[str]:
 
+        parent_deps = super().get_dependencies(mgr, spec, daemon_type)
         deps = [f'secure_monitoring_stack:{mgr.secure_monitoring_stack}']
         deps += mgr.cache.get_daemons_by_types(['mgmt-gateway'])
-        return sorted(deps)
+        return sorted(parent_deps + deps)
 
     def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
         assert self.TYPE == daemon_spec.daemon_type
@@ -1591,6 +1595,7 @@ class CephExporterService(CephService):
         if spec.stats_period:
             exporter_config.update({'stats-period': f'{spec.stats_period}'})
 
+        spec = self.mgr.spec_store[daemon_spec.service_name].spec
         security_enabled, _, _ = self.mgr._get_security_config()
         if security_enabled:
             exporter_config.update({'https_enabled': True})
@@ -1602,7 +1607,7 @@ class CephExporterService(CephService):
         daemon_spec.keyring = keyring
         daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
         daemon_spec.final_config = merge_dicts(daemon_spec.final_config, exporter_config)
-        daemon_spec.deps = self.get_dependencies(self.mgr)
+        daemon_spec.deps = self.get_dependencies(self.mgr, spec)
 
         return daemon_spec
 
@@ -1646,10 +1651,12 @@ class CephadmAgent(CephService):
 
     @classmethod
     def get_dependencies(cls, mgr: "CephadmOrchestrator",
-                         spec: Optional[ServiceSpec] = None,
+                         spec: ServiceSpec,
                          daemon_type: Optional[str] = None) -> List[str]:
+        parent_deps = super().get_dependencies(mgr, spec, daemon_type)
         agent = mgr.http_server.agent
         return sorted(
+            parent_deps +
             [
                 str(mgr.get_mgr_ip()),
                 str(agent.server_port),
