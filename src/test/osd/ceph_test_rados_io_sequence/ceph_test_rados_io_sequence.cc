@@ -161,8 +161,11 @@ constexpr std::string_view usage[] = {
     "\t\t read|write|failedwrite <off> <len>",
     "\t\t read2|write2|failedwrite2 <off> <len> <off> <len>",
     "\t\t read3|write3|failedwrite3 <off> <len> <off> <len> <off> <len>",
-    "\t\t injecterror <type> <shard> <good_count> <fail_count>",
-    "\t\t clearinject <type> <shard>",
+    "\t\t append",
+    "\t\t truncate",
+    "\t\t injecterror <io_type> <shard> <type> <good_count> <fail_count>",
+    "\t\t clearinject <io_type> <shard> <type>",
+    "\t\t sleep",
     "\t\t done"};
 
 po::options_description get_options_description() {
