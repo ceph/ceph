@@ -612,6 +612,7 @@ struct ECCommon {
     ECCommon &ec_backend;
     ECExtentCache extent_cache;
     uint64_t ec_pdw_write_mode;
+    bool next_write_all_shards = false;
 
     RMWPipeline(CephContext *cct,
                 ceph::ErasureCodeInterfaceRef ec_impl,
