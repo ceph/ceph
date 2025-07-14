@@ -1,7 +1,7 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { NotificationHeaderComponent } from './notification-header.component';
 import { NotificationService } from '../../../../shared/services/notification.service';
-import { BehaviorSubject, of } from 'rxjs';
+import { BehaviorSubject } from 'rxjs';
 
 describe('NotificationHeaderComponent', () => {
   let component: NotificationHeaderComponent;

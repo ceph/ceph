@@ -1,12 +1,10 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { NotificationPanelComponent } from './notification-panel.component';
 import { NotificationService } from '../../../shared/services/notification.service';
-import { FixtureHelper } from '../../../../testing/unit-test-helper';
 
 describe('NotificationPanelComponent', () => {
   let component: NotificationPanelComponent;
   let fixture: ComponentFixture<NotificationPanelComponent>;
-  let fixtureHelper: FixtureHelper;
   let notificationService: NotificationService;
 
   beforeEach(async () => {
@@ -26,7 +24,6 @@ describe('NotificationPanelComponent', () => {
   beforeEach(() => {
     fixture = TestBed.createComponent(NotificationPanelComponent);
     component = fixture.componentInstance;
-    fixtureHelper = new FixtureHelper(fixture);
     notificationService = TestBed.inject(NotificationService);
     fixture.detectChanges();
   });
