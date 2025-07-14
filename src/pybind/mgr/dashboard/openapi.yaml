@@ -13820,6 +13820,13 @@ paths:
         name: daemon_name
         schema:
           type: string
+      - default: false
+        description: If true, returns complete user details for each user. If false,
+          returns only the list of usernames.
+        in: query
+        name: detailed
+        schema:
+          type: boolean
       responses:
         '200':
           content:

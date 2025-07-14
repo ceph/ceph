@@ -626,13 +626,21 @@ class RgwBucket(RgwRESTController):
                 bucket = '/{}'.format(bucket)
 
             # Link bucket to new user:
+            params = {
+                'bucket': bucket,
+                'bucket-id': bucket_id,
+            }
+
+            accounts = RgwAccounts().get_accounts()
+            if uid in accounts:
+                # If the bucket is owned by an account, we need to use the account-id
+                # instead of uid.
+                params['account-id'] = uid
+            else:
+                params['uid'] = uid
             result = self.proxy(daemon_name,
                                 'PUT',
-                                'bucket', {
-                                    'bucket': bucket,
-                                    'bucket-id': bucket_id,
-                                    'uid': uid
-                                },
+                                'bucket', params,
                                 json_response=False)
 
         uid_tenant = uid[:uid.find('$')] if uid.find('$') >= 0 else None
@@ -811,16 +819,24 @@ class RgwUser(RgwRESTController):
             and len(set(edit_permissions).intersection(set(permissions[Scope.RGW]))) > 0
 
     @EndpointDoc("Display RGW Users",
+                 parameters={
+                     'detailed': (bool, "If true, returns complete user details for each user. "
+                                  "If false, returns only the list of usernames.")
+                 },
                  responses={200: RGW_USER_SCHEMA})
-    def list(self, daemon_name=None):
-        # type: (Optional[str]) -> List[str]
-        users = []  # type: List[str]
+    def list(self, daemon_name=None, detailed: bool = False):
+        detailed = str_to_bool(detailed)
+        users = []  # type: List[Union[str, Dict[str, Any]]]
         marker = None
         while True:
             params = {}  # type: dict
             if marker:
                 params['marker'] = marker
             result = self.proxy(daemon_name, 'GET', 'user?list', params)
+            if detailed:
+                for user in result['keys']:
+                    users.append(self._get(user, daemon_name=daemon_name, stats=False))
+                return users
             users.extend(result['keys'])
             if not result['truncated']:
                 break

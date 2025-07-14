@@ -34,7 +34,9 @@ describe('RgwUserService', () => {
     service.list().subscribe((resp) => {
       result = resp;
     });
-    const req = httpTesting.expectOne(`api/rgw/user?${RgwHelper.DAEMON_QUERY_PARAM}`);
+    const req = httpTesting.expectOne(
+      `api/rgw/user?${RgwHelper.DAEMON_QUERY_PARAM}&detailed=false`
+    );
     expect(req.request.method).toBe('GET');
     req.flush([]);
     expect(result).toEqual([]);
@@ -45,7 +47,7 @@ describe('RgwUserService', () => {
     service.list().subscribe((resp) => {
       result = resp;
     });
-    let req = httpTesting.expectOne(`api/rgw/user?${RgwHelper.DAEMON_QUERY_PARAM}`);
+    let req = httpTesting.expectOne(`api/rgw/user?${RgwHelper.DAEMON_QUERY_PARAM}&detailed=false`);
     expect(req.request.method).toBe('GET');
     req.flush(['foo', 'bar']);
 
@@ -62,7 +64,9 @@ describe('RgwUserService', () => {
 
   it('should call enumerate', () => {
     service.enumerate().subscribe();
-    const req = httpTesting.expectOne(`api/rgw/user?${RgwHelper.DAEMON_QUERY_PARAM}`);
+    const req = httpTesting.expectOne(
+      `api/rgw/user?${RgwHelper.DAEMON_QUERY_PARAM}&detailed=false`
+    );
     expect(req.request.method).toBe('GET');
   });
 
