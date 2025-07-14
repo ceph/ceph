@@ -22,6 +22,7 @@ class MgmtGatewayService(CephadmService):
 
     def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
         assert self.TYPE == daemon_spec.daemon_type
+        super().prepare_create(daemon_spec)
         daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
         return daemon_spec
 
@@ -50,32 +51,6 @@ class MgmtGatewayService(CephadmService):
         # we adjust the standby behaviour so rev-proxy can pick correctly the active instance
         self.mgr.set_module_option_ex('dashboard', 'standby_error_status_code', '503')
         self.mgr.set_module_option_ex('dashboard', 'standby_behaviour', 'error')
-
-    def get_external_certificates(self, svc_spec: MgmtGatewaySpec, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[str, str]:
-        cert = self.mgr.cert_mgr.get_cert('mgmt_gw_cert')
-        key = self.mgr.cert_mgr.get_key('mgmt_gw_key')
-        user_made = False
-        if not (cert and key):
-            # not available on store, check if provided on the spec
-            if svc_spec.ssl_cert and svc_spec.ssl_key:
-                user_made = True
-                cert = svc_spec.ssl_cert
-                key = svc_spec.ssl_key
-            else:
-                # not provided on the spec, let's generate self-sigend certificates
-                ip = self.get_mgmt_gw_ip(svc_spec, daemon_spec)
-                # we don't include the host_fqdn in case of using a virtual_ip
-                # because we may have several instances of the mgmt-gateway running
-                # on different hosts
-                host_fqdn = [] if svc_spec.virtual_ip else [self.mgr.get_fqdn(daemon_spec.host)]
-                cert, key = self.mgr.cert_mgr.generate_cert(host_fqdn, ip)
-            # save certificates
-            if cert and key:
-                self.mgr.cert_mgr.save_cert('mgmt_gw_cert', cert, user_made=user_made)
-                self.mgr.cert_mgr.save_key('mgmt_gw_key', key, user_made=user_made)
-            else:
-                logger.error("Failed to obtain certificate and key from mgmt-gateway.")
-        return cert, key
 
     def get_internal_certificates(self, svc_spec: MgmtGatewaySpec, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[str, str]:
         ip = self.get_mgmt_gw_ip(svc_spec, daemon_spec)
@@ -147,6 +122,8 @@ class MgmtGatewayService(CephadmService):
             'enable_oauth2_proxy': bool(oauth2_proxy_endpoints),
         }
 
+        ip = self.get_mgmt_gw_ip(svc_spec, daemon_spec)
+        cert, key = self.get_certificates(daemon_spec, [ip])
         internal_cert, internal_pkey = self.get_internal_certificates(svc_spec, daemon_spec)
         daemon_config = {
             "files": {
@@ -170,8 +147,6 @@ class MgmtGatewayService(CephadmService):
         Called before mgmt-gateway daemon is removed.
         """
         # reset the standby dashboard redirection behaviour
+        super().post_remove(daemon, is_failed_deploy=is_failed_deploy)
         self.mgr.set_module_option_ex('dashboard', 'standby_error_status_code', '500')
         self.mgr.set_module_option_ex('dashboard', 'standby_behaviour', 'redirect')
-        # delete cert/key entires for this mgmt-gateway daemon
-        self.mgr.cert_mgr.rm_cert('mgmt_gw_cert')
-        self.mgr.cert_mgr.rm_key('mgmt_gw_key')
