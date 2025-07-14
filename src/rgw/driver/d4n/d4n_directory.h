@@ -108,7 +108,7 @@ public:
 
 class Directory {
   public:
-    D4NTransaction* m_d4n_trx{nullptr};
+    D4NTransaction* m_d4n_trx{nullptr};//TODO: private
     void set_d4n_trx(D4NTransaction* d4n_trx) {m_d4n_trx = d4n_trx;}
 };
 
@@ -128,6 +128,9 @@ class BucketDirectory: public Directory {
 class ObjectDirectory: public Directory {
   public:
     ObjectDirectory(std::shared_ptr<connection>& conn) : conn(conn) {}
+
+    //get a connection
+    std::shared_ptr<connection> get_connection() { return conn; } 
 
     int exist_key(const DoutPrefixProvider* dpp, CacheObj* object, optional_yield y);
 
