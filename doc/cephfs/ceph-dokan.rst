@@ -9,7 +9,9 @@ userspace, pretty much like FUSE.
 
 Please see the `installation guide`_ to get started.
 
-Please see the `OS recommendations`_ regarding client support.
+.. note::
+
+   Please see the `OS recommendations`_ regarding client package support.
 
 Usage
 =====
