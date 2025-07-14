@@ -984,7 +984,10 @@ void ECBackend::handle_sub_write(
     ceph_abort_msg("Error inject - OSD down");
   }
   if (!get_parent()->pgb_is_primary())
+  {
     get_parent()->update_stats(op.stats);
+    get_parent()->log_stats(op.soid, op.stats.stats.sum, false, op.t);
+  }
   ObjectStore::Transaction localt;
   if (!op.temp_added.empty()) {
     switcher->add_temp_objs(op.temp_added);
