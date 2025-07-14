@@ -732,6 +732,13 @@ void RGWOp_Key_Create::execute(optional_yield y)
     op_state.set_key_type(key_type);
   }
 
+  op_ret = rgw_forward_request_to_master(this, *s->penv.site, s->user->get_id(),
+                                         nullptr, nullptr, s->info, s->err, y);
+  if (op_ret < 0) {
+    ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
+    return;
+  }
+
   op_ret = RGWUserAdminOp_Key::create(s, driver, op_state, flusher, y);
 }
 
@@ -777,6 +784,13 @@ void RGWOp_Key_Remove::execute(optional_yield y)
       key_type = KEY_TYPE_S3;
 
     op_state.set_key_type(key_type);
+  }
+
+  op_ret = rgw_forward_request_to_master(this, *s->penv.site, s->user->get_id(),
+                                         nullptr, nullptr, s->info, s->err, y);
+  if (op_ret < 0) {
+    ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
+    return;
   }
 
   op_ret = RGWUserAdminOp_Key::remove(s, driver, op_state, flusher, y);
