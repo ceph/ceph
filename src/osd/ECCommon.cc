@@ -220,24 +220,23 @@ int ECCommon::ReadPipeline::get_min_avail_to_read_shards(
 
   read_request.shard_want_to_read.populate_shard_id_set(want);
 
-  if (sinfo.supports_partial_reads() && want.size() > sinfo.get_k()) {
+  int r = 0;
+  auto kth_iter = want.find_nth(sinfo.get_k());
+  if (kth_iter != want.end()) {
     // If we support partial reads, we are making the assumption that only
     // K shards need to be read to recover data.  We opt here for minimising
     // the number of reads over minimising the amount of parity calculations
     // that are needed.
-    shard_id_set old_want = want;
-    want.clear();
-    int i=0;
-    for (auto shard : old_want) {
-      want.insert(shard);
-      if (std::cmp_equal(++i, sinfo.get_k())) {
-        break;
-      }
-    }
+    shard_id_set want_for_plugin = want;
+    shard_id_t kth = *kth_iter;
+    want_for_plugin.erase_range(kth, sinfo.get_k_plus_m() - (int)kth);
+    r = ec_impl->minimum_to_decode(want_for_plugin, have, need_set,
+                                     need_sub_chunks.get());
+  } else {
+    r = ec_impl->minimum_to_decode(want, have, need_set,
+                                     need_sub_chunks.get());
   }
 
-  int r = ec_impl->minimum_to_decode(want, have, need_set,
-                                     need_sub_chunks.get());
   if (r < 0) {
     dout(20) << "minimum_to_decode_failed r: " << r << "want: " << want
       << " have: " << have << " need: " << need_set << dendl;
