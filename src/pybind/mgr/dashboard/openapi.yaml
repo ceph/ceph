@@ -8319,6 +8319,7 @@ paths:
             trace.
       security:
       - jwt: []
+      summary: Get NVMeoF gateway log level information
       tags:
       - NVMe-oF Gateway
     put:
@@ -8359,6 +8360,7 @@ paths:
             trace.
       security:
       - jwt: []
+      summary: Set NVMeoF gateway log levels
       tags:
       - NVMe-oF Gateway
   /api/nvmeof/gateway/version:
@@ -8391,6 +8393,7 @@ paths:
             trace.
       security:
       - jwt: []
+      summary: Get the version of the NVMeoF gateway
       tags:
       - NVMe-oF Gateway
   /api/nvmeof/spdk/log_level:
@@ -8428,6 +8431,7 @@ paths:
             trace.
       security:
       - jwt: []
+      summary: Get NVMeoF gateway spdk log levels
       tags:
       - NVMe-oF SPDK
     put:
@@ -8470,6 +8474,7 @@ paths:
             trace.
       security:
       - jwt: []
+      summary: Set NVMeoF gateway spdk log levels
       tags:
       - NVMe-oF SPDK
   /api/nvmeof/spdk/log_level/disable:
@@ -8509,6 +8514,7 @@ paths:
             trace.
       security:
       - jwt: []
+      summary: Disable NVMeoF gateway spdk log
       tags:
       - NVMe-oF SPDK
   /api/nvmeof/subsystem:
