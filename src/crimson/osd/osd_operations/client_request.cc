@@ -193,14 +193,12 @@ ClientRequest::interruptible_future<> ClientRequest::with_pg_process_interruptib
     co_return;
   }
 
-  if (!pg.is_primary()) {
-    // primary can handle both normal ops and balanced reads
-    if (is_misdirected_replica_read(pg)) {
+  if (is_misdirected_replica_read(pg)) {
       DEBUGDPP("{}.{}: dropping misdirected op",
-	       pg, *this, this_instance_id);
+               pg, *this, this_instance_id);
       co_return;
-    }
-
+  }
+  if (!pg.is_primary()) {
     pg.get_perf_logger().inc(l_osd_replica_read);
     if (pg.is_missing_head_and_clones(m->get_hobj())) {
       DEBUGDPP("{}.{}: {} possibly missing head or clone object on replica,"
@@ -628,10 +626,13 @@ ClientRequest::do_process(
 bool ClientRequest::is_misdirected_replica_read(const PG& pg) const
 {
   LOG_PREFIX(ClientRequest::is_misdirected_replica_read);
-  // otherwise take a closer look
   if (const int flags = m->get_flags();
       flags & CEPH_OSD_FLAG_BALANCE_READS ||
       flags & CEPH_OSD_FLAG_LOCALIZE_READS) {
+    if (pg.is_primary()) {
+      DEBUGDPP("{}.{}: dropping - balanced/localize read on primary {}", pg, *this);
+      return true;
+    }
     if (op_info.rwordered()) {
       DEBUGDPP("{}.{}: dropping - rwoedered with balanced/localize read {}", pg, *this);
       return true;
@@ -644,10 +645,13 @@ bool ClientRequest::is_misdirected_replica_read(const PG& pg) const
       DEBUGDPP("{}.{}: dropping - can't write to replica", pg, *this);
       return true;
     }
-    return false;
+  } else {
+    if (!pg.is_primary()) {
+      DEBUGDPP("{}.{}: dropping - nor balanced/localize read on replica", pg, *this);
+      return true;
+    }
   }
-  DEBUGDPP("{}.{}: dropping - not a balanced/localize read ", pg, *this);
-  return true;
+  return false;
 }
 
 void ClientRequest::put_historic() const
