@@ -1587,10 +1587,6 @@ constexpr rewrite_gen_t OOL_GENERATION = 2;
 
 // All the rewritten extents start with MIN_REWRITE_GENERATION
 constexpr rewrite_gen_t MIN_REWRITE_GENERATION = 3;
-// without cold tier, the largest generation is less than MIN_COLD_GENERATION
-constexpr rewrite_gen_t MIN_COLD_GENERATION = 5;
-constexpr rewrite_gen_t MAX_REWRITE_GENERATION = 7;
-constexpr rewrite_gen_t REWRITE_GENERATIONS = MAX_REWRITE_GENERATION + 1;
 constexpr rewrite_gen_t NULL_GENERATION =
   std::numeric_limits<rewrite_gen_t>::max();
 
@@ -1606,16 +1602,20 @@ constexpr std::size_t generation_to_writer(rewrite_gen_t gen) {
 }
 
 // before EPM decision
-constexpr bool is_target_rewrite_generation(rewrite_gen_t gen) {
+constexpr bool is_target_rewrite_generation(
+  rewrite_gen_t gen,
+  rewrite_gen_t max_gen) {
   return gen == INIT_GENERATION ||
          (gen >= MIN_REWRITE_GENERATION &&
-          gen <= REWRITE_GENERATIONS);
+	  gen <= max_gen + 1);
 }
 
 // after EPM decision
-constexpr bool is_rewrite_generation(rewrite_gen_t gen) {
+constexpr bool is_rewrite_generation(
+  rewrite_gen_t gen,
+  rewrite_gen_t max_gen) {
   return gen >= INLINE_GENERATION &&
-         gen < REWRITE_GENERATIONS;
+	 gen <= max_gen;
 }
 
 enum class data_category_t : uint8_t {

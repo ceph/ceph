@@ -189,6 +189,16 @@ options:
   level: advanced
   desc: Begin fast eviction when the used ratio of the main tier reaches this value.
   default: 0.7
+- name: seastore_hot_tier_generations
+  type: uint
+  level: advanced
+  desc: The number of generations in the hot tier or the whole SeaStore instance if there's only one tier.
+  default: 5
+- name: seastore_cold_tier_generations
+  type: uint
+  level: advanced
+  desc: The number of generations in the cold tier if it exists.
+  default: 3
 - name: seastore_data_delta_based_overwrite
   type: size
   level: dev
