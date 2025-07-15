@@ -1418,6 +1418,8 @@ class NvmeofServiceSpec(ServiceSpec):
                  enable_prometheus_exporter: Optional[bool] = True,
                  prometheus_port: Optional[int] = 10008,
                  prometheus_stats_interval: Optional[int] = 10,
+                 prometheus_startup_delay: Optional[int] = 240,
+                 prometheus_connection_list_cache_expiration: Optional[int] = 60,
                  bdevs_per_cluster: Optional[int] = None,
                  flat_bdevs_per_cluster: Optional[int] = None,
                  cluster_connections: Optional[int] = None,
@@ -1528,6 +1530,11 @@ class NvmeofServiceSpec(ServiceSpec):
         self.prometheus_port = prometheus_port or 10008
         #: ``prometheus_stats_interval`` Prometheus get stats interval
         self.prometheus_stats_interval = prometheus_stats_interval
+        #: ``prometheus_startup_delay`` Prometheus startup delay, in seconds
+        self.prometheus_startup_delay = prometheus_startup_delay
+        #: ``prometheus_connection_list_cache_expiration`` Expiration time of connection list cache
+        self.prometheus_connection_list_cache_expiration = \
+            prometheus_connection_list_cache_expiration
         #: ``verify_nqns`` enables verification of subsystem and host NQNs for validity
         self.verify_nqns = verify_nqns
         #: ``verify_keys`` enables verification of PSJ and DHCHAP keys in the gateway
