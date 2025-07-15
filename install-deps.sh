@@ -426,8 +426,9 @@ else
                 [ ! $NO_BOOST_PKGS ] && install_boost_on_ubuntu focal
                 ;;
             *Jammy*)
-                [ ! $NO_BOOST_PKGS ] && install_boost_on_ubuntu jammy
                 $SUDO apt-get install -y gcc
+		ensure_decent_gcc_on_ubuntu 12 jammy
+                [ ! $NO_BOOST_PKGS ] && install_boost_on_ubuntu jammy
                 ;;
             *)
                 $SUDO apt-get install -y gcc
