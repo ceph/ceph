@@ -230,7 +230,7 @@ int ECCommon::ReadPipeline::get_min_avail_to_read_shards(
     int i=0;
     for (auto shard : old_want) {
       want.insert(shard);
-      if (++i == sinfo.get_k()) {
+      if (std::cmp_equal(++i, sinfo.get_k())) {
         break;
       }
     }
