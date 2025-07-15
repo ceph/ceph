@@ -4167,6 +4167,16 @@ options:
   - runtime
   see_also:
   - bdev_async_discard_threads
+- name: bdev_max_discard_length
+  desc: maximum length of a single discard request
+  type: uint
+  level: advanced
+  default: 2147483648
+  with_legacy: true
+  flags:
+  - runtime
+  see_also:
+  - bdev_enable_discard
 - name: bdev_flock_retry_interval
   type: float
   level: advanced

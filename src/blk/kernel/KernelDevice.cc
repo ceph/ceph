@@ -1196,10 +1196,23 @@ int KernelDevice::_discard(uint64_t offset, uint64_t len)
 	       << dendl;
     return 0;
   }
-  dout(10) << __func__
-           << " 0x" << std::hex << offset << "~" << len << std::dec
-           << dendl;
-  r = BlkDev{fd_directs[WRITE_LIFE_NOT_SET]}.discard((int64_t)offset, (int64_t)len);
+  uint64_t max_len = cct->_conf->bdev_max_discard_length;
+  if (max_len) {
+    while (len > 0 && r == 0) {
+      auto l = std::min(max_len, len);
+      dout(10) << __func__
+               << " 0x" << std::hex << offset << "~" << l << std::dec
+               << dendl;
+      r = BlkDev{fd_directs[WRITE_LIFE_NOT_SET]}.discard((int64_t)offset, (int64_t)l);
+      offset += l;
+      len -= l;
+    }
+  } else {
+    dout(10) << __func__
+             << " 0x" << std::hex << offset << "~" << len << std::dec
+             << dendl;
+    r = BlkDev{fd_directs[WRITE_LIFE_NOT_SET]}.discard((int64_t)offset, (int64_t)len);
+  }
   return r;
 }
 
