@@ -2428,7 +2428,7 @@ extern "C" int64_t ceph_ll_readv_writev_v2(class ceph_mount_info *cmount,
   if (info_wrapper.get_info()->write || info_wrapper.get_info()->result <= 0 || !info_wrapper.get_zerocopy())
     delete buf;
 
-  info_wrapper.get_info()->callback(io_info);
+  // no need to execute external callback on the blocking call
   return info_wrapper.get_info()->result;
 }
 
