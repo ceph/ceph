@@ -503,16 +503,38 @@ class RGWAM:
 
     def create_system_user(self, realm, zonegroup, zone):
         try:
-            sys_user_info = self.user_op().create(zone,
-                                                  zonegroup,
-                                                  uid=f'sysuser-{realm.name}',
-                                                  uid_prefix='user-sys',
-                                                  is_system=True)
+            sys_user_info = self.user_op().create(
+                zone,
+                zonegroup,
+                uid=f'sysuser-{realm.name}',
+                uid_prefix='user-sys',
+                is_system=True
+            )
             sys_user = RGWUser(sys_user_info)
             logging.info(f'Created system user: {sys_user.uid} on'
-                         '{realm.name}/{zonegroup.name}/{zone.name}')
+                         f'{realm.name}/{zonegroup.name}/{zone.name}')
             return sys_user
         except RGWAMException as e:
+            if e.retcode == -errno.EEXIST:
+                # You get this error (EEXIST) when the user already exists. This
+                # can happen if you delete the zone/zg/realm for the user but not
+                # the user itself and then try to call "rgw realm bootstrap"
+                # with the same zone/zg/realm names again. In this case, let's try
+                # to get the existing user's info
+                try:
+                    sys_user_info = self.user_op().info(
+                        zone,
+                        zonegroup,
+                        uid=f'sysuser-{realm.name}',
+                    )
+                    sys_user = RGWUser(sys_user_info)
+                    logging.info(f'Found existing system user: sysuser-{realm.name}')
+                    return sys_user
+                except RGWAMException as e2:
+                    RGWAMException(
+                        f'System user sysuser-{realm.name} already existed. '
+                        'Failed getting info for user', e2
+                    )
             raise RGWAMException('failed to create system user', e)
 
     def create_normal_user(self, zg, zone, uid=None):
