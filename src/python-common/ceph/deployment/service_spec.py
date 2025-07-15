@@ -2516,14 +2516,14 @@ class AlertManagerSpec(MonitoringSpec):
         # service_type: alertmanager
         # service_id: xyz
         # user_data:
-        #   default_webhook_urls:
+        #   webhook_urls:
         #   - "https://foo"
         #   - "https://bar"
         #
         # Documentation:
-        # default_webhook_urls - A list of additional URL's that are
-        #                        added to the default receivers'
-        #                        <webhook_configs> configuration.
+        # webhook_urls - A list of additional URL's that are
+        #                added to the default receivers'
+        #                <webhook_configs> configuration.
         self.user_data = user_data or {}
         self.secure = secure
         self.only_bind_port_on_networks = only_bind_port_on_networks
