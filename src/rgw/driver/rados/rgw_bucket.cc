@@ -518,17 +518,15 @@ int RGWBucket::check_bad_index_multipart(rgw::sal::RadosStore* const rados_store
   const int max_aio = std::max(1, op_state.get_max_aio());
   int any_error = 0; // first error encountered if any
   for (int i = 0; i < max_aio; i++) {
-    spawn::spawn(context, [&](spawn::yield_context yield) {
+    boost::asio::spawn(context, [&](boost::asio::yield_context yield) {
       while (true) {
         const int shard = next_shard++;
         if (shard >= num_shards) {
           return;
         }
 
-        optional_yield y(context, yield);
-
         int r = ::check_bad_index_multipart(rados_store, &*bucket, dpp,
-					    op_state, flusher, shard, y);
+					    op_state, flusher, shard, yield);
         if (r < 0) {
           ldpp_dout(dpp, -1) << "WARNING: error processing shard " << shard <<
             " check_bad_index_multipart(): " << r << "; skipping" << dendl;
