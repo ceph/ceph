@@ -7246,7 +7246,7 @@ int RGWRados::Object::preconditional_checks(const DoutPrefixProvider *dpp, std::
     if (if_nomatch == "*"sv) {
       // test the object is NOT existing
       if (current_state.exists) {
-        return -ENOENT;
+        return -ERR_PRECONDITION_FAILED;
       }
     } else {
       bufferlist bl;
