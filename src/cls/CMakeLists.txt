@@ -48,8 +48,6 @@ if (WITH_RBD)
 
   set(cls_rbd_client_srcs rbd/cls_rbd_client.cc rbd/cls_rbd_types.cc)
   add_library(cls_rbd_client STATIC ${cls_rbd_client_srcs})
-  target_link_libraries(cls_rbd_client cls_lock_client)
-
 endif (WITH_RBD)
 
 # cls_lock
