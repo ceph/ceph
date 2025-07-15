@@ -203,6 +203,7 @@ def _container_cmd(ctx, args, *, workdir=None, interactive=False):
         ctx.container_engine,
         "run",
         "--name=ceph_build",
+        "--net=host",
     ]
     if interactive:
         cmd.append("-it")
@@ -239,6 +240,7 @@ def _container_cmd(ctx, args, *, workdir=None, interactive=False):
         cmd.append(f"-eCCACHE_BASEDIR={ctx.cli.homedir}")
     for extra_arg in ctx.cli.extra or []:
         cmd.append(extra_arg)
+    cmd.append('-eNINJA_STATUS=[%e: %f/%t] ')
     cmd.append(ctx.image_name)
     cmd.extend(args)
     return cmd
