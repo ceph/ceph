@@ -1773,6 +1773,9 @@ class Module(MgrModule, OrchestratorClientMixin):
                 self.log.exception(f'Failed to setup cephadm based secure monitoring stack: {e}\n',
                                    'Falling back to default configuration')
 
+        # In any error fallback to plain http mode
+        self.setup_default_config(server_addr, server_port)
+
     def setup_default_config(self, server_addr: str, server_port: int) -> None:
         cherrypy.config.update({
             'server.socket_host': server_addr,
