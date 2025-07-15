@@ -8559,7 +8559,7 @@ paths:
                   description: NVMeoF gateway group
                   type: string
                 max_namespaces:
-                  default: 1024
+                  default: 4096
                   description: Maximum number of namespaces
                   type: integer
                 nqn:
