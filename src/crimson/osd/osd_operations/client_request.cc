@@ -632,6 +632,10 @@ bool ClientRequest::is_misdirected_replica_read(const PG& pg) const
   if (const int flags = m->get_flags();
       flags & CEPH_OSD_FLAG_BALANCE_READS ||
       flags & CEPH_OSD_FLAG_LOCALIZE_READS) {
+    if (op_info.rwordered()) {
+      DEBUGDPP("{}: dropping - rwoedered with balanced/localize read {}", pg, *this);
+      return true;
+    }
     if (!op_info.may_read()) {
       DEBUGDPP("{}: dropping - no read found with balanced/localize read", pg, *this);
       return true;
