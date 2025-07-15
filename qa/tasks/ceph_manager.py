@@ -1425,7 +1425,7 @@ class OSDThrasher(Thrasher):
                 self.ceph_manager.osd_admin_socket(osd, command=['dump_historic_ops'],
                                      check_status=False, timeout=30, stdout=DEVNULL)
             gevent.sleep(0)
-
+  
     @log_exc
     def do_noscrub_toggle(self):
         """
@@ -2490,7 +2490,7 @@ class CephManager:
         """
         Return the randomized list of PGs that can have their recovery/backfill forced
         """
-        j = self.get_pg_stats();
+        j = self.get_pg_stats()
         pgids = []
         if backfill:
             wanted = ['degraded', 'backfilling', 'backfill_wait']
@@ -2651,6 +2651,22 @@ class CephManager:
         :returns: all osds
         """
         return self.get_osd_dump_json()['osds']
+        
+    def do_dump_perf_counter(self, osd_id):
+        """
+        dumps perf counter for full and inc maps for osd with osd id 
+        """
+        try: 
+            proc = self.osd_admin_socket(osd_id, ['perf', 'dump'],stdout=StringIO())
+            py_dic_output=json.loads(proc.stdout.getvalue())
+            full_map_count=py_dic_output['osd']['full_map_received']
+            inc_map_count=py_dic_output['osd']['inc_map_received']
+            res = f"For the osd : {osd_id} full maps = {full_map_count} inc maps = {inc_map_count}"
+            self.log(res)
+            return full_map_count,inc_map_count
+        except Exception as e:
+            output = f"failed to get counters because of {e}"
+            self.log(output)
 
     def get_osd_metadata(self):
         """
@@ -2793,7 +2809,7 @@ class CephManager:
         num = 0
         for pg in pgs:
             if pg['state'].count('peered') and not pg['state'].count('stale'):
-                 num += 1
+                num += 1
         return num
 
     def _print_not_active_clean_pg(self, pgs):
@@ -2901,8 +2917,8 @@ class CephManager:
         pgs = self.get_pg_stats()
         for pg in pgs:
            if 'active' not in pg['state']:
-             self.log('PG %s is not active' % pg['pgid'])
-             self.log(pg)
+            self.log('PG %s is not active' % pg['pgid'])
+            self.log(pg)
 
     def dump_pgs_not_active_peered(self, pgs):
         for pg in pgs:
