@@ -198,10 +198,16 @@ class AnnotatedDataTextOutputFormatter(OutputFormatter):
 
 
 class NvmeofCLICommand(CLICommand):
+    desc: str
+
     def __init__(self, prefix, model: Type[NamedTuple], perm='rw', poll=False):
         super().__init__(prefix, perm, poll)
         self._output_formatter = AnnotatedDataTextOutputFormatter()
         self._model = model
+
+    def _use_api_endpoint_desc_if_available(self, func):
+        if not self.desc and hasattr(func, 'doc_info'):
+            self.desc = func.doc_info.get('summary', '')
 
     def __call__(self, func) -> HandlerFuncType:  # type: ignore
         # pylint: disable=useless-super-delegation
@@ -211,7 +217,11 @@ class NvmeofCLICommand(CLICommand):
         function it wraps compared to CLICmmand, breaking a Liskov substitution principal,
         hence triggering linters alerts.
         """
-        return super().__call__(func)
+        resp = super().__call__(func)
+
+        self._use_api_endpoint_desc_if_available(func)
+
+        return resp
 
     def call(self,
              mgr: Any,
