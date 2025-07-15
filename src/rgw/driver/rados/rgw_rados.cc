@@ -3276,10 +3276,9 @@ int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_si
     }
   }
 
-  if (meta.if_match != NULL || meta.if_nomatch != NULL) {
-    r = target->preconditional_checks(rctx.dpp, meta.if_match, meta.if_nomatch, *current_state, rctx.y);
-    if (r < 0)
-      return r;
+  r = target->preconditional_checks(rctx.dpp, std::nullopt, real_clock::zero(), false, meta.if_match, meta.if_nomatch, *current_state, rctx.y);
+  if (r < 0) {
+    return r;
   }
   bool guard = ((target->manifest) || (target->state->obj_tag.length() != 0)) && (!target->state->fake_tag);
   bool set_attr_id_tag = guard && target->obj.key.instance.empty() && (meta.if_nomatch == NULL || meta.if_nomatch != "*"sv);
@@ -6436,29 +6435,10 @@ int RGWRados::Object::Delete::delete_obj(optional_yield y,
         return r;
       }
 
-      if (params.if_match != NULL || params.if_nomatch != NULL) {
-        r = target->preconditional_checks(dpp, params.if_match, params.if_nomatch, *current_state, y);
-        if (r < 0) {
-          return r;
-        }
-      }
-
-      if (params.size_match.has_value() && current_state->size != params.size_match) {
-        return -ERR_PRECONDITION_FAILED;
-      }
-
-      if (!real_clock::is_zero(params.last_mod_time_match)) {
-        struct timespec ctime = ceph::real_clock::to_timespec(current_state->mtime);
-        struct timespec last_mod_time = ceph::real_clock::to_timespec(params.last_mod_time_match);
-        if (!params.high_precision_time) {
-          ctime.tv_nsec = 0;
-          last_mod_time.tv_nsec = 0;
-        }
-
-        ldpp_dout(dpp, 10) << "If-Match-Last-Modified-Time: " << params.last_mod_time_match << " Last-Modified: " << ctime << dendl;
-        if (ctime != last_mod_time) {
-          return -ERR_PRECONDITION_FAILED;
-        }
+      r = target->preconditional_checks(dpp, params.size_match, params.last_mod_time_match, params.high_precision_time,
+                                        params.if_match, params.if_nomatch, *current_state, y);
+      if (r < 0) {
+        return r;
       }
 
       r = store->set_olh(dpp, target->get_ctx(), target->get_bucket_info(), marker, true,
@@ -6585,23 +6565,6 @@ int RGWRados::Object::Delete::delete_obj(optional_yield y,
     /* only delete object if mtime is less than or equal to params.unmod_since */
     store->cls_obj_check_mtime(op, params.unmod_since, params.high_precision_time, CLS_RGW_CHECK_TIME_MTIME_LE);
   }
-
-  if (!real_clock::is_zero(params.last_mod_time_match)) {
-    struct timespec ctime = ceph::real_clock::to_timespec(state->mtime);
-    struct timespec last_mod_time = ceph::real_clock::to_timespec(params.last_mod_time_match);
-    if (!params.high_precision_time) {
-      ctime.tv_nsec = 0;
-      last_mod_time.tv_nsec = 0;
-    }
-
-    ldpp_dout(dpp, 10) << "If-Match-Last-Modified-Time: " << params.last_mod_time_match << " Last-Modified: " << ctime << dendl;
-    if (ctime != last_mod_time) {
-      return -ERR_PRECONDITION_FAILED;
-    }
-
-    /* only delete object if mtime is equal to params.last_mod_time_match */
-    store->cls_obj_check_mtime(op, params.last_mod_time_match, params.high_precision_time, CLS_RGW_CHECK_TIME_MTIME_EQ);
-  }
   uint64_t obj_accounted_size = state->accounted_size;
 
   if (params.abortmp) {
@@ -6629,10 +6592,6 @@ int RGWRados::Object::Delete::delete_obj(optional_yield y,
     }
   }
 
-  if (params.size_match.has_value() && state->size != params.size_match) {
-      return -ERR_PRECONDITION_FAILED;
-  }
-
   if (!state->exists) {
     if (!force) {
       target->invalidate_state();
@@ -6644,11 +6603,14 @@ int RGWRados::Object::Delete::delete_obj(optional_yield y,
     }
   }
 
-  if (params.if_match != NULL || params.if_nomatch != NULL) {
-    r = target->preconditional_checks(dpp, params.if_match, params.if_nomatch, *state, y);
-    if (r < 0) {
-      return r;
-    }
+  r = target->preconditional_checks(dpp, params.size_match, params.last_mod_time_match, params.high_precision_time,
+                                    params.if_match, params.if_nomatch, *state, y);
+  if (!real_clock::is_zero(params.last_mod_time_match)) {
+    /* only delete object if mtime is equal to params.last_mod_time_match */
+    store->cls_obj_check_mtime(op, params.last_mod_time_match, params.high_precision_time, CLS_RGW_CHECK_TIME_MTIME_EQ);
+  }
+  if (r < 0) {
+    return r;
   }
 
   RGWBucketInfo& bucket_info = target->get_bucket_info();
@@ -7237,9 +7199,28 @@ int RGWRados::Object::versioned_bucket_get_state(const DoutPrefixProvider *dpp, 
   return 0;
 }
 
-int RGWRados::Object::preconditional_checks(const DoutPrefixProvider *dpp, const char *if_match,
-                                            const char *if_nomatch, RGWObjState& current_state, optional_yield y)
+int RGWRados::Object::preconditional_checks(const DoutPrefixProvider *dpp, std::optional<uint64_t> size_match,
+                                            ceph::real_time last_mod_time_match, bool high_precision_time,
+                                            const char *if_match, const char *if_nomatch, RGWObjState& current_state, optional_yield y)
 {
+  if (size_match.has_value() && current_state.size != size_match) {
+    return -ERR_PRECONDITION_FAILED;
+  }
+
+  if (!real_clock::is_zero(last_mod_time_match)) {
+    struct timespec ctime = ceph::real_clock::to_timespec(current_state.mtime);
+    struct timespec last_mod_time = ceph::real_clock::to_timespec(last_mod_time_match);
+    if (!high_precision_time) {
+      ctime.tv_nsec = 0;
+      last_mod_time.tv_nsec = 0;
+    }
+
+    ldpp_dout(dpp, 10) << "If-Match-Last-Modified-Time: " << last_mod_time_match << " Last-Modified: " << ctime << dendl;
+    if (ctime != last_mod_time) {
+      return -ERR_PRECONDITION_FAILED;
+    }
+  }
+
   using namespace std::string_literals;
   if (if_match) {
     if (if_match == "*"sv) {

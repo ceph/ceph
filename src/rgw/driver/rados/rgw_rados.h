@@ -718,8 +718,9 @@ public:
     void invalidate_state();
 
     int versioned_bucket_get_state(const DoutPrefixProvider *dpp, RGWObjState*& current_state, optional_yield y);
-    int preconditional_checks(const DoutPrefixProvider *dpp, const char *if_match, const char *if_nomatch,
-                              RGWObjState& current_state, optional_yield y);
+    int preconditional_checks(const DoutPrefixProvider *dpp, std::optional<uint64_t> size_match,
+                              ceph::real_time last_mod_time_match, bool high_precision_time,
+                              const char *if_match, const char *if_nomatch, RGWObjState& current_state, optional_yield y);
     int prepare_atomic_modification(const DoutPrefixProvider *dpp, librados::ObjectWriteOperation& op, bool reset_obj,
                                     const std::string *ptag, bool modify_tail, bool set_attr_id_tag, optional_yield y);
     int complete_atomic_modification(const DoutPrefixProvider *dpp, bool keep_tail, optional_yield y);
