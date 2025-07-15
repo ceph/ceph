@@ -195,7 +195,7 @@ ClientRequest::interruptible_future<> ClientRequest::with_pg_process_interruptib
 
   if (!pg.is_primary()) {
     // primary can handle both normal ops and balanced reads
-    if (is_misdirected(pg)) {
+    if (is_misdirected_replica_read(pg)) {
       DEBUGDPP("{}.{}: dropping misdirected op",
 	       pg, *this, this_instance_id);
       co_return;
@@ -625,24 +625,24 @@ ClientRequest::do_process(
   }
 }
 
-bool ClientRequest::is_misdirected(const PG& pg) const
+bool ClientRequest::is_misdirected_replica_read(const PG& pg) const
 {
+  LOG_PREFIX(ClientRequest::is_misdirected_replica_read);
   // otherwise take a closer look
   if (const int flags = m->get_flags();
       flags & CEPH_OSD_FLAG_BALANCE_READS ||
       flags & CEPH_OSD_FLAG_LOCALIZE_READS) {
     if (!op_info.may_read()) {
-      // no read found, so it can't be balanced read
+      DEBUGDPP("{}: dropping - no read found with balanced/localize read", pg, *this);
       return true;
     }
     if (op_info.may_write() || op_info.may_cache()) {
-      // write op, but i am not primary
+      DEBUGDPP("{}: dropping - can't write to replica", pg, *this);
       return true;
     }
-    // balanced reads; any replica will do
     return false;
   }
-  // neither balanced nor localize reads
+  DEBUGDPP("{}: dropping - not a balanced/localize read ", pg, *this);
   return true;
 }
 

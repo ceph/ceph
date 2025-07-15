@@ -269,7 +269,7 @@ private:
       ::crimson::osd::IOInterruptCondition,
       Errorator>;
 
-  bool is_misdirected(const PG& pg) const;
+  bool is_misdirected_replica_read(const PG& pg) const;
 
   const SnapContext get_snapc(
     PG &pg,
