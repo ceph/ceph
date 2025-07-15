@@ -2304,6 +2304,16 @@ def task(ctx, config):
               username: registry-user
               password: registry-password
 
+    By default, the image tag is determined as a suite 'branch' value,
+    or 'sha1' if provided. However, the tag value can be overridden by
+    including ':TAG' or '@DIGEST' in the container image name, for example,
+    for the tag 'latest', the 'overrides' section looks like:
+
+        overrides:
+          cephadm:
+            containers:
+              image: 'quay.io/ceph-ci/ceph:latest'
+
     :param ctx: the argparse.Namespace object
     :param config: the config dict
     :param watchdog_setup: start DaemonWatchdog to watch daemons for failures
@@ -2351,7 +2361,10 @@ def task(ctx, config):
         sha1 = config.get('sha1')
         flavor = config.get('flavor', 'default')
 
-        if sha1:
+        if any(_ in container_image_name for _ in (':', '@')):
+            log.info('Provided image contains tag or digest, using it as is')
+            ctx.ceph[cluster_name].image = container_image_name
+        elif sha1:
             if flavor == "crimson-debug" or flavor == "crimson-release":
                 ctx.ceph[cluster_name].image = container_image_name + ':' + sha1 + '-' + flavor
             else:
