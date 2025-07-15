@@ -4,6 +4,7 @@
 
 #include <boost/asio/detached.hpp>
 #include <boost/redis/connection.hpp>
+#include <set>
 
 namespace rgw { namespace d4n {
 
@@ -65,9 +66,50 @@ struct CacheBlock {
   /* Blocks use the cacheObj's dirty and hostsList metadata to store their dirty flag values and locations in the block directory. */
 };
 
+class D4NTransaction {
+  //purpose: to provide a transactional interface to Redis
+  //this object should be shared among all the directories (object, block, bucket)
+  //assumption: all the directories are in the same RGW context and share the same Redis connection
+public:
+
+    enum class redis_operation_type {
+	NONE,READ_OP,WRITE_OP
+    };
+
+    enum class TrxState {
+			NONE,
+			STARTED,
+			ENDED
+		} trxState{TrxState::NONE};
+
+    std::string m_trx_id;
+    void start_trx();
+    int init_trx(const DoutPrefixProvider* dpp,std::shared_ptr<connection> , optional_yield y);
+    int end_trx(const DoutPrefixProvider* dpp,std::shared_ptr<connection> , optional_yield y);
+    bool is_trx_started(const DoutPrefixProvider* dpp,std::shared_ptr<connection> conn,std::string &key,redis_operation_type op, optional_yield y);
+    std::string get_end_trx_script(const DoutPrefixProvider* dpp, std::shared_ptr<connection> conn, optional_yield y);
+    std::string get_trx_id(const DoutPrefixProvider* dpp,std::shared_ptr<connection> conn, optional_yield y);
+
+    void create_rw_temp_keys(std::string key);
+    std::string create_unique_temp_keys(std::string key);
+    
+    int clone_key_for_transaction(std::string key_source, std::string key_destination, std::shared_ptr<connection> conn, optional_yield y);
+    std::string m_evalsha_clone_key;
+    std::string m_evalsha_end_trx;
+
+    std::set<std::string> m_temp_read_keys;//temporary key for use in transactions
+    std::set<std::string> m_temp_write_keys;//temporary key for use in transactions
+    std::set<std::string> m_temp_test_write_keys;//temporary key for use in transactions
+    std::string m_original_key;//original key, used to restore the key from Redis
+    std::string m_temp_key_read;//temporary key for use in transactions
+    std::string m_temp_key_write;//temporary key for use in transactions
+    std::string m_temp_key_test_write;//temporary key for use in transactions
+};
+
 class Directory {
   public:
-    Directory() {}
+    D4NTransaction* m_d4n_trx{nullptr};//TODO: private
+    void set_d4n_trx(D4NTransaction* d4n_trx) {m_d4n_trx = d4n_trx;}
 };
 
 class BucketDirectory: public Directory {
@@ -86,6 +128,9 @@ class BucketDirectory: public Directory {
 class ObjectDirectory: public Directory {
   public:
     ObjectDirectory(std::shared_ptr<connection>& conn) : conn(conn) {}
+
+    //get a connection
+    std::shared_ptr<connection> get_connection() { return conn; } 
 
     int exist_key(const DoutPrefixProvider* dpp, CacheObj* object, optional_yield y);
 
@@ -133,6 +178,8 @@ class BlockDirectory: public Directory {
     int multi(const DoutPrefixProvider* dpp, optional_yield y);
     int discard(const DoutPrefixProvider* dpp, optional_yield y);
     int unwatch(const DoutPrefixProvider* dpp, optional_yield y);
+
+    std::shared_ptr<connection> get_connection() {return conn;}	
 
   private:
     std::shared_ptr<connection> conn;
