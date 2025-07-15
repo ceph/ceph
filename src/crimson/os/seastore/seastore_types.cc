@@ -287,8 +287,6 @@ std::ostream &operator<<(std::ostream &out, rewrite_gen_printer_t gen)
     return out << "GEN_INL";
   } else if (gen.gen == OOL_GENERATION) {
     return out << "GEN_OOL";
-  } else if (gen.gen > REWRITE_GENERATIONS) {
-    return out << "GEN_INVALID(" << (unsigned)gen.gen << ")!";
   } else {
     return out << "GEN(" << (unsigned)gen.gen << ")";
   }

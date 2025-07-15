@@ -987,7 +987,7 @@ struct transaction_manager_test_t :
 
       epm->background_process
         .eviction_state
-        .init(stop_ratio, default_ratio, fast_ratio);
+        .init(stop_ratio, default_ratio, fast_ratio, epm->hot_tier_generations);
 
       // these variables are described in
       // EPM::BackgroundProcess::eviction_state_t::maybe_update_eviction_mode
@@ -1040,7 +1040,7 @@ struct transaction_manager_test_t :
       assert(all_extent_types.size() == EXTENT_TYPES_MAX - 4);
 
       std::vector<rewrite_gen_t> all_generations;
-      for (auto i = INIT_GENERATION; i < REWRITE_GENERATIONS; i++) {
+      for (auto i = INIT_GENERATION; i <= epm->dynamic_max_rewrite_generation; i++) {
         all_generations.push_back(i);
       }
 
@@ -1063,7 +1063,7 @@ struct transaction_manager_test_t :
 	    expected_generations[t][INIT_GENERATION] = OOL_GENERATION;
 	  }
 
-          for (auto i = INIT_GENERATION + 1; i < REWRITE_GENERATIONS; i++) {
+          for (auto i = INIT_GENERATION + 1; i <= epm->dynamic_max_rewrite_generation; i++) {
 	    expected_generations[t][i] = i;
           }
         }
@@ -1074,7 +1074,7 @@ struct transaction_manager_test_t :
           if (is_root_type(t) || is_lba_backref_node(t)) {
             continue;
           }
-          for (auto i = INIT_GENERATION + 1; i < REWRITE_GENERATIONS; i++) {
+          for (auto i = INIT_GENERATION + 1; i <= epm->dynamic_max_rewrite_generation; i++) {
             expected_generations[t][i] = func(i);
           }
         }
@@ -1102,9 +1102,9 @@ struct transaction_manager_test_t :
       };
 
       // verify that no data should go to the cold tier
-      update_data_gen_mapping([](rewrite_gen_t gen) -> rewrite_gen_t {
-        if (gen == MIN_COLD_GENERATION) {
-          return MIN_COLD_GENERATION - 1;
+      update_data_gen_mapping([this](rewrite_gen_t gen) -> rewrite_gen_t {
+        if (gen == epm->hot_tier_generations) {
+          return epm->hot_tier_generations - 1;
         } else {
           return gen;
         }
@@ -1130,9 +1130,9 @@ struct transaction_manager_test_t :
 
       // verify that data must go to the cold tier
       run_until(ratio_D_size).get();
-      update_data_gen_mapping([](rewrite_gen_t gen) {
-        if (gen >= MIN_REWRITE_GENERATION && gen < MIN_COLD_GENERATION) {
-          return MIN_COLD_GENERATION;
+      update_data_gen_mapping([this](rewrite_gen_t gen) {
+        if (gen >= MIN_REWRITE_GENERATION && gen < epm->hot_tier_generations) {
+          return epm->hot_tier_generations;
         } else {
           return gen;
         }

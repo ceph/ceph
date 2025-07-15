@@ -1291,6 +1291,7 @@ public:
     SegmentManagerGroupRef&& sm_group,
     BackrefManager &backref_manager,
     SegmentSeqAllocator &segment_seq_allocator,
+    rewrite_gen_t max_rewrite_generation,
     bool detailed,
     bool is_cold);
 
@@ -1303,11 +1304,13 @@ public:
       SegmentManagerGroupRef&& sm_group,
       BackrefManager &backref_manager,
       SegmentSeqAllocator &ool_seq_allocator,
+      rewrite_gen_t max_rewrite_generation,
       bool detailed,
       bool is_cold = false) {
     return std::make_unique<SegmentCleaner>(
         config, std::move(sm_group), backref_manager,
-        ool_seq_allocator, detailed, is_cold);
+        ool_seq_allocator, max_rewrite_generation,
+	detailed, is_cold);
   }
 
   /*
@@ -1472,7 +1475,6 @@ private:
         segment_id_t segment_id,
         rewrite_gen_t generation,
         segment_off_t segment_size) {
-      ceph_assert(is_rewrite_generation(generation));
 
       rewrite_gen_t target_gen;
       if (generation < MIN_REWRITE_GENERATION) {
@@ -1483,7 +1485,6 @@ private:
         target_gen = generation + 1;
       }
 
-      assert(is_target_rewrite_generation(target_gen));
       return {generation,
               target_gen,
               segment_size,
@@ -1611,6 +1612,7 @@ private:
     ceph_assert(s_type == segment_type_t::OOL ||
                 trimmer != nullptr); // segment_type_t::JOURNAL
     auto old_usage = calc_utilization(segment);
+    ceph_assert(is_rewrite_generation(generation, max_rewrite_generation));
     segments.init_closed(segment, seq, s_type, category, generation);
     auto new_usage = calc_utilization(segment);
     adjust_segment_util(old_usage, new_usage);
@@ -1670,6 +1672,7 @@ private:
 
   // TODO: drop once paddr->journal_seq_t is introduced
   SegmentSeqAllocator &ool_segment_seq_allocator;
+  const rewrite_gen_t max_rewrite_generation = NULL_GENERATION;
 };
 
 class RBMCleaner;

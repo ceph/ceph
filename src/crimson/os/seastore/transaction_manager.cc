@@ -802,7 +802,12 @@ TransactionManagerRef make_transaction_manager(
     shard_stats_t& shard_stats,
     bool is_test)
 {
-  auto epm = std::make_unique<ExtentPlacementManager>();
+  rewrite_gen_t hot_tier_generations = crimson::common::get_conf<uint64_t>(
+    "seastore_hot_tier_generations");
+  rewrite_gen_t cold_tier_generations = crimson::common::get_conf<uint64_t>(
+    "seastore_cold_tier_generations");
+  auto epm = std::make_unique<ExtentPlacementManager>(
+    hot_tier_generations, cold_tier_generations);
   auto cache = std::make_unique<Cache>(*epm);
   auto lba_manager = lba::create_lba_manager(*cache);
   auto sms = std::make_unique<SegmentManagerGroup>();
@@ -890,6 +895,7 @@ TransactionManagerRef make_transaction_manager(
       std::move(cold_sms),
       *backref_manager,
       epm->get_ool_segment_seq_allocator(),
+      hot_tier_generations + cold_tier_generations - 1,
       cleaner_is_detailed,
       /* is_cold = */ true);
     if (backend_type == backend_type_t::SEGMENTED) {
@@ -906,6 +912,7 @@ TransactionManagerRef make_transaction_manager(
       std::move(sms),
       *backref_manager,
       epm->get_ool_segment_seq_allocator(),
+      hot_tier_generations - 1,
       cleaner_is_detailed);
     auto segment_cleaner = static_cast<SegmentCleaner*>(cleaner.get());
     for (auto id : segment_cleaner->get_device_ids()) {

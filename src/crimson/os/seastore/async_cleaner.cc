@@ -32,7 +32,6 @@ void segment_info_t::set_open(
   ceph_assert(_seq != NULL_SEG_SEQ);
   ceph_assert(_type != segment_type_t::NULL_SEG);
   ceph_assert(_category != data_category_t::NUM);
-  ceph_assert(is_rewrite_generation(_generation));
   state = Segment::segment_state_t::OPEN;
   seq = _seq;
   type = _type;
@@ -67,7 +66,6 @@ void segment_info_t::init_closed(
   ceph_assert(_seq != NULL_SEG_SEQ);
   ceph_assert(_type != segment_type_t::NULL_SEG);
   ceph_assert(_category != data_category_t::NUM);
-  ceph_assert(is_rewrite_generation(_generation));
   state = Segment::segment_state_t::CLOSED;
   seq = _seq;
   type = _type;
@@ -916,6 +914,7 @@ SegmentCleaner::SegmentCleaner(
   SegmentManagerGroupRef&& sm_group,
   BackrefManager &backref_manager,
   SegmentSeqAllocator &segment_seq_allocator,
+  rewrite_gen_t max_rewrite_generation,
   bool detailed,
   bool is_cold)
   : detailed(detailed),
@@ -923,7 +922,8 @@ SegmentCleaner::SegmentCleaner(
     config(config),
     sm_group(std::move(sm_group)),
     backref_manager(backref_manager),
-    ool_segment_seq_allocator(segment_seq_allocator)
+    ool_segment_seq_allocator(segment_seq_allocator),
+    max_rewrite_generation(max_rewrite_generation)
 {
   config.validate();
 }
@@ -1060,6 +1060,7 @@ segment_id_t SegmentCleaner::allocate_segment(
     auto& segment_info = it->second;
     if (segment_info.is_empty()) {
       auto old_usage = calc_utilization(seg_id);
+      ceph_assert(is_rewrite_generation(generation, max_rewrite_generation));
       segments.mark_open(seg_id, seq, type, category, generation);
       if (type == segment_type_t::JOURNAL) {
         assert(trimmer != nullptr);
@@ -1271,8 +1272,12 @@ SegmentCleaner::clean_space_ret SegmentCleaner::clean_space()
          space_tracker->calc_utilization(seg_id),
          sea_time_point_printer_t{segments.get_time_bound()});
     ceph_assert(segment_info.is_closed());
+    ceph_assert(is_rewrite_generation(
+	segment_info.generation, max_rewrite_generation));
     reclaim_state = reclaim_state_t::create(
         seg_id, segment_info.generation, segments.get_segment_size());
+    assert(is_target_rewrite_generation(
+	reclaim_state->target_generation, max_rewrite_generation));
   }
   reclaim_state->advance(config.reclaim_bytes_per_cycle);
 
