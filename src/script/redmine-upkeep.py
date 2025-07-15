@@ -11,6 +11,7 @@
 
 import argparse
 import copy
+import inspect
 import itertools
 import json
 import logging
@@ -319,6 +320,15 @@ class RedmineUpkeep:
     GITHUB_RATE_LIMITED = False
     MAX_UPKEEP_FAILURES = 5
 
+    class Filter:
+        @staticmethod
+        def get_filters():
+            raise NotImplementedError("NI")
+
+        @staticmethod
+        def requires_github_api():
+            raise NotImplementedError("NI")
+
     def __init__(self, args):
         self.G = git.Repo(args.git)
         self.R = self._redmine_connect()
@@ -355,15 +365,15 @@ class RedmineUpkeep:
         self.transform_methods.sort(key=lambda x: x.__name__)
         log.debug(f"Sorted transformation methods: {[m.__name__ for m in self.transform_methods]}")
 
-        # Discover filter methods based on prefix
-        self.filter_methods = []
-        for name in dir(self):
-            if name.startswith('_filter_') and callable(getattr(self, name)):
-                self.filter_methods.append(getattr(self, name))
-        log.debug(f"Discovered filter methods: {[f.__name__ for f in self.filter_methods]}")
-
-        random.shuffle(self.filter_methods)
-        log.debug(f"Shuffled filter methods for processing order: {[f.__name__ for f in self.filter_methods]}")
+        # Discover filters based on prefix
+        self.filters = []
+        for name, v in RedmineUpkeep.__dict__.items():
+            if inspect.isclass(v) and issubclass(v, self.Filter) and v != self.Filter:
+                log.debug("discovered %s", v.NAME)
+                self.filters.append(v)
+        random.shuffle(self.filters) # to shuffle equivalent PRIORITY
+        self.filters.sort(key = lambda filter: filter.PRIORITY, reverse=True)
+        log.debug(f"Discovered filters: {[f.__name__ for f in self.filters]}")
 
     def _redmine_connect(self):
         log.info("Connecting to %s", REDMINE_ENDPOINT)
@@ -373,15 +383,28 @@ class RedmineUpkeep:
 
     # Transformations:
 
-    def _filter_merged(self, filters):
-        log.debug("Applying _filter_merged criteria.")
-        filters[f"cf_{REDMINE_CUSTOM_FIELD_ID_PULL_REQUEST_ID}"] = '>=0'
-        filters[f"cf_{REDMINE_CUSTOM_FIELD_ID_MERGE_COMMIT}"] = '!*'
-        filters["status_id"] = [
-            REDMINE_STATUS_ID_PENDING_BACKPORT,
-            REDMINE_STATUS_ID_RESOLVED
-        ]
-        return True # needs github API
+    class FilterMerged(Filter):
+        """
+        Filter issues that are closed but no merge commit is set.
+        """
+
+        PRIORITY = 1000
+        NAME = "Merged"
+
+        @staticmethod
+        def get_filters():
+            return {
+                f"cf_{REDMINE_CUSTOM_FIELD_ID_PULL_REQUEST_ID}": '>=0',
+                f"cf_{REDMINE_CUSTOM_FIELD_ID_MERGE_COMMIT}": '!*',
+                "status_id": [
+                    REDMINE_STATUS_ID_PENDING_BACKPORT,
+                    REDMINE_STATUS_ID_RESOLVED,
+                ],
+            }
+
+        @staticmethod
+        def requires_github_api():
+            return True
 
     def _transform_merged(self, issue_update):
         """
@@ -464,11 +487,23 @@ class RedmineUpkeep:
             issue_update.logger.info("Issue is already in 'Resolved' status. No change needed.")
             return False
 
-    def _filter_released(self, filters):
-        log.debug("Applying _filter_released criteria.")
-        filters[f"cf_{REDMINE_CUSTOM_FIELD_ID_MERGE_COMMIT}"] = '*'
-        filters[f"cf_{REDMINE_CUSTOM_FIELD_ID_RELEASED_IN}"] = '!*'
-        return False
+    class FilterReleased(Filter):
+        """
+        Filter for issues that are merged but not yet released.
+        """
+
+        PRIORITY = 10
+        NAME = "Released"
+
+        @staticmethod
+        def get_filters():
+            return {
+                "status_id": REDMINE_STATUS_ID_PENDING_BACKPORT,
+            }
+
+        @staticmethod
+        def requires_github_api():
+            return False
 
     def _transform_released(self, issue_update):
         """
@@ -497,15 +532,27 @@ class RedmineUpkeep:
             issue_update.logger.info(f"Commit {commit} not yet in a release. 'Released In' field will not be updated.")
         return False
 
-    def _filter_issues_pending_backport(self, filters):
+
+    class FilterPendingBackport(Filter):
         """
         Filter for issues that are in 'Pending Backport' status.  The
         transformation will then check if they are non-backport trackers and if
         all their 'Copied to' backports are resolved.
         """
-        log.debug("Applying _filter_issues_pending_backport criteria.")
-        filters["status_id"] = REDMINE_STATUS_ID_PENDING_BACKPORT
-        return False
+
+        PRIORITY = 10
+        NAME = "Pending Backport"
+
+        @staticmethod
+        def get_filters():
+            return {
+                "status_id": REDMINE_STATUS_ID_PENDING_BACKPORT,
+            }
+
+        @staticmethod
+        def requires_github_api():
+            return False
+
 
     def _transform_resolve_main_issue_from_backports(self, issue_update):
         """
@@ -914,35 +961,35 @@ h2. Update Payload
         # This reduces Redmine API calls for filtering
         common_filters = {
             "project_id": self.project_id,
-            "limit": limit,
             "sort": f'cf_{REDMINE_CUSTOM_FIELD_ID_UPKEEP_TIMESTAMP}',
             "status_id": "*",
             f"cf_{REDMINE_CUSTOM_FIELD_ID_TAGS}": "!upkeep-failed",
         }
         #f"cf_{REDMINE_CUSTOM_FIELD_ID_UPKEEP_TIMESTAMP}": f"<={cutoff_date}", # Not updated recently
-        log.info("Beginning to loop through shuffled filters.")
-        for filter_method in self.filter_methods:
+
+        log.info("Beginning to loop through filters.")
+        for f in self.filters:
             if limit <= 0:
                 log.info("Issue processing limit reached. Stopping filter execution.")
                 break
-            common_filters['limit'] = limit
-            filters = copy.deepcopy(common_filters)
-            needs_github_api = filter_method(filters)
+            issue_filter = {**common_filters, **f.get_filters()}
+            issue_filter['limit'] = limit
+            needs_github_api = f.requires_github_api()
             try:
-                log.info(f"Running filter {filter_method.__name__} with criteria: {filters}")
-                issues = self.R.issue.filter(**filters)
+                log.info(f"Running filter {f.NAME} with criteria: {issue_filter}")
+                issues = self.R.issue.filter(**issue_filter)
                 issue_count = len(issues)
-                log.info(f"Filter {filter_method.__name__} returned {issue_count} issue(s).")
+                log.info(f"Filter {f.NAME} returned {issue_count} issue(s).")
                 for issue in issues:
                     if needs_github_api and self.GITHUB_RATE_LIMITED:
-                        log.warning(f"Stopping filter {filter_method.__name__} due to Github rate limits.")
+                        log.warning(f"Stopping filter {f.NAME} due to Github rate limits.")
                         break
                     limit = limit - 1
                     self._process_issue_transformations(issue)
                     if limit <= 0:
                         break
             except redminelib.exceptions.ResourceAttrError as e:
-                log.warning(f"Redmine API error with filter {filters}: {e}")
+                log.warning(f"Redmine API error with filter {issue_filter}: {e}")
 
 def main():
     parser = argparse.ArgumentParser(description="Ceph redmine upkeep tool")
