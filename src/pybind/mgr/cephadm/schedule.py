@@ -467,18 +467,34 @@ class HostAssignment(object):
                 "placement spec is empty: no hosts, no label, no pattern, no count")
 
         # allocate an IP?
-        if self.spec.networks:
+        if self.spec.networks or self.spec.ip_addrs:
             orig = ls.copy()
             ls = []
             for p in orig:
-                ip = self.find_ip_on_host(p.hostname, self.spec.networks)
+                ip = None
+                # daemon can have specific ip if 'ip_addrs' is spcified in spec, we can use this
+                # parameter for all services, if they need to bind to specific ip
+                # If ip not present and networks is passed, ip of that network will be used
+                if self.spec.ip_addrs:
+                    ip = self.spec.ip_addrs.get(p.hostname)
+                    host_ips: List[str] = []
+                    for net_details in self.networks.get(p.hostname, {}).values():
+                        for ips in net_details.values():
+                            host_ips.extend(ips)
+                    if ip and ip not in host_ips:
+                        logger.debug(f"IP {ip} is not configured on host {p.hostname}.")
+                        ip = None
+                if not ip and self.spec.networks:
+                    ip = self.find_ip_on_host(p.hostname, self.spec.networks)
                 if ip:
                     ls.append(DaemonPlacement(daemon_type=self.primary_daemon_type,
                                               hostname=p.hostname, network=p.network,
                                               name=p.name, ports=p.ports, ip=ip))
                 else:
                     logger.debug(
-                        f'Skipping {p.hostname} with no IP in network(s) {self.spec.networks}'
+                        f"Skipping {p.hostname} with no IP in provided networks or ip_addrs "
+                        f"{f'networks: {self.spec.networks}' if self.spec.networks else ''}"
+                        f"{f'ip_addrs: {self.spec.ip_addrs}' if self.spec.ip_addrs else ''}"
                     )
 
         if self.filter_new_host:
