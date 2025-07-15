@@ -608,7 +608,7 @@ ECTransaction::Generate::Generate(PGTransaction &t,
    * not simply construct written shards here.
    */
   for (auto &&[shard, t] : transactions) {
-    if (t.get_num_ops() > old_transaction_counts[int(shard)] &&
+    if (std::cmp_greater(t.get_num_ops(), old_transaction_counts[int(shard)]) &&
         !entry->is_written_shard(shard)) {
       ldpp_dout(dpp, 20) << __func__ << " Transaction for shard " << shard << ": ";
       Formatter *f = Formatter::create("json");
