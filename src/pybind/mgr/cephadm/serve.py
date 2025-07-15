@@ -826,6 +826,7 @@ class CephadmServe:
             primary_daemon_type=svc.primary_daemon_type(spec),
             per_host_daemon_type=svc.per_host_daemon_type(spec),
             rank_map=rank_map,
+            upgrade_in_progress=(self.mgr.upgrade.upgrade_state is not None)
         )
 
         try:
