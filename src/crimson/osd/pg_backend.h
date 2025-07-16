@@ -25,6 +25,7 @@
 #include "crimson/osd/osd_operations/osdop_params.h"
 
 struct hobject_t;
+struct ECListener;
 
 namespace ceph::os {
   class Transaction;
@@ -77,7 +78,7 @@ public:
 					   crimson::osd::ShardServices& shard_services,
 					   const ec_profile_t& ec_profile,
 					   DoutPrefixProvider &dpp,
-					   struct ECListener &eclistener);
+					   ECListener &eclistener);
   using attrs_t =
     std::map<std::string, ceph::bufferptr, std::less<>>;
   using read_errorator = ll_read_errorator::extend<
