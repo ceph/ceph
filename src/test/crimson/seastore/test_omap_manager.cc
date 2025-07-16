@@ -646,43 +646,45 @@ TEST_P(omap_manager_test_t, replay)
   run_async([this] {
     omap_root_t omap_root = initialize();
 
-    for (unsigned i = 0; i < 8; i++) {
-      logger().debug("opened split transaction");
+    // Repeatedly apply set/rm operations until the omap tree reaches
+    // depth 2. This simulates real-world scenarios where data is
+    // inserted and deleted over time, and ensures that replay after
+    // structural transitions does not corrupt tree state.
+    //
+    // Each iteration inserts 256 keys and removes 128, driving split
+    // pressure with a controlled amount of churn.
+    while (omap_root.get_depth() < 2) {
       auto t = create_mutate_transaction();
+      logger().debug("== begin split-churn cycle (num_keys = {})",
+	             test_omap_mappings.size());
 
-      for (unsigned j = 0; j < 80; ++j) {
+      for (int i = 0; i < 128; i++) {
         set_random_key(omap_root, *t);
-        if ((i % 2 == 0) && (j % 50 == 0)) {
-          check_mappings(omap_root, *t);
-        }
+        set_random_key(omap_root, *t);
+        rm_key(omap_root, *t, test_omap_mappings.begin()->first);
       }
-      logger().debug("submitting transaction i = {}", i);
       submit_transaction(std::move(t));
-    }
-    replay();
-    check_mappings(omap_root);
 
-    auto mkeys = get_mapped_keys();
-    auto t = create_mutate_transaction();
-    for (unsigned i = 0; i < mkeys.size(); i++) {
-      rm_key(omap_root, *t, mkeys[i]);
-
-      if (i % 10 == 0) {
-        logger().debug("submitting transaction i= {}", i);
-        submit_transaction(std::move(t));
-        replay();
-        t = create_mutate_transaction();
-      }
-      if (i % 50 == 0) {
-        logger().debug("check_mappings  i= {}", i);
-        check_mappings(omap_root, *t);
-        check_mappings(omap_root);
-      }
+      replay();
+      check_mappings(omap_root);
     }
-    logger().debug("finally submitting transaction ");
-    submit_transaction(std::move(t));
-    replay();
-    check_mappings(omap_root);
+
+    // Gradually remove 128 keys at a time — matching the number
+    // inserted per iteration earlier. This triggers a merge that
+    // shrinks the tree back to depth 1, allowing us to verify that
+    // replay remains correct after structural contraction.
+    while (omap_root.get_depth() > 1) {
+      auto t = create_mutate_transaction();
+      logger().debug("== begin full deletion to trigger merge");
+
+      auto first = test_omap_mappings.begin()->first;
+      auto last = std::next(test_omap_mappings.begin(), 128)->first;
+      rm_key_range(omap_root, *t, first, last);
+      submit_transaction(std::move(t));
+
+      replay();
+      check_mappings(omap_root);
+    }
   });
 }
 
