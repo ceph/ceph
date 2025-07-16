@@ -330,42 +330,36 @@ void PeeringState::apply_pwlc(const std::pair<eversion_t, eversion_t> pwlc,
   // Check if last_complete and last_update can be advanced based on
   // knowledge of partial_writes
   const auto & [fromversion, toversion] = pwlc;
-  bool logged = false;
-  if ((toversion > info.last_complete) &&
-      (fromversion.version <= info.last_complete.version)) {
-    psdout(10) << "osd." << shard << " has last_complete "
-	       << info.last_complete
-	       << " pwlc can advance last_complete to " << toversion
-	       << dendl;
-    logged = true;
-    info.last_complete = toversion;
-  }
-  if ((toversion > info.last_update) &&
-      (fromversion.version <= info.last_update.version)) {
-    if (!logged) {
+  if (toversion > info.last_update) {
+    if (fromversion.version <= info.last_update.version) {
+      if (info.last_complete == info.last_update) {
+	psdout(10) << "osd." << shard << " has last_complete"
+		   << "=last_update " << info.last_update
+		   << " pwlc can advance both to " << toversion
+		   << dendl;
+	info.last_complete = toversion;
+      } else {
+	psdout(10) << "osd." << shard << " has last_complete "
+		   << info.last_complete << " and last_update "
+		   << info.last_update
+		   << " pwlc can advance last_update to " << toversion
+		   << dendl;
+      }
+      info.last_update = toversion;
+      if (log1 && toversion > log1->head) {
+	log1->head = toversion;
+      }
+      if (log2 && toversion > log2->get_head()) {
+	log2->set_head(toversion);
+      }
+    } else {
       psdout(10) << "osd." << shard << " has last_complete "
 		 << info.last_complete << " and last_update "
 		 << info.last_update
-		 << " pwlc can advance last_update to " << toversion
+		 << " cannot apply pwlc from " << fromversion
+		 << " to " << toversion
 		 << dendl;
-      logged = true;
     }
-    info.last_update = toversion;
-    if (log1 && toversion > log1->head) {
-      log1->head = toversion;
-    }
-    if (log2 && toversion > log2->get_head()) {
-      log2->set_head(toversion);
-    }
-  }
-  if ((toversion > info.last_complete) &&
-      !logged) {
-    psdout(10) << "osd." << shard << " has last_complete "
-	       << info.last_complete << " and last_update "
-	       << info.last_update
-	       << " cannot apply pwlc from " << fromversion
-	       << " to " << toversion
-	       << dendl;
   }
 }
 
