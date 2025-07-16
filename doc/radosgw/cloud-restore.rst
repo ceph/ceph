@@ -1,3 +1,5 @@
+.. _radosgw-cloud-restore:
+
 =============
 Cloud Restore
 =============
