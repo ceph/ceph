@@ -640,12 +640,15 @@ struct ClientReadCompleter final : ECCommon::ReadCompleter {
       for (auto &&read: req.to_read) {
         // Return a buffer containing both data and parity
         // if the parity read inject is set
+#ifndef WITH_CRIMSON
         if (cct->_conf->bluestore_debug_inject_read_err &&
             ECInject::test_parity_read(hoid)) {
           bufferlist data_and_parity;
           read_pipeline.create_parity_read_buffer(res.buffers_read, read, &data_and_parity);
           result.insert(read.offset, data_and_parity.length(), data_and_parity);
-        } else {
+        } else
+#endif
+        {
           result.insert(read.offset, read.size,
                         res.buffers_read.get_ro_buffer(read.offset, read.size));
         }
@@ -685,11 +688,13 @@ void ECCommon::ReadPipeline::objects_read_and_reconstruct(
   map<hobject_t, read_request_t> for_read_op;
   for (auto &&[hoid, to_read]: reads) {
     ECUtil::shard_extent_set_t want_shard_reads(sinfo.get_k_plus_m());
+#ifndef WITH_CRIMSON
     if (cct->_conf->bluestore_debug_inject_read_err &&
         ECInject::test_parity_read(hoid)) {
       get_want_to_read_all_shards(to_read, want_shard_reads);
-    }
-    else {
+    } else
+#endif
+    {
       get_want_to_read_shards(to_read, want_shard_reads);
     }
 
