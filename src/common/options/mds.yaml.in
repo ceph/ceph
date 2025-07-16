@@ -793,6 +793,21 @@ options:
   services:
   - mds
   with_legacy: true
+- name: mds_allow_batched_ops
+  type: bool
+  level: advanced
+  desc: allow MDS to batch lookup/getattr RPCs
+  long_desc: >
+    The MDS will batch a lookup or getattr RPC on the same inode when
+    possible to avoid repetitive locks on metadata and to bypass other
+    requests acquiring write locks. Generally, this should only
+    improve performance but this switch exists to provide a means to
+    turn this behavior off for comparison.
+  default: true
+  services:
+  - mds
+  flags:
+  - runtime
 # multiple of size_max that triggers immediate split
 - name: mds_bal_fragment_fast_factor
   type: float
