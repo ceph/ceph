@@ -144,3 +144,28 @@ class TLSCredentialType(_StrEnum):
     CERT = 'cert'
     KEY = 'key'
     CA_CERT = 'ca-cert'
+
+
+class KeyBridgeScopeType(_StrEnum):
+    """Specify the type of a keybridge scope."""
+
+    MEM = 'mem'
+    KMIP = 'kmip'
+
+    def unique(self) -> bool:
+        """Return true if the scope is unique for a keybridge.
+        A unique scope can only appear once and has no additional qualifying
+        name(s).
+        """
+        return self in {self.MEM}
+
+
+class KeyBridgePeerPolicy(_StrEnum):
+    """Specify keybridge peer policy for validating access.
+    The policy bundles keybridge peer validation approaches into a single named
+    policy. Typically users *should not* be changing this. It's mainly for
+    debugging and hacking.
+    """
+
+    RESTRICTED = 'restricted'
+    UNRESTRICTED = 'unrestricted'
