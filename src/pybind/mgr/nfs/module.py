@@ -1,6 +1,7 @@
 import logging
 import threading
 from typing import Tuple, Optional, List, Dict, Any
+import yaml
 
 from mgr_module import MgrModule, CLICommand, Option, CLICheckNonemptyFileInput
 import object_format
@@ -147,11 +148,18 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                                 ingress: Optional[bool] = None,
                                 virtual_ip: Optional[str] = None,
                                 ingress_mode: Optional[IngressType] = None,
-                                port: Optional[int] = None) -> None:
+                                port: Optional[int] = None,
+                                inbuf: Optional[str] = None,
+                                ) -> None:
         """Create an NFS Cluster"""
+        cluster_qos_config = None
+        if inbuf:
+            config = yaml.safe_load(inbuf)
+            cluster_qos_config = config.get('cluster_qos_config')
         return self.nfs.create_nfs_cluster(cluster_id=cluster_id, placement=placement,
                                            virtual_ip=virtual_ip, ingress=ingress,
-                                           ingress_mode=ingress_mode, port=port)
+                                           ingress_mode=ingress_mode, port=port,
+                                           cluster_qos_config=cluster_qos_config)
 
     @CLICommand('nfs cluster rm', perm='rw')
     @object_format.EmptyResponder()
