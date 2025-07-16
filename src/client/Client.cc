@@ -18934,7 +18934,9 @@ int Client::fcopyfile(const char *spath, const char *dpath, UserPerm& perms, mod
         if (r < 0) {
           ldout(cct, 10) << "fcopyfile: error reading copy data, r=" << r << dendl;
           goto out;
-        }
+        } else {
+	  len = r;
+	}
 
         r = write(dest, in_buf, len, off);
         if (r < 0) {
@@ -18943,8 +18945,15 @@ int Client::fcopyfile(const char *spath, const char *dpath, UserPerm& perms, mod
         }
         off = off + len;
 
-        if (off == size)
+        if (off == size) {
           break;
+	} else if (off > size) {
+	  ldout(cct, 0) << __FILE__ << ",  " << __func__ << "() at " << __LINE__
+		        << " internal error: \"off\" is greater than \"size\"; "
+			" off = " << off << " size = " << size << dendl;
+	  r = -1;
+	  goto out;
+	}
       }
     }
     out:
