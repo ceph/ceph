@@ -8,6 +8,27 @@ using namespace std;
 
 namespace rgw { namespace store {
 
+int POSIXUserDB::ProcessOp(const DoutPrefixProvider *dpp, string_view Op, DBOpParams *params) {
+  int ret = -1;
+  shared_ptr<class DBOp> db_op;
+
+  db_op = getDBOp(dpp, Op, params);
+
+  if (!db_op) {
+    ldpp_dout(dpp, 0)<<"No db_op found for Op("<<Op<<")" << dendl;
+    return ret;
+  }
+  ret = db_op->Execute(dpp, params);
+
+  if (ret) {
+    ldpp_dout(dpp, 0)<<"In Process op Execute failed for fop(" << Op << ")" << dendl;
+  } else {
+    ldpp_dout(dpp, 20)<<"Successfully processed fop(" << Op << ")" << dendl;
+  }
+
+  return ret;
+}
+
 int POSIXUserDB::Initialize(string logfile, int loglevel)
 {
   int ret = -1;
@@ -44,6 +65,35 @@ int POSIXUserDB::Initialize(string logfile, int loglevel)
 
   ldpp_dout(dpp, 0) << "POSIXUserDB successfully initialized - name:" \
     << db_name << "" << dendl;
+
+  // Create default user that corresponds to vstart user (TODO: Temporary fix)
+  dbops = SQLiteDB::dbops;
+  DBOpParams params = {};
+  RGWAccessKey key("0555b35654ad1656d804", "h7GhxuBLTrlhVUyxSPUKUV8r/2EI4ngqJxD7iBdBYLhwluN30JaT3Q==");
+
+  params.user_table = user_table;
+  params.bucket_table = bucket_table;
+  params.quota_table = quota_table;
+  params.lc_entry_table = lc_entry_table;
+  params.lc_head_table = lc_head_table;
+  params.op.user.uinfo.display_name = "tester";
+  params.op.user.uinfo.user_id.id = "test";
+  params.op.user.uinfo.access_keys["default"] = key;
+
+  shared_ptr<class DBOp> db_op;
+  db_op = dbops.GetUser;
+  ret = db_op->Execute(dpp, &params);
+
+  if (ret == -ENOENT) {
+    db_op = dbops.InsertUser;
+    ret = db_op->Execute(dpp, &params);
+
+    if (ret) {
+      ldpp_dout(dpp, 0)<<"Op Execute failed for fop(InsertUser)" << dendl;
+    } else {
+      ldpp_dout(dpp, 20)<<"Successfully processed fop(InsertUser)" << dendl;
+    }
+  } 
 
   return ret;
 }
