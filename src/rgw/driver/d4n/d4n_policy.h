@@ -182,9 +182,10 @@ class LFUDAPolicy : public CachePolicy {
     int delete_data_blocks(const DoutPrefixProvider* dpp, LFUDAObjEntry* e, optional_yield y);
 
   public:
-    LFUDAPolicy(std::shared_ptr<connection>& conn, rgw::cache::CacheDriver* cacheDriver) : CachePolicy(), 
-											   conn(conn), 
-											   cacheDriver(cacheDriver)
+    LFUDAPolicy(std::shared_ptr<connection>& conn, rgw::cache::CacheDriver* cacheDriver, optional_yield y) : CachePolicy(), 
+                                                                                                             y(y),
+													     conn(conn), 
+													     cacheDriver(cacheDriver)
     {
       blockDir = new BlockDirectory{conn};
       objDir = new ObjectDirectory{conn};
@@ -207,7 +208,6 @@ class LFUDAPolicy : public CachePolicy {
     virtual void update(const DoutPrefixProvider* dpp, const std::string& key, uint64_t offset, uint64_t len, const std::string& version, bool dirty, uint8_t op, optional_yield y, std::string& restore_val=empty) override;
     virtual bool erase(const DoutPrefixProvider* dpp, const std::string& key, optional_yield y) override;
     virtual bool _erase(const DoutPrefixProvider* dpp, const std::string& key, optional_yield y);
-    void save_y(optional_yield y) { this->y = y; }
     virtual void update_dirty_object(const DoutPrefixProvider* dpp, const std::string& key, const std::string& version, bool deleteMarker, uint64_t size, 
 			    double creationTime, const rgw_user& user, const std::string& etag, const std::string& bucket_name, const std::string& bucket_id,
 			    const rgw_obj_key& obj_key, uint8_t op, optional_yield y, std::string& restore_val=empty) override;
@@ -221,6 +221,7 @@ class LFUDAPolicy : public CachePolicy {
       }
       return it->second.first;
     }
+    void save_y(optional_yield y) { this->y = y; }
 };
 
 class LRUPolicy : public CachePolicy {
@@ -258,10 +259,10 @@ class PolicyDriver {
     CachePolicy* cachePolicy;
 
   public:
-    PolicyDriver(std::shared_ptr<connection>& conn, rgw::cache::CacheDriver* cacheDriver, const std::string& _policyName) : policyName(_policyName) 
+    PolicyDriver(std::shared_ptr<connection>& conn, rgw::cache::CacheDriver* cacheDriver, const std::string& _policyName, optional_yield y) : policyName(_policyName) 
     {
       if (policyName == "lfuda") {
-	cachePolicy = new LFUDAPolicy(conn, cacheDriver);
+	cachePolicy = new LFUDAPolicy(conn, cacheDriver, y);
       } else if (policyName == "lru") {
 	cachePolicy = new LRUPolicy(cacheDriver);
       }
