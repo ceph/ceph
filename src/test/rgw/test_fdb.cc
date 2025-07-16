@@ -210,7 +210,7 @@ int main(int argc, char **argv)
   int result = Catch::Session().run(argc, argv);
 
   // Make sure that FoundationDB is shut down once and only once:
-  ceph::libfdb::detail::database_system::shutdown_fdb(); 
+  ceph::libfdb::database_system::shutdown_fdb(); 
 
   return result;
 }
