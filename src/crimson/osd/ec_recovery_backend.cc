@@ -21,12 +21,14 @@ namespace {
   }
 }
 
+namespace crimson::osd {
+
 ECRecoveryBackend::ECRecoveryBackend(
   crimson::osd::PG& pg,
   crimson::osd::ShardServices& shard_services,
   crimson::os::CollectionRef coll,
   ECBackend* backend)
-: ::RecoveryBackend(pg, shard_services, coll, backend),
+: ::crimson::osd::RecoveryBackend(pg, shard_services, coll, backend),
   ::ECCommon::RecoveryBackend(
     shard_services.get_cct(),
     coll->get_cid(),
@@ -73,7 +75,7 @@ void ECRecoveryBackend::commit_txn_send_replies(
   std::map<int, MOSDPGPushReply*> replies)
 {
   std::ignore = shard_services.get_store().do_transaction(
-    ::RecoveryBackend::coll, std::move(txn)
+    crimson::osd::RecoveryBackend::coll, std::move(txn)
   ).then([replies=std::move(replies), this]() mutable {
     if (auto msgit = replies.find(get_parent()->whoami_shard().osd);
         msgit != std::end(replies)) {
@@ -189,6 +191,8 @@ ECRecoveryBackend::handle_recovery_op(
       boost::static_pointer_cast<MOSDPGPushReply>(m));
   default:
     // delegate backfill messages to parent class
-    return handle_backfill_op(std::move(m), conn);
+    return ::crimson::osd::RecoveryBackend::handle_recovery_op(std::move(m), conn);
   }
 }
+
+} // namespace crimson::osd

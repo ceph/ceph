@@ -23,13 +23,12 @@
 #include "osd/recovery_types.h"
 #include "osd/osd_types.h"
 
-namespace crimson::osd{
-  class PG;
-}
-
 class PGBackend;
 
-class ECRecoveryBackend : public RecoveryBackend,
+namespace crimson::osd {
+class PG;
+
+class ECRecoveryBackend : public crimson::osd::RecoveryBackend,
 			  private ECCommon::RecoveryBackend {
 public:
   ECRecoveryBackend(crimson::osd::PG& pg,
@@ -64,3 +63,5 @@ private:
   interruptible_future<> handle_push_reply(
     Ref<MOSDPGPushReply> m);
 };
+
+} // namespace crimson::osd
