@@ -251,17 +251,17 @@ struct ECCrimsonOp : ECCommon::RMWPipeline::Op {
     ECTransaction::generate_transactions(
       t.get(),
       plan,
-      ecimpl,
+      ec_impl,
       pgid,
       sinfo,
-      remote_read_result,
+      remote_shard_extent_map,
       log_entries,
       written,
       transactions,
       &temp_added,
       &temp_cleared,
       dpp,
-      require_osd_release);
+      osdmap);
 #endif
   }
 
