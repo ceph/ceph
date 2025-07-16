@@ -55,6 +55,8 @@ StoreTool::StoreTool(const string& type,
   }
 }
 
+#ifdef WITH_BLUESTORE
+
 int StoreTool::load_bluestore(const string& path, bool read_only, bool to_repair)
 {
     auto bluestore = new BlueStore(g_ceph_context, path);
@@ -66,6 +68,8 @@ int StoreTool::load_bluestore(const string& path, bool read_only, bool to_repair
     db = decltype(db){db_ptr, Deleter(bluestore)};
     return 0;
 }
+
+#endif // WITH_BLUESTORE
 
 uint32_t StoreTool::traverse(const string& prefix,
                              const bool do_crc,

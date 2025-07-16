@@ -509,15 +509,16 @@ public:
       // always try step 2 if paddr unknown
       needs_step_2 = !ret.is_paddr_known;
 
+      auto target_extent = CachedExtentRef(&extent);
       return trans_intr::make_interruptible(
 	extent.wait_io()
-      ).then_interruptible([&extent, needs_touch,
+      ).then_interruptible([target_extent, needs_touch,
 			    needs_step_2, &t, this, t_src] {
 	if (needs_step_2) {
-	  t.maybe_add_to_read_set_step_2(&extent);
+	  t.maybe_add_to_read_set_step_2(target_extent.get());
 	}
 	if (needs_touch) {
-	  touch_extent(extent, &t_src, t.get_cache_hint());
+	  touch_extent(*target_extent, &t_src, t.get_cache_hint());
 	}
 	return get_extent_iertr::now();
       });
@@ -624,9 +625,11 @@ public:
     assert(is_logical_type(p_extent->get_type()) ||
            p_extent->is_fully_loaded());
 
+    auto target_extent = CachedExtentRef(p_extent);
     return trans_intr::make_interruptible(
       p_extent->wait_io()
-    ).then_interruptible([p_extent, needs_touch, needs_step_2, &t, this, t_src] {
+    ).then_interruptible([target_extent, needs_touch, needs_step_2, &t, this, t_src] {
+      auto p_extent = target_extent.get();
       if (needs_step_2) {
 	t.maybe_add_to_read_set_step_2(p_extent);
       }

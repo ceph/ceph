@@ -54,6 +54,8 @@ public:
 
     if (technique == "reed_sol_van"sv) {
       flags |= FLAG_EC_PLUGIN_OPTIMIZED_SUPPORTED;
+    } else if (technique != "cauchy_orig"sv) {
+      flags |= FLAG_EC_PLUGIN_CRC_ENCODE_DECODE_SUPPORT;
     }
   }
 

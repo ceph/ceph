@@ -417,7 +417,6 @@ private:
     return all_shards;
   }
 
-
 public:
   stripe_info_t(const ErasureCodeInterfaceRef &ec_impl, const pg_pool_t *pool,
                 uint64_t stripe_width
@@ -550,6 +549,10 @@ public:
     return pool->allows_ecoverwrites();
   }
 
+  bool supports_ec_optimisations() const {
+    return pool->allows_ecoptimizations();
+  }
+
   bool supports_sub_chunks() const {
     return (plugin_flags &
       ErasureCodeInterface::FLAG_EC_PLUGIN_REQUIRE_SUB_CHUNKS) != 0;
@@ -572,6 +575,11 @@ public:
   bool supports_parity_delta_writes() const {
     return (plugin_flags &
       ErasureCodeInterface::FLAG_EC_PLUGIN_PARITY_DELTA_OPTIMIZATION) != 0;
+  }
+
+  bool supports_encode_decode_crcs() const {
+    return (plugin_flags &
+            ErasureCodeInterface::FLAG_EC_PLUGIN_CRC_ENCODE_DECODE_SUPPORT) != 0;
   }
 
   uint64_t get_stripe_width() const {
