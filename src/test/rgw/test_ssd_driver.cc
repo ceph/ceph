@@ -70,14 +70,13 @@ class Environment : public ::testing::Environment {
 
     void SetUp() override {
       std::vector<const char*> args;
-      std::string conf_file_list;
-      std::string cluster = "";
-      CephInitParameters iparams = ceph_argparse_early_args(
-        args, CEPH_ENTITY_TYPE_CLIENT,
-        &cluster, &conf_file_list);
+      auto _cct = global_init(nullptr, args, CEPH_ENTITY_TYPE_CLIENT,
+			      CODE_ENVIRONMENT_UTILITY,
+			      CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
 
-      cct = common_preinit(iparams, CODE_ENVIRONMENT_UTILITY, {});
+      cct = _cct.get();
       dpp = new DoutPrefix(cct->get(), dout_subsys, "SSD backed Cache backend Test: ");
+      common_init_finish(g_ceph_context);
     }
 
     CephContext* cct;

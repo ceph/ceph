@@ -572,7 +572,7 @@ int log_record(rgw::sal::Driver* driver,
         s->info.x_meta_map.contains("x-amz-id-2") ? s->info.x_meta_map.at("x-amz-id-2") : "-",
         aws_version,
         s->info.env->get("SSL_CIPHER", "-"),
-        auth_type,
+        dash_if_empty(auth_type),
         dash_if_empty(fqdn),
         s->info.env->get("TLS_VERSION", "-"),
         "-", // no access point ARN

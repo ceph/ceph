@@ -107,6 +107,41 @@ struct seastore_test_t :
     std::map<string, bufferlist> omap;
     bufferlist contents;
 
+    ObjectStore::omap_iter_ret_t check_iterate(
+      std::string_view key,
+      std::string_view value,
+      std::map<string, bufferlist>::iterator &refiter)
+    {
+      if (refiter != omap.end()) {
+        EXPECT_EQ(refiter->first, key);
+      }
+      if (refiter != omap.end() && refiter->first < key) {
+        auto ite = omap.find(std::string(key));
+        auto dist = std::distance(refiter, ite);
+        for (int i = 0; i < dist; i++) {
+          logger().debug(
+            "check_omap: missing omap key {}",
+            refiter->first);
+          EXPECT_TRUE(false) << "missing omap key " << refiter->first;
+          return ObjectStore::omap_iter_ret_t::STOP;
+        }
+        ++refiter;
+        EXPECT_EQ(refiter->first, key);
+      } else if (refiter == omap.end() || refiter->first > key) {
+        logger().debug(
+          "check_omap: extra omap key {}",
+          key);
+        EXPECT_TRUE(false) << "extra omap key " << key;
+        return ObjectStore::omap_iter_ret_t::STOP;
+      } else {
+        ceph::bufferlist bl;
+        bl.append(value);
+        EXPECT_EQ(bl, refiter->second);
+        ++refiter;
+      }
+      return ObjectStore::omap_iter_ret_t::NEXT;
+    }
+
     std::map<snapid_t, bufferlist> clone_contents;
 
     void touch(
@@ -429,41 +464,26 @@ struct seastore_test_t :
       }
     }
 
-    void check_omap(SeaStoreShard &sharded_seastore) {
-      auto refiter = omap.begin();
-      std::optional<std::string> start;
-      while(true) {
-        auto [done, kvs] = sharded_seastore.omap_get_values(
-          coll,
-          oid,
-          start).unsafe_get();
-        auto iter = kvs.begin();
-        while (true) {
-	  if ((done && iter == kvs.end()) && refiter == omap.end()) {
-	    return; // finished
-          } else if (!done && iter == kvs.end()) {
-	    break; // reload kvs
-          }
-          if (iter == kvs.end() || refiter->first < iter->first) {
-	    logger().debug(
-	      "check_omap: missing omap key {}",
-	      refiter->first);
-	    GTEST_FAIL() << "missing omap key " << refiter->first;
-	    ++refiter;
-          } else if (refiter == omap.end() || refiter->first > iter->first) {
-	    logger().debug(
-	      "check_omap: extra omap key {}",
-	      iter->first);
-	    GTEST_FAIL() << "extra omap key " << iter->first;
-            ++iter;
-          } else {
-	    EXPECT_EQ(iter->second, refiter->second);
-            ++iter;
-            ++refiter;
-          }
-        }
-        if (!done) {
-          start = kvs.rbegin()->first;
+    void check_omap(SeaStoreShard &sharded_seastore,
+      std::map<string, bufferlist>::iterator &refiter,
+      std::function<ObjectStore::omap_iter_ret_t(std::string_view, std::string_view)> callback)
+    {
+      ObjectStore::omap_iter_seek_t start_from = ObjectStore::omap_iter_seek_t::min_lower_bound();
+      refiter = omap.begin();
+      sharded_seastore.omap_iterate(
+        coll,
+        oid,
+        start_from,
+        callback).unsafe_get();
+
+      if (refiter == omap.end()) {
+        return;
+      } else {
+        for (; refiter != omap.end(); refiter++) {
+          logger().debug(
+            "check_omap: missing omap key {}",
+            refiter->first);
+          GTEST_FAIL() << "missing omap key " << refiter->first;
         }
       }
     }
@@ -814,9 +834,16 @@ TEST_P(seastore_test_t, rename)
       test_obj.cid, 
       test_obj.coll,
       ghobject_t(hobject_t(sobject_t(std::string("object_1"), CEPH_NOSNAP)))};
+
+    std::map<string, bufferlist>::iterator refiter;
+    std::function<ObjectStore::omap_iter_ret_t(std::string_view, std::string_view)> callback =
+      [&test_other, &refiter](std::string_view key, std::string_view val)
+    {
+      return test_other.check_iterate(key, val, refiter);
+    };
     test_obj.rename(*sharded_seastore, test_other);
     test_other.read(*sharded_seastore, 0, 4096);
-    test_other.check_omap(*sharded_seastore);
+    test_other.check_omap(*sharded_seastore, refiter, callback);
   });
 }
 
@@ -1071,11 +1098,17 @@ TEST_P(seastore_test_t, omap_test_iterator)
     test_obj.touch(*sharded_seastore);
     for (unsigned i = 0; i < 20; ++i) {
       test_obj.set_omap(
-	*sharded_seastore,
-	make_key(i),
-	make_bufferlist(128));
+        *sharded_seastore,
+        make_key(i),
+        make_bufferlist(128));
     }
-    test_obj.check_omap(*sharded_seastore);
+    std::map<string, bufferlist>::iterator refiter;
+    std::function<ObjectStore::omap_iter_ret_t(std::string_view, std::string_view)> callback =
+      [&test_obj, &refiter](std::string_view key, std::string_view val)
+    {
+      return test_obj.check_iterate(key, val, refiter);
+    };
+    test_obj.check_omap(*sharded_seastore, refiter, callback);
   });
 }
 
@@ -1091,18 +1124,24 @@ TEST_P(seastore_test_t, object_data_omap_remove)
     test_obj.touch(*sharded_seastore);
     for (unsigned i = 0; i < 1024; ++i) {
       test_obj.set_omap(
-	*sharded_seastore,
-	make_key(i),
-	make_bufferlist(128));
+        *sharded_seastore,
+        make_key(i),
+        make_bufferlist(128));
     }
-    test_obj.check_omap(*sharded_seastore);
+    std::map<string, bufferlist>::iterator refiter;
+    std::function<ObjectStore::omap_iter_ret_t(std::string_view, std::string_view)> callback =
+      [&test_obj, &refiter](std::string_view key, std::string_view val)
+    {
+      return test_obj.check_iterate(key, val, refiter);
+    };
+    test_obj.check_omap(*sharded_seastore, refiter, callback);
 
     for (uint64_t i = 0; i < 16; i++) {
       test_obj.write(
-	*sharded_seastore,
-	4096 * i,
-	4096,
-	'a');
+        *sharded_seastore,
+        4096 * i,
+        4096,
+        'a');
     }
     test_obj.remove(*sharded_seastore);
   });

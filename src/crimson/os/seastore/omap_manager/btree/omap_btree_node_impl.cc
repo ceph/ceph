@@ -223,6 +223,50 @@ OMapInnerNode::rm_key(omap_context_t oc, const std::string &key)
   });
 }
 
+OMapInnerNode::iterate_ret
+OMapInnerNode::iterate(
+  omap_context_t oc,
+  ObjectStore::omap_iter_seek_t &start_from,
+  omap_iterate_cb_t callback)
+{
+  LOG_PREFIX(OMapInnerNode::iterate);
+  DEBUGT("{}, this: {}", oc.t, start_from, *this);
+
+  auto start_iter = get_containing_child(start_from.seek_position);
+  return seastar::do_with(
+    iter_t(start_iter),
+    ObjectStore::omap_iter_ret_t{ObjectStore::omap_iter_ret_t::NEXT},
+    [this, &start_from, oc, callback]
+    (auto &iter, auto &ret)
+  {
+    return trans_intr::repeat(
+      [&start_from, &iter, &ret, oc, callback, this]()
+      -> iterate_iertr::future<seastar::stop_iteration>
+    {
+      if (iter == iter_cend()) {
+        return iterate_iertr::make_ready_future<seastar::stop_iteration>(
+               seastar::stop_iteration::yes);
+      }
+      return get_child_node(oc, iter
+      ).si_then([&start_from, &iter, &ret, callback, oc] (auto &&extent) {
+        return extent->iterate(oc, start_from, callback
+        ).si_then([&ret, &iter](auto &&child_ret) mutable {
+          ret = child_ret;
+          if (child_ret == ObjectStore::omap_iter_ret_t::STOP) {
+            return iterate_iertr::make_ready_future<seastar::stop_iteration>(
+                   seastar::stop_iteration::yes);
+          }
+          ++iter;
+          return iterate_iertr::make_ready_future<seastar::stop_iteration>(
+                 seastar::stop_iteration::no);
+        });
+      });
+    }).si_then([&ret, ref = OMapNodeRef(this)] {
+      return iterate_iertr::make_ready_future<ObjectStore::omap_iter_ret_t>(std::move(ret));
+    });
+  });
+}
+
 OMapInnerNode::list_ret
 OMapInnerNode::list(
   omap_context_t oc,
@@ -747,6 +791,38 @@ OMapLeafNode::rm_key(omap_context_t oc, const std::string &key)
       mutation_result_t(mutation_status_t::FAIL, std::nullopt, std::nullopt));
   }
 
+}
+
+OMapLeafNode::iterate_ret
+OMapLeafNode::iterate(
+  omap_context_t oc,
+  ObjectStore::omap_iter_seek_t &start_from,
+  omap_iterate_cb_t callback)
+{
+  LOG_PREFIX(OMapLeafNode::iterate);
+  DEBUGT("{}, this: {}", oc.t, start_from, *this);
+
+  auto ret = ObjectStore::omap_iter_ret_t::NEXT;
+  auto iter = start_from.seek_type == ObjectStore::omap_iter_seek_t::LOWER_BOUND ?
+                string_lower_bound(start_from.seek_position) :
+                string_upper_bound(start_from.seek_position);
+
+  std::string key;
+  for(; iter != iter_end(); iter++) {
+    ceph::bufferlist bl = iter->get_val();
+    std::string result(bl.c_str(), bl.length());
+    key = iter->get_key();
+    ret = callback(key, result);
+    if (ret == ObjectStore::omap_iter_ret_t::STOP) {
+      break;
+    }
+  }
+  if (!key.empty()) {
+    start_from.seek_position = key;
+  }
+  start_from.seek_type = ObjectStore::omap_iter_seek_t::UPPER_BOUND;
+
+  return iterate_iertr::make_ready_future<ObjectStore::omap_iter_ret_t>(std::move(ret));
 }
 
 OMapLeafNode::list_ret
