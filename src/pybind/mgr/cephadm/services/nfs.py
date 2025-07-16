@@ -120,9 +120,6 @@ class NFSService(CephService):
         self.mgr.log.info(f'Ensuring {nodeid} is in the ganesha grace table')
         self.run_grace_tool(spec, 'add', nodeid)
 
-        # create the rados config object
-        self.create_rados_config_obj(spec)
-
         port = daemon_spec.ports[0] if daemon_spec.ports else 2049
         monitoring_ip, monitoring_port = self.get_monitoring_details(daemon_spec.service_name, host)
 
@@ -227,9 +224,15 @@ class NFSService(CephService):
 
         return get_cephadm_config(), self.get_dependencies(self.mgr, spec)
 
+    def pre_daemon_service_config(self, spec: ServiceSpec) -> None:
+        nfs_spec = cast(NFSServiceSpec, spec)
+        self.config(nfs_spec)
+        self.create_rados_config_obj(nfs_spec)
+
     def create_rados_config_obj(self,
                                 spec: NFSServiceSpec,
                                 clobber: bool = False) -> None:
+        config_file_data = None
         objname = spec.rados_config_name()
         cmd = [
             'rados',
@@ -244,6 +247,7 @@ class NFSService(CephService):
             timeout=10)
         if not result.returncode and not clobber:
             logger.info('Rados config object exists: %s' % objname)
+            config_file_data = result.stdout
         else:
             logger.info('Creating rados config object: %s' % objname)
             result = subprocess.run(
@@ -255,6 +259,20 @@ class NFSService(CephService):
                     f'Unable to create rados config object {objname}: {result.stderr.decode("utf-8")}'
                 )
                 raise RuntimeError(result.stderr.decode("utf-8"))
+        if spec.cluster_qos_config:
+            # set cluster level qos config
+            from nfs.cluster import config_cluster_qos_from_dict
+            assert spec.service_id
+            update_obj = False
+            if config_file_data and 'qosconf-nfs' in config_file_data.decode('utf-8'):
+                update_obj = True
+
+            config_cluster_qos_from_dict(
+                mgr=self.mgr,
+                cluster_id=spec.service_id,
+                qos_dict=spec.cluster_qos_config,
+                update_existing_obj=update_obj
+            )
 
     def create_keyring(self, daemon_spec: CephadmDaemonDeploySpec) -> str:
         daemon_id = daemon_spec.daemon_id
