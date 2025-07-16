@@ -39,6 +39,8 @@ except FileNotFoundError:
     pass
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN", GITHUB_TOKEN)
 
+GITHUB_ACTIONS = os.getenv("GITHUB_ACTIONS") == 'true'
+
 GITHUB_USER = os.getenv("GITHUB_USER", os.getenv("GITHUB_USER", getuser()))
 GITHUB_ORG = "ceph"
 GITHUB_REPO = "ceph"
@@ -995,7 +997,7 @@ h2. Update Payload
 def main():
     parser = argparse.ArgumentParser(description="Ceph redmine upkeep tool")
     parser.add_argument('--debug', dest='debug', action='store_true', help='turn debugging on')
-    parser.add_argument('--github-action', dest='gha', action='store_true', help='github action output')
+    parser.add_argument('--github-action', default=GITHUB_ACTIONS, dest='gha', action='store_true', help='github action output')
     parser.add_argument('--limit', dest='limit', action='store', type=int, default=200, help='limit processed issues')
     parser.add_argument('--git-dir', dest='git', action='store', default=".", help='git directory')
 
