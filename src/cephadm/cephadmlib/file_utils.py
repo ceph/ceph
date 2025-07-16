@@ -54,7 +54,7 @@ def write_new(
 
 
 def populate_files(
-    config_dir: str, config_files: Dict, uid: int, gid: int
+    config_dir: Union[str, Path], config_files: Dict, uid: int, gid: int
 ) -> None:
     """create config files for different services"""
     for fname in config_files:
