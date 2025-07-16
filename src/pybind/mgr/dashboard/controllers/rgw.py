@@ -476,6 +476,22 @@ class RgwBucket(RgwRESTController):
         rgw_client = RgwClient.instance(owner, daemon_name)
         return rgw_client.delete_lifecycle(bucket_name)
 
+    def _get_notification(self, bucket_name: str = '', notification_id=None,
+                          daemon_name=None, owner=None):
+        rgw_client = RgwClient.instance(owner, daemon_name)
+        return rgw_client.get_notification(bucket_name, notification_id)
+
+    def _set_notification(self, bucket_name: str,
+                          notification: str = None,
+                          daemon_name=None, owner=None):
+        rgw_client = RgwClient.instance(owner, daemon_name)
+        return rgw_client.set_notification(bucket_name, notification)
+
+    def _delete_notification(self, bucket_name: str, notification_id: str,
+                             daemon_name=None, owner=None):
+        rgw_client = RgwClient.instance(owner, daemon_name)
+        return rgw_client.delete_notification(bucket_name, notification_id)
+
     def _get_acl(self, bucket_name, daemon_name, owner):
         rgw_client = RgwClient.instance(owner, daemon_name)
         return str(rgw_client.get_acl(bucket_name))
@@ -749,6 +765,32 @@ class RgwBucket(RgwRESTController):
         owner = _get_owner(owner)
         bucket_name = RgwBucket.get_s3_bucket_name(bucket_name, tenant)
         return self._get_lifecycle(bucket_name, daemon_name, owner)
+
+    @RESTController.Collection(method='GET', path='/notification')
+    @allow_empty_body
+    def get_notification(self, bucket_name: str = '', notification_id: Optional[str] = None,
+                         daemon_name=None, owner=None):
+        owner = _get_owner(owner)
+        bucket_name = RgwBucket.get_s3_bucket_name(bucket_name)
+        return self._get_notification(bucket_name, notification_id, daemon_name, owner)
+
+    @RESTController.Collection(method='PUT', path='/notification')
+    @allow_empty_body
+    def set_notification(self, bucket_name: str = '', notification: str = '', daemon_name=None,
+                         owner=None):
+        owner = _get_owner(owner)
+        bucket_name = RgwBucket.get_s3_bucket_name(bucket_name)
+        if notification == '{}':
+            return self._delete_notification(bucket_name, daemon_name, owner)
+        return self._set_notification(bucket_name, notification, daemon_name, owner)
+
+    @RESTController.Collection(method='DELETE', path='/notification')
+    @allow_empty_body
+    def delete_notification(self, bucket_name: str = '', notification_id: str = '',
+                            daemon_name=None, owner=None):
+        owner = _get_owner(owner)
+        bucket_name = RgwBucket.get_s3_bucket_name(bucket_name)
+        return self._delete_notification(bucket_name, notification_id, daemon_name, owner)
 
     @Endpoint(method='GET', path='/ratelimit')
     @EndpointDoc("Get the bucket global rate limit")
@@ -1456,11 +1498,9 @@ class RgwTopic(RESTController):
         "Create a new RGW Topic",
         parameters={
             "name": (str, "Name of the topic"),
-            "owner": (str, "Name of the owner"),
-            "daemon_name": (str, "Name of the daemon"),
             "push_endpoint": (str, "Push Endpoint"),
-            "opaque_data": (str, "OpaqueData"),
-            "persistent": (bool, "Persistent"),
+            "opaque_data": (str, " opaque data"),
+            "persistent": (bool, "persistent"),
             "time_to_live": (str, "Time to live"),
             "max_retries": (str, "Max retries"),
             "retry_sleep_duration": (str, "Retry sleep duration"),
