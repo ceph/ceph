@@ -1,6 +1,6 @@
-====================
+==============
 Bucket Logging
-====================
+==============
 
 .. versionadded:: T
 
@@ -18,21 +18,21 @@ objects in the log bucket.
 
 .. note::
 
-    - The log bucket must be created before enabling logging on a bucket
-    - The log bucket cannot be the same as the bucket being logged
-    - The log bucket cannot have logging enabled on it
+    - The log bucket must be created before enabling logging on a bucket.
+    - The log bucket cannot be the same as the bucket being logged.
+    - The log bucket cannot have logging enabled on it.
     - The log bucket cannot have any encryption set on it (including SSE-S3
-      with AES-256)
-    - The log bucket cannot have any compression set on it
-    - The log bucket must not have RequestPayer enabled
-    - Source and log buckets must be in the same zonegroup
+      with AES-256).
+    - The log bucket cannot have any compression set on it.
+    - The log bucket must not have RequestPayer enabled.
+    - Source and log buckets must be in the same zonegroup.
     - Source and log buckets may belong to different accounts (with proper
-      bucket policy set)
-    - The log bucket may have object lock enabled with default retention period
+      bucket policy set).
+    - The log bucket may have object lock enabled with default retention period.
     - The 16-byte unique ID part of the log object name is a lexicographically
       ordered random string that consists of a 10-byte counter and a 6-byte
       random alphanumeric string (or a random alphanumeric string if the
-      counter is not available)
+      counter is not available).
 
 
 .. toctree::
@@ -44,8 +44,8 @@ For performance reasons, even though the log records are written to persistent
 storage, the log object will appear in the log bucket only after some
 configurable amount of time (or if the maximum object size of 128MB is
 reached). This time (in seconds) can be set per source bucket via a Ceph
-extension to the REST API, or globally via the
-`rgw_bucket_logging_obj_roll_time` configuration option. If not set, the
+extension to the :ref:`REST API <radosgw s3>`, or globally via the
+``rgw_bucket_logging_obj_roll_time`` configuration option. If not set, the
 default time is 5 minutes. Adding a log object to the log bucket is done
 "lazily", meaning that if no more records are written to the object, it may
 remain outside of the log bucket even after the configured time has passed. To
@@ -68,7 +68,7 @@ action fails, the operation is not executed and an error is returned to the
 client. Some exceptions to that rule exist: the "Fails Operation" columns in
 the table below indicate by "No" which operations will not fail even if logging
 failed. Journal mode supports filtering out records based on matches of the
-prefixes and suffixes of the logged object keys. Regular-expression matching
+prefixes and suffixes of the logged object keys. Regular expression matching
 can also be used on these to create filters. Note that it may happen that the
 log records were successfully written but the bucket operation failed, since
 the logs are written.
@@ -109,11 +109,11 @@ holding relevant log records.
 
 Bucket Logging Policy
 ---------------------
-On the source bucket, only its owner is allowed to enable or disable bucket
+Only the owner of the source bucket is allowed to enable or disable bucket
 logging. For a bucket to be used as a log bucket, it must have a bucket policy
 that allows that (even if the source bucket and the log bucket are owned by the
-same user or account). The bucket policy must allow the `s3:PutObject` action
-for the log bucket, to be performed by the `logging.s3.amazonaws.com` service
+same user or account). The bucket policy must allow the ``s3:PutObject`` action
+for the log bucket, to be performed by the ``logging.s3.amazonaws.com`` service
 principal. The bucket policy should also specify the source bucket and account
 that are expected to write logs to it. For example:
 
@@ -162,7 +162,7 @@ Log Objects Key Format
 
 Simple
 ``````
-has the following format:
+The "Simple" log objects key has the following format:
 
 ::
 
@@ -176,7 +176,7 @@ For example:
 
 Partitioned
 ```````````
-has the following format:
+The "Partitioned" log objects key has the following format:
 
 ::
 
@@ -188,16 +188,16 @@ For example:
 
   fish/testid/default/fish-bucket/2024/08/06/2024-08-06-10-11-18-0000000011D1FGPA
 
-Log Records
-~~~~~~~~~~~
+Log Records Format
+------------------
 
 The log records are space-separated string columns and have the following
 possible formats:
 
 Journal
 ```````
-minimum amount of data used for journaling bucket changes (this is a Ceph
-extension).
+The "Journal" record format uses minimum amount of data for journaling
+bucket changes (this is a Ceph extension).
 
   - bucket owner (or dash if empty)
   - bucket name (or dash if empty), in the format: ``[tenant:]<bucket name>``
@@ -218,7 +218,7 @@ For example:
 
 Standard
 ````````
-based on `AWS Logging Record Format`_.
+The "Standard" record format is based on `AWS Logging Record Format`_.
 
   - bucket owner (or dash if empty)
   - bucket name (or dash if empty) in the format: ``[tenant:]<bucket name>``
@@ -238,14 +238,14 @@ based on `AWS Logging Record Format`_.
   - referer (or dash if empty)
   - user agent (or dash if empty) inside double quotes
   - version id (or dash if empty)
-  - host id taken from "x-amz-id-2" (or dash if empty)
+  - host id taken from ``x-amz-id-2`` (or dash if empty)
   - signature version (or dash if empty)
   - cipher suite (or dash if empty)
-  - authentication type ("AuthHeader" for regular auth, "QueryString" for presigned URL or dash if unauthenticated)
+  - authentication type (``AuthHeader`` for regular auth, ``QueryString`` for presigned URL or dash if unauthenticated)
   - host header (or dash if empty)
   - TLS version (or dash if empty)
   - access point ARN (not supported, always a dash)
-  - ACL flag ("Yes" if an ACL was required for authorization, otherwise dash)
+  - ACL flag (``Yes`` if an ACL was required for authorization, otherwise dash)
 
 For example:
 
@@ -255,6 +255,6 @@ For example:
   testid fish [06/Aug/2024:09:30:51 +0000] - testid 9e369a15-5f43-4f07-b638-de920b22f91b.4179.7046073853138417766 REST.GET.OBJECT myfile "GET /fish/myfile HTTP/1.1" 200 - - 512 - - - - - - - - - localhost - -
   testid fish [06/Aug/2024:09:30:56 +0000] - testid 9e369a15-5f43-4f07-b638-de920b22f91b.4179.10723158448701085570 REST.DELETE.OBJECT myfile "DELETE /fish/myfile1 HTTP/1.1" 200 - - 512 - - - - - - - - - localhost - -
 
- 
+
 .. _AWS Logging Record Format: https://docs.aws.amazon.com/AmazonS3/latest/userguide/LogFormat.html
 .. _Bucket Operations: ../s3/bucketops
