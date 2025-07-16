@@ -854,7 +854,7 @@ template <>
 struct fmt::formatter<ECCommon::RMWPipeline::Op> : fmt::ostream_formatter {};
 
 
-inline std::optional<object_info_t> ECBackend::get_object_info_from_obc(
+inline std::optional<object_info_t> ECCommon::get_object_info_from_obc(
     ObjectContextRef &obc) {
   std::optional<object_info_t> ret;
 
