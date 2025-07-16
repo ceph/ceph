@@ -22,7 +22,7 @@ export interface TierTarget {
     read_through_restore_days: number;
     restore_storage_class: string;
     s3?: S3Details;
-    's3-glacier': S3Glacier;
+    's3-glacier'?: S3Glacier;
   };
 }
 
@@ -81,8 +81,8 @@ export interface RequestModel {
 }
 
 export interface PlacementTarget {
-  tags?: string[];
   placement_id: string;
+  tags?: string[];
   tier_type?: TIER_TYPE;
   tier_config?: {
     endpoint: string;
@@ -127,6 +127,24 @@ export interface TextLabels {
   readthroughrestoreDaysText: string;
   restoreStorageClassText: string;
 }
+
+export const CLOUD_TIER_REQUIRED_FIELDS = [
+  'region',
+  'target_endpoint',
+  'access_key',
+  'secret_key',
+  'target_path'
+];
+
+export const GLACIER_REQUIRED_FIELDS = [
+  'region',
+  'target_endpoint',
+  'access_key',
+  'secret_key',
+  'target_path',
+  'glacier_restore_tier_type',
+  'restore_storage_class'
+];
 
 export const TIER_TYPE = {
   LOCAL: 'local',
@@ -198,7 +216,7 @@ export const EXPEDITED_TIER_TYPE_TEXT = $localize`Expedited glacier restore tier
 
 export const RESTORE_DAYS_TEXT = $localize`Refers to number of days to the object will be restored on glacier/tape endpoint.`;
 
-export const READTHROUGH_RESTORE_DAYS_TEXT = $localize`The duration for which objects restored via read-through are retained.`;
+export const READTHROUGH_RESTORE_DAYS_TEXT = $localize`The days for which objects restored via read-through are retained.`;
 
 export const RESTORE_STORAGE_CLASS_TEXT = $localize`The storage class to which object data is to be restored.`;
 
