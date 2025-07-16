@@ -4627,6 +4627,16 @@ void PeeringState::append_log(
       * object is deleted before we can _merge_object_divergent_entries().
       */
     pg_log.skip_rollforward(&info, handler.get());
+    /* Invalidate pwlc for this shard until the next interval when
+     * it will be updated with the pwlc from another shard
+     */
+    for (auto & [shard, versionrange] :
+	   info.partial_writes_last_complete) {
+      auto & [fromversion, toversion] = versionrange;
+      fromversion.epoch = 0;
+      fromversion.version = eversion_t::max().version;
+      toversion = fromversion;
+    }
   }
 
   for (auto p = logv.begin(); p != logv.end(); ++p) {
