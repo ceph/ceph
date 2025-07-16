@@ -440,7 +440,12 @@ void PGBackend::partial_write(
       }
       auto &&[old_v,  new_v] = pwlc_iter->second;
       if (old_v == new_v) {
-	if (old_v.version >= entry.version.version) {
+        if (old_v.version == eversion_t::max().version) {
+	  // shard is backfilling or in async recovery, pwlc is
+	  // invalid
+	  ldpp_dout(dpp, 20) << __func__ << " pwlc invalid " << shard
+			   << dendl;
+	} else if (old_v.version >= entry.version.version) {
 	  // Abnormal case - consider_adjusting_pwlc may advance pwlc
 	  // during peering because all shards have updates but these
 	  // have not been marked complete. At the end of peering
@@ -463,9 +468,13 @@ void PGBackend::partial_write(
     } else if (pwlc_iter != info->partial_writes_last_complete.end()) {
       auto &&[old_v,  new_v] = pwlc_iter->second;
       // Log updated or shard absent, partial write entry is a no-op
-      if (old_v.version >= entry.version.version) {
-	  // Abnormal case - see above
-	  ldpp_dout(dpp, 20) << __func__ << " pwlc is ahead of entry " << shard
+      if (old_v.version == eversion_t::max().version) {
+	// shard is backfilling or in async recovery, pwlc is invalid
+	ldpp_dout(dpp, 20) << __func__ << " pwlc invalid " << shard
+			   << dendl;
+      } else if (old_v.version >= entry.version.version) {
+	// Abnormal case - see above
+	ldpp_dout(dpp, 20) << __func__ << " pwlc is ahead of entry " << shard
 			   << dendl;
       } else {
 	old_v = new_v = entry.version;
