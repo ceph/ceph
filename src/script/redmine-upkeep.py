@@ -889,7 +889,7 @@ h2. Update Payload
 
         log.info(f"Found 'Fixes:' tags for tracker(s) #{', '.join([str(x) for x in found_tracker_ids])} in commits.")
 
-        tracker_links = "\n".join([f"https://tracker.ceph.com/issues/{tid}" for tid in found_tracker_ids])
+        tracker_links = "\n".join([f"* https://tracker.ceph.com/issues/{tid}" for tid in found_tracker_ids])
         comment_body = f"""
 
             This is an automated message by src/script/redmine-upkeep.py.
