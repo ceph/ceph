@@ -492,7 +492,7 @@ namespace rgw::sal {
 
   int DBObject::list_parts(const DoutPrefixProvider* dpp, CephContext* cct,
 			   int max_parts, int marker, int* next_marker,
-			   bool* truncated, list_parts_each_t each_func,
+			   bool* truncated, list_parts_each_t&& each_func,
 			   optional_yield y)
   {
     return -EOPNOTSUPP;
