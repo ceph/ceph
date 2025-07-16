@@ -63,28 +63,29 @@ instances or all radosgw-admin options can be put into the ``[global]`` or the
 Lifecycle Settings
 ==================
 
-Bucket Lifecycle configuration can be used to manage your objects so they are stored
-effectively throughout their lifetime. In past releases Lifecycle processing was rate-limited
-by single threaded processing. With the Nautilus release this has been addressed and the
-Ceph Object Gateway now allows for parallel thread processing of bucket lifecycles across
-additional Ceph Object Gateway instances and replaces the in-order
-index shard enumeration with a random ordered sequence.
+Bucket Lifecycle configuration can be used to manage your objects so that they
+are stored effectively throughout their lifetimes. In past releases, lifecycle
+processing was rate-limited by single-threaded processing. As of the Nautilus
+release, the Ceph Object Gateway allows for parallel-thread processing of
+bucket lifecycles across additional Ceph Object Gateway instances and replaces
+in-order index-shard enumeration with a random ordered sequence.
 
-There are two options in particular to look at when looking to increase the
-aggressiveness of lifecycle processing:
+Two options in particular are relevant to increasing the aggressiveness of
+lifecycle processing:
 
 .. confval:: rgw_lc_max_worker
 .. confval:: rgw_lc_max_wp_worker
 
-These values can be tuned based upon your specific workload to further increase the
-aggressiveness of lifecycle processing. For a workload with a large number of buckets (thousands)
-you would raise the number of workers by increasing :confval:`rgw_lc_max_worker`
-from the default value of 3. Whereas for a workload with a higher number of objects per bucket
-(hundreds of thousands) you would raise the number of parallel threads
-by increasing :confval:`rgw_lc_max_wp_worker` from the default value of 3.
+These values can be tuned based upon your specific workload to further increase
+the aggressiveness of lifecycle processing. For a workload with a large number
+of buckets (thousands), raise the number of workers by increasing
+:confval:`rgw_lc_max_worker` from the default value of 3. But for a workload
+with a higher number of objects per bucket (hundreds of thousands), raise the
+number of parallel threads by increasing :confval:`rgw_lc_max_wp_worker` from
+the default value of 3.
 
-.. note:: When looking to tune either of these specific values please validate the
-   current Cluster performance and Ceph Object Gateway utilization before increasing.
+.. note:: Before increasing either of these values, validate the current
+   Cluster performance and Ceph Object Gateway utilization.
 
 The lifecycle maintenance thread must also be enabled on at least one RGW
 daemon for each zone. 
