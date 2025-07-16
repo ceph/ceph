@@ -40,6 +40,11 @@ except FileNotFoundError:
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN", GITHUB_TOKEN)
 
 GITHUB_ACTIONS = os.getenv("GITHUB_ACTIONS") == 'true'
+GITHUB_SERVER_URL = os.getenv("GITHUB_SERVER_URL", "https://github.com/")
+GITHUB_REPOSITORY = os.getenv("GITHUB_REPOSITORY", "ceph/ceph")
+GITHUB_RUN_ID = os.getenv("GITHUB_RUN_ID", "nil")
+
+GITHUB_ACTION_LOG = f"{GITHUB_SERVER_URL}/{GITHUB_REPOSITORY}/actions/runs/{GITHUB_RUN_ID}"
 
 GITHUB_USER = os.getenv("GITHUB_USER", os.getenv("GITHUB_USER", getuser()))
 GITHUB_ORG = "ceph"
@@ -772,6 +777,10 @@ h2. Update Payload
 <pre>
 {json.dumps(issue_update.get_update_payload(suppress_mail=True), indent=4)}
 </pre>
+
+h2. Update Log
+
+{GITHUB_ACTION_LOG}
 """
         comment = comment.strip()
         issue_update.logger.debug("Created update failure comment:\n%s", comment)
@@ -908,6 +917,8 @@ h2. Update Payload
             Pull Request merge resolves any of those tickets, please update the
             "Pull Request ID" field on each ticket. A future run of this
             script will appropriately update them.
+
+            Update Log: {GITHUB_ACTION_LOG}
 
         """
         comment_body = textwrap.dedent(comment_body)
