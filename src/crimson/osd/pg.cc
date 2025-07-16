@@ -675,7 +675,7 @@ void PG::on_active_advmap(const OSDMapRef &osdmap)
   const auto new_removed_snaps = osdmap->get_new_removed_snaps();
   if (auto it = new_removed_snaps.find(get_pgid().pool());
       it != new_removed_snaps.end()) {
-    bool bad = false;
+    [[maybe_unused]] bool bad = false;
     for (auto j : it->second) {
       if (snap_trimq.intersects(j.first, j.second)) {
 	decltype(snap_trimq) added, overlap;
