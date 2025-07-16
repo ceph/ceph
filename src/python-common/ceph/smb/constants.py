@@ -8,9 +8,11 @@ CTDB = 'ctdb'
 
 
 # Feature names
+# (please keep sorted)
 CEPHFS_PROXY = 'cephfs-proxy'
 CLUSTERED = 'clustered'
 DOMAIN = 'domain'
+KEYBRIDGE = 'keybridge'
 REMOTE_CONTROL = 'remote-control'
 SMBMETRICS = 'smbmetrics'
 
@@ -22,6 +24,7 @@ FEATURES = {
     CEPHFS_PROXY,
     CLUSTERED,
     DOMAIN,
+    KEYBRIDGE,
     REMOTE_CONTROL,
 }
 
