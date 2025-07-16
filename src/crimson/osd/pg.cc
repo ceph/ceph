@@ -1506,7 +1506,7 @@ PG::interruptible_future<> PG::handle_rep_write_reply(Ref<MOSDECSubOpWriteReply>
       peering_state.update_peer_last_complete_ondisk(op.from, op.last_complete);
     }
   }
-  auto* ec_backend=dynamic_cast<::ECBackend*>(&get_backend());
+  auto* ec_backend=dynamic_cast<crimson::osd::ECBackend*>(&get_backend());
   assert(ec_backend);
   return ec_backend->handle_rep_write_reply(
     std::move(m->op)
