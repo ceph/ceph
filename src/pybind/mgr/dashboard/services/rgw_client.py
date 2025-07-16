@@ -1183,6 +1183,74 @@ class RgwClient(RestClient):
             raise DashboardException(msg=str(e), component='rgw')
         return result
 
+    @RestClient.api_put('/{bucket_name}?notification')
+    def set_notification(self, bucket_name, notification, request=None):
+        # pylint: disable=unused-argument
+
+        notification = notification.strip()
+
+        if notification.startswith('{'):
+            notification = self.dict_to_xml(notification)
+
+        if not notification.startswith('<NotificationConfiguration'):
+            notification = (
+                f'<NotificationConfiguration>{notification}</NotificationConfiguration>'
+            )
+
+        try:
+            result = request(data=notification)  # type: ignore
+        except RequestException as e:
+            raise DashboardException(msg=str(e), component='rgw')
+
+        return result
+
+    @RestClient.api_get('/{bucket_name}?notification')
+    def get_notification(self, bucket_name, request=None):
+        # pylint: disable=unused-argument
+        try:
+            result = request(
+                raw_content=True,
+                headers={'Accept': 'text/xml'}
+            ).decode()  # type: ignore
+        except RequestException as e:
+            raise DashboardException(msg=str(e), component='rgw')
+
+        notification_config_dict = xmltodict.parse(result)
+        notification_configuration = notification_config_dict.get(
+            'NotificationConfiguration'
+        ) or {}
+        topic_configuration = notification_configuration.get('TopicConfiguration')
+        if not topic_configuration:
+            return []
+
+        if isinstance(topic_configuration, dict):
+            topic_configuration = [topic_configuration]
+
+        def normalize_filter_rules(filter_dict):
+            if not isinstance(filter_dict, dict):
+                return
+            for key in ['S3Key', 'S3Metadata', 'S3Tags']:
+                if key in filter_dict:
+                    rules = filter_dict[key].get('FilterRule')
+                    if rules and isinstance(rules, dict):
+                        filter_dict[key]['FilterRule'] = [rules]
+
+        for topic in topic_configuration:
+            topic_filter = topic.get('Filter')
+            if topic_filter:
+                normalize_filter_rules(topic_filter)
+
+        return notification_configuration
+
+    @RestClient.api_delete('/{bucket_name}?notification={notification_id}')
+    def delete_notification(self, bucket_name, notification_id, request=None):
+        # pylint: disable=unused-argument
+        try:
+            result = request()
+        except RequestException as e:
+            raise DashboardException(msg=str(e), component='rgw')
+        return result
+
 
 class SyncStatus(Enum):
     enabled = 'enabled'
