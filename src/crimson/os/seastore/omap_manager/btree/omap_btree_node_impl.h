@@ -70,9 +70,14 @@ struct OMapInnerNode
   void do_on_rewrite(Transaction &t, LogicalCachedExtent &extent) final {
     auto &ext = static_cast<OMapInnerNode&>(extent);
     this->parent_node_t::on_rewrite(t, ext);
-    auto &other = static_cast<OMapInnerNode&>(extent);
-    this->init_range(other.get_begin(), other.get_end());
     this->sync_children_capacity();
+    // During rewriting, an omap node may not be seen by users yet.
+    // If it becomes seen upon commiting, we need to fix the rewritting
+    // extent in prepare_commit().
+    if (likely(is_seen_by_users())) {
+      assert(ext.is_seen_by_users());
+      init_range(ext.get_begin(), ext.get_end());
+    }
   }
 
   void prepare_commit() final {
@@ -82,7 +87,10 @@ struct OMapInnerNode
       if (!prior.is_seen_by_users()) {
 	return;
       }
+      // Here the prior that becomes seen after do_on_rewrite(),
+      // we need to initialize the rewritting extent accordingly.
       set_seen_by_users();
+      init_range(prior.get_begin(), prior.get_end());
     }
     this->parent_node_t::prepare_commit();
     if (is_rewrite()) {
@@ -311,8 +319,14 @@ struct OMapLeafNode
   using child_node_t = ChildNode<OMapInnerNode, OMapLeafNode, std::string>;
 
   void do_on_rewrite(Transaction &t, LogicalCachedExtent &extent) final {
-    auto &other = static_cast<OMapLeafNode&>(extent);
-    this->init_range(other.get_begin(), other.get_end());
+    // During rewriting, an omap node may not be seen by users yet.
+    // If it becomes seen upon commiting, we need to fix the rewritting
+    // extent in prepare_commit().
+    if (likely(is_seen_by_users())) {
+      auto &ext = static_cast<OMapLeafNode&>(*get_prior_instance());
+      assert(ext.is_seen_by_users());
+      init_range(ext.get_begin(), ext.get_end());
+    }
   }
 
   void on_invalidated(Transaction &t) final {
@@ -326,7 +340,10 @@ struct OMapLeafNode
       if (!prior.is_seen_by_users()) {
 	return;
       }
+      // Here the prior that becomes seen after do_on_rewrite(),
+      // we need to initialize the rewritting extent accordingly.
       set_seen_by_users();
+      init_range(prior.get_begin(), prior.get_end());
     }
     if (is_rewrite()) {
       auto &prior = *get_prior_instance()->template cast<OMapLeafNode>();
