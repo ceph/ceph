@@ -116,9 +116,9 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
        const hobject_t &soid,
        const object_stat_sum_t &delta_stats) = 0;
      virtual void log_stats(hobject_t soid,
-                            object_stat_sum_t stats,
-                            bool delta,
-                            ObjectStore::Transaction& t) = 0;
+                            const object_stat_sum_t& stats,
+                            ObjectStore::Transaction& t,
+                            bool is_delta) = 0;
 
      /**
       * Called when a read from a std::set of replicas/primary fails

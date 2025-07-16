@@ -9162,14 +9162,14 @@ void PrimaryLogPG::finish_ctx(OpContext *ctx, int log_op_type, int result)
 }
 
 void PrimaryLogPG::log_stats(hobject_t soid,
-                             object_stat_sum_t stats,
-                             bool delta,
-                             ObjectStore::Transaction& t)
+                             const object_stat_sum_t& stats,
+                             ObjectStore::Transaction& t,
+                             bool is_delta)
 {
   Formatter *f = Formatter::create("json");
 
   std::string operation = "updated to ";
-  if (delta)
+  if (is_delta)
   {
     operation = "delta applied ";
   }
@@ -9182,7 +9182,7 @@ void PrimaryLogPG::log_stats(hobject_t soid,
   f->flush(*_dout);
   *_dout << dendl;
 
-  int set_oi_count = 0;
+  std::map<hobject_t, int> soid_oi_set_count_map;
 
   ObjectStore::Transaction::iterator i = t.begin();
 
@@ -9214,8 +9214,6 @@ void PrimaryLogPG::log_stats(hobject_t soid,
 
     case ObjectStore::Transaction::OP_SETATTR:
       {
-        set_oi_count++;
-
         string name = i.decode_string();
         if (name == OI_ATTR)
         {
@@ -9226,10 +9224,12 @@ void PrimaryLogPG::log_stats(hobject_t soid,
           oi.dump(f);
           f->close_section();
 
-          dout(20) << __func__ << ", soid: " << soid << "."
+          dout(20) << __func__ << ", soid: " << soid
                    << " setattr - OI set to ";
           f->flush(*_dout);
-          *_dout << "bl: " << bl << dendl;
+          *_dout << dendl;
+
+          soid_oi_set_count_map[soid]++;
         }
       }
       break;
@@ -9253,6 +9253,8 @@ void PrimaryLogPG::log_stats(hobject_t soid,
                      << ". setattrs - OI set to ";
             f->flush(*_dout);
             *_dout << "bl: " << bl << dendl;
+
+            soid_oi_set_count_map[soid]++;
           }
         }
       }
@@ -9291,16 +9293,19 @@ void PrimaryLogPG::log_stats(hobject_t soid,
     }
   }
 
-  if (set_oi_count > 1)
+  for (const auto&[soid, oi_set_count] : soid_oi_set_count_map)
   {
-    f->open_object_section("t");
-    t.dump(f);
-    f->close_section();
-    dout(10) << __func__ << ", soid: " << soid
-             << ". WARNING: oi set multiple ("
-             << set_oi_count << ") times in transaction ";
-    f->flush(*_dout);
-    *_dout << dendl;
+    if (oi_set_count > 1)
+    {
+      f->open_object_section("t");
+      t.dump(f);
+      f->close_section();
+      dout(10) << __func__ << ", soid: " << soid
+               << ". INFO: oi set multiple ("
+               << oi_set_count << ") times in transaction ";
+      f->flush(*_dout);
+      *_dout << dendl;
+    }
   }
 }
 
