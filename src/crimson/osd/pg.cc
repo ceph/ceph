@@ -1475,7 +1475,7 @@ PG::interruptible_future<> PG::handle_rep_write_op(Ref<MOSDECSubOpWrite> m)
       return false;
     });
   }
-  auto* ec_backend=dynamic_cast<::ECBackend*>(&get_backend());
+  auto* ec_backend=dynamic_cast<crimson::osd::ECBackend*>(&get_backend());
   assert(ec_backend);
   const auto tid = m->op.tid;
   return ec_backend->handle_rep_write_op(
@@ -1515,7 +1515,7 @@ PG::interruptible_future<> PG::handle_rep_write_reply(Ref<MOSDECSubOpWriteReply>
 
 PG::interruptible_future<> PG::handle_rep_read_op(Ref<MOSDECSubOpRead> m)
 {
-  auto* ec_backend=dynamic_cast<::ECBackend*>(&get_backend());
+  auto* ec_backend=dynamic_cast<crimson::osd::ECBackend*>(&get_backend());
   assert(ec_backend);
   return ec_backend->handle_rep_read_op(
     std::move(m)
