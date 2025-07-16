@@ -179,9 +179,7 @@ def task(ctx, config):
     # Set global CRIMSON flag based on configuration
     global CRIMSON
     CRIMSON = config.get('crimson_objectstore_tool', False)
-    
-    tool_name = 'crimson-objectstore-tool' if CRIMSON else 'ceph-objectstore-tool'
-    log.info('Beginning ceph_objectstore_tool using {}...'.format(tool_name))
+    log.info('crimson_objectstore_tool is {}...'.format(CRIMSON))
 
     log.debug(config)
     log.debug(ctx)
@@ -307,8 +305,7 @@ def test_objectstore(ctx, config, cli_remote, REP_POOL, REP_NAME, ec=False):
     log.info("Test --op list by generating json for all objects")
     
     if CRIMSON:
-        # crimson-objectstore-tool uses different command format
-        prefix = ("sudo crimson-objectstore-tool "
+        prefix = ("sudo ceph-objectstore-tool "
                   "--data-path {fpath} ").format(fpath=FSPATH)
     else:
         prefix = ("sudo ceph-objectstore-tool "
