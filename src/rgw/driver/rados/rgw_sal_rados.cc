@@ -3590,7 +3590,6 @@ int RadosObject::RadosDeleteOp::delete_obj(const DoutPrefixProvider* dpp, option
   parent_op.params.mtime = params.mtime;
   parent_op.params.size_match = params.size_match;
   parent_op.params.if_match = params.if_match;
-  parent_op.params.if_nomatch = params.if_nomatch;
   parent_op.params.high_precision_time = params.high_precision_time;
   parent_op.params.zones_trace = params.zones_trace;
   parent_op.params.abortmp = params.abortmp;

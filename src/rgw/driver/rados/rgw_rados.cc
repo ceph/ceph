@@ -3268,7 +3268,7 @@ int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_si
     return r;
   RGWObjState* current_state = target->state;
   if (!target->obj.key.instance.empty()) {
-    r = target->versioned_bucket_get_state(rctx.dpp, current_state, rctx.y);
+    r = target->get_current_version_state(rctx.dpp, current_state, rctx.y);
     if (r == -ENOENT) {
       current_state = target->state;
     } else if (r < 0) {
@@ -3276,7 +3276,7 @@ int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_si
     }
   }
 
-  r = target->preconditional_checks(rctx.dpp, std::nullopt, real_clock::zero(), false, meta.if_match, meta.if_nomatch, *current_state, rctx.y);
+  r = target->check_preconditional(rctx.dpp, std::nullopt, real_clock::zero(), false, meta.if_match, meta.if_nomatch, *current_state, rctx.y);
   if (r < 0) {
     return r;
   }
@@ -6428,15 +6428,15 @@ int RGWRados::Object::Delete::delete_obj(optional_yield y,
       if (r < 0)
         return r;
       RGWObjState* current_state = target->state;
-      r = target->versioned_bucket_get_state(dpp, current_state, y);
+      r = target->get_current_version_state(dpp, current_state, y);
       if (r == -ENOENT) {
         current_state = target->state;
       } else if (r < 0) {
         return r;
       }
 
-      r = target->preconditional_checks(dpp, params.size_match, params.last_mod_time_match, params.high_precision_time,
-                                        params.if_match, params.if_nomatch, *current_state, y);
+      r = target->check_preconditional(dpp, params.size_match, params.last_mod_time_match, params.high_precision_time,
+                                        params.if_match, NULL, *current_state, y);
       if (r < 0) {
         return r;
       }
@@ -6456,22 +6456,8 @@ int RGWRados::Object::Delete::delete_obj(optional_yield y,
       }
 
       using namespace std::string_literals;
-      if (params.if_match) {
-        if (params.if_match == "*"sv) {
-          if (!dirent.exists) {
-            return -ENOENT;
-          }
-        } else if(string if_match = rgw_string_unquote(params.if_match); dirent.meta.etag != if_match) {
-          return -ERR_PRECONDITION_FAILED;
-        }
-      }
-
-      if (params.if_nomatch) {
-        if (params.if_nomatch == "*"sv) {
-          if (dirent.exists) {
-            return -ENOENT;
-          }
-        } else if(string if_nomatch = rgw_string_unquote(params.if_nomatch); dirent.meta.etag == if_nomatch) {
+      if (params.if_match && params.if_match != "*"sv) {
+        if(string if_match = rgw_string_unquote(params.if_match); dirent.meta.etag != if_match) {
           return -ERR_PRECONDITION_FAILED;
         }
       }
@@ -6603,8 +6589,8 @@ int RGWRados::Object::Delete::delete_obj(optional_yield y,
     }
   }
 
-  r = target->preconditional_checks(dpp, params.size_match, params.last_mod_time_match, params.high_precision_time,
-                                    params.if_match, params.if_nomatch, *state, y);
+  r = target->check_preconditional(dpp, params.size_match, params.last_mod_time_match, params.high_precision_time,
+                                    params.if_match, NULL, *state, y);
   if (!real_clock::is_zero(params.last_mod_time_match)) {
     /* only delete object if mtime is equal to params.last_mod_time_match */
     store->cls_obj_check_mtime(op, params.last_mod_time_match, params.high_precision_time, CLS_RGW_CHECK_TIME_MTIME_EQ);
@@ -7177,7 +7163,7 @@ void RGWRados::Object::invalidate_state()
   ctx.invalidate(obj);
 }
 
-int RGWRados::Object::versioned_bucket_get_state(const DoutPrefixProvider *dpp, RGWObjState*& current_state, optional_yield y)
+int RGWRados::Object::get_current_version_state(const DoutPrefixProvider *dpp, RGWObjState*& current_state, optional_yield y)
 {
   // objects in versioning-enabled buckets don't get overwritten.
   // preconditions refer to the current version instead
@@ -7199,7 +7185,7 @@ int RGWRados::Object::versioned_bucket_get_state(const DoutPrefixProvider *dpp, 
   return 0;
 }
 
-int RGWRados::Object::preconditional_checks(const DoutPrefixProvider *dpp, std::optional<uint64_t> size_match,
+int RGWRados::Object::check_preconditional(const DoutPrefixProvider *dpp, std::optional<uint64_t> size_match,
                                             ceph::real_time last_mod_time_match, bool high_precision_time,
                                             const char *if_match, const char *if_nomatch, RGWObjState& current_state, optional_yield y)
 {

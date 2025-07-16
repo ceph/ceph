@@ -1536,7 +1536,6 @@ protected:
   ceph::real_time last_mod_time_match; /* if modified time match */
   std::optional<uint64_t> size_match; /* if size match */
   const char *if_match{NULL}; /* if etag match */
-  const char *if_nomatch{NULL}; /* if size doesn't match */
   bool no_precondition_error;
   std::unique_ptr<RGWBulkDelete::Deleter> deleter;
   bool bypass_perm;

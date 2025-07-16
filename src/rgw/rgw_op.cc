@@ -5671,7 +5671,6 @@ void RGWDeleteObj::execute(optional_yield y)
       del_op->params.null_verid = null_verid;
       del_op->params.size_match = size_match;
       del_op->params.if_match = if_match;
-      del_op->params.if_nomatch = if_nomatch;
 
       op_ret = del_op->delete_obj(this, y, rgw::sal::FLAG_LOG_OP);
       if (op_ret >= 0) {

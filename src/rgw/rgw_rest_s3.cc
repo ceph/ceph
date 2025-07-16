@@ -3722,7 +3722,6 @@ int RGWDeleteObj_ObjStore_S3::get_params(optional_yield y)
   const char *if_last_mod_time_match = s->info.env->get("HTTP_X_AMZ_IF_MATCH_LAST_MODIFIED_TIME");
   const char *if_size_match = s->info.env->get("HTTP_X_AMZ_IF_MATCH_SIZE");
   if_match = s->info.env->get("HTTP_IF_MATCH");
-  if_nomatch = s->info.env->get("HTTP_IF_NONE_MATCH");
 
   if (s->system_request) {
     s->info.args.get_bool(RGW_SYS_PARAM_PREFIX "no-precondition-error", &no_precondition_error, false);
