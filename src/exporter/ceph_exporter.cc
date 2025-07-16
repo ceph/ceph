@@ -36,7 +36,9 @@ static void usage() {
                "  --cert-file:    Path to the certificate file when using HTTPS\n"
                "  --key-file:     Path to the certificate key file when using HTTPS\n"
                "  --prio-limit:   Only perf counters greater than or equal to prio-limit are fetched. Default: 5\n"
-               "  --stats-period: Interval between daemon scrapes (seconds). Default: 5s"
+               "  --stats-period: Interval between daemon scrapes (seconds). Default: 5s\n"
+               "  --disable-process-metrics: disable the collection of prcess metrics of an ceph daemon"
+
             << std::endl;
   generic_server_usage();
 }
@@ -72,6 +74,8 @@ int main(int argc, char **argv) {
       cct->_conf.set_val("exporter_prio_limit", val);
     } else if (ceph_argparse_witharg(args, i, &val, "--stats-period", (char *)NULL)) {
       cct->_conf.set_val("exporter_stats_period", val);
+    } else if (ceph_argparse_flag(args, i, &val, "--disable-process-metrics", (char *)NULL)) {
+      cct->_conf.set_val("exporter_disable_process_metrics", "true");
     } else {
       ++i;
     }
