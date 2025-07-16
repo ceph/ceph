@@ -27,8 +27,8 @@
 #include <set>
 #include <string>
 #include <string_view>
+#include <variant>
 
-#include <boost/variant.hpp>
 #ifdef WITH_CRIMSON
 #include <boost/smart_ptr/local_shared_ptr.hpp>
 #endif
@@ -1148,7 +1148,7 @@ public:
     }
   };
 
-  typedef boost::variant<std::string,int64_t,double> value_t;
+  typedef std::variant<std::string,int64_t,double> value_t;
 
   static bool is_opt_name(const std::string& name);
   static opt_desc_t get_opt_desc(const std::string& name);
@@ -1168,7 +1168,7 @@ public:
     if (i == opts.end()) {
       return false;
     }
-    *val = boost::get<T>(i->second);
+    *val = std::get<T>(i->second);
     return true;
   }
 
@@ -1178,7 +1178,7 @@ public:
     if (i == opts.end()) {
       return std::forward<T>(default_value);
     }
-    return boost::get<T>(i->second);
+    return std::get<T>(i->second);
   }
 
   const value_t& get(key_t key) const;
@@ -1199,6 +1199,14 @@ private:
   friend std::ostream& operator<<(std::ostream& out, const pool_opts_t& opts);
 };
 WRITE_CLASS_ENCODER_FEATURES(pool_opts_t)
+
+template <typename T, typename... Ts>
+std::ostream& operator<<(std::ostream& out, const std::variant<T, Ts...>& v) {
+  std::visit([&out](const auto& value) {
+    out << value;
+  }, v);
+  return out;
+}
 
 struct pg_merge_meta_t {
   pg_t source_pgid;
