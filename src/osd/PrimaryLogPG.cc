@@ -9250,7 +9250,7 @@ void PrimaryLogPG::log_stats(hobject_t soid,
             f->close_section();
 
             dout(20) << __func__ << ", soid: " << soid
-                     << ". setattrs - OI set to ";
+                     << " setattrs - OI set to ";
             f->flush(*_dout);
             *_dout << "bl: " << bl << dendl;
 
@@ -9301,7 +9301,7 @@ void PrimaryLogPG::log_stats(hobject_t soid,
       t.dump(f);
       f->close_section();
       dout(10) << __func__ << ", soid: " << soid
-               << ". INFO: oi set multiple ("
+               << " INFO: oi set multiple ("
                << oi_set_count << ") times in transaction ";
       f->flush(*_dout);
       *_dout << dendl;
