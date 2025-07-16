@@ -699,6 +699,7 @@ class RedmineUpkeep:
                     issue_update.logger.info(f"Transformation {transform_method.__name__} resulted in a change.")
                     applied_transformations.append(transform_method.__name__)
 
+            issue_update.set_transform(None)
             if issue_update.has_changes:
                 issue_update.logger.info("Changes detected. Sending update to Redmine...")
                 try:
