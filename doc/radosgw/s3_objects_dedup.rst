@@ -18,7 +18,7 @@ Admin commands
    Resumes a paused dedup session.
 - ``radosgw-admin dedup abort``:
    Aborts an active dedup session and release all resources used by it.
-- ``radosgw-admin dedup estimate``
+- ``radosgw-admin dedup estimate``:
    Starts a new dedup estimate session (aborting first existing session if exists).
 
 ***************
@@ -26,7 +26,7 @@ Skipped Objects
 ***************
 Dedup Estimate process skips the following objects:
 
-- Objects smaller than 4MB (unless they are multipart).
+- Objects smaller than 4 MB (unless they are multipart).
 - Objects with different placement rules.
 - Objects with different pools.
 - Objects with different storage classes.
