@@ -1673,6 +1673,13 @@ private:
   // TODO: drop once paddr->journal_seq_t is introduced
   SegmentSeqAllocator &ool_segment_seq_allocator;
   const rewrite_gen_t max_rewrite_generation = NULL_GENERATION;
+
+  enum class gc_formula_t {
+    GREEDY,
+    BENEFIT,
+    COST_BENEFIT,
+  };
+  gc_formula_t gc_formula;
 };
 
 class RBMCleaner;

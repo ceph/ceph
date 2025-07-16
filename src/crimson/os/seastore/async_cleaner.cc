@@ -14,13 +14,6 @@ SET_SUBSYS(seastore_cleaner);
 
 namespace {
 
-enum class gc_formula_t {
-  GREEDY,
-  BENEFIT,
-  COST_BENEFIT,
-};
-constexpr auto gc_formula = gc_formula_t::COST_BENEFIT;
-
 }
 
 namespace crimson::os::seastore {
@@ -925,6 +918,19 @@ SegmentCleaner::SegmentCleaner(
     ool_segment_seq_allocator(segment_seq_allocator),
     max_rewrite_generation(max_rewrite_generation)
 {
+  LOG_PREFIX(SegmentCleaner::SegmentCleaner);
+  auto formula = crimson::common::get_conf<std::string>(
+    "seastore_segment_cleaner_gc_formula");
+  INFO("gc_formula={}, max_rewrite_generation={}",
+    formula, max_rewrite_generation);
+  if (formula == "greedy") {
+    gc_formula = gc_formula_t::GREEDY;
+  } else if (formula == "cost_benefit") {
+    gc_formula = gc_formula_t::COST_BENEFIT;
+  } else {
+    assert(formula == "benefit");
+    gc_formula = gc_formula_t::BENEFIT;
+  }
   config.validate();
 }
 
@@ -1105,11 +1111,11 @@ double SegmentCleaner::calc_gc_benefit_cost(
 {
   double util = calc_utilization(id);
   ceph_assert(util >= 0 && util < 1);
-  if constexpr (gc_formula == gc_formula_t::GREEDY) {
+  if (gc_formula == gc_formula_t::GREEDY) {
     return 1 - util;
   }
 
-  if constexpr (gc_formula == gc_formula_t::COST_BENEFIT) {
+  if (gc_formula == gc_formula_t::COST_BENEFIT) {
     if (util == 0) {
       return std::numeric_limits<double>::max();
     }
@@ -1676,13 +1682,13 @@ segment_id_t SegmentCleaner::get_next_reclaim_segment() const
   segment_id_t id = NULL_SEG_ID;
   double max_benefit_cost = 0;
   sea_time_point now_time;
-  if constexpr (gc_formula != gc_formula_t::GREEDY) {
+  if (gc_formula != gc_formula_t::GREEDY) {
     now_time = seastar::lowres_system_clock::now();
   } else {
     now_time = NULL_TIME;
   }
   sea_time_point bound_time;
-  if constexpr (gc_formula == gc_formula_t::BENEFIT) {
+  if (gc_formula == gc_formula_t::BENEFIT) {
     bound_time = segments.get_time_bound();
     if (bound_time == NULL_TIME) {
       WARN("BENEFIT -- bound_time is NULL_TIME");
