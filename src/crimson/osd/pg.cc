@@ -675,7 +675,7 @@ void PG::on_active_advmap(const OSDMapRef &osdmap)
   const auto new_removed_snaps = osdmap->get_new_removed_snaps();
   if (auto it = new_removed_snaps.find(get_pgid().pool());
       it != new_removed_snaps.end()) {
-    bool bad = false;
+    [[maybe_unused]] bool bad = false;
     for (auto j : it->second) {
       if (snap_trimq.intersects(j.first, j.second)) {
 	decltype(snap_trimq) added, overlap;
@@ -1321,7 +1321,8 @@ void PG::check_blocklisted_obc_watchers(
       auto watch = crimson::osd::Watch::create(
         obc, winfo, src.second, this);
       watch->disconnect();
-      auto [it, emplaced] = obc->watchers.emplace(src, std::move(watch));
+      [[maybe_unused]] auto [it, emplaced] =
+        obc->watchers.emplace(src, std::move(watch));
       assert(emplaced);
       logger().debug("added watch for obj {}, client {}",
         obc->get_oid(), src.second);
