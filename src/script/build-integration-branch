@@ -53,6 +53,33 @@ def parse_args():
         help="Don't add `{postfix}` to the branch name.",
     )
     parser.add_argument(
+        "--trailer",
+        action="append",
+        dest='trailers',
+        help="Allow user to set arbitrary git trailers on final commit.",
+    )
+    parser.add_argument(
+        '--ceph-build-job',
+        action="append",
+        dest='trailers',
+        type=lambda v: f'CEPH-BUILD-JOB:{v}',
+        help="Set CEPH-BUILD-JOB trailer on final commit.",
+    )
+    parser.add_argument(
+        '--distros',
+        action="append",
+        dest='trailers',
+        type=lambda v: f'DISTROS:{v}',
+        help="Set DISTROS trailer on final commit.",
+    )
+    parser.add_argument(
+        '--archs',
+        action="append",
+        dest='trailers',
+        type=lambda v: f'ARCHS:{v}',
+        help="Set DISTROS trailer on final commit.",
+    )
+    parser.add_argument(
         "--repo",
         default=REPO,
         help="GitHub repository (in `<org>/<name>` form)",
@@ -150,6 +177,12 @@ def main():
                 message = ('Exiting due to an unknown failure when pulling '
                            f'PR#{pr_number}')
                 raise Exception(message)
+    if cli.trailers:
+        cmd = ['git', 'commit', '--am', '--no-edit']
+        cmd.extend(f'--trailer={t}' for t in cli.trailers)
+        if call(cmd) != 0:
+            print('Failed to set git trailers!')
+            sys.exit(1)
 
     print('--- done. these PRs were included:')
     print('\n'.join(prtext).encode('ascii', errors='ignore').decode())
