@@ -948,7 +948,6 @@ void ECBackend::submit_transaction(
   op->plan = get_write_plan(
     sinfo,
     *op->t,
-    [this](const hobject_t& oid) { return get_hinfo_from_disk(oid); },
     read_pipeline,
     rmw_pipeline,
     get_parent()->get_dpp());

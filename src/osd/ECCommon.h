@@ -818,11 +818,9 @@ struct ECCommon {
       ObjectContextRef &obc_map
     );
 
-  template <class GetHashInfoF>
   static ECTransaction::WritePlan get_write_plan(
     const ECUtil::stripe_info_t &sinfo,
     PGTransaction &t,
-    GetHashInfoF &&get_hinfo,
     ECCommon::ReadPipeline &read_pipeline,
     ECCommon::RMWPipeline &rmw_pipeline,
     DoutPrefixProvider *dpp);
@@ -868,11 +866,9 @@ inline std::optional<object_info_t> ECBackend::get_object_info_from_obc(
   return ret;
 }
 
-template <class GetHashInfoF>
-ECTransaction::WritePlan ECBackend::get_write_plan(
+inline ECTransaction::WritePlan ECCommon::get_write_plan(
   const ECUtil::stripe_info_t &sinfo,
   PGTransaction &t,
-  GetHashInfoF &&get_hinfo,
   ECCommon::ReadPipeline &read_pipeline,
   ECCommon::RMWPipeline &rmw_pipeline,
   DoutPrefixProvider *dpp) {
