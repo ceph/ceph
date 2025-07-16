@@ -1916,7 +1916,8 @@ void PG::send_message_osd_cluster(int osd, MOSDPGPush* msg, epoch_t from_epoch)
   logger().debug("{}: MOSDPGPush from_epoch {} to osd.{}",
                  __func__, from_epoch, osd);
   if (whoami_shard().osd == osd) {
-    static_cast<ECRecoveryBackend&>(*recovery_backend).handle_push(msg);
+    std::ignore =
+      static_cast<ECRecoveryBackend&>(*recovery_backend).handle_push(msg);
   } else {
     std::vector wrapped_msg {
       std::make_pair(osd, static_cast<Message*>(msg))
