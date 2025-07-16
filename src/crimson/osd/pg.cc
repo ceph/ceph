@@ -1310,7 +1310,8 @@ void PG::check_blocklisted_obc_watchers(
       auto watch = crimson::osd::Watch::create(
         obc, winfo, src.second, this);
       watch->disconnect();
-      auto [it, emplaced] = obc->watchers.emplace(src, std::move(watch));
+      [[maybe_unused]] auto [it, emplaced] =
+        obc->watchers.emplace(src, std::move(watch));
       assert(emplaced);
       logger().debug("added watch for obj {}, client {}",
         obc->get_oid(), src.second);
