@@ -1064,12 +1064,12 @@ RGWAccessControlPolicy& FilterObject::get_acl()
 
 int FilterObject::list_parts(const DoutPrefixProvider* dpp, CephContext* cct,
 			     int max_parts, int marker, int* next_marker,
-			     bool* truncated, list_parts_each_t each_func,
+			     bool* truncated, list_parts_each_t&& each_func,
 			     optional_yield y)
 {
   return next->list_parts(dpp, cct, max_parts, marker, next_marker,
 			  truncated,
-			  sal::Object::list_parts_each_t(each_func),
+			  std::move(each_func),
 			  y);
 }
 
