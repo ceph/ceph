@@ -2677,7 +2677,7 @@ bool RadosObject::is_sync_completed(const DoutPrefixProvider* dpp,
 
 int RadosObject::list_parts(const DoutPrefixProvider* dpp, CephContext* cct,
 			   int max_parts, int marker, int* next_marker,
-			   bool* truncated, list_parts_each_t each_func,
+			   bool* truncated, list_parts_each_t&& each_func,
 			   optional_yield y)
 {
   int ret{0};
