@@ -87,7 +87,7 @@ class FakeSpecDescription:
 class FakeSpecStore():
     def __init__(self, mgr):
         self.mgr = mgr
-        self._specs = {'ingress': FakeSpecDescription('ingress', 9049), 'nfs': FakeSpecDescription('nfs', 9587)}
+        self._specs = {'ingress': FakeSpecDescription('ingress', 9049), 'nfs': FakeSpecDescription('nfs', 9587), 'smb': FakeSpecDescription('smb', 9922)}
 
     def __contains__(self, name):
         return name in self._specs
