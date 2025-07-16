@@ -21,6 +21,7 @@ overrides:
       - FS_DEGRADED
       - OSDMAP_FLAGS
       - OSD_UPGRADE_FINISHED
+      - Replacing daemon mds
 tasks:
 - install:
     branch: reef
