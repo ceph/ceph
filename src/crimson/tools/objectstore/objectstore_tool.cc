@@ -53,15 +53,16 @@ StoreTool::list_objects(const coll_t& cid, ghobject_t next)
   });
 }
 
-seastar::future<FuturizedStore::Shard::omap_values_t>
-StoreTool::omap_get_values(
+seastar::future<>
+StoreTool::omap_iterate(
   const coll_t &cid,
   const ghobject_t &oid,
-  const std::optional<std::string> &start)
+  const std::optional<std::string> &start,
+  FuturizedStore::Shard::omap_iterate_cb_t callback)
 {
   return seastar::smp::submit_to(
     shard_id,
-    [this, cid, oid, start]() -> seastar::future<FuturizedStore::Shard::omap_values_t>
+    [this, cid, oid, start, callback]() -> seastar::future<>
   {
     auto coll = co_await store->get_sharded_store().open_collection(cid
     ).handle_exception([](std::exception_ptr) {
@@ -69,21 +70,21 @@ StoreTool::omap_get_values(
     });
     if (!coll) {
       logger.error("Failed to open collection: collection does not exist");
-      co_return FuturizedStore::Shard::omap_values_t();
+      co_return;
     }
-    auto result = co_await store->get_sharded_store().omap_get_values(
-      coll, oid, start).safe_then_unpack(
-      [](bool success, FuturizedStore::Shard::omap_values_t vals) {
-        if (!success) {
-          logger.error("omap_get_values failed");
-          return FuturizedStore::Shard::omap_values_t();
-        }
-        return vals;
-      },
-      FuturizedStore::Shard::read_errorator::all_same_way([] {
-        return FuturizedStore::Shard::omap_values_t();
-      }));
-    co_return result;
+
+    ObjectStore::omap_iter_seek_t start_from = ObjectStore::omap_iter_seek_t::min_lower_bound();
+    if (start) {
+      start_from = ObjectStore::omap_iter_seek_t{
+        start.value(),
+        ObjectStore::omap_iter_seek_t::UPPER_BOUND};
+    }
+    co_await store->get_sharded_store().omap_iterate(coll, oid, start_from, callback
+    ).safe_then([] (auto ret) {
+      ceph_assert (ret == ObjectStore::omap_iter_ret_t::NEXT);
+    }).handle_error(
+      crimson::os::FuturizedStore::Shard::read_errorator::assert_all{}
+    );
   });
 }
 
@@ -104,23 +105,18 @@ seastar::future<std::string> StoreTool::get_omap(
       logger.error("Failed to open collection: collection does not exist");
       co_return std::string();
     }
-    auto result = co_await store->get_sharded_store().omap_get_values(
-      coll, oid, std::nullopt).safe_then_unpack(
-      [key](bool success, FuturizedStore::Shard::omap_values_t vals) {
-        if (!success) {
-          logger.error("omap_get_values failed");
-          return std::string();
-        }
-        auto it = vals.find(key);
-        if (it != vals.end()) {
-          return it->second.to_str();
-        }
-        return std::string();
-      },
-      FuturizedStore::Shard::read_errorator::all_same_way([] {
-        return std::string();
-      }));
-    co_return result;
+
+    std::set<std::string> to_get;
+    to_get.insert(key);
+    auto&& vals = co_await store->get_sharded_store().omap_get_values(
+      coll, oid, to_get).handle_error(
+      crimson::os::FuturizedStore::Shard::read_errorator::assert_all{}
+    );
+    auto it = vals.find(key);
+    if (it != vals.end()) {
+      co_return it->second.to_str();
+    }
+    co_return std::string();
   });
 }
 

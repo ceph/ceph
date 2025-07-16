@@ -44,6 +44,12 @@ using crimson::common::local_conf;
 
 using namespace crimson::tools::kvstore;
 
+
+std::string cleanbin(std::string_view str_view) {
+    std::string str(str_view); 
+    return cleanbin(str);
+}
+
 // Helper function to convert binary data to readable format
 std::string cleanbin(const std::string& str) {
   // Check if string contains non-printable characters
@@ -620,17 +626,20 @@ seastar::future<int> run_tool(StoreTool& st, objectstore_config_t& config) {
     }
 
     case operation_type_t::LIST_OMAP: {
-      FuturizedStore::Shard::omap_values_t omaps =
-        co_await st.omap_get_values(config.coll, config.ghobj, op.omap_start);
 
-      for (const auto& omap : omaps) {
+      std::function<ObjectStore::omap_iter_ret_t(std::string_view, std::string_view)> callback =
+        [] (std::string_view key, std::string_view value) {
         if (outistty) {
-          std::string cleaned_key = cleanbin(omap.first);
+          std::string cleaned_key = cleanbin(key);
           fmt::print(std::cout, "{}\n", cleaned_key);
         } else {
-          fmt::print(std::cout, "{}\n", omap.first);
+          fmt::print(std::cout, "{}\n", key);
         }
-      }
+        return ObjectStore::omap_iter_ret_t::NEXT;
+      };
+
+      co_await st.omap_iterate(config.coll, config.ghobj, op.omap_start, callback);
+
       break;
     }
 

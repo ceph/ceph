@@ -39,11 +39,12 @@ public:
   seastar::future<pg_info_t> get_pg_info(const coll_t& cid);
   
   // Omap operations
-  seastar::future<FuturizedStore::Shard::omap_values_t>
-  omap_get_values(
+  seastar::future<>
+  omap_iterate(
     const coll_t &cid,
     const ghobject_t &oid,
-    const std::optional<std::string> &start);
+    const std::optional<std::string> &start,
+    FuturizedStore::Shard::omap_iterate_cb_t callback);
   seastar::future<std::string> get_omap(
     const coll_t& cid,
     const ghobject_t& oid,
