@@ -17,7 +17,7 @@
           i18n-label
           for="storageClassType"
           formControlName="storageClassType"
-          [helperText]="textLabels.storageClassText"
+          [helperText]="helpTextLabels.storageClassText"
           id="storageClassType"
           [invalid]="storageClassForm.showError('storageClassType', formDir, 'required')"
           [invalidText]="storageError"
@@ -141,7 +141,7 @@
               i18n
               [invalid]="storageClassForm.showError('region', formDir, 'required')"
               [invalidText]="regionError"
-              [helperText]="textLabels.targetRegionText"
+              [helperText]="helpTextLabels.targetRegionText"
               >Target Region
               <input
                 cdsText
@@ -165,29 +165,33 @@
           <div cdsCol>
             <!-- Target Endpoint -->
             <cds-text-label
-              labelInputID="endpoint"
-              i18n
-              [invalid]="storageClassForm.showError('endpoint', formDir, 'required')"
+            labelInputID="target_endpoint"
+            i18n
+            [invalid]="storageClassForm.showError('target_endpoint', formDir, 'invalidURL') || storageClassForm.showError('target_endpoint', formDir, 'required')"
+            [invalidText]="endpointError"
+            [helperText]="helpTextLabels.targetEndpointText"
+            >Target Endpoint
+            <input
+              cdsText
+              type="text"
+              placeholder="e.g, http://ceph-node-00.com:80"
+              i18n-placeholder
+              id="target_endpoint"
+              formControlName="target_endpoint"
+              [invalid]="storageClassForm.showError('target_endpoint', formDir, 'invalidURL') || storageClassForm.showError('target_endpoint', formDir, 'required')"
               [invalidText]="endpointError"
-              [helperText]="textLabels.targetEndpointText"
-              >Target Endpoint
-              <input
-                cdsText
-                type="text"
-                placeholder="e.g, http://ceph-node-00.com:80"
-                i18n-placeholder
-                id="endpoint"
-                formControlName="endpoint"
-                [invalid]="storageClassForm.showError('endpoint', formDir, 'required')"
-              />
-            </cds-text-label>
+            />
+          </cds-text-label>
             <ng-template #endpointError>
               <span
                 class="invalid-feedback"
-                *ngIf="storageClassForm.showError('endpoint', formDir, 'required')"
+                *ngIf="storageClassForm.showError('target_endpoint', formDir, 'required')"
                 i18n
                 >This field is required.</span
               >
+              <span class="invalid-feedback"
+                    *ngIf="storageClassForm.showError('target_endpoint', formDir, 'invalidURL')"
+                    i18n>Please enter a valid URL.</span>
             </ng-template>
           </div>
         </div>
@@ -200,7 +204,7 @@
               labelInputID="access_key"
               [invalid]="storageClassForm.showError('access_key', formDir, 'required')"
               [invalidText]="accessError"
-              [helperText]="textLabels.targetAccessKeyText"
+              [helperText]="helpTextLabels.targetAccessKeyText"
               i18n
               >Target Access Key
               <input
@@ -229,7 +233,7 @@
                class="d-flex">
             <cds-password-label
               labelInputID="secret_key"
-              [helperText]="textLabels.targetSecretKeyText"
+              [helperText]="helpTextLabels.targetSecretKeyText"
               [invalid]="storageClassForm.showError('secret_key', formDir, 'required')"
               [invalidText]="secretError"
               i18n
@@ -260,7 +264,7 @@
             i18n
             [invalid]="storageClassForm.showError('target_path', formDir, 'required')"
             [invalidText]="targetError"
-            [helperText]="textLabels.targetPathText"
+            [helperText]="helpTextLabels.targetPathText"
             >Target Path
             <input
               cdsText
@@ -287,7 +291,7 @@
             i18n
             (change)="onAllowReadThroughChange($event)"
             >Allow Read Through
-            <cd-help-text>{{ textLabels?.allowReadThroughText }}</cd-help-text>
+            <cd-help-text>{{ helpTextLabels?.allowReadThroughText }}</cd-help-text>
           </cds-checkbox>
         </div>
         <div class="form-item">
@@ -297,7 +301,7 @@
             cdOptionalField="Head Object (Stub File)"
             i18n
             >Head Object (Stub File)
-            <cd-help-text>{{ textLabels?.retainHeadObjectText }}</cd-help-text>
+            <cd-help-text>{{ helpTextLabels?.retainHeadObjectText }}</cd-help-text>
           </cds-checkbox>
         </div>
         <div class="form-item form-item-append"
@@ -309,7 +313,7 @@
               id="read_through_restore_days"
               min="1"
               label="ReadThrough Restore Days"
-              [helperText]="textLabels.readthroughrestoreDaysText"
+              [helperText]="helpTextLabels.readthroughrestoreDaysText"
               i18n-helperText
               i18n-label
               i18n
@@ -339,7 +343,7 @@
               formControlName="restore_storage_class"
               label="Restore Storage Class"
               id="restore_storage_class"
-              [helperText]="textLabels.restoreStorageClassText"
+              [helperText]="helpTextLabels.restoreStorageClassText"
               i18n-label
             >
               <option value=""
@@ -367,7 +371,7 @@
                 storageClassForm.controls.glacier_restore_tier_type.dirty
               "
               [invalidText]="glacierError"
-              [helperText]="textLabels.tiertypeText"
+              [helperText]="helpTextLabels.tiertypeText"
               i18n-label
             >
               <option value=""
@@ -391,7 +395,7 @@
               [id]="'glacier_restore_days'"
               [formControlName]="'glacier_restore_days'"
               [label]="'Glacier Restore Days'"
-              [helperText]="textLabels.restoreDaysText"
+              [helperText]="helpTextLabels.restoreDaysText"
               [min]="1"
               i18n-helperText
               i18n-label
@@ -441,7 +445,7 @@
                     <cds-text-label
                       labelInputID="multipart_sync_threshold"
                       i18n
-                      [helperText]="textLabels.multipartSyncThresholdText"
+                      [helperText]="helpTextLabels.multipartSyncThresholdText"
                       cdOptionalField="Multipart Sync Threshold"
                       >Multipart Sync Threshold
                       <input
@@ -457,7 +461,7 @@
                     <cds-text-label
                       labelInputID="multipart_min_part_size"
                       i18n
-                      [helperText]="textLabels.multipartMinPartText"
+                      [helperText]="helpTextLabels.multipartMinPartText"
                       cdOptionalField="Multipart Minimum Part Size"
                       >Multipart Minimum Part Size
                       <input
