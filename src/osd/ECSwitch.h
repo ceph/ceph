@@ -328,6 +328,51 @@ public:
     return legacy.get_ec_stripe_chunk_size();
   }
 
+  bool get_ec_supports_crc_encode_decode() const override {
+    if (is_optimized()) {
+      return optimized.get_ec_supports_crc_encode_decode();
+    }
+    return legacy.get_ec_supports_crc_encode_decode();
+  }
+
+  bool ec_can_decode(const shard_id_set &available_shards) const override {
+    if (is_optimized()) {
+      return optimized.ec_can_decode(available_shards);
+    }
+
+    return false;
+  }
+
+  shard_id_map<bufferlist> ec_encode_acting_set(
+      const bufferlist &in_bl) const override {
+    if (is_optimized()) {
+      return optimized.ec_encode_acting_set(in_bl);
+    }
+
+    ceph_abort_msg("This interface is not supported by legacy EC");
+    return {0};
+  }
+
+  shard_id_map<bufferlist> ec_decode_acting_set(
+      const shard_id_map<bufferlist> &shard_map,
+      int chunk_size) const override {
+    if (is_optimized()) {
+      return optimized.ec_decode_acting_set(shard_map, chunk_size);
+    }
+
+    ceph_abort_msg("This interface is not supported by legacy EC");
+    return {0};
+  }
+
+  ECUtil::stripe_info_t ec_get_sinfo() const {
+    if (is_optimized()) {
+      return optimized.ec_get_sinfo();
+    }
+
+    ceph_abort_msg("This interface is not supported by legacy EC");
+    return {0, 0, 0};
+  }
+
   int objects_get_attrs(
     const hobject_t &hoid,
     std::map<std::string, ceph::buffer::list, std::less<>> *out) override
