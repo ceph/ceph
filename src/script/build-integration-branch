@@ -58,84 +58,90 @@ except ImportError:
     assert len(sys.argv) == 2
     branch = label + postfix
 
-token = ''
-try:
-    nrc = netrc.netrc()
-    nrauth = nrc.authenticators("api.github.com")
-    if nrauth:
-        token = nrauth[2]
-    if not token:
-        nrauth = nrc.authenticators("github.com")
+
+def main():
+    token = ''
+    try:
+        nrc = netrc.netrc()
+        nrauth = nrc.authenticators("api.github.com")
         if nrauth:
             token = nrauth[2]
-except FileNotFoundError:
-    pass
-if not token:
-    try:
-        with open(os.path.expanduser('~/.github_token')) as myfile:
-            token = myfile.readline().strip()
+        if not token:
+            nrauth = nrc.authenticators("github.com")
+            if nrauth:
+                token = nrauth[2]
     except FileNotFoundError:
         pass
-if not token:
-    print('No github api access token found')
-    print('  Add a token to .netrc for [api.]github.com')
-    print('  OR add a token to $HOME/.github_token')
+    if not token:
+        try:
+            with open(os.path.expanduser('~/.github_token')) as myfile:
+                token = myfile.readline().strip()
+        except FileNotFoundError:
+            pass
+    if not token:
+        print('No github api access token found')
+        print('  Add a token to .netrc for [api.]github.com')
+        print('  OR add a token to $HOME/.github_token')
 
-# get prs
-baseurl = urljoin('https://api.github.com',
-                  ('repos/{repo}/issues?labels={label}'
-                   '&sort=created'
-                   '&direction=asc'))
-url = baseurl.format(label=label,
-                     repo=repo)
-r = requests.get(url,
-                 headers={'Authorization': 'token %s' % token})
-if not r.ok:
-    print("Failed to access github api")
-    print("(Do you have a valid, unexpired github api token?)")
-    sys.exit(1)
-
-j = json.loads(r.text or r.content)
-print("--- found %d issues tagged with %s" % (len(j), label))
-
-prs = []
-prtext = []
-for issue in j:
-    if 'pull_request' not in issue:
-        continue
-    r = requests.get(issue['pull_request']['url'],
+    # get prs
+    baseurl = urljoin('https://api.github.com',
+                      ('repos/{repo}/issues?labels={label}'
+                       '&sort=created'
+                       '&direction=asc'))
+    url = baseurl.format(label=label,
+                         repo=repo)
+    r = requests.get(url,
                      headers={'Authorization': 'token %s' % token})
-    pr = json.loads(r.text or r.content)
-    prs.append(pr)
-    prtext.append(pr['html_url'] + ' - ' + pr['title'])
-print("--- queried %s prs" % len(prs))
+    if not r.ok:
+        print("Failed to access github api")
+        print("(Do you have a valid, unexpired github api token?)")
+        sys.exit(1)
 
-print("branch %s" % branch)
+    j = json.loads(r.text or r.content)
+    print("--- found %d issues tagged with %s" % (len(j), label))
 
-# assemble
-print('--- creating branch %s' % branch)
-r = call(['git', 'branch', '-D', branch])
-r = call(['git', 'checkout', '-b', branch])
-assert not r
-for pr in prs:
-    pr_number = pr['number']
-    pr_url = pr['head']['repo']['clone_url']
-    pr_ref = pr['head']['ref']
-    print(f'--- pr {pr_number} --- pulling {pr_url} branch {pr_ref}')
-    while True:
-        r = call(['git', 'pull', '--no-ff', '--no-edit', pr_url, pr_ref])
-        if r == 0:
-            break
-        elif r == 1:
-            print(f'Unable to access {pr_url}, retrying..')
-        elif r == 128:
-            message = f'Unable to resolve conflict when merging PR#{pr_number}'
-            raise Exception(message)
-        else:
-            message = ('Exiting due to an unknown failure when pulling '
-                       f'PR#{pr_number}')
-            raise Exception(message)
+    prs = []
+    prtext = []
+    for issue in j:
+        if 'pull_request' not in issue:
+            continue
+        r = requests.get(issue['pull_request']['url'],
+                         headers={'Authorization': 'token %s' % token})
+        pr = json.loads(r.text or r.content)
+        prs.append(pr)
+        prtext.append(pr['html_url'] + ' - ' + pr['title'])
+    print("--- queried %s prs" % len(prs))
 
-print('--- done. these PRs were included:')
-print('\n'.join(prtext).encode('ascii', errors='ignore').decode())
-print('--- perhaps you want to: ./run-make-check.sh && git push ci %s' % branch)
+    print("branch %s" % branch)
+
+    # assemble
+    print('--- creating branch %s' % branch)
+    r = call(['git', 'branch', '-D', branch])
+    r = call(['git', 'checkout', '-b', branch])
+    assert not r
+    for pr in prs:
+        pr_number = pr['number']
+        pr_url = pr['head']['repo']['clone_url']
+        pr_ref = pr['head']['ref']
+        print(f'--- pr {pr_number} --- pulling {pr_url} branch {pr_ref}')
+        while True:
+            r = call(['git', 'pull', '--no-ff', '--no-edit', pr_url, pr_ref])
+            if r == 0:
+                break
+            elif r == 1:
+                print(f'Unable to access {pr_url}, retrying..')
+            elif r == 128:
+                message = f'Unable to resolve conflict when merging PR#{pr_number}'
+                raise Exception(message)
+            else:
+                message = ('Exiting due to an unknown failure when pulling '
+                           f'PR#{pr_number}')
+                raise Exception(message)
+
+    print('--- done. these PRs were included:')
+    print('\n'.join(prtext).encode('ascii', errors='ignore').decode())
+    print('--- perhaps you want to: ./run-make-check.sh && git push ci %s' % branch)
+
+
+if __name__ == '__main__':
+    main()
