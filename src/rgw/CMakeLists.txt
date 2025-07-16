@@ -623,6 +623,18 @@ set(librgw_srcs
   librgw.cc)
 add_library(rgw SHARED ${librgw_srcs})
 
+if(D4N_USE_FDB_SINK)
+ message("Building with FDB support as D4N sink (experimental).")
+
+#JFW:
+# target_link_libraries(rgw_common PRIVATE
+#  rgw_fdb)
+
+#JFW:
+# target_link_libraries(radosgw PRIVATE
+#  rgw_fdb)
+endif()
+
 target_compile_definitions(rgw PUBLIC "-DCLS_CLIENT_HIDE_IOCTX")
 target_include_directories(rgw
   PUBLIC "${CMAKE_SOURCE_DIR}/src/dmclock/support/src"

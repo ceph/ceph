@@ -272,8 +272,6 @@ class transaction final
 
 } // namespace ceph::libfdb
 
-/////////////////////// ***************** JFW
-
 namespace ceph::libfdb::detail {
 
 // The global DB state and management thread:
@@ -328,8 +326,7 @@ class database_system final
      // fmt::println("database::shutdown_fdb() error {}", r);
    }
  
-  // Wait for fdb_stop_network to do its thing(); 
-  std::this_thread::sleep_for(25ms); 
+  std::this_thread::sleep_for(10ms); 
  
   if(fdb_network_thread.joinable()) {
    fdb_network_thread.join();
@@ -344,65 +341,10 @@ class database_system final
 
 namespace ceph::libfdb {
 
-/* JFW: TODO: unused, implement options
-template <typename SettingKind>
-inline void set_options(auto& set_option_target_obj, const std::pair<SettingKind, std::string>& kv)
+inline void shutdown_libfdb()
 {
- std::ranges::for_each(kv, [&set_option_target_obj](const auto& kv) {
-		        set_option_target_obj.set_option(kv.first, kv.second);
-		      });
-}*/
-
-database::database()
-{
- std::call_once(ceph::libfdb::detail::database_system::fdb_was_initialized, ceph::libfdb::detail::database_system::initialize_fdb);
-
- if(fdb_error_t r = fdb_create_database(nullptr, &fdb_handle); 0 != r)
-  throw fdb_exception(r);
-
- // may now set database options:
- ; // JFW
-}
-
-database::~database()
-{
- // destroy specific database:
- if(nullptr != fdb_handle) {
-  fdb_database_destroy(fdb_handle), fdb_handle = nullptr;
- }
-}
-
-transaction::transaction(database_handle& dbh)
- : dbh(dbh)
-{
-  if(fdb_error_t r = fdb_database_create_transaction(dbh->raw_handle(), &txn_handle); 0 != r) {
-   throw fdb_exception(r);
-  }
-}
-
-transaction::~transaction()
-{
-  if(nullptr == txn_handle) {
-   return;
-  }
-
-/*JFW
-  // If no writes have taken place we do not need to commit; if we don't commit, then we are implicitly
-  // rolled-back. For now, this isn't tracked:
-  commit();
-*/
-  fdb_transaction_destroy(txn_handle);
-}
-
-void transaction::commit()
-{
- future_value fv = fdb_transaction_commit(raw_handle());
-
- // JFW: IMPORTANT: TODO: I think to correctly handle this, we're supposed to do the fdb_transaction_on_error() 
- // dance; for now:
- if(fdb_error_t r = fdb_future_block_until_ready(fv.raw_handle()); 0 != r) {
-    throw fdb_exception(r);
- }
+ // Shutdown the FDB thread:
+ ceph::libfdb::detail::database_system::shutdown_fdb();
 }
 
 } // namespace ceph::libfdb

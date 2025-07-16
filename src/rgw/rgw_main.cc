@@ -30,6 +30,13 @@ static void godown_alarm(int signum)
   _exit(0);
 }
 
+void rgw_main_shutdown()
+{
+ dout(1) << "JFW: rgw_main_shutdown()" << dendl;
+ // Make sure that FoundationDB is shut down once and only once:
+ ceph::libfdb::detail::database_system::shutdown_fdb();
+}
+
 class C_InitTimeout : public Context {
 public:
   C_InitTimeout() {}
