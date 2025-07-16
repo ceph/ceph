@@ -245,7 +245,7 @@ based on `AWS Logging Record Format`_.
   - host header (or dash if empty)
   - TLS version (or dash if empty)
   - access point ARN (not supported, always a dash)
-  - ACL flag ("Yes" if the request is an ACL operation, otherwise dash)
+  - ACL flag ("Yes" if an ACL was required for authorization, otherwise dash)
 
 For example:
 
