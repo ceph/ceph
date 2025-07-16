@@ -13,17 +13,9 @@ OR adding an entry like the following to `~/.netrc`:
   machine github.com
   password ghp_E7ln0tAR34LtoK3nIsw34RyTve2moM3BvK
   ```
-
-
-Usage:
-  build-integration-branch <label> [--no-date]
-  build-integration-branch -h | --help
-
-Options:
-  -h --help   Show this screen.
-  --no-date   Don't add `{postfix}` to the branch name.
 """
 
+import argparse
 import json
 import os
 import requests
@@ -35,31 +27,52 @@ from subprocess import call, check_output
 from urllib.parse import urljoin
 
 TIME_FORMAT = '%Y-%m-%d-%H%M'
-postfix = "-" + time.strftime(TIME_FORMAT, time.localtime())
+CODENAMES = 'mimic nautilus octopus pacific quincy reef squid tentacle'
+REPO = "ceph/ceph"
 
-current_branch = check_output('git rev-parse --abbrev-ref HEAD',
-                              shell=True).strip().decode()
-if current_branch in 'mimic nautilus octopus pacific quincy reef squid tentacle'.split():
-    postfix += '-' + current_branch
-    print(f"Adding current branch name '-{current_branch}' as a postfix")
 
-repo = "ceph/ceph"
+def get_postfix():
+    postfix = "-" + time.strftime(TIME_FORMAT, time.localtime())
+    current_branch = (
+        check_output('git rev-parse --abbrev-ref HEAD', shell=True)
+        .strip()
+        .decode()
+    )
+    if current_branch in CODENAMES.split():
+        postfix += '-' + current_branch
+        print(f"Adding current branch name '-{current_branch}' as a postfix")
+    return postfix
 
-try:
-    from docopt import docopt
-    arguments = docopt(__doc__.format(postfix=postfix))
-    label = arguments['<label>']
-    branch = label
-    if not arguments['--no-date']:
-        branch += postfix
-except ImportError:
-    # Fallback without docopt.
-    label = sys.argv[1]
-    assert len(sys.argv) == 2
-    branch = label + postfix
+
+def parse_args():
+    parser = argparse.ArgumentParser(usage=__doc__)
+    parser.add_argument(
+        "--no-date",
+        "--no-postfix",
+        action="store_true",
+        help="Don't add `{postfix}` to the branch name.",
+    )
+    parser.add_argument(
+        "--repo",
+        default=REPO,
+        help="GitHub repository (in `<org>/<name>` form)",
+    )
+    parser.add_argument(
+        "label",
+        help="GitHub label to search for",
+    )
+    return parser.parse_args()
 
 
 def main():
+    cli = parse_args()
+    if cli.no_date:
+        branch = cli.label
+    else:
+        branch = cli.label + get_postfix()
+    label = cli.label
+    repo = cli.repo
+
     token = ''
     try:
         nrc = netrc.netrc()
