@@ -163,6 +163,23 @@ Issue #{self.issue_update.issue.id} referenced "PR #{self.pr_id}":https://github
 </pre>
 """
 
+class RedmineUpdateException(UpkeepException):
+    def __init__(self, issue_update, **kwargs):
+        super().__init__(issue_update, **kwargs)
+
+    def __str__(self):
+        return "Update to Redmine failed"
+
+    def comment(self):
+        return f"""
+Redmine Update failed:
+
+<pre>
+{self.traceback.strip()}
+</pre>
+"""
+
+
 class IssueUpdate:
     def __init__(self, issue, github_session, git_repo):
         self.issue = issue
@@ -720,10 +737,9 @@ class RedmineUpkeep:
                         self.modifications_made.setdefault(t_name, 0)
                         self.modifications_made[t_name] += 1
                     return True
-                except requests.exceptions.HTTPError as err:
+                except requests.exceptions.HTTPError as e:
                     issue_update.logger.error("API PUT failure during upkeep.", exc_info=True)
-                    self._handle_upkeep_failure(issue_update, err)
-                    return False
+                    raise RedmineUpdateException(issue_update, exception=e, traceback=traceback.format_exc())
             else:
                 issue_update.logger.info("No changes detected after all transformations. No Redmine update sent.")
                 return False
