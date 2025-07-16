@@ -31,7 +31,7 @@
 #include "rgw_dedup.h"
 #include "rgw_dmclock_scheduler_ctx.h"
 #include "rgw_ratelimit.h"
-
+#include "rgw/fdb/fdb.h"
 
 class RGWPauser : public RGWRealmReloader::Pauser {
   std::vector<Pauser*> pausers;
@@ -54,11 +54,14 @@ public:
 
 namespace rgw {
 
+void rgw_main_shutdown();
+
 namespace lua { class Background; }
 namespace dedup{ class Background; }
 namespace sal { class ConfigStore; }
 
 class RGWLib;
+
 class AppMain {
   /* several components should be initalized only if librgw is
     * also serving HTTP */
@@ -93,7 +96,14 @@ public:
   ~AppMain();
 
   void shutdown(std::function<void(void)> finalize_async_signals
-	       = []() { /* nada */});
+              = []() { 
+		  using namespace std::chrono_literals;
+
+		  // Make sure that FoundationDB is shut down once and only once:
+		  ceph::libfdb::shutdown_libfdb();
+
+		  std::this_thread::sleep_for(20ms); 
+		});
 
   sal::ConfigStore* get_config_store() const {
     return cfgstore.get();

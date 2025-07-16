@@ -176,7 +176,7 @@ in the library, and especially std::string::compare();
 
 */
 // JFW: TODO: implement/expose remaining features (key selectors, batching and chunking, etc.):
-future_value get_range_future_from_transaction(transaction_handle& txn, std::string_view begin_key, std::string_view end_key)
+inline future_value get_range_future_from_transaction(transaction_handle& txn, std::string_view begin_key, std::string_view end_key)
 {
   // By default, give (begin, end):
   constexpr bool begin_or_eq = true;
