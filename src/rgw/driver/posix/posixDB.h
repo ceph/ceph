@@ -102,8 +102,13 @@ class RemovePOSIXUserOp: public SQLRemoveUser {};
 class POSIXUserDB : public SQLiteDB {
   private:
     const std::string db_name;
-    rgw::sal::Driver* driver;
     const std::string user_table;
+    const std::string bucket_table;
+    const std::string quota_table;
+    const std::string lc_head_table;
+    const std::string lc_entry_table;
+
+    rgw::sal::Driver* driver;
 
   protected:
     void *db;
@@ -114,6 +119,8 @@ class POSIXUserDB : public SQLiteDB {
     std::mutex mtx;
 
   public:
+    struct DBOps dbops;
+
     POSIXUserDB(std::string db_name, CephContext *_cct) : SQLiteDB(db_name, _cct),
 		db_name(db_name),
 		user_table(db_name+"_user_table"),
@@ -123,18 +130,19 @@ class POSIXUserDB : public SQLiteDB {
     /* POSIXUserDB() {}*/
 
     int Initialize(std::string logfile, int loglevel);
+    int ProcessOp(const DoutPrefixProvider *dpp, std::string_view Op, DBOpParams *params);
     int Destroy(const DoutPrefixProvider *dpp);
 
     CephContext* ctx() { return this->cct; }
 
     virtual int InitPrepareParams(const DoutPrefixProvider *dpp,
                                   DBOpPrepareParams &p_params,
-                                  DBOpParams* params) { return 0; } // TODO
-    virtual int createLCTables(const DoutPrefixProvider *dpp) { return 0; }
+                                  DBOpParams* params) override { return 0; }
+    virtual int createLCTables(const DoutPrefixProvider *dpp) override { return 0; }
 
-    virtual int ListAllBuckets(const DoutPrefixProvider *dpp, DBOpParams *params) { return 0; } // TODO
-    virtual int ListAllUsers(const DoutPrefixProvider *dpp, DBOpParams *params) { return 0; } // TODO
-    virtual int ListAllObjects(const DoutPrefixProvider *dpp, DBOpParams *params) { return 0; } // TODO
+    virtual int ListAllBuckets(const DoutPrefixProvider *dpp, DBOpParams *params) override { return 0; }
+    virtual int ListAllUsers(const DoutPrefixProvider *dpp, DBOpParams *params) override { return 0; }
+    virtual int ListAllObjects(const DoutPrefixProvider *dpp, DBOpParams *params) override { return 0; }
 };
 
 } } // namespace rgw::store
