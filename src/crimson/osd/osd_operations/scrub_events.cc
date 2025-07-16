@@ -186,15 +186,19 @@ ScrubScan::ifut<> ScrubScan::scan_object(
   DEBUGDPP("obj: {}", pg, obj);
   auto &entry = ret.objects[obj.hobj];
   return interruptor::make_interruptible(
-    pg.shard_services.get_store().stat(
+    crimson::os::with_store<&crimson::os::FuturizedStore::Shard::stat>(
+      pg.shard_services.get_store(pg.get_store_index()),
       pg.get_collection_ref(),
-      obj)
+      obj,
+      0)
   ).then_interruptible([FNAME, &pg, &obj, &entry](struct stat obj_stat) {
     DEBUGDPP("obj: {}, stat complete, size {}", pg, obj, obj_stat.st_size);
     entry.size = obj_stat.st_size;
-    return pg.shard_services.get_store().get_attrs(
+    return crimson::os::with_store<&crimson::os::FuturizedStore::Shard::get_attrs>(
+      pg.shard_services.get_store(pg.get_store_index()),
       pg.get_collection_ref(),
-      obj);
+      obj,
+      0);
   }).safe_then_interruptible([FNAME, &pg, &obj, &entry](auto &&attrs) {
     DEBUGDPP("obj: {}, got {} attrs", pg, obj, attrs.size());
     for (auto &i : attrs) {
@@ -244,11 +248,13 @@ ScrubScan::ifut<> ScrubScan::deep_scan_object(
                 pg, *this, obj, progress);
       const auto stride = local_conf().get_val<Option::size_t>(
         "osd_deep_scrub_stride");
-      return pg.shard_services.get_store().read(
+      return crimson::os::with_store<&crimson::os::FuturizedStore::Shard::read>(
+        pg.shard_services.get_store(pg.get_store_index()),
         pg.get_collection_ref(),
         obj,
         *(progress.offset),
-        stride
+        stride,
+        0
       ).safe_then([this, FNAME, stride, &obj, &progress, &entry, &pg](auto bl) {
         size_t offset = *progress.offset;
         DEBUGDPP("op: {}, obj: {}, progress: {} got offset {}",
@@ -279,9 +285,11 @@ ScrubScan::ifut<> ScrubScan::deep_scan_object(
    {
       DEBUGDPP("op: {}, obj: {}, progress: {} scanning omap header",
                 pg, *this, obj, progress);
-      return pg.shard_services.get_store().omap_get_header(
+      return crimson::os::with_store<&crimson::os::FuturizedStore::Shard::omap_get_header>(
+        pg.shard_services.get_store(pg.get_store_index()),
         pg.get_collection_ref(),
-        obj
+        obj,
+        0
       ).safe_then([&progress](auto bl) {
         progress.omap_hash << bl;
       }).handle_error(
@@ -319,11 +327,13 @@ ScrubScan::ifut<> ScrubScan::deep_scan_object(
     {
       DEBUGDPP("op: {}, obj: {}, progress: {} scanning omap keys",
                 pg, *this, obj, progress);
-      return pg.shard_services.get_store().omap_iterate(
+      return crimson::os::with_store<&crimson::os::FuturizedStore::Shard::omap_iterate>(
+        pg.shard_services.get_store(pg.get_store_index()),
         pg.get_collection_ref(),
         obj,
         start_from,
-        callback
+        callback,
+        0
       ).safe_then([FNAME, this, &obj, &progress, &entry, &pg](auto result) {
         assert(result == ObjectStore::omap_iter_ret_t::NEXT);
         DEBUGDPP("op: {}, obj: {}, progress: {} omap done",
