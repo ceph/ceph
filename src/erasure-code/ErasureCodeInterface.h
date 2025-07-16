@@ -679,6 +679,11 @@ namespace ceph {
        * are irrelevant if this flag is false.
        */
       FLAG_EC_PLUGIN_OPTIMIZED_SUPPORTED = 1<<6,
+      /* This plugin supports the ability to encode CRCs of data shards to get
+       * the CRC of a parity shard. This flag also represents the inverse,
+       * to decode a parity CRC to get the CRC of a data shard.
+       */
+      FLAG_EC_PLUGIN_CRC_ENCODE_DECODE_SUPPORT = 1<<7,
     };
     static const char *get_optimization_flag_name(const plugin_flags flag) {
       switch (flag) {
@@ -689,6 +694,8 @@ namespace ceph {
       case FLAG_EC_PLUGIN_PARITY_DELTA_OPTIMIZATION: return "paritydelta";
       case FLAG_EC_PLUGIN_REQUIRE_SUB_CHUNKS: return "requiresubchunks";
       case FLAG_EC_PLUGIN_OPTIMIZED_SUPPORTED: return "optimizedsupport";
+      case FLAG_EC_PLUGIN_CRC_ENCODE_DECODE_SUPPORT:
+        return "crcencodedecode";
       default: return "???";
       }
     }

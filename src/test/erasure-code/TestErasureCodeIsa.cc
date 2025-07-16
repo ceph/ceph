@@ -49,7 +49,7 @@ void IsaErasureCodeTest::compare_chunks(bufferlist &in, shard_id_map<bufferlist>
 
 void IsaErasureCodeTest::encode_decode(unsigned object_size)
 {
-  ErasureCodeIsaDefault Isa(tcache);
+  ErasureCodeIsaDefault Isa(tcache, "reed_sol_van");
 
   ErasureCodeProfile profile;
   profile["k"] = "2";
@@ -190,7 +190,7 @@ TEST_F(IsaErasureCodeTest, encode_decode)
 
 TEST_F(IsaErasureCodeTest, minimum_to_decode)
 {
-  ErasureCodeIsaDefault Isa(tcache);
+  ErasureCodeIsaDefault Isa(tcache, "reed_sol_van");
   ErasureCodeProfile profile;
   profile["k"] = "2";
   profile["m"] = "2";
@@ -287,7 +287,7 @@ TEST_F(IsaErasureCodeTest, minimum_to_decode)
 TEST_F(IsaErasureCodeTest, chunk_size)
 {
   {
-    ErasureCodeIsaDefault Isa(tcache);
+    ErasureCodeIsaDefault Isa(tcache, "reed_sol_van");
     ErasureCodeProfile profile;
     profile["k"] = "2";
     profile["m"] = "1";
@@ -299,7 +299,7 @@ TEST_F(IsaErasureCodeTest, chunk_size)
     ASSERT_EQ(EC_ISA_ADDRESS_ALIGNMENT * 2, Isa.get_chunk_size(EC_ISA_ADDRESS_ALIGNMENT * k + 1));
   }
   {
-    ErasureCodeIsaDefault Isa(tcache);
+    ErasureCodeIsaDefault Isa(tcache, "reed_sol_van");
     ErasureCodeProfile profile;
     profile["k"] = "3";
     profile["m"] = "1";
@@ -320,7 +320,7 @@ TEST_F(IsaErasureCodeTest, chunk_size)
 
 TEST_F(IsaErasureCodeTest, encode)
 {
-  ErasureCodeIsaDefault Isa(tcache);
+  ErasureCodeIsaDefault Isa(tcache, "reed_sol_van");
   ErasureCodeProfile profile;
   profile["k"] = "2";
   profile["m"] = "2";
@@ -369,7 +369,7 @@ TEST_F(IsaErasureCodeTest, encode)
 
 TEST_F(IsaErasureCodeTest, sanity_check_k)
 {
-  ErasureCodeIsaDefault Isa(tcache);
+  ErasureCodeIsaDefault Isa(tcache, "reed_sol_van");
   ErasureCodeProfile profile;
   profile["k"] = "1";
   profile["m"] = "1";
@@ -402,7 +402,7 @@ TEST_F(IsaErasureCodeTest, isa_vandermonde_exhaustive)
   // Test all possible failure scenarios and reconstruction cases for
   // a (12,4) configuration using the vandermonde matrix
 
-  ErasureCodeIsaDefault Isa(tcache);
+  ErasureCodeIsaDefault Isa(tcache, "reed_sol_van");
   ErasureCodeProfile profile;
   profile["k"] = "12";
   profile["m"] = "4";
@@ -527,7 +527,7 @@ TEST_F(IsaErasureCodeTest, isa_cauchy_exhaustive)
 {
   // Test all possible failure scenarios and reconstruction cases for
   // a (12,4) configuration using the cauchy matrix
-  ErasureCodeIsaDefault Isa(tcache,ErasureCodeIsaDefault::kCauchy);
+  ErasureCodeIsaDefault Isa(tcache, "cauchy", ErasureCodeIsaDefault::kCauchy);
   ErasureCodeProfile profile;
   profile["k"] = "12";
   profile["m"] = "4";
@@ -654,7 +654,7 @@ TEST_F(IsaErasureCodeTest, isa_cauchy_cache_trash)
 {
   // Test all possible failure scenarios and reconstruction cases for
   // a (12,4) configuration using the cauchy matrix
-  ErasureCodeIsaDefault Isa(tcache,ErasureCodeIsaDefault::kCauchy);
+  ErasureCodeIsaDefault Isa(tcache, "cauchy", ErasureCodeIsaDefault::kCauchy);
   ErasureCodeProfile profile;
   profile["k"] = "16";
   profile["m"] = "4";
@@ -782,7 +782,7 @@ TEST_F(IsaErasureCodeTest, isa_xor_codec)
   // Test all possible failure scenarios and reconstruction cases for
   // a (4,1) RAID-5 like configuration 
 
-  ErasureCodeIsaDefault Isa(tcache);
+  ErasureCodeIsaDefault Isa(tcache, "reed_sol_van");
   ErasureCodeProfile profile;
   profile["k"] = "4";
   profile["m"] = "1";
@@ -908,7 +908,7 @@ TEST_F(IsaErasureCodeTest, create_rule)
 
   {
     stringstream ss;
-    ErasureCodeIsaDefault isa(tcache);
+    ErasureCodeIsaDefault isa(tcache, "reed_sol_van");
     ErasureCodeProfile profile;
     profile["k"] = "2";
     profile["m"] = "2";
@@ -932,7 +932,7 @@ TEST_F(IsaErasureCodeTest, create_rule)
   }
   {
     stringstream ss;
-    ErasureCodeIsaDefault isa(tcache);
+    ErasureCodeIsaDefault isa(tcache, "reed_sol_van");
     ErasureCodeProfile profile;
     profile["k"] = "2";
     profile["m"] = "2";
@@ -944,7 +944,7 @@ TEST_F(IsaErasureCodeTest, create_rule)
   }
   {
     stringstream ss;
-    ErasureCodeIsaDefault isa(tcache);
+    ErasureCodeIsaDefault isa(tcache, "reed_sol_van");
     ErasureCodeProfile profile;
     profile["k"] = "2";
     profile["m"] = "2";

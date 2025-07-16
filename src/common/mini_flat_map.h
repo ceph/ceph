@@ -50,14 +50,22 @@ class mini_flat_map {
   template<bool is_const>
   class _iterator {
     friend class mini_flat_map;
-    using mini_flat_map_p = std::conditional_t<is_const,
-                                               const mini_flat_map *,
-                                               mini_flat_map *>;
+
+   public:
+    // types required by std::iterator_traits
     using value_type = std::conditional_t<is_const,
                                           const std::pair<const KeyT &,
                                                           const ValueT &>,
                                           std::pair<const KeyT &, ValueT &>>;
+    using difference_type = std::ptrdiff_t;
+    using pointer = const value_type *;
+    using reference = const value_type &;
+    using iterator_category = std::forward_iterator_tag;
 
+   private:
+   using mini_flat_map_p = std::conditional_t<is_const,
+                                              const mini_flat_map *,
+                                              mini_flat_map *>;
     mini_flat_map_p map;
     std::optional<value_type> value;
     KeyT key;
@@ -73,8 +81,6 @@ class mini_flat_map {
     }
 
    public:
-    using difference_type = std::ptrdiff_t;
-
     _iterator(mini_flat_map_p map) : map(map), key(0) {
       progress();
     }
