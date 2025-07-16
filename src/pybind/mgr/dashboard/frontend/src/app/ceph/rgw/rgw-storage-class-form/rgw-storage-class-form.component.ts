@@ -41,7 +41,9 @@ import {
   STORAGE_CLASS_CONSTANTS,
   STANDARD_TIER_TYPE_TEXT,
   EXPEDITED_TIER_TYPE_TEXT,
-  TextLabels
+  TextLabels,
+  CLOUD_TIER_REQUIRED_FIELDS,
+  GLACIER_REQUIRED_FIELDS
 } from '../models/rgw-storage-class.model';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { NotificationService } from '~/app/shared/services/notification.service';
@@ -71,7 +73,7 @@ export class RgwStorageClassFormComponent extends CdForm implements OnInit {
   TIER_TYPE = TIER_TYPE;
   TIER_TYPE_DISPLAY = TIER_TYPE_DISPLAY;
   storageClassOptions: StorageClassOption[];
-  textLabels: TextLabels;
+  helpTextLabels: TextLabels;
 
   constructor(
     public actionLabels: ActionLabelsI18n,
@@ -89,7 +91,7 @@ export class RgwStorageClassFormComponent extends CdForm implements OnInit {
   }
 
   ngOnInit() {
-    this.textLabels = {
+    this.helpTextLabels = {
       targetPathText: TARGET_PATH_TEXT,
       targetEndpointText: TARGET_ENDPOINT_TEXT,
       targetRegionText: TARGET_REGION_TEXT,
@@ -114,7 +116,7 @@ export class RgwStorageClassFormComponent extends CdForm implements OnInit {
     ];
     this.createForm();
     this.storageClassTypeText();
-    this.TierTypeText();
+    this.updateTierTypeHelpText();
     this.loadingReady();
     this.loadZoneGroup();
     if (this.editing) {
@@ -132,6 +134,12 @@ export class RgwStorageClassFormComponent extends CdForm implements OnInit {
           this.storageClassForm.get('zonegroup').disable();
           this.storageClassForm.get('placement_target').disable();
           this.storageClassForm.get('storage_class').disable();
+          if (
+            this.tierTargetInfo?.val?.tier_type === TIER_TYPE.CLOUD_TIER ||
+            this.tierTargetInfo?.val?.tier_type === TIER_TYPE.GLACIER
+          ) {
+            this.storageClassForm.get('storageClassType').disable();
+          }
           this.storageClassForm.patchValue({
             zonegroup: this.storageClassInfo?.zonegroup_name,
             region: response?.region,
@@ -167,60 +175,52 @@ export class RgwStorageClassFormComponent extends CdForm implements OnInit {
   }
 
   private updateValidatorsBasedOnStorageClass(value: string) {
-    const controlsToUpdate = [
-      'region',
-      'endpoint',
-      'access_key',
-      'secret_key',
-      'target_path',
-      'glacier_restore_tier_type',
-      'restore_storage_class'
-    ];
-
-    controlsToUpdate.forEach((field) => {
+    GLACIER_REQUIRED_FIELDS.forEach((field) => {
       const control = this.storageClassForm.get(field);
 
       if (
-        (value === TIER_TYPE.CLOUD_TIER &&
-          ['region', 'endpoint', 'access_key', 'secret_key', 'target_path'].includes(field)) ||
-        (value === TIER_TYPE.GLACIER &&
-          [
-            'glacier_restore_tier_type',
-            'restore_storage_class',
-            'region',
-            'endpoint',
-            'access_key',
-            'secret_key',
-            'target_path'
-          ].includes(field))
+        (value === TIER_TYPE.CLOUD_TIER && CLOUD_TIER_REQUIRED_FIELDS.includes(field)) ||
+        (value === TIER_TYPE.GLACIER && GLACIER_REQUIRED_FIELDS.includes(field))
       ) {
         control.setValidators([Validators.required]);
       } else {
         control.clearValidators();
       }
-
       control.updateValueAndValidity();
     });
+
+    if (this.editing) {
+      const defaultValues = {
+        allow_read_through: false,
+        read_through_restore_days: STORAGE_CLASS_CONSTANTS.DEFAULT_READTHROUGH_RESTORE_DAYS,
+        restore_storage_class: STORAGE_CLASS_CONSTANTS.DEFAULT_STORAGE_CLASS,
+        multipart_min_part_size: STORAGE_CLASS_CONSTANTS.DEFAULT_MULTIPART_MIN_PART_SIZE,
+        multipart_sync_threshold: STORAGE_CLASS_CONSTANTS.DEFAULT_MULTIPART_SYNC_THRESHOLD
+      };
+      Object.keys(defaultValues).forEach((key) => {
+        this.storageClassForm.get(key).setValue(defaultValues[key]);
+      });
+    }
   }
 
   storageClassTypeText() {
     this.storageClassForm?.get('storageClassType')?.valueChanges.subscribe((value) => {
       if (value === TIER_TYPE.LOCAL) {
-        this.textLabels.storageClassText = LOCAL_STORAGE_CLASS_TEXT;
+        this.helpTextLabels.storageClassText = LOCAL_STORAGE_CLASS_TEXT;
       } else if (value === TIER_TYPE.CLOUD_TIER) {
-        this.textLabels.storageClassText = CLOUDS3_STORAGE_CLASS_TEXT;
+        this.helpTextLabels.storageClassText = CLOUDS3_STORAGE_CLASS_TEXT;
       } else if (value === TIER_TYPE.GLACIER) {
-        this.textLabels.storageClassText = GLACIER_STORAGE_CLASS_TEXT;
+        this.helpTextLabels.storageClassText = GLACIER_STORAGE_CLASS_TEXT;
       }
     });
   }
 
-  TierTypeText() {
+  updateTierTypeHelpText() {
     this.storageClassForm?.get('glacier_restore_tier_type')?.valueChanges.subscribe((value) => {
       if (value === STORAGE_CLASS_CONSTANTS.DEFAULT_STORAGE_CLASS) {
-        this.textLabels.tiertypeText = STANDARD_TIER_TYPE_TEXT;
+        this.helpTextLabels.tiertypeText = STANDARD_TIER_TYPE_TEXT;
       } else {
-        this.textLabels.tiertypeText = EXPEDITED_TIER_TYPE_TEXT;
+        this.helpTextLabels.tiertypeText = EXPEDITED_TIER_TYPE_TEXT;
       }
     });
   }
@@ -384,7 +384,7 @@ export class RgwStorageClassFormComponent extends CdForm implements OnInit {
   }
 
   getTierTargetByStorageClass(placementTargetInfo: PlacementTarget, storageClass: string) {
-    const tierTarget = placementTargetInfo.tier_targets.find(
+    const tierTarget = placementTargetInfo?.tier_targets?.find(
       (target: TierTarget) => target.val.storage_class === storageClass
     );
     return tierTarget;
