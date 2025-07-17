@@ -5,6 +5,7 @@ overrides:
       - FS_INLINE_DATA_DEPRECATED
       - FS_WITH_FAILED_MDS
       - MDS_ALL_DOWN
+      - is offline because no MDS
       - MDS_DAMAGE
       - MDS_DEGRADED
       - MDS_FAILED
