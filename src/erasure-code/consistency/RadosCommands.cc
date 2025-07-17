@@ -137,7 +137,19 @@ ceph::ErasureCodeProfile RadosCommands::get_ec_profile_for_pool(const std::strin
 }
 
 /**
- * RadosCommands the parity read inject on the acting primary
+ * Get chunk size for pool with the supplied name
+ *
+ * @param pool_name string Name of the pool to get chunk size of
+ * @return int the chunk size of the pool
+ */
+int RadosCommands::get_ec_chunk_size_for_pool(const std::string& pool_name)
+{
+  ceph::ErasureCodeProfile profile = get_ec_profile_for_pool(pool_name);
+  return (profile.contains("stripe_unit") ? std::stol(profile["stripe_unit"]) : 4096);
+}
+
+/**
+ * Inject the parity read inject on the acting primary
  * for the specified object and pool. Assert on failure.
  *
  * @param pool_name string Name of the pool to perform inject on

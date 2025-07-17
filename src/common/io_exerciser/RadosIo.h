@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ObjectModel.h"
+#include "erasure-code/consistency/ConsistencyChecker.h"
 
 /* Overview
  *
@@ -25,6 +26,7 @@ class RadosIo : public Model {
   boost::asio::io_context& asio;
   std::unique_ptr<ObjectModel> om;
   std::unique_ptr<ceph::io_exerciser::data_generation::DataGenerator> db;
+  std::unique_ptr<ceph::consistency::ConsistencyChecker> cc;
   std::string pool;
   std::optional<std::vector<int>> cached_shard_order;
   int threads;

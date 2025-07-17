@@ -14,8 +14,7 @@ using bufferlist = ceph::bufferlist;
 
 ConsistencyChecker::ConsistencyChecker(librados::Rados &rados,
                                        boost::asio::io_context& asio,
-                                       const std::string& pool_name,
-                                       int stripe_unit) :
+                                       const std::string& pool_name) :
   rados(rados),
   asio(asio),
   reader(ceph::consistency::ECReader(rados, asio, pool_name)),
@@ -24,7 +23,7 @@ ConsistencyChecker::ConsistencyChecker(librados::Rados &rados,
        commands.get_ec_profile_for_pool(pool_name),
        commands.get_pool_allow_ec_optimizations(pool_name)),
   encoder(ceph::consistency::ECEncoderSwitch(pool.get_ec_profile(),
-                                             stripe_unit,
+                                             commands.get_ec_chunk_size_for_pool(pool_name),
                                              commands.get_pool_allow_ec_optimizations(pool_name)
                                             )) {}
 
