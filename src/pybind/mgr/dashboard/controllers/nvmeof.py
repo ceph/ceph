@@ -9,7 +9,7 @@ from orchestrator import OrchestratorError
 from .. import mgr
 from ..model import nvmeof as model
 from ..security import Scope
-from ..services.nvmeof_cli import NvmeofCLICommand
+from ..services.nvmeof_cli import NvmeofCLICommand, convert_to_bytes
 from ..services.orchestrator import OrchClient
 from ..tools import str_to_bool
 from . import APIDoc, APIRouter, BaseController, CreatePermission, \
@@ -470,6 +470,49 @@ else:
                 )
             )
 
+        @NvmeofCLICommand("nvmeof ns add", model.NamespaceCreation)
+        @convert_to_model(model.NamespaceCreation)
+        @handle_nvmeof_error
+        def create_cli(
+            self,
+            nqn: str,
+            rbd_image_name: str,
+            rbd_pool: str = "rbd",
+            create_image: Optional[bool] = False,
+            size: Optional[str] = None,
+            rbd_image_size: Optional[str] = None,
+            trash_image: Optional[bool] = False,
+            block_size: int = 512,
+            load_balancing_group: Optional[int] = None,
+            force: Optional[bool] = False,
+            no_auto_visible: Optional[bool] = False,
+            disable_auto_resize: Optional[bool] = False,
+            read_only: Optional[bool] = False,
+            gw_group: Optional[str] = None,
+            traddr: Optional[str] = None,
+        ):
+            size_b = rbd_image_size_b = None
+            if size:
+                size_b = convert_to_bytes(size, default_unit='MB')
+            if rbd_image_size:
+                rbd_image_size_b = convert_to_bytes(rbd_image_size, default_unit='MB')
+            return NVMeoFClient(gw_group=gw_group, traddr=traddr).stub.namespace_add(
+                NVMeoFClient.pb2.namespace_add_req(
+                    subsystem_nqn=nqn,
+                    rbd_image_name=rbd_image_name,
+                    rbd_pool_name=rbd_pool,
+                    block_size=block_size,
+                    create_image=create_image,
+                    size=rbd_image_size_b or size_b,
+                    trash_image=trash_image,
+                    anagrpid=load_balancing_group,
+                    force=force,
+                    no_auto_visible=no_auto_visible,
+                    disable_auto_resize=disable_auto_resize,
+                    read_only=read_only
+                )
+            )
+
         @ReadPermission
         @Endpoint('PUT', '{nsid}/set_qos')
         @NvmeofCLICommand("nvmeof ns set_qos", model=model.RequestStatus)
@@ -580,6 +623,28 @@ else:
             return NVMeoFClient(gw_group=gw_group, traddr=traddr).stub.namespace_resize(
                 NVMeoFClient.pb2.namespace_resize_req(
                     subsystem_nqn=nqn, nsid=int(nsid), new_size=new_size_mib
+                )
+            )
+
+        @NvmeofCLICommand("nvmeof ns resize", model=model.RequestStatus)
+        @convert_to_model(model.RequestStatus)
+        @handle_nvmeof_error
+        def resize_cli(
+            self,
+            nqn: str,
+            nsid: str,
+            rbd_image_size: str,
+            gw_group: Optional[str] = None,
+            traddr: Optional[str] = None
+        ):
+            if rbd_image_size:
+                rbd_image_size_b = convert_to_bytes(rbd_image_size, default_unit='MB')
+            mib = 1024 * 1024
+            rbd_image_size_mb = rbd_image_size_b // mib
+
+            return NVMeoFClient(gw_group=gw_group, traddr=traddr).stub.namespace_resize(
+                NVMeoFClient.pb2.namespace_resize_req(
+                    subsystem_nqn=nqn, nsid=int(nsid), new_size=rbd_image_size_mb
                 )
             )
 

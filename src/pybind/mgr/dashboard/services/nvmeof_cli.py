@@ -55,6 +55,33 @@ def remove_nvmeof_gateway(_, name: str, daemon_name: str = ''):
         return -errno.EINVAL, '', str(ex)
 
 
+MULTIPLES = ['', "K", "M", "G", "T", "P"]
+UNITS = {
+    f"{prefix}{suffix}": 1024 ** mult
+    for mult, prefix in enumerate(MULTIPLES)
+    for suffix in ['', 'B', 'iB']
+    if not (prefix == '' and suffix == 'iB')
+}
+
+
+def convert_to_bytes(size: Union[int, str], default_unit=None):
+    if isinstance(size, int):
+        number = size
+        size = str(size)
+    else:
+        num_str = ''.join(filter(str.isdigit, size))
+        number = int(num_str)
+    unit_str = ''.join(filter(str.isalpha, size))
+    if not unit_str:
+        if not default_unit:
+            raise ValueError("default unit was not provided")
+        unit_str = default_unit
+
+    if unit_str in UNITS:
+        return number * UNITS[unit_str]
+    raise ValueError(f"Invalid unit: {unit_str}")
+
+
 def convert_from_bytes(num_in_bytes):
     units = ['B', 'KB', 'MB', 'GB', 'TB', 'PB']
     size = float(num_in_bytes)
