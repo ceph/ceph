@@ -1758,7 +1758,7 @@ private:
       return is_finished;
     }
 
-    int read_async(uint64_t off, uint64_t len, bufferlist *bl, iofinish_method_ctx<WriteEncMgr> *ioctx);
+    int read(uint64_t off, uint64_t len, bufferlist *bl, iofinish_method_ctx<WriteEncMgr> *ioctx);
 
   protected:
     virtual int do_write() = 0;
@@ -2116,7 +2116,7 @@ private:
 
   loff_t _lseek(Fh *fh, loff_t offset, int whence);
   int64_t _read(Fh *fh, int64_t offset, uint64_t size, bufferlist *bl,
-  		Context *onfinish = nullptr);
+  		Context *onfinish = nullptr, bool read_for_write = false);
   void do_readahead(Fh *f, Inode *in, uint64_t off, uint64_t len);
   int64_t _write_success(Fh *fh, utime_t start, uint64_t fpos,
                          int64_t request_offset, uint64_t request_size,
