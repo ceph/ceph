@@ -114,7 +114,7 @@ public:
       ceph_abort();
   }
 
-  PyObject *get()
+  virtual PyObject *get()
   {
     finish_pending_streams();
 
@@ -124,12 +124,12 @@ public:
 
   void finish_pending_streams();
 
-private:
+protected:
   PyObject *root;
   PyObject *cursor;
   std::stack<PyObject *> stack;
-
-  void dump_pyobject(std::string_view name, PyObject *p);
+private:
+  virtual void dump_pyobject(std::string_view name, PyObject *p);
 
   class PendingStream {
     public:
@@ -142,22 +142,90 @@ private:
 
 };
 
-class PyJSONFormatter : public JSONFormatter {
+class PyFormatterRO : public PyFormatter {
 public:
-  PyObject *get();
-  PyJSONFormatter (const PyJSONFormatter&) = default;
-  PyJSONFormatter(bool pretty=false, bool is_array=false) : JSONFormatter(pretty) {
-    if(is_array) {
-      open_array_section("");
+  using PyFormatter::PyFormatter;
+
+  /// Insert a leaf or complex object under 'name', freezing it immediately
+  void dump_pyobject(std::string_view name, PyObject* p) override {
+    PyObject* frozen = to_readonly(p);
+    if (PyDict_Check(cursor)) {
+      PyObject* key = PyUnicode_DecodeUTF8(name.data(), name.size(), nullptr);
+      PyDict_SetItem(cursor, key, frozen);
+      Py_DECREF(key);
+    } else if (PyList_Check(cursor)) {
+      PyList_Append(cursor, frozen);
     } else {
-      open_object_section("");
+      ceph_abort();
     }
-}
+    Py_DECREF(frozen);
+  }
+
+  /// Open a new object section for subsequent dump calls
+  void open_object_section(std::string_view name) override {
+    PyObject* dict = PyDict_New();
+    dump_pyobject(name, dict);
+    stack.push(cursor);
+    cursor = dict;
+    // no DECREF(dict); dump_pyobject did not steal ref; we still own it as cursor
+  }
+
+  /// Open a new array section for subsequent dump calls
+  void open_array_section(std::string_view name) override {
+    PyObject* list = PyList_New(0);
+    dump_pyobject(name, list);
+    stack.push(cursor);
+    cursor = list;
+    // no DECREF(list); dump_pyobject did not steal ref; we still own it
+  }
+
+  // close_section matches base: just pop back to parent.
+  // No extra freezing here — values were frozen at insertion time.
+  void close_section() override {
+    ceph_assert(cursor != root);
+    ceph_assert(!stack.empty());
+    cursor = stack.top();
+    stack.pop();
+  }
 
 private:
-  using json_formatter = JSONFormatter;
-  template <class T> void add_value(std::string_view name, T val);
-  void add_value(std::string_view name, std::string_view val, bool quoted);
+  static PyObject* to_readonly(PyObject* obj) {
+    if (PyList_Check(obj))      return to_tuple(obj);
+    if (PySet_Check(obj))       return to_frozenset(obj);
+    if (PyDict_Check(obj))      return incref(obj);
+    /* tuple/str/int/bytes/etc */
+    return incref(obj);
+  }
+  static PyObject* incref(PyObject* o) { Py_INCREF(o); return o; }
+  static PyObject* to_tuple(PyObject* seq) {
+    // Support any sequence; use PySequence_Fast for speed/safety.
+    PyObject* fast = PySequence_Fast(seq, "expected a sequence");
+    if (!fast) {
+      return nullptr;  // Propagates Python exception
+    }
+
+    Py_ssize_t n = PySequence_Fast_GET_SIZE(fast);
+    PyObject* t = PyTuple_New(n);
+    if (!t) {
+      Py_DECREF(fast);
+      return nullptr;
+    }
+
+    for (Py_ssize_t i = 0; i < n; ++i) {
+      PyObject* item = PySequence_Fast_GET_ITEM(fast, i);  // borrowed
+      PyObject* frozen = to_readonly(item);                // NEW ref (may recurse)
+      if (!frozen) {
+        Py_DECREF(t);
+        Py_DECREF(fast);
+        return nullptr;
+      }
+      PyTuple_SET_ITEM(t, i, frozen); // steals 'frozen' reference
+    }
+
+    Py_DECREF(fast);
+    return t;
+  }
+  static PyObject* to_frozenset(PyObject* set) { return PyFrozenSet_New(set); }
 };
 
 #endif

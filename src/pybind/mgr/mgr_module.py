@@ -1501,12 +1501,22 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
             All these structures have their own JSON representations: experiment
             or look at the C++ ``dump()`` methods to learn about them.
         """
-        obj = self._ceph_get(data_name)
-        if isinstance(obj, bytes):
-            obj = json.loads(obj)
+        return self._ceph_get(data_name)
 
-        return obj
-
+    @API.expose
+    def erase(self, data_name: str) -> None:
+        """
+        Called by the plugin to erase cache entries for named
+        cluster-wide objects from ceph-mgr.
+        :param str data_name: Valid things to erase are osd_map, mon_map,
+                fs_map, pg_summary, io_rate, pg_dump, df, osd_stats,
+                health, mon_status, devices, pg_stats, pool_stats,
+                pg_ready, osd_ping_times, mgr_map, mgr_ips,
+                modified_config_options, service_map, mds_metadata,
+                have_local_config_map, osd_pool_stats, pg_status.
+        """
+        return self._ceph_erase(data_name)
+    
     def _stattype_to_str(self, stattype: int) -> str:
 
         typeonly = stattype & self.PERFCOUNTER_TYPE_MASK
