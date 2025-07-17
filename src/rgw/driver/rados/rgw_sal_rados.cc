@@ -3138,7 +3138,7 @@ int RadosObject::restore_obj_from_cloud(Bucket* bucket,
     return ret;
   }
 
-  ldpp_dout(dpp, 20) << "Sucessfully restored object(" << get_key() << ") from the cloud endpoint(" << endpoint << ")" << dendl;
+  ldpp_dout(dpp, 20) << "Successfully restored object(" << get_key() << ") from the cloud endpoint(" << endpoint << ")" << dendl;
 
   return ret;
 }

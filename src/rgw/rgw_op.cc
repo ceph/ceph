@@ -7234,7 +7234,7 @@ void RGWCompleteMultipart::execute(optional_yield y)
 
     ret = upload->cleanup_orphaned_parts(this, s->cct, y, meta_obj->get_obj(), remove_objs, processed_prefixes);
     if (ret < 0) {
-      ldpp_dout(this, 0) << "ERROR: failed to clenup orphaned parts. ret=" << ret << dendl;
+      ldpp_dout(this, 0) << "ERROR: failed to cleanup orphaned parts. ret=" << ret << dendl;
     }
   }
 

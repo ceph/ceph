@@ -2459,7 +2459,7 @@ int D4NFilterObject::D4NFilterReadOp::D4NFilterGetCB::handle_data(bufferlist& bl
               ldpp_dout(dpp, 0) << "D4NFilterObject::D4NFilterReadOp::D4NFilterGetCB::" << __func__ << "(): put() to cache backend failed, ret=" << ret << dendl;
             }
           } else {
-            ldpp_dout(dpp, 0) << "D4N Filter: " << __func__ << " An error occured during eviction, ret=" << ret << dendl;
+            ldpp_dout(dpp, 0) << "D4N Filter: " << __func__ << " An error occurred during eviction, ret=" << ret << dendl;
           }
         }
 
@@ -2863,7 +2863,7 @@ int D4NFilterWriter::process(bufferlist&& data, uint64_t offset)
               driver->get_policy_driver()->get_cache_policy()->update(dpp, oid_in_cache, ofs, bl.length(), version, dirty, rgw::d4n::RefCount::NOOP, y);
             }
           } else {
-            ldpp_dout(dpp, 0) << "D4NFilterWriter::" << __func__ << "(): ERROR: writting data to the cache failed, ret=" << ret << dendl;
+            ldpp_dout(dpp, 0) << "D4NFilterWriter::" << __func__ << "(): ERROR: writing data to the cache failed, ret=" << ret << dendl;
             return ret;
           }
         }

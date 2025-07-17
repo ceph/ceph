@@ -812,7 +812,7 @@ int RGWSelectObj_ObjStore_S3::parquet_processing(bufferlist& bl, off_t ofs, off_
     }
     ldout(s->cct, 10) << "S3select:append_in_callback = " << append_in_callback << dendl;
     if (requested_buffer.size() < m_request_range) {
-      ldout(s->cct, 10) << "S3select: need another round buffe-size: " << requested_buffer.size() << " request range length:" << m_request_range << dendl;
+      ldout(s->cct, 10) << "S3select: need another round buffer-size: " << requested_buffer.size() << " request range length:" << m_request_range << dendl;
       return 0;
     } else {//buffer is complete
       ldout(s->cct, 10) << "S3select: buffer is complete " << requested_buffer.size() << " request range length:" << m_request_range << dendl;
