@@ -71,7 +71,6 @@ struct rbm_superblock_t {
   }
 
   void validate() const {
-    ceph_assert(shard_num == seastar::smp::count);
     ceph_assert(block_size > 0);
     for (unsigned int i = 0; i < seastar::smp::count; i ++) {
       ceph_assert(shard_infos[i].size > block_size &&
