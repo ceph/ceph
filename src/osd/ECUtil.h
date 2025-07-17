@@ -576,40 +576,6 @@ public:
     ceph_assert(stripe_width % k == 0);
   }
 
-  stripe_info_t(unsigned int k, unsigned int m, uint64_t stripe_width,
-                const pg_pool_t *pool, const std::vector<shard_id_t> &_chunk_mapping)
-    : stripe_width(stripe_width),
-      plugin_flags(0xFFFFFFFFFFFFFFFFul),
-      // Everything enabled for test harnesses.
-      chunk_size(stripe_width / k),
-      pool(pool),
-      k(k),
-      m(m),
-      chunk_mapping(complete_chunk_mapping(_chunk_mapping, k + m)),
-      chunk_mapping_reverse(reverse_chunk_mapping(chunk_mapping)),
-      data_shards(calc_shards(raw_shard_id_t(), k, chunk_mapping)),
-      parity_shards(calc_shards(raw_shard_id_t(k), m, chunk_mapping)) {
-    ceph_assert(stripe_width != 0);
-    ceph_assert(stripe_width % k == 0);
-  }
-
-  stripe_info_t(unsigned int k, unsigned int m, uint64_t stripe_width,
-                const pg_pool_t *pool)
-    : stripe_width(stripe_width),
-      plugin_flags(0xFFFFFFFFFFFFFFFFul),
-      // Everything enabled for test harnesses.
-      chunk_size(stripe_width / k),
-      pool(pool),
-      k(k),
-      m(m),
-      chunk_mapping(complete_chunk_mapping(std::vector<shard_id_t>(), k + m)),
-      chunk_mapping_reverse(reverse_chunk_mapping(chunk_mapping)),
-      data_shards(calc_shards(raw_shard_id_t(), k, chunk_mapping)),
-      parity_shards(calc_shards(raw_shard_id_t(k), m, chunk_mapping)) {
-    ceph_assert(stripe_width != 0);
-    ceph_assert(stripe_width % k == 0);
-  }
-
   uint64_t object_size_to_shard_size(const uint64_t size, shard_id_t shard) const {
     uint64_t remainder = size % get_stripe_width();
     uint64_t shard_size = (size - remainder) / k;
