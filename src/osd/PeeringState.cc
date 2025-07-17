@@ -3337,24 +3337,18 @@ void PeeringState::proc_master_log(
   bool invalidate_stats = false;
 
   // For partial writes we may be able to keep some of the divergent entries
-  if (olog.head < pg_log.get_head()) {
+  if (pool.info.allows_ecoptimizations() && (olog.head < pg_log.get_head())) {
     // Iterate backwards to divergence
     auto p = pg_log.get_log().log.end();
-    while (true) {
-      if (p == pg_log.get_log().log.begin()) {
-	break;
-      }
+    while (p != pg_log.get_log().log.begin()) {
       --p;
-      if (p->version.version <= olog.head.version) {
+      if (p->version <= olog.head) {
 	break;
       }
     }
-    // See if we can wind forward partially written entries
-    map<pg_shard_t, pg_info_t> all_info(peer_info.begin(), peer_info.end());
-    all_info[pg_whoami] = info;
-    // Normal case is that both logs have entry olog.head
-    bool can_check_next_entry = (p->version == olog.head);
-    if ((p->version < olog.head) || (p == pg_log.get_log().log.begin())) {
+    if (p == pg_log.get_log().log.end()) {
+      // Empty log - probably due to a PG split - nothing to do
+    } else {
       // After a PG split there may be gaps in the log where entries were
       // split to the other PG. This can result in olog.head being ahead
       // of p->version. So long as there are no entries in olog between
@@ -3362,20 +3356,30 @@ void PeeringState::proc_master_log(
       // partially written entries
       auto op = olog.log.end();
       if (op == olog.log.begin()) {
-	can_check_next_entry = true;
-      } else if (op->version.version < p->version.version) {
-	can_check_next_entry = true;
+	// Other log is emtpy
+	if (p->version <= olog.head) {
+	  consider_adjusting_pwlc(p->version);
+	  ++p;
+	} else {
+	  consider_adjusting_pwlc(pg_log.get_tail());
+	}
+      } else if (op->version == p->version) {
+	// Normal case - both logs have this entry
+	consider_adjusting_pwlc(p->version);
+	++p;
+      } else if (op->version < p->version) {
+	// Last entry in other log is before this entry
+	consider_adjusting_pwlc(pg_log.get_tail());
+      } else {
+	// Other log is ahead of the primary log - give up
+	p = pg_log.get_log().log.end();
       }
     }
-    if (can_check_next_entry) {
-      consider_adjusting_pwlc(p->version);
-    }
+    // See if we can wind forward partially written entries
+    map<pg_shard_t, pg_info_t> all_info(peer_info.begin(), peer_info.end());
+    all_info[pg_whoami] = info;
     PGLog::LogEntryHandlerRef rollbacker{pl->get_log_handler(t)};
-    while (can_check_next_entry) {
-      ++p;
-      if (p == pg_log.get_log().log.end()) {
-	break;
-      }
+    while (p != pg_log.get_log().log.end()) {
       if (p->is_written_shard(from.shard)) {
         psdout(10) << "entry " << p->version << " has written shards "
 		   << p->written_shards << " so is divergent" << dendl;
@@ -3415,15 +3419,16 @@ void PeeringState::proc_master_log(
       psdout(20) << "keeping entry " << p->version << dendl;
       invalidate_stats = true;
       eversion_t previous_version;
-	if (p == pg_log.get_log().log.begin()) {
-	  previous_version = pg_log.get_tail();
-	} else {
-	  previous_version = std::prev(p)->version;
-	}
-	rollbacker.get()->partial_write(&info, previous_version, *p);
-	olog.head = p->version;
+      if (p == pg_log.get_log().log.begin()) {
+	previous_version = pg_log.get_tail();
+      } else {
+	previous_version = std::prev(p)->version;
+      }
+      rollbacker.get()->partial_write(&info, previous_version, *p);
+      olog.head = p->version;
 
-      // We need to continue processing the log, so don't break.
+      // Process the next entry
+      ++p;
     }
   }
   // merge log into our own log to build master log.  no need to
