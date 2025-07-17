@@ -147,6 +147,10 @@
   allowed.  `rbd trash mv` command now behaves the same way as `rbd rm` in this
   scenario.
 
+* RGW: The default value of `rgw_lc_max_wp_worker` has been raised from 3 to 128
+  to accelerate lifecycle processing. These workers now use coroutines instead of
+  separate threads.
+
 * RGW: Replication policies now validate permissions using `s3:ReplicateObject`,
   `s3:ReplicateDelete`, and `s3:ReplicateTags` for destination buckets. For source
   buckets, both `s3:GetObjectVersionForReplication` and `s3:GetObject(Version)`
