@@ -788,7 +788,11 @@ struct ECCommon {
             << " missing_on_shards=" << missing_on_shards
             << " recovery_info=" << recovery_info
             << " recovery_progress=" << recovery_progress
+#ifndef WITH_CRIMSON
             << " obc refcount=" << obc.use_count()
+#else
+            << " obc refcount=" << obc->get_use_count()
+#endif
             << " state=" << ECCommon::RecoveryBackend::RecoveryOp::tostr(state)
             << " waiting_on_pushes=" << waiting_on_pushes
             << ")";
