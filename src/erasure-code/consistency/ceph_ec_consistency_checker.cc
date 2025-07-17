@@ -35,8 +35,7 @@ int main(int argc, char **argv)
     ("oid,i", po::value<std::string>(), "object io")
     ("blocksize,b", po::value<int>(), "block size")
     ("offset,o", po::value<int>(), "offset")
-    ("length,l", po::value<int>(), "length")
-    ("stripeunit,s", po::value<int>(), "stripe unit");
+    ("length,l", po::value<int>(), "length");
 
   po::variables_map vm;
   std::vector<std::string> unrecognized_options;
@@ -62,7 +61,6 @@ int main(int argc, char **argv)
   auto blocksize = vm["blocksize"].as<int>();
   auto offset = vm["offset"].as<int>();
   auto length = vm["length"].as<int>();
-  auto stripe_unit = vm["stripeunit"].as<int>();
 
   int rc;
   rc = rados.init_with_context(g_ceph_context);
@@ -73,7 +71,7 @@ int main(int argc, char **argv)
   guard.emplace(boost::asio::make_work_guard(asio));
   thread = make_named_thread("io_thread",[&asio] { asio.run(); });
 
-  auto checker = ceph::consistency::ConsistencyChecker(rados, asio, pool, stripe_unit);
+  auto checker = ceph::consistency::ConsistencyChecker(rados, asio, pool);
   checker.single_read_and_check_consistency(oid, blocksize, offset, length);
   checker.print_results(std::cout);
 
