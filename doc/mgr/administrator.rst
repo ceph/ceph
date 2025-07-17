@@ -61,20 +61,28 @@ daemon as failed using ``ceph mgr fail <mgr name>``.
 
 Performance and Scalability
 ---------------------------
+All the Manager modules share a cache that is enabled by default. The cache
+uses an event-driven invalidation strategy, automatically updating when cluster
+maps change to ensure modules always work with current data while maximizing
+performance.
 
-All the mgr modules share a cache that can be enabled with
-``ceph config set mgr mgr_ttl_cache_expire_seconds <seconds>``, where seconds
-is the time to live of the cached python objects.
+The cache is particularly beneficial for clusters with 500+ OSDs or 10k+ PGs,
+as internal structures might increase in size and cause latency issues when
+requesting large structures. As an example, an OSDMap with 1000 OSDs has an
+approximate size of 4MiB. With heavy load, on a 3000 OSD cluster, the response
+latency for cached requests improved by approximately 1.5× when the cache was enabled.
 
-It is recommended to enable the cache with a 10 seconds TTL when there are 500+
-osds or 10k+ pgs as internal structures might increase in size, and cause latency
-issues when requesting large structures. As an example, an OSDMap with 1000 osds
-has a approximate size of 4MiB. With heavy load, on a 3000 osd cluster there has
-been a 1.5x improvement enabling the cache.
+The cache automatically invalidates entries when the underlying cluster maps
+(such as OSDMap, PGMap, or MonMap) are updated. If needed, you can manually
+flush specific cached maps using ``ceph mgr cli cache flush [map-name]``.
 
-Furthermore, you can run ``ceph daemon mgr.${MGRNAME} perf dump`` to retrieve
-perf counters of a mgr module. In ``mgr.cache_hit`` and ``mgr.cache_miss``
-you'll find the hit/miss ratio of the mgr cache.
+To disable the cache (not recommended for large clusters), run:
+``ceph config set mgr mgr_map_cache_enabled false``
+
+You can run ``ceph daemon mgr.${MGRNAME} perf dump`` to retrieve
+perf counters of a Manager module. In ``mgr.cache_hit`` and ``mgr.cache_miss``
+you'll find the hit/miss ratio of the Manager cache, which can help verify the
+cache is operating effectively.
 
 Using modules
 -------------
