@@ -4366,6 +4366,8 @@ options:
   type: uint
   level: advanced
   desc: Default number of shards for a persistent topic if sharding of persistent topic notifs enabled
-  default: 3
+  long_desc: This option specifies the number of shards to create for newly defined persistent topics. Note that only 
+      newly created persistent topics obey the config, previously existing topics have only one queue.
+  default: 11
   services: 
     - rgw
