@@ -63,10 +63,6 @@ RadosIo::RadosIo(librados::Rados& rados, boost::asio::io_context& asio,
   int rc;
   rc = rados.ioctx_create(pool.c_str(), io);
   ceph_assert(rc == 0);
-  allow_ec_overwrites(true);
-  if (ec_optimizations) {
-    allow_ec_optimizations();
-  }
 }
 
 RadosIo::~RadosIo() {}
@@ -88,28 +84,6 @@ void RadosIo::wait_for_io(int count) {
   while (outstanding_io > count) {
     cond.wait(l);
   }
-}
-
-void RadosIo::allow_ec_overwrites(bool allow) {
-  int rc;
-  bufferlist inbl, outbl;
-  std::string cmdstr = "{\"prefix\": \"osd pool set\", \"pool\": \"" + pool +
-                       "\", \
-      \"var\": \"allow_ec_overwrites\", \"val\": \"" +
-                       (allow ? "true" : "false") + "\"}";
-  rc = rados.mon_command(cmdstr, inbl, &outbl, nullptr);
-  ceph_assert(rc == 0);
-}
-
-void RadosIo::allow_ec_optimizations()
-{
-  int rc;
-  bufferlist inbl, outbl;
-  std::string cmdstr =
-    "{\"prefix\": \"osd pool set\", \"pool\": \"" + pool + "\", \
-      \"var\": \"allow_ec_optimizations\", \"val\": \"true\"}";
-  rc = rados.mon_command(cmdstr, inbl, &outbl, nullptr);
-  ceph_assert(rc == 0);
 }
 
 template <int N>
@@ -197,8 +171,14 @@ void RadosIo::applyIoOp(IoOp& op) {
 
     case OpType::Consistency: {
       start_io();
+      ceph_assert(cc);
       bool is_consistent =
-          cc->single_read_and_check_consistency(oid, block_size, 0, 0);
+        cc->single_read_and_check_consistency(oid, block_size, 0, 0);
+      if (!is_consistent) {
+        std::stringstream strstream;
+        cc->print_results(strstream);
+        std::cerr << strstream.str() << std::endl;
+      }
       ceph_assert(is_consistent);
       finish_io();
       break;
