@@ -2782,6 +2782,9 @@ int RadosObject::load_obj_state(const DoutPrefixProvider* dpp, optional_yield y,
 
   int ret = store->getRados()->get_obj_state(dpp, rados_ctx, bucket->get_info(), get_obj(), &pstate, &manifest, follow_olh, y);
   if (ret < 0) {
+    if (ret == -ENOENT) {
+      state.is_dm = pstate->is_dm;
+    }
     return ret;
   }
 
