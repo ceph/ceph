@@ -381,10 +381,12 @@ static PyObject*
 ceph_state_get(BaseMgrModule *self, PyObject *args)
 {
   char *what = NULL;
+  dout(10) << __func__ << " called" << dendl;
   if (!PyArg_ParseTuple(args, "s:ceph_state_get", &what)) {
+    dout(0) << __func__ << " Invalid args!" << dendl;
     return NULL;
   }
-
+  dout(10) << __func__ << " what: " << what << dendl;
   return self->py_modules->cacheable_get_python(what);
 }
 

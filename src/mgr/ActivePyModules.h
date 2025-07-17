@@ -26,7 +26,7 @@
 #include "mon/MonCommand.h"
 #include "mon/mon_types.h"
 #include "mon/ConfigMap.h"
-#include "mgr/TTLCache.h"
+#include "mgr/MgrMapCache.h"
 
 #include "DaemonState.h"
 #include "ClusterState.h"
@@ -58,7 +58,7 @@ class ActivePyModules
   LogChannelRef clog, audit_clog;
   Objecter &objecter;
   Finisher &finisher;
-  TTLCache<std::string, PyObject*> ttl_cache;
+  MgrMapCache<std::string, PyObject*> api_cache;
 public:
   Finisher cmd_finisher;
 private:
