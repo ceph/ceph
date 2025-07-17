@@ -21,6 +21,7 @@
 #define dout_subsys ceph_subsys_rgw
 
 static constexpr std::string_view topic_tenant_delim = ":";
+static constexpr std::string_view topic_shard_delim = "."; 
 
 // format and parse topic metadata keys as tenant:name
 std::string get_topic_metadata_key(std::string_view tenant,
@@ -44,6 +45,7 @@ void parse_topic_metadata_key(const std::string& key,
                               std::string& name)
 {
   // expected format: tenant_name:topic_name*
+  // expected format: tenant_name:topic_name.<shard_id>
   auto pos = key.find(topic_tenant_delim);
   if (pos != std::string::npos) {
     tenant = key.substr(0, pos);
@@ -52,6 +54,11 @@ void parse_topic_metadata_key(const std::string& key,
     tenant.clear();
     name = key;
   }
+  //remove shard id if present
+  pos = name.find_last_of(topic_shard_delim);
+  if(pos != std::string::npos){
+    name = name.substr(0, pos);
+  } 
 }
 
 void set_event_id(std::string& id, const std::string& hash, const utime_t& ts) {
