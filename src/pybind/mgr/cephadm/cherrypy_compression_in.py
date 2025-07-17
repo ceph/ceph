@@ -31,8 +31,11 @@ class CompressionDecoderTool:
                 cherrypy.log(f"[compression_in] Failed to decompress {encoding}: {e}", severity=40)
                 raise cherrypy.HTTPError(400, f"Invalid {encoding} request body")
         elif encoding and encoding != 'identity':
-            cherrypy.log(f"[compression_in] Unsupported Content-Encoding: {encoding}", severity=30)
-            raise cherrypy.HTTPError(415, f"Unsupported Content-Encoding: {encoding}")
+            supported_encodings = ', '.join(list(self.decompressors.keys()) + ['identity'])
+            cherrypy.log(f"[compression_in] Unsupported Content-Encoding: {encoding} (supported: {supported_encodings})", severity=30)  # WARNING
+            raise cherrypy.HTTPError(415,
+                                     f"Unsupported Content-Encoding: {encoding}",
+                                     headers=[("Accept-Encoding", supported_encodings)])
 
 
 # Register the tool
