@@ -11435,7 +11435,7 @@ error:
 }
 
 int64_t Client::_read(Fh *f, int64_t offset, uint64_t size, bufferlist *bl,
-                      Context *onfinish)
+                      Context *onfinish, bool read_for_write)
 {
   ceph_assert(ceph_mutex_is_locked_by_me(client_lock));
 
@@ -11452,7 +11452,7 @@ int64_t Client::_read(Fh *f, int64_t offset, uint64_t size, bufferlist *bl,
 
   ldout(cct, 10) << __func__ << " " << *in << " " << offset << "~" << size << dendl;
 
-  if ((f->mode & CEPH_FILE_MODE_RD) == 0)
+  if ((f->mode & CEPH_FILE_MODE_RD) == 0 && !read_for_write)
     return -EBADF;
   //bool lazy = f->mode == CEPH_FILE_MODE_LAZY;
 
@@ -12256,10 +12256,10 @@ int Client::WriteEncMgr::init()
   return 0;
 }
 
-int Client::WriteEncMgr::read_async(uint64_t off, uint64_t len, bufferlist *bl,
+int Client::WriteEncMgr::read(uint64_t off, uint64_t len, bufferlist *bl,
                                      iofinish_method_ctx<WriteEncMgr> *ioctx)
 {
-  ldout(cct, 10) << __func__ << dendl;
+  ldout(cct, 20) << __func__ << dendl;
   get();
 
   if (off >= in->size) {
@@ -12267,7 +12267,7 @@ int Client::WriteEncMgr::read_async(uint64_t off, uint64_t len, bufferlist *bl,
     return 0;
   }
 
-  int r = clnt->_read_async(f, off, len, bl, ioctx->ctx());
+  int r = clnt->_read(f, off, len, bl, ioctx->ctx(), true);
   if (r < 0) {
     ioctx->cancel(r);
     put();
@@ -12313,7 +12313,7 @@ int Client::WriteEncMgr::read_modify_write(Context *_iofinish)
   if (read_start_size > 0) {
     finish_read_start_ctx.reset(new iofinish_method_ctx<WriteEncMgr>(*this, &WriteEncMgr::finish_read_start_cb, &aioc));
 
-    r = read_async(start_block_ofs, read_start_size, &startbl, finish_read_start_ctx.get());
+    r = read(start_block_ofs, read_start_size, &startbl, finish_read_start_ctx.get());
     if (r < 0) {
       finish_read_start_ctx.reset();
 
@@ -12325,7 +12325,7 @@ int Client::WriteEncMgr::read_modify_write(Context *_iofinish)
   if (need_read_end) {
     finish_read_end_ctx.reset(new iofinish_method_ctx<WriteEncMgr>(*this, &WriteEncMgr::finish_read_end_cb, &aioc));
 
-    r = read_async(end_block_ofs, FSCRYPT_BLOCK_SIZE, &endbl, finish_read_end_ctx.get());
+    r = read(end_block_ofs, FSCRYPT_BLOCK_SIZE, &endbl, finish_read_end_ctx.get());
     if (r < 0) {
       finish_read_end_ctx.reset();
 
