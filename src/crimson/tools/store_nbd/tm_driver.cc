@@ -148,9 +148,9 @@ void TMDriver::init()
 
   std::vector<Device*> sec_devices;
 #ifndef NDEBUG
-  tm = make_transaction_manager(device.get(), sec_devices, shard_stats, true);
+  tm = make_transaction_manager(device.get(), sec_devices, shard_stats, 0, true);
 #else
-  tm = make_transaction_manager(device.get(), sec_devices, shard_stats, false);
+  tm = make_transaction_manager(device.get(), sec_devices, shard_stats, 0, false);
 #endif
 }
 

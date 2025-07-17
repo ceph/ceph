@@ -163,7 +163,7 @@ seastar::future<> pg_log_workload(crimson::os::FuturizedStore &global_store,
                                   int num_logs, int num_concurrent_io,
                                   int duration, int log_size, int log_length) {
   LOG_PREFIX(pg_log_workload);
-  auto &local_store = global_store.get_sharded_store();
+  auto &local_store = *(global_store.get_sharded_store().get());
 
   std::map<int, coll_t> collection_id;
   std::map<int, crimson::os::CollectionRef> coll_ref_map;
@@ -364,7 +364,7 @@ seastar::future<> rgw_index_workload(crimson::os::FuturizedStore &global_store,
                                      int num_buckets_per_collection) {
 
   LOG_PREFIX(rgw_index_workload);
-  auto &local_store = global_store.get_sharded_store();
+  auto &local_store = *(global_store.get_sharded_store().get());
   std::map<int, coll_t> collection_id_for_rgw;
   std::map<int, crimson::os::CollectionRef>
       coll_ref_map_rgw; // map of bucket number and coll_ref
