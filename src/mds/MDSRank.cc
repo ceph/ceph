@@ -3100,6 +3100,23 @@ void MDSRankDispatcher::handle_asok_command(
   } else if (command == "quiesce db") {
     command_quiesce_db(cmdmap, on_finish);
     return;
+  } else if (command == "dump stray") {
+    dout(10) << "dump_stray start" <<  dendl;
+    // the context is a wrapper for formatter to be used while scanning stray dir
+    auto context = std::make_unique<MDCache::C_MDS_DumpStrayDirCtx>(mdcache, f,
+     [this,on_finish](int r) {
+      // completion callback, will be called when scan is done
+      dout(10) << "dump_stray done" <<  dendl;
+      bufferlist bl;
+      on_finish(r, "", bl);
+    });
+    std::lock_guard l(mds_lock);
+    r = mdcache->stray_status(std::move(context));
+    // since the scanning op can be async, we want to know it, for better semantics
+    if (r == -EAGAIN) {
+     dout(10) << "dump_stray wait" << dendl;
+    }
+    return;
   } else {
     r = -ENOSYS;
   }
@@ -3531,7 +3548,7 @@ void MDSRank::command_quiesce_path(Formatter* f, const cmdmap_t& cmdmap, asok_fi
 
   // This is a little ugly, apologies.
   // We should still be under the mds lock for this test to be valid.
-  // MDCache will delete the quiesce_ctx if it manages to complete syncrhonously,
+  // MDCache will delete the quiesce_ctx if it manages  
   // so we are testing the `mdr->internal_op_finish` to see if that has happend
   if (!await && mdr && mdr->internal_op_finish) {
     ceph_assert(mdr->internal_op_finish == quiesce_ctx);
