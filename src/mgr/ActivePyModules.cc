@@ -27,7 +27,7 @@
 #include "osd/OSDMap.h"
 #include "osd/osd_types.h"
 #include "mgr/MgrContext.h"
-#include "mgr/TTLCache.h"
+#include "mgr/MgrMapCache.h"
 #include "mgr/mgr_perf_counters.h"
 
 #include "DaemonKey.h"
@@ -182,40 +182,41 @@ PyObject *ActivePyModules::get_daemon_status_python(
 }
 
 void ActivePyModules::update_cache_metrics() {
-    auto hit_miss_ratio = ttl_cache.get_hit_miss_ratio();
+    auto hit_miss_ratio = api_cache.get_hit_miss_ratio();
+    dout(10) << __func__ << ": api cache hit/miss ratio: " << hit_miss_ratio.first
+             << "/" << hit_miss_ratio.second << dendl;
     perfcounter->set(l_mgr_cache_hit, hit_miss_ratio.first);
     perfcounter->set(l_mgr_cache_miss, hit_miss_ratio.second);
 }
 
 PyObject *ActivePyModules::cacheable_get_python(const std::string &what)
 {
-  uint64_t ttl_seconds = g_conf().get_val<uint64_t>("mgr_ttl_cache_expire_seconds");
-  if(ttl_seconds > 0) {
-    ttl_cache.set_ttl(ttl_seconds);
+  if(api_cache.is_enabled() && api_cache.is_cacheable(what)) {
     try{
-      PyObject* cached = ttl_cache.get(what);
+      PyObject* cached = api_cache.get(what);
+      dout(20) << __func__ << ": api cache hit for " << what << dendl;
       update_cache_metrics();
       return cached;
     } catch (std::out_of_range& e) {}
   }
 
   PyObject *obj = get_python(what);
-  if(ttl_seconds && ttl_cache.is_cacheable(what)) {
-    ttl_cache.insert(what, obj);
-    Py_INCREF(obj);
-  }
+  api_cache.insert(what, obj);
+  dout(20) << __func__ << ": api cache miss for " << what << ", inserting into cache" << dendl;
+
   update_cache_metrics();
   return obj;
 }
 
 PyObject *ActivePyModules::get_python(const std::string &what)
 {
-  uint64_t ttl_seconds = g_conf().get_val<uint64_t>("mgr_ttl_cache_expire_seconds");
-
   PyFormatter pf;
   PyJSONFormatter jf;
-  // Use PyJSONFormatter if TTL cache is enabled.
-  Formatter &f = ttl_seconds ? (Formatter&)jf : (Formatter&)pf;
+
+  // Use PyJSONFormatter if api cache is enabled and key is cacheable.
+  // Otherwise, use PyFormatter.
+  Formatter &f = (api_cache.is_enabled() && api_cache.is_cacheable(what)) 
+    ? (Formatter&)jf : (Formatter&)pf;
 
   if (what == "fs_map") {
     without_gil_t no_gil;
@@ -520,7 +521,7 @@ PyObject *ActivePyModules::get_python(const std::string &what)
     derr << "Python module requested unknown data '" << what << "'" << dendl;
     Py_RETURN_NONE;
   }
-  if(ttl_seconds) {
+  if(api_cache.is_enabled() && api_cache.is_cacheable(what)) {
     return jf.get();
   } else {
     return pf.get();
@@ -561,6 +562,9 @@ void ActivePyModules::notify_all(const std::string &notify_type,
                      const std::string &notify_id)
 {
   std::lock_guard l(lock);
+  
+  // invalidate api cache for this notify type
+  api_cache.invalidate(notify_type);
 
   dout(10) << __func__ << ": notify_all " << notify_type << dendl;
   for (auto& [name, module] : modules) {
