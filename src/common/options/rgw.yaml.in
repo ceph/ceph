@@ -4365,9 +4365,9 @@ options:
 - name: rgw_bucket_persistent_notif_num_shards
   type: uint
   level: advanced
-  desc: Default number of shards for a persistent topic if sharding of persistent topic notifs enabled
-  long_desc: This option specifies the number of shards to create for newly defined persistent topics. Note that only 
-      newly created persistent topics obey the config, previously existing topics have only one queue.
+  desc: Number of shards for a persistent topic.
+  long_desc: Number of shards of persistent topics. The notifications will be sharded by a combination of 
+    the bucket and key name. Changing the number effect only new topics and does not change exiting ones.
   default: 11
   services: 
     - rgw
