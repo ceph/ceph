@@ -241,6 +241,14 @@
         "lintFilePatterns": ["src/**/*.ts", "src/**/*.html"]
       },
       "outputs": ["{options.outputFile}"]
+    },
+    "local-registry": {
+      "executor": "@nx/js:verdaccio",
+      "options": {
+        "port": 4873,
+        "config": ".verdaccio/config.yml",
+        "storage": "tmp/local-registry/storage"
+      }
     }
   }
 }

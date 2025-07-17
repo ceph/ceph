@@ -1,0 +1,13 @@
+<div class="chart-container"
+     [ngStyle]="style">
+  <canvas baseChart
+          #sparkCanvas
+          [data]="chartData"
+          [options]="options"
+          [type]="'line'">
+  </canvas>
+  <div class="chartjs-tooltip"
+       #sparkTooltip>
+    <table></table>
+  </div>
+</div>
