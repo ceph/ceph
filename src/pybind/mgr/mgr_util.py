@@ -10,7 +10,6 @@ from ceph.fs.earmarking import (
 if 'UNITTEST' in os.environ:
     import tests  # noqa
 
-import bcrypt
 import cephfs
 import contextlib
 import datetime
@@ -33,6 +32,7 @@ else:
 from typing import Tuple, Any, Callable, Optional, Dict, TYPE_CHECKING, TypeVar, List, Iterable, Generator, Generic, Iterator
 
 from ceph.deployment.utils import wrap_ipv6
+from ceph.cryptotools.select import get_crypto_caller
 
 T = TypeVar('T')
 
@@ -627,19 +627,8 @@ def create_self_signed_cert(organisation: str = 'Ceph',
 
     """
 
-    from OpenSSL import crypto
-    from uuid import uuid4
-
     # RDN = Relative Distinguished Name
     valid_RDN_list = ['C', 'ST', 'L', 'O', 'OU', 'CN', 'emailAddress']
-
-    # create a key pair
-    pkey = crypto.PKey()
-    pkey.generate_key(crypto.TYPE_RSA, 2048)
-
-    # Create a "subject" object
-    req = crypto.X509Req()
-    subj = req.get_subject()
 
     if dname:
         # dname received, so check it contains valid RDNs
@@ -648,48 +637,18 @@ def create_self_signed_cert(organisation: str = 'Ceph',
     else:
         dname = {"O": organisation, "CN": common_name}
 
-    # populate the subject with the dname settings
-    for k, v in dname.items():
-        setattr(subj, k, v)
-
-    # create a self-signed cert
-    cert = crypto.X509()
-    cert.set_subject(req.get_subject())
-    cert.set_serial_number(int(uuid4()))
-    cert.gmtime_adj_notBefore(0)
-    cert.gmtime_adj_notAfter(10 * 365 * 24 * 60 * 60)  # 10 years
-    cert.set_issuer(cert.get_subject())
-    cert.set_pubkey(pkey)
-    cert.sign(pkey, 'sha512')
-
-    cert = crypto.dump_certificate(crypto.FILETYPE_PEM, cert)
-    pkey = crypto.dump_privatekey(crypto.FILETYPE_PEM, pkey)
-
-    return cert.decode('utf-8'), pkey.decode('utf-8')
+    cc = get_crypto_caller()
+    pkey = cc.create_private_key()
+    cert = cc.create_self_signed_cert(dname, pkey)
+    return cert, pkey
 
 
-def verify_cacrt_content(crt):
-    # type: (str) -> int
-    from OpenSSL import crypto
+def certificate_days_to_expire(crt: str) -> int:
     try:
-        crt_buffer = crt.encode("ascii") if isinstance(crt, str) else crt
-        x509 = crypto.load_certificate(crypto.FILETYPE_PEM, crt_buffer)
-        no_after = x509.get_notAfter()
-        if not no_after:
-            raise ServerConfigException("Certificate does not have an expiration date.")
-
-        end_date = datetime.datetime.strptime(no_after.decode('ascii'), '%Y%m%d%H%M%SZ')
-        if x509.has_expired():
-            org, cn = get_cert_issuer_info(crt)
-            msg = f'Certificate issued by "{org}/{cn}" expired on {end_date}'
-            logger.warning(msg)
-            raise ServerConfigException(msg)
-
-        # Certificate still valid, calculate and return days until expiration
-        return (end_date - datetime.datetime.utcnow()).days
-
-    except (ValueError, crypto.Error) as e:
-        raise ServerConfigException(f'Invalid certificate: {e}')
+        cc = get_crypto_caller()
+        return cc.certificate_days_to_expire(crt)
+    except ValueError as err:
+        raise ServerConfigException(f'Invalid certificate: {err}')
 
 
 def verify_cacrt(cert_fname):
@@ -703,7 +662,7 @@ def verify_cacrt(cert_fname):
 
     try:
         with open(cert_fname) as f:
-            verify_cacrt_content(f.read())
+            certificate_days_to_expire(f.read())
     except ValueError as e:
         raise ServerConfigException(
             'Invalid certificate {}: {}'.format(cert_fname, str(e)))
@@ -711,52 +670,21 @@ def verify_cacrt(cert_fname):
 
 def get_cert_issuer_info(crt: str) -> Tuple[Optional[str], Optional[str]]:
     """Basic validation of a ca cert"""
-
-    from OpenSSL import crypto, SSL  # noqa
+    cc = get_crypto_caller()
     try:
-        crt_buffer = crt.encode("ascii") if isinstance(crt, str) else crt
-        (org_name, cn) = (None, None)
-        cert = crypto.load_certificate(crypto.FILETYPE_PEM, crt_buffer)
-        components = cert.get_issuer().get_components()
-        for c in components:
-            if c[0].decode() == 'O':  # org comp
-                org_name = c[1].decode()
-            elif c[0].decode() == 'CN':  # common name comp
-                cn = c[1].decode()
-        return (org_name, cn)
-    except (ValueError, crypto.Error) as e:
-        raise ServerConfigException(f'Invalid certificate key: {e}')
+        return cc.get_cert_issuer_info(crt)
+    except ValueError as err:
+        raise ServerConfigException(f'Invalid certificate key: {err}')
 
 
 def verify_tls(crt, key):
     # type: (str, str) -> int
-    days_to_expiration = verify_cacrt_content(crt)
-
-    from OpenSSL import crypto, SSL
+    cc = get_crypto_caller()
     try:
-        _key = crypto.load_privatekey(crypto.FILETYPE_PEM, key)
-        _key.check()
-    except (ValueError, crypto.Error) as e:
-        raise ServerConfigException(
-            'Invalid private key: {}'.format(str(e)))
-    try:
-        crt_buffer = crt.encode("ascii") if isinstance(crt, str) else crt
-        _crt = crypto.load_certificate(crypto.FILETYPE_PEM, crt_buffer)
-    except ValueError as e:
-        raise ServerConfigException(
-            'Invalid certificate key: {}'.format(str(e))
-        )
-
-    try:
-        context = SSL.Context(SSL.TLSv1_METHOD)
-        context.use_certificate(_crt)
-        context.use_privatekey(_key)
-        context.check_privatekey()
-    except crypto.Error as e:
-        logger.warning('Private key and certificate do not match up: {}'.format(str(e)))
-    except SSL.Error as e:
-        raise ServerConfigException(f'Invalid cert/key pair: {e}')
-
+        days_to_expiration = cc.certificate_days_to_expire(crt)
+        cc.verify_tls(crt, key)
+    except ValueError as err:
+        raise ServerConfigException(str(err))
     return days_to_expiration
 
 
@@ -785,24 +713,14 @@ def verify_tls_files(cert_fname, pkey_fname):
     if not os.path.isfile(pkey_fname):
         raise ServerConfigException('private key %s does not exist' % pkey_fname)
 
-    from OpenSSL import crypto, SSL
+    if not os.path.isfile(cert_fname):
+        raise ServerConfigException('certificate %s does not exist' % cert_fname)
 
     try:
-        with open(pkey_fname) as f:
-            pkey = crypto.load_privatekey(crypto.FILETYPE_PEM, f.read())
-            pkey.check()
-    except (ValueError, crypto.Error) as e:
-        raise ServerConfigException(
-            'Invalid private key {}: {}'.format(pkey_fname, str(e)))
-    try:
-        context = SSL.Context(SSL.TLSv1_METHOD)
-        context.use_certificate_file(cert_fname, crypto.FILETYPE_PEM)
-        context.use_privatekey_file(pkey_fname, crypto.FILETYPE_PEM)
-        context.check_privatekey()
-    except crypto.Error as e:
-        logger.warning(
-            'Private key {} and certificate {} do not match up: {}'.format(
-                pkey_fname, cert_fname, str(e)))
+        with open(pkey_fname) as key_file, open(cert_fname) as cert_file:
+            verify_tls(cert_file.read(), key_file.read())
+    except (ServerConfigException) as e:
+        raise ServerConfigException({e})
 
 
 def get_most_recent_rate(rates: Optional[List[Tuple[float, float]]]) -> float:
@@ -982,16 +900,6 @@ def profile_method(skip_attribute: bool = False) -> Callable[[Callable[..., T]],
     return outer
 
 
-def password_hash(password: Optional[str], salt_password: Optional[str] = None) -> Optional[str]:
-    if not password:
-        return None
-    if not salt_password:
-        salt = bcrypt.gensalt()
-    else:
-        salt = salt_password.encode('utf8')
-    return bcrypt.hashpw(password.encode('utf8'), salt).decode('utf8')
-
-
 def parse_combined_pem_file(pem_data: str) -> Tuple[Optional[str], Optional[str]]:
 
     # Extract the certificate
@@ -1009,3 +917,14 @@ def parse_combined_pem_file(pem_data: str) -> Tuple[Optional[str], Optional[str]
         private_key = pem_data[pem_data.index(key_start):pem_data.index(key_end) + len(key_end)]
 
     return cert, private_key
+
+
+def password_hash(password: Optional[str], salt_password: Optional[str] = None) -> Optional[str]:
+    if not password:
+        return None
+
+    if not salt_password:
+        salt_password = ''
+
+    cc = get_crypto_caller()
+    return cc.password_hash(password, salt_password)

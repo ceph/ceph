@@ -23,6 +23,7 @@ if TYPE_CHECKING:
     else:
         from typing_extensions import Literal
 
+from ceph.cryptotools.select import choose_crypto_caller
 from mgr_module import CLIReadCommand, CLIWriteCommand, HandleCommandResult, \
     MgrModule, MgrStandbyModule, NotifyType, Option, _get_localized_key
 from mgr_util import ServerConfigException, build_url, \
@@ -275,6 +276,7 @@ class Module(MgrModule, CherryPyConfig):
         Option(name='redirect_resolve_ip_addr', type='bool', default=False),
         Option(name='cross_origin_url', type='str', default=''),
         Option(name='sso_oauth2', type='bool', default=False),
+        Option(name='crypto_caller', type='str', default=''),
     ]
     MODULE_OPTIONS.extend(options_schema_list())
     for options in PLUGIN_MANAGER.hook.get_options() or []:
@@ -288,6 +290,9 @@ class Module(MgrModule, CherryPyConfig):
     def __init__(self, *args, **kwargs):
         super(Module, self).__init__(*args, **kwargs)
         CherryPyConfig.__init__(self)
+        # configure the dashboard's crypto caller. by default it will
+        # use the remote caller to avoid pyo3 conflicts
+        choose_crypto_caller(str(self.get_module_option('crypto_caller', '')))
 
         mgr.init(self)
 
@@ -563,6 +568,9 @@ class StandbyModule(MgrStandbyModule, CherryPyConfig):
         super(StandbyModule, self).__init__(*args, **kwargs)
         CherryPyConfig.__init__(self)
         self.shutdown_event = threading.Event()
+        # configure the dashboard's crypto caller. by default it will
+        # use the remote caller to avoid pyo3 conflicts
+        choose_crypto_caller(str(self.get_module_option('crypto_caller', '')))
 
         # We can set the global mgr instance to ourselves even though
         # we're just a standby, because it's enough for logging.

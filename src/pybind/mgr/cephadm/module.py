@@ -45,6 +45,7 @@ from ceph.deployment.service_spec import (
 )
 from ceph.deployment.drive_group import DeviceSelection
 from ceph.utils import str_to_datetime, datetime_to_str, datetime_now
+from ceph.cryptotools.select import choose_crypto_caller
 from cephadm.serve import CephadmServe, REQUIRES_POST_ACTIONS
 from cephadm.services.cephadmservice import CephadmDaemonDeploySpec
 from cephadm.http_server import CephadmHttpServer
@@ -496,6 +497,10 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         super(CephadmOrchestrator, self).__init__(*args, **kwargs)
         self._cluster_fsid: str = self.get('mon_map')['fsid']
         self.last_monmap: Optional[datetime.datetime] = None
+        # cephadm module always needs access to the real cryptography module
+        # for asyncssh. It is always permitted to use the internal
+        # cryptocaller.
+        choose_crypto_caller('internal')
 
         # for serve()
         self.run = True
