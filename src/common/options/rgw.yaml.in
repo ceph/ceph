@@ -135,7 +135,7 @@ options:
     upload larger objects, a special composite upload mechanism is required
     multi-part upload (MPU) for S3 and DLO and SLO for Swift.  Note that this
     value also limits the size of individual chunks uploaded for MPU and
-    DLO/SLO objects, thus the larget composite object that can be uploaded is
+    DLO/SLO objects, thus the largest composite object that can be uploaded is
     of size ``rgw_max_put_size`` * ``rgw_multipart_part_upload_limit``
   default: 5_G
   services:
@@ -177,7 +177,7 @@ options:
 #
 # Represents the number of shards for the bucket index object, a value of zero
 # indicates there is no sharding. By default (no sharding, the name of the object
-# is '.dir.{marker}', with sharding, the name is '.dir.{markder}.{sharding_id}',
+# is '.dir.{marker}', with sharding, the name is '.dir.{marker}.{sharding_id}',
 # sharding_id is zero-based value. It is not recommended to set a too large value
 # (e.g. thousand) as it increases the cost for bucket listing.
 - name: rgw_override_bucket_index_max_shards
@@ -361,7 +361,7 @@ options:
 - name: rgw_numa_node
   type: int
   level: advanced
-  desc: set the RGW daemon'ss CPU affinity to a NUMA node (-1 for none)
+  desc: set the RGW daemon's CPU affinity to a NUMA node (-1 for none)
   default: -1
   services:
   - rgw
@@ -380,7 +380,7 @@ options:
   type: bool
   level: advanced
   desc: Multiple content length headers compatibility
-  long_desc: Try to handle requests with abiguous multiple content length headers
+  long_desc: Try to handle requests with ambiguous multiple content length headers
     (Content-Length, Http-Content-Length).
   fmt_desc: Enable compatibility handling of FCGI requests with both ``CONTENT_LENGTH``
     and ``HTTP_CONTENT_LENGTH`` set.
@@ -936,7 +936,7 @@ options:
   level: advanced
   desc: RGW handle cross domain policy
   long_desc: Returned cross domain policy when accessing the crossdomain.xml resource
-    (Swift compatiility).
+    (Swift compatibility).
   default: <allow-access-from domain="*" secure="false" />
   services:
   - rgw
@@ -1214,7 +1214,7 @@ options:
 - name: rgw_verify_ssl
   type: bool
   level: advanced
-  desc: Should RGW verify SSL when connecing to a remote HTTP server
+  desc: Should RGW verify SSL when connecting to a remote HTTP server
   long_desc: RGW can send requests to other RGW servers (e.g., in multi-site sync
     work). This configurable selects whether RGW should verify the certificate for
     the remote peer and host.
@@ -1230,7 +1230,7 @@ options:
 #
 # The file handle cache is a partitioned hash table
 # (fhcache_partitions), each with a closed hash part and backing
-# b-tree mapping.  The number of partions is expected to be a small
+# b-tree mapping.  The number of partitions is expected to be a small
 # prime, the cache size something larger but less than 5K, the total
 # size of the cache is n_part *  cache_size.
 - name: rgw_nfs_lru_lanes
@@ -2158,7 +2158,7 @@ options:
   type: int
   level: advanced
   desc: Data log time window
-  long_desc: The data log keeps information about buckets that have objectst that
+  long_desc: The data log keeps information about buckets that have objects that
     were modified within a specific timeframe. The sync process then knows which buckets
     are needed to be scanned for data sync.
   fmt_desc: The data log entries window in seconds.
@@ -2172,7 +2172,7 @@ options:
   desc: Max size of pending changes in data log
   long_desc: RGW will trigger update to the data log if the number of pending entries
     reached this number.
-  fmt_dsec: The number of in-memory entries to hold for the data changes log.
+  fmt_desc: The number of in-memory entries to hold for the data changes log.
   default: 1000
   services:
   - rgw
@@ -2810,7 +2810,7 @@ options:
   type: uint
   level: dev
   desc: Latency (in seconds) injected before rgw bucket index unlink op calls to simulate
-    queueing latency and validate behavior of simultaneuous delete requests which
+    queueing latency and validate behavior of simultaneous delete requests which
     target the same object.
   default: 0
   with_legacy: true
@@ -3027,7 +3027,7 @@ options:
   - rgw_crypt_vault_auth
   - rgw_crypt_vault_addr
   with_legacy: true
-#  Vault Namespace (only availabe in Vault Enterprise Version)
+#  Vault Namespace (only available in Vault Enterprise Version)
 - name: rgw_crypt_vault_namespace
   type: str
   level: advanced
@@ -3404,7 +3404,7 @@ options:
   desc: Number of hours to delay bucket index shard reduction.
   long_desc: >-
     In order to avoid resharding buckets with object
-    counts that fluctuate up and down regularly, we implemement a delay
+    counts that fluctuate up and down regularly, we implement a delay
     between noting a shard reduction might be appropriate and when it's
     actually done. This allows us to cancel the reshard operation if the
     number of object significantly increases during this delay.
@@ -4334,7 +4334,7 @@ options:
   type: uint 
   level: advanced
   desc: Time in seconds to delete idle kafka connections
-  long_desc: A conection will be considered "idle" if no messages
+  long_desc: A connection will be considered "idle" if no messages
     are sent to it for more than the time defined.
     Note that the connection will not be considered idle, even if it is down,
     as long as there are attempts to send messages to it.
