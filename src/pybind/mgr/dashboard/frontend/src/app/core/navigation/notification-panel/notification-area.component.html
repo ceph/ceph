@@ -1,57 +1,45 @@
-<cds-text size="heading-02" class="notification-section-heading">Today</cds-text>
-<div *ngIf="todayNotifications.length === 0" class="cds--notification-empty">
-  <cds-text size="body-short-01">No notifications for today.</cds-text>
-</div>
-<div *ngFor="let notification of todayNotifications; let last = last">
-  <cds-tile class="notification-tile" kind="default">
-    <div class="notification-icon-timestamp">
-      <cds-icon
-        [name]="getCarbonIcon(notification.type)"
-        size="20"
-        class="notification-icon"
-        [ngClass]="getIconColorClass(notification.type)">
-      </cds-icon>
+<ng-container *ngIf="todayNotifications.length > 0">
+  <div class="notification-section-heading">Today</div>
+  <div *ngFor="let notification of todayNotifications; let last = last" class="notification-wrapper">
+    <div class="notification-item">
+      <div class="notification-icon">
+        <svg [cdsIcon]="getCarbonIcon(notification.type)" [size]="16" [ngClass]="getIconColorClass(notification.type)">
+        </svg>
+      </div>
+      <div class="notification-content">
+        <div class="notification-timestamp">{{ notification.timestamp | relativeDate }}</div>
+        <div class="notification-title">{{ notification.title }}</div>
+        <div class="notification-message">{{ notification.message }}</div>
+      </div>
+      <button cdsButton="ghost" size="sm" class="notification-close" (click)="removeNotification(notification, $event)">
+        <svg cdsIcon="close" size="16"></svg>
+      </button>
     </div>
-    <div class="notification-content">
-      <cds-text size="caption" class="notification-timestamp">
-        {{ notification.timestamp | relativeDate }}
-      </cds-text>
-      <cds-text size="body-short-01" class="notification-title">
-        {{ notification.title }}
-      </cds-text>
-      <cds-text size="body-short-02" class="notification-message">
-        {{ notification.message }}
-      </cds-text>
-    </div>
-  </cds-tile>
-  <div *ngIf="!last" class="notification-divider"></div>
-</div>
+    <div *ngIf="!last" class="notification-divider"></div>
+  </div>
+</ng-container>
 
-<cds-text size="heading-02" class="notification-section-heading">Previous</cds-text>
-<div *ngIf="previousNotifications.length === 0" class="cds--notification-empty">
-  <cds-text size="body-short-01">No previous notifications.</cds-text>
-</div>
-<div *ngFor="let notification of previousNotifications; let last = last">
-  <cds-tile class="notification-tile" kind="default">
-    <div class="notification-icon-timestamp">
-      <cds-icon
-        [name]="getCarbonIcon(notification.type)"
-        size="20"
-        class="notification-icon"
-        [ngClass]="getIconColorClass(notification.type)">
-      </cds-icon>
+<ng-container *ngIf="previousNotifications.length > 0">
+  <div class="notification-section-heading" [class.mt-0]="todayNotifications.length === 0">Previous</div>
+  <div *ngFor="let notification of previousNotifications; let last = last" class="notification-wrapper">
+    <div class="notification-item">
+      <div class="notification-icon">
+        <svg [cdsIcon]="getCarbonIcon(notification.type)" [size]="16" [ngClass]="getIconColorClass(notification.type)">
+        </svg>
+      </div>
+      <div class="notification-content">
+        <div class="notification-timestamp">{{ notification.timestamp | relativeDate }}</div>
+        <div class="notification-title">{{ notification.title }}</div>
+        <div class="notification-message">{{ notification.message }}</div>
+      </div>
+      <button cdsButton="ghost" size="sm" class="notification-close" (click)="removeNotification(notification, $event)">
+        <svg cdsIcon="close" size="16"></svg>
+      </button>
     </div>
-    <div class="notification-content">
-      <cds-text size="caption" class="notification-timestamp">
-        {{ notification.timestamp | relativeDate }}
-      </cds-text>
-      <cds-text size="body-short-01" class="notification-title">
-        {{ notification.title }}
-      </cds-text>
-      <cds-text size="body-short-02" class="notification-message">
-        {{ notification.message }}
-      </cds-text>
-    </div>
-  </cds-tile>
-  <div *ngIf="!last" class="notification-divider"></div>
+    <div *ngIf="!last" class="notification-divider"></div>
+  </div>
+</ng-container>
+
+<div *ngIf="todayNotifications.length === 0 && previousNotifications.length === 0" class="notification-empty">
+  <div>No notifications</div>
 </div> 

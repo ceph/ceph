@@ -1,70 +1,153 @@
-.notification-section-heading {
-  font-weight: 600;
-  margin-top: 1.5rem;
-  margin-bottom: 0.5rem;
-  text-align: left;
+@use '@carbon/styles/scss/theme' as *;
+@use '@carbon/styles/scss/spacing';
+@use '@carbon/type';
+
+:host ::ng-deep {
+  .notification-section-heading {
+    @include type.type-style('heading-compact-01');
+    margin: 0;
+    color: #161616;
+    padding: 1rem 1rem 0.75rem;
+    background-color: #ffffff;
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    display: block;
+
+    &.mt-0 {
+      margin-top: 0;
+    }
+  }
 }
 
-.notification-tile {
+.notification-empty {
+  margin: 0;
+  padding: 1rem;
+  color: #6f6f6f;
+  text-align: center;
+  @include type.type-style('body-short-01');
+}
+
+.notification-wrapper {
+  padding: 0 1rem;
+  position: relative;
+  z-index: 1;
+  background-color: #ffffff;
+
+  &:last-child {
+    padding-bottom: 1rem;
+  }
+}
+
+.notification-item {
   display: flex;
-  align-items: flex-start;
   gap: 1rem;
-  background: none;
-  box-shadow: none;
-  padding: 0.5rem 0;
-}
+  padding: 0.75rem 0;
+  align-items: flex-start;
+  position: relative;
 
-.notification-icon-timestamp {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  min-width: 40px;
+  .notification-close {
+    position: absolute;
+    right: 0;
+    top: 0.75rem;
+    padding: 0.5rem;
+    min-height: 0;
+    color: #525252;
+    opacity: 0;
+    transition: opacity 0.2s ease-in-out;
+    
+    &:hover {
+      background-color: #e8e8e8;
+    }
+  }
+
+  &:hover {
+    .notification-close {
+      opacity: 1;
+    }
+  }
 }
 
 .notification-icon {
-  margin-bottom: 0.25rem;
-}
-
-.icon-error {
-  color: #da1e28;
-}
-.icon-success {
-  color: #24a148;
-}
-.icon-info {
-  color: #0043ce;
-}
-.icon-warning {
-  color: #f1c21b;
+  flex-shrink: 0;
+  margin-top: 0;
 }
 
 .notification-content {
   flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
+  gap: 0.5rem;
+  padding-right: 2rem;
 }
 
-.notification-timestamp {
-  color: #6f6f6f;
-  margin-bottom: 0.2rem;
-}
+:host ::ng-deep {
+  .notification-timestamp {
+    @include type.type-style('label-01');
+    color: #6f6f6f;
+    line-height: 1;
+    margin-top: 0;
+    display: block;
+  }
 
-.notification-title {
-  font-weight: 600;
-  margin-bottom: 0.1rem;
-}
+  .notification-title {
+    @include type.type-style('body-short-01');
+    margin: 0;
+    color: #161616;
+    line-height: 1.25;
+    display: block;
+  }
 
-.notification-message {
-  color: #525252;
+  .notification-message {
+    @include type.type-style('body-short-01');
+    color: #525252;
+    margin: 0;
+    line-height: 1.4;
+    margin-top: -0.125rem;
+    display: block;
+  }
 }
 
 .notification-divider {
   border-bottom: 1px solid #e0e0e0;
-  margin: 0.5rem 0;
 }
 
-.cds--notification-empty {
-  margin-bottom: 1.5rem;
-  color: #6f6f6f;
-} 
+:host {
+  display: block;
+  height: 100%;
+  overflow-y: auto;
+  background-color: #ffffff;
+
+  ::ng-deep {
+    .notification-icon {
+      svg.icon-error,
+      svg.icon-error:hover {
+        fill: $support-error !important;
+        color: $support-error !important;
+      }
+
+      svg.icon-warning,
+      svg.icon-warning:hover {
+        fill: $support-warning !important;
+        color: $support-warning !important;
+      }
+
+      svg.icon-success,
+      svg.icon-success:hover {
+        fill: $support-success !important;
+        color: $support-success !important;
+      }
+
+      svg.icon-info,
+      svg.icon-info:hover {
+        fill: $support-info !important;
+        color: $support-info !important;
+      }
+
+      svg path {
+        fill: inherit !important;
+      }
+    }
+  }
+}

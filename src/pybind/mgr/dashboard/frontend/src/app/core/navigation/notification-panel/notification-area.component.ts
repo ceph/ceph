@@ -42,6 +42,23 @@ export class NotificationAreaComponent implements OnInit, OnDestroy {
     }
   }
 
+  removeNotification(notification: CdNotification, event: MouseEvent) {
+    // Stop event propagation to prevent panel closing
+    event.stopPropagation();
+    event.preventDefault();
+
+    // Get the notification index from the service's data
+    const notifications = this.notificationService['dataSource'].getValue();
+    const index = notifications.findIndex(
+      (n) => n.timestamp === notification.timestamp && n.title === notification.title
+    );
+
+    if (index > -1) {
+      // Remove the notification through the service
+      this.notificationService.remove(index);
+    }
+  }
+
   getCarbonIcon(type: NotificationType): string {
     switch (type) {
       case NotificationType.success:
