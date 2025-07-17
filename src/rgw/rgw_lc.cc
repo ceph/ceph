@@ -25,6 +25,7 @@
 #include "rgw_perf_counters.h"
 #include "rgw_common.h"
 #include "rgw_bucket.h"
+#include "rgw_bucket_layout.h"
 #include "rgw_lc.h"
 #include "rgw_zone.h"
 #include "rgw_string.h"
@@ -348,6 +349,19 @@ static bool pass_object_lock_check(rgw::sal::Driver* driver, rgw::sal::Object* o
   }
 }
 
+/**
+ * Determines whether to use unordered listing for lifecycle processing.
+ *
+ * For buckets with low shard counts, ordered listing is preferred due to better
+ * performance
+ *
+ * For buckets with high shard counts, unordered listing is preferred to avoid
+ * excess OSD requests
+ */
+static bool should_list_unordered(const rgw::bucket_index_layout_generation& current_index, uint64_t threshold) {
+  return current_index.layout.type == rgw::BucketIndexType::Normal
+    && rgw::num_shards(current_index.layout.normal) > threshold;
+}
 class LCObjsLister {
   rgw::sal::Driver* driver;
   rgw::sal::Bucket* bucket;
@@ -363,7 +377,13 @@ public:
   LCObjsLister(rgw::sal::Driver* _driver, rgw::sal::Bucket* _bucket) :
       driver(_driver), bucket(_bucket) {
     list_params.list_versions = bucket->versioned();
-    list_params.allow_unordered = true; // XXX can be unconditionally true, so long as all versions of one object are assured to be on one shard and always ordered on that shard (true today in RADOS)
+
+    CephContext* cct = driver->ctx();
+    uint64_t threshold = cct->_conf.get_val<uint64_t>("rgw_lc_ordered_list_threshold");
+
+    const auto& current_index = bucket->get_info().layout.current_index;
+    list_params.allow_unordered = should_list_unordered(current_index, threshold);
+
     delay_ms = driver->ctx()->_conf.get_val<int64_t>("rgw_lc_thread_delay");
   }
 
@@ -377,7 +397,9 @@ public:
   }
 
   int fetch(const DoutPrefixProvider *dpp) {
-    int ret = bucket->list(dpp, list_params, 1000, list_results, null_yield);
+    CephContext* cct = dpp->get_cct();
+    int cnt = cct->_conf.get_val<uint64_t>("rgw_lc_list_cnt");
+    int ret = bucket->list(dpp, list_params, cnt, list_results, null_yield);
     if (ret < 0) {
       return ret;
     }
@@ -908,7 +930,12 @@ int RGWLC::handle_multipart_expiration(rgw::sal::Bucket* target,
   /* lifecycle processing does not depend on total order, so can
    * take advantage of unordered listing optimizations--such as
    * operating on one shard at a time */
-  params.allow_unordered = true;
+
+  uint64_t threshold = cct->_conf.get_val<uint64_t>("rgw_lc_ordered_list_threshold");
+
+  const auto& current_index = target->get_info().layout.current_index;
+  params.allow_unordered = should_list_unordered(current_index, threshold);
+
   params.ns = RGW_OBJ_NS_MULTIPART;
   params.access_list_filter = MultipartMetaFilter;
 
