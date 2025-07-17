@@ -48,7 +48,6 @@ ECBackend::ECBackend(pg_shard_t whoami,
     sinfo(ec_impl, &(eclistener.get_pool()), stripe_width),
     fast_read{fast_read},
     allows_ecoverwrites{allows_ecoverwrites},
-    unstable_hashinfo_registry{shard_services.get_cct(), ec_impl},
     read_pipeline{shard_services.get_cct(), ec_impl, sinfo, &eclistener, *this},
     rmw_pipeline{shard_services.get_cct(), ec_impl, sinfo, &eclistener, *this, shard_services.lookup_ec_extent_cache_lru()}
 {
@@ -327,13 +326,6 @@ ECBackend::submit_transaction(const std::set<pg_shard_t> &pg_shards,
   op->plan = ECCommon::get_write_plan(
     sinfo,
     *(op->t),
-    [&op, this](const hobject_t &i) {
-      ECUtil::HashInfoRef ref =
-        unstable_hashinfo_registry.get_hash_info(i, true, op->t->obc_map[i]->attr_cache, 0);
-  logger().debug("ECBackend::{} LINE {}", "_submit_transaction", __LINE__);
-      ceph_assert_always(ref);
-      return ref;
-    },
     read_pipeline,
     rmw_pipeline,
     &dpp);
