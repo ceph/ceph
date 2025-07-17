@@ -1332,23 +1332,33 @@ int publish_abort(reservation_t& res) {
 }
 
 int get_persistent_queue_stats(const DoutPrefixProvider *dpp, librados::IoCtx &rados_ioctx,
-                               const std::string &queue_name, rgw_topic_stats &stats, optional_yield y)
+                               ShardNamesView shards, rgw_topic_stats &stats, optional_yield y)
 {
   // TODO: use optional_yield instead calling rados_ioctx.operate() synchronously
   cls_2pc_reservations reservations;
-  auto ret = cls_2pc_queue_list_reservations(rados_ioctx, queue_name, reservations);
-  if (ret < 0) {
-    ldpp_dout(dpp, 1) << "ERROR: failed to read queue list reservation: " << ret << dendl;
-    return ret;
-  }
-  stats.queue_reservations = reservations.size();
+  uint32_t shard_entries; 
+  uint64_t shard_size;
 
-  ret = cls_2pc_queue_get_topic_stats(rados_ioctx, queue_name, stats.queue_entries, stats.queue_size);
-  if (ret < 0) {
-    ldpp_dout(dpp, 1) << "ERROR: failed to get the queue size or the number of entries: " << ret << dendl;
-    return ret;
+  stats.queue_reservations = 0; 
+  stats.queue_size = 0; 
+  stats.queue_entries = 0; 
+  for(const auto& shard_name: shards){
+    auto ret = cls_2pc_queue_list_reservations(rados_ioctx, shard_name, reservations);
+    if (ret < 0) {
+      ldpp_dout(dpp, 1) << "ERROR: failed to read queue list reservation: " << ret << dendl;
+      return ret;
+    }
+    stats.queue_reservations += reservations.size();
+    shard_entries = 0; 
+    shard_size = 0; 
+    ret = cls_2pc_queue_get_topic_stats(rados_ioctx, shard_name, shard_entries, shard_size);
+    stats.queue_size += shard_size; 
+    stats.queue_entries += shard_entries;
+    if (ret < 0) {
+      ldpp_dout(dpp, 1) << "ERROR: failed to get the queue size or the number of entries: " << ret << dendl;
+      return ret;
+    }
   }
-
   return 0;
 }
 

@@ -134,7 +134,7 @@ int publish_commit(rgw::sal::Object* obj,
 int publish_abort(reservation_t& reservation);
 
 int get_persistent_queue_stats(const DoutPrefixProvider *dpp, librados::IoCtx &rados_ioctx,
-                               const std::string &queue_name, rgw_topic_stats &stats, optional_yield y);
+                               ShardNamesView shards, rgw_topic_stats &stats, optional_yield y);
 
 }
 
