@@ -466,7 +466,7 @@ int GroupSnapshot_to_group_snap_info2(
   image_snaps.reserve(cls_group_snap.snaps.size());
 
   for (const auto& snap : cls_group_snap.snaps) {
-    librbd::IoCtx image_ioctx;
+    librados::IoCtx image_ioctx;
     int r = util::create_ioctx(group_ioctx, "image", snap.pool, {},
                                &image_ioctx);
     if (r < 0) {
@@ -978,7 +978,7 @@ int Group<I>::snap_create(librados::IoCtx& group_ioctx,
   }
 
   for (auto image: images) {
-    librbd::IoCtx image_io_ctx;
+    librados::IoCtx image_io_ctx;
     r = util::create_ioctx(group_ioctx, "image", image.spec.pool_id, {},
                            &image_io_ctx);
     if (r < 0) {
