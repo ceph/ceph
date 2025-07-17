@@ -35,7 +35,6 @@ ECRecoveryBackend::ECRecoveryBackend(
     backend->ec_impl,
     backend->sinfo,
     backend->read_pipeline,
-    backend->unstable_hashinfo_registry,
     &pg)
 {}
 

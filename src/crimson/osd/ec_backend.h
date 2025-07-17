@@ -117,8 +117,6 @@ private:
   const bool fast_read;
   const bool allows_ecoverwrites;
 
-  ECCommon::UnstableHashInfoRegistry unstable_hashinfo_registry;
-
   ECCommon::ReadPipeline read_pipeline;
   ECCommon::RMWPipeline rmw_pipeline;
 };
