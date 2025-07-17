@@ -217,6 +217,8 @@ def download_cephadm(ctx, config, ref):
     elif config.get('cephadm_mode') != 'cephadm-package':
         if ctx.config.get('redhat'):
             _fetch_cephadm_from_rpm(ctx)
+        elif 'cephadm_url' in config:
+            _fetch_cephadm_from_url(ctx, config, config.get('cephadm_url'))
         # TODO: come up with a sensible way to detect if we need an "old, uncompiled"
         # cephadm
         elif 'cephadm_git_url' in config and 'cephadm_branch' in config:
@@ -232,6 +234,33 @@ def download_cephadm(ctx, config, ref):
         _rm_cluster(ctx, cluster_name)
         if config.get('cephadm_mode') == 'root':
             _rm_cephadm(ctx)
+
+def _sanity_check_cephadm(ctx):
+    cephadm_file_size = '$(stat -c%s {})'.format(ctx.cephadm)
+    ctx.cluster.run(
+        args=[
+            'test', '-s', ctx.cephadm,
+            run.Raw('&&'),
+            'test', run.Raw(cephadm_file_size), "-gt", run.Raw('1000'),
+            run.Raw('&&'),
+            'chmod', '+x', ctx.cephadm,
+        ],
+    )
+
+
+def _fetch_cephadm_from_url(ctx, config, url):
+    log.info(f'Downloading cephadm from url: {url}')
+    ctx.cluster.run(
+        args=[
+            'curl', '--silent', '-L', url,
+            run.Raw('>'),
+            ctx.cephadm,
+            run.Raw('&&'),
+            'ls', '-l',
+            ctx.cephadm,
+        ],
+    )
+    _sanity_check_cephadm(ctx)
 
 
 def _fetch_cephadm_from_container(ctx, config):
@@ -312,17 +341,7 @@ def _fetch_cephadm_from_github(ctx, config, ref):
                 'ls', '-l', ctx.cephadm,
             ],
         )
-    # sanity-check the resulting file and set executable bit
-    cephadm_file_size = '$(stat -c%s {})'.format(ctx.cephadm)
-    ctx.cluster.run(
-        args=[
-            'test', '-s', ctx.cephadm,
-            run.Raw('&&'),
-            'test', run.Raw(cephadm_file_size), "-gt", run.Raw('1000'),
-            run.Raw('&&'),
-            'chmod', '+x', ctx.cephadm,
-        ],
-    )
+    _sanity_check_cephadm(ctx)
 
 
 def _fetch_cephadm_from_chachra(ctx, config, cluster_name):
@@ -396,18 +415,7 @@ def _download_cephadm(ctx, url):
             ctx.cephadm,
         ],
     )
-
-    # sanity-check the resulting file and set executable bit
-    cephadm_file_size = '$(stat -c%s {})'.format(ctx.cephadm)
-    ctx.cluster.run(
-        args=[
-            'test', '-s', ctx.cephadm,
-            run.Raw('&&'),
-            'test', run.Raw(cephadm_file_size), "-gt", run.Raw('1000'),
-            run.Raw('&&'),
-            'chmod', '+x', ctx.cephadm,
-        ],
-    )
+    _sanity_check_cephadm(ctx)
 
 
 def _rm_cluster(ctx, cluster_name):
