@@ -22,9 +22,29 @@ namespace {
 
 namespace crimson::os::seastore::random_block_device::nvme {
 
+seastar::future<> NVMeBlockDevice::start(unsigned int shard_nums)
+{
+  device_shard_nums = shard_nums;
+  auto num_shard_services = (device_shard_nums + seastar::smp::count - 1 ) / seastar::smp::count;
+  logger().info("device_shard_nums={} seastar::smp={}, num_shard_services={}", device_shard_nums, seastar::smp::count, num_shard_services);
+  return shard_devices.start(num_shard_services, device_path);
+
+}
+
+seastar::future<> NVMeBlockDevice::stop()
+{
+  return shard_devices.stop();
+}
+
+Device& NVMeBlockDevice::get_sharded_device(unsigned int store_index)
+{
+  assert(store_index < shard_devices.local().mshard_devices.size());
+  return *shard_devices.local().mshard_devices[store_index];
+}
+
 NVMeBlockDevice::mkfs_ret NVMeBlockDevice::mkfs(device_config_t config) {
   using crimson::common::get_conf;
-  return shard_devices.local().do_primary_mkfs(config,
+  return shard_devices.local().mshard_devices[0]->do_primary_mkfs(config,
     seastar::smp::count,
     get_conf<Option::size_t>("seastore_cbjournal_size") 
   );
@@ -81,10 +101,12 @@ NVMeBlockDevice::mount_ret NVMeBlockDevice::mount()
 {
   logger().debug(" mount ");
   return shard_devices.invoke_on_all([](auto &local_device) {
-    return local_device.do_shard_mount(
-    ).handle_error(
-      crimson::ct_error::assert_all{
-	"Invalid error in NVMeBlockDevice::do_shard_mount"
+    return seastar::do_for_each(local_device.mshard_devices, [](auto& mshard_device) {
+      return mshard_device->do_shard_mount(
+      ).handle_error(
+        crimson::ct_error::assert_all{
+          "Invalid error in NVMeBlockDevice::do_shard_mount"
+      });
     });
   }).then([this] () {
     if (is_end_to_end_data_protection()) {
