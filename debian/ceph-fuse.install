@@ -1,4 +1,4 @@
-lib/systemd/system/ceph-fuse*
+{usr/,}lib/systemd/system/ceph-fuse*
 usr/bin/ceph-fuse
 usr/sbin/mount.fuse.ceph sbin
 usr/share/man/man8/ceph-fuse.8
