@@ -29,7 +29,7 @@
 #include "osd/OSDMap.h"
 #include "osd/osd_types.h"
 #include "mgr/MgrContext.h"
-#include "mgr/TTLCache.h"
+#include "mgr/MgrMapCache.h"
 #include "mgr/mgr_perf_counters.h"
 #include "messages/MMgrReport.h" // for class PerfCounterType
 
@@ -197,41 +197,55 @@ PyObject *ActivePyModules::get_daemon_status_python(
   return f.get();
 }
 
-void ActivePyModules::update_cache_metrics() {
-    auto hit_miss_ratio = ttl_cache.get_hit_miss_ratio();
-    perfcounter->set(l_mgr_cache_hit, hit_miss_ratio.first);
-    perfcounter->set(l_mgr_cache_miss, hit_miss_ratio.second);
+int ActivePyModules::ceph_cache_map_erase(std::string_view what)
+{
+  if (!api_cache.exists(what)) {
+    dout(10) << " what: " << what << " not in cache" << dendl;
+    return -ENOENT;
+  } else if (!api_cache.is_cacheable(what)) {
+    dout(10) << " what: " << what << " not cacheable" << dendl;
+    return -EINVAL;
+  }
+  dout(10) << " what: " << what << dendl;
+  api_cache.erase(what);
+  return 0;
 }
 
-PyObject *ActivePyModules::cacheable_get_python(const std::string &what)
+PyObject *ActivePyModules::cacheable_get_python(std::string_view what, const bool get_mutable)
 {
-  uint64_t ttl_seconds = g_conf().get_val<uint64_t>("mgr_ttl_cache_expire_seconds");
-  if(ttl_seconds > 0) {
-    ttl_cache.set_ttl(ttl_seconds);
-    try{
-      PyObject* cached = ttl_cache.get(what);
-      update_cache_metrics();
+  const bool use_cache =
+    !get_mutable &&
+    api_cache.is_enabled() &&
+    api_cache.is_cacheable(what);
+  if (use_cache) {
+    PyObject* cached = api_cache.get(what);
+    if (cached) {
+      dout(20) << ": api cache hit for " << what << " hit/miss "
+               << api_cache.get_hits() << "/" << api_cache.get_misses()
+               << dendl;
       return cached;
-    } catch (std::out_of_range& e) {}
+    }
   }
 
-  PyObject *obj = get_python(what);
-  if(ttl_seconds && ttl_cache.is_cacheable(what)) {
-    ttl_cache.insert(what, obj);
+  PyObject *obj = get_python(what, get_mutable);
+  if (use_cache && obj) {
+    api_cache.insert(what, obj);
   }
-  update_cache_metrics();
   return obj;
 }
 
-PyObject *ActivePyModules::get_python(const std::string &what)
+PyObject *ActivePyModules::get_python(std::string_view what, const bool get_mutable)
 {
-  uint64_t ttl_seconds = g_conf().get_val<uint64_t>("mgr_ttl_cache_expire_seconds");
+  const bool use_cache =
+    !get_mutable &&
+    api_cache.is_enabled() &&
+    api_cache.is_cacheable(what) &&
+    PyGILState_Check();
 
-  PyFormatter pf;
-  PyJSONFormatter jf;
-  // Use PyJSONFormatter if TTL cache is enabled.
-  Formatter &f = ttl_seconds ? (Formatter&)jf : (Formatter&)pf;
-
+  PyFormatter py_formatter;
+  PyFormatterRO py_formatter_ro;
+  PyFormatter &f = use_cache ? (PyFormatter&)py_formatter_ro :
+                               py_formatter;
   if (what == "fs_map") {
     without_gil_t no_gil;
     cluster_state.with_fsmap([&](const FSMap &fsmap) {
@@ -404,7 +418,7 @@ PyObject *ActivePyModules::get_python(const std::string &what)
   } else if (what.size() > 7 &&
 	     what.substr(0, 7) == "device ") {
     without_gil_t no_gil;
-    string devid = what.substr(7);
+    string devid(what.substr(7));
     if (!daemon_state.with_device(devid,
       [&] (const DeviceState& dev) {
         with_gil_t with_gil{no_gil};
@@ -535,11 +549,8 @@ PyObject *ActivePyModules::get_python(const std::string &what)
     derr << "Python module requested unknown data '" << what << "'" << dendl;
     Py_RETURN_NONE;
   }
-  if(ttl_seconds) {
-    return jf.get();
-  } else {
-    return pf.get();
-  }
+
+  return f.get();
 }
 
 void ActivePyModules::start_one(PyModuleRef py_module)
@@ -594,6 +605,9 @@ void ActivePyModules::notify_all(const std::string &notify_type,
                      const std::string &notify_id)
 {
   std::lock_guard l(lock);
+  
+  // invalidate api cache for this notify type
+  api_cache.invalidate(notify_type);
 
   dout(10) << __func__ << ": notify_all " << notify_type << dendl;
   for (auto& [name, module] : modules) {
@@ -1563,6 +1577,7 @@ void ActivePyModules::get_progress_events(std::map<std::string,ProgressEvent> *e
 void ActivePyModules::config_notify()
 {
   std::lock_guard l(lock);
+  api_cache.invalidate("config");
   for (auto& [name, module] : modules) {
     // Send all python calls down a Finisher to avoid blocking
     // C++ code, and avoid any potential lock cycles.

@@ -622,10 +622,12 @@ Dispatcher::dispatch_result_t Mgr::ms_dispatch2(const ref_t<Message>& m)
     case CEPH_MSG_FS_MAP:
       handle_fs_map(ref_cast<MFSMap>(m));
       py_module_registry->notify_all("fs_map", "");
+      py_module_registry->notify_all("mds_metadata", "");
       return Dispatcher::ACKNOWLEDGED();
     case CEPH_MSG_OSD_MAP:
       handle_osd_map();
       py_module_registry->notify_all("osd_map", "");
+      py_module_registry->notify_all("osd_metadata", "");
 
       // Continuous subscribe, so that we can generate notifications
       // for our MgrPyModules
@@ -762,6 +764,7 @@ bool Mgr::got_mgr_map(const MgrMap& m)
   cluster_state.with_mgrmap([&](const MgrMap& m) {
       old_modules = m.modules;
     });
+  py_module_registry->notify_all("mgr_map", "");
   if (m.modules != old_modules) {
     derr << "mgrmap module list changed to (" << m.modules << "), respawn"
 	 << dendl;
@@ -805,12 +808,14 @@ void Mgr::handle_mgr_digest(ref_t<MMgrDigest> m)
   dout(10) << m->mon_status_json.length() << dendl;
   dout(10) << m->health_json.length() << dendl;
   cluster_state.load_digest(m.get());
-  //no users: py_module_registry->notify_all("mon_status", "");
+  py_module_registry->notify_all("mon_status", "");
   py_module_registry->notify_all("health", "");
 
   // Hack: use this as a tick/opportunity to prompt python-land that
   // the pgmap might have changed since last time we were here.
   py_module_registry->notify_all("pg_summary", "");
+  py_module_registry->notify_all("pg_stats", "");
+  py_module_registry->notify_all("pg_dump", "");
   dout(10) << "done." << dendl;
   m.reset();
 

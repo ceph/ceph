@@ -36,6 +36,7 @@ if(WITH_MGR)
     StandbyPyModules.cc
     ThreadMonitor.cc
     mgr_commands.cc
+    MgrMapCache.cc
     MgrOpRequest.cc
     ${CMAKE_SOURCE_DIR}/src/common/TrackedOp.cc
     $<TARGET_OBJECTS:mgr_cap_obj>)
