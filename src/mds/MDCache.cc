@@ -8448,6 +8448,13 @@ int MDCache::path_traverse(const MDRequestRef& mdr, MDSContextFactory& cf,
       }
     }
     ceph_assert(curdir);
+
+    if (mds->damage_table.is_dirfrag_damaged(curdir)) {
+      dout(4) << "traverse: stopped lookup at dirfrag "
+              << *curdir << "/" << path[depth] << " snap=" << snapid << dendl;
+      return -CEPHFS_EIO;
+    }
+
     if (pdir) {
       *pdir = curdir;
     }
