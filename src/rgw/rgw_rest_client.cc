@@ -902,7 +902,7 @@ int RGWRESTStreamRWRequest::send_request(const DoutPrefixProvider *dpp, RGWAcces
 int RGWRESTStreamRWRequest::send(RGWHTTPManager *mgr)
 {
   if (!headers_gen) {
-    ldpp_dout(this, 0) << "ERROR: " << __func__ << "(): send_prepare() was not called: likey a bug!" << dendl;
+    ldpp_dout(this, 0) << "ERROR: " << __func__ << "(): send_prepare() was not called: likely a bug!" << dendl;
     return -EINVAL;
   }
 
