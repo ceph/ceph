@@ -35,6 +35,8 @@ import { TableDetailDirective } from '../directives/table-detail.directive';
 import { filter, map } from 'rxjs/operators';
 import { CdSortDirection } from '../../enum/cd-sort-direction';
 import { CdSortPropDir } from '../../models/cd-sort-prop-dir';
+import { EditState } from '../../models/cd-table-editing';
+import { CdFormGroup } from '../../forms/cd-form-group';
 
 const TABLE_LIST_LIMIT = 10;
 type TPaginationInput = { page: number; size: number; filteredData: any[] };
@@ -85,6 +87,8 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
   rowDetailTpl: TemplateRef<any>;
   @ViewChild('tableActionTpl', { static: true })
   tableActionTpl: TemplateRef<any>;
+  @ViewChild('editingTpl', { static: true })
+  editingTpl: TemplateRef<any>;
 
   @ContentChild(TableDetailDirective) rowDetail!: TableDetailDirective;
   @ContentChild(TableActionsComponent) tableActions!: TableActionsComponent;
@@ -241,6 +245,9 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
    */
   @Output() columnFiltersChanged = new EventEmitter<CdTableColumnFiltersChange>();
 
+  @Output()
+  editSubmitAction = new EventEmitter<{ [field: string]: string }>();
+
   /**
    * Use this variable to access the selected row(s).
    */
@@ -376,6 +383,9 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
       return filter.value !== undefined;
     });
   }
+
+  editingCells = new Set<string>();
+  editStates: EditState = {};
 
   constructor(
     // private ngZone: NgZone,
@@ -806,6 +816,7 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
     this.cellTemplates.path = this.pathTpl;
     this.cellTemplates.tooltip = this.tooltipTpl;
     this.cellTemplates.copy = this.copyTpl;
+    this.cellTemplates.editing = this.editingTpl;
   }
 
   useCustomClass(value: any): string {
@@ -1335,5 +1346,29 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
       this.selectAllCheckbox = true;
       this.selectAllCheckboxSomeSelected = false;
     }
+  }
+
+  editCellItem(rowId: string, colProp: string, formGroup: CdFormGroup, value: string) {
+    const key = `${rowId}-${colProp}`;
+    this.editingCells.add(key);
+    if (!this.editStates[rowId]) {
+      this.editStates[rowId] = {};
+    }
+    formGroup?.get(colProp).setValue(value);
+    this.editStates[rowId][colProp] = value;
+  }
+
+  saveCellItem(rowId: string, colProp: string, formGroup: CdFormGroup) {
+    if (formGroup?.invalid) {
+      formGroup.setErrors({ cdSubmitButton: true });
+      return;
+    }
+    this.editSubmitAction.emit(this.editStates[rowId]);
+    this.editingCells.delete(`${rowId}-${colProp}`);
+    delete this.editStates[rowId][colProp];
+  }
+
+  isCellEditing(rowId: string, colProp: string): boolean {
+    return this.editingCells.has(`${rowId}-${colProp}`);
   }
 }
