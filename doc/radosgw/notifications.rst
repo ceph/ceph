@@ -84,6 +84,16 @@ which tells the client that it may retry later.
 .. tip:: To minimize the latency added by asynchronous notification, we 
    recommended placing the "log" pool on fast media.
 
+The following are the global configurations for asynchronous notifications:
+
+.. confval:: rgw_bucket_persistent_notif_num_shards
+
+.. note:: During upgrade scenarios, if you create a topic from a new version of radosgw, 
+   there will be no guarantee on ordering of notifications on any bucket mapped to that topic.
+   
+.. tip:: It is also recommended that you avoid modifying or deleting topics created during 
+   upgrade scenarios, as this might result in unused RADOS objects that will not be cleaned up.
+
 
 Topic Management via CLI
 ------------------------
