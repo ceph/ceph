@@ -61,6 +61,13 @@ class RemoveOp : public TestOp<OpType::Remove> {
   std::string to_string(uint64_t block_size) const override;
 };
 
+class ConsistencyOp : public TestOp<OpType::Consistency> {
+  public:
+   ConsistencyOp();
+   static std::unique_ptr<ConsistencyOp> generate();
+   std::string to_string(uint64_t block_size) const override;
+ };
+
 template <OpType opType, int numIOs>
 class ReadWriteOp : public TestOp<opType> {
  public:
