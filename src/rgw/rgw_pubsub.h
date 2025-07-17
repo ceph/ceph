@@ -271,7 +271,7 @@ struct rgw_pubsub_dest {
 
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(8, 8, bl);
+    ENCODE_START(8, 1, bl);
     encode("", bl);
     encode("", bl);
     encode(push_endpoint, bl);
