@@ -11,11 +11,13 @@ SET_SUBSYS(seastore_epm);
 namespace crimson::os::seastore {
 
 SegmentedOolWriter::SegmentedOolWriter(
+  unsigned int shard_index,
   data_category_t category,
   rewrite_gen_t gen,
   SegmentProvider& sp,
   SegmentSeqAllocator &ssa)
-  : segment_allocator(nullptr, category, gen, sp, ssa),
+  : shard_index(shard_index),
+    segment_allocator(nullptr, category, gen, sp, ssa),
     record_submitter(crimson::common::get_conf<uint64_t>(
                        "seastore_journal_iodepth_limit"),
                      crimson::common::get_conf<uint64_t>(
@@ -205,7 +207,7 @@ void ExtentPlacementManager::init(
 
     data_writers_by_gen.resize(num_writers, nullptr);
     for (rewrite_gen_t gen = OOL_GENERATION; gen < MIN_COLD_GENERATION; ++gen) {
-      writer_refs.emplace_back(std::make_unique<SegmentedOolWriter>(
+      writer_refs.emplace_back(std::make_unique<SegmentedOolWriter>(shard_index,
 	    data_category_t::DATA, gen, *segment_cleaner,
             *ool_segment_seq_allocator));
       data_writers_by_gen[generation_to_writer(gen)] = writer_refs.back().get();
@@ -213,7 +215,7 @@ void ExtentPlacementManager::init(
 
     md_writers_by_gen.resize(num_writers, {});
     for (rewrite_gen_t gen = OOL_GENERATION; gen < MIN_COLD_GENERATION; ++gen) {
-      writer_refs.emplace_back(std::make_unique<SegmentedOolWriter>(
+      writer_refs.emplace_back(std::make_unique<SegmentedOolWriter>(shard_index,
 	    data_category_t::METADATA, gen, *segment_cleaner,
             *ool_segment_seq_allocator));
       md_writers_by_gen[generation_to_writer(gen)] = writer_refs.back().get();
@@ -242,13 +244,13 @@ void ExtentPlacementManager::init(
 
   if (cold_segment_cleaner) {
     for (rewrite_gen_t gen = MIN_COLD_GENERATION; gen < REWRITE_GENERATIONS; ++gen) {
-      writer_refs.emplace_back(std::make_unique<SegmentedOolWriter>(
+      writer_refs.emplace_back(std::make_unique<SegmentedOolWriter>(shard_index,
             data_category_t::DATA, gen, *cold_segment_cleaner,
             *ool_segment_seq_allocator));
       data_writers_by_gen[generation_to_writer(gen)] = writer_refs.back().get();
     }
     for (rewrite_gen_t gen = MIN_COLD_GENERATION; gen < REWRITE_GENERATIONS; ++gen) {
-      writer_refs.emplace_back(std::make_unique<SegmentedOolWriter>(
+      writer_refs.emplace_back(std::make_unique<SegmentedOolWriter>(shard_index,
             data_category_t::METADATA, gen, *cold_segment_cleaner,
             *ool_segment_seq_allocator));
       md_writers_by_gen[generation_to_writer(gen)] = writer_refs.back().get();
@@ -961,20 +963,25 @@ ExtentPlacementManager::BackgroundProcess::do_background_cycle()
   }
 }
 
-void ExtentPlacementManager::BackgroundProcess::register_metrics()
+void ExtentPlacementManager::BackgroundProcess::register_metrics(unsigned int shard_index)
 {
   namespace sm = seastar::metrics;
   metrics.add_group("background_process", {
     sm::make_counter("io_count", stats.io_count,
-                     sm::description("the sum of IOs")),
+                     sm::description("the sum of IOs"),
+                     {sm::label_instance("shard_store_index", std::to_string(shard_index))}),
     sm::make_counter("io_blocked_count", stats.io_blocked_count,
-                     sm::description("IOs that are blocked by gc")),
+                     sm::description("IOs that are blocked by gc"),
+                     {sm::label_instance("shard_store_index", std::to_string(shard_index))}),
     sm::make_counter("io_blocked_count_trim", stats.io_blocked_count_trim,
-                     sm::description("IOs that are blocked by trimming")),
+                     sm::description("IOs that are blocked by trimming"),
+                     {sm::label_instance("shard_store_index", std::to_string(shard_index))}),
     sm::make_counter("io_blocked_count_clean", stats.io_blocked_count_clean,
-                     sm::description("IOs that are blocked by cleaning")),
+                     sm::description("IOs that are blocked by cleaning"),
+                     {sm::label_instance("shard_store_index", std::to_string(shard_index))}),
     sm::make_counter("io_blocked_sum", stats.io_blocked_sum,
-                     sm::description("the sum of blocking IOs"))
+                     sm::description("the sum of blocking IOs"),
+                     {sm::label_instance("shard_store_index", std::to_string(shard_index))})
   });
 }
 

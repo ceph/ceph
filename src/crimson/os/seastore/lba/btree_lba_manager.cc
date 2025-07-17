@@ -816,7 +816,7 @@ BtreeLBAManager::refresh_lba_cursor(
   return refresh_lba_cursor_iertr::make_ready_future();
 }
 
-void BtreeLBAManager::register_metrics()
+void BtreeLBAManager::register_metrics(unsigned int shard_index)
 {
   LOG_PREFIX(BtreeLBAManager::register_metrics);
   DEBUG("start");
@@ -828,32 +828,38 @@ void BtreeLBAManager::register_metrics()
       sm::make_counter(
         "alloc_extents",
         stats.num_alloc_extents,
-        sm::description("total number of lba alloc_extent operations")
+        sm::description("total number of lba alloc_extent operations"),
+        {sm::label_instance("shard_store_index", std::to_string(shard_index))}
       ),
       sm::make_counter(
         "alloc_extents_iter_nexts",
         stats.num_alloc_extents_iter_nexts,
-        sm::description("total number of iterator next operations during extent allocation")
+        sm::description("total number of iterator next operations during extent allocation"),
+        {sm::label_instance("shard_store_index", std::to_string(shard_index))}
       ),
       sm::make_counter(
         "refresh_parent_total",
         stats.num_refresh_parent_total,
-        sm::description("total number of refreshed cursors")
+        sm::description("total number of refreshed cursors"),
+        {sm::label_instance("shard_store_index", std::to_string(shard_index))}
       ),
       sm::make_counter(
         "refresh_invalid_parent",
         stats.num_refresh_invalid_parent,
-        sm::description("total number of refreshed cursors with invalid parents")
+        sm::description("total number of refreshed cursors with invalid parents"),
+        {sm::label_instance("shard_store_index", std::to_string(shard_index))}
       ),
       sm::make_counter(
         "refresh_unviewable_parent",
         stats.num_refresh_unviewable_parent,
-        sm::description("total number of refreshed cursors with unviewable parents")
+        sm::description("total number of refreshed cursors with unviewable parents"),
+        {sm::label_instance("shard_store_index", std::to_string(shard_index))}
       ),
       sm::make_counter(
         "refresh_modified_viewable_parent",
         stats.num_refresh_modified_viewable_parent,
-        sm::description("total number of refreshed cursors with viewable but modified parents")
+        sm::description("total number of refreshed cursors with viewable but modified parents"),
+        {sm::label_instance("shard_store_index", std::to_string(shard_index))}
       ),
     }
   );

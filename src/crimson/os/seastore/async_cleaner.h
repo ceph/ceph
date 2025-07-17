@@ -534,7 +534,8 @@ public:
     config_t config,
     backend_type_t type,
     device_off_t roll_start,
-    device_off_t roll_size);
+    device_off_t roll_size,
+    unsigned int shard_index);
 
   ~JournalTrimmerImpl() = default;
 
@@ -621,9 +622,10 @@ public:
       config_t config,
       backend_type_t type,
       device_off_t roll_start,
-      device_off_t roll_size) {
+      device_off_t roll_size,
+      unsigned int shard_index) {
     return std::make_unique<JournalTrimmerImpl>(
-        backref_manager, config, type, roll_start, roll_size);
+        backref_manager, config, type, roll_start, roll_size, shard_index);
   }
 
   struct stat_printer_t {
@@ -676,7 +678,7 @@ private:
     return std::min(get_max_dirty_bytes_to_trim(),
 		    config.rewrite_dirty_bytes_per_cycle);
   }
-  void register_metrics();
+  void register_metrics(unsigned int shard_index);
 
   ExtentCallbackInterface *extent_callback = nullptr;
   BackgroundListener *background_callback = nullptr;
@@ -1287,6 +1289,7 @@ public:
   };
 
   SegmentCleaner(
+    unsigned int shard_index,
     config_t config,
     SegmentManagerGroupRef&& sm_group,
     BackrefManager &backref_manager,
@@ -1299,13 +1302,14 @@ public:
   }
 
   static SegmentCleanerRef create(
+      unsigned int shard_index,
       config_t config,
       SegmentManagerGroupRef&& sm_group,
       BackrefManager &backref_manager,
       SegmentSeqAllocator &ool_seq_allocator,
       bool detailed,
       bool is_cold = false) {
-    return std::make_unique<SegmentCleaner>(
+    return std::make_unique<SegmentCleaner>(shard_index,
         config, std::move(sm_group), backref_manager,
         ool_seq_allocator, detailed, is_cold);
   }
@@ -1619,6 +1623,7 @@ private:
     }
   }
 
+  unsigned int shard_index;
   const bool detailed;
   const bool is_cold;
   const config_t config;

@@ -27,9 +27,11 @@ SET_SUBSYS(seastore_journal);
 namespace crimson::os::seastore::journal {
 
 SegmentedJournal::SegmentedJournal(
+  unsigned int shard_index,
   SegmentProvider &segment_provider,
   JournalTrimmer &trimmer)
-  : segment_seq_allocator(
+  : shard_index(shard_index),
+    segment_seq_allocator(
       new SegmentSeqAllocator(segment_type_t::JOURNAL)),
     journal_segment_allocator(&trimmer,
                               data_category_t::METADATA,
@@ -53,13 +55,13 @@ SegmentedJournal::SegmentedJournal(
 SegmentedJournal::open_for_mkfs_ret
 SegmentedJournal::open_for_mkfs()
 {
-  return record_submitter.open(true);
+  return record_submitter.open(shard_index, true);
 }
 
 SegmentedJournal::open_for_mount_ret
 SegmentedJournal::open_for_mount()
 {
-  return record_submitter.open(false);
+  return record_submitter.open(shard_index, false);
 }
 
 SegmentedJournal::close_ertr::future<> SegmentedJournal::close()
