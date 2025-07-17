@@ -235,6 +235,14 @@ void LogSegment::try_to_expire(MDSRank *mds, MDSGatherBuilder &gather_bld, int o
     }
   }
 
+  auto const oft_cseq = mds->mdcache->open_file_table.get_committed_log_seq();
+  if (!mds->mdlog->is_capped() && seq >= oft_cseq) {
+    dout(10) << *this << ".try_to_expire"
+             << " defer expire for oft_committed_seq (" << oft_cseq
+             << ") <= seq (" << seq << ")" << dendl;
+    mds->mdcache->open_file_table.wait_for_commit(seq, gather_bld.new_sub());
+  }
+
   ceph_assert(g_conf()->mds_kill_journal_expire_at != 3);
 
   std::map<int64_t, std::vector<CInodeCommitOperations>> ops_vec_map;
@@ -346,9 +354,10 @@ void LogSegment::try_to_expire(MDSRank *mds, MDSGatherBuilder &gather_bld, int o
     (*p)->add_waiter(CInode::WAIT_TRUNC, gather_bld.new_sub());
   }
   // purge inodes
-  dout(10) << "try_to_expire waiting for purge of " << purging_inodes << dendl;
-  if (purging_inodes.size())
+  if (purging_inodes.size()) {
+    dout(10) << "try_to_expire waiting for purge of " << purging_inodes << dendl;
     set_purged_cb(gather_bld.new_sub());
+  }
   
   if (gather_bld.has_subs()) {
     dout(6) << "LogSegment(" << seq << "/" << offset << ").try_to_expire waiting" << dendl;
