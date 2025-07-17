@@ -110,8 +110,8 @@ struct cache_test_t : public seastar_test_suite_t {
       return segment_manager->mkfs(
         segment_manager::get_ephemeral_device_config(0, 1, 0));
     }).safe_then([this] {
-      epm.reset(new ExtentPlacementManager());
-      cache.reset(new Cache(*epm));
+      epm.reset(new ExtentPlacementManager(0));
+      cache.reset(new Cache(*epm, 0));
       current = paddr_t::make_seg_paddr(segment_id_t(segment_manager->get_device_id(), 0), 0);
       epm->test_init_no_background(segment_manager.get());
       return seastar::do_with(
