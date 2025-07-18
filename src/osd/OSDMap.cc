@@ -2026,10 +2026,24 @@ void OSDMap::clean_temps(CephContext *cct,
     int primary;
     nextmap.pg_to_raw_up(pg.first, &raw_up, &primary);
     bool remove = false;
-    if (raw_up == pg.second) {
-      ldout(cct, 10) << __func__ << "  removing pg_temp " << pg.first << " "
-		     << pg.second << " that matches raw_up mapping" << dendl;
-      remove = true;
+    const pg_pool_t *pool = nextmap.get_pg_pool(pg.first.pool());
+    auto acting_set = nextmap.pgtemp_undo_primaryfirst(*pool, pg.first, pg.second);
+    if (raw_up == acting_set) {
+      bool keep = false;
+      // Optimized EC pools may set acting to be the same as up to
+      // force a change of primary shard - do not remove pg_temp
+      // if it is being used for this purpose
+      if (pool->allows_ecoptimizations()) {
+	if (nextmap._pick_primary(pg.second) != primary) {
+	  // pg_temp still required
+	  keep = true;
+	}
+      }
+      if (!keep) {
+	ldout(cct, 10) << __func__ << "  removing pg_temp " << pg.first << " "
+		       << pg.second << " that matches raw_up mapping" << dendl;
+	remove = true;
+      }
     }
     // oversized pg_temp?
     if (pg.second.size() > nextmap.get_pg_pool(pg.first.pool())->get_size()) {
@@ -2901,7 +2915,7 @@ const std::vector<int> OSDMap::pgtemp_undo_primaryfirst(const pg_pool_t& pool,
   // Only perform the transform for pools with allow_ec_optimizations set
   // that also have pg_temp set
   if (pool.allows_ecoptimizations()) {
-    if (pg_temp->find(pool.raw_pg_to_pg(pg)) != pg_temp->end()) {
+    if (has_pgtemp(pool.raw_pg_to_pg(pg))) {
       std::vector<int> result;
       int primaryshard = 0;
       int nonprimaryshard = pool.size - pool.nonprimary_shards.size();
@@ -2919,9 +2933,52 @@ const std::vector<int> OSDMap::pgtemp_undo_primaryfirst(const pg_pool_t& pool,
   return acting;
 }
 
+const shard_id_t OSDMap::pgtemp_primaryfirst(const pg_pool_t& pool,
+	const pg_t pg, const shard_id_t shard) const
+{
+  if ((shard == shard_id_t::NO_SHARD) ||
+      (shard == shard_id_t(0))) {
+    return shard;
+  }
+  shard_id_t result = shard;
+  if (pool.allows_ecoptimizations()) {
+    if (has_pgtemp(pool.raw_pg_to_pg(pg))) {
+      int num_parity_shards = pool.size - pool.nonprimary_shards.size() - 1;
+      if (shard >= pool.size - num_parity_shards) {
+	result = shard_id_t(result + num_parity_shards + 1 - pool.size);
+      } else {
+	result = shard_id_t(result + num_parity_shards);
+      }
+    }
+  }
+  return result;
+}
+
+shard_id_t OSDMap::pgtemp_undo_primaryfirst(const pg_pool_t& pool,
+	const pg_t pg, const shard_id_t shard) const
+{
+  if ((shard == shard_id_t::NO_SHARD) ||
+      (shard == shard_id_t(0))) {
+    return shard;
+  }
+  shard_id_t result = shard;
+  if (pool.allows_ecoptimizations()) {
+    if (has_pgtemp(pool.raw_pg_to_pg(pg))) {
+      int num_parity_shards = pool.size - pool.nonprimary_shards.size() - 1;
+      if (shard > num_parity_shards) {
+	result = shard_id_t(result - num_parity_shards);
+      } else {
+	result = shard_id_t(result + pool.size - num_parity_shards - 1);
+      }
+    }
+  }
+  return result;
+}
+
 void OSDMap::_get_temp_osds(const pg_pool_t& pool, pg_t pg,
                             vector<int> *temp_pg, int *temp_primary) const
 {
+  vector<int> temp;
   pg = pool.raw_pg_to_pg(pg);
   const auto p = pg_temp->find(pg);
   temp_pg->clear();
@@ -2931,21 +2988,22 @@ void OSDMap::_get_temp_osds(const pg_pool_t& pool, pg_t pg,
 	if (pool.can_shift_osds()) {
 	  continue;
 	} else {
-	  temp_pg->push_back(CRUSH_ITEM_NONE);
+	  temp.push_back(CRUSH_ITEM_NONE);
 	}
       } else {
-	temp_pg->push_back(p->second[i]);
+	temp.push_back(p->second[i]);
       }
     }
+    *temp_pg = pgtemp_undo_primaryfirst(pool, pg, temp);
   }
   const auto &pp = primary_temp->find(pg);
   *temp_primary = -1;
   if (pp != primary_temp->end()) {
     *temp_primary = pp->second;
-  } else if (!temp_pg->empty()) { // apply pg_temp's primary
-    for (unsigned i = 0; i < temp_pg->size(); ++i) {
-      if ((*temp_pg)[i] != CRUSH_ITEM_NONE) {
-	*temp_primary = (*temp_pg)[i];
+  } else if (!temp.empty()) { // apply pg_temp's primary
+    for (unsigned i = 0; i < temp.size(); ++i) {
+      if (temp[i] != CRUSH_ITEM_NONE) {
+	*temp_primary = temp[i];
 	break;
       }
     }

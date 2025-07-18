@@ -504,6 +504,7 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
 
    void partial_write(
      pg_info_t *info,
+     eversion_t previous_version,
      const pg_log_entry_t &entry);
 
    void remove(

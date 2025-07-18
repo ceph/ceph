@@ -364,7 +364,7 @@ void PeeringState::update_peer_info(const pg_shard_t &from,
   }
   // 3 cases:
   // We are the primary - from is the shard that sent the oinfo
-  // We are a replica - from is the primary, it will not have pwlc infomation
+  // We are a replica - from is the primary, it will not have pwlc infomation for itself
   // Merge - from is pg_whoami, oinfo is a source pg that is being merged
   if ((from != pg_whoami) &&
       info.partial_writes_last_complete.contains(from.shard)) {
@@ -385,6 +385,34 @@ void PeeringState::update_peer_info(const pg_shard_t &from,
       } else {
 	psdout(10) << "osd." << from << " has last_complete "
 		   << peer_info[from].last_complete
+		   << " cannot apply pwlc from " << fromversion
+		   << " to " << toversion
+		   << dendl;
+      }
+    }
+  }
+  // Non-primary shards might need to apply pwlc to update info
+  if (info.partial_writes_last_complete.contains(pg_whoami.shard)) {
+    // Check if last_complete and last_update can be advanced based on
+    // knowledge of partial_writes
+    const auto & [fromversion, toversion] =
+      info.partial_writes_last_complete[pg_whoami.shard];
+    if (toversion > info.last_complete) {
+      if (fromversion <= info.last_complete) {
+	psdout(10) << "osd." << pg_whoami << " has last_complete "
+		   << info.last_complete
+		   << " but pwlc says its at " << toversion
+		   << dendl;
+	info.last_complete = toversion;
+	if (toversion > info.last_update) {
+	  info.last_update = toversion;
+	}
+	if (toversion > pg_log.get_head()) {
+	  pg_log.set_head(toversion);
+	}
+      } else {
+	psdout(10) << "osd." << pg_whoami << " has last_complete "
+		   << info.last_complete
 		   << " cannot apply pwlc from " << fromversion
 		   << " to " << toversion
 		   << dendl;
@@ -611,14 +639,10 @@ bool PeeringState::should_restart_peering(
   int newupprimary,
   int newactingprimary,
   const vector<int>& newup,
-  const vector<int>& _newacting,
+  const vector<int>& newacting,
   OSDMapRef lastmap,
   OSDMapRef osdmap)
 {
-  const vector<int> newacting = osdmap->pgtemp_undo_primaryfirst(
-					  pool.info,
-					  info.pgid.pgid,
-					  _newacting);
   if (PastIntervals::is_new_interval(
 	primary.osd,
 	newactingprimary,
@@ -898,9 +922,7 @@ void PeeringState::init_primary_up_acting(
   int new_acting_primary)
 {
   actingset.clear();
-  acting = get_osdmap()->pgtemp_undo_primaryfirst(pool.info,
-						  info.pgid.pgid,
-						  newacting);
+  acting = newacting;
   for (uint8_t i = 0; i < acting.size(); ++i) {
     if (acting[i] != CRUSH_ITEM_NONE)
       actingset.insert(
@@ -931,9 +953,26 @@ void PeeringState::init_primary_up_acting(
 	break;
       }
     }
+    // Calcuating the shard of the acting_primary is tricky because in
+    // error conditions the same osd can be in multiple positions in
+    // the acting_set. Use pgtemp ordering (which places shards which
+    // can become the primary first) to match the code in
+    // OSDMap::_get_temp_osds
+    const OSDMapRef osdmap = get_osdmap();
+    bool has_pgtemp = osdmap->has_pgtemp(spgid.pgid);
+    std::vector<int> pg_temp = acting;
+    if (has_pgtemp) {
+      pg_temp = osdmap->pgtemp_primaryfirst(pool.info, acting);
+    }
     for (uint8_t i = 0; i < acting.size(); ++i) {
-      if (acting[i] == new_acting_primary) {
-	primary = pg_shard_t(acting[i], shard_id_t(i));
+      if (pg_temp[i] == new_acting_primary) {
+	if (has_pgtemp) {
+	  primary = pg_shard_t(new_acting_primary,
+			       osdmap->pgtemp_undo_primaryfirst(
+				 pool.info, spgid.pgid, shard_id_t(i)));
+	} else {
+	  primary = pg_shard_t(new_acting_primary, shard_id_t(i));
+	}
 	break;
       }
     }
@@ -2685,7 +2724,7 @@ bool PeeringState::search_for_missing(
     tinfo.partial_writes_last_complete = info.partial_writes_last_complete;
     if (!tinfo.partial_writes_last_complete.empty()) {
       psdout(20) << "sending info to " << from
-		 << " pwcl=" << tinfo.partial_writes_last_complete
+		 << " pwlc=" << tinfo.partial_writes_last_complete
 		 << " info=" << tinfo
 		 << dendl;
     }
@@ -3288,7 +3327,22 @@ void PeeringState::proc_master_log(
     // See if we can wind forward partially written entries
     map<pg_shard_t, pg_info_t> all_info(peer_info.begin(), peer_info.end());
     all_info[pg_whoami] = info;
-    while (p->version == olog.head) {
+    // Normal case is that both logs have entry olog.head
+    bool can_check_next_entry = (p->version == olog.head);
+    if (p->version < olog.head) {
+      // After a PG split there may be gaps in the log where entries were
+      // split to the other PG. This can result in olog.head being ahead
+      // of p->version. So long as there are no entries in olog between
+      // p->version and olog.head we can still try to wind forward
+      // partially written entries
+      auto op = olog.log.end();
+      if (op == olog.log.begin()) {
+	can_check_next_entry = true;
+      } else if (op->version.version < p->version.version) {
+	can_check_next_entry = true;
+      }
+    }
+    while (can_check_next_entry) {
       ++p;
       if (p == pg_log.get_log().log.end()) {
 	break;
@@ -3299,39 +3353,40 @@ void PeeringState::proc_master_log(
 	// This entry was meant to be written on from, this is the first
 	// divergent entry
 	break;
-      } else {
-	// Test if enough shards have the update
-	shard_id_set shards_with_update;
-	shard_id_set shards_without_update;
-        for (auto&& [pg_shard, pi] : all_info) {
-	  psdout(20) << "version " << p->version
-		     << " testing osd " << pg_shard
-		     << " written=" << p->written_shards
-		     << " present=" << p->present_shards << dendl;
-	  if (p->is_present_shard(pg_shard.shard) &&
-	      p->is_written_shard(pg_shard.shard)) {
-	    if (pi.last_update < p->version) {
-	      if (!shards_with_update.contains(pg_shard.shard)) {
-		shards_without_update.insert(pg_shard.shard);
-	      }
-	    } else {
-	      shards_with_update.insert(pg_shard.shard);
-	      shards_without_update.erase(pg_shard.shard);
+      }
+      // Test if enough shards have the update
+      shard_id_set shards_with_update;
+      shard_id_set shards_without_update;
+      for (auto&& [pg_shard, pi] : all_info) {
+	psdout(20) << "version " << p->version
+		   << " testing osd " << pg_shard
+		   << " written=" << p->written_shards
+		   << " present=" << p->present_shards << dendl;
+	if (p->is_present_shard(pg_shard.shard) &&
+	    p->is_written_shard(pg_shard.shard)) {
+	  if (pi.last_update < p->version) {
+	    if (!shards_with_update.contains(pg_shard.shard)) {
+	      shards_without_update.insert(pg_shard.shard);
 	    }
+	  } else {
+	    shards_with_update.insert(pg_shard.shard);
+	    shards_without_update.erase(pg_shard.shard);
 	  }
 	}
-	psdout(20) << "shards_with_update=" << shards_with_update
-		   << " shards_without_update=" << shards_without_update
-		   << dendl;
-	if (!shards_without_update.empty()) {
-	  // A shard is missing this write - this is the first divergent entry
-	  break;
-	}
-	// This entry can be kept, only shards that didn't participate in
-	// the partial write missed the update
-        psdout(20) << "keeping entry " << p->version << dendl;
-	olog.head = p->version;
       }
+      psdout(20) << "shards_with_update=" << shards_with_update
+		 << " shards_without_update=" << shards_without_update
+		 << dendl;
+      if (!shards_without_update.empty()) {
+	// A shard is missing this write - this is the first divergent entry
+	break;
+      }
+      // This entry can be kept, only shards that didn't participate in
+      // the partial write missed the update
+      psdout(20) << "keeping entry " << p->version << dendl;
+      olog.head = p->version;
+
+      // We need to continue processing the log, so don't break.
     }
   }
   // merge log into our own log to build master log.  no need to
@@ -3548,7 +3603,10 @@ void PeeringState::split_into(
 
   child->info.last_user_version = info.last_user_version;
 
+  // fix up pwlc - it may refer to log entries that are no longer in the log
   child->info.partial_writes_last_complete = info.partial_writes_last_complete;
+  pg_log.split_pwlc(info);
+  child->pg_log.split_pwlc(child->info);
 
   info.log_tail = pg_log.get_tail();
   child->info.log_tail = child->pg_log.get_tail();
@@ -4461,7 +4519,7 @@ void PeeringState::merge_new_log_entries(
   }
 }
 
-void PeeringState::add_log_entry(const pg_log_entry_t& e, bool applied)
+void PeeringState::add_log_entry(const pg_log_entry_t& e, ObjectStore::Transaction &t, bool applied)
 {
   // raise last_complete only if we were previously up to date
   if (info.last_complete == info.last_update)
@@ -4477,7 +4535,9 @@ void PeeringState::add_log_entry(const pg_log_entry_t& e, bool applied)
     info.last_user_version = e.user_version;
 
   // log mutation
-  pg_log.add(e, applied);
+  enum PGLog::NonPrimary nonprimary{pool.info.is_nonprimary_shard(info.pgid.shard)};
+  PGLog::LogEntryHandlerRef handler{pl->get_log_handler(t)};
+  pg_log.add(e, nonprimary, applied, &info, handler.get());
   psdout(10) << "add_log_entry " << e << dendl;
 }
 
@@ -4491,6 +4551,20 @@ void PeeringState::append_log(
   bool transaction_applied,
   bool async)
 {
+  /* With EC optimisations on, it is possible that we are told to commit a
+   * version we don't have. This happens when the multiple transactions were
+   * in flight and the last was a partial write.
+   * While this is technically valid, there are a number of asserts which can
+   * be avoided by refusing to roll forward beyond the head of the log.
+   */
+  if (pool.info.allows_ecoptimizations()) {
+    if (roll_forward_to > pg_log.get_head()) {
+      roll_forward_to = pg_log.get_head();
+    }
+    if (pct > pg_log.get_head()) {
+      pct = pg_log.get_head();
+    }
+  }
   /* The primary has sent an info updating the history, but it may not
    * have arrived yet.  We want to make sure that we cannot remember this
    * write without remembering that it happened in an interval which went
@@ -4519,7 +4593,7 @@ void PeeringState::append_log(
   }
 
   for (auto p = logv.begin(); p != logv.end(); ++p) {
-    add_log_entry(*p, transaction_applied);
+    add_log_entry(*p, t, transaction_applied);
 
     /* We don't want to leave the rollforward artifacts around
      * here past last_backfill.  It's ok for the same reason as
