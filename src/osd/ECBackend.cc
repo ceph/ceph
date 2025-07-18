@@ -280,6 +280,7 @@ bool ECBackend::_handle_message(
     reply->min_epoch = get_parent()->get_interval_start_epoch();
     handle_sub_read(op->op.from, op->op, &(reply->op), _op->pg_trace);
     reply->trace = _op->pg_trace;
+    reply->pgid.reset_shard(op->op.from.shard);
     get_parent()->send_message_osd_cluster(
       reply, _op->get_req()->get_connection());
     return true;
@@ -1008,7 +1009,86 @@ int ECBackend::objects_read_sync(
     uint64_t len,
     uint32_t op_flags,
     bufferlist *bl) {
-  return -EOPNOTSUPP;
+
+
+  if (!sinfo.supports_direct_reads()) {
+    return -EOPNOTSUPP;
+  }
+
+  int r = _objects_read_sync(hoid, off, len, op_flags, bl);
+
+  if (r < 0) {
+    dout(20) << __func__ << " r=" << r
+          << " hoid=" << hoid
+          << " off=" << off
+          << " len=" << len
+          << " op_flags=" << op_flags
+          << " primary=" << switcher->is_primary()
+          << " shard=" << (off / sinfo.get_chunk_size()) % sinfo.get_k()
+          << dendl;
+  } else {
+    return r;
+  }
+
+  // The above returns errors largely only interesting for tracing. Here we
+  // simplify this down to:
+  // Primary returns EIO, which causes an async read to be executed immediately.
+  // A non-primary returns EAGAIN which forces the client to resent to the
+  // primary.
+  if (switcher->is_primary()) {
+    return -EIO;
+  }
+
+  return -EAGAIN;
+}
+
+// NOTE: Return codes from this function are largely nonsense and translated
+//       to more useful values before returning to client. 
+int ECBackend::_objects_read_sync(
+    const hobject_t &hoid,
+    uint64_t off,
+    uint64_t len,
+    uint32_t op_flags,
+    bufferlist *bl) {
+
+  if (get_parent()->get_local_missing().is_missing(hoid)) {
+    return -EACCES;  // Permission denied (cos its missing)
+  }
+
+  // sync reads are supported for sub-chunk reads where no reconstruct is
+  // required.
+  uint64_t chunk_size = sinfo.get_chunk_size();
+  uint64_t start_chunk = off / chunk_size;
+  // This calculation is wrong for length = 0, but it doesn't matter if these reads get sent to the primary
+  uint64_t end_chunk = (off + len - 1) / chunk_size;
+  uint64_t shard_offset, shard_len;
+  shard_id_t shard = get_parent()->whoami_shard().shard;
+  raw_shard_id_t raw_shard = sinfo.get_raw_shard(shard);
+
+  if (end_chunk == start_chunk) {
+    shard_offset = sinfo.ro_offset_to_shard_offset(off, raw_shard);
+    shard_len = len;
+  } else {
+    ECUtil::shard_extent_set_t full_read(sinfo.get_k_plus_m());
+    sinfo.ro_range_to_shard_extent_set(off, len, full_read);
+    shard_offset = full_read[shard].range_start();
+    shard_len = full_read[shard].range_end() - shard_offset;
+  }
+
+  dout(20) << __func__ << " Submitting sync read: "
+      << " hoid=" << hoid
+      << " shard_offset=" << shard_offset
+      << " shard_len=" << shard_len
+      << " op_flags=" << op_flags
+      << " primary=" << switcher->is_primary()
+      << " shard=" << (off / sinfo.get_chunk_size()) % sinfo.get_k()
+      << dendl;
+
+
+  return switcher->store->read(switcher->ch,
+          ghobject_t(hoid, ghobject_t::NO_GEN, shard),
+          shard_offset,
+          shard_len, *bl, op_flags);
 }
 
 void ECBackend::objects_read_async(

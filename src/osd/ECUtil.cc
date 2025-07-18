@@ -996,7 +996,7 @@ bool get_int_from_bufferlist(bufferlist bl, int offset, uint32_t *value) {
 
   auto bl_iter = bl.begin();
   bl_iter += offset;
-  int b = 0;
+  unsigned b = 0;
   for (; b < sizeof(uint32_t); ++b, ++bl_iter) {
     ceph_assert(bl_iter != bl.end());
     *value |= (((unsigned int)bl_iter.get_current_ptr().c_str()[0]) << b);
