@@ -1066,7 +1066,7 @@ __u32 AsyncMessenger::get_global_seq(__u32 old)
       ldout(cct, 10) << __func__ << " old=" << old
         << " > global_seq=" << global_seq
         << "; new global_seq=" << old << dendl;
-    global_seq = old;
+      global_seq = old;
   }
   __u32 ret = ++global_seq;
   ldout(cct, 10) << __func__ << " increment to global_seq=" << global_seq << dendl;
