@@ -522,7 +522,7 @@ int main(int argc, char **argv)
   bool ec_pool = false;
   bool no_omap = false;
   bool no_sparse = false;
-  bool balance_reads = false;
+  bool balance_reads = true; // FAIL REVIEW - Because this does not work well enough.
   bool localize_reads = false;
   uint8_t offlen_randomization_ratio = 50;
   bool set_redirect = false;

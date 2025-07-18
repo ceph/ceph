@@ -62,6 +62,8 @@
 
 #include "neorados/RADOSImpl.h"
 
+#include "osdc/SplitRead.h"
+
 using std::list;
 using std::make_pair;
 using std::map;
@@ -897,7 +899,7 @@ void Objecter::_linger_submit(LingerOp *info,
 
   // Populate Op::target
   OSDSession *s = NULL;
-  int r = _calc_target(&info->target, nullptr);
+  int r = _calc_target(&info->target);
   switch (r) {
   case RECALC_OP_TARGET_POOL_EIO:
     _check_linger_pool_eio(info);
@@ -1127,8 +1129,7 @@ void Objecter::_scan_requests(
     if (pool_full_map)
       force_resend_writes = force_resend_writes ||
 	(*pool_full_map)[op->target.base_oloc.pool];
-    int r = _calc_target(&op->target,
-			 op->session ? op->session->con.get() : nullptr);
+    int r = _calc_target(&op->target, op);
     switch (r) {
     case RECALC_OP_TARGET_NO_ACTION:
       if (!skipped_map && !(force_resend_writes && op->target.respects_full()))
@@ -1330,7 +1331,8 @@ void Objecter::handle_osd_map(MOSDMap *m)
     Op *op = p->second;
     if (op->target.epoch < osdmap->get_epoch()) {
       ldout(cct, 10) << __func__ << "  checking op " << p->first << dendl;
-      int r = _calc_target(&op->target, nullptr);
+      // Do not pass op. We want ECReads to retry via the primary.
+      int r = _calc_target(&op->target);
       if (r == RECALC_OP_TARGET_POOL_DNE) {
 	p = need_resend.erase(p);
 	_check_op_pool_dne(op, nullptr);
@@ -2318,6 +2320,13 @@ void Objecter::resend_mon_ops()
 
 // read | write ---------------------------
 
+
+void Objecter::op_post_submit(Op* op) {
+  boost::asio::post(service, [this, op]() {
+    op_submit(op);
+  });
+}
+
 void Objecter::op_submit(Op *op, ceph_tid_t *ptid, int *ctx_budget)
 {
   shunique_lock rl(rwlock, ceph::acquire_shared);
@@ -2325,7 +2334,12 @@ void Objecter::op_submit(Op *op, ceph_tid_t *ptid, int *ctx_budget)
   if (!ptid)
     ptid = &tid;
   op->trace.event("op submit");
-  _op_submit_with_budget(op, rl, ptid, ctx_budget);
+
+  bool was_split = SplitRead::create(op, *this, rl, ptid, ctx_budget, cct);
+
+  if (!was_split) {
+    _op_submit_with_budget(op, rl, ptid, ctx_budget);
+  }
 }
 
 void Objecter::_op_submit_with_budget(Op *op,
@@ -2465,7 +2479,7 @@ void Objecter::_op_submit(Op *op, shunique_lock<ceph::shared_mutex>& sul, ceph_t
   OSDSession *s = NULL;
 
   bool check_for_latest_map = false;
-  int r = _calc_target(&op->target, nullptr);
+  int r = _calc_target(&op->target, op);
   switch(r) {
   case RECALC_OP_TARGET_POOL_DNE:
     check_for_latest_map = true;
@@ -2493,7 +2507,7 @@ void Objecter::_op_submit(Op *op, shunique_lock<ceph::shared_mutex>& sul, ceph_t
       // map changed; recalculate mapping
       ldout(cct, 10) << __func__ << " relock raced with osdmap, recalc target"
 		     << dendl;
-      check_for_latest_map = _calc_target(&op->target, nullptr)
+      check_for_latest_map = _calc_target(&op->target, op)
 	== RECALC_OP_TARGET_POOL_DNE;
       if (s) {
 	put_session(s);
@@ -2910,7 +2924,7 @@ void Objecter::_prune_snapc(
   }
 }
 
-int Objecter::_calc_target(op_target_t *t, Connection *con, bool any_change)
+int Objecter::_calc_target(op_target_t *t, const Op *op, bool any_change)
 {
   // rwlock is locked
   bool is_read = t->flags & CEPH_OSD_FLAG_READ;
@@ -3062,6 +3076,7 @@ int Objecter::_calc_target(op_target_t *t, Connection *con, bool any_change)
       prev_pgid.is_merge_target(t->pg_num, pg_num);
   }
 
+  bool ec_direct = false;
   if (legacy_change || split_or_merge || force_resend) {
     t->pgid = pgid;
     t->acting = std::move(acting);
@@ -3083,10 +3098,23 @@ int Objecter::_calc_target(op_target_t *t, Connection *con, bool any_change)
       if (osdmap->has_pgtemp(actual_pgid)) {
 	pg_temp = osdmap->pgtemp_primaryfirst(*pi, t->acting);
       }
-      for (uint8_t i = 0; i < t->acting.size(); ++i) {
-        if (pg_temp[i] == acting_primary) {
-	  spgid.reset_shard(osdmap->pgtemp_undo_primaryfirst(*pi, actual_pgid, shard_id_t(i)));
-          break;
+      if (op && op->ec_shard) {
+        ec_direct = true;
+        t->osd = t->acting[int(*op->ec_shard)];
+        // In some redrive scenarios, the acting set can change. Fail the IO
+        // and retry.
+        if (!osdmap->exists(t->osd)) {
+          t->osd = -1;
+          return RECALC_OP_TARGET_POOL_DNE;
+        }
+        spgid.reset_shard(osdmap->pgtemp_undo_primaryfirst(*pi, actual_pgid, *op->ec_shard));
+
+      } else {
+        for (uint8_t i = 0; i < t->acting.size(); ++i) {
+          if (pg_temp[i] == acting_primary) {
+            spgid.reset_shard(osdmap->pgtemp_undo_primaryfirst(*pi, actual_pgid, shard_id_t(i)));
+            break;
+          }
         }
       }
     }
@@ -3103,12 +3131,15 @@ int Objecter::_calc_target(op_target_t *t, Connection *con, bool any_change)
 		   << " acting " << t->acting
 		   << " primary " << acting_primary << dendl;
     t->used_replica = false;
-    if ((t->flags & (CEPH_OSD_FLAG_BALANCE_READS |
+    if (!ec_direct && (t->flags & (CEPH_OSD_FLAG_BALANCE_READS |
                      CEPH_OSD_FLAG_LOCALIZE_READS)) &&
         !is_write && pi->is_replicated() && t->acting.size() > 1) {
       int osd;
       ceph_assert(is_read && t->acting[0] == acting_primary);
-      if (t->flags & CEPH_OSD_FLAG_BALANCE_READS) {
+      if (op->ec_shard) {
+        osd = t->acting[int(*op->ec_shard)];
+      }
+      else if (t->flags & CEPH_OSD_FLAG_BALANCE_READS) {
 	int p = rand() % t->acting.size();
 	if (p)
 	  t->used_replica = true;
@@ -3140,7 +3171,7 @@ int Objecter::_calc_target(op_target_t *t, Connection *con, bool any_change)
 	osd = t->acting[best];
       }
       t->osd = osd;
-    } else {
+    } else if (!ec_direct) {
       t->osd = acting_primary;
     }
   }
@@ -3159,7 +3190,7 @@ int Objecter::_calc_target(op_target_t *t, Connection *con, bool any_change)
 int Objecter::_map_session(op_target_t *target, OSDSession **s,
 			   shunique_lock<ceph::shared_mutex>& sul)
 {
-  _calc_target(target, nullptr);
+  _calc_target(target);
   return _get_session(target->osd, s, sul);
 }
 
@@ -3517,6 +3548,82 @@ int Objecter::take_linger_budget(LingerOp *info)
   return 1;
 }
 
+bs::error_code Objecter::handle_osd_op_reply2(Op *op, vector<OSDOp> &out_ops) {
+
+  ceph_assert(op->ops.size() == op->out_bl.size());
+  ceph_assert(op->ops.size() == op->out_rval.size());
+  ceph_assert(op->ops.size() == op->out_ec.size());
+  ceph_assert(op->ops.size() == op->out_handler.size());
+  auto pb = op->out_bl.begin();
+  auto pr = op->out_rval.begin();
+  auto pe = op->out_ec.begin();
+  auto ph = op->out_handler.begin();
+  ceph_assert(op->out_bl.size() == op->out_rval.size());
+  ceph_assert(op->out_bl.size() == op->out_handler.size());
+  auto p = out_ops.begin();
+  // Propagates handler error to Op::completion. In the event of
+  // multiple handler errors, the most recent wins.
+  bs::error_code handler_error;
+  // Holds OSD error code, so handlers downstream of a failing op are
+  // made aware of it.
+  bs::error_code first_osd_error;
+  for (unsigned i = 0;
+       p != out_ops.end() && pb != op->out_bl.end();
+       ++i, ++p, ++pb, ++pr, ++pe, ++ph) {
+    ldout(cct, 10) << " op " << i << " rval " << p->rval
+		   << " len " << p->outdata.length() << dendl;
+    // Track when we get an OSD error and supply it to subsequent
+    // handlers so they won't attempt to operate on data that isn't
+    // there.
+    if (!first_osd_error && (p->rval < 0)) {
+      first_osd_error = bs::error_code(-p->rval, osd_category());
+    }
+    if (*pb)
+      **pb = p->outdata;
+    // set rval before running handlers so that handlers
+    // can change it if e.g. decoding fails
+    if (*pr)
+      **pr = ceph_to_hostos_errno(p->rval);
+    if (*pe)
+      **pe = p->rval < 0 ? bs::error_code(-p->rval, osd_category()) :
+	bs::error_code();
+    if (*ph) {
+      try {
+	bs::error_code e;
+	if (first_osd_error) {
+	  e = first_osd_error;
+	} else if (p->rval < 0) {
+	  e = bs::error_code(-p->rval, osd_category());
+	}
+	std::move((*ph))(e, p->rval, p->outdata);
+      } catch (const bs::system_error& e) {
+	ldout(cct, 10) << "ERROR: tid " << op->tid << ": handler function threw "
+		       << e.what() << dendl;
+	handler_error = e.code();
+	if (*pe) {
+	  **pe = e.code();
+	}
+	if (*pr && **pr == 0) {
+	  **pr = ceph::from_error_code(e.code());
+	}
+      } catch (const std::exception& e) {
+	ldout(cct, 0) << "ERROR: tid " << op->tid << ": handler function threw "
+		      << e.what() << dendl;
+	handler_error = osdc_errc::handler_failed;
+	if (*pe) {
+	  **pe = osdc_errc::handler_failed;
+	}
+	if (*pr && **pr == 0) {
+	  **pr = -EIO;
+	}
+      }
+    }
+  }
+
+  return handler_error;
+}
+
+
 /* This function DOES put the passed message before returning */
 void Objecter::handle_osd_op_reply(MOSDOpReply *m)
 {
@@ -3627,7 +3734,7 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
     }
   }
 
-  if (rc == -EAGAIN) {
+  if (rc == -EAGAIN && !op->ec_shard) {
     ldout(cct, 7) << " got -EAGAIN, resubmitting" << dendl;
     if (op->has_completion())
       num_in_flight--;
@@ -3687,75 +3794,7 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
 		  << " != request ops " << op->ops
 		  << " from " << m->get_source_inst() << dendl;
 
-  ceph_assert(op->ops.size() == op->out_bl.size());
-  ceph_assert(op->ops.size() == op->out_rval.size());
-  ceph_assert(op->ops.size() == op->out_ec.size());
-  ceph_assert(op->ops.size() == op->out_handler.size());
-  auto pb = op->out_bl.begin();
-  auto pr = op->out_rval.begin();
-  auto pe = op->out_ec.begin();
-  auto ph = op->out_handler.begin();
-  ceph_assert(op->out_bl.size() == op->out_rval.size());
-  ceph_assert(op->out_bl.size() == op->out_handler.size());
-  auto p = out_ops.begin();
-  // Propagates handler error to Op::completion. In the event of
-  // multiple handler errors, the most recent wins.
-  bs::error_code handler_error;
-  // Holds OSD error code, so handlers downstream of a failing op are
-  // made aware of it.
-  bs::error_code first_osd_error;
-  for (unsigned i = 0;
-       p != out_ops.end() && pb != op->out_bl.end();
-       ++i, ++p, ++pb, ++pr, ++pe, ++ph) {
-    ldout(cct, 10) << " op " << i << " rval " << p->rval
-		   << " len " << p->outdata.length() << dendl;
-    // Track when we get an OSD error and supply it to subsequent
-    // handlers so they won't attempt to operate on data that isn't
-    // there.
-    if (!first_osd_error && (p->rval < 0)) {
-      first_osd_error = bs::error_code(-p->rval, osd_category());
-    }
-    if (*pb)
-      **pb = p->outdata;
-    // set rval before running handlers so that handlers
-    // can change it if e.g. decoding fails
-    if (*pr)
-      **pr = ceph_to_hostos_errno(p->rval);
-    if (*pe)
-      **pe = p->rval < 0 ? bs::error_code(-p->rval, osd_category()) :
-	bs::error_code();
-    if (*ph) {
-      try {
-	bs::error_code e;
-	if (first_osd_error) {
-	  e = first_osd_error;
-	} else if (p->rval < 0) {
-	  e = bs::error_code(-p->rval, osd_category());
-	}
-	std::move((*ph))(e, p->rval, p->outdata);
-      } catch (const bs::system_error& e) {
-	ldout(cct, 10) << "ERROR: tid " << op->tid << ": handler function threw "
-		       << e.what() << dendl;
-	handler_error = e.code();
-	if (*pe) {
-	  **pe = e.code();
-	}
-	if (*pr && **pr == 0) {
-	  **pr = ceph::from_error_code(e.code());
-	}
-      } catch (const std::exception& e) {
-	ldout(cct, 0) << "ERROR: tid " << op->tid << ": handler function threw "
-		      << e.what() << dendl;
-	handler_error = osdc_errc::handler_failed;
-	if (*pe) {
-	  **pe = osdc_errc::handler_failed;
-	}
-	if (*pr && **pr == 0) {
-	  **pr = -EIO;
-	}
-      }
-    }
-  }
+  bs::error_code handler_error = handle_osd_op_reply2(op, out_ops);
 
   // NOTE: we assume that since we only request ONDISK ever we will
   // only ever get back one (type of) ack ever.

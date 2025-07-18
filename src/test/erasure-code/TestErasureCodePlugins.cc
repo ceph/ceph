@@ -619,6 +619,56 @@ TEST_P(PluginTest, CRCEncodeDecodeSupport) {
   }
 }
 
+TEST_P(PluginTest, decode_test)
+{
+  initialize();
+  if (get_k() != 2)
+  {
+    GTEST_SKIP() << "Ignore me";
+  }
+
+  if (get_m() != 1)
+  {
+    GTEST_SKIP() << "Ignore me";
+  }
+
+  shard_id_set want_to_encode;
+  for (shard_id_t i = shard_id_t(0); i < get_k_plus_m(); ++i) {
+    want_to_encode.insert(i);
+  }
+
+  uint32_t crcs[] = {0x9967888a, 0xb14039a2, 0x2827b128};
+  bufferlist data_bl;
+  for (unsigned i=0; i < get_k(); ++i) {
+    bufferptr s = create_buffer_from_crc(crcs[i]);
+    data_bl.append(s);
+  }
+
+  shard_id_map<bufferlist> encoded_data(get_k_plus_m());
+  erasure_code->encode(want_to_encode, data_bl, &encoded_data);
+
+  std::cout << fmt::format("{}: Encoded: ", __func__);
+  for (auto& [shard_id, bl] : encoded_data)
+  {
+    unsigned int hex = (reinterpret_cast<unsigned char&>(bl.c_str()[3]) << 24) |
+                       (reinterpret_cast<unsigned char&>(bl.c_str()[2]) << 16) |
+                       (reinterpret_cast<unsigned char&>(bl.c_str()[1]) << 8) |
+                       (reinterpret_cast<unsigned char&>(bl.c_str()[0]));
+    std::cout << fmt::format("[{}: {:#010x}] ", shard_id.id, hex);
+    //ceph_assert(hex == crcs[(int)shard_id]);
+  }
+  std::cout << std::endl;
+
+  bufferptr s5 = create_buffer_from_crc(0xd5e5629a);
+  bufferptr s6 = create_buffer_from_crc(0x556e82b9);
+
+  shard_id_set want_to_decode;
+  for (shard_id_t i = shard_id_t(1); i < get_k_plus_m(); ++i) {
+    want_to_decode.insert(i);
+  }
+  //erasure_code->decode_chunks(want_to_decode, data_bl, )
+}
+
 INSTANTIATE_TEST_SUITE_P(
   PluginTests,
   PluginTest,
