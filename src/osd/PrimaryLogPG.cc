@@ -2063,6 +2063,7 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
       osd->handle_misdirected_op(this, op);
       return;
     }
+    op->set_balance_read();
   } else {
     // normal case; must be primary
     if (!is_primary()) {
@@ -5882,17 +5883,25 @@ int PrimaryLogPG::do_read(OpContext *ctx, OSDOp& osd_op) {
     if (oi.is_data_digest() && op.extent.offset == 0 &&
         op.extent.length >= oi.size)
       maybe_crc = oi.data_digest;
-    ctx->pending_async_reads.push_back(
-      make_pair(
-        boost::make_tuple(op.extent.offset, op.extent.length, op.flags),
-        make_pair(&osd_op.outdata,
-		  new FillInVerifyExtent(&op.extent.length, &osd_op.rval,
-					 &osd_op.outdata, maybe_crc, oi.size,
-					 osd, soid, op.flags))));
-    dout(10) << " async_read noted for " << soid << dendl;
 
-    ctx->op_finishers[ctx->current_osd_subop_num].reset(
-      new ReadFinisher(osd_op));
+    if (ctx->op->balance_read()) {
+      result = pgbackend->objects_read_sync(
+        soid, op.extent.offset, op.extent.length, op.flags, &osd_op.outdata);
+
+        dout(20) << " EC sync read for " << soid << " result=" << result << dendl;
+    } else {
+      ctx->pending_async_reads.push_back(
+        make_pair(
+          boost::make_tuple(op.extent.offset, op.extent.length, op.flags),
+            make_pair(&osd_op.outdata,
+              new FillInVerifyExtent(&op.extent.length, &osd_op.rval,
+                                     &osd_op.outdata, maybe_crc, oi.size,
+                                     osd, soid, op.flags))));
+      dout(10) << " async_read noted for " << soid << dendl;
+
+      ctx->op_finishers[ctx->current_osd_subop_num].reset(
+        new ReadFinisher(osd_op));
+    }
   } else {
     int r = pgbackend->objects_read_sync(
       soid, op.extent.offset, op.extent.length, op.flags, &osd_op.outdata);
@@ -9187,10 +9196,9 @@ void PrimaryLogPG::log_stats(hobject_t soid,
 
   ObjectStore::Transaction::iterator i = t.begin();
 
-  for (int pos = 0; i.have_op(); ++pos)
+  for ([[maybe_unused]] int j = 0; i.have_op(); ++j)
   {
     ObjectStore::Transaction::Op *op = i.decode_op();
-    int r = 0;
 
     if (op->op == ObjectStore::Transaction::OP_COLL_HINT) {
       uint32_t type = op->hint;

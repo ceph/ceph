@@ -186,6 +186,14 @@ class ECBackend : public ECCommon {
 
   void kick_reads();
 
+  int _objects_read_sync(
+    const hobject_t &hoid,
+    uint64_t off,
+    uint64_t len,
+    uint32_t op_flags,
+    ceph::buffer::list *bl
+  );
+
   /**
    * Recovery
    *
