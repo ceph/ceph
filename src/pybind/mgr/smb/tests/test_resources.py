@@ -838,3 +838,67 @@ def test_load_text(params):
     else:
         with pytest.raises(params['exc_type'], match=params['error']):
             smb.resources.load_text(params['txt'])
+
+
+@pytest.mark.parametrize("max_conn", [0, 25])
+def test_share_with_comment_and_max_connections(max_conn):
+    import yaml
+
+    yaml_str = f"""
+resource_type: ceph.smb.share
+cluster_id: rhumba
+share_id: goodshare
+name: Good Share
+cephfs:
+    volume: myvol
+    path: /good
+comment: This is a test share
+max_connections: {max_conn}
+"""
+
+    data = yaml.safe_load_all(yaml_str)
+    loaded = smb.resources.load(data)
+    assert loaded
+
+    share = loaded[0]
+    assert share.comment == "This is a test share"
+    assert share.max_connections == max_conn
+
+
+def test_share_with_invalid_max_connections():
+    import yaml
+
+    yaml_str = """
+resource_type: ceph.smb.share
+cluster_id: rhumba
+share_id: badshare
+name: Bad Share
+cephfs:
+    volume: myvol
+    path: /bad
+max_connections: -10
+"""
+    data = yaml.safe_load_all(yaml_str)
+    with pytest.raises(
+        ValueError,
+        match="max_connections must be 0 or a non-negative integer",
+    ):
+        smb.resources.load(data)
+
+
+def test_share_with_invalid_comment():
+    import yaml
+
+    yaml_str = """
+resource_type: ceph.smb.share
+cluster_id: rhumba
+share_id: weirdshare
+name: Weird Share
+cephfs:
+    volume: myvol
+    path: /weird
+comment: "Invalid\\nComment"
+"""
+    data = yaml.safe_load_all(yaml_str)
+    with pytest.raises(ValueError, match="Comment cannot contain newlines"):
+        smb.resources.load(data)
