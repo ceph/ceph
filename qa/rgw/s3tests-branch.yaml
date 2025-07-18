@@ -1,4 +1,4 @@
 overrides:
   s3tests:
-     force-branch: wip-tentacle-logging
-     git_remote: https://github.com/yuvalif/
+     force-branch: ceph-tentacle
+     # git_remote: https://github.com/ceph/
