@@ -32,8 +32,9 @@ else:
     @APIRouter("/nvmeof/gateway", Scope.NVME_OF)
     @APIDoc("NVMe-oF Gateway Management API", "NVMe-oF Gateway")
     class NVMeoFGateway(RESTController):
-
-        @NvmeofCLICommand("nvmeof gw info", model.GatewayInfo)
+        @NvmeofCLICommand(
+            "nvmeof gateway info", model.GatewayInfo, alias="nvmeof gw info"
+        )
         @EndpointDoc("Get information about the NVMeoF gateway")
         @convert_to_model(model.GatewayInfo)
         @handle_nvmeof_error
@@ -57,7 +58,9 @@ else:
 
         @ReadPermission
         @Endpoint('GET', '/version')
-        @NvmeofCLICommand("nvmeof gw version", model.GatewayVersion)
+        @NvmeofCLICommand(
+            "nvmeof gateway version", model.GatewayVersion, alias="nvmeof gw version"
+        )
         @EndpointDoc("Get the version of the NVMeoF gateway")
         @convert_to_model(model.GatewayVersion)
         @handle_nvmeof_error
@@ -71,7 +74,10 @@ else:
 
         @ReadPermission
         @Endpoint('GET', '/log_level')
-        @NvmeofCLICommand("nvmeof gw get_log_level", model.GatewayLogLevelInfo)
+        @NvmeofCLICommand(
+            "nvmeof gateway get_log_level", model.GatewayLogLevelInfo,
+            alias="nvmeof gw get_log_level"
+        )
         @EndpointDoc("Get NVMeoF gateway log level information")
         @convert_to_model(model.GatewayLogLevelInfo)
         @handle_nvmeof_error
@@ -84,7 +90,8 @@ else:
 
         @ReadPermission
         @Endpoint('PUT', '/log_level')
-        @NvmeofCLICommand("nvmeof gw set_log_level", model.RequestStatus)
+        @NvmeofCLICommand(
+            "nvmeof gateway set_log_level", model.RequestStatus, alias="nvmeof gw set_log_level")
         @EndpointDoc("Set NVMeoF gateway log levels")
         @convert_to_model(model.RequestStatus)
         @handle_nvmeof_error
@@ -195,11 +202,15 @@ else:
         )
         @convert_to_model(model.SubsystemStatus)
         @handle_nvmeof_error
-        def create(self, nqn: str, enable_ha: bool = True, max_namespaces: int = 4096,
+        def create(self, nqn: str, enable_ha: Optional[bool] = True,
+                   max_namespaces: Optional[int] = 4096, no_group_append: Optional[bool] = True,
+                   serial_number: Optional[str] = None, dhchap_key: Optional[str] = None,
                    gw_group: Optional[str] = None, traddr: Optional[str] = None):
             return NVMeoFClient(gw_group=gw_group, traddr=traddr).stub.create_subsystem(
                 NVMeoFClient.pb2.create_subsystem_req(
-                    subsystem_nqn=nqn, max_namespaces=max_namespaces, enable_ha=enable_ha
+                    subsystem_nqn=nqn, serial_number=serial_number,
+                    max_namespaces=max_namespaces, enable_ha=enable_ha,
+                    no_group_append=no_group_append, dhchap_key=dhchap_key
                 )
             )
 
@@ -356,7 +367,9 @@ else:
     @APIDoc("NVMe-oF Subsystem Namespace Management API", "NVMe-oF Subsystem Namespace")
     class NVMeoFNamespace(RESTController):
         @pick("namespaces")
-        @NvmeofCLICommand("nvmeof ns list", model.NamespaceList)
+        @NvmeofCLICommand(
+            "nvmeof namespace list", model.NamespaceList, alias="nvmeof ns list"
+        )
         @EndpointDoc(
             "List all NVMeoF namespaces in a subsystem",
             parameters={
@@ -372,7 +385,8 @@ else:
             )
 
         @pick("namespaces", first=True)
-        @NvmeofCLICommand("nvmeof ns get", model.NamespaceList)
+        @NvmeofCLICommand(
+            "nvmeof namespace get", model.NamespaceList, alias="nvmeof ns get")
         @EndpointDoc(
             "Get info from specified NVMeoF namespace",
             parameters={
@@ -391,7 +405,10 @@ else:
 
         @ReadPermission
         @Endpoint('GET', '{nsid}/io_stats')
-        @NvmeofCLICommand("nvmeof ns get_io_stats", model.NamespaceIOStats)
+        @NvmeofCLICommand(
+            "nvmeof namespace get_io_stats", model.NamespaceIOStats,
+            alias="nvmeof ns get_io_stats"
+        )
         @EndpointDoc(
             "Get IO stats from specified NVMeoF namespace",
             parameters={
@@ -409,7 +426,9 @@ else:
                     subsystem_nqn=nqn, nsid=int(nsid))
             )
 
-        @NvmeofCLICommand("nvmeof ns add", model.NamespaceCreation)
+        @NvmeofCLICommand(
+            "nvmeof namespace add", model.NamespaceCreation, alias="nvmeof ns add"
+        )
         @EndpointDoc(
             "Create a new NVMeoF namespace",
             parameters={
@@ -515,7 +534,8 @@ else:
 
         @ReadPermission
         @Endpoint('PUT', '{nsid}/set_qos')
-        @NvmeofCLICommand("nvmeof ns set_qos", model=model.RequestStatus)
+        @NvmeofCLICommand(
+            "nvmeof namespace set_qos", model=model.RequestStatus, alias="nvmeof ns set_qos")
         @EndpointDoc(
             "set QOS for specified NVMeoF namespace",
             parameters={
@@ -564,7 +584,10 @@ else:
 
         @ReadPermission
         @Endpoint('PUT', '{nsid}/change_load_balancing_group')
-        @NvmeofCLICommand("nvmeof ns change_load_balancing_group", model=model.RequestStatus)
+        @NvmeofCLICommand(
+            "nvmeof namespace change_load_balancing_group", model=model.RequestStatus,
+            alias="nvmeof ns change_load_balancing_group"
+        )
         @EndpointDoc(
             "set the load balancing group for specified NVMeoF namespace",
             parameters={
@@ -596,7 +619,9 @@ else:
 
         @ReadPermission
         @Endpoint('PUT', '{nsid}/resize')
-        @NvmeofCLICommand("nvmeof ns resize", model=model.RequestStatus)
+        @NvmeofCLICommand(
+            "nvmeof namespace resize", model=model.RequestStatus, alias="nvmeof ns resize"
+        )
         @EndpointDoc(
             "resize the specified NVMeoF namespace",
             parameters={
@@ -650,7 +675,9 @@ else:
 
         @ReadPermission
         @Endpoint('PUT', '{nsid}/add_host')
-        @NvmeofCLICommand("nvmeof ns add_host", model=model.RequestStatus)
+        @NvmeofCLICommand(
+            "nvmeof namespace add_host", model=model.RequestStatus, alias="nvmeof ns add_host"
+        )
         @EndpointDoc(
             "Adds a host to the specified NVMeoF namespace",
             parameters={
@@ -686,7 +713,9 @@ else:
 
         @ReadPermission
         @Endpoint('PUT', '{nsid}/del_host')
-        @NvmeofCLICommand("nvmeof ns del_host", model=model.RequestStatus)
+        @NvmeofCLICommand(
+            "nvmeof namespace del_host", model=model.RequestStatus, alias="nvmeof ns del_host"
+        )
         @EndpointDoc(
             "Removes a host from the specified NVMeoF namespace",
             parameters={
@@ -717,7 +746,10 @@ else:
 
         @ReadPermission
         @Endpoint('PUT', '{nsid}/change_visibility')
-        @NvmeofCLICommand("nvmeof ns change_visibility", model=model.RequestStatus)
+        @NvmeofCLICommand(
+            "nvmeof namespace change_visibility", model=model.RequestStatus,
+            alias="nvmeof ns change_visibility"
+        )
         @EndpointDoc(
             "changes the visibility of the specified NVMeoF namespace to all or selected hosts",
             parameters={
@@ -750,7 +782,10 @@ else:
 
         @ReadPermission
         @Endpoint('PUT', '{nsid}/set_auto_resize')
-        @NvmeofCLICommand("nvmeof ns set_auto_resize", model=model.RequestStatus)
+        @NvmeofCLICommand(
+            "nvmeof namespace set_auto_resize", model=model.RequestStatus,
+            alias="nvmeof ns set_auto_resize"
+        )
         @EndpointDoc(
             "Enable or disable namespace auto resize when RBD image is resized",
             parameters={
@@ -785,7 +820,10 @@ else:
 
         @ReadPermission
         @Endpoint('PUT', '{nsid}/set_rbd_trash_image')
-        @NvmeofCLICommand("nvmeof ns set_rbd_trash_image", model=model.RequestStatus)
+        @NvmeofCLICommand(
+            "nvmeof namespace set_rbd_trash_image", model=model.RequestStatus,
+            alias="nvmeof ns set_rbd_trash_image"
+        )
         @EndpointDoc(
             "changes the trash image on delete of the specified NVMeoF \
                 namespace to all or selected hosts",
@@ -820,7 +858,10 @@ else:
 
         @ReadPermission
         @Endpoint('PUT', '{nsid}/refresh_size')
-        @NvmeofCLICommand("nvmeof ns refresh_size", model=model.RequestStatus)
+        @NvmeofCLICommand(
+            "nvmeof namespace refresh_size", model=model.RequestStatus,
+            alias="nvmeof ns refresh_size"
+        )
         @EndpointDoc(
             "refresh the specified NVMeoF namespace to current RBD image size",
             parameters={
@@ -848,7 +889,9 @@ else:
             )
 
         @pick("namespaces", first=True)
-        @NvmeofCLICommand("nvmeof ns update", model.NamespaceList)
+        @NvmeofCLICommand(
+            "nvmeof namespace update", model.NamespaceList, alias="nvmeof ns update"
+        )
         @EndpointDoc(
             "Update an existing NVMeoF namespace",
             parameters={
@@ -938,7 +981,7 @@ else:
             return response
 
         @empty_response
-        @NvmeofCLICommand("nvmeof ns del", model.RequestStatus)
+        @NvmeofCLICommand("nvmeof namespace del", model.RequestStatus, alias="nvmeof ns del")
         @EndpointDoc(
             "Delete an existing NVMeoF namespace",
             parameters={
@@ -989,7 +1032,7 @@ else:
         @convert_to_model(model.HostsInfo, finalize=_update_hosts)
         @handle_nvmeof_error
         def list(
-            self, nqn: str, clear_alerts: Optional[bool],
+            self, nqn: str, clear_alerts: Optional[bool] = None,
             gw_group: Optional[str] = None, traddr: Optional[str] = None
         ):
             return NVMeoFClient(gw_group=gw_group, traddr=traddr).stub.list_hosts(
