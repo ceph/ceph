@@ -7,6 +7,7 @@ from unittest.mock import MagicMock
 import pytest
 from mgr_module import CLICommand, HandleCommandResult
 
+from ..controllers import EndpointDoc
 from ..model.nvmeof import CliFlags, CliHeader
 from ..services.nvmeof_cli import AnnotatedDataTextOutputFormatter, \
     NvmeofCLICommand, convert_from_bytes
@@ -121,6 +122,47 @@ class TestNvmeofCLICommand:
         )
         assert result.stderr == ''
         base_call_return_none_mock.assert_called_once()
+
+    def test_command_empty_desc_by_default(self, sample_command):
+        assert NvmeofCLICommand.COMMANDS[sample_command].desc == ''
+
+    def test_command_with_endpointdoc_get_desc(self):
+        test_cmd = "test command1"
+        test_desc = 'test desc1'
+
+        class Model(NamedTuple):
+            a: str
+            b: int
+
+        @NvmeofCLICommand(test_cmd, Model)
+        @EndpointDoc(test_desc)
+        def func(_): # noqa # pylint: disable=unused-variable
+            return {'a': '1', 'b': 2}
+
+        assert NvmeofCLICommand.COMMANDS[test_cmd].desc == test_desc
+
+        del NvmeofCLICommand.COMMANDS[test_cmd]
+        assert test_cmd not in NvmeofCLICommand.COMMANDS
+
+    def test_command_with_endpointdoc_and_docstr_get_docstr(self):
+        test_cmd = "test command1"
+        test_desc = 'test desc1'
+        test_docstr = 'test docstr'
+
+        class Model(NamedTuple):
+            a: str
+            b: int
+
+        @NvmeofCLICommand(test_cmd, Model)
+        @EndpointDoc(test_desc)
+        def func(_): # noqa # pylint: disable=unused-variable
+            """test docstr"""
+            return {'a': '1', 'b': 2}
+
+        assert NvmeofCLICommand.COMMANDS[test_cmd].desc == test_docstr
+
+        del NvmeofCLICommand.COMMANDS[test_cmd]
+        assert test_cmd not in NvmeofCLICommand.COMMANDS
 
 
 class TestNVMeoFConfCLI(unittest.TestCase, CLICommandTestMixin):
