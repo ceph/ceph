@@ -42,7 +42,7 @@ Logging Reliability
 -------------------
 For performance reasons, even though the log records are written to persistent
 storage, the log object will appear in the log bucket only after some
-configurable amount of time (or if the maximum object size of 128MB is
+configurable amount of time (or if the maximum object size of 128 MB is
 reached). This time (in seconds) can be set per source bucket via a Ceph
 extension to the :ref:`REST API <radosgw s3>`, or globally via the
 ``rgw_bucket_logging_obj_roll_time`` configuration option. If not set, the
@@ -101,7 +101,7 @@ The following operations are supported in journal mode:
 
 Multisite
 `````````
-In a multi-zone deployment, each zone uses its own log object before the
+In a :ref:`multi-zone deployment <multisite>`, each zone uses its own log object before the
 log object is added to the log bucket. After the log object is added to the
 log bucket (that is, after being flushed) it is replicated to other zones.
 This means that for a given time period there can be more than one log object
@@ -154,7 +154,7 @@ mode, the logging operation is skipped, but the bucket operation continues.
 
 Bucket Logging REST API
 -----------------------
-Detailed under: `Bucket Operations`_.
+Detailed under: :ref:`radosgw-bucketops`.
 
 
 Log Objects Key Format
@@ -257,4 +257,3 @@ For example:
 
 
 .. _AWS Logging Record Format: https://docs.aws.amazon.com/AmazonS3/latest/userguide/LogFormat.html
-.. _Bucket Operations: ../s3/bucketops
