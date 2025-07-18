@@ -58,6 +58,7 @@ class Features(enum.Enum):
     CLUSTERED = 'clustered'
     CEPHFS_PROXY = 'cephfs-proxy'
     REMOTE_CONTROL = 'remote-control'
+    KEYBRIDGE = 'keybridge'
 
     @classmethod
     def valid(cls, value: str) -> bool:
@@ -184,6 +185,12 @@ class RemoteControlConfig:
 
 
 @dataclasses.dataclass(frozen=True)
+class KeyBridgeConfig:
+    tls_files: TLSFiles
+    socket = 'unix:/run/keybridge.s'
+
+
+@dataclasses.dataclass(frozen=True)
 class Config:
     identity: DaemonIdentity
     instance_id: str
@@ -213,6 +220,7 @@ class Config:
     bind_to: List[BindInterface] = dataclasses.field(default_factory=list)
     proxy_image: str = ''
     remote_control: Optional[RemoteControlConfig] = None
+    keybridge: Optional[KeyBridgeConfig] = None
 
     def config_uris(self) -> List[str]:
         uris = [self.source_config]
@@ -441,6 +449,30 @@ class RemoteControlContainer(SambaContainerCommon):
         ]
 
 
+class KeyBridgeContainer(SambaContainerCommon):
+    def name(self) -> str:
+        return 'keybridge'
+
+    def args(self) -> List[str]:
+        args = super().args()
+        assert self.cfg.keybridge, 'keybridge is not configured'
+        args.append('keybridge')
+        if self.cfg.keybridge.tls_files:
+            cert_path = self.cfg.keybridge.tls_files.cert_interior_path
+            key_path = self.cfg.keybridge.tls_files.key_interior_path
+            ca_cert_path = self.cfg.keybridge.tls_files.ca_cert_interior_path
+            # all or nothing with kmip
+            assert cert_path and key_path and ca_cert_path
+            args.append(f'--kmip-tls-cert={cert_path}')
+            args.append(f'--kmip-tls-key={key_path}')
+            args.append(f'--kmip-tls-ca-cert={ca_cert_path}')
+        args.append(self.cfg.keybridge.socket)
+        return args
+
+    def container_args(self) -> List[str]:
+        return super().container_args() + ['--entrypoint=samba-satellite']
+
+
 class CephFSProxyContainer(ContainerCommon):
     def name(self) -> str:
         return 'proxy'
@@ -654,6 +686,12 @@ class SMB(ContainerDaemonForm):
             )
         else:
             remote_control_cfg = None
+        if Features.KEYBRIDGE.value in instance_features:
+            keybridge_cfg = KeyBridgeConfig(
+                tls_files=TLSFiles.match(self._tls_files, 'keybridge')
+            )
+        else:
+            keybridge_cfg = None
 
         rank, rank_gen = self._rank_info
         self._instance_cfg = Config(
@@ -682,6 +720,7 @@ class SMB(ContainerDaemonForm):
             proxy_image=proxy_image,
             bind_to=self._network_mapper.bind_interfaces(bind_networks),
             remote_control=remote_control_cfg,
+            keybridge=keybridge_cfg,
         )
         logger.debug('SMB Instance Config: %s', self._instance_cfg)
         logger.debug('Configured files: %s', self._files)
@@ -743,6 +782,8 @@ class SMB(ContainerDaemonForm):
             )
         if self._cfg.remote_control:
             ctrs.append(RemoteControlContainer(self._cfg))
+        if self._cfg.keybridge:
+            ctrs.append(KeyBridgeContainer(self._cfg))
 
         if self._cfg.clustered:
             init_ctrs += [
