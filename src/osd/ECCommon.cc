@@ -1561,7 +1561,7 @@ ECCommon::RecoveryBackend::recover_object(
   return op;
 }
 
-std::optional<object_info_t> ECBackend::get_object_info_from_obc(
+std::optional<object_info_t> ECCommon::get_object_info_from_obc(
     ObjectContextRef &obc) {
   std::optional<object_info_t> ret;
 
@@ -1573,7 +1573,7 @@ std::optional<object_info_t> ECBackend::get_object_info_from_obc(
   return ret;
 }
 
-ECTransaction::WritePlan ECBackend::get_write_plan(
+ECTransaction::WritePlan ECCommon::get_write_plan(
   const ECUtil::stripe_info_t &sinfo,
   PGTransaction &t,
   ECCommon::ReadPipeline &read_pipeline,
