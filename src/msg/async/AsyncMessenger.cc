@@ -1082,9 +1082,12 @@ __u32 AsyncMessenger::get_global_seq(__u32 old_global_seq)
   } // release lock
 
   if (did_update_to_old) {
-    ldout(cct, 10) << __func__ << " old_global_seq=" << old_global_seq
+    ldout(cct, 10) 
+      << __func__ << " old_global_seq=" << old_global_seq
       << " > global_seq=" << global_seq
-      << "; new global_seq=" << updated_to << dendl;
+      << "; new global_seq=" << updated_to
+      << " (was " << prev_global << ")"
+      << dendl;
   }
   ldout(cct, 10) << __func__ << " increment to global_seq=" << global_seq << dendl;
   return ret;
