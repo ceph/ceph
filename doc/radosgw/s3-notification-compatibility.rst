@@ -1,3 +1,5 @@
+.. _radosgw-s3-notification-compatibility:
+
 =====================================
 S3 Bucket Notifications Compatibility
 =====================================
@@ -5,14 +7,14 @@ S3 Bucket Notifications Compatibility
 Ceph's `Bucket Notifications`_ API follows `AWS S3 Bucket Notifications API`_. However, some differences exist, as listed below.
 
 
-.. note:: 
+.. note::
 
     Compatibility is different depending on which of the above mechanism is used
 
 Supported Destination
 ---------------------
 
-AWS supports: **SNS**, **SQS** and **Lambda** as possible destinations (AWS internal destinations). 
+AWS supports: **SNS**, **SQS** and **Lambda** as possible destinations (AWS internal destinations).
 Currently, we support: **HTTP/S**, **Kafka** and **AMQP**.
 
 We are using the **SNS** ARNs to represent the **HTTP/S**, **Kafka** and **AMQP** destinations.
@@ -30,7 +32,7 @@ Following tags (and the tags inside them) are not supported:
 | ``<CloudFunctionConfiguration>``  | not needed, we treat all destinations as SNS |
 +-----------------------------------+----------------------------------------------+
 
-REST API Extension 
+REST API Extension
 ------------------
 
 Ceph's bucket notification API has the following extensions:
@@ -51,7 +53,7 @@ Ceph's bucket notification API has the following extensions:
 
   - Filtering based on object tags
 
-- Each one of the additional filters extends the S3 API and using it will require extension of the client SDK (unless you are using plain HTTP). 
+- Each one of the additional filters extends the S3 API and using it will require extension of the client SDK (unless you are using plain HTTP).
 
 - Filtering overlapping is allowed, so that same event could be sent as different notification
 
@@ -112,7 +114,7 @@ Event Types
 +--------------------------------------------------------+-------------------------------------------+
 | ``s3:ObjectSynced:*``                                  | Ceph extension                            |
 +--------------------------------------------------------+-------------------------------------------+
-| ``s3:ObjectSynced:Create``                             | Ceph Extension                            |
+| ``s3:ObjectSynced:Create``                             | Ceph extension                            |
 +--------------------------------------------------------+-------------------------------------------+
 | ``s3:ObjectSynced:Delete``                             | Ceph extension                            |
 +--------------------------------------------------------+-------------------------------------------+
@@ -137,28 +139,28 @@ Event Types
 | ``s3:ReducedRedundancyLostObject``                     | Not applicable                            |
 +--------------------------------------------------------+-------------------------------------------+
 
-.. note:: 
+.. note::
 
    The ``s3:ObjectRemoved:DeleteMarkerCreated`` event presents information on the latest version of the object
 
 .. note::
 
    In case of multipart upload, an ``ObjectCreated:CompleteMultipartUpload`` notification will be sent at the end of the process.
-   
+
 .. note::
 
-   The ``s3:ObjectSynced:Create`` event is sent when an object successfully syncs to a zone. It must be explicitly set for each zone. 
+   The ``s3:ObjectSynced:Create`` event is sent when an object successfully syncs to a zone. It must be explicitly set for each zone.
 
 Topic Configuration
 -------------------
-In the case of bucket notifications, the topics management API will be derived from `AWS Simple Notification Service API`_. 
+In the case of bucket notifications, the topics management API will be derived from `AWS Simple Notification Service API`_.
 Note that most of the API is not applicable to Ceph, and only the following actions are implemented:
 
  - ``CreateTopic``
  - ``DeleteTopic``
  - ``ListTopics``
 
-We also have the following extensions to topic configuration: 
+We also have the following extensions to topic configuration:
 
  - In ``GetTopic`` we allow fetching a specific topic, instead of all user topics
  - In ``CreateTopic``
