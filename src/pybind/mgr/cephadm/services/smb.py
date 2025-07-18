@@ -179,6 +179,23 @@ class SMBService(CephService):
                 'remote_control.ca.crt',
                 self._cert_or_uri(smb_spec.remote_control_ca_cert),
             )
+        if 'keybridge' in smb_spec.features:
+            files = config_blobs.setdefault('files', {})
+            _add_cfg(
+                files,
+                'keybridge.ssl.crt',
+                self._cert_or_uri(smb_spec.keybridge_kmip_ssl_cert),
+            )
+            _add_cfg(
+                files,
+                'keybridge.ssl.key',
+                self._cert_or_uri(smb_spec.keybridge_kmip_ssl_key),
+            )
+            _add_cfg(
+                files,
+                'keybridge.ca.crt',
+                self._cert_or_uri(smb_spec.keybridge_kmip_ca_cert),
+            )
 
         logger.debug('smb generate_config: %r', config_blobs)
         self._configure_cluster_meta(smb_spec, daemon_spec)
