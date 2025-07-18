@@ -900,16 +900,26 @@ void Locker::drop_non_rdlocks(MutationImpl *mut, set<CInode*> *pneed_issue)
     issue_caps_set(*pneed_issue);
 }
 
-void Locker::drop_rdlocks_for_early_reply(MutationImpl *mut)
+void Locker::handle_locks_for_early_reply(MutationImpl *mut)
 {
   set<CInode*> need_issue;
+  bool nudged = false;
+
+  dout(10) << __func__ << ": " << *mut << dendl;
 
   for (auto it = mut->locks.begin(); it != mut->locks.end(); ) {
+    SimpleLock *lock = it->lock;
+    if (!nudged) {
+      /* A request may finally early reply only after another request has
+       * triggered an unstable state change. We need to nudge the log now to
+       * move things along.
+       */
+      nudged = nudge_log(lock);
+    }
     if (!it->is_rdlock()) {
       ++it;
       continue;
     }
-    SimpleLock *lock = it->lock;
     // make later mksnap/setlayout (at other mds) wait for this unsafe request
     if (lock->get_type() == CEPH_LOCK_ISNAP ||
 	lock->get_type() == CEPH_LOCK_IPOLICY) {
@@ -1839,11 +1849,17 @@ bool Locker::rdlock_start(SimpleLock *lock, const MDRequestRef& mut, bool as_ano
   return false;
 }
 
-void Locker::nudge_log(SimpleLock *lock)
+bool Locker::nudge_log(SimpleLock *lock)
 {
-  dout(10) << "nudge_log " << *lock << " on " << *lock->get_parent() << dendl;
-  if (lock->get_parent()->is_auth() && lock->is_unstable_and_locked())    // as with xlockdone, or cap flush
+   // as with xlockdone, or cap flush
+  if (lock->get_parent()->is_auth() && lock->is_unstable_and_locked() && lock->has_any_waiter()) {
+    dout(10) << __func__ << " YES " << *lock << " on " << *lock->get_parent() << dendl;
     mds->mdlog->flush();
+    return true;
+  } else {
+    dout(20) << __func__ << " NO " << *lock << " on " << *lock->get_parent() << dendl;
+    return false;
+  }
 }
 
 void Locker::rdlock_finish(const MutationImpl::lock_iterator& it, MutationImpl *mut, bool *pneed_issue)

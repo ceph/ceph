@@ -4070,6 +4070,7 @@ std::vector<std::string> MDSRankDispatcher::get_tracked_keys()
     "fsid",
     "host",
     "mds_allow_async_dirops",
+    "mds_allow_batched_ops",
     "mds_alternate_name_max",
     "mds_bal_export_pin",
     "mds_bal_fragment_dirs",
