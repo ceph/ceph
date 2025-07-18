@@ -2267,6 +2267,7 @@ RadosObject::RadosDeleteOp::RadosDeleteOp(RadosObject *_source) :
 	parent_op(&op_target)
 { }
 
+
 int RadosObject::RadosDeleteOp::delete_obj(const DoutPrefixProvider* dpp, optional_yield y, uint32_t flags)
 {
   parent_op.params.bucket_owner = params.bucket_owner.get_id();
@@ -2284,15 +2285,16 @@ int RadosObject::RadosDeleteOp::delete_obj(const DoutPrefixProvider* dpp, option
   parent_op.params.abortmp = params.abortmp;
   parent_op.params.parts_accounted_size = params.parts_accounted_size;
 
-  int ret = parent_op.delete_obj(y, dpp, flags & FLAG_LOG_OP);
-  if (ret < 0)
+  int ret = parent_op.delete_obj(y, dpp, flags & FLAG_LOG_OP, flags & FLAG_FORCE_OP);
+  if (ret < 0) {
     return ret;
+  }
 
   result.delete_marker = parent_op.result.delete_marker;
   result.version_id = parent_op.result.version_id;
 
   return ret;
-}
+} // RadosObject::RadosDeleteOp::delete_obj
 
 int RadosObject::delete_object(const DoutPrefixProvider* dpp,
 			       optional_yield y,
@@ -2305,8 +2307,9 @@ int RadosObject::delete_object(const DoutPrefixProvider* dpp,
   del_op.params.versioning_status = (flags & FLAG_PREVENT_VERSIONING)
                                     ? 0 : bucket->get_info().versioning_status();
 
-  return del_op.delete_obj(y, dpp, flags & FLAG_LOG_OP);
-}
+  // convert flags to bool params
+  return del_op.delete_obj(y, dpp, flags & FLAG_LOG_OP, flags & FLAG_FORCE_OP);
+} // RadosObject::delete_object
 
 int RadosObject::delete_obj_aio(const DoutPrefixProvider* dpp, RGWObjState* astate,
 				   Completions* aio, bool keep_index_consistent,
