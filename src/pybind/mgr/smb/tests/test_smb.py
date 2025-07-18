@@ -929,3 +929,180 @@ def test_tls_credential_yaml_show(tmodule):
     assert res == 0
     body = body.strip()
     assert 'value: |' in body
+
+
+def _keybridge_example():
+    return [
+        {
+            'resource_type': 'ceph.smb.tls.credential',
+            'tls_credential_id': 'cert1',
+            'intent': 'present',
+            'credential_type': 'cert',
+            'value': cert1,
+        },
+        {
+            'resource_type': 'ceph.smb.tls.credential',
+            'tls_credential_id': 'key1',
+            'intent': 'present',
+            'credential_type': 'key',
+            'value': cert1,
+        },
+        {
+            'resource_type': 'ceph.smb.tls.credential',
+            'tls_credential_id': 'cacert1',
+            'intent': 'present',
+            'credential_type': 'ca-cert',
+            'value': cert1,
+        },
+        {
+            'resource_type': 'ceph.smb.cluster',
+            'cluster_id': 'foo',
+            'auth_mode': 'active-directory',
+            'intent': 'present',
+            'clustering': 'never',
+            'domain_settings': {
+                'realm': 'dom1.example.com',
+                'join_sources': [
+                    {
+                        'source_type': 'resource',
+                        'ref': 'foo',
+                    }
+                ],
+            },
+            "keybridge": {
+                "scopes": [
+                    {"name": "mem"},
+                    {
+                        "name": "kmip",
+                        "kmip_hosts": ["zorg.example.net"],
+                        "kmip_port": 78989,
+                        "kmip_cert": {"ref": "cert1"},
+                        "kmip_key": {"ref": "key1"},
+                        "kmip_ca_cert": {"ref": "cacert1"},
+                    },
+                ],
+            },
+        },
+        {
+            'resource_type': 'ceph.smb.join.auth',
+            'auth_id': 'foo',
+            'intent': 'present',
+            'auth': {
+                'username': 'testadmin',
+                'password': 'Passw0rd',
+            },
+        },
+        {
+            'resource_type': 'ceph.smb.share',
+            'cluster_id': 'foo',
+            'share_id': 's1',
+            'intent': 'present',
+            'name': 'Ess One',
+            'readonly': False,
+            'browseable': True,
+            'cephfs': {
+                'volume': 'cephfs',
+                'path': '/',
+                'provider': 'samba-vfs',
+                "fscrypt_key": {
+                    "scope": "mem",
+                    "name": "bob",
+                },
+            },
+        },
+    ]
+
+
+def test_keybridge_config(tmodule):
+    txt = json.dumps(_keybridge_example())
+
+    rg = tmodule.apply_resources(txt)
+    assert rg.success, rg.to_simplified()
+
+
+@pytest.mark.parametrize(
+    "params",
+    [
+        dict(scopes=[{'name': 'joe'}], expected='invalid scope type'),
+        dict(scopes=[{'name': 'mem.joe'}], expected='invalid scope name'),
+        dict(scopes=[{'name': 'kmip.00'}], expected='invalid scope name'),
+        dict(scopes=[{'name': 'kmip.'}], expected='invalid scope name'),
+        dict(scopes=[{'name': 'kmip._'}], expected='invalid scope name'),
+        dict(scopes=[], enabled=True, expected='at least one scope'),
+        dict(scopes=[{'name': 'kmip'}], expected='kmip hostname'),
+        dict(
+            scopes=[{'name': 'kmip', 'kmip_hosts': ['foo.example.org']}],
+            expected='kmip server port',
+        ),
+        dict(
+            scopes=[
+                {
+                    'name': 'kmip',
+                    'kmip_hosts': ['foo.example.org'],
+                    'kmip_port': 67890,
+                }
+            ],
+            expected='cert',
+        ),
+        dict(
+            scopes=[
+                {
+                    'name': 'mem',
+                    'kmip_hosts': ['foo.example.org'],
+                    'kmip_port': 67890,
+                }
+            ],
+            expected='mem',
+        ),
+    ],
+)
+def test_keybridge_config_scope_error(tmodule, params):
+    example = _keybridge_example()
+    if enabled := params.get('enabled'):
+        example[3]['keybridge']['enabled'] = enabled
+    example[3]['keybridge']['scopes'] = params['scopes']
+    txt = json.dumps(example)
+
+    rg = tmodule.apply_resources(txt)
+    assert not rg.success, rg.to_simplified()
+    failures = [r for r in rg if not r.success]
+    assert len(failures) == 1
+    failure = failures[0]
+    assert params['expected'] in failure.msg
+
+
+@pytest.mark.parametrize(
+    "params",
+    [
+        dict(fkey={'scope': 'mem', 'name': ''}, expected='valid'),
+        dict(fkey={'scope': 'mem', 'name': '-'}, expected='valid'),
+        dict(fkey={'scope': '-', 'name': 'foo'}, expected='valid'),
+        dict(
+            fkey={'scope': 'mim', 'name': 'foo'},
+            expected='invalid scope type',
+        ),
+        dict(
+            fkey={'scope': 'mem.bob', 'name': 'foo'},
+            expected='invalid scope name',
+        ),
+        dict(
+            fkey={'scope': 'kmip.-', 'name': 'foo'},
+            expected='invalid scope name',
+        ),
+        dict(
+            fkey={'scope': 'kmip.foo', 'name': 'foo'},
+            expected='scope name not known',
+        ),
+    ],
+)
+def test_share_fscrypt_config_error(tmodule, params):
+    example = _keybridge_example()
+    example[-1]['cephfs']['fscrypt_key'] = params['fkey']
+    txt = json.dumps(example)
+
+    rg = tmodule.apply_resources(txt)
+    assert not rg.success, rg.to_simplified()
+    failures = [r for r in rg if not r.success]
+    assert len(failures) == 1
+    failure = failures[0]
+    assert params['expected'] in failure.msg
