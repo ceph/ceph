@@ -93,7 +93,7 @@ class SubvolumeBase(object):
 
     @property
     def namespace(self):
-        return "{0}{1}".format(self.vol_spec.fs_namespace, self.subvolname)
+        return f'{self.vol_spec.fs_namespace}_{self.group.groupname}_{self.subvolname}'
 
     @property
     def group_name(self):
