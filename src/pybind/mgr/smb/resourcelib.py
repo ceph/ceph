@@ -390,6 +390,10 @@ class Resource:
             return _fs(value)
 
         if fld.takes(list):
+            if isinstance(value, str):
+                raise ResourceTypeError(
+                    f'{fld.name} expects a list not a string'
+                )
             subtype = fld.list_element_type()
             return [
                 self._object_sub_from_simplified(subtype, v) for v in value
