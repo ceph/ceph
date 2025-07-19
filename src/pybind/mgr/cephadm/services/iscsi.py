@@ -41,17 +41,19 @@ class IscsiService(CephService):
 
     @classmethod
     def get_dependencies(cls, mgr: "CephadmOrchestrator",
-                         spec: Optional[ServiceSpec] = None,
+                         spec: ServiceSpec,
                          daemon_type: Optional[str] = None) -> List[str]:
+        parent_deps = super().get_dependencies(mgr, spec, daemon_type)
         if spec:
             iscsi_spec = cast(IscsiServiceSpec, spec)
-            return [get_trusted_ips(mgr, iscsi_spec)]
+            return parent_deps + [get_trusted_ips(mgr, iscsi_spec)]
         else:
-            return [mgr.get_mgr_ip()]
+            return parent_deps + [mgr.get_mgr_ip()]
 
     def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
         assert self.TYPE == daemon_spec.daemon_type
 
+        super().prepare_create(daemon_spec)
         spec = cast(IscsiServiceSpec, self.mgr.spec_store[daemon_spec.service_name].spec)
         igw_id = daemon_spec.daemon_id
 
@@ -62,26 +64,18 @@ class IscsiService(CephService):
                                               'mgr', 'allow command "service status"',
                                               'osd', 'allow rwx'])
 
-        if spec.ssl_cert:
-            if isinstance(spec.ssl_cert, list):
-                cert_data = '\n'.join(spec.ssl_cert)
-            else:
-                cert_data = spec.ssl_cert
+        ssl_cert, ssl_key = self.get_certificates(daemon_spec)
+        if ssl_cert:
             ret, out, err = self.mgr.check_mon_command({
                 'prefix': 'config-key set',
                 'key': f'iscsi/{utils.name_to_config_section("iscsi")}.{igw_id}/iscsi-gateway.crt',
-                'val': cert_data,
+                'val': ssl_cert,
             })
-
-        if spec.ssl_key:
-            if isinstance(spec.ssl_key, list):
-                key_data = '\n'.join(spec.ssl_key)
-            else:
-                key_data = spec.ssl_key
+        if ssl_key:
             ret, out, err = self.mgr.check_mon_command({
                 'prefix': 'config-key set',
                 'key': f'iscsi/{utils.name_to_config_section("iscsi")}.{igw_id}/iscsi-gateway.key',
-                'val': key_data,
+                'val': ssl_key,
             })
 
         trusted_ip_list = get_trusted_ips(self.mgr, spec)
