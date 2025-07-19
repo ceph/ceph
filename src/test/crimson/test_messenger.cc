@@ -3674,9 +3674,9 @@ test_v2_protocol(entity_addr_t test_addr,
                  entity_addr_t test_peer_addr,
                  bool test_peer_islocal,
                  bool peer_wins) {
-  ceph_assert_always(test_addr.is_msgr2());
-  ceph_assert_always(cmd_peer_addr.is_msgr2());
-  ceph_assert_always(test_peer_addr.is_msgr2());
+  ceph_assert(test_addr.is_msgr2());
+  ceph_assert(cmd_peer_addr.is_msgr2());
+  ceph_assert(test_peer_addr.is_msgr2());
 
   if (test_peer_islocal) {
     // initiate crimson test peer locally

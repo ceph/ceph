@@ -109,16 +109,16 @@ struct client_config {
     client_config conf;
     entity_addr_t addr;
     ceph_assert(addr.parse(options["server-addr"].as<std::string>().c_str(), nullptr));
-    ceph_assert_always(addr.is_msgr2());
+    ceph_assert(addr.is_msgr2());
 
     conf.server_addr = addr;
     conf.block_size = options["client-bs"].as<unsigned>();
     conf.ramptime = options["ramptime"].as<unsigned>();
     conf.msgtime = options["msgtime"].as<unsigned>();
     conf.num_clients = options["clients"].as<unsigned>();
-    ceph_assert_always(conf.num_clients > 0);
+    ceph_assert(conf.num_clients > 0);
     conf.num_conns = options["conns-per-client"].as<unsigned>();
-    ceph_assert_always(conf.num_conns > 0);
+    ceph_assert(conf.num_conns > 0);
     conf.depth = options["depth"].as<unsigned>();
     conf.skip_core_0 = options["client-skip-core-0"].as<bool>();
     return conf;
@@ -145,7 +145,7 @@ struct server_config {
     server_config conf;
     entity_addr_t addr;
     ceph_assert(addr.parse(options["server-addr"].as<std::string>().c_str(), nullptr));
-    ceph_assert_always(addr.is_msgr2());
+    ceph_assert(addr.is_msgr2());
 
     conf.addr = addr;
     conf.block_size = options["server-bs"].as<unsigned>();
@@ -207,7 +207,7 @@ static seastar::future<> run(
           crimson::net::ConnectionRef,
           seastar::shard_id new_shard,
           bool is_replace) override {
-        ceph_assert_always(new_shard == seastar::this_shard_id());
+        ceph_assert(new_shard == seastar::this_shard_id());
         auto &server = container().local();
         ++server.conn_count;
       }
@@ -303,7 +303,7 @@ static seastar::future<> run(
         if (last_msg) {
           auto msg = boost::static_pointer_cast<MOSDOp>(last_msg);
           msg->finish_decode();
-          ceph_assert_always(msg->ops.size() == 1);
+          ceph_assert(msg->ops.size() == 1);
           msg_size = msg->ops[0].op.extent.length;
           last_msg.reset();
         }
@@ -447,12 +447,12 @@ static seastar::future<> run(
         }
 
         void finish_connecting() {
-          ceph_assert_always(connected_time == mono_clock::zero());
+          ceph_assert(connected_time == mono_clock::zero());
           connected_time = mono_clock::now();
         }
 
         void start_collect() {
-          ceph_assert_always(connected_time != mono_clock::zero());
+          ceph_assert(connected_time != mono_clock::zero());
           start_time = mono_clock::now();
           start_count = received_count;
           sampled_count = 0u;
@@ -610,7 +610,7 @@ static seastar::future<> run(
       void ms_handle_connect(
           crimson::net::ConnectionRef conn,
           seastar::shard_id prv_shard) override {
-        ceph_assert_always(prv_shard == seastar::this_shard_id());
+        ceph_assert(prv_shard == seastar::this_shard_id());
         assert(is_active());
         unsigned index = static_cast<ConnectionPriv&>(conn->get_user_private()).index;
         auto &conn_state = conn_states[index];
