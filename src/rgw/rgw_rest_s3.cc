@@ -6467,6 +6467,7 @@ AWSGeneralAbstractor::get_auth_data_v4(const req_state* const s,
         case RGW_OP_PUT_BUCKET_OBJ_LOCK:
         case RGW_OP_PUT_OBJ_RETENTION:
         case RGW_OP_PUT_OBJ_LEGAL_HOLD:
+        case RGW_STS_GET_CALLER_IDENTITY:
         case RGW_STS_GET_SESSION_TOKEN:
         case RGW_STS_ASSUME_ROLE:
         case RGW_OP_PUT_BUCKET_PUBLIC_ACCESS_BLOCK:
