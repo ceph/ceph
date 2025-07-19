@@ -66,3 +66,12 @@ options:
   - ceph-exporter
   flags:
   - runtime
+- name: exporter_disable_process_metrics
+  type: bool
+  level: advanced
+  desc: if true disable the collection of process metrics
+  default: false
+  services:
+  - ceph-exporter
+  flags:
+  - runtime
