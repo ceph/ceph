@@ -353,6 +353,8 @@ void usage()
   cout << "  notification list                list bucket notifications configuration\n";
   cout << "  notification get                 get a bucket notifications configuration\n";
   cout << "  notification rm                  remove a bucket notifications configuration\n";
+  cout << "  restore status                   check restore status of object in a bucket\n";
+  cout << "  restore list                     show the information about restore operations in a bucket\n";
   cout << "options:\n";
   cout << "   --tenant=<tenant>                 tenant name\n";
   cout << "   --user_ns=<namespace>             namespace of user (oidc in case of users authenticated with oidc provider)\n";
@@ -914,6 +916,8 @@ enum class OPT {
   ACCOUNT_STATS,
   ACCOUNT_RM,
   ACCOUNT_LIST,
+  RESTORE_STATUS,
+  RESTORE_LIST,
 };
 
 }
@@ -1177,6 +1181,8 @@ static SimpleCmd::Commands all_cmds = {
   { "account stats", OPT::ACCOUNT_STATS },
   { "account rm", OPT::ACCOUNT_RM },
   { "account list", OPT::ACCOUNT_LIST },
+  { "restore status", OPT::RESTORE_STATUS },
+  { "restore list", OPT::RESTORE_LIST },
 };
 
 static SimpleCmd::Aliases cmd_aliases = {
@@ -4582,6 +4588,8 @@ int main(int argc, const char **argv)
        OPT::PUBSUB_TOPIC_STATS  ,
        OPT::PUBSUB_TOPIC_DUMP  ,
 			 OPT::SCRIPT_GET,
+       OPT::RESTORE_STATUS,
+       OPT::RESTORE_LIST,
     };
 
     std::set<OPT> gc_ops_list = {
@@ -12194,7 +12202,121 @@ next:
       }
     }
   }
-
+  if (opt_cmd == OPT::RESTORE_STATUS ||
+      opt_cmd == OPT::RESTORE_LIST) {
+        int ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
+        if (ret < 0) {
+          cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
+          return -ret;
+        }
+        if (opt_cmd == OPT::RESTORE_STATUS) {
+          if (!object.empty()) {
+            std::unique_ptr<rgw::sal::Object> obj = bucket->get_object(object);
+            obj->set_instance(object_version);
+            ret = obj->get_obj_attrs(null_yield, dpp());
+            if (ret < 0) {
+              cerr << "ERROR: failed to stat object, returned error: " << cpp_strerror(-ret) << std::endl;
+              return 1;
+            }
+            formatter->open_object_section("object restore status");
+            formatter->dump_string("name", object);
+            map<string, bufferlist>::iterator iter;
+            for (iter = obj->get_attrs().begin(); iter != obj->get_attrs().end(); ++iter) {
+              bufferlist& bl = iter->second;
+              if (iter->first == RGW_ATTR_RESTORE_STATUS) {
+                rgw::sal::RGWRestoreStatus rs;
+                decode(rs, bl);
+                formatter->dump_string("RestoreStatus", rgw::sal::rgw_restore_status_dump(rs));
+              } else if (iter->first == RGW_ATTR_RESTORE_TYPE) {
+                rgw::sal::RGWRestoreType rt;
+                decode(rt, bl);
+                formatter->dump_string("RestoreType", rgw::sal::rgw_restore_type_dump(rt));
+              } else if (iter->first == RGW_ATTR_RESTORE_EXPIRY_DATE) {
+                decode_dump<ceph::real_time>("restore_expiry_date", bl, formatter.get());
+              } else if (iter->first == RGW_ATTR_RESTORE_TIME) {
+                decode_dump<ceph::real_time>("restore_time", bl, formatter.get());
+              } else if (iter->first == RGW_ATTR_RESTORE_TIME) {
+                decode_dump<ceph::real_time>("user.rgw.restore-at", bl, formatter.get());
+              }
+            }
+            formatter->close_section();
+            formatter->flush(cout);
+          }
+        } else if (opt_cmd == OPT::RESTORE_LIST) {
+          int count = 0;
+          int max_entries = 1000;
+          int restore_completed_count = 0;
+          int restore_in_progress_count = 0;
+          int restore_failed_count = 0;
+          string prefix;
+          string restore_completed;
+          string restore_in_progress;
+          string restore_failed;
+          string delim;
+          string marker;
+          vector<rgw_bucket_dir_entry> result;
+          string ns;
+          rgw::sal::Bucket::ListParams params;
+          rgw::sal::Bucket::ListResults results;
+          params.prefix = prefix;
+          params.delim = delim;
+          params.marker = rgw_obj_key(marker);
+          params.ns = ns;
+          params.enforce_ns = true;
+          //params.list_versions = true;
+          do {
+            ret = bucket->list(dpp(), params, max_entries - count, results, null_yield);
+            if (ret < 0) {
+              cerr << "ERROR: driver->list_objects(): " << cpp_strerror(-ret) << std::endl;
+              return -ret;
+            }
+            count += results.objs.size();
+            for (vector<rgw_bucket_dir_entry>::iterator iter = results.objs.begin(); iter != results.objs.end(); ++iter) {
+              std::unique_ptr<rgw::sal::Object> obj = bucket->get_object(iter->key.name);
+              if (obj) {
+                obj->set_instance(object_version);
+                ret = obj->get_obj_attrs(null_yield, dpp());
+                if (ret < 0) {
+                  cerr << "ERROR: failed to stat object, returned error: " << cpp_strerror(-ret) << std::endl;
+                  return -ret;
+                }
+                for (map<string, bufferlist>::iterator getattriter = obj->get_attrs().begin(); getattriter != obj->get_attrs().end(); ++getattriter) {
+                  bufferlist& bl = getattriter->second;
+                  if (getattriter->first == RGW_ATTR_RESTORE_STATUS) {
+                    rgw::sal::RGWRestoreStatus rs;
+                    decode(rs, bl);
+                    if ( rs == rgw::sal::RGWRestoreStatus::RestoreAlreadyInProgress) {
+                      restore_in_progress = restore_in_progress.append(" " + iter->key.name);
+                      restore_in_progress_count ++;
+                    } else  if (rs == rgw::sal::RGWRestoreStatus::CloudRestored) {
+                      restore_completed = restore_completed.append(" " + iter->key.name);
+                      restore_completed_count ++;
+                    } else if (rs == rgw::sal::RGWRestoreStatus::RestoreFailed) {
+                      restore_failed = restore_failed.append(" " + iter->key.name);
+                      restore_failed_count ++;
+                    }
+                  }
+                }
+              }
+            }
+          } while (results.is_truncated && count < max_entries);
+          formatter->open_object_section("restore_info");
+          if (restore_completed_count > 0) {
+            formatter->dump_string("restore_completed", restore_completed);
+            formatter->dump_int("restore_completed_count", restore_completed_count);
+          }
+          if (restore_in_progress_count) {
+            formatter->dump_string("restore_in_progress", restore_in_progress);
+            formatter->dump_int("restore_in_progress_count", restore_in_progress_count);
+          }
+          if (restore_failed_count > 0) {
+            formatter->dump_string("restore_failed", restore_failed);
+            formatter->dump_int("restore_failed_count", restore_failed_count);
+          }
+          formatter->close_section();
+          formatter->flush(cout);
+        }
+      }
   return 0;
 }
 
