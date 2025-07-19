@@ -5086,6 +5086,7 @@ next:
       results->raw_stats.memory_value.rstat = in->get_inode()->rstat;
       frag_info_t& dir_info = results->raw_stats.ondisk_value.dirstat;
       nest_info_t& nest_info = results->raw_stats.ondisk_value.rstat;
+      bool has_local_dirty_dirfrag = false;
 
       if (rval != 0) {
         results->raw_stats.error_str << "Failed to read dirfrags off disk";
@@ -5103,6 +5104,8 @@ next:
 	  ceph_assert(dir->get_version() > 0);
 	  nest_info.add(dir->get_fnode()->accounted_rstat);
 	  dir_info.add(dir->get_fnode()->accounted_fragstat);
+          if (dir->is_auth() && dir->is_dirty())
+              has_local_dirty_dirfrag = true;
         }
       }
       nest_info.rsubdirs++; // it gets one to account for self
@@ -5128,7 +5131,17 @@ next:
                       "please rerun scrub when system is stable; "
                       "assuming passed for now;" << dendl;
           results->raw_stats.passed = true;
-        }
+        } else if (has_local_dirty_dirfrag || in->has_dirty_remote_dirfrag_scrubbed()) {
+          MDCache *mdcache = in->mdcache; // for dout()
+          auto ino = [this]() { return in->ino(); }; // for dout()
+          dout(20) << (has_local_dirty_dirfrag ? "local": "remote") << " dirfrag : "
+	              "raw stats most likely wont match since it's a directory "
+	              "inode and a dirfrag is dirty; please rerun scrub when "
+		      "system is stable; assuming passed for now;" << dendl;
+          results->raw_stats.passed = true;
+	  if (in->has_dirty_remote_dirfrag_scrubbed())
+	    in->clear_dirty_remote_dirfrag_scrubbed();
+	}
 	goto next;
       }
 
