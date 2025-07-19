@@ -3317,6 +3317,8 @@ void PGMap::get_health_checks(
 	for (auto str : asum.second.second) {
 	  summary += str;
 	}
+      } else if (asum.first == "BLUESTORE_FREE_FRAGMENTATION") {
+        summary += " experiencing high free space fragmentation of BlueStore";
       }
 
       auto& d = checks->add(asum.first, HEALTH_WARN, summary, asum.second.first);
