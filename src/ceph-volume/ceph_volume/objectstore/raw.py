@@ -1,7 +1,7 @@
 import logging
 import json
 import os
-from .bluestore import BlueStore
+from .baseobjectstore import BaseObjectStore
 from ceph_volume import terminal, decorators, conf, process
 from ceph_volume.util import system, disk
 from ceph_volume.util import prepare as prepare_utils
@@ -17,7 +17,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-class RawBlueStore(BlueStore):
+class Raw(BaseObjectStore):
     def __init__(self, args: "argparse.Namespace") -> None:
         super().__init__(args)
         self.method = 'raw'
