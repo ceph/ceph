@@ -312,13 +312,18 @@ class IngressService(CephService):
                 if ifaces and ipaddress.ip_address(bare_ip) in ipaddress.ip_network(subnet):
                     interface = list(ifaces.keys())[0]
                     for ip_addr in ifaces[interface]:
-                        if ip_addr != str(bare_ip):
-                            host_ip = ip_addr
-                            break
+                        # Ignore if the IP is the VIP
+                        if ip_addr == str(bare_ip):
+                            continue
+                        host_ip = ip_addr
+                        break
+
+                if host_ip:
                     logger.info(
                         f'{bare_ip} is in {subnet} on {host} interface {interface}'
                     )
                     break
+
             # try to find interface by matching spec.virtual_interface_networks
             if not interface and spec.virtual_interface_networks:
                 for subnet, ifaces in self.mgr.cache.networks.get(host, {}).items():
