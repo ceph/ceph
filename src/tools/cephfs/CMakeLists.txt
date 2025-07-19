@@ -1,6 +1,7 @@
 set(cephfs_journal_tool_srcs
   cephfs-journal-tool.cc
   JournalTool.cc
+  ProgressTracker.cc
   JournalFilter.cc
   JournalScanner.cc
   EventOutput.cc
@@ -28,6 +29,7 @@ target_link_libraries(cephfs-meta-injection
 set(cephfs_table_tool_srcs
   cephfs-table-tool.cc
   TableTool.cc
+  ProgressTracker.cc
   RoleSelector.cc
   MDSUtility.cc)
 add_executable(cephfs-table-tool ${cephfs_table_tool_srcs})
@@ -37,6 +39,7 @@ target_link_libraries(cephfs-table-tool librados mds osdc global
 set(cephfs_data_scan_srcs
   cephfs-data-scan.cc
   DataScan.cc
+  ProgressTracker.cc
   RoleSelector.cc
   PgFiles.cc
   MDSUtility.cc)
