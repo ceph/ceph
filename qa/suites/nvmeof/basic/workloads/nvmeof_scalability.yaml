@@ -13,6 +13,18 @@ tasks:
 - cephadm.wait_for_service:
     service: nvmeof.mypool.mygroup0
 
+## Enable gateway in DEBUG mode
+# - cephadm.exec:
+#     host.a:
+#       - ceph orch ls nvmeof --export > /tmp/nvmeof-orig.yaml
+#       - "sed 's/log_level:\ INFO/log_level:\ DEBUG/g' /tmp/nvmeof-orig.yaml > /tmp/nvmeof-debug.yaml"
+#       - cat /tmp/nvmeof-debug.yaml
+#       - ceph orch apply -i /tmp/nvmeof-debug.yaml
+#       - ceph orch redeploy nvmeof.mypool.mygroup0
+
+# - cephadm.wait_for_service:
+#     service: nvmeof.mypool.mygroup0
+
 - workunit:
     no_coverage_and_limits: true
     timeout: 30m
