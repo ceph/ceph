@@ -704,7 +704,7 @@ namespace rgw::dedup {
   //---------------------------------------------------------------------------
   static void init_cmp_pairs(const disk_record_t *p_rec,
                              const bufferlist    &etag_bl,
-                             bufferlist          &sha256_bl, // OUT PARAM
+                             bufferlist          &hash_bl, // OUT PARAM
                              librados::ObjectWriteOperation *p_op)
   {
     p_op->cmpxattr(RGW_ATTR_ETAG, CEPH_OSD_CMPXATTR_OP_EQ, etag_bl);
@@ -712,15 +712,15 @@ namespace rgw::dedup {
     // Can replace it with something cheaper like size/version?
     p_op->cmpxattr(RGW_ATTR_MANIFEST, CEPH_OSD_CMPXATTR_OP_EQ, p_rec->manifest_bl);
 
-    // SHA has 256 bit splitted into multiple 64bit units
+    // BLAKE3 hash has 256 bit splitted into multiple 64bit units
     const unsigned units = (256 / (sizeof(uint64_t)*8));
     static_assert(units == 4);
     for (unsigned i = 0; i < units; i++) {
-      ceph::encode(p_rec->s.sha256[i], sha256_bl);
+      ceph::encode(p_rec->s.hash[i], hash_bl);
     }
 
-    if (!p_rec->s.flags.sha256_calculated()) {
-      p_op->cmpxattr(RGW_ATTR_SHA256, CEPH_OSD_CMPXATTR_OP_EQ, sha256_bl);
+    if (!p_rec->s.flags.hash_calculated()) {
+      p_op->cmpxattr(RGW_ATTR_BLAKE3, CEPH_OSD_CMPXATTR_OP_EQ, hash_bl);
     }
   }
 
@@ -755,17 +755,17 @@ namespace rgw::dedup {
     ldpp_dout(dpp, 20) << __func__ << "::num_parts=" << p_tgt_rec->s.num_parts
                        << "::ETAG=" << etag_bl.to_str() << dendl;
 
-    bufferlist hash_bl, manifest_hash_bl, tgt_sha256_bl;
+    bufferlist hash_bl, manifest_hash_bl, tgt_hash_bl;
     crypto::digest<crypto::SHA1>(p_src_rec->manifest_bl).encode(hash_bl);
     // Use a shorter hash (64bit instead of 160bit)
     hash_bl.splice(0, 8, &manifest_hash_bl);
     librados::ObjectWriteOperation tgt_op;
-    init_cmp_pairs(p_tgt_rec, etag_bl, tgt_sha256_bl, &tgt_op);
+    init_cmp_pairs(p_tgt_rec, etag_bl, tgt_hash_bl, &tgt_op);
     tgt_op.setxattr(RGW_ATTR_SHARE_MANIFEST, manifest_hash_bl);
     tgt_op.setxattr(RGW_ATTR_MANIFEST, p_src_rec->manifest_bl);
-    if (p_tgt_rec->s.flags.sha256_calculated()) {
-      tgt_op.setxattr(RGW_ATTR_SHA256, tgt_sha256_bl);
-      p_stats->set_sha256_attrs++;
+    if (p_tgt_rec->s.flags.hash_calculated()) {
+      tgt_op.setxattr(RGW_ATTR_BLAKE3, tgt_hash_bl);
+      p_stats->set_hash_attrs++;
     }
 
     std::string src_oid, tgt_oid;
@@ -800,13 +800,13 @@ namespace rgw::dedup {
         // disk-record (as require an expensive random-disk-write).
         // When deduping C we can trust the shared_manifest state in the table and
         // skip a redundant update to SRC object attribute
-        bufferlist src_sha256_bl;
+        bufferlist src_hash_bl;
         librados::ObjectWriteOperation src_op;
-        init_cmp_pairs(p_src_rec, etag_bl, src_sha256_bl, &src_op);
+        init_cmp_pairs(p_src_rec, etag_bl, src_hash_bl, &src_op);
         src_op.setxattr(RGW_ATTR_SHARE_MANIFEST, manifest_hash_bl);
-        if (p_src_rec->s.flags.sha256_calculated()) {
-          src_op.setxattr(RGW_ATTR_SHA256, src_sha256_bl);
-          p_stats->set_sha256_attrs++;
+        if (p_src_rec->s.flags.hash_calculated()) {
+          src_op.setxattr(RGW_ATTR_BLAKE3, src_hash_bl);
+          p_stats->set_hash_attrs++;
         }
 
         ldpp_dout(dpp, 20) << __func__ <<"::send SRC CLS (Shared_Manifest)"<< dendl;
@@ -824,57 +824,49 @@ namespace rgw::dedup {
     return ret;
   }
 
-  using ceph::crypto::SHA256;
   //---------------------------------------------------------------------------
-  int Background::calc_object_sha256(const disk_record_t *p_rec, uint8_t *p_sha256)
+  int Background::calc_object_blake3(const disk_record_t *p_rec, uint8_t *p_hash)
   {
-    ldpp_dout(dpp, 20) << __func__ << "::p_rec->obj_name=" << p_rec->obj_name << dendl;
-    // Open questions -
-    // 1) do we need the secret if so what is the correct one to use?
-    // 2) are we passing the head/tail objects in the correct order?
+    ldpp_dout(dpp, 20) << __func__ << "::obj_name=" << p_rec->obj_name << dendl;
     RGWObjManifest manifest;
     try {
       auto bl_iter = p_rec->manifest_bl.cbegin();
       decode(manifest, bl_iter);
     } catch (buffer::error& err) {
-      ldpp_dout(dpp, 1)  << __func__ << "::ERROR: bad src manifest" << dendl;
+      ldpp_dout(dpp, 1)  << __func__ << "::ERROR: bad src manifest for: "
+                         << p_rec->obj_name << dendl;
       return -EINVAL;
     }
-    std::string oid;
-    build_oid(p_rec->bucket_id, p_rec->obj_name, &oid);
-    librados::IoCtx head_ioctx;
-    const char *secret = "0555b35654ad1656d804f1b017cd26e9";
-    TOPNSPC::crypto::HMACSHA256 hmac((const uint8_t*)secret, strlen(secret));
+
+    blake3_hasher hmac;
+    blake3_hasher_init(&hmac);
     for (auto p = manifest.obj_begin(dpp); p != manifest.obj_end(dpp); ++p) {
       rgw_raw_obj raw_obj = p.get_location().get_raw_obj(rados);
       rgw_rados_ref obj;
       int ret = rgw_get_rados_ref(dpp, rados_handle, raw_obj, &obj);
       if (ret < 0) {
-        ldpp_dout(dpp, 1) << __func__ << "::failed rgw_get_rados_ref() for raw_obj="
-                          << raw_obj << dendl;
+        ldpp_dout(dpp, 1) << __func__ << "::failed rgw_get_rados_ref() for oid: "
+                          << raw_obj.oid << ", err is " << cpp_strerror(-ret) << dendl;
         return ret;
       }
 
-      if (oid == raw_obj.oid) {
-        ldpp_dout(dpp, 20) << __func__ << "::manifest: head object=" << oid << dendl;
-        head_ioctx = obj.ioctx;
-      }
       bufferlist bl;
       librados::IoCtx ioctx = obj.ioctx;
       // read full object
       ret = ioctx.read(raw_obj.oid, bl, 0, 0);
       if (ret > 0) {
         for (const auto& bptr : bl.buffers()) {
-          hmac.Update((const unsigned char *)bptr.c_str(), bptr.length());
+          blake3_hasher_update(&hmac, (const unsigned char *)bptr.c_str(), bptr.length());
         }
       }
       else {
-        ldpp_dout(dpp, 1) << __func__ << "::ERR: failed to read " << oid
+        ldpp_dout(dpp, 1) << __func__ << "::ERR: failed to read " << raw_obj.oid
                           << ", error is " << cpp_strerror(-ret) << dendl;
         return ret;
       }
     }
-    hmac.Final(p_sha256);
+
+    blake3_hasher_finalize(&hmac, p_hash, BLAKE3_OUT_LEN);
     return 0;
   }
 
@@ -977,33 +969,33 @@ namespace rgw::dedup {
       memset(&p_rec->s.shared_manifest, 0, sizeof(p_rec->s.shared_manifest));
     }
 
-    itr = attrs.find(RGW_ATTR_SHA256);
+    itr = attrs.find(RGW_ATTR_BLAKE3);
     if (itr != attrs.end()) {
       try {
         auto bl_iter = itr->second.cbegin();
-        // SHA has 256 bit splitted into multiple 64bit units
+        // BLAKE3 hash 256 bit splitted into multiple 64bit units
         const unsigned units = (256 / (sizeof(uint64_t)*8));
         static_assert(units == 4);
         for (unsigned i = 0; i < units; i++) {
           uint64_t val;
           ceph::decode(val, bl_iter);
-          p_rec->s.sha256[i] = val;
+          p_rec->s.hash[i] = val;
         }
-        p_stats->valid_sha256_attrs++;
+        p_stats->valid_hash_attrs++;
         return 0;
       } catch (buffer::error& err) {
-        ldpp_dout(dpp, 1) << __func__ << "::ERR: failed SHA256 decode" << dendl;
+        ldpp_dout(dpp, 1) << __func__ << "::ERR: failed HASH decode" << dendl;
         return -EINVAL;
       }
     }
 
-    p_stats->invalid_sha256_attrs++;
+    p_stats->invalid_hash_attrs++;
     // TBD: redundant memset...
-    memset(p_rec->s.sha256, 0, sizeof(p_rec->s.sha256));
-    // CEPH_CRYPTO_HMACSHA256_DIGESTSIZE is 32 Bytes (32*8=256)
-    int ret = calc_object_sha256(p_rec, (uint8_t*)p_rec->s.sha256);
+    memset(p_rec->s.hash, 0, sizeof(p_rec->s.hash));
+    // BLAKE3_OUT_LEN is 32 Bytes
+    int ret = calc_object_blake3(p_rec, (uint8_t*)p_rec->s.hash);
     if (ret == 0) {
-      p_rec->s.flags.set_sha256_calculated();
+      p_rec->s.flags.set_hash_calculated();
     }
 
     return ret;
@@ -1177,18 +1169,18 @@ namespace rgw::dedup {
   }
 
   //---------------------------------------------------------------------------
-  static int write_sha256_object_attribute(const DoutPrefixProvider* const dpp,
+  static int write_blake3_object_attribute(const DoutPrefixProvider* const dpp,
                                            rgw::sal::Driver* driver,
                                            RGWRados* rados,
                                            const disk_record_t *p_rec)
   {
     bufferlist etag_bl;
-    bufferlist sha256_bl;
+    bufferlist hash_bl;
     librados::ObjectWriteOperation op;
     etag_to_bufferlist(p_rec->s.md5_high, p_rec->s.md5_low, p_rec->s.num_parts,
                        &etag_bl);
-    init_cmp_pairs(p_rec, etag_bl, sha256_bl /*OUT PARAM*/, &op);
-    op.setxattr(RGW_ATTR_SHA256, sha256_bl);
+    init_cmp_pairs(p_rec, etag_bl, hash_bl /*OUT PARAM*/, &op);
+    op.setxattr(RGW_ATTR_BLAKE3, hash_bl);
 
     std::string oid;
     librados::IoCtx ioctx;
@@ -1304,17 +1296,17 @@ namespace rgw::dedup {
       return 0;
     }
 
-    if (memcmp(src_rec.s.sha256, p_tgt_rec->s.sha256, sizeof(src_rec.s.sha256)) != 0) {
-      p_stats->sha256_mismatch++;
-      ldpp_dout(dpp, 10) << __func__ << "::SHA256 mismatch" << dendl;
-      // TBD: set sha256 attributes on head objects to save calc next time
-      if (src_rec.s.flags.sha256_calculated()) {
-        write_sha256_object_attribute(dpp, driver, rados, &src_rec);
-        p_stats->set_sha256_attrs++;
+    if (memcmp(src_rec.s.hash, p_tgt_rec->s.hash, sizeof(src_rec.s.hash)) != 0) {
+      p_stats->hash_mismatch++;
+      ldpp_dout(dpp, 10) << __func__ << "::HASH mismatch" << dendl;
+      // TBD: set hash attributes on head objects to save calc next time
+      if (src_rec.s.flags.hash_calculated()) {
+        write_blake3_object_attribute(dpp, driver, rados, &src_rec);
+        p_stats->set_hash_attrs++;
       }
-      if (p_tgt_rec->s.flags.sha256_calculated()) {
-        write_sha256_object_attribute(dpp, driver, rados, p_tgt_rec);
-        p_stats->set_sha256_attrs++;
+      if (p_tgt_rec->s.flags.hash_calculated()) {
+        write_blake3_object_attribute(dpp, driver, rados, p_tgt_rec);
+        p_stats->set_hash_attrs++;
       }
       return 0;
     }

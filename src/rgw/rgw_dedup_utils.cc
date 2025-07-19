@@ -432,15 +432,15 @@ namespace rgw::dedup {
     this->skipped_source_record   += other.skipped_source_record;
     this->duplicate_records       += other.duplicate_records;
     this->size_mismatch           += other.size_mismatch;
-    this->sha256_mismatch         += other.sha256_mismatch;
+    this->hash_mismatch           += other.hash_mismatch;
     this->failed_src_load         += other.failed_src_load;
     this->failed_rec_load         += other.failed_rec_load;
     this->failed_block_load       += other.failed_block_load;
 
-    this->valid_sha256_attrs      += other.valid_sha256_attrs;
-    this->invalid_sha256_attrs    += other.invalid_sha256_attrs;
-    this->set_sha256_attrs        += other.set_sha256_attrs;
-    this->skip_sha256_cmp         += other.skip_sha256_cmp;
+    this->valid_hash_attrs        += other.valid_hash_attrs;
+    this->invalid_hash_attrs      += other.invalid_hash_attrs;
+    this->set_hash_attrs          += other.set_hash_attrs;
+    this->skip_hash_cmp           += other.skip_hash_cmp;
 
     this->set_shared_manifest_src += other.set_shared_manifest_src;
     this->loaded_objects          += other.loaded_objects;
@@ -514,15 +514,15 @@ namespace rgw::dedup {
         f->dump_unsigned("Failed Remap Overflow", this->failed_map_overflow);
       }
 
-      f->dump_unsigned("Valid SHA256 attrs", this->valid_sha256_attrs);
-      f->dump_unsigned("Invalid SHA256 attrs", this->invalid_sha256_attrs);
+      f->dump_unsigned("Valid HASH attrs", this->valid_hash_attrs);
+      f->dump_unsigned("Invalid HASH attrs", this->invalid_hash_attrs);
 
-      if (this->set_sha256_attrs) {
-        f->dump_unsigned("Set SHA256", this->set_sha256_attrs);
+      if (this->set_hash_attrs) {
+        f->dump_unsigned("Set HASH", this->set_hash_attrs);
       }
 
-      if (this->skip_sha256_cmp) {
-        f->dump_unsigned("Can't run SHA256 compare", this->skip_sha256_cmp);
+      if (this->skip_hash_cmp) {
+        f->dump_unsigned("Can't run HASH compare", this->skip_hash_cmp);
       }
     }
 
@@ -582,8 +582,8 @@ namespace rgw::dedup {
 
     {
       Formatter::ObjectSection logical_failures(*f, "logical failures");
-      if (this->sha256_mismatch) {
-        f->dump_unsigned("SHA256 mismatch", this->sha256_mismatch);
+      if (this->hash_mismatch) {
+        f->dump_unsigned("HASH mismatch", this->hash_mismatch);
       }
       if (this->duplicate_records) {
         f->dump_unsigned("Duplicate SRC/TGT", this->duplicate_records);
@@ -620,15 +620,15 @@ namespace rgw::dedup {
     encode(m.skipped_source_record, bl);
     encode(m.duplicate_records, bl);
     encode(m.size_mismatch, bl);
-    encode(m.sha256_mismatch, bl);
+    encode(m.hash_mismatch, bl);
     encode(m.failed_src_load, bl);
     encode(m.failed_rec_load, bl);
     encode(m.failed_block_load, bl);
 
-    encode(m.valid_sha256_attrs, bl);
-    encode(m.invalid_sha256_attrs, bl);
-    encode(m.set_sha256_attrs, bl);
-    encode(m.skip_sha256_cmp, bl);
+    encode(m.valid_hash_attrs, bl);
+    encode(m.invalid_hash_attrs, bl);
+    encode(m.set_hash_attrs, bl);
+    encode(m.skip_hash_cmp, bl);
     encode(m.set_shared_manifest_src, bl);
 
     encode(m.loaded_objects, bl);
@@ -670,15 +670,15 @@ namespace rgw::dedup {
     decode(m.skipped_source_record, bl);
     decode(m.duplicate_records, bl);
     decode(m.size_mismatch, bl);
-    decode(m.sha256_mismatch, bl);
+    decode(m.hash_mismatch, bl);
     decode(m.failed_src_load, bl);
     decode(m.failed_rec_load, bl);
     decode(m.failed_block_load, bl);
 
-    decode(m.valid_sha256_attrs, bl);
-    decode(m.invalid_sha256_attrs, bl);
-    decode(m.set_sha256_attrs, bl);
-    decode(m.skip_sha256_cmp, bl);
+    decode(m.valid_hash_attrs, bl);
+    decode(m.invalid_hash_attrs, bl);
+    decode(m.set_hash_attrs, bl);
+    decode(m.skip_hash_cmp, bl);
     decode(m.set_shared_manifest_src, bl);
 
     decode(m.loaded_objects, bl);
