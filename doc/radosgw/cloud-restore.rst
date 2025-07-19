@@ -94,10 +94,10 @@ the following configurables should be set accordingly:
 
   The duration for which the objects are to be restored on the remote cloud service.
 
-* ``glacier_restore_tier_type`` (``Standard`` | ``Expedited``)
+* ``glacier_restore_tier_type`` (``Standard`` | ``Expedited`` | ``None``)
 
   The type of retrieval within the cloud service, which may represent different
-  pricing. Supported options are ``Standard`` and ``Expedited``.
+  pricing. Supported options are ``Standard``, ``Expedited`` and ``None``.
 
 
 For example:
