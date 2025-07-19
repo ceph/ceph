@@ -1090,24 +1090,24 @@ RandomBlockOolWriter::do_write(
     }
   }
 
-  return trans_intr::make_interruptible(
-    seastar::do_with(std::move(writes),
-      [&t, this](auto& writes) {
-      auto& stats = t.get_ool_write_stats();
-      stats.num_records += writes.size();
-      auto& trans_stats = get_by_src(w_stats.stats_by_src, t.get_src());
-      trans_stats.num_records += writes.size();
-      return crimson::do_for_each(writes,
-        [](auto& info) {
-        return info.rbm->write(info.offset, info.bp
-        ).handle_error(
-          alloc_write_ertr::pass_further{},
-          crimson::ct_error::assert_all{
-            "Invalid error when writing record"}
-        );
+  auto& stats = t.get_ool_write_stats();
+  stats.num_records += writes.size();
+  auto& trans_stats = get_by_src(w_stats.stats_by_src, t.get_src());
+  trans_stats.num_records += writes.size();
+  return seastar::do_with(std::move(writes),
+    [&t, this](auto& writes) {
+    return trans_intr::parallel_for_each(writes,
+      [](auto &info) {
+      return info.rbm->write(info.offset, info.bp
+      ).handle_error(
+        alloc_write_ertr::pass_further{},
+        crimson::ct_error::assert_all{
+          "Invalid error when writing record"}
+      ).safe_then([]() {
+        return alloc_write_iertr::now();
       });
-    })
-  );
+    });
+  });
 }
 
 }
