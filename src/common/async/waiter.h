@@ -138,7 +138,10 @@ public:
 
 template<typename Ret>
 class waiter<Ret> final : public detail::base {
-  std::aligned_storage_t<sizeof(Ret)> ret;
+  static constexpr std::size_t Alignment = std::bit_ceil(sizeof(Ret));
+  struct alignas(Alignment) {
+    unsigned char data[sizeof(Ret)];
+  } ret;
 
 public:
   Ret wait() {
