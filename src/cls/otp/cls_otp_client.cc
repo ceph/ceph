@@ -57,34 +57,31 @@ namespace rados {
         rados_op->exec("otp", "otp_remove", in);
       }
 
-      int OTP::check(CephContext *cct, librados::IoCtx& ioctx, const string& oid,
-                     const string& id, const string& val, otp_check_t *result) {
+      void check(librados::ObjectWriteOperation& wop,
+                 std::string id, std::string val, std::string token)
+      {
         cls_otp_check_otp_op op;
-        op.id = id;
-        op.val = val;
-#define TOKEN_LEN 16
-        op.token = gen_rand_alphanumeric(cct, TOKEN_LEN);
-        
+        op.id = std::move(id);
+        op.val = std::move(val);
+        op.token = std::move(token);
+
         bufferlist in;
-        bufferlist out;
         encode(op, in);
-        librados::ObjectWriteOperation wop;
         wop.exec("otp", "otp_check", in);
-        int r = ioctx.operate(oid, &wop);
-        if (r < 0) {
-          return r;
-        }
+      }
 
-        cls_otp_get_result_op op2;
-        op2.token = op.token;
-        bufferlist in2;
-        bufferlist out2;
-        encode(op2, in2);
-        r = ioctx.exec(oid, "otp", "otp_get_result", in, out);
-        if (r < 0) {
-          return r;
-        }
-
+      void check_result(librados::ObjectReadOperation& rop, std::string token,
+                        bufferlist& out, int& op_ret)
+      {
+        cls_otp_get_result_op op;
+        op.token = std::move(token);
+        bufferlist in;
+        encode(op, in);
+        rop.exec("otp", "otp_get_result", in, &out, &op_ret);
+      }
+      int check_result_decode(const bufferlist& out,
+                              otp_check_t& result)
+      {
         auto iter = out.cbegin();
         cls_otp_get_result_reply ret;
         try {
@@ -93,7 +90,7 @@ namespace rados {
 	  return -EBADMSG;
         }
 
-        *result = ret.result;
+        result = ret.result;
 
         return 0;
       }
@@ -159,23 +156,18 @@ namespace rados {
         return get(op, ioctx, oid, nullptr, true, result);
       }
 
-      int OTP::get_current_time(librados::IoCtx& ioctx, const string& oid,
-                                ceph::real_time *result) {
+      void get_current_time(librados::ObjectReadOperation& rop,
+                            bufferlist& out, int& op_ret)
+      {
         cls_otp_get_current_time_op op;
         bufferlist in;
-        bufferlist out;
-        int op_ret;
         encode(op, in);
-        ObjectReadOperation rop;
         rop.exec("otp", "get_current_time", in, &out, &op_ret);
-        int r = ioctx.operate(oid, &rop, nullptr);
-        if (r < 0) {
-          return r;
-        }
-        if (op_ret < 0) {
-          return op_ret;
-        }
+      }
 
+      int get_current_time_decode(const bufferlist& out,
+                                  ceph::real_time& result)
+      {
         cls_otp_get_current_time_reply ret;
         auto iter = out.cbegin();
         try {
@@ -184,7 +176,7 @@ namespace rados {
 	  return -EBADMSG;
         }
 
-        *result = ret.time;
+        result = ret.time;
 
         return 0;
       }

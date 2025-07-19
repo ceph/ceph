@@ -235,92 +235,6 @@ void RGWOp_MDLog_Delete::execute(optional_yield y) {
   op_ret = meta_log.trim(this, shard_id, {}, {}, {}, marker, y);
 }
 
-void RGWOp_MDLog_Lock::execute(optional_yield y) {
-  string period, shard_id_str, duration_str, locker_id, zone_id;
-  unsigned shard_id;
-
-  op_ret = 0;
-
-  period       = s->info.args.get("period");
-  shard_id_str = s->info.args.get("id");
-  duration_str = s->info.args.get("length");
-  locker_id    = s->info.args.get("locker-id");
-  zone_id      = s->info.args.get("zone-id");
-
-  if (period.empty()) {
-    ldpp_dout(this, 5) << "Missing period id trying to use current" << dendl;
-    period = driver->get_zone()->get_current_period_id();
-  }
-
-  if (period.empty() ||
-      shard_id_str.empty() ||
-      (duration_str.empty()) ||
-      locker_id.empty() ||
-      zone_id.empty()) {
-    ldpp_dout(this, 5) << "Error invalid parameter list" << dendl;
-    op_ret = -EINVAL;
-    return;
-  }
-
-  string err;
-  shard_id = (unsigned)strict_strtol(shard_id_str.c_str(), 10, &err);
-  if (!err.empty()) {
-    ldpp_dout(this, 5) << "Error parsing shard_id param " << shard_id_str << dendl;
-    op_ret = -EINVAL;
-    return;
-  }
-
-  RGWMetadataLog meta_log{s->cct, static_cast<rgw::sal::RadosStore*>(driver)->svc()->zone, static_cast<rgw::sal::RadosStore*>(driver)->svc()->cls, period};
-  unsigned dur;
-  dur = (unsigned)strict_strtol(duration_str.c_str(), 10, &err);
-  if (!err.empty() || dur <= 0) {
-    ldpp_dout(this, 5) << "invalid length param " << duration_str << dendl;
-    op_ret = -EINVAL;
-    return;
-  }
-  op_ret = meta_log.lock_exclusive(s, shard_id, make_timespan(dur), zone_id,
-				     locker_id);
-  if (op_ret == -EBUSY)
-    op_ret = -ERR_LOCKED;
-}
-
-void RGWOp_MDLog_Unlock::execute(optional_yield y) {
-  string period, shard_id_str, locker_id, zone_id;
-  unsigned shard_id;
-
-  op_ret = 0;
-
-  period       = s->info.args.get("period");
-  shard_id_str = s->info.args.get("id");
-  locker_id    = s->info.args.get("locker-id");
-  zone_id      = s->info.args.get("zone-id");
-
-  if (period.empty()) {
-    ldpp_dout(this, 5) << "Missing period id trying to use current" << dendl;
-    period = driver->get_zone()->get_current_period_id();
-  }
-
-  if (period.empty() ||
-      shard_id_str.empty() ||
-      locker_id.empty() ||
-      zone_id.empty()) {
-    ldpp_dout(this, 5) << "Error invalid parameter list" << dendl;
-    op_ret = -EINVAL;
-    return;
-  }
-
-  string err;
-  shard_id = (unsigned)strict_strtol(shard_id_str.c_str(), 10, &err);
-  if (!err.empty()) {
-    ldpp_dout(this, 5) << "Error parsing shard_id param " << shard_id_str << dendl;
-    op_ret = -EINVAL;
-    return;
-  }
-
-  RGWMetadataLog meta_log{s->cct, static_cast<rgw::sal::RadosStore*>(driver)->svc()->zone, static_cast<rgw::sal::RadosStore*>(driver)->svc()->cls, period};
-  op_ret = meta_log.unlock(s, shard_id, zone_id, locker_id);
-}
-
 void RGWOp_MDLog_Notify::execute(optional_yield y) {
 #define LARGE_ENOUGH_BUF (128 * 1024)
 
@@ -1258,11 +1172,7 @@ RGWOp *RGWHandler_Log::op_post() {
   }
 
   if (type.compare("metadata") == 0) {
-    if (s->info.args.exists("lock"))
-      return new RGWOp_MDLog_Lock;
-    else if (s->info.args.exists("unlock"))
-      return new RGWOp_MDLog_Unlock;
-    else if (s->info.args.exists("notify"))
+    if (s->info.args.exists("notify"))
       return new RGWOp_MDLog_Notify;
   } else if (type.compare("data") == 0) {
     if (s->info.args.exists("notify")) {

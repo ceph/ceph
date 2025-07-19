@@ -1972,14 +1972,16 @@ void get_stale_instances(rgw::sal::Driver* driver, const std::string& bucket_nam
   // with these
   {
     RGWBucketReshardLock reshard_lock(static_cast<rgw::sal::RadosStore*>(driver), cur_bucket->get_info(), true);
-    r = reshard_lock.lock(dpp);
+    r = reshard_lock.lock(dpp, y);
     if (r < 0) {
       // most likely bucket is under reshard, return the sureshot stale instances
       ldpp_dout(dpp, 5) << __func__
                              << "failed to take reshard lock; reshard underway likey" << dendl;
       return;
     }
-    auto sg = make_scope_guard([&reshard_lock](){ reshard_lock.unlock();} );
+    auto sg = make_scope_guard([&reshard_lock, dpp, y] {
+          std::ignore = reshard_lock.unlock(dpp, y);
+        });
     // this should be fast enough that we may not need to renew locks and check
     // exit status?, should we read the values of the instances again?
     stale_instances.insert(std::end(stale_instances),
