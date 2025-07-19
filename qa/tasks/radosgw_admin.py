@@ -546,11 +546,11 @@ def task(ctx, config):
     # TESTCASE 'bucket-stats','bucket','stats','no session/buckets','succeeds, empty list'
     (err, out) = rgwadmin(ctx, client, ['bucket', 'stats', '--uid', user1],
         check_status=True)
-    assert len(out) == 0
+    assert len(out['buckets']) == 0
 
     # TESTCASE 'bucket-stats2','bucket','stats','no buckets','succeeds, empty list'
     (err, out) = rgwadmin(ctx, client, ['bucket', 'list', '--uid', user1], check_status=True)
-    assert len(out) == 0
+    assert len(out['buckets']) == 0
 
     # create a first bucket
     bucket = connection.create_bucket(bucket_name)
@@ -559,8 +559,8 @@ def task(ctx, config):
 
     # TESTCASE 'bucket-list','bucket','list','one bucket','succeeds, expected list'
     (err, out) = rgwadmin(ctx, client, ['bucket', 'list', '--uid', user1], check_status=True)
-    assert len(out) == 1
-    assert out[0] == bucket_name
+    assert len(out['buckets']) == 1
+    assert out['buckets'][0] == bucket_name
 
     bucket_list = connection.get_all_buckets()
     assert len(bucket_list) == 1
@@ -570,8 +570,8 @@ def task(ctx, config):
 
     # TESTCASE 'bucket-list-all','bucket','list','all buckets','succeeds, expected list'
     (err, out) = rgwadmin(ctx, client, ['bucket', 'list'], check_status=True)
-    assert len(out) >= 1
-    assert bucket_name in out;
+    assert len(out['buckets']) >= 1
+    assert bucket_name in out['buckets']
 
     # TESTCASE 'max-bucket-limit,'bucket','create','4 buckets','5th bucket fails due to max buckets == 4'
     bucket2 = connection.create_bucket(bucket_name + '2')
