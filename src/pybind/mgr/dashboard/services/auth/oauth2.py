@@ -96,13 +96,15 @@ class OAuth2(SSOAuth):
         if jmespath and getattr(mgr.SSO_DB.config, 'roles_path', None):
             logger.debug("Using 'roles_path' to fetch roles")
             roles = jmespath.search(mgr.SSO_DB.config.roles_path, jwt_payload)
+        elif 'scope' in jwt_payload:
+            roles = jwt_payload['scope'].split(' ')
         # e.g Keycloak
-        elif 'resource_access' in jwt_payload or 'realm_access' in jwt_payload:
+        elif not roles and 'resource_access' in jwt_payload or 'realm_access' in jwt_payload:
             logger.debug("Using 'resource_access' or 'realm_access' to fetch roles")
             roles = jmespath.search(
                 "resource_access.*[?@!='account'].roles[] || realm_access.roles[]",
                 jwt_payload)
-        elif 'roles' in jwt_payload:
+        elif not roles and 'roles' in jwt_payload:
             logger.debug("Using 'roles' to fetch roles")
             roles = jwt_payload['roles']
             if isinstance(roles, str):
@@ -129,10 +131,10 @@ class OAuth2(SSOAuth):
             raise cherrypy.HTTPError()
         try:
             user = mgr.ACCESS_CTRL_DB.create_user(
-                jwt_payload['sub'], None, jwt_payload['name'], jwt_payload['email'])
+                jwt_payload.get('sub', ''), None, jwt_payload.get('name', ''), jwt_payload.get('email', ''))
         except UserAlreadyExists:
             logger.debug("User already exists")
-            user = mgr.ACCESS_CTRL_DB.get_user(jwt_payload['sub'])
+            user = mgr.ACCESS_CTRL_DB.get_user(jwt_payload.get('sub', ''))
         user.set_roles(cls.get_user_roles())
         # set user last update to token time issued
         user.last_update = jwt_payload['iat']
