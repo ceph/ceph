@@ -30,11 +30,6 @@ Allocator::Allocator(std::string_view name,
    block_size(_block_size)
 {}
 
-
-Allocator::~Allocator()
-{}
-
-
 Allocator *Allocator::create(
   CephContext* cct,
   std::string_view type,
