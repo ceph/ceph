@@ -16,8 +16,10 @@
 
 #include "common/dout.h"
 #include "ECUtil.h"
+#include "common/ceph_releases.h"
 #include "erasure-code/ErasureCodeInterface.h"
 #include "os/Transaction.h"
+#include "OSDMap.h"
 #include "PGTransaction.h"
 
 namespace ECTransaction {
