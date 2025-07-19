@@ -223,19 +223,20 @@ void ECBackend::RecoveryBackend::handle_recovery_push(
     m->t.touch(coll, tobj);
   }
 
-  if (!op.data_included.empty()) {
-    uint64_t start = op.data_included.range_start();
-    uint64_t end = op.data_included.range_end();
-    ceph_assert(op.data.length() == (end - start));
+  ceph_assert(op.data.length() == op.data_included.size());
+  uint64_t tobj_size = 0;
 
-    m->t.write(
-      coll,
-      tobj,
-      start,
-      op.data.length(),
-      op.data);
-  } else {
-    ceph_assert(op.data.length() == 0);
+  uint64_t cursor = 0;
+  for (auto [off, len] : op.data_included) {
+    bufferlist bl;
+    if (len != op.data.length()) {
+      bl.substr_of(op.data, cursor, len);
+    } else {
+      bl = op.data;
+    }
+    m->t.write(coll, tobj, off, len, bl);
+    tobj_size = off + len;
+    cursor += len;
   }
 
   if (op.before_progress.first) {
@@ -244,6 +245,15 @@ void ECBackend::RecoveryBackend::handle_recovery_push(
       coll,
       tobj,
       op.attrset);
+  }
+
+  if (op.after_progress.data_complete) {
+    uint64_t shard_size = sinfo.object_size_to_shard_size(op.recovery_info.size,
+      get_parent()->whoami_shard().shard);
+    ceph_assert(shard_size >= tobj_size);
+    if (shard_size != tobj_size) {
+      m->t.truncate( coll, tobj, shard_size);
+    }
   }
 
   if (op.after_progress.data_complete && !oneshot) {
@@ -361,7 +371,7 @@ void ECBackend::RecoveryBackend::handle_recovery_read_complete(
 
   uint64_t aligned_size = ECUtil::align_next(op.obc->obs.oi.size);
 
-  int r = op.returned_data->decode(ec_impl, shard_want_to_read, aligned_size);
+  int r = op.returned_data->decode(ec_impl, shard_want_to_read, aligned_size, get_parent()->get_dpp(), true);
   ceph_assert(r == 0);
 
   // Finally, we don't want to write any padding, so truncate the buffer
@@ -601,22 +611,24 @@ void ECBackend::RecoveryBackend::continue_recovery_op(
       if (after_progress.data_recovered_to >= op.obc->obs.oi.size) {
         after_progress.data_complete = true;
       }
+
       for (auto &&pg_shard: op.missing_on) {
         m->pushes[pg_shard].push_back(PushOp());
         PushOp &pop = m->pushes[pg_shard].back();
         pop.soid = op.hoid;
         pop.version = op.recovery_info.oi.get_version_for_shard(pg_shard.shard);
-        op.returned_data->get_shard_first_buffer(pg_shard.shard, pop.data);
+
+        op.returned_data->get_sparse_buffer(pg_shard.shard, pop.data, pop.data_included);
+        ceph_assert(pop.data.length() == pop.data_included.size());
+
         dout(10) << __func__ << ": pop shard=" << pg_shard
                  << ", oid=" << pop.soid
                  << ", before_progress=" << op.recovery_progress
 		 << ", after_progress=" << after_progress
 		 << ", pop.data.length()=" << pop.data.length()
+                 << ", pop.data_included=" << pop.data_included
 		 << ", size=" << op.obc->obs.oi.size << dendl;
-        if (pop.data.length())
-          pop.data_included.union_insert(
-            op.returned_data->get_shard_first_offset(pg_shard.shard),
-            pop.data.length());
+
         if (op.recovery_progress.first) {
           if (sinfo.is_nonprimary_shard(pg_shard.shard)) {
             if (pop.version == op.recovery_info.oi.version) {

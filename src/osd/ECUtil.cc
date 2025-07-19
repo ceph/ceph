@@ -475,19 +475,23 @@ void shard_extent_map_t::insert_parity_buffers() {
   }
 }
 
-slice_iterator<shard_id_t, extent_map> shard_extent_map_t::begin_slice_iterator(
-    const shard_id_set &out) {
-  return slice_iterator(extent_maps, out);
+slice_iterator shard_extent_map_t::begin_slice_iterator(
+    const shard_id_set &out,
+    DoutPrefixProvider *dpp,
+    const shard_id_set *dedup_zeros) {
+  return slice_iterator(extent_maps, out, dpp, dedup_zeros);
 }
 
 /* Encode parity chunks, using the encode_chunks interface into the
  * erasure coding. This generates all parity using full stripe writes.
  */
-int shard_extent_map_t::_encode(const ErasureCodeInterfaceRef &ec_impl) {
+int shard_extent_map_t::encode(const ErasureCodeInterfaceRef &ec_impl,
+    DoutPrefixProvider *dpp,
+    shard_id_set *dedup_zeros) {
   shard_id_set out_set = sinfo->get_parity_shards();
   bool rebuild_req = false;
 
-  for (auto iter = begin_slice_iterator(out_set); !iter.is_end(); ++iter) {
+  for (auto iter = begin_slice_iterator(out_set, dpp, dedup_zeros); !iter.is_end(); ++iter) {
     if (!iter.is_page_aligned()) {
       rebuild_req = true;
       break;
@@ -503,17 +507,10 @@ int shard_extent_map_t::_encode(const ErasureCodeInterfaceRef &ec_impl) {
 
   if (rebuild_req) {
     pad_and_rebuild_to_ec_align();
-    return _encode(ec_impl);
+    return encode(ec_impl, dpp, dedup_zeros);
   }
 
   return 0;
-}
-
-/* Encode parity chunks, using the encode_chunks interface into the
- * erasure coding. This generates all parity using full stripe writes.
- */
-int shard_extent_map_t::encode(const ErasureCodeInterfaceRef &ec_impl) {
-  return _encode(ec_impl);
 }
 
 /* Encode parity chunks, using the parity delta write interfaces on plugins
@@ -521,7 +518,8 @@ int shard_extent_map_t::encode(const ErasureCodeInterfaceRef &ec_impl) {
  */
 int shard_extent_map_t::encode_parity_delta(
     const ErasureCodeInterfaceRef &ec_impl,
-    shard_extent_map_t &old_sem) {
+    shard_extent_map_t &old_sem,
+    DoutPrefixProvider *dpp) {
   shard_id_set out_set = sinfo->get_parity_shards();
 
   pad_and_rebuild_to_ec_align();
@@ -542,7 +540,7 @@ int shard_extent_map_t::encode_parity_delta(
 
     s.compute_ro_range();
 
-    for (auto iter = s.begin_slice_iterator(out_set); !iter.is_end(); ++iter) {
+    for (auto iter = s.begin_slice_iterator(out_set, dpp); !iter.is_end(); ++iter) {
       ceph_assert(iter.is_page_aligned());
       shard_id_map<bufferptr> &data_shards = iter.get_in_bufferptrs();
       shard_id_map<bufferptr> &parity_shards = iter.get_out_bufferptrs();
@@ -644,7 +642,9 @@ void shard_extent_map_t::trim(const shard_extent_set_t &trim_to) {
 
 int shard_extent_map_t::decode(const ErasureCodeInterfaceRef &ec_impl,
                                const shard_extent_set_t &want,
-                               uint64_t object_size) {
+                               uint64_t object_size,
+                               DoutPrefixProvider *dpp,
+                               bool dedup_zeros) {
   shard_id_set want_set;
   shard_id_set have_set;
   want.populate_shard_id_set(want_set);
@@ -679,11 +679,11 @@ int shard_extent_map_t::decode(const ErasureCodeInterfaceRef &ec_impl,
       decode_for_parity.intersection_of(want.at(shard), read_mask.at(shard));
       pad_on_shard(decode_for_parity, shard);
     }
-    r = _decode(ec_impl, want_set, decode_set);
+    r = _decode(ec_impl, want_set, decode_set, dpp);
   }
   if (!r && !encode_set.empty()) {
     pad_on_shards(want, encode_set);
-    r = _encode(ec_impl);
+    r = encode(ec_impl, dpp, dedup_zeros?&need_set:nullptr);
   }
 
   // If we failed to decode, then bail out, or the trimming below might fail.
@@ -702,9 +702,10 @@ int shard_extent_map_t::decode(const ErasureCodeInterfaceRef &ec_impl,
 
 int shard_extent_map_t::_decode(const ErasureCodeInterfaceRef &ec_impl,
                                 const shard_id_set &want_set,
-                                const shard_id_set &need_set) {
+                                const shard_id_set &need_set,
+                                DoutPrefixProvider *dpp) {
   bool rebuild_req = false;
-  for (auto iter = begin_slice_iterator(need_set); !iter.is_end(); ++iter) {
+  for (auto iter = begin_slice_iterator(need_set, dpp); !iter.is_end(); ++iter) {
     if (!iter.is_page_aligned()) {
       rebuild_req = true;
       break;
@@ -719,7 +720,7 @@ int shard_extent_map_t::_decode(const ErasureCodeInterfaceRef &ec_impl,
 
   if (rebuild_req) {
     pad_and_rebuild_to_ec_align();
-    return _decode(ec_impl, want_set, need_set);
+    return _decode(ec_impl, want_set, need_set, dpp);
   }
 
   compute_ro_range();
