@@ -496,6 +496,8 @@ def cephfs_setup(ctx, config):
     if mdss.remotes:
         log.info('Setting up CephFS filesystem(s)...')
         cephfs_config = config.get('cephfs', {})
+        ctx.cephfs_config = deepcopy(cephfs_config)
+        ctx.subvols = deepcopy(config.get('subvols', None))
         fs_configs =  cephfs_config.pop('fs', [{'name': 'cephfs'}])
 
         # wait for standbys to become available (slow due to valgrind, perhaps)
