@@ -1,0 +1,22 @@
+{
+  "compileOnSave": false,
+  "compilerOptions": {
+    "sourceMap": true,
+    "declaration": false,
+    "moduleResolution": "node",
+    "emitDecoratorMetadata": true,
+    "experimentalDecorators": true,
+    "importHelpers": true,
+    "target": "ES2022",
+    "module": "ES2022",
+    "lib": ["es2017", "dom"],
+    "baseUrl": "./",
+    "paths": {
+      "@ceph-dashboard/shared": ["libs/shared/src/index.ts"],
+      "stream": ["node_modules/stream-browserify"],
+      "timers": ["node_modules/timers-browserify"],
+      "~/*": ["src/*"]
+    }
+  },
+  "exclude": ["coverage", "dist", "node_modules", "cypress"]
+}

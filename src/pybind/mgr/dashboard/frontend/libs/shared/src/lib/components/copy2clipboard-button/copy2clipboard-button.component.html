@@ -1,0 +1,17 @@
+<i [ngClass]="[icons.clipboard, icons.large]"
+   (click)="onClick()"
+   class="text-primary ms-2"
+   title="Copy to Clipboard"
+   *ngIf="showIconOnly; else withButtonTpl"></i>
+
+<ng-template #withButtonTpl>
+
+  <cds-icon-button kind="tertiary"
+                   size="md"
+                   title="Copy to Clipboard"
+                   (click)="onClick()">
+    <svg cdsIcon="copy"
+         size="32"
+         class="cds--btn__icon"></svg>
+  </cds-icon-button>
+</ng-template>
