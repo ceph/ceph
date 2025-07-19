@@ -353,6 +353,7 @@ OMapInnerNode::list(
             }
             result.merge(std::move(child_result));
 	    if (result.size() == config.max_result_size) {
+	      complete = child_complete;
 	      return list_iertr::make_ready_future<seastar::stop_iteration>(
 		seastar::stop_iteration::yes);
 	    }
