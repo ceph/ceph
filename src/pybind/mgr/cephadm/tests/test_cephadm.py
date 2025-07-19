@@ -2524,7 +2524,7 @@ Traceback (most recent call last):
             cephadm_module.cache.facts = facts
             assert cephadm_module._validate_tunedprofile_settings(spec) == expected_value
 
-    @mock.patch("cephadm.CephadmOrchestrator.set_maintenance_healthcheck", lambda _: None)
+    @mock.patch("cephadm.CephadmOrchestrator.update_maintenance_healthcheck", lambda _: None)
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
     def test_tuned_profiles_validation(self, cephadm_module):
         with with_host(cephadm_module, 'test'):
