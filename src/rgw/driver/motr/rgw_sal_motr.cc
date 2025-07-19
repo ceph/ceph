@@ -1542,6 +1542,7 @@ int MotrObject::copy_object(const ACLOwner& owner,
     std::string* tag,
     std::string* etag,
     void (*progress_cb)(off_t, void *),
+    rgw::sal::DataProcessorFactory* dp_factory,
     void* progress_data,
     const DoutPrefixProvider* dpp,
     optional_yield y)
