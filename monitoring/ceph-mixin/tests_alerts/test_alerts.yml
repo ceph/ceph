@@ -146,7 +146,7 @@ tests:
        exp_samples:
          - labels: '{ceph_daemon="osd.0", hostname="ceph", instance="ceph:9283",
             job="ceph",cluster="mycluster"}'
-           value: 1.2200000000000001E+01
+           value: 1.21E+01
    alert_rule_test:
      - eval_time: 5m
        alertname: CephOSDFlapping
@@ -508,77 +508,116 @@ tests:
  # MTU Mismatch
  - interval: 1m
    input_series:
-    - series: 'node_network_mtu_bytes{device="eth0",instance="node-exporter",job="node-exporter",cluster="mycluster"}'
+    # Test 1: All MTUs match (NO alert)
+    - series: 'node_network_mtu_bytes{device="eth0",instance="host1",cluster="c"}'
       values: '1500 1500 1500 1500 1500'
-    - series: 'node_network_mtu_bytes{device="eth1",instance="node-exporter",job="node-exporter",cluster="mycluster"}'
+    - series: 'node_network_mtu_bytes{device="eth0",instance="host2",cluster="c"}'
       values: '1500 1500 1500 1500 1500'
-    - series: 'node_network_mtu_bytes{device="eth2",instance="node-exporter",job="node-exporter",cluster="mycluster"}'
-      values: '1500 1500 1500 1500 1500'
-    - series: 'node_network_mtu_bytes{device="eth3",instance="node-exporter",job="node-exporter",cluster="mycluster"}'
-      values: '1500 1500 1500 1500 1500'
-    - series: 'node_network_mtu_bytes{device="eth4",instance="node-exporter",job="node-exporter",cluster="mycluster"}'
+    - series: 'node_network_up{device="eth0",instance="host1",cluster="c"}'
+      values: '1 1 1 1 1'
+    - series: 'node_network_up{device="eth0",instance="host2",cluster="c"}'
+      values: '1 1 1 1 1'
+
+    # Test 2: One host has different MTU
+    - series: 'node_network_mtu_bytes{device="eth1",instance="host1",cluster="c"}'
       values: '9000 9000 9000 9000 9000'
-    - series: 'node_network_mtu_bytes{device="eth4",instance="hostname1",job="node-exporter",cluster="mycluster"}'
-      values: '2200 2200 2200 2200 2200'
-    - series: 'node_network_mtu_bytes{device="eth4",instance="hostname2",job="node-exporter",cluster="mycluster"}'
+    - series: 'node_network_mtu_bytes{device="eth1",instance="host2",cluster="c"}'
+      values: '9000 9000 9000 9000 9000'
+    - series: 'node_network_mtu_bytes{device="eth1",instance="host3",cluster="c"}'
+      values: '9200 9200 9200 9200 9200'
+    - series: 'node_network_up{device="eth1",instance="host1",cluster="c"}'
+      values: '1 1 1 1 1'
+    - series: 'node_network_up{device="eth1",instance="host2",cluster="c"}'
+      values: '1 1 1 1 1'
+    - series: 'node_network_up{device="eth1",instance="host3",cluster="c"}'
+      values: '1 1 1 1 1'
+
+    # Test 3: Down host should not alert
+    - series: 'node_network_mtu_bytes{device="eth2",instance="host1",cluster="c"}'
       values: '2400 2400 2400 2400 2400'
-    - series: 'node_network_up{device="eth0",instance="node-exporter",job="node-exporter",cluster="mycluster"}'
+    - series: 'node_network_mtu_bytes{device="eth2",instance="host2",cluster="c"}'
+      values: '2400 2400 2400 2400 2400'
+    - series: 'node_network_mtu_bytes{device="eth2",instance="host3",cluster="c"}'
+      values: '9000 9000 9000 9000 9000'
+    - series: 'node_network_up{device="eth2",instance="host1",cluster="c"}'
+      values: '1 1 1 1 1'
+    - series: 'node_network_up{device="eth2",instance="host2",cluster="c"}'
+      values: '1 1 1 1 1'
+    - series: 'node_network_up{device="eth2",instance="host3",cluster="c"}'
       values: '0 0 0 0 0'
-    - series: 'node_network_up{device="eth1",instance="node-exporter",job="node-exporter",cluster="mycluster"}'
-      values: '0 0 0 0 0'
-    - series: 'node_network_up{device="eth2",instance="node-exporter",job="node-exporter",cluster="mycluster"}'
+
+    # Test 4: All different MTUs, odd count, median = 2400
+    - series: 'node_network_mtu_bytes{device="eth3",instance="host1",cluster="c"}'
+      values: '1500 1500 1500 1500 1500'
+    - series: 'node_network_mtu_bytes{device="eth3",instance="host2",cluster="c"}'
+      values: '2400 2400 2400 2400 2400'
+    - series: 'node_network_mtu_bytes{device="eth3",instance="host3",cluster="c"}'
+      values: '9000 9000 9000 9000 9000'
+    - series: 'node_network_up{device="eth3",instance="host1",cluster="c"}'
       values: '1 1 1 1 1'
-    - series: 'node_network_up{device="eth3",instance="node-exporter",job="node-exporter",cluster="mycluster"}'
+    - series: 'node_network_up{device="eth3",instance="host2",cluster="c"}'
       values: '1 1 1 1 1'
-    - series: 'node_network_up{device="eth4",instance="node-exporter",job="node-exporter",cluster="mycluster"}'
+    - series: 'node_network_up{device="eth3",instance="host3",cluster="c"}'
       values: '1 1 1 1 1'
-    - series: 'node_network_up{device="eth4",instance="hostname1",job="node-exporter",cluster="mycluster"}'
-      values: '1 1 1 1 1'
-    - series: 'node_network_up{device="eth4",instance="hostname2",job="node-exporter",cluster="mycluster"}'
-      values: '0 0 0 0 0'
+
    promql_expr_test:
-     - expr: |
-          node_network_mtu_bytes * (node_network_up{device!="lo"} > 0) ==
-            scalar(
-              max by (cluster,device) (node_network_mtu_bytes * (node_network_up{device!="lo"} > 0)) !=
-                quantile by (cluster,device) (.5, node_network_mtu_bytes * (node_network_up{device!="lo"} > 0))
-            )
-          or
-          node_network_mtu_bytes * (node_network_up{device!="lo"} > 0) ==
-            scalar(
-              min by (cluster,device) (node_network_mtu_bytes * (node_network_up{device!="lo"} > 0)) !=
-                quantile by (cluster,device) (.5, node_network_mtu_bytes * (node_network_up{device!="lo"} > 0))
-            )
-       eval_time: 1m
-       exp_samples:
-         - labels: '{device="eth4", instance="node-exporter", job="node-exporter", cluster="mycluster"}'
-           value: 9000
-         - labels: '{device="eth4", instance="hostname1", job="node-exporter", cluster="mycluster"}'
-           value: 2200
+    - expr: |
+        (
+          node_network_mtu_bytes{device!="lo"} * (node_network_up{device!="lo"} > 0)
+        )
+        !=
+        on(cluster, device)
+        group_left()
+        quantile by (cluster, device) (
+          0.5,
+          node_network_mtu_bytes{device!="lo"} * (node_network_up{device!="lo"} > 0)
+        )
+      eval_time: 1m
+      exp_samples:
+        # eth1: host3 deviates from 9000 (median)
+        - labels: '{device="eth1", instance="host3", cluster="c"}'
+          value: 9200
+
+        # eth3: median is 2400, host1 and host3 differ
+        - labels: '{device="eth3", instance="host1", cluster="c"}'
+          value: 1500
+        - labels: '{device="eth3", instance="host3", cluster="c"}'
+          value: 9000
+
    alert_rule_test:
-     - eval_time: 1m
-       alertname: CephNodeInconsistentMTU
-       exp_alerts:
-       - exp_labels:
-           device: eth4
-           instance: hostname1
-           job: node-exporter
-           severity: warning
-           type: ceph_default
-           cluster: "mycluster"
-         exp_annotations:
-           summary: MTU settings across Ceph hosts are inconsistent on cluster mycluster
-           description: "Node hostname1 has a different MTU size (2200) than the median of devices named eth4."
-       - exp_labels:
-           device: eth4
-           instance: node-exporter
-           job: node-exporter
-           severity: warning
-           type: ceph_default
-           cluster: "mycluster"
-         exp_annotations:
-           summary: MTU settings across Ceph hosts are inconsistent on cluster mycluster
-           description: "Node node-exporter has a different MTU size (9000) than the median of devices named eth4."
+    - eval_time: 1m
+      alertname: CephNodeInconsistentMTU
+      exp_alerts:
+        # Test 2 - host3 has wrong MTU
+        - exp_labels:
+            device: eth1
+            instance: host3
+            cluster: c
+            severity: warning
+            type: ceph_default
+          exp_annotations:
+            summary: MTU settings across Ceph hosts are inconsistent on cluster c
+            description: "Node host3 has a different MTU size (9200) than the median of devices named eth1."
+
+        # Test 4 - host1 and host3 deviate from median 2400
+        - exp_labels:
+            device: eth3
+            instance: host1
+            cluster: c
+            severity: warning
+            type: ceph_default
+          exp_annotations:
+            summary: MTU settings across Ceph hosts are inconsistent on cluster c
+            description: "Node host1 has a different MTU size (1500) than the median of devices named eth3."
+        - exp_labels:
+            device: eth3
+            instance: host3
+            cluster: c
+            severity: warning
+            type: ceph_default
+          exp_annotations:
+            summary: MTU settings across Ceph hosts are inconsistent on cluster c
+            description: "Node host3 has a different MTU size (9000) than the median of devices named eth3."
 
  # pool full, data series has 6 but using topk(5) so to ensure the
  # results are working as expected
