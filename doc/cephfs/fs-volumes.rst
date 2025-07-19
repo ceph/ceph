@@ -167,7 +167,7 @@ Create a subvolume group by running the following command:
 
 .. prompt:: bash #
 
-   ceph fs subvolumegroup create <vol_name> <group_name> [--size <size_in_bytes>] [--pool_layout <data_pool_name>] [--uid <uid>] [--gid <gid>] [--mode <octal_mode>]
+   ceph fs subvolumegroup create <vol_name> <group_name> [--size <size_in_bytes>] [--pool_layout <data_pool_name>] [--uid <uid>] [--gid <gid>] [--mode <octal_mode>] [--normalization <form>] [--casesensitive <bool>]
 
 The command succeeds even if the subvolume group already exists.
 
@@ -177,6 +177,30 @@ size in bytes. The size of the subvolume group is specified by setting
 a quota on it (see :doc:`/cephfs/quota`). By default, the subvolume group
 is created with octal file mode ``755``, uid ``0``, gid ``0`` and the data pool
 layout of its parent directory.
+
+You can also specify an unicode normalization form using the ``--normalization``
+option. This will be used to internally mangle file names so that unicode
+characters that can be represented by different unicode code point sequences
+are all mapped to the same representation, which means that they will all
+access the same file. However, users will continue to see the same name that
+they used when the file was created.
+
+The valid values for the unicode normalization form are:
+
+    - nfd: canonical decomposition (default)
+    - nfc: canonical decomposition, followed by canonical composition
+    - nfkd: compatibility decomposition
+    - nfkc: compatibility decomposition, followed by canonical composition
+
+To learn more about unicode normalization forms see https://unicode.org/reports/tr15
+
+It's also possible to configure a subvolume group for case insensitive access
+when the ``--casesensitive=0`` option is used. When this option is added, file
+names that only differ in the case of its characters will be mapped to the same
+file. The case of the file name used when the file was created is preserved.
+
+.. note:: Setting ``--casesensitive=0`` option implicitly enables
+   unicode normalization on the subvolume group.
 
 Remove a subvolume group by running a command of the following form:
 
