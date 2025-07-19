@@ -38,7 +38,8 @@
     "fix": "run-p -csl --aggregate-output fix:*",
     "compodoc": "compodoc",
     "doc-build": "compodoc -p tsconfig.app.json",
-    "doc-serve": "compodoc --port 8444 -s tsconfig.app.json"
+    "doc-serve": "compodoc --port 8444 -s tsconfig.app.json",
+    "prepare": "cd ../../../../../ && husky src/pybind/mgr/dashboard/frontend/.husky"
   },
   "private": true,
   "dependencies": {
@@ -121,6 +122,7 @@
     "gherkin-lint": "4.2.4",
     "html-linter": "1.1.1",
     "htmllint-cli": "0.0.7",
+    "husky": "9.1.7",
     "identity-obj-proxy": "3.0.0",
     "isomorphic-form-data": "2.0.0",
     "jest": "29.7.0",
@@ -136,8 +138,8 @@
     "pretty-quick": "3.0.2",
     "start-server-and-test": "2.0.3",
     "stylelint": "16.20.0",
-    "stylelint-scss": "6.12.1",
     "stylelint-config-standard": "38.0.0",
+    "stylelint-scss": "6.12.1",
     "table": "6.8.0",
     "ts-node": "9.0.0",
     "typescript": "5.4.5",

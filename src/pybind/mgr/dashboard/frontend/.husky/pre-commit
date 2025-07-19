@@ -1,0 +1,3 @@
+cd src/pybind/mgr/dashboard/frontend
+npm run fix
+npm run lint
