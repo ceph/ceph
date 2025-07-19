@@ -1457,6 +1457,10 @@ public:
     ceph_abort_msg("Unsupported");
   }
 
+  virtual bool is_physical_reserved() {
+    return false;
+  }
+
   virtual ~LogicalCachedExtent() {}
 
 protected:
