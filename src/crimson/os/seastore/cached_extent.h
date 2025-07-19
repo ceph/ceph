@@ -311,7 +311,6 @@ public:
             placement_hint_t hint,
             rewrite_gen_t gen,
 	    transaction_id_t trans_id) {
-    assert(gen == NULL_GENERATION || is_rewrite_generation(gen));
     state = _state;
     set_paddr(paddr);
     user_hint = hint;
@@ -758,8 +757,6 @@ public:
 
   /// assign the target rewrite generation for the followup rewrite
   void set_target_rewrite_generation(rewrite_gen_t gen) {
-    assert(is_target_rewrite_generation(gen));
-
     user_hint = placement_hint_t::REWRITE;
     rewrite_generation = gen;
   }

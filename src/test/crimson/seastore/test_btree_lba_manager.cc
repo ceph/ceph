@@ -139,7 +139,12 @@ struct btree_test_base :
     }).safe_then([this] {
       sms.reset(new SegmentManagerGroup());
       journal = journal::make_segmented(*this, *this);
-      epm.reset(new ExtentPlacementManager());
+      rewrite_gen_t hot_tier_generations = crimson::common::get_conf<uint64_t>(
+	"seastore_hot_tier_generations");
+      rewrite_gen_t cold_tier_generations = crimson::common::get_conf<uint64_t>(
+	"seastore_cold_tier_generations");
+      epm.reset(new ExtentPlacementManager(
+	hot_tier_generations, cold_tier_generations));
       cache.reset(new Cache(*epm));
 
       block_size = segment_manager->get_block_size();
