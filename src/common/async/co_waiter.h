@@ -14,6 +14,7 @@
 
 #include <exception>
 #include <optional>
+#include <boost/asio/associated_cancellation_slot.hpp>
 #include <boost/asio/append.hpp>
 #include <boost/asio/async_result.hpp>
 #include <boost/asio/dispatch.hpp>
