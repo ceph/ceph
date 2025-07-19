@@ -68,27 +68,33 @@ void EnableRequest<I>::handle_get_mirror_image(int r) {
     r = cls_client::mirror_image_get_finish(&iter, &m_mirror_image);
   }
 
-  if (r == 0 && m_mirror_image.state == cls::rbd::MIRROR_IMAGE_STATE_CREATING &&
-      !m_non_primary_global_image_id.empty()) {
-    // special case where rbd-mirror injects a disabled record to record the
-    // local image id prior to creating ther image
-    ldout(m_cct, 10) << "enabling mirroring on in-progress image replication"
-                     << dendl;
-  } else if (r == 0) {
+  if (r < 0 && r != -ENOENT) {
+      lderr(m_cct) << "failed to retrieve mirroring state: " << cpp_strerror(r)
+                 << dendl;
+      finish(r);
+      return;
+  }
+
+  if (r == 0) {
     if (m_mirror_image.mode != m_mode) {
       lderr(m_cct) << "invalid current image mirror mode" << dendl;
       r = -EINVAL;
     } else if (m_mirror_image.state == cls::rbd::MIRROR_IMAGE_STATE_ENABLED) {
       ldout(m_cct, 10) << "mirroring is already enabled" << dendl;
-    } else {
+    } else if (
+        (m_mirror_image.state == cls::rbd::MIRROR_IMAGE_STATE_CREATING) &&
+        (m_mirror_image.global_image_id == m_non_primary_global_image_id)) {
+      ldout(m_cct, 10) << "enabling mirroring on in-progress image replication"
+                       << dendl;
+    } else if (
+	m_mirror_image.state == cls::rbd::MIRROR_IMAGE_STATE_DISABLING) {
       lderr(m_cct) << "currently disabling" << dendl;
       r = -EINVAL;
+    } else {
+      lderr(m_cct) << "unexpected image mirror info" << dendl;
+      r = -EINVAL;
     }
-    finish(r);
-    return;
-  } else if (r != -ENOENT) {
-    lderr(m_cct) << "failed to retrieve mirror image: " << cpp_strerror(r)
-                 << dendl;
+
     finish(r);
     return;
   }
