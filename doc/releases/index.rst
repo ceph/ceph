@@ -67,6 +67,7 @@ Release timeline
 .. _19.2.0: squid#v19-2-0-squid
 .. _19.2.1: squid#v19-2-1-squid
 .. _19.2.2: squid#v19-2-2-squid
+.. _19.2.3: squid#v19-2-3-squid
 
 .. _Reef: reef
 .. _18.2.0: reef#v18-2-0-reef
@@ -88,7 +89,7 @@ Release timeline
 .. _17.2.7: quincy#v17-2-7-quincy
 .. _17.2.8: quincy#v17-2-8-quincy
 .. _17.2.9: quincy#v17-2-9-quincy
-   
+
 .. _Pacific: pacific
 .. _16.2.15: pacific#v16-2-15-pacific
 .. _16.2.14: pacific#v16-2-14-pacific
