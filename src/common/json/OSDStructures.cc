@@ -69,6 +69,21 @@ void OSDPoolGetReply::decode_json(JSONObj* obj) {
   JSONDecoder::decode_json("allow_ec_optimizations", allow_ec_optimizations, obj);
 }
 
+void OSDPoolSetRequest::dump(Formatter* f) const {
+  encode_json("prefix", "osd pool set", f);
+  encode_json("pool", pool, f);
+  encode_json("var", var, f);
+  encode_json("val", val, f);
+  encode_json("yes_i_really_mean_it", yes_i_really_mean_it, f);
+}
+
+void OSDPoolSetRequest::decode_json(JSONObj* obj) {
+  JSONDecoder::decode_json("pool", pool, obj);
+  JSONDecoder::decode_json("var", var, obj);
+  JSONDecoder::decode_json("val", val, obj);
+  JSONDecoder::decode_json("yes_i_really_mean_it", yes_i_really_mean_it, obj);
+}
+
 void OSDECProfileGetRequest::dump(Formatter* f) const {
   encode_json("prefix", "osd erasure-code-profile get", f);
   encode_json("name", name, f);
