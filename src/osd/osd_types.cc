@@ -4656,7 +4656,7 @@ void ObjectModDesc::visit(Visitor *visitor) const
 	break;
       }
       case UPDATE_SNAPS: {
-	set<snapid_t> snaps;
+	vector<snapid_t> snaps;
 	decode(snaps, bp);
 	visitor->update_snaps(snaps);
 	break;
@@ -4735,7 +4735,7 @@ struct DumpVisitor : public ObjectModDesc::Visitor {
     f->dump_string("code", "CREATE");
     f->close_section();
   }
-  void update_snaps(const set<snapid_t> &snaps) override {
+  void update_snaps(const vector<snapid_t> &snaps) override {
     f->open_object_section("op");
     f->dump_string("code", "UPDATE_SNAPS");
     f->dump_stream("snaps") << snaps;
@@ -7411,7 +7411,7 @@ void OSDOp::merge_osd_op_vector_out_data(vector<OSDOp>& ops, ceph::buffer::list&
 
 int prepare_info_keymap(
   CephContext* cct,
-  map<string,bufferlist> *km,
+  vector<pair<string,bufferlist>> *km,
   string *key_to_remove,
   epoch_t epoch,
   pg_info_t &info,
@@ -7423,8 +7423,9 @@ int prepare_info_keymap(
   PerfCounters *logger,
   DoutPrefixProvider *dpp)
 {
+  km->reserve(km->size() + 4); //4 more entries are added below for now
   if (dirty_epoch) {
-    encode(epoch, (*km)[string(epoch_key)]);
+    encode(epoch, km->emplace_back(string(epoch_key), bufferlist()).second);
   }
 
   if (logger)
@@ -7438,7 +7439,7 @@ int prepare_info_keymap(
     bool did = fast.try_apply_to(&last_written_info);
     ceph_assert(did);  // we verified last_update increased above
     if (info == last_written_info) {
-      encode(fast, (*km)[string(fastinfo_key)]);
+      encode(fast, km->emplace_back(string(fastinfo_key), bufferlist()).second);
       if (logger)
 	logger->inc(l_osd_pg_fastinfo);
       return 0;
@@ -7469,12 +7470,12 @@ int prepare_info_keymap(
   // info.  store purged_snaps separately.
   interval_set<snapid_t> purged_snaps;
   purged_snaps.swap(info.purged_snaps);
-  encode(info, (*km)[string(info_key)]);
+  encode(info, km->emplace_back(string(info_key), bufferlist()).second);
   purged_snaps.swap(info.purged_snaps);
 
   if (dirty_big_info) {
     // potentially big stuff
-    bufferlist& bigbl = (*km)[string(biginfo_key)];
+    bufferlist& bigbl = km->emplace_back(string(biginfo_key), bufferlist()).second;
     encode(past_intervals, bigbl);
     encode(info.purged_snaps, bigbl);
     //dout(20) << "write_info bigbl " << bigbl.length() << dendl;

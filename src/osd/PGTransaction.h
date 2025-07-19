@@ -141,7 +141,7 @@ public:
     std::optional<ceph::buffer::list> omap_header;
 
     /// (old, new) -- only valid with no truncate or buffer updates
-    std::optional<std::pair<std::set<snapid_t>, std::set<snapid_t>>> updated_snaps;
+    std::optional<std::pair<std::vector<snapid_t>, std::vector<snapid_t>>> updated_snaps;
 
     struct alloc_hint_t {
       uint64_t expected_object_size;
@@ -322,16 +322,16 @@ public:
 
   void update_snaps(
     const hobject_t &hoid,         ///< [in] object for snaps
-    const std::set<snapid_t> &old_snaps,///< [in] old snaps value
-    const std::set<snapid_t> &new_snaps ///< [in] new snaps value
+    std::vector<snapid_t> &&old_snaps,///< [in] old snaps value
+    std::vector<snapid_t> &&new_snaps ///< [in] new snaps value
     ) {
     auto &op = get_object_op(hoid);
     ceph_assert(!op.updated_snaps);
     ceph_assert(op.buffer_updates.empty());
     ceph_assert(!op.truncate);
     op.updated_snaps = make_pair(
-      old_snaps,
-      new_snaps);
+      std::move(old_snaps),
+      std::move(new_snaps));
   }
 
   /// Clears, truncates
@@ -449,6 +449,7 @@ public:
   void omap_setkeys(
     const hobject_t &hoid,         ///< [in] object to write
     ceph::buffer::list &keys_bl            ///< [in] encoded map<string, ceph::buffer::list>
+                                           ///<  or vector<pair<string, ceph::buffer::list>>
     ) {
     auto &op = get_object_op_for_modify(hoid);
     op.omap_updates.emplace_back(
@@ -459,6 +460,15 @@ public:
   void omap_setkeys(
     const hobject_t &hoid,         ///< [in] object to write
     std::map<std::string, ceph::buffer::list> &keys  ///< [in] omap keys, may be cleared
+    ) {
+    using ceph::encode;
+    ceph::buffer::list bl;
+    encode(keys, bl);
+    omap_setkeys(hoid, bl);
+  }
+  void omap_setkeys(
+    const hobject_t &hoid,         ///< [in] object to write
+    std::vector<std::pair<std::string, ceph::buffer::list>> &keys  ///< [in] omap keys, may be cleared
     ) {
     using ceph::encode;
     ceph::buffer::list bl;

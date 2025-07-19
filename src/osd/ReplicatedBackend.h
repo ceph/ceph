@@ -280,7 +280,7 @@ public:
 			ceph::buffer::list data_included,
 			ceph::buffer::list omap_header,
 			const std::map<std::string, ceph::buffer::list, std::less<>> &attrs,
-			const std::map<std::string, ceph::buffer::list> &omap_entries,
+			const std::vector<std::pair<std::string, ceph::buffer::list>> &omap_entries,
 			ObjectStore::Transaction *t);
   void submit_push_complete(const ObjectRecoveryInfo &recovery_info,
 			    ObjectStore::Transaction *t);
