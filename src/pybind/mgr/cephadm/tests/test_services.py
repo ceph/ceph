@@ -433,6 +433,7 @@ protocol_log_level = WARNING
 conn_retries = 10
 transports = tcp
 transport_tcp_options = {{"in_capsule_data_size": 8192, "max_io_qpairs_per_ctrlr": 7}}
+enable_dsa_acceleration = True
 tgt_cmd_extra_args = {tgt_cmd_extra_args}
 qos_timeslice_in_usecs = 0
 notifications_interval = 60
@@ -472,7 +473,8 @@ timeout = 1.0\n"""
                             "config": "",
                             "keyring": "[client.nvmeof.testpool.mygroup.test.qwert]\nkey = None\n",
                             "files": {
-                                "ceph-nvmeof.conf": nvmeof_gateway_conf
+                                "ceph-nvmeof.conf": nvmeof_gateway_conf,
+                                "enable_dsa_acceleration": "True"
                             }
                         }
                     }),

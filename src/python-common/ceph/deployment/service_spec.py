@@ -1458,6 +1458,7 @@ class NvmeofServiceSpec(ServiceSpec):
                  transports: Optional[str] = 'tcp',
                  transport_tcp_options: Optional[Dict[str, int]] =
                  {"in_capsule_data_size": 8192, "max_io_qpairs_per_ctrlr": 7},
+                 enable_dsa_acceleration: bool = True,
                  tgt_cmd_extra_args: Optional[str] = None,
                  iobuf_options: Optional[Dict[str, int]] = None,
                  qos_timeslice_in_usecs: Optional[int] = 0,
@@ -1632,6 +1633,8 @@ class NvmeofServiceSpec(ServiceSpec):
         self.transports = transports
         #: List of extra arguments for transports in the form opt=value
         self.transport_tcp_options: Optional[Dict[str, int]] = transport_tcp_options
+        #: ``enable_dsa_acceleration`` enable  dsa acceleration
+        self.enable_dsa_acceleration = enable_dsa_acceleration
         #: ``tgt_cmd_extra_args`` extra arguments for the nvmf_tgt process
         self.tgt_cmd_extra_args = tgt_cmd_extra_args
         #: List of extra arguments for SPDK iobuf in the form opt=value
