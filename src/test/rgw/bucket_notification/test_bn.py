@@ -572,7 +572,15 @@ def get_stats_persistent_topic(topic_name, assert_entries_number=None):
     assert_equal(result[1], 0)
     parsed_result = json.loads(result[0])
     if assert_entries_number:
-        assert_equal(parsed_result['Topic Stats']['Entries'], assert_entries_number)
+        actual_number = parsed_result['Topic Stats']['Entries']
+        if actual_number != assert_entries_number:
+            log.warning('Topic stats: %s', parsed_result)
+            result = admin(['topic', 'dump', '--topic', topic_name], get_config_cluster())
+            parsed_result = json.loads(result[0])
+            log.warning('Topic dump:')
+            for entry in parsed_result:
+                log.warning(entry)
+            assert_equal(actual_number, assert_entries_number)
     return parsed_result
 
 
