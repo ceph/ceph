@@ -1130,18 +1130,33 @@ public:
       assert(offset < laddr_t::UNIT_SIZE);
     }
 
-    laddr_t get_roundup_laddr() const {
+    laddr_t get_roundup_laddr(size_t alignment) const {
+      ceph_assert(alignment % laddr_t::UNIT_SIZE == 0);
       if (offset == 0) {
-	return laddr_t(base);
+	return laddr_t(p2roundup(base, alignment >> laddr_t::UNIT_SHIFT));
       } else {
 	assert(offset < laddr_t::UNIT_SIZE);
-	return laddr_t(base + 1);
+	return laddr_t(p2roundup(base + 1, alignment >> laddr_t::UNIT_SHIFT));
       }
     }
-    laddr_t get_aligned_laddr() const { return laddr_t(base); }
+    laddr_t get_aligned_laddr(size_t alignment) const {
+      ceph_assert(alignment % laddr_t::UNIT_SIZE == 0);
+      return laddr_t(p2align(base, alignment >> laddr_t::UNIT_SHIFT));
+    }
+    laddr_t get_laddr() const {
+      return laddr_t{base};
+    }
     extent_len_t get_offset() const {
       assert(offset < laddr_t::UNIT_SIZE);
       return offset;
+    }
+    bool has_offset() const {
+      return offset != 0;
+    }
+    bool is_aligned(size_t alignment) const {
+      assert(alignment % laddr_t::UNIT_SIZE == 0);
+      return !has_offset() &&
+	base % (alignment >> UNIT_SHIFT) == 0;
     }
     laddr_t checked_to_laddr() const {
       assert(offset == 0);
@@ -1182,8 +1197,7 @@ public:
     friend laddr_offset_t operator+(const laddr_offset_t &laddr_offset,
 				    const loffset_t &offset) {
       // laddr_offset_t could access (laddr_t + loffset_t) overload.
-      return laddr_offset.get_aligned_laddr()
-	  + (laddr_offset.get_offset() + offset);
+      return laddr_offset.get_laddr() + (laddr_offset.get_offset() + offset);
     }
     friend laddr_offset_t operator+(const loffset_t &offset,
 				    const laddr_offset_t &loffset) {
@@ -1194,11 +1208,11 @@ public:
 				    const loffset_t &offset) {
       if (laddr_offset.get_offset() >= offset) {
 	return laddr_offset_t(
-	  laddr_offset.get_aligned_laddr(),
+	  laddr_offset.get_laddr(),
 	  laddr_offset.get_offset() - offset);
       } else {
 	// laddr_offset_t could access (laddr_t - loffset_t) overload.
-	return laddr_offset.get_aligned_laddr()
+	return laddr_offset.get_laddr()
 	    - (offset - laddr_offset.get_offset());
       }
     }
@@ -1236,12 +1250,12 @@ public:
   friend bool operator==(const laddr_t&, const laddr_t&) = default;
   friend bool operator==(const laddr_t &laddr,
 			 const laddr_offset_t &laddr_offset) {
-    return laddr == laddr_offset.get_aligned_laddr()
+    return laddr == laddr_offset.get_laddr()
 	&& 0 == laddr_offset.get_offset();
   }
   friend bool operator==(const laddr_offset_t &laddr_offset,
 			 const laddr_t &laddr) {
-    return laddr_offset.get_aligned_laddr() == laddr
+    return laddr_offset.get_laddr() == laddr
 	&& laddr_offset.get_offset() == 0;
   }
   friend auto operator<=>(const laddr_t&, const laddr_t&) = default;
