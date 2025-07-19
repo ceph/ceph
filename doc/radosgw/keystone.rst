@@ -1,3 +1,5 @@
+.. _radosgw-keystone:
+
 =====================================
  Integrating with OpenStack Keystone
 =====================================

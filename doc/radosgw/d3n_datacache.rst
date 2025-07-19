@@ -57,8 +57,8 @@ Requirements
 Limitations
 -----------
 
-- D3N will not cache objects compressed by `Rados Gateway Compression`_ (OSD level compression is supported).
-- D3N will not cache objects encrypted by `Rados Gateway Encryption`_.
+- D3N will not cache objects compressed by :ref:`RADOS Gateway Compression <radosgw-compression>` (OSD level compression is supported).
+- D3N will not cache objects encrypted by :ref:`RADOS Gateway Encryption <radosgw-encryption>`.
 - D3N will be disabled if the ``rgw_max_chunk_size`` config variable value differs from the ``rgw_obj_stripe_size`` config variable value.
 
 
@@ -125,7 +125,5 @@ The following D3N related settings can be added to the Ceph configuration file
 
 .. _MOC D3N (Datacenter-scale Data Delivery Network): https://massopen.cloud/research-and-development/cloud-research/d3n/
 .. _Red Hat Research D3N Cache for Data Centers: https://research.redhat.com/blog/research_project/d3n-multilayer-cache/
-.. _Rados Gateway Compression: ../compression/
-.. _Rados Gateway Encryption: ../encryption/
 .. _RGW Data cache and CDN: ../rgw-cache/
 .. _Service Management - Mounting Files with Extra Container Arguments: ../cephadm/services/#mounting-files-with-extra-container-arguments
