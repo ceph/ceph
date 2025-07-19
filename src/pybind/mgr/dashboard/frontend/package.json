@@ -12,12 +12,8 @@
     "build:localize": "node cd --env --pre && nx build --localize",
     "postbuild:localize": "node cd --res",
     "env_build": "node cd --env",
-    "i18n": "npm run i18n:extract && npm run i18n:push && npm run i18n:pull && npm run i18n:merge",
+    "i18n": "npm run i18n:extract",
     "i18n:extract": "nx extract-i18n --output-path src/locale --progress=false",
-    "i18n:push": "npx i18ntool push -c i18n.config.json",
-    "i18n:pull": "npx i18ntool pull -c i18n.config.json",
-    "i18n:merge": "npx i18ntool merge -c i18n.config.json",
-    "i18n:token": "npx i18ntool config token",
     "test": "jest --watch",
     "test:ci": "jest --clearCache && JEST_SILENT_REPORTER_DOTS=true jest --detectOpenHandles --coverage --reporters jest-silent-reporter",
     "pree2e": "rm -f cypress/reports/results-*.xml || true",
@@ -38,7 +34,8 @@
     "fix": "run-p -csl --aggregate-output fix:*",
     "compodoc": "compodoc",
     "doc-build": "compodoc -p tsconfig.app.json",
-    "doc-serve": "compodoc --port 8444 -s tsconfig.app.json"
+    "doc-serve": "compodoc --port 8444 -s tsconfig.app.json",
+    "prepare-husky": "cd ../../../../../ && husky src/pybind/mgr/dashboard/frontend/.husky"
   },
   "private": true,
   "dependencies": {
@@ -130,6 +127,7 @@
     "gherkin-lint": "4.2.4",
     "html-linter": "1.1.1",
     "htmllint-cli": "0.0.7",
+    "husky": "9.1.7",
     "identity-obj-proxy": "3.0.0",
     "isomorphic-form-data": "2.0.0",
     "jest": "29.7.0",

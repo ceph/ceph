@@ -1,0 +1,28 @@
+#!/bin/bash
+
+echo "Running husky pre-commit hook..."
+
+cd src/pybind/mgr/dashboard/frontend || exit 1
+
+HTML_FILES=$(git diff --cached --name-only --diff-filter=ACMRTUXB -- "*.html" | wc -l)
+SCSS_FILES=$(git diff --cached --name-only --diff-filter=ACMRTUXB -- "*.scss" | wc -l)
+TS_FILES=$(git diff --cached --name-only --diff-filter=ACMRTUXB -- "*.ts" | wc -l)
+GHERKIN_FILES=$(git diff --cached --name-only --diff-filter=ACMRTUXB -- "*.feature" | wc -l)
+
+if [[ "$HTML_FILES" -gt 0 && "$SCSS_FILES" -eq 0 && "$TS_FILES" -eq 0 ]]; then
+    echo 'Running "npm lint:html"...'
+    npm run lint:html
+fi
+
+if [[ "$SCSS_FILES" -gt 0 || "$TS_FILES" -gt 0 || "$GHERKIN_FILES" -gt 0 ]]; then
+    echo 'Running "npm fix"...'
+    npm run fix
+
+    # Add fixes to staging:
+    git add .
+
+    echo 'Running "npm lint"...'
+    npm run lint
+fi
+
+echo 'Pre-commit hook finished.'
