@@ -1,3 +1,10 @@
+* RGW: OpenSSL engine support deprecated in favor of provider support.
+  - Removed `openssl_engine_opts` configuration option. OpenSSL engine configurations in string format are no longer supported.
+  - Added `openssl_conf` configuration option for loading specified providers as default providers.
+    Configuration file syntax follows the OpenSSL standard (see https://github.com/openssl/openssl/blob/master/doc/man5/config.pod).
+    If the default provider is still required when using custom providers,
+    it must be explicitly loaded in the configuration file or code (see https://github.com/openssl/openssl/blob/master/README-PROVIDERS.md).
+
 >=20.0.0
 
 * RADOS: lead Monitor and stretch mode status are now included in the `ceph status` output.
