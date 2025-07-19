@@ -6217,6 +6217,37 @@ int Server::check_layout_vxattr(const MDRequestRef& mdr,
   return 0;
 }
 
+void Server::_updatesnap_finish(const MDRequestRef& mdr, CInode *diri, snapid_t snapid)
+{
+  dout(10) << "_updatesnap_finish " << *mdr << " " << snapid << dendl;
+
+  mdr->apply();
+
+  mds->snapclient->commit(mdr->more()->stid, mdr->ls);
+
+  dout(10) << "snaprealm now " << *diri->snaprealm << dendl;
+
+  // notify other mds
+  mdcache->send_snap_update(diri, mdr->more()->stid, CEPH_SNAP_OP_UPDATE);
+
+  mdcache->do_realm_invalidate_and_update_notify(diri, CEPH_SNAP_OP_UPDATE);
+
+  mdr->in[0] = diri;
+  mdr->tracei = diri;
+  mdr->snapid = snapid;
+  respond_to_request(mdr, 0);
+}
+
+struct C_MDS_updatesnap_finish : public ServerLogContext {
+  CInode *diri;
+  snapid_t snapid;
+  C_MDS_updatesnap_finish(Server *s, const MDRequestRef& r, CInode *di, snapid_t sn) :
+    ServerLogContext(s, r), diri(di), snapid(sn) {}
+  void finish(int r) override {
+    server->_updatesnap_finish(mdr, diri, snapid);
+  }
+};
+
 void Server::handle_client_setvxattr(const MDRequestRef& mdr, CInode *cur)
 {
   const cref_t<MClientRequest> &req = mdr->client_request;
@@ -6507,6 +6538,133 @@ void Server::handle_client_setvxattr(const MDRequestRef& mdr, CInode *cur)
     mdr->no_early_reply = true;
     pip = pi.inode.get();
     adjust_realm = true;
+  } else if (name == "ceph.dir.subvolume.snaps.visible"sv) {
+    if (!cur->is_dir()) {
+      respond_to_request(mdr, -EINVAL);
+      return;
+    }
+
+    bool val = true;
+    try {
+      std::string errstr;
+      val = strict_strtob(value, &errstr);
+      if (!errstr.empty()) {
+        dout(10) << "bad vxattr value, unable to parse bool for " << name
+                 << ": " << errstr << dendl;
+        respond_to_request(mdr, -EINVAL);
+        return;
+      }
+    } catch (boost::bad_lexical_cast const& e) {
+      dout(10) << "bad vxattr value, unable to parse bool for " << name
+               << ": " << e.what() << dendl;
+      respond_to_request(mdr, -EINVAL);
+      return;
+    }
+
+    // perform few checks with lightweight rdlock
+    if (!mdr->more()->rdonly_checks) {
+      lov.add_rdlock(&cur->snaplock);
+      if (!mds->locker->acquire_locks(mdr, lov)) {
+        return;
+      }
+
+      /* Skip if dirinode is not marked as a subvolume.
+      * This feature currently applies only to subvolume paths.
+      * For details, see: https://tracker.ceph.com/issues/71740
+      */
+      const auto srnode = cur->get_projected_srnode();
+      if (!srnode || !srnode->is_subvolume()) {
+        dout(10) << "cannot allow changing snapdir visibility for " 
+                 << req->get_filepath() << " since it's not a subvolume path" 
+                 << dendl;
+        respond_to_request(mdr, -EPERM);
+        return; 
+      }
+      // check if visibility already matches the desired value
+      if (val == srnode->is_snapdir_visible()) {
+        dout(20) << "snapdir visibility for " << req->get_filepath()
+                 << " is already set to " << std::boolalpha << val << dendl;
+        respond_to_request(mdr, 0);
+        return;
+      }
+      
+      mdr->more()->rdonly_checks = true;
+      dout(20) << "dropping rdlock" << dendl;
+      mds->locker->drop_locks(mdr.get());
+    }
+
+    if (!xlock_policylock(mdr, cur, false, true)) {
+      return;
+    }
+
+    /* Repeat rdlocks checks to see if anything changed b/w rdlock release and
+    *  xlock policylock acquisition
+    */ 
+    {
+      const auto srnode = cur->get_projected_srnode();
+      if (!srnode || !srnode->is_subvolume()) {
+        dout(10) << "cannot allow changing snapdir visibility for "
+                 << req->get_filepath() << " since it's not a subvolume path"
+                 << dendl;
+        respond_to_request(mdr, -EPERM);
+        return; 
+      }
+
+      if (val == srnode->is_snapdir_visible()) {
+        dout(20) << "snapdir visibility for " << req->get_filepath()
+                 << " is already set to " << std::boolalpha << val << dendl;
+        respond_to_request(mdr, 0);
+        return;
+      }
+    }
+
+    adjust_realm = true;
+    auto pi = cur->project_inode(mdr, false, adjust_realm);
+    dout(20) << "setting snapdir visibility to " << std::boolalpha
+               << val << " for " << req->get_filepath() << dendl;
+    if (val) {
+      pi.snapnode->set_snapdir_visibility();
+    } else {
+      pi.snapnode->unset_snapdir_visibility();
+    }
+
+    pi.snapnode->seq += 1;
+    pi.snapnode->last_modified = mdr->get_op_stamp();
+    pi.snapnode->change_attr++;
+    
+    pip = pi.inode.get();
+    pip->change_attr++;
+    pip->ctime = mdr->get_op_stamp();
+    if (mdr->get_op_stamp() > pip->rstat.rctime)
+      pip->rstat.rctime = mdr->get_op_stamp();
+    pip->version = cur->pre_dirty();
+    if (cur->is_file())
+      pip->update_backtrace();
+
+    if (!mdr->more()->stid) {
+      mds->snapclient->prepare_update(cur->ino(), pi.snapnode->seq, "", utime_t(),
+              &mdr->more()->stid,
+              new C_MDS_RetryRequest(mdcache, mdr));
+      return;
+    }
+    version_t stid = mdr->more()->stid;
+    dout(10) << " stid is " << stid << dendl;
+    // journal the inode changes
+    mdr->ls = mdlog->get_current_segment();
+    EUpdate *le = new EUpdate(mdlog, "update_snapdir_visibility");
+
+    le->metablob.add_client_req(req->get_reqid(), req->get_oldest_client_tid());
+    le->metablob.add_table_transaction(TABLE_SNAP, stid);
+    mdcache->predirty_journal_parents(mdr, &le->metablob, cur, 0, PREDIRTY_PRIMARY, false);
+    mdcache->journal_dirty_inode(mdr.get(), &le->metablob, cur);
+
+    // journal the snaprealm changes
+    submit_mdlog_entry(le, new C_MDS_updatesnap_finish(this, mdr, cur, pi.snapnode->seq),
+                      mdr, __func__);
+    mdlog->flush();
+    
+    mdr->no_early_reply = true;
+    return;
   } else if (name == "ceph.dir.pin"sv) {
     if (!cur->is_dir() || cur->is_root()) {
       respond_to_request(mdr, -EINVAL);

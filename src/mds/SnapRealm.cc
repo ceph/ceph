@@ -57,7 +57,8 @@ ostream& operator<<(ostream& out, const SnapRealm& realm)
   if (realm.srnode.is_parent_global())
     out << " global ";
   out << " last_modified " << realm.srnode.last_modified
-      << " change_attr " << realm.srnode.change_attr;
+      << " change_attr " << realm.srnode.change_attr
+      << " is_snapdir_visible " << realm.srnode.is_snapdir_visible();
   out << " " << &realm << ")";
   return out;
 }
@@ -435,7 +436,8 @@ void SnapRealm::build_snap_trace() const
 
     dout(10) << "build_snap_trace my_snaps " << info.my_snaps << dendl;
 
-    SnapRealmInfoNew ninfo(info, srnode.last_modified, srnode.change_attr);
+    SnapRealmInfoNew ninfo(info, srnode.last_modified,
+                           srnode.change_attr, srnode.is_snapdir_visible());
     encode(info, cached_snap_trace);
     encode(ninfo, cached_snap_trace_new);
     return;
@@ -470,7 +472,8 @@ void SnapRealm::build_snap_trace() const
     info.my_snaps.push_back(p->first);
   dout(10) << "build_snap_trace my_snaps " << info.my_snaps << dendl;
 
-  SnapRealmInfoNew ninfo(info, srnode.last_modified, srnode.change_attr);
+  SnapRealmInfoNew ninfo(info, srnode.last_modified,
+                         srnode.change_attr, srnode.is_snapdir_visible());
 
   encode(info, cached_snap_trace);
   encode(ninfo, cached_snap_trace_new);
