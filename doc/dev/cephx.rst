@@ -163,7 +163,7 @@ where::
     AuthTicket {
       EntityName name           # client's identity, as proven by its possession of principal_secret
       u64 global_id             # newly assigned, or from old_ticket
-      utime_t created, renew_after, expires
+      utime_t created, expires
       AuthCapsInfo       # what client is allowed to do
       u32 flags = 0      # unused
     }
@@ -258,7 +258,7 @@ Where, as above,::
     AuthTicket {
       EntityName name
       u64 global_id
-      utime_t created, renew_after, expires
+      utime_t created, expires
       AuthCapsInfo       # what you are allowed to do
       u32 flags = 0      # unused
     }
