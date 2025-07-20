@@ -17,3 +17,4 @@ overrides:
       - slow request
       - noscrub
       - nodeep-scrub
+      - osds down
