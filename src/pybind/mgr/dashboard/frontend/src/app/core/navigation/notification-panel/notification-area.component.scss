@@ -1,14 +1,14 @@
 @use '@carbon/styles/scss/theme' as *;
-@use '@carbon/styles/scss/spacing';
+@use '@carbon/styles/scss/spacing' as *;
 @use '@carbon/type';
 
 :host ::ng-deep {
   .notification-section-heading {
     @include type.type-style('heading-compact-01');
     margin: 0;
-    color: #161616;
-    padding: 1rem 1rem 0.75rem;
-    background-color: #ffffff;
+    color: $text-primary;
+    padding: $spacing-05 $spacing-05 $spacing-03;
+    background-color: $layer-01;
     position: sticky;
     top: 0;
     z-index: 2;
@@ -22,42 +22,42 @@
 
 .notification-empty {
   margin: 0;
-  padding: 1rem;
-  color: #6f6f6f;
+  padding: $spacing-05;
+  color: $text-secondary;
   text-align: center;
   @include type.type-style('body-short-01');
 }
 
 .notification-wrapper {
-  padding: 0 1rem;
+  padding: 0 $spacing-05;
   position: relative;
   z-index: 1;
-  background-color: #ffffff;
+  background-color: $layer-01;
 
   &:last-child {
-    padding-bottom: 1rem;
+    padding-bottom: $spacing-05;
   }
 }
 
 .notification-item {
   display: flex;
-  gap: 1rem;
-  padding: 0.75rem 0;
+  gap: $spacing-05;
+  padding: $spacing-03 0;
   align-items: flex-start;
   position: relative;
 
   .notification-close {
     position: absolute;
     right: 0;
-    top: 0.75rem;
-    padding: 0.5rem;
+    top: $spacing-03;
+    padding: $spacing-02;
     min-height: 0;
-    color: #525252;
+    color: $text-helper;
     opacity: 0;
     transition: opacity 0.2s ease-in-out;
     
     &:hover {
-      background-color: #e8e8e8;
+      background-color: $layer-hover;
     }
   }
 
@@ -78,14 +78,14 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
-  padding-right: 2rem;
+  gap: $spacing-02;
+  padding-right: $spacing-06;
 }
 
 :host ::ng-deep {
   .notification-timestamp {
     @include type.type-style('label-01');
-    color: #6f6f6f;
+    color: $text-secondary;
     line-height: 1;
     margin-top: 0;
     display: block;
@@ -94,33 +94,33 @@
   .notification-title {
     @include type.type-style('body-short-01');
     margin: 0;
-    color: #161616;
+    color: $text-primary;
     line-height: 1.25;
     display: block;
   }
 
   .notification-message {
     @include type.type-style('body-short-01');
-    color: #525252;
+    color: $text-helper;
     margin: 0;
     line-height: 1.4;
-    margin-top: -0.125rem;
+    margin-top: -$spacing-01;
     display: block;
   }
 }
 
 .notification-divider {
-  border-bottom: 1px solid #e0e0e0;
+  border-bottom: 1px solid $border-subtle-01;
 }
 
 :host {
   display: block;
   height: 100%;
   overflow-y: auto;
-  background-color: #ffffff;
+  background-color: $layer-01;
 
   ::ng-deep {
-    .notification-icon {
+    .notification-icon {  
       svg.icon-error,
       svg.icon-error:hover {
         fill: $support-error !important;

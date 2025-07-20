@@ -18,7 +18,7 @@
   color: $text-primary;
   display: flex;
   flex-direction: column;
-  overflow: hidden; // Add this to contain the scrolling child
+  overflow: hidden;
 
   cd-notification-header {
     flex: 0 0 auto;
