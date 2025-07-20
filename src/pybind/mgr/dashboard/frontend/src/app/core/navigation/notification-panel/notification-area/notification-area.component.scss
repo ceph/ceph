@@ -5,6 +5,7 @@
 :host ::ng-deep {
   .notification-section-heading {
     @include type.type-style('heading-compact-01');
+
     margin: 0;
     color: $text-primary;
     padding: $spacing-05 $spacing-05 $spacing-03;
@@ -18,6 +19,64 @@
       margin-top: 0;
     }
   }
+
+  .notification-timestamp {
+    @include type.type-style('label-01');
+
+    color: $text-secondary;
+    line-height: 1;
+    margin-top: 0;
+    display: block;
+  }
+
+  .notification-title {
+    @include type.type-style('body-short-01');
+
+    margin: 0;
+    color: $text-primary;
+    line-height: 1.25;
+    display: block;
+  }
+
+  .notification-message {
+    @include type.type-style('body-short-01');
+
+    color: $text-helper;
+    margin: 0;
+    line-height: 1.4;
+    margin-top: -$spacing-01;
+    display: block;
+  }
+
+  .notification-icon {
+    svg.icon-error,
+    svg.icon-error:hover {
+      fill: $support-error !important;
+      color: $support-error !important;
+    }
+
+    svg.icon-warning,
+    svg.icon-warning:hover {
+      fill: $support-warning !important;
+      color: $support-warning !important;
+    }
+
+    svg.icon-success,
+    svg.icon-success:hover {
+      fill: $support-success !important;
+      color: $support-success !important;
+    }
+
+    svg.icon-info,
+    svg.icon-info:hover {
+      fill: $support-info !important;
+      color: $support-info !important;
+    }
+
+    svg path {
+      fill: inherit !important;
+    }
+  }
 }
 
 .notification-empty {
@@ -25,6 +84,7 @@
   padding: $spacing-05;
   color: $text-secondary;
   text-align: center;
+
   @include type.type-style('body-short-01');
 }
 
@@ -55,7 +115,7 @@
     color: $text-helper;
     opacity: 0;
     transition: opacity 0.2s ease-in-out;
-    
+
     &:hover {
       background-color: $layer-hover;
     }
@@ -82,33 +142,6 @@
   padding-right: $spacing-06;
 }
 
-:host ::ng-deep {
-  .notification-timestamp {
-    @include type.type-style('label-01');
-    color: $text-secondary;
-    line-height: 1;
-    margin-top: 0;
-    display: block;
-  }
-
-  .notification-title {
-    @include type.type-style('body-short-01');
-    margin: 0;
-    color: $text-primary;
-    line-height: 1.25;
-    display: block;
-  }
-
-  .notification-message {
-    @include type.type-style('body-short-01');
-    color: $text-helper;
-    margin: 0;
-    line-height: 1.4;
-    margin-top: -$spacing-01;
-    display: block;
-  }
-}
-
 .notification-divider {
   border-bottom: 1px solid $border-subtle-01;
 }
@@ -118,36 +151,4 @@
   height: 100%;
   overflow-y: auto;
   background-color: $layer-01;
-
-  ::ng-deep {
-    .notification-icon {  
-      svg.icon-error,
-      svg.icon-error:hover {
-        fill: $support-error !important;
-        color: $support-error !important;
-      }
-
-      svg.icon-warning,
-      svg.icon-warning:hover {
-        fill: $support-warning !important;
-        color: $support-warning !important;
-      }
-
-      svg.icon-success,
-      svg.icon-success:hover {
-        fill: $support-success !important;
-        color: $support-success !important;
-      }
-
-      svg.icon-info,
-      svg.icon-info:hover {
-        fill: $support-info !important;
-        color: $support-info !important;
-      }
-
-      svg path {
-        fill: inherit !important;
-      }
-    }
-  }
 }

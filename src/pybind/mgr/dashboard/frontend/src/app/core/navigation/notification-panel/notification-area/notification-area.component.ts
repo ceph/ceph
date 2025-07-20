@@ -1,8 +1,8 @@
 import { Component, OnInit, OnDestroy } from '@angular/core';
 import { Subscription } from 'rxjs';
-import { NotificationService } from 'src/app/shared/services/notification.service';
-import { CdNotification } from 'src/app/shared/models/cd-notification';
-import { NotificationType } from 'src/app/shared/enum/notification-type.enum';
+import { NotificationService } from '../../../../shared/services/notification.service';
+import { CdNotification } from '../../../../shared/models/cd-notification';
+import { NotificationType } from '../../../../shared/enum/notification-type.enum';
 
 @Component({
   selector: 'cd-notification-area',
@@ -76,11 +76,16 @@ export class NotificationAreaComponent implements OnInit, OnDestroy {
 
   getIconColorClass(type: NotificationType): string {
     switch (type) {
-      case NotificationType.success: return 'icon-success';
-      case NotificationType.error: return 'icon-error';
-      case NotificationType.info: return 'icon-info';
-      case NotificationType.warning: return 'icon-warning';
-      default: return '';
+      case NotificationType.success:
+        return 'icon-success';
+      case NotificationType.error:
+        return 'icon-error';
+      case NotificationType.info:
+        return 'icon-info';
+      case NotificationType.warning:
+        return 'icon-warning';
+      default:
+        return '';
     }
   }
-} 
+}
