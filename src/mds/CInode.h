@@ -467,6 +467,16 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
     return scrub_infop->queued_frags;
   }
 
+  bool has_dirty_remote_dirfrag_scrubbed() {
+    return dirty_remote_dirfrag_scrubbed;
+  }
+  void mark_dirty_remote_dirfrag_scrubbed() {
+    dirty_remote_dirfrag_scrubbed = true;
+  }
+  void clear_dirty_remote_dirfrag_scrubbed() {
+    dirty_remote_dirfrag_scrubbed = false;
+  }
+
   bool is_multiversion() const {
     return snaprealm ||  // other snaprealms will link to me
       get_inode()->is_dir() ||  // links to me in other snaps
@@ -1255,6 +1265,7 @@ private:
 
   int stickydir_ref = 0;
   std::unique_ptr<scrub_info_t> scrub_infop;
+  bool dirty_remote_dirfrag_scrubbed = false;
   /** @} Scrubbing and fsck */
 };
 
