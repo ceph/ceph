@@ -205,8 +205,10 @@ TransactionManager::ref_ret TransactionManager::remove(
 {
   LOG_PREFIX(TransactionManager::remove);
   DEBUGT("{} ...", t, *ref);
-  return lba_manager->remove_mapping(t, ref->get_laddr()
-  ).si_then([this, FNAME, &t, ref](auto result) {
+  return lba_manager->get_mapping(t, *ref
+  ).si_then([ref, this, &t](auto mapping) {
+    return lba_manager->remove_mapping(t, std::move(mapping));
+  }).si_then([this, FNAME, &t, ref](auto result) {
     assert(!result.direct_result);
     auto &primary_result = result.result;
     if (primary_result.refcount == 0) {
@@ -225,26 +227,62 @@ TransactionManager::ref_ret TransactionManager::remove(
 {
   LOG_PREFIX(TransactionManager::remove);
   DEBUGT("{} ...", t, offset);
-  return lba_manager->remove_mapping(t, offset
-  ).si_then([this, FNAME, offset, &t](auto result) -> ref_ret {
-    auto fut = ref_iertr::now();
-    auto &primary_result = result.result;
-    assert(primary_result.refcount == 0);
-    if (primary_result.need_to_remove_extent()) {
-      ceph_assert(!result.direct_result);
-      fut = cache->retire_extent_addr(
-        t, primary_result.addr.get_paddr(), primary_result.length);
-    } else if (auto &direct_result = result.direct_result;
-               direct_result.has_value() &&
-               direct_result->need_to_remove_extent()) {
-      fut = cache->retire_extent_addr(
-        t, direct_result->addr.get_paddr(), direct_result->length);
-    }
-    return fut.si_then([result=std::move(result), offset, &t, FNAME] {
-      DEBUGT("removed {}~0x{:x} refcount={} -- offset={}",
-             t, result.result.addr, result.result.length,
-             result.result.refcount, offset);
-      return result.result.refcount;
+  return lba_manager->get_mapping(t, offset
+  ).si_then([&t, this, FNAME, offset](auto mapping) {
+    return seastar::do_with(
+      std::move(mapping),
+      [&t, this, FNAME, offset](auto &mapping) {
+      auto fut = base_iertr::make_ready_future<LogicalChildNodeRef>();
+      if (mapping.is_indirect()) {
+        fut = lba_manager->complete_indirect_lba_mapping(t, std::move(mapping)
+        ).si_then([&mapping, &t, this](auto m) {
+          mapping = std::move(m);
+          auto ret = get_extent_if_linked<LogicalChildNode>(t, mapping);
+          if (ret.index() == 1) {
+            return std::move(std::get<1>(ret));
+          }
+          return get_child_iertr::make_ready_future<LogicalChildNodeRef>();
+        });
+      } else if (mapping.get_val().is_real_location()) {
+        auto ret = get_extent_if_linked<LogicalChildNode>(t, mapping);
+        if (ret.index() == 1) {
+          fut = std::move(std::get<1>(ret));
+        }
+      }
+      return fut.si_then([&t, &mapping, this, FNAME, offset](auto extent) {
+        return lba_manager->remove_mapping(t, std::move(mapping)
+        ).si_then([this, FNAME, offset, &t, extent](auto result) -> ref_ret {
+          auto fut = ref_iertr::now();
+          auto &primary_result = result.result;
+          assert(primary_result.refcount == 0);
+          if (primary_result.need_to_remove_extent()) {
+            ceph_assert(!result.direct_result);
+            assert(extent->get_laddr() == primary_result.direct_key);
+            if (extent) {
+              cache->retire_extent(t, extent);
+            } else {
+              fut = cache->retire_extent_addr(
+                t, primary_result.addr.get_paddr(), primary_result.length);
+            }
+          } else if (auto &direct_result = result.direct_result;
+                     direct_result.has_value() &&
+                     direct_result->need_to_remove_extent()) {
+            assert(extent->get_laddr() == direct_result->direct_key);
+            if (extent) {
+              cache->retire_extent(t, extent);
+            } else {
+              fut = cache->retire_extent_addr(
+                t, direct_result->addr.get_paddr(), direct_result->length);
+            }
+          }
+          return fut.si_then([result=std::move(result), offset, &t, FNAME] {
+            DEBUGT("removed {}~0x{:x} refcount={} -- offset={}",
+                   t, result.result.addr, result.result.length,
+                   result.result.refcount, offset);
+            return result.result.refcount;
+          });
+        });
+      });
     });
   });
 }
