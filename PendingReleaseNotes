@@ -147,6 +147,14 @@
   allowed.  `rbd trash mv` command now behaves the same way as `rbd rm` in this
   scenario.
 
+* CephFS: If the subvolume name passed to the command `ceph fs subvolume info`
+  is a clone, the output now will also contain a "source" field that tells user
+  the name of source snapshot along with the name of volume, subvolume group and
+  subvolume in which the source snapshot is located. For clones created with
+  Tentacle or earlier release, the value of this field will be 'N/A'. Regular
+  subvolumes don't have a source subvolume and therefore the output for them
+  won't contain a "source" field regardless of the release.
+
 * RGW: Replication policies now validate permissions using `s3:ReplicateObject`,
   `s3:ReplicateDelete`, and `s3:ReplicateTags` for destination buckets. For source
   buckets, both `s3:GetObjectVersionForReplication` and `s3:GetObject(Version)`
