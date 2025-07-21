@@ -82,13 +82,6 @@ TYPE(ECSubWriteReply)
 TYPE_FEATUREFUL(ECSubRead)
 TYPE(ECSubReadReply)
 
-#include "osd/HitSet.h"
-TYPE_NONDETERMINISTIC(ExplicitHashHitSet)
-TYPE_NONDETERMINISTIC(ExplicitObjectHitSet)
-TYPE(BloomHitSet)
-TYPE_NONDETERMINISTIC(HitSet)   // because some subclasses are
-TYPE(HitSet::Params)
-
 #include "osd/SnapMapper.h"
 TYPE(SnapMapper::Mapping)
 TYPE(SnapMapper::object_snaps)
