@@ -82,11 +82,13 @@ struct ECCommon {
       const ZTracer::Trace &trace,
       ECListener &eclistener) = 0;
 
+#ifdef WITH_CRIMSON
   virtual void handle_sub_read_n_reply(
     pg_shard_t from,
     ECSubRead &op,
     const ZTracer::Trace &trace
     ) = 0;
+#endif
 
   virtual void objects_read_and_reconstruct(
       const std::map<hobject_t, std::list<ec_align_t>> &reads,
@@ -354,7 +356,9 @@ struct ECCommon {
     const ECUtil::stripe_info_t &sinfo;
     // TODO: lay an interface down here
     ECListener *parent;
+#ifdef WITH_CRIMSON
     ECCommon &ec_backend;
+#endif
 
     ECListener *get_parent() const { return parent; }
 
@@ -371,13 +375,21 @@ struct ECCommon {
     ReadPipeline(CephContext *cct,
                  ceph::ErasureCodeInterfaceRef ec_impl,
                  const ECUtil::stripe_info_t &sinfo,
+#ifdef WITH_CRIMSON
                  ECListener *parent,
                  ECCommon &ec_backend)
+#else
+                 ECListener *parent)
+#endif
       : cct(cct),
         ec_impl(std::move(ec_impl)),
         sinfo(sinfo),
+#ifdef WITH_CRIMSON
         parent(parent),
         ec_backend(ec_backend) {}
+#else
+        parent(parent) {}
+#endif
 
     /**
      * While get_want_to_read_shards creates a want_to_read based on the EC
@@ -434,12 +446,14 @@ struct ECCommon {
         //< [in] Shards where reads have failed (optional)
       ); ///< @return error code, 0 on success
 
+#ifdef WITH_CRIMSON
     void handle_sub_read_n_reply(
       pg_shard_t from,
       ECSubRead &op,
       const ZTracer::Trace &trace) {
       ec_backend.handle_sub_read_n_reply(from, op, trace);
     }
+#endif
   };
 
   /**

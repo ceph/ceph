@@ -75,7 +75,11 @@ ECBackend::ECBackend(
   ECSwitch *s,
   ECExtentCache::LRU &ec_extent_cache_lru)
   : parent(pg), cct(cct), switcher(s),
+#ifdef WITH_CRIMSON
     read_pipeline(cct, ec_impl, this->sinfo, get_parent()->get_eclistener(), *this),
+#else
+    read_pipeline(cct, ec_impl, this->sinfo, get_parent()->get_eclistener()),
+#endif
     rmw_pipeline(cct, ec_impl, this->sinfo, get_parent()->get_eclistener(),
                  *this, ec_extent_cache_lru),
     recovery_backend(cct, switcher->coll, ec_impl, this->sinfo, read_pipeline,

@@ -86,7 +86,11 @@ class ECBackend : public ECCommon {
     pg_shard_t from,
     ECSubRead &op,
     const ZTracer::Trace &trace
+#ifdef WITH_CRIMSON
     ) override;
+#else
+    );
+#endif
   void handle_sub_write_reply(
       pg_shard_t from,
       const ECSubWriteReply &op,

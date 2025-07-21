@@ -466,6 +466,7 @@ void ECCommon::ReadPipeline::do_read_op(ReadOp &rop) {
     get_parent()->send_message_osd_cluster(m, get_osdmap_epoch());
   }
 
+#if WITH_CRIMSON
   if (local_read_op) {
     dout(10) << __func__ << ": doing local read for " << rop << dendl;
     handle_sub_read_n_reply(
@@ -473,6 +474,7 @@ void ECCommon::ReadPipeline::do_read_op(ReadOp &rop) {
       *local_read_op,
       rop.trace);
   }
+#endif
   dout(10) << __func__ << ": started " << rop << dendl;
 }
 
