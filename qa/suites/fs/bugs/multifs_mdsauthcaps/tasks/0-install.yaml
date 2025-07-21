@@ -1,0 +1,37 @@
+meta:
+- desc: |
+   install ceph/squid v19.2.2
+tasks:
+- install:
+    tag: v19.2.2
+- print: "**** done installing squid v19.2.2"
+- install.upgrade:
+    # upgrade the single ceph cluster node, which runs all
+    # the mon/mds/osd/mgr daemons except client node.
+    mon.a:
+- print: "**** done install.upgrade on ceph cluster node"
+- ceph:
+    log-ignorelist:
+      - overall HEALTH_
+      - \(FS_
+      - \(MDS_
+      - \(OSD_
+      - \(MON_DOWN\)
+      - \(CACHE_POOL_
+      - \(POOL_
+      - \(MGR_DOWN\)
+      - \(PG_
+      - \(SMALLER_PGP_NUM\)
+      - Monitor daemon marked osd
+      - Behind on trimming
+      - Manager daemon
+    conf:
+      global:
+        mon warn on pool no app: false
+- exec:
+    mon.a:
+    - ceph osd dump -f json-pretty
+    - ceph versions
+    - ceph fs status
+    - ceph health detail
+- print: "**** done ceph"
