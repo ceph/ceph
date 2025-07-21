@@ -4,12 +4,49 @@ Rados modle-based integration tests
 import contextlib
 import logging
 import gevent
+from typing import Any, Dict
+
+
 from teuthology import misc as teuthology
-
-
 from teuthology.orchestra import run
+from .watched_process import WatchedProcess
 
 log = logging.getLogger(__name__)
+
+
+class CephTestRados(WatchedProcess):
+    """
+    The WatchedProcess class for ceph_test_rados. This allows us to monitor
+    any ceph_test_rados processes for error, and to kill the remote processes when
+    the DaemonWatchdog barks.
+
+    It also raises the assert from the watchdog so that the failure reason shown in
+    the test result is the reason the watchdog barked.
+    """
+
+    def __init__(self, ctx: Dict[Any, Any], config: Dict[Any, Any], cluster: str, sub_processes: Dict[str, Any]):
+        super(CephTestRados, self).__init__()
+
+        self._ctx = ctx
+        self._config = config
+        self._cluster: str = cluster
+        self._sub_processes = sub_processes
+        self._name: str = f"ceph-test-rados-{self._cluster}"
+
+    @property
+    def id(self) -> str:
+        return self._name
+
+    def stop(self):
+        debug: str = f"Stopping {self._name}"
+        if self._exception:
+            debug += f" due to exception {self._exception}"
+        log.debug(debug)
+        for test_id, proc in self._sub_processes.items():
+            log.info("Stopping instance %s", test_id)
+            proc.stdin.close()
+        if self._exception:
+            raise self._exception
 
 @contextlib.contextmanager
 def task(ctx, config):
@@ -146,6 +183,8 @@ def task(ctx, config):
         'adjust-ulimits',
         'ceph-coverage',
         '{tdir}/archive/coverage'.format(tdir=testdir),
+        'daemon-helper',
+        'kill', 
         'ceph_test_rados']
     if config.get('ec_pool', False):
         args.extend(['--no-omap'])
@@ -253,6 +292,8 @@ def task(ctx, config):
             profile_name = None
             crush_name = None
 
+        cluster = config.get("cluster", "ceph")
+
         for i in range(int(config.get('runs', '1'))):
             log.info("starting run %s out of %s", str(i), config.get('runs', '1'))
             tests = {}
@@ -296,6 +337,14 @@ def task(ctx, config):
                     wait=False
                     )
                 tests[id_] = proc
+
+            watched_process: CephTestRados = CephTestRados(ctx, config, cluster, tests)
+            ctx.ceph[cluster].watched_processes.append(watched_process)
+            try:
+                run.wait(tests.values())
+            except Exception as e:
+                watched_process.set_exception(e)
+
             run.wait(tests.values())
             wait_for_all_active_clean_pgs = config.get("wait_for_all_active_clean_pgs", False)
             # usually set when we do min_size testing.
@@ -304,6 +353,9 @@ def task(ctx, config):
                 # Mainly used for test_pool_min_size
                 manager.wait_for_clean()
                 manager.wait_for_all_osds_up(timeout=1800)
+
+            if watched_process.exception:
+                raise watched_process.exception
 
             for pool in created_pools:
                 manager.wait_snap_trimming_complete(pool);
