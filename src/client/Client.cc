@@ -6204,22 +6204,23 @@ int Client::may_setattr(const InodeRef& in, struct ceph_statx *stx, int mask,
   }
 
   if (mask & CEPH_SETATTR_MODE) {
-    bool allowed = false;
     /*
      * Currently the kernel fuse and libfuse code is buggy and
      * won't pass the ATTR_KILL_SUID/ATTR_KILL_SGID to ceph-fuse.
      * But will just set the ATTR_MODE and at the same time by
      * clearing the suid/sgid bits.
      *
-     * Only allow unprivileged users to clear S_ISUID and S_ISUID.
+     * Only allow unprivileged users to clear S_ISUID and S_ISGID.
      */
-    if ((in->mode & (S_ISUID | S_ISGID)) != (stx->stx_mode & (S_ISUID | S_ISGID)) &&
-        (in->mode & ~(S_ISUID | S_ISGID)) == (stx->stx_mode & ~(S_ISUID | S_ISGID))) {
-      allowed = true;
-    }
-    uint32_t m = ~stx->stx_mode & in->mode; // mode bits removed
-    ldout(cct, 20) << __func__ << " " << *in << " = " << hex << m << dec <<  dendl;
-    if (perms.uid() != 0 && perms.uid() != in->uid && !allowed)
+    uint32_t removed_bits = ~stx->stx_mode & in->mode;
+    uint32_t added_bits = ~in->mode & stx->stx_mode;
+    bool clearing_suid_sgid = (
+      // no new bits added
+      added_bits == 0 &&
+      // only suid/suid bits removed
+      (removed_bits & ~(S_ISUID | S_ISGID)) == 0);
+    ldout(cct, 20) << __func__ << " " << *in << " = " << hex << removed_bits << dec <<  dendl;
+    if (perms.uid() != 0 && perms.uid() != in->uid && !clearing_suid_sgid)
       goto out;
 
     gid_t i_gid = (mask & CEPH_SETATTR_GID) ? stx->stx_gid : in->gid;

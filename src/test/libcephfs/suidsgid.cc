@@ -19,6 +19,7 @@
 #include "include/stringify.h"
 #include "include/cephfs/libcephfs.h"
 #include "include/rados/librados.h"
+#include <cerrno>
 #include <errno.h>
 #include <fcntl.h>
 #include <unistd.h>
@@ -142,6 +143,17 @@ void run_change_mode_test_case()
   ASSERT_EQ(ceph_chmod(cmount, c_dir, 0777), -EPERM);
 }
 
+static void run_set_sgid_suid_test_case(int old_suid_sgid,
+					int new_suid_sgid,
+					int expected_result)
+{
+  char c_dir[1024];
+  sprintf(c_dir, "/mode_test_%d", getpid());
+  const int mode = 0766;
+  ASSERT_EQ(ceph_mkdirs(admin, c_dir, mode | old_suid_sgid), 0);
+  ASSERT_EQ(ceph_chmod(cmount, c_dir, mode | new_suid_sgid), expected_result);
+}
+
 TEST(SuidsgidTest, WriteClearSetuid) {
   ASSERT_EQ(0, ceph_create(&admin, NULL));
   ASSERT_EQ(0, ceph_conf_read_file(admin, NULL));
@@ -214,7 +226,17 @@ TEST(SuidsgidTest, WriteClearSetuid) {
   // 14, Truncate by unprivileged user clears the suid and sgid
   run_truncate_test_case(06766, 0, 100);
 
+  // 15, Prohibit unpriviledged user from changing non-sgid/suid
+  //     mode bits
   run_change_mode_test_case();
+
+  // 16, Prohibit unpriviledged user from setting suid/sgid
+  run_set_sgid_suid_test_case(0, S_ISUID, -EPERM);
+  run_set_sgid_suid_test_case(0, S_ISGID, -EPERM);
+  run_set_sgid_suid_test_case(0, S_ISUID | S_ISGID, -EPERM);
+  run_set_sgid_suid_test_case(S_ISGID, S_ISUID, -EPERM);
+  run_set_sgid_suid_test_case(S_ISUID, S_ISGID, -EPERM);
+  run_set_sgid_suid_test_case(S_ISGID, S_ISUID | S_ISGID, -EPERM);
 
   // clean up
   ceph_shutdown(cmount);
