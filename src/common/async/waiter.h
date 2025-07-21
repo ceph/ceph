@@ -138,8 +138,9 @@ public:
 
 template<typename Ret>
 class waiter<Ret> final : public detail::base {
-  std::aligned_storage_t<sizeof(Ret)> ret;
-
+  struct alignas(Ret) {
+    std::byte data[sizeof(Ret)];
+  } ret;
 public:
   Ret wait() {
     auto l = wait_base();
