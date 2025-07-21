@@ -1445,12 +1445,14 @@ private:
       partial_len,
       [laddr=pin.get_intermediate_base(),
        maybe_init=std::move(maybe_init),
-       child_pos=std::move(child_pos)]
+       child_pos=std::move(child_pos),
+       &t, this]
       (T &extent) mutable {
 	assert(extent.is_logical());
 	assert(!extent.has_laddr());
 	assert(!extent.has_been_invalidated());
 	child_pos.link_child(&extent);
+	child_pos.invalidate_retired_placeholder(t, *cache, extent);
 	extent.set_laddr(laddr);
 	maybe_init(extent);
 	extent.set_seen_by_users();
@@ -1517,12 +1519,14 @@ private:
       pin.get_val(),
       direct_key,
       direct_length,
-      [direct_key, child_pos=std::move(child_pos)](CachedExtent &extent) mutable {
+      [direct_key, child_pos=std::move(child_pos),
+      &t, this](CachedExtent &extent) mutable {
 	assert(extent.is_logical());
 	auto &lextent = static_cast<LogicalChildNode&>(extent);
 	assert(!lextent.has_laddr());
 	assert(!lextent.has_been_invalidated());
 	child_pos.link_child(&lextent);
+	child_pos.invalidate_retired_placeholder(t, *cache, lextent);
 	lextent.set_laddr(direct_key);
         // No change to extent::seen_by_user because this path is only
         // for background cleaning.

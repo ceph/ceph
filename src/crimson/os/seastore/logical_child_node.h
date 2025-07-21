@@ -25,6 +25,8 @@ class RetiredExtentPlaceholder
   : public CachedExtent,
     public ChildNode<lba::LBALeafNode, RetiredExtentPlaceholder, laddr_t> {
 
+  using lba_child_node_t =
+    ChildNode<lba::LBALeafNode, RetiredExtentPlaceholder, laddr_t>;
 public:
   RetiredExtentPlaceholder(extent_len_t length)
     : CachedExtent(CachedExtent::retired_placeholder_construct_t{}, length) {}
@@ -33,6 +35,10 @@ public:
     if (this->is_stable()) {
       lba_child_node_t::destroy();
     }
+  }
+
+  void on_invalidated(Transaction&) final {
+    this->lba_child_node_t::on_invalidated();
   }
 
   CachedExtentRef duplicate_for_write(Transaction&) final {
