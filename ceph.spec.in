@@ -2564,6 +2564,9 @@ fi
 %{_includedir}/cephfs/types.h
 %dir %{_includedir}/cephfs/metrics
 %{_includedir}/cephfs/metrics/Types.h
+%{_includedir}/cephfs/dump.h
+%{_includedir}/cephfs/json.h
+%{_includedir}/cephfs/keys_and_values.h
 %{_libdir}/libcephfs.so
 %{_libdir}/libcephfs_proxy.so
 %{_libdir}/pkgconfig/cephfs.pc
