@@ -72,6 +72,7 @@ set(librgw_common_srcs
   rgw_multi_del.cc
   rgw_multipart_meta_filter.cc
   rgw_obj_manifest.cc
+  driver/rados/rgw_obj_manifest.cc
   rgw_period.cc
   rgw_realm.cc
   rgw_sync.cc
@@ -138,11 +139,6 @@ set(librgw_common_srcs
   rgw_bucket_encryption.cc
   rgw_tracer.cc
   rgw_lua_background.cc
-  rgw_dedup.cc
-  rgw_dedup_table.cc
-  rgw_dedup_store.cc
-  rgw_dedup_utils.cc
-  rgw_dedup_cluster.cc
   rgw_data_access.cc
   rgw_realm_watcher.cc
   rgw_bucket_logging.cc
@@ -155,6 +151,11 @@ list(APPEND librgw_common_srcs
 
 if(WITH_RADOSGW_RADOS)
   list(APPEND librgw_common_srcs
+	  rgw_dedup.cc
+	  rgw_dedup_table.cc
+	  rgw_dedup_store.cc
+	  rgw_dedup_utils.cc
+	  rgw_dedup_cluster.cc
           services/svc_finisher.cc
           services/svc_bi_rados.cc
           services/svc_bilog_rados.cc
@@ -219,7 +220,6 @@ if(WITH_RADOSGW_RADOS)
           driver/rados/rgw_trim_bilog.cc
           driver/rados/rgw_trim_datalog.cc
           driver/rados/rgw_trim_mdlog.cc
-          driver/rados/rgw_user.cc
           driver/rados/role.cc
           driver/rados/roles.cc
           driver/rados/sync_fairness.cc
@@ -260,7 +260,9 @@ if(WITH_RADOSGW_POSIX)
 	      driver/posix/rgw_sal_posix.cc
 	      driver/posix/lmdb-safe.cc
 	      driver/posix/posixDB.cc
-	      driver/posix/notify.cpp)
+	      driver/posix/notify.cpp
+              driver/rados/rgw_user.cc
+              driver/rados/rgw_bucket.cc)
 endif()
 if(WITH_JAEGER)
   list(APPEND librgw_common_srcs rgw_tracer.cc)
@@ -514,6 +516,9 @@ set(radosgw_admin_srcs
   radosgw-admin/sync_checkpoint.cc
   radosgw-admin/orphan.cc)
 
+set(radosgw_admin_srcs_without_rados
+  radosgw-admin/radosgw-admin.cc)
+
 # this is unsatisfying and hopefully temporary; ARROW should not be
 # part of radosgw_admin
 if(WITH_RADOSGW_ARROW_FLIGHT)
@@ -533,6 +538,19 @@ target_link_libraries(radosgw-admin
   ${CURL_LIBRARIES} ${EXPAT_LIBRARIES} ${BLKID_LIBRARIES})
 endif()
 
+if(WITH_RADOSGW_POSIX)
+add_executable(radosgw-admin ${radosgw_admin_srcs_without_rados})
+target_link_libraries(radosgw-admin
+  legacy-option-headers
+  ${rgw_libs} librados
+  cls_rgw_client cls_otp_client cls_lock_client cls_refcount_client
+  cls_log_client cls_timeindex_client
+  cls_version_client cls_user_client
+  global ${LIB_RESOLV}
+  OATH::OATH
+  ${CURL_LIBRARIES} ${EXPAT_LIBRARIES} ${BLKID_LIBRARIES})
+endif()
+
 # this is unsatisfying and hopefully temporary; ARROW should not be
 # part of radosgw_admin
 if(WITH_RADOSGW_ARROW_FLIGHT)
@@ -540,6 +558,10 @@ if(WITH_RADOSGW_ARROW_FLIGHT)
 endif(WITH_RADOSGW_ARROW_FLIGHT)
 
 if(WITH_RADOSGW_RADOS)
+install(TARGETS radosgw-admin DESTINATION bin)
+endif()
+
+if(WITH_RADOSGW_POSIX)
 install(TARGETS radosgw-admin DESTINATION bin)
 endif()
 
