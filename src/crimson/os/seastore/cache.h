@@ -102,7 +102,8 @@ class SegmentProvider;
  * - TRACE: DEBUG details
  * - seastore_t logs
  */
-class Cache : public ExtentTransViewRetriever {
+class Cache : public ExtentTransViewRetriever,
+	      public RetiredExtentPlaceholderInvalidater {
 public:
   using base_ertr = crimson::errorator<
     crimson::ct_error::input_output_error>;
@@ -367,6 +368,18 @@ public:
           offset, length, [](T &){}, std::move(f), &t_src)
       );
     }
+  }
+
+  void invalidate_retired_placeholder(
+    Transaction &t,
+    CachedExtent &retired_placeholder,
+    CachedExtent &extent) {
+    // replace placeholder in transactions
+    while (!retired_placeholder.read_transactions.empty()) {
+      auto t = retired_placeholder.read_transactions.begin()->t;
+      t->replace_placeholder(retired_placeholder, extent);
+    }
+    retired_placeholder.set_invalid(t);
   }
 
   /*
