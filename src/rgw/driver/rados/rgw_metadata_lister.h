@@ -68,7 +68,9 @@ class RGWMetadataLister {
   std::string get_marker()
   {
     std::string marker;
+#ifdef WITH_RADOSGW_RADOS
     listing.get_marker(&marker);
+#endif
     return marker;
   }
 };

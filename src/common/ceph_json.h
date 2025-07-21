@@ -502,7 +502,9 @@ template<class T>
 static void encode_json_impl(const char *name, const T& val, ceph::Formatter *f)
 {
   f->open_object_section(name);
+#ifdef WITH_RADOSGW_RADOS
   val.dump(f);
+#endif
   f->close_section();
 }
 
