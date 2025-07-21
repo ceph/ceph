@@ -163,8 +163,8 @@ public:
   retire_extent_ret retire_extent_addr(
     Transaction &t, paddr_t addr, extent_len_t length);
 
-  void retire_absent_extent_addr(
-    Transaction &t, paddr_t addr, extent_len_t length);
+  CachedExtentRef retire_absent_extent_addr(
+    Transaction &t, laddr_t laddr, paddr_t addr, extent_len_t length);
 
   /**
    * get_root
