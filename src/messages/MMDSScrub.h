@@ -51,6 +51,7 @@ public:
     if (is_force()) out << " force";
     if (is_recursive()) out << " recursive";
     if (is_repair()) out << " repair";
+    if (is_remote_dirfrag_dirty()) out << " dirty_remote_dirfrag";
     out << ")";
   }
   void encode_payload(uint64_t features) override {
@@ -99,23 +100,28 @@ public:
   bool is_repair() const {
     return flags & FLAG_REPAIR;
   }
+  bool is_remote_dirfrag_dirty() const {
+    return flags & FLAG_DIRTY_REMOTE_DIRFRAG;
+  }
 
 protected:
-  static constexpr int HEAD_VERSION = 1;
-  static constexpr int COMPAT_VERSION = 1;
+  static constexpr int HEAD_VERSION = 2;
+  static constexpr int COMPAT_VERSION = 2;
 
   MMDSScrub() : MMDSOp(MSG_MDS_SCRUB, HEAD_VERSION, COMPAT_VERSION) {}
   MMDSScrub(int o)
     : MMDSOp(MSG_MDS_SCRUB, HEAD_VERSION, COMPAT_VERSION), op(o) {}
   MMDSScrub(int o, inodeno_t i, fragset_t&& _frags, std::string_view _tag,
 	    inodeno_t _origin=inodeno_t(), bool internal_tag=false,
-	    bool force=false, bool recursive=false, bool repair=false)
+	    bool force=false, bool recursive=false, bool repair=false,
+	    bool remote_dirfrag_dirty=false)
     : MMDSOp(MSG_MDS_SCRUB, HEAD_VERSION, COMPAT_VERSION),
     op(o), ino(i), frags(std::move(_frags)), tag(_tag), origin(_origin) {
     if (internal_tag) flags |= FLAG_INTERNAL_TAG;
     if (force) flags |= FLAG_FORCE;
     if (recursive) flags |= FLAG_RECURSIVE;
     if (repair) flags |= FLAG_REPAIR;
+    if (remote_dirfrag_dirty) flags |= FLAG_DIRTY_REMOTE_DIRFRAG;
   }
 
   ~MMDSScrub() override {}
@@ -129,6 +135,7 @@ private:
   static constexpr unsigned FLAG_FORCE		= 1<<1;
   static constexpr unsigned FLAG_RECURSIVE	= 1<<2;
   static constexpr unsigned FLAG_REPAIR		= 1<<3;
+  static constexpr unsigned FLAG_DIRTY_REMOTE_DIRFRAG	= 1<<4;
 
   int32_t op;
   inodeno_t ino;
