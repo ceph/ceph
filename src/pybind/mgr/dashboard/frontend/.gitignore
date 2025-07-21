@@ -32,6 +32,9 @@
 npm-debug.log
 testem.log
 /typings
+.nx/cache
+.nx/workspace-data
+.verdaccio/
 
 # e2e
 /cypress/screenshots
