@@ -1310,7 +1310,11 @@ private:
 	      });
 	    } else {
 	      // absent
-	      cache->retire_absent_extent_addr(t, original_paddr, original_len);
+	      auto unlinked_child = std::move(std::get<0>(ret));
+	      auto retired_placeholder = cache->retire_absent_extent_addr(
+		t, pin.get_key(), original_paddr, original_len
+	      )->template cast<RetiredExtentPlaceholder>();
+	      unlinked_child.child_pos.link_child(retired_placeholder.get());
 	      return base_iertr::make_ready_future<TCachedExtentRef<T>>();
 	    }
 	  }
@@ -1374,6 +1378,19 @@ private:
       );
     });
   }
+
+  using _remove_mapping_result_t = LBAManager::ref_update_result_t;
+  ref_iertr::future<_remove_mapping_result_t> _remove(
+    Transaction &t,
+    LBAMapping mapping);
+  ref_iertr::future<_remove_mapping_result_t>
+  _remove_indirect_mapping(
+    Transaction &t,
+    LBAMapping mapping);
+  ref_iertr::future<_remove_mapping_result_t>
+  _remove_direct_mapping(
+    Transaction &t,
+    LBAMapping mapping);
 
   rewrite_extent_ret rewrite_logical_extent(
     Transaction& t,

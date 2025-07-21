@@ -93,8 +93,8 @@ Cache::retire_extent_ret Cache::retire_extent_addr(
   return retire_extent_iertr::now();
 }
 
-void Cache::retire_absent_extent_addr(
-  Transaction &t, paddr_t paddr, extent_len_t length)
+CachedExtentRef Cache::retire_absent_extent_addr(
+  Transaction &t, laddr_t laddr, paddr_t paddr, extent_len_t length)
 {
   assert(paddr.is_absolute());
 
@@ -112,10 +112,12 @@ void Cache::retire_absent_extent_addr(
   ext->init(
     CachedExtent::extent_state_t::CLEAN, paddr,
     PLACEMENT_HINT_NULL, NULL_GENERATION, TRANS_ID_NULL);
+  static_cast<RetiredExtentPlaceholder&>(*ext).set_laddr(laddr);
   DEBUGT("retire {}~0x{:x} as placeholder, add extent -- {}",
 	 t, paddr, length, *ext);
   add_extent(ext);
   t.add_absent_to_retired_set(ext);
+  return ext;
 }
 
 void Cache::dump_contents()
