@@ -247,7 +247,6 @@ The "Standard" record format is based on `AWS Logging Record Format`_.
   - access point ARN (not supported, always a dash)
   - ACL flag (``Yes`` if an ACL was required for authorization, otherwise dash)
 
-
 For example:
 
 ::
