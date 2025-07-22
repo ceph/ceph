@@ -7847,9 +7847,10 @@ next:
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;
     }
-    rgw_obj_key key(object, object_version);
-    ret = rgw_remove_object(dpp(), driver, bucket.get(), key);
 
+    rgw_obj_key key(object, object_version);
+
+    ret = rgw_remove_object(dpp(), driver, bucket.get(), key, yes_i_really_mean_it);
     if (ret < 0) {
       cerr << "ERROR: object remove returned: " << cpp_strerror(-ret) << std::endl;
       return -ret;
