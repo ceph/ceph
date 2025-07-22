@@ -88,6 +88,8 @@ import { SidePanelComponent } from './side-panel/side-panel.component';
 import InfoIcon from '@carbon/icons/es/information/16';
 import CopyIcon from '@carbon/icons/es/copy/32';
 import downloadIcon from '@carbon/icons/es/download/16';
+import CheckIcon from '@carbon/icons/es/checkmark/16';
+
 import { ChartsModule } from '@carbon/charts-angular';
 import { IconComponent } from './icon/icon.component';
 
@@ -220,6 +222,6 @@ import { IconComponent } from './icon/icon.component';
 })
 export class ComponentsModule {
   constructor(private iconService: IconService) {
-    this.iconService.registerAll([InfoIcon, CopyIcon, EditIcon, CodeIcon, downloadIcon]);
+    this.iconService.registerAll([InfoIcon, CopyIcon, EditIcon, CodeIcon, downloadIcon, CheckIcon]);
   }
 }
