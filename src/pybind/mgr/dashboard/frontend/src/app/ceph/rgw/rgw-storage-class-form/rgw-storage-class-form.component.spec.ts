@@ -112,7 +112,7 @@ describe('RgwStorageClassFormComponent', () => {
     component.storageClassForm.get('storage_class').setValue(storageClassName);
     component.storageClassForm.get('zonegroup').setValue('zonegroup1');
     component.storageClassForm.get('placement_target').setValue('placement1');
-    component.storageClassForm.get('endpoint').setValue('http://ams03.com');
+    component.storageClassForm.get('target_endpoint').setValue('http://ceph-node-00:8090');
     component.storageClassForm.get('access_key').setValue('accesskey');
     component.storageClassForm.get('secret_key').setValue('secretkey');
     component.storageClassForm.get('target_path').setValue('/target');
@@ -128,7 +128,7 @@ describe('RgwStorageClassFormComponent', () => {
 
   it('should set required validators for CLOUD_TIER fields', () => {
     (component as any).updateValidatorsBasedOnStorageClass(TIER_TYPE_DISPLAY.CLOUD_TIER);
-    const requiredFields = ['region', 'endpoint', 'access_key', 'secret_key', 'target_path'];
+    const requiredFields = ['region', 'target_endpoint', 'access_key', 'secret_key', 'target_path'];
     requiredFields.forEach((field) => {
       const control = component.storageClassForm.get(field);
       control.setValue('');
@@ -146,7 +146,7 @@ describe('RgwStorageClassFormComponent', () => {
     (component as any).updateValidatorsBasedOnStorageClass(TIER_TYPE_DISPLAY.GLACIER);
     const requiredFields = [
       'region',
-      'endpoint',
+      'target_endpoint',
       'access_key',
       'secret_key',
       'target_path',
@@ -166,7 +166,7 @@ describe('RgwStorageClassFormComponent', () => {
 
     const allFields = [
       'region',
-      'endpoint',
+      'target_endpoint',
       'access_key',
       'secret_key',
       'target_path',
