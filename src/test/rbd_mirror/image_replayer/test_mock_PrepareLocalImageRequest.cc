@@ -269,7 +269,7 @@ TEST_F(TestMockImageReplayerPrepareLocalImageRequest, SuccessJournal) {
   MockGetMirrorInfoRequest mock_get_mirror_info_request;
   expect_get_mirror_info(mock_get_mirror_info_request,
                          {cls::rbd::MIRROR_IMAGE_MODE_JOURNAL,
-                          "global image id",
+                          "global image id", {},
                           cls::rbd::MIRROR_IMAGE_STATE_ENABLED},
                          librbd::mirror::PROMOTION_STATE_NON_PRIMARY,
                          "remote mirror uuid", 0);
@@ -309,7 +309,7 @@ TEST_F(TestMockImageReplayerPrepareLocalImageRequest, SuccessSnapshot) {
   MockGetMirrorInfoRequest mock_get_mirror_info_request;
   expect_get_mirror_info(mock_get_mirror_info_request,
                          {cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT,
-                          "global image id",
+                          "global image id", {},
                           cls::rbd::MIRROR_IMAGE_STATE_ENABLED},
                          librbd::mirror::PROMOTION_STATE_NON_PRIMARY,
                          "remote mirror uuid", 0);
@@ -366,7 +366,7 @@ TEST_F(TestMockImageReplayerPrepareLocalImageRequest, DirGetNameDNE) {
   MockGetMirrorInfoRequest mock_get_mirror_info_request;
   expect_get_mirror_info(mock_get_mirror_info_request,
                          {cls::rbd::MIRROR_IMAGE_MODE_JOURNAL,
-                          "global image id",
+                          "global image id", {},
                           cls::rbd::MIRROR_IMAGE_STATE_ENABLED},
                          librbd::mirror::PROMOTION_STATE_NON_PRIMARY,
                          "remote mirror uuid", 0);
@@ -417,7 +417,7 @@ TEST_F(TestMockImageReplayerPrepareLocalImageRequest, MirrorImageInfoError) {
   MockGetMirrorInfoRequest mock_get_mirror_info_request;
   expect_get_mirror_info(mock_get_mirror_info_request,
                          {cls::rbd::MIRROR_IMAGE_MODE_JOURNAL,
-                          "global image id",
+                          "global image id", {},
                           cls::rbd::MIRROR_IMAGE_STATE_ENABLED},
                          librbd::mirror::PROMOTION_STATE_NON_PRIMARY,
                          "remote mirror uuid", -EINVAL);
@@ -445,7 +445,7 @@ TEST_F(TestMockImageReplayerPrepareLocalImageRequest, ImageCreating) {
   MockGetMirrorInfoRequest mock_get_mirror_info_request;
   expect_get_mirror_info(mock_get_mirror_info_request,
                          {cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT,
-                          "global image id",
+                          "global image id", {},
                           cls::rbd::MIRROR_IMAGE_STATE_CREATING},
                          librbd::mirror::PROMOTION_STATE_NON_PRIMARY,
                          "remote mirror uuid", 0);
@@ -479,7 +479,7 @@ TEST_F(TestMockImageReplayerPrepareLocalImageRequest, ImageDisabling) {
   MockGetMirrorInfoRequest mock_get_mirror_info_request;
   expect_get_mirror_info(mock_get_mirror_info_request,
                          {cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT,
-                          "global image id",
+                          "global image id", {},
                           cls::rbd::MIRROR_IMAGE_STATE_DISABLING},
                          librbd::mirror::PROMOTION_STATE_NON_PRIMARY,
                          "remote mirror uuid", 0);
