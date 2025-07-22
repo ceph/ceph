@@ -53,8 +53,9 @@ private:
 
   bool finalized{false};
 
-  int init_watch(const DoutPrefixProvider *dpp, optional_yield y);
-  void finalize_watch();
+  int init_watch(const DoutPrefixProvider *dpp,
+                 boost::asio::yield_context yield);
+  void finalize_watch(boost::asio::yield_context yield);
 
   void init(RGWSI_Zone *_zone_svc,
             librados::Rados* rados_,
