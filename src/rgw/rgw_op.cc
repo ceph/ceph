@@ -7633,6 +7633,22 @@ void RGWDeleteMultiObj::handle_individual_object(const rgw_obj_key& o, optional_
   send_partial_response(o, del_op->result.delete_marker, del_op->result.version_id, op_ret);
 }
 
+void RGWDeleteMultiObj::handle_objects(const std::vector<rgw_obj_key>& objs,
+                                       uint32_t max_aio,
+                                       boost::asio::yield_context yield)
+{
+  auto group = ceph::async::spawn_throttle{yield, max_aio};
+
+  for (const auto& key : objs) {
+    group.spawn([this, &key] (boost::asio::yield_context yield) {
+                  handle_individual_object(key, yield);
+                });
+
+    rgw_flush_formatter(s, s->formatter);
+  }
+  group.wait();
+}
+
 void RGWDeleteMultiObj::execute(optional_yield y)
 {
   const char* buf = data.c_str();
@@ -7700,16 +7716,25 @@ void RGWDeleteMultiObj::execute(optional_yield y)
 
   // process up to max_aio object deletes in parallel
   const uint32_t max_aio = std::max<uint32_t>(1, s->cct->_conf->rgw_multi_obj_del_max_aio);
-  auto group = ceph::async::spawn_throttle{y, max_aio};
 
-  for (const auto& key : multi_delete->objects) {
-    group.spawn([this, &key] (boost::asio::yield_context yield) {
-                  handle_individual_object(key, yield);
-                });
+  // if we're not already running in a coroutine, spawn one
+  if (!y) {
+    auto& objs = multi_delete->objects;
 
-    rgw_flush_formatter(s, s->formatter);
+    boost::asio::io_context context;
+    boost::asio::spawn(context,
+        [this, &objs, max_aio] (boost::asio::yield_context yield) {
+          handle_objects(objs, max_aio, yield);
+        },
+        [] (std::exception_ptr eptr) {
+          if (eptr) std::rethrow_exception(eptr);
+        });
+    context.run();
+  } else {
+    // use the existing coroutine's yield context
+    handle_objects(multi_delete->objects, max_aio,
+                   y.get_yield_context());
   }
-  group.wait();
 
   /*  set the return code to zero, errors at this point will be
   dumped to the response */
