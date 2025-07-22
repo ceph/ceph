@@ -1629,48 +1629,12 @@ int ECBackend::objects_read_sync(
     uint32_t op_flags,
     bufferlist *bl) {
 
-  /* sync reads are supported for sub-chunk reads where no reconstruct is
-   * required.
-   */
 
-  uint64_t chunk_size = sinfo.get_chunk_size();
-  uint64_t start_chunk = off / chunk_size;
-  // This calculation is wrong for length = 0, but it doesn't matter if these reads get sent to the primary
-  uint64_t end_chunk = (off + len - 1) / chunk_size;
-  int r = 0;
-  if (start_chunk != end_chunk) {
-    r = -EOPNOTSUPP;
+  if (!sinfo.supports_direct_reads()) {
+    return -EOPNOTSUPP;
   }
 
-  shard_id_t shard;
-  bool is_primary;
-
-  if (r == 0) {
-    // Normally not safe, but this assumption is requried to be true for direct reads.
-    shard = shard_id_t(start_chunk % sinfo.get_k());
-
-    if (get_parent()->whoami_shard().shard != shard ) {
-      r = -EOPNOTSUPP;
-    }
-  }
-
-  if (r == 0) {
-    is_primary = switcher->is_primary();
-    if (get_parent()->get_local_missing().is_missing(hoid)) {
-      r = is_primary?-EIO:-EAGAIN;
-    }
-  }
-
-  if (r == 0) {
-    int r = switcher->store->read(switcher->ch,
-          ghobject_t(hoid, ghobject_t::NO_GEN, shard),
-          sinfo.ro_offset_to_shard_offset(off, sinfo.get_raw_shard(shard)),
-          len, *bl, op_flags);
-
-    if (r < 0) {
-      r = is_primary?-EIO:-EAGAIN;
-    }
-  }
+  int r = _objects_read_sync(hoid, off, len, op_flags, bl);
 
   //FAIL REVIEW - too high dout value.
   dout(0) << __func__ << " r=" << r
@@ -1678,10 +1642,60 @@ int ECBackend::objects_read_sync(
         << " off=" << off
         << " len=" << len
         << " op_flags=" << op_flags
-        << " primary=" << is_primary
-        << " shard=" << shard
+        << " primary=" << switcher->is_primary()
+        << " shard=" << (off / sinfo.get_chunk_size()) % sinfo.get_k()
         << dendl;
-  return r;
+
+  if (r >= 0) {
+    return r;
+  }
+
+  // The above returns errors largely only interesting for tracing. Here we
+  // simplify this down to:
+  // Primary returns EIO, which causes an async read to be executed immediately.
+  // A non-primary returns EAGAIN which forces the client to resent to the
+  // primary.
+  if (switcher->is_primary()) {
+    return -EIO;
+  }
+
+  return -EAGAIN;
+}
+
+// NOTE: Return codes from this function are largely nonsense and translated
+//       to more useful values before returning to client. 
+int ECBackend::_objects_read_sync(
+    const hobject_t &hoid,
+    uint64_t off,
+    uint64_t len,
+    uint32_t op_flags,
+    bufferlist *bl) {
+
+  // sync reads are supported for sub-chunk reads where no reconstruct is
+  // required.
+  uint64_t chunk_size = sinfo.get_chunk_size();
+  uint64_t start_chunk = off / chunk_size;
+  // This calculation is wrong for length = 0, but it doesn't matter if these reads get sent to the primary
+  uint64_t end_chunk = (off + len - 1) / chunk_size;
+  if (start_chunk != end_chunk) {
+    return -EDOM; //Math argument out of domain of func
+  }
+
+  // Normally not safe, but this assumption is requried to be true for direct reads.
+  shard_id_t shard(start_chunk % sinfo.get_k());
+
+  if (get_parent()->whoami_shard().shard != shard ) {
+    return -ENODEV; // No such device ... here
+  }
+
+  if (get_parent()->get_local_missing().is_missing(hoid)) {
+    return -EACCES;  // Permission denied (cos its missing)
+  }
+
+  return switcher->store->read(switcher->ch,
+          ghobject_t(hoid, ghobject_t::NO_GEN, shard),
+          sinfo.ro_offset_to_shard_offset(off, sinfo.get_raw_shard(shard)),
+          len, *bl, op_flags);
 }
 
 void ECBackend::objects_read_async(
