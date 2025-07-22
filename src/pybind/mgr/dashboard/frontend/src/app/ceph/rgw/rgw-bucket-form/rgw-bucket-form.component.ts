@@ -231,7 +231,12 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
     }
 
     // Process route parameters.
-    this.route.params.subscribe((params: { bid: string }) => {
+    this.route.params.subscribe((params: { bid: string; owner: string }) => {
+      let bucketOwner = '';
+      if (params.hasOwnProperty('owner')) {
+        // only used for showing bucket owned by account
+        bucketOwner = decodeURIComponent(params.owner);
+      }
       if (params.hasOwnProperty('bid')) {
         const bid = decodeURIComponent(params.bid);
         promises['getBid'] = this.rgwBucketService.get(bid);
@@ -299,13 +304,13 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
               // creating dummy user object to show the account owner
               // here value['owner] is the account user id
               const user = Object.assign(
-                { uid: value['owner'] },
+                { uid: bucketOwner },
                 ownersList.find((owner: RgwUser) => owner.uid === AppConstants.defaultUser)
               );
               this.accountUsers.push(user);
               this.bucketForm.get('isAccountOwner').setValue(true);
               this.bucketForm.get('isAccountOwner').disable();
-              this.bucketForm.get('accountUser').setValue(value['owner']);
+              this.bucketForm.get('accountUser').setValue(bucketOwner);
               this.bucketForm.get('accountUser').disable();
             }
             this.isVersioningAlreadyEnabled = this.isVersioningEnabled;

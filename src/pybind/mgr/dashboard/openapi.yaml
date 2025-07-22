@@ -13994,6 +13994,7 @@ paths:
       tags:
       - RgwUser
     post:
+      description: Create a new RGW user.
       parameters: []
       requestBody:
         content:
@@ -14003,6 +14004,8 @@ paths:
                 access_key:
                   type: string
                 account_id:
+                  type: integer
+                account_policies:
                   type: integer
                 account_root_user:
                   default: false
@@ -14177,6 +14180,7 @@ paths:
       tags:
       - RgwUser
     put:
+      description: Update an existing RGW user.
       parameters:
       - in: path
         name: uid
@@ -14189,6 +14193,8 @@ paths:
             schema:
               properties:
                 account_id:
+                  type: integer
+                account_policies:
                   type: integer
                 account_root_user:
                   default: false

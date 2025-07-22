@@ -42,3 +42,43 @@ class RgwAccounts:
                                 '--account-id', account_id]
 
         return cls.send_rgw_cmd(set_quota_status_cmd)
+
+    @classmethod
+    def attach_managed_policy(cls, userId, policy_arn):
+        radosgw_attach_managed_policies = ['user', 'policy', 'attach',
+                                           '--uid', userId, '--policy-arn', policy_arn]
+        try:
+            exit_code, _, err = mgr.send_rgwadmin_command(radosgw_attach_managed_policies,
+                                                          stdout_as_json=False)
+            if exit_code > 0:
+                raise DashboardException(e=err, msg='Unable to attach managed policies',
+                                         http_status_code=500, component='rgw')
+        except SubprocessError as error:
+            raise DashboardException(error, http_status_code=500, component='rgw')
+
+    @classmethod
+    def detach_managed_policy(cls, userId, policy_arn):
+        radosgw_detach_managed_policy = ['user', 'policy', 'detach',
+                                         '--uid', userId, '--policy-arn', policy_arn]
+        try:
+            exit_code, _, err = mgr.send_rgwadmin_command(radosgw_detach_managed_policy,
+                                                          stdout_as_json=False)
+            if exit_code > 0:
+                raise DashboardException(e=err, msg='Unable to detach managed policies',
+                                         http_status_code=500, component='rgw')
+
+        except SubprocessError as error:
+            raise DashboardException(error, http_status_code=500, component='rgw')
+
+    @classmethod
+    def list_managed_policy(cls, userId):
+        radosgw_list_managed_policies = ['user', 'policy', 'list', 'attached',
+                                         '--uid', userId]
+        try:
+            exit_code, out, err = mgr.send_rgwadmin_command(radosgw_list_managed_policies)
+            if exit_code > 0:
+                raise DashboardException(e=err, msg='Unable to get managed policies',
+                                         http_status_code=500, component='rgw')
+            return out
+        except SubprocessError as error:
+            raise DashboardException(error, http_status_code=500, component='rgw')
