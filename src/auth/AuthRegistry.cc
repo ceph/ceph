@@ -35,7 +35,6 @@ AuthRegistry::~AuthRegistry()
 const char** AuthRegistry::get_tracked_conf_keys() const
 {
   static const char *keys[] = {
-    "auth_supported",
     "auth_client_required",
     "auth_cluster_required",
     "auth_service_required",
@@ -114,15 +113,20 @@ void AuthRegistry::_parse_mode_list(const string& s,
 
 void AuthRegistry::_refresh_config()
 {
-  if (cct->_conf->auth_supported.size()) {
-    _parse_method_list(cct->_conf->auth_supported, &cluster_methods);
-    _parse_method_list(cct->_conf->auth_supported, &service_methods);
-    _parse_method_list(cct->_conf->auth_supported, &client_methods);
-  } else {
-    _parse_method_list(cct->_conf->auth_cluster_required, &cluster_methods);
-    _parse_method_list(cct->_conf->auth_service_required, &service_methods);
-    _parse_method_list(cct->_conf->auth_client_required, &client_methods);
-  }
+  auto cluster_required = cct->_conf.get_val<std::string>("auth_cluster_required");
+  auto service_required = cct->_conf.get_val<std::string>("auth_service_required");
+  auto client_required = cct->_conf.get_val<std::string>("auth_client_required");
+
+  ldout(cct,10) << __func__ << ": conf values "
+                << " cluster_required=" << cluster_required
+                << " service_required=" << service_required
+                << " client_required=" << client_required
+                << dendl;
+
+  _parse_method_list(cluster_required, &cluster_methods);
+  _parse_method_list(service_required, &service_methods);
+  _parse_method_list(client_required, &client_methods);
+
   _parse_mode_list(cct->_conf.get_val<string>("ms_mon_cluster_mode"),
 		   &mon_cluster_modes);
   _parse_mode_list(cct->_conf.get_val<string>("ms_mon_service_mode"),
