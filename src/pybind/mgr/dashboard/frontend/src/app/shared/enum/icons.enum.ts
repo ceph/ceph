@@ -83,6 +83,7 @@ export enum Icons {
   launch = 'launch',
   parentChild = 'parent-child',
   dataTable = 'data-table',
+  idea = 'idea',
   /* Icons for special effect */
   size16 = '16',
   size20 = '20',
