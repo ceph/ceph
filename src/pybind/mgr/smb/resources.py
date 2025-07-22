@@ -216,6 +216,23 @@ class _RBase:
 
 
 @resourcelib.component()
+class FSCryptKeySelector(_RBase):
+    """Parameters used to define where a fscrypt key will be acquired."""
+
+    # name of the keybridge scope to use
+    scope: str
+    # name of the entity (the key) to fetch
+    name: str
+
+    def scope_identity(self) -> KeyBridgeScopeIdentity:
+        return KeyBridgeScopeIdentity.from_name(self.scope)
+
+    def validate(self) -> None:
+        self.scope_identity()  # raises value error if scope invalid
+        validation.check_id(self.name)
+
+
+@resourcelib.component()
 class CephFSStorage(_RBase):
     """Description of where in a CephFS file system a share is located."""
 
@@ -224,6 +241,9 @@ class CephFSStorage(_RBase):
     subvolumegroup: str = ''
     subvolume: str = ''
     provider: CephFSStorageProvider = CephFSStorageProvider.SAMBA_VFS
+    # fscrypt_key is used to identify and obtain fscrypt key material
+    # from the keybridge.
+    fscrypt_key: Optional[FSCryptKeySelector] = None
 
     def __post_init__(self) -> None:
         # Allow a shortcut form of <subvolgroup>/<subvol> in the subvolume
