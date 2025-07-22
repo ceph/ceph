@@ -69,6 +69,9 @@ export class RgwUserService {
   create(args: Record<string, any>) {
     return this.rgwDaemonService.request((params: HttpParams) => {
       _.keys(args).forEach((key) => {
+        if (typeof args[key] === 'object') {
+          args[key] = JSON.stringify(args[key]);
+        }
         params = params.append(key, args[key]);
       });
       return this.http.post(this.url, null, { params: params });
@@ -78,6 +81,9 @@ export class RgwUserService {
   update(uid: string, args: Record<string, any>) {
     return this.rgwDaemonService.request((params: HttpParams) => {
       _.keys(args).forEach((key) => {
+        if (typeof args[key] === 'object') {
+          args[key] = JSON.stringify(args[key]);
+        }
         params = params.append(key, args[key]);
       });
       return this.http.put(`${this.url}/${uid}`, null, { params: params });

@@ -110,7 +110,10 @@ export class RgwBucketListComponent extends ListWithDetails implements OnInit, O
       }
     ];
     const getBucketUri = () =>
-      this.selection.first() && `${encodeURIComponent(this.selection.first().bid)}`;
+      this.selection.first() &&
+      `${encodeURIComponent(this.selection.first().bid)}/${encodeURIComponent(
+        this.selection.first().owner
+      )}`;
     const addAction: CdTableAction = {
       permission: 'create',
       icon: Icons.add,
