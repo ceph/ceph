@@ -670,7 +670,7 @@ namespace ceph {
        * to a stripe to be applied using a read-modify-write of a
        * data chunk and the coding parity chunks.
        */
-      FLAG_EC_PLUGIN_PARITY_DELTA_OPTIMIZATION = 1<<4,
+      PFLAG_EC_PLUGIN_PARITY_DELTA_OPTIMIZATION = 1<<4,
       /* This plugin requires sub-chunks (at the time of writing this was only
        * clay). Other plugins will not process the overhead of stub sub-chunks.
        */
@@ -684,6 +684,11 @@ namespace ceph {
        * to decode a parity CRC to get the CRC of a data shard.
        */
       FLAG_EC_PLUGIN_CRC_ENCODE_DECODE_SUPPORT = 1<<7,
+      /* This plugin supports the ability for the client to read directly from
+       * the OSD containing a shard. This currently requires that raw shard ==
+       * shard and that the data shards are simply striped.
+       */
+      FLAG_EC_PLUGIN_DIRECT_READS = 1<<8,
     };
     static const char *get_optimization_flag_name(const plugin_flags flag) {
       switch (flag) {
