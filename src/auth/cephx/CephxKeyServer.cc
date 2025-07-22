@@ -593,12 +593,15 @@ int KeyServer::_build_session_auth_info(uint32_t service_id,
 
   generate_secret(info.session_key, key_type);
 
-  // mon keys are stored externally.  and the caps are blank anyway.
-  if (service_id != CEPH_ENTITY_TYPE_MON) {
-    string s = ceph_entity_type_name(service_id);
-    if (!data.get_caps(cct, info.ticket.name, s, info.ticket.caps)) {
-      return -EINVAL;
-    }
+  /* N.B.: the Monitor special cases cap retrieval via a call to
+   * CephxServiceHandler::handle_request which fills in the
+   * Connection::peer_caps_info. This lets the Monitor always use the latest
+   * up-to-date mon caps for the entity but it's an unfortunate divergence in
+   * behavior.
+   */
+  string s = ceph_entity_type_name(service_id);
+  if (!data.get_caps(cct, info.ticket.name, s, info.ticket.caps)) {
+    return -EINVAL;
   }
   return 0;
 }
