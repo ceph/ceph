@@ -6741,7 +6741,7 @@ bool Monitor::ms_handle_fast_authentication(Connection *con)
 	   << " addr " << s->con->get_peer_addr()
 	   << " " << *s << dendl;
 
-  AuthCapsInfo &caps_info = con->get_peer_caps_info();
+  auto& caps_info = con->get_peer_caps_info();
   if (caps_info.allow_all) {
     s->caps.set_allow_all();
     s->authenticated = true;
