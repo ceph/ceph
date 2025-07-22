@@ -281,4 +281,24 @@ export class RgwBucketService extends ApiClient {
   getGlobalBucketRateLimit() {
     return this.http.get(`${this.url}/ratelimit`);
   }
+
+  listNotification(bucket_name: string) {
+    return this.rgwDaemonService.request((params: HttpParams) => {
+      params = params.appendAll({
+        bucket_name: bucket_name
+      });
+      return this.http.get(`${this.url}/notification`, { params: params });
+    });
+  }
+
+  setNotification(bucket_name: string, notification: string, owner: string) {
+    return this.rgwDaemonService.request((params: HttpParams) => {
+      params = params.appendAll({
+        bucket_name: bucket_name,
+        notification: notification,
+        owner: owner
+      });
+      return this.http.put(`${this.url}/notification`, null, { params: params });
+    });
+  }
 }

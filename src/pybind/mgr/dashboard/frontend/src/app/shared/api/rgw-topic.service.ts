@@ -17,8 +17,8 @@ export class RgwTopicService extends ApiClient {
     super();
   }
 
-  listTopic(): Observable<Topic[]> {
-    return this.http.get<Topic[]>(this.baseURL);
+  listTopic(): Observable<Topic> {
+    return this.http.get<Topic>(this.baseURL);
   }
 
   getTopic(key: string) {
