@@ -164,6 +164,50 @@ class TestNvmeofCLICommand:
         del NvmeofCLICommand.COMMANDS[test_cmd]
         assert test_cmd not in NvmeofCLICommand.COMMANDS
 
+    def test_command_alias_calls_command(self, base_call_mock):
+        test_cmd = "test command1"
+        test_alias = "test alias1"
+
+        class Model(NamedTuple):
+            a: str
+            b: int
+
+        @NvmeofCLICommand(test_cmd, Model, alias=test_alias)
+        def func(_): # noqa # pylint: disable=unused-variable
+            return {'a': '1', 'b': 2}
+
+        assert test_cmd in NvmeofCLICommand.COMMANDS
+        assert test_alias in NvmeofCLICommand.COMMANDS
+
+        result = NvmeofCLICommand.COMMANDS[test_cmd].call(MagicMock(), {})
+        assert result.retval == 0
+        assert result.stdout == (
+            "+-+\n"
+            "|A|\n"
+            "+-+\n"
+            "|b|\n"
+            "+-+"
+        )
+        assert result.stderr == ''
+        base_call_mock.assert_called_once()
+
+        result = NvmeofCLICommand.COMMANDS[test_alias].call(MagicMock(), {})
+        assert result.retval == 0
+        assert result.stdout == (
+            "+-+\n"
+            "|A|\n"
+            "+-+\n"
+            "|b|\n"
+            "+-+"
+        )
+        assert result.stderr == ''
+        assert base_call_mock.call_count == 2
+
+        del NvmeofCLICommand.COMMANDS[test_cmd]
+        del NvmeofCLICommand.COMMANDS[test_alias]
+        assert test_cmd not in NvmeofCLICommand.COMMANDS
+        assert test_alias not in NvmeofCLICommand.COMMANDS
+
 
 class TestNVMeoFConfCLI(unittest.TestCase, CLICommandTestMixin):
     def setUp(self):
@@ -339,6 +383,42 @@ class TestNVMeoFConfCLI(unittest.TestCase, CLICommandTestMixin):
 
 
 class TestAnnotatedDataTextOutputFormatter():
+    def test_no_annotation(self):
+        class Sample(NamedTuple):
+            name: str
+            age: int
+            byte: int
+
+        data = {'name': 'Alice', 'age': 30, "byte": 20971520}
+
+        formatter = AnnotatedDataTextOutputFormatter()
+        output = formatter.format_output(data, Sample)
+        assert output == (
+            '+-----+---+--------+\n'
+            '|Name |Age|Byte    |\n'
+            '+-----+---+--------+\n'
+            '|Alice|30 |20971520|\n'
+            '+-----+---+--------+'
+        )
+
+    def test_none_to_empty_str_annotation(self):
+        class Sample(NamedTuple):
+            name: str
+            age: int
+            byte: int
+
+        data = {'name': 'Alice', 'age': 30, "byte": None}
+
+        formatter = AnnotatedDataTextOutputFormatter()
+        output = formatter.format_output(data, Sample)
+        assert output == (
+            '+-----+---+----+\n'
+            '|Name |Age|Byte|\n'
+            '+-----+---+----+\n'
+            '|Alice|30 |    |\n'
+            '+-----+---+----+'
+        )
+
     def test_size_bytes_annotation(self):
         class Sample(NamedTuple):
             name: str
