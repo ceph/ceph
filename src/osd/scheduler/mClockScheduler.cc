@@ -116,12 +116,13 @@ void mClockScheduler::enqueue(OpSchedulerItem&& item)
              << "]: " << it->second.size()
              << dendl;
   }
- dout(30) << __func__ << " mClockClients: "
-          << scheduler
-          << dendl;
- dout(30) << __func__ << " mClockQueues: { "
-          << display_queues() << " }"
-          << dendl;
+
+  dout(30) << __func__ << " mClockClients: "
+           << scheduler
+           << dendl;
+  dout(30) << __func__ << " mClockQueues: { "
+           << display_queues() << " }"
+           << dendl;
 }
 
 void mClockScheduler::enqueue_front(OpSchedulerItem&& item)
