@@ -238,6 +238,13 @@
                                       (updateBucketDetails)="updateBucketDetails(extractLifecycleDetails.bind(this))"></cd-rgw-bucket-lifecycle-list>
       </ng-template>
     </ng-container>
+    <ng-container ngbNavItem="notification">
+      <a ngbNavLink
+         i18n>Notification</a>
+      <ng-template ngbNavContent>
+        <cd-rgw-bucket-notification-list [bucket]="selection"></cd-rgw-bucket-notification-list>
+      </ng-template>
+    </ng-container>
   </nav>
 
   <div [ngbNavOutlet]="nav"></div>

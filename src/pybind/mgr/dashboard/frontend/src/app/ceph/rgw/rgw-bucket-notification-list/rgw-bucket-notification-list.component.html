@@ -1,0 +1,46 @@
+  <fieldset>
+    <legend i18n
+            class="cd-header">
+    Notification Configuration
+    <cd-help-text>
+       Configure bucket notification to trigger alerts for specific events, such as object creation or transitions, based on prefixes or tags.
+    </cd-help-text>
+  </legend>
+  </fieldset>
+  <ng-container *ngIf="notification$ | async as notification">
+  <cd-table #table
+            [data]="notification"
+            [columns]="columns"
+            columnMode="flex"
+            selectionType="single"
+            identifier="Id"
+            (fetchData)="fetchData()">
+  </cd-table>
+  </ng-container>
+  <ng-template #filterTpl
+               let-config="data.value">
+    <ng-container *ngIf="config">
+      <ng-container *ngFor="let item of config | keyvalue">
+        <ng-container *ngIf="item.value?.FilterRule?.length">
+          <div class="cds--label">
+            {{ item.key }}:
+          </div>
+          <div [cdsStack]="'horizontal'"
+               *ngFor="let rule of item.value.FilterRule">
+            <cds-tag size="sm"
+                     class="badge-background-gray">{{ rule.Name }}: {{ rule.Value }}</cds-tag>
+          </div>
+          <br>
+        </ng-container>
+      </ng-container>
+    </ng-container>
+  </ng-template>
+  <ng-template #eventTpl
+               let-event="data.value">
+    <ng-container *ngIf="event">
+      <cds-tag size="sm"
+               class="badge-background-primary">
+      {{ event }}
+      </cds-tag>
+    </ng-container>
+  </ng-template>

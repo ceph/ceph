@@ -1240,7 +1240,7 @@ class RgwClient(RestClient):
             if topic_filter:
                 normalize_filter_rules(topic_filter)
 
-        return notification_configuration
+        return topic_configuration
 
     @RestClient.api_delete('/{bucket_name}?notification={notification_id}')
     def delete_notification(self, bucket_name, notification_id, request=None):
