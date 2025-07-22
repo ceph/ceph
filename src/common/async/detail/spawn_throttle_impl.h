@@ -23,7 +23,6 @@
 #include <boost/asio/associated_cancellation_slot.hpp>
 #include <boost/asio/async_result.hpp>
 #include <boost/asio/execution/context.hpp>
-#include <boost/asio/io_context.hpp>
 #include <boost/asio/query.hpp>
 #include <boost/asio/spawn.hpp>
 #include <boost/intrusive_ptr.hpp>
@@ -52,10 +51,6 @@ class spawn_throttle_impl :
     }
   }
   virtual ~spawn_throttle_impl() {}
-
-  // factory function
-  static auto create(optional_yield y, size_t limit, cancel_on_error on_error)
-      -> boost::intrusive_ptr<spawn_throttle_impl>;
 
   // return the completion handler for a new child. may block due to throttling
   // or rethrow an exception from a previously-spawned child
@@ -189,52 +184,6 @@ inline spawn_throttle_handler spawn_throttle_impl::get()
   return {this, c};
 }
 
-
-// Spawn throttle implementation for use in synchronous contexts where wait()
-// blocks the calling thread until completion.
-class sync_spawn_throttle_impl final : public spawn_throttle_impl {
-  static constexpr int concurrency = 1; // only run from a single thread
- public:
-  sync_spawn_throttle_impl(size_t limit, cancel_on_error on_error)
-    : spawn_throttle_impl(limit, on_error),
-      ctx(std::in_place, concurrency)
-  {}
-
-  executor_type get_executor() override
-  {
-    return ctx->get_executor();
-  }
-
-  void wait_for(size_t target_count) override
-  {
-    while (count > target_count) {
-      if (ctx->stopped()) {
-        ctx->restart();
-      }
-      ctx->run_one();
-    }
-
-    report_exception(); // throw unreported exception
-  }
-
-  void cancel(bool shutdown) override
-  {
-    spawn_throttle_impl::cancel(shutdown);
-
-    if (shutdown) {
-      // destroy the io_context to trigger two-phase shutdown which
-      // destroys any completion handlers with a reference to 'this'
-      ctx.reset();
-      count = 0;
-    }
-  }
-
- private:
-  std::optional<boost::asio::io_context> ctx;
-};
-
-// Spawn throttle implementation for use in asynchronous contexts where wait()
-// suspends the calling stackful coroutine.
 class async_spawn_throttle_impl final :
     public spawn_throttle_impl,
     public service_list_base_hook
@@ -344,17 +293,5 @@ class async_spawn_throttle_impl final :
     }
   }
 };
-
-inline auto spawn_throttle_impl::create(optional_yield y, size_t limit,
-                                        cancel_on_error on_error)
-    -> boost::intrusive_ptr<spawn_throttle_impl>
-{
-  if (y) {
-    auto yield = y.get_yield_context();
-    return new async_spawn_throttle_impl(yield, limit, on_error);
-  } else {
-    return new sync_spawn_throttle_impl(limit, on_error);
-  }
-}
 
 } // namespace ceph::async::detail
