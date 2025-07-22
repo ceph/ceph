@@ -59,7 +59,7 @@
 
 <ng-template #dashboardButton>
   <div class="mt-4 text-center"
-       *ngIf="!buttonToEnableModule; else enableButton">
+       *ngIf="!module_name; else enableButton">
     <button class="btn btn-primary"
             [routerLink]="'/dashboard'"
             i18n>Go To Dashboard</button>
