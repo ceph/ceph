@@ -237,12 +237,47 @@ public:
     return op;
   }
 
-   SchedulerClass get_scheduler_class() const final {
-    auto type = op->get_req()->get_type();
-    if (type == CEPH_MSG_OSD_OP ||
-	type == CEPH_MSG_OSD_BACKOFF) {
+  SchedulerClass get_scheduler_class() const final {
+    switch (op->get_req()->get_type()) {
+    case CEPH_MSG_OSD_OP:
+    case CEPH_MSG_OSD_BACKOFF:
       return SchedulerClass::client;
-    } else {
+    /**
+     * EC SubOp reads for mClock are now classed based on their priority.
+     * The primary reason is to prevent subOps from overwhelming the
+     * 'immediate' queue during OSD events like failures, removal,
+     * reweight and any operation that trigger recovery/backfills. A sudden
+     * and long enough sustained burst of subOps in the 'immediate' could
+     * result in slow ops since client ops are preempted due to ops in the
+     * higher priority 'immediate' queue.
+     *
+     * The new classification described below improves the scheduling
+     * of client and other classes of operation during recovery/backfill as
+     * they are no longer preempted by recovery EC subOps in the 'immediate'
+     * queue. EC SubOps are now handled as follows:
+     *
+     *  - EC SubOp reads generated during recovery will either go into the
+     *    'background_recovery' or 'background_best_effort' class based on
+     *    the recovery priority set for the op. EC SubOp reads generated due
+     *    to client will continue to be classified as 'immediate'.
+     *
+     *  - EC SubOp writes generated as a result of client operations will
+     *    continue to be classified as 'immediate'.
+     *
+     *  - EC SubOp replies are considered high priority and therefore
+     *    continue to be classed as 'immediate'.
+     *
+     *  Note: The 'cost' for EC subOp read operation is set according to
+     *  the amount of data to be read/written.
+     */
+    case MSG_OSD_EC_READ: {
+      auto prio = op->get_req()->get_priority();
+      if (prio <= PeeringState::recovery_msg_priority_t::FORCED) {
+        return priority_to_scheduler_class(prio);
+      }
+      [[fallthrough]];
+    }
+    default:
       return SchedulerClass::immediate;
     }
   }
