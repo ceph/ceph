@@ -2107,7 +2107,8 @@ options:
    ``ceph-osd``, ``ceph-mds`` and ``ceph-mgr``) must authenticate with
    each other. Valid settings are ``cephx`` or ``none``.
   default: cephx
-  with_legacy: true
+  flags:
+    - runtime
 - name: auth_exit_on_failure
   type: int
   level: dev
@@ -2124,7 +2125,8 @@ options:
    to authenticate with the Ceph Storage Cluster in order to access
    Ceph services. Valid settings are ``cephx`` or ``none``.
   default: cephx
-  with_legacy: true
+  flags:
+    - runtime
 # what clients require of daemons
 - name: auth_client_required
   type: str
@@ -2134,13 +2136,8 @@ options:
    authenticate with the Ceph Client. Valid settings are ``cephx``
    or ``none``.
   default: cephx, none
-  with_legacy: true
-# deprecated; default value for above if they are not defined.
-- name: auth_supported
-  type: str
-  level: advanced
-  desc: authentication methods required (deprecated)
-  with_legacy: true
+  flags:
+    - runtime
 - name: max_rotating_auth_attempts
   type: int
   level: advanced
