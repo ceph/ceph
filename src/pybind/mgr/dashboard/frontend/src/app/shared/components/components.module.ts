@@ -36,7 +36,8 @@ import {
   SelectModule,
   ComboBoxModule,
   ProgressIndicatorModule,
-  PanelModule
+  PanelModule,
+  PopoverModule
 } from 'carbon-components-angular';
 import EditIcon from '@carbon/icons/es/edit/20';
 import CodeIcon from '@carbon/icons/es/code/16';
@@ -130,7 +131,8 @@ import { IconComponent } from './icon/icon.component';
     ProgressIndicatorModule,
     BaseChartDirective,
     PanelModule,
-    ChartsModule
+    ChartsModule,
+    PopoverModule
   ],
   declarations: [
     SparklineComponent,
