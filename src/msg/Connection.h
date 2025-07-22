@@ -164,7 +164,7 @@ public:
   virtual void shutdown() = 0;
 
   // WARNING / FIXME: this is not populated for loopback connections
-  AuthCapsInfo& get_peer_caps_info() {
+  AuthCapsInfo const& get_peer_caps_info() const {
     return peer_caps_info;
   }
   const EntityName& get_peer_entity_name() {
