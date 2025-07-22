@@ -19,7 +19,6 @@
 
 #include <boost/intrusive_ptr.hpp>
 #include "cancel_on_error.h"
-#include "yield_context.h"
 
 namespace ceph::async {
 
@@ -60,7 +59,7 @@ class spawn_throttle {
  public:
   spawn_throttle(boost::asio::yield_context yield, size_t limit,
                  cancel_on_error on_error = cancel_on_error::none)
-    : impl(new detail::async_spawn_throttle_impl(yield, limit, on_error))
+    : impl(new detail::spawn_throttle_impl(yield, limit, on_error))
   {}
 
   spawn_throttle(spawn_throttle&&) = default;
@@ -73,7 +72,7 @@ class spawn_throttle {
   ~spawn_throttle()
   {
     if (impl) {
-      impl->cancel(true);
+      impl->cancel();
     }
   }
 
@@ -117,7 +116,7 @@ class spawn_throttle {
   /// Cancel all outstanding coroutines.
   void cancel()
   {
-    impl->cancel(false);
+    impl->cancel();
   }
 };
 
