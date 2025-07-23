@@ -882,6 +882,8 @@ int FSCryptFNameDenc::get_decrypted_symlink(const std::string& b64enc, std::stri
 int FSCryptFDataDenc::decrypt_bl(uint64_t off, uint64_t len, uint64_t pos, const std::vector<Segment>& holes, bufferlist *bl)
 {
   auto data_len = bl->length();
+  if (data_len == 0)
+    return 0;
 
   auto target_end = off + len;
 
