@@ -93,6 +93,10 @@ class NvmeofService(CephService):
             except ValueError:
                 logger.error(f"Invalid value for SPDK huge pages: {spec.spdk_huge_pages}")
 
+        # Enable DSA probing
+        if spec.enable_dsa_acceleration:
+            daemon_spec.extra_files['enable_dsa_acceleration'] = str(spec.enable_dsa_acceleration)
+
         if spec.enable_auth:
             if (
                 not spec.client_cert
