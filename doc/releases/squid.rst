@@ -25,6 +25,12 @@ Notable Changes
 * MGR: MGR's always-on modulues/plugins can now be force-disabled. This can be
   necessary in cases where MGR(s) needs to be prevented from being flooded by
   the module commands when coresponding Ceph service is down/degraded.
+* RGW: An authentication bypass vulnerability in STS
+  [CVE-2023-43040]has been fixed.
+* RGW: S3 policy now enforces ARN-based conditionals.
+* RGW: Copying an object to iself no longer causes data
+  loss. Potential corruption on ETIMEDOUT (not enabled by default),
+  was also fixed.
 
 Changelog
 ---------
