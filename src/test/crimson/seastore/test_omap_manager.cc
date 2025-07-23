@@ -915,6 +915,46 @@ TEST_P(omap_manager_test_t, heavy_update)
   });
 }
 
+TEST_P(omap_manager_test_t, monotonic_inc)
+{
+  // This test simulate a real-world common pattern of inserting
+  // monotonically increasing new keys and sequentially deleting
+  // the oldest keys. The goal is to detect any abnormal splits
+  // (imbalances) that may occur during right-skewed growth, and
+  // then repeatedly delete the oldest keys to trigger left-skewed
+  // deletions, checking for bugs in repeated left-side rebalancing.
+  run_async([this] {
+    omap_root_t omap_root = initialize();
+
+    auto monotonic_inc = []() {
+      static uint64_t counter = 0;
+      char buf[32];
+      snprintf(buf, sizeof(buf), "%16lu", counter++);
+      return std::string(buf);
+    };
+
+    while (omap_root.get_depth() < 3) {
+      auto t = create_mutate_transaction();
+      for (int i = 0; i < 128; i++) {
+        auto key = monotonic_inc();
+        auto val = rand_buffer(512);
+        set_key(omap_root, *t, key, val);
+      }
+      submit_transaction(std::move(t));
+    }
+    check_mappings(omap_root);
+
+    while (test_omap_mappings.size() > 128) {
+      auto t = create_mutate_transaction();
+      auto first = test_omap_mappings.begin()->first;
+      auto last = std::next(test_omap_mappings.begin(), 128)->first;
+      rm_key_range(omap_root, *t, first, last);
+      submit_transaction(std::move(t));
+    }
+    check_mappings(omap_root);
+  });
+}
+
 INSTANTIATE_TEST_SUITE_P(
   omap_manager_test,
   omap_manager_test_t,
