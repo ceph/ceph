@@ -180,6 +180,12 @@
   C `rbd_mirror_image_resync()`, and Python `Image.mirror_image_resync()` --
   will return EINVAL instead of ENOENT when mirroring is not enabled.
 
+* RADOS: The configuration parameter `osd_repair_during_recovery` has been removed.
+  That configuration flag used to control whether an operator-initiated
+  "repair scrub" would be allowed to start on an OSD that is performing a
+  recovery. In this Ceph version, operator-initiated scrubs and repair-scrubs
+  are never blocked by a repair being performed.
+
 >=19.2.1
 
 * CephFS: Command `fs subvolume create` now allows tagging subvolumes through option
