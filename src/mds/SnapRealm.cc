@@ -117,6 +117,8 @@ void SnapRealm::check_cache() const
   snapid_t seq;
   snapid_t last_created;
   snapid_t last_destroyed = mdcache->mds->snapclient->get_last_destroyed();
+  utime_t last_modified = srnode.last_modified;
+  uint64_t change_attr = srnode.change_attr;
   if (global || srnode.is_parent_global()) {
     last_created = mdcache->mds->snapclient->get_last_created();
     seq = std::max(last_created, last_destroyed);
@@ -125,14 +127,19 @@ void SnapRealm::check_cache() const
     seq = srnode.seq;
   }
   if (cached_seq >= seq &&
-      cached_last_destroyed == last_destroyed)
+      cached_last_destroyed == last_destroyed &&
+      cached_last_modified == last_modified &&
+      cached_change_attr >= change_attr) {
     return;
+  }
 
   cached_snap_context.clear();
 
   cached_seq = seq;
   cached_last_created = last_created;
   cached_last_destroyed = last_destroyed;
+  cached_last_modified = last_modified;
+  cached_change_attr = change_attr;
 
   cached_subvolume_ino = 0;
   if (parent)
@@ -149,6 +156,8 @@ void SnapRealm::check_cache() const
 	   << " cached_seq " << cached_seq
 	   << " cached_last_created " << cached_last_created
 	   << " cached_last_destroyed " << cached_last_destroyed
+     	   << " cached_last_modified " << cached_last_modified
+           << " cached_change_attr " << cached_change_attr
 	   << ")" << dendl;
 }
 
