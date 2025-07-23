@@ -95,6 +95,7 @@ class DistroKind(StrEnum):
     CENTOS8 = "centos8"
     CENTOS9 = "centos9"
     FEDORA41 = "fedora41"
+    ROCKY9 = "rocky9"
     ROCKY10 = "rocky10"
     UBUNTU2204 = "ubuntu22.04"
     UBUNTU2404 = "ubuntu24.04"
@@ -106,6 +107,7 @@ class DistroKind(StrEnum):
             cls.CENTOS8,
             cls.CENTOS9,
             cls.FEDORA41,
+            cls.ROCKY9,
             cls.ROCKY10,
         }
 
@@ -125,6 +127,8 @@ class DistroKind(StrEnum):
             "centos9stream": cls.CENTOS9,
             str(cls.FEDORA41): cls.FEDORA41,
             "fc41": cls.FEDORA41,
+            str(cls.ROCKY9): cls.ROCKY9,
+            'rockylinux9': cls.ROCKY9,
             str(cls.ROCKY10): cls.ROCKY10,
             'rockylinux10': cls.ROCKY10,
             str(cls.UBUNTU2204): cls.UBUNTU2204,
@@ -145,6 +149,7 @@ class DefaultImage(StrEnum):
     CENTOS8 = "quay.io/centos/centos:stream8"
     CENTOS9 = "quay.io/centos/centos:stream9"
     FEDORA41 = "registry.fedoraproject.org/fedora:41"
+    ROCKY9 = "docker.io/rockylinux/rockylinux:9"
     ROCKY10 = "docker.io/rockylinux/rockylinux:10"
     UBUNTU2204 = "docker.io/ubuntu:22.04"
     UBUNTU2404 = "docker.io/ubuntu:24.04"
