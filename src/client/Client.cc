@@ -11355,7 +11355,7 @@ void Client::C_Read_Sync_NonBlocking::finish(int r)
 
   if (r == -ENOENT) {
     // if we get ENOENT from OSD, assume 0 bytes returned
-    goto success;
+    r = 0;
   } else if (r < 0) {
     // pass error to caller
     goto error;
