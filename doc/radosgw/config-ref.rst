@@ -63,14 +63,14 @@ instances or all radosgw-admin options can be put into the ``[global]`` or the
 Lifecycle Settings
 ==================
 
-Bucket Lifecycle configuration can be used to manage your objects so that they
-are stored effectively throughout their lifetimes. In past releases, lifecycle
-processing was rate-limited by single-threaded processing. As of the Nautilus
-release, the Ceph Object Gateway allows for parallel-thread processing of
-bucket lifecycles across additional Ceph Object Gateway instances and replaces
-in-order index-shard enumeration with a random ordered sequence.
+Bucket Lifecycle (LC) configuration can be used to manage your objects so that
+they are stored effectively throughout their lifetimes. In past releases,
+lifecycle processing was rate-limited by single-threaded processing. As of the
+Nautilus release, the Ceph Object Gateway allows for parallel-thread processing
+of bucket lifecycles across additional Ceph Object Gateway instances and
+replaces in-order index-shard enumeration with a random ordered sequence.
 
-Two options in particular are relevant to increasing the aggressiveness of
+Two options in particular are relevant to adjusting the aggressiveness of
 lifecycle processing:
 
 .. confval:: rgw_lc_max_worker
