@@ -20,7 +20,7 @@ releases:
     target_eol: 2026-09-19
     releases:
       - version: 19.2.3
-        released: 2025-07-22
+        released: 2025-07-28
       - version: 19.2.2
         released: 2025-04-10
       - version: 19.2.1
