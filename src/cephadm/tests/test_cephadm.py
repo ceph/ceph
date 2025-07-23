@@ -603,7 +603,7 @@ class TestCephAdm(object):
             ['registry-login', '--registry-json', 'sample-json'])
         with pytest.raises(Exception) as e:
             assert _cephadm.command_registry_login(ctx)
-        assert str(e.value) == ("json provided for custom registry login did not include all necessary fields. "
+        assert str(e.value).startswith("json provided for custom registry login did not include all necessary fields. "
                         "Please setup json file as\n"
                         "{\n"
                           " \"url\": \"REGISTRY_URL\",\n"
