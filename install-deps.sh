@@ -550,14 +550,11 @@ else
                     $SUDO dnf config-manager --add-repo http://apt-mirror.front.sepia.ceph.com/lab-extras/8/
                     $SUDO dnf config-manager --setopt=apt-mirror.front.sepia.ceph.com_lab-extras_8_.gpgcheck=0 --save
                     $SUDO dnf -y module enable javapackages-tools
-                elif test $ID = centos -a $MAJOR_VERSION = 9 ; then
+                elif { [ "$ID" = centos ] || [ "$ID" = rocky ]; } && [ "$MAJOR_VERSION" -ge 9 ]; then
                     $SUDO dnf config-manager --set-enabled crb
-                elif test $ID = centos -a $MAJOR_VERSION = 10 ; then
-                    $SUDO dnf config-manager --set-enabled crb
-                    setup_lab_extras_repo
-                elif test $ID = rocky -a $MAJOR_VERSION = 10 ; then
-                    $SUDO dnf config-manager --set-enabled crb
-                    setup_lab_extras_repo
+                    if [ "$MAJOR_VERSION" -eq 10 ]; then
+                        setup_lab_extras_repo
+                    fi
                 elif test $ID = rhel -a $MAJOR_VERSION = 8 ; then
                     dts_ver=11
                     $SUDO dnf config-manager --set-enabled "codeready-builder-for-rhel-8-${ARCH}-rpms"
