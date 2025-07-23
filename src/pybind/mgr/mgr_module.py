@@ -1996,7 +1996,8 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
     @API.expose
     def set_localized_module_option(self, key: str, val: Optional[str]) -> None:
         """
-        Set localized configuration for this ceph-mgr instance
+        Set localized configuration for this ceph-mgr instance.
+
         :param str key:
         :param str val:
         :return: str
