@@ -39,6 +39,8 @@ export class AlertPanelComponent implements OnInit {
   actionName = '';
   @Input()
   lowContrast = true;
+  @Input()
+  variant: 'toast' | 'inline' = 'inline';
 
   /**
    * The event that is triggered when the close button (x) has been
@@ -84,7 +86,8 @@ export class AlertPanelComponent implements OnInit {
       actionsTemplate: this.actionTpl,
       showClose: this.dismissible,
       title: this.showTitle ? this.title : '',
-      lowContrast: this.lowContrast
+      lowContrast: this.lowContrast,
+      variant: this.variant
     };
   }
 
