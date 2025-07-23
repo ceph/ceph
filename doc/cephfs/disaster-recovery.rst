@@ -26,11 +26,11 @@ If a PG is lost in a *data* pool, then the file system continues to operate
 normally, but some parts of some files will simply be missing (reads will
 return zeros).
 
-Losing a data PG may affect many files. Files are split into many objects, so
-identifying which files have been affected by the loss of particular PGs
-requires a full scan over all object IDs that may exist within the size of a
-file. This type of scan may be useful for identifying which files must be
-restored from a backup.
+Losing a data pool PG may affect many files. Files are split into many RADOS
+objects, so identifying which files have been affected by the loss of
+particular PGs requires a scan of all RADOS objects storing data for the file.
+This type of scan may be useful for identifying which files must be restored
+from a backup.
 
 .. danger::
 
