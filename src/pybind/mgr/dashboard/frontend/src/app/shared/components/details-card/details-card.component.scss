@@ -1,0 +1,24 @@
+@use '@carbon/layout';
+@use './src/styles/vendor/variables' as vv;
+
+.details-card {
+  background-color: vv.$white;
+  box-shadow: 0 layout.$spacing-01 layout.$spacing-03 rgba(0, 0, 0, 8%);
+  min-width: layout.rem(500px);
+
+  .details-card-header {
+    align-items: center;
+    display: flex;
+    justify-content: space-between;
+    padding: layout.$spacing-05;
+    position: relative;
+  }
+
+  .details-card-body {
+    padding: layout.$spacing-05;
+  }
+
+  .cds--row {
+    row-gap: layout.$spacing-05;
+  }
+}

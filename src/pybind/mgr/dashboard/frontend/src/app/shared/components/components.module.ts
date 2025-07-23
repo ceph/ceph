@@ -87,6 +87,7 @@ import { SidePanelComponent } from './side-panel/side-panel.component';
 import { ChartsModule } from '@carbon/charts-angular';
 import { InlineMessageComponent } from './inline-message/inline-message.component';
 import { IconComponent } from './icon/icon.component';
+import { DetailsCardComponent } from './details-card/details-card.component';
 
 // Icons
 import InfoIcon from '@carbon/icons/es/information/16';
@@ -180,7 +181,8 @@ import CloseIcon from '@carbon/icons/es/close/16';
     ProgressComponent,
     SidePanelComponent,
     IconComponent,
-    InlineMessageComponent
+    InlineMessageComponent,
+    DetailsCardComponent
   ],
   providers: [provideCharts(withDefaultRegisterables())],
   exports: [
@@ -222,7 +224,8 @@ import CloseIcon from '@carbon/icons/es/close/16';
     ProgressComponent,
     SidePanelComponent,
     IconComponent,
-    InlineMessageComponent
+    InlineMessageComponent,
+    DetailsCardComponent
   ]
 })
 export class ComponentsModule {
