@@ -27,6 +27,21 @@ SMB_POOL = '.smb'
 log = logging.getLogger(__name__)
 
 
+def _read_all(
+    ioctx: rados.Ioctx, key: str, chunk_size: int = _CHUNK_SIZE
+) -> bytearray:
+    """Read all of the data in the rados object."""
+    idx = 0
+    ba = bytearray()
+    while True:
+        chunk = ioctx.read(key, chunk_size, idx * chunk_size)
+        ba += chunk
+        if len(chunk) < _CHUNK_SIZE:
+            break
+        idx += 1
+    return ba
+
+
 class RADOSConfigEntry:
     """A store entry object for the RADOS pool based store."""
 
@@ -58,7 +73,7 @@ class RADOSConfigEntry:
         with self._shared_ioctx() as ioctx:
             ioctx.set_namespace(self._ns)
             try:
-                val = ioctx.read(self._key, _CHUNK_SIZE).decode()
+                val = _read_all(ioctx, self._key).decode()
             except rados.ObjectNotFound:
                 val = ''
         log.debug('rados read result of %s = %r', self.full_key, val)
@@ -67,8 +82,7 @@ class RADOSConfigEntry:
     def write(self, content: str) -> None:
         """Write a RADOS object."""
         log.debug('rados write to %s', self.full_key)
-        data = content.encode('utf-8')
-        assert len(data) < _CHUNK_SIZE
+        data = content.encode()
         with self._shared_ioctx() as ioctx:
             ioctx.set_namespace(self._ns)
             ioctx.write_full(self._key, data)
