@@ -2692,11 +2692,6 @@ void Server::dispatch_client_request(const MDRequestRef& mdr)
   }
   
   if (is_full) {
-    CInode *cur = try_get_auth_inode(mdr, req->get_filepath().get_ino());
-    if (!cur) {
-      // the request is already responded to
-      return;
-    }
     if (req->get_op() == CEPH_MDS_OP_SETLAYOUT ||
         req->get_op() == CEPH_MDS_OP_SETDIRLAYOUT ||
         req->get_op() == CEPH_MDS_OP_SETLAYOUT ||
@@ -2709,7 +2704,18 @@ void Server::dispatch_client_request(const MDRequestRef& mdr)
 	  req->get_op() == CEPH_MDS_OP_RENAME) &&
 	 (!mdr->has_more() || mdr->more()->witnessed.empty())) // haven't started peer request
 	) {
-
+      /*
+       * The inode fetch below is specific to the operations above and the inode is
+       * expected to be in memory as these operations are likely preceded by lookup.
+       * Doing this generically outside the condition was incorrect as the ops like
+       * getattr might not have the inode in memory as this could be a non-auth mds
+       * and fails with ESTALE confusing the client without forwarding to the auth mds.
+       */
+      CInode *cur = try_get_auth_inode(mdr, req->get_filepath().get_ino());
+      if (!cur) {
+        // the request is already responded to
+        return;
+      }
       if (check_access(mdr, cur, MAY_FULL)) {
         dout(20) << __func__ << ": full, has FULL caps, permitting op " << ceph_mds_op_name(req->get_op()) << dendl;
       } else {
