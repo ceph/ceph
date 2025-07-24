@@ -2495,6 +2495,9 @@ private:
                                             /// When 0 onode_bluestore_t v2 is in force, otherwise v3 is used.
                                             /// Ability to disable is important for efficient testing.
 
+  ///< debug trigger to idempotent reformat objects on reads
+  float debug_idemreform_chance = 0;
+
   uint64_t kv_ios = 0;
   uint64_t kv_throttle_costs = 0;
   uint64_t kv_throttle_txcs = 0;
@@ -2804,6 +2807,7 @@ private:
   void _set_per_pool_omap();
   void _update_osd_memory_options();
   void _update_allocator_lookup_policy();
+  void _set_debug_options();
 
   int _open_bdev(bool create);
   // Verifies if disk space is enough for reserved + min bluefs
@@ -2911,6 +2915,7 @@ private:
   TransContext *_txc_create(Collection *c, OpSequencer *osr,
 			    std::list<Context*> *on_commits,
 			    TrackedOpRef osd_op=TrackedOpRef());
+  void _txc_exec(TransContext* txc, ThreadPool::TPHandle* handle);
   void _txc_update_store_statfs(TransContext *txc);
   void _txc_add_transaction(TransContext *txc, Transaction *t);
   void _txc_calc_cost(TransContext *txc);
@@ -3633,6 +3638,13 @@ private:
       debug_mdata_error_objects.erase(o);
     }
   }
+  void _debug_idemreform_write(
+    CollectionRef& c,
+    OnodeRef& o,
+    uint64_t offset,
+    const bufferlist& bl);
+  bool _debug_maybe_idemreform();
+
 private:
   ceph::mutex qlock = ceph::make_mutex("BlueStore::Alerts::qlock");
   std::string failed_cmode;
