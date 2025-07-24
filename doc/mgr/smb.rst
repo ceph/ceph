@@ -447,6 +447,15 @@ custom_dns
     Optional. List of IP Addresses. IP addresses will be used as DNS
     resolver(s) in Samba containers allowing the containers to use domain DNS
     even if the Ceph host does not
+custom_ports
+    Optional. A mapping of service names to port numbers that will override the
+    default ports used for those services. The service names are:
+    ``smb``, ``smbmetrics``, and ``ctdb``. If a service name is not
+    present in the mapping the default port will be used.
+    For example, ``{"smb": 4455, "smbmetrics": 9009}`` will change the
+    ports used by smb for client access and the metrics exporter, but
+    not change the port used by the CTDB clustering daemon.
+    Note - not all SMB clients are able to use alternate port numbers.
 placement
     Optional. A Ceph Orchestration :ref:`placement specifier
     <orchestrator-cli-placement-spec>`.  Defaults to one host if not provided
