@@ -517,6 +517,10 @@ public:
     return {get_reactor_utilization()};
   }
 
+  auto dump_store_shards(Formatter *f) const {
+    return pg_to_shard_mapping.dump_store_shards(f);
+  }
+
   auto create_split_pg_mapping(spg_t pgid, core_id_t core, unsigned int store_index) {
     return pg_to_shard_mapping.get_or_create_pg_mapping(pgid, core, store_index);
   }

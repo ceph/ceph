@@ -833,6 +833,8 @@ seastar::future<> OSD::start_asok_admin()
 	std::as_const(get_shard_services().get_registry())));
     asok->register_command(
       make_asok_hook<DumpRecoveryReservationsHook>(get_shard_services()));
+    asok->register_command(
+      make_asok_hook<StoreShardNumsHook>(get_shard_services()));
   });
 }
 
