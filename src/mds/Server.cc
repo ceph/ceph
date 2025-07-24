@@ -6430,7 +6430,7 @@ void Server::handle_client_setvxattr(const MDRequestRef& mdr, CInode *cur)
     try {
       if (is_rmxattr) {
         const auto srnode = cur->get_projected_srnode();
-	if (!srnode->is_subvolume()) {
+	if (srnode && !srnode->is_subvolume()) {
 	  respond_to_request(mdr, 0);
 	  return;
 	}

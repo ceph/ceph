@@ -3183,8 +3183,38 @@ const CInode::mempool_old_inode& CInode::cow_old_inode(snapid_t follows, bool co
 
 void CInode::pre_cow_old_inode()
 {
-  snapid_t follows = mdcache->get_global_snaprealm()->get_newest_seq();
-  dout(20) << __func__ << " follows " << follows << " on " << *this << dendl;
+  snapid_t follows;
+  bool using_global_snaprealm_seq = true;
+  SnapRealm *realm = find_snaprealm();
+  //bool use_global_snaprealm_seq = mdcache->use_global_snaprealm_seq;
+
+  if (mdcache->get_use_global_snaprealm_seq()) {
+    follows = mdcache->get_global_snaprealm()->get_newest_seq();
+  } else if (realm->get_subvolume_ino() || realm->get_newest_seq() <= 1 ) {
+    /* Config is disabled :
+     1. If it's a subvolume realm, obviously use realm's seq number.
+     2. If there are no snaps on that directory, use realm's seq number.
+         a. In a pure subvolume use case, updates outside the subvolume directory
+            from group directory (/volumes/<group>/<subvol> to root would use realm's
+            seq number to avoid unnecessary cow of old inodes.
+         b. In a non subvolume use case, use realm's seq number only if there are
+            no snaps. If there are snaps, always use global snaprealm's seq as there
+            could be hardlinks/renames.
+    */
+    follows = realm->get_newest_seq();
+    using_global_snaprealm_seq = false;
+  } else {
+    /* Config is disabled:
+     * 1. In a pure subvolume use case, if there is atleast one snap in the realm (between
+     *    root and subvolume snap path), use global snaprealm's seq number.
+     * 2. In a non subvolume use case, if there is atleast one snap in the realm,
+     *    use global snaprealm's seq number.
+     */
+    follows = mdcache->get_global_snaprealm()->get_newest_seq();
+  }
+
+  dout(20) << __func__ << " using_global_snaprealm_seq:" << (using_global_snaprealm_seq ? "yes ":"no ")
+           << " follows " << follows << " on " << *this << " snaprealm=" << *realm << dendl;
   if (first <= follows)
     cow_old_inode(follows, true);
 }
