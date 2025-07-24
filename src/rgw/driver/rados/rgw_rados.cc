@@ -6453,12 +6453,15 @@ int RGWRados::Object::Delete::delete_obj(optional_yield y,
 
       using namespace std::string_literals;
       if (params.if_match && params.if_match != "*"sv) {
-        if(string if_match = rgw_string_unquote(params.if_match); dirent.meta.etag != if_match) {
+        string if_match = rgw_string_unquote(params.if_match);
+        ldpp_dout(dpp, 10) << "checking precondtion if_match: " << if_match << ", etag: " << dirent.meta.etag << dendl;
+        if(dirent.meta.etag != if_match) {
           return -ERR_PRECONDITION_FAILED;
         }
       }
 
       if (params.size_match.has_value()) {
+        ldpp_dout(dpp, 10) << "checking precondtion size_match: " << params.size_match << ", size: " << dirent.meta.size << dendl;
         if (params.size_match != dirent.meta.size) {
           return -ERR_PRECONDITION_FAILED;
         }
@@ -6472,7 +6475,8 @@ int RGWRados::Object::Delete::delete_obj(optional_yield y,
           last_mod_time.tv_nsec = 0;
         }
 
-        ldpp_dout(dpp, 10) << "If-Match-Last-Modified-Time: " << params.last_mod_time_match << " Last-Modified: " << ctime << dendl;
+        ldpp_dout(dpp, 10) << "checking precondtion If-Match-Last-Modified-Time: " << params.last_mod_time_match
+                           << ", Last-Modified: " << ctime << ", with high_precision_time:" << params.high_precision_time << dendl;
         if (ctime != last_mod_time) {
           return -ERR_PRECONDITION_FAILED;
         }
@@ -7186,8 +7190,11 @@ int RGWRados::Object::check_preconditions(const DoutPrefixProvider *dpp, std::op
                                             ceph::real_time last_mod_time_match, bool high_precision_time,
                                             const char *if_match, const char *if_nomatch, RGWObjState& current_state, optional_yield y)
 {
-  if (size_match.has_value() && current_state.size != size_match) {
-    return -ERR_PRECONDITION_FAILED;
+  if (size_match.has_value()) {
+    ldpp_dout(dpp, 10) << "RGWRados::Object::check_preconditions size_match: " << size_match.value() << ", size: " << current_state.size << dendl;
+      if (current_state.size != size_match) {
+      return -ERR_PRECONDITION_FAILED;
+    }
   }
 
   if (!real_clock::is_zero(last_mod_time_match)) {
@@ -7198,7 +7205,8 @@ int RGWRados::Object::check_preconditions(const DoutPrefixProvider *dpp, std::op
       last_mod_time.tv_nsec = 0;
     }
 
-    ldpp_dout(dpp, 10) << "If-Match-Last-Modified-Time: " << last_mod_time_match << " Last-Modified: " << ctime << dendl;
+    ldpp_dout(dpp, 10) << "RGWRados::Object::check_preconditions If-Match-Last-Modified-Time: " << last_mod_time_match
+                       << ", Last-Modified: " << ctime << ", with high_precision_time:" << high_precision_time << dendl;
     if (ctime != last_mod_time) {
       return -ERR_PRECONDITION_FAILED;
     }
@@ -7216,10 +7224,12 @@ int RGWRados::Object::check_preconditions(const DoutPrefixProvider *dpp, std::op
       if (current_state.get_attr(RGW_ATTR_ETAG, bl)) {
         string if_match_str = rgw_string_unquote(if_match);
         string etag = string(bl.c_str(), bl.length());
+        ldpp_dout(dpp, 10) << "RGWRados::Object::check_preconditions if_match: " << if_match_str << ", etag: " << etag << dendl;
         if (if_match_str.compare(0, etag.length(), etag.c_str(), etag.length()) != 0) {
           return -ERR_PRECONDITION_FAILED;
         }
       } else {
+        ldpp_dout(dpp, 10) << "RGWRados::Object::check_preconditions if_match object has no etag" << dendl;
         return (!current_state.exists)? -ENOENT: -ERR_PRECONDITION_FAILED;
       }
     }
@@ -7236,6 +7246,7 @@ int RGWRados::Object::check_preconditions(const DoutPrefixProvider *dpp, std::op
       if (current_state.get_attr(RGW_ATTR_ETAG, bl)) {
         string if_nomatch_str = rgw_string_unquote(if_nomatch);
         string etag = string(bl.c_str(), bl.length());
+        ldpp_dout(dpp, 10) << "RGWRados::Object::check_preconditions if_match: " << if_nomatch_str << ", etag: " << etag << dendl;
         if (if_nomatch_str.compare(0, etag.length(), etag.c_str(), etag.length()) == 0) {
           return -ERR_PRECONDITION_FAILED;
         }
