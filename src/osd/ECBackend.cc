@@ -1636,8 +1636,7 @@ int ECBackend::objects_read_sync(
 
   int r = _objects_read_sync(hoid, off, len, op_flags, bl);
 
-  //FAIL REVIEW - too high dout value.
-  dout(0) << __func__ << " r=" << r
+  dout(20) << __func__ << " r=" << r
         << " hoid=" << hoid
         << " off=" << off
         << " len=" << len
