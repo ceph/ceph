@@ -4486,6 +4486,7 @@ class RocksDBBlueFSVolumeSelector : public BlueFSVolumeSelector
   uint64_t level0_size = 0;
   uint64_t level_base = 0;
   uint64_t level_multiplier = 0;
+  bool new_pol = false;
   size_t extra_level = 0;
   enum {
     OLD_POLICY,
@@ -4500,37 +4501,49 @@ public:
     uint64_t _level0_size,
     uint64_t _level_base,
     uint64_t _level_multiplier,
-    double reserved_factor,
-    uint64_t reserved,
-    bool new_pol)
-  {
+    bool _new_pol) {
+
     l_totals[LEVEL_LOG - LEVEL_FIRST] = 0; // not used at the moment
     l_totals[LEVEL_WAL - LEVEL_FIRST] = _wal_total;
     l_totals[LEVEL_DB - LEVEL_FIRST] = _db_total;
     l_totals[LEVEL_SLOW - LEVEL_FIRST] = _slow_total;
 
+    level0_size = _level0_size;
+    level_base = _level_base;
+    level_multiplier = _level_multiplier;
+
+    new_pol = _new_pol;
+  }
+
+  void update_from_config(CephContext* cct) override
+  {
     if (!new_pol) {
       return;
     }
+
+    db_avail4slow = 0;
+    extra_level = 0;
+    double reserved_factor =
+      cct->_conf->bluestore_volume_selection_reserved_factor;
+    uint64_t reserved = cct->_conf->bluestore_volume_selection_reserved;
+
+    auto db_total = l_totals[LEVEL_DB - LEVEL_FIRST];
     // Calculating how much extra space is available at DB volume.
     // Depending on the presence of explicit reserved size specification it might be either
     // * DB volume size - reserved
     // or
     // * DB volume size - sum_max_level_size(0, L-1) - max_level_size(L) * reserved_factor
     if (!reserved) {
-      level0_size = _level0_size;
-      level_base = _level_base;
-      level_multiplier = _level_multiplier;
-      uint64_t prev_levels = _level0_size;
-      uint64_t cur_level = _level_base;
+      uint64_t prev_levels = level0_size;
+      uint64_t cur_level = level_base;
       extra_level = 1;
       do {
-	uint64_t next_level = cur_level * _level_multiplier;
+	uint64_t next_level = cur_level * level_multiplier;
         uint64_t next_threshold = prev_levels + cur_level + next_level;
         ++extra_level;
-        if (_db_total <= next_threshold) {
+        if (db_total <= next_threshold) {
 	  uint64_t cur_threshold = prev_levels + cur_level * reserved_factor;
-          db_avail4slow = cur_threshold < _db_total ? _db_total - cur_threshold : 0;
+          db_avail4slow = cur_threshold < db_total ? db_total - cur_threshold : 0;
           break;
         } else {
           prev_levels += cur_level;
@@ -4538,7 +4551,7 @@ public:
         }
       } while (true);
     } else {
-      db_avail4slow = reserved < _db_total ? _db_total - reserved : 0;
+      db_avail4slow = reserved < db_total ? db_total - reserved : 0;
       extra_level = 0;
     }
   }

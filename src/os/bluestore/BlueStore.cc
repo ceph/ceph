@@ -5765,7 +5765,9 @@ std::vector<std::string> BlueStore::get_tracked_keys() const noexcept
     "bluestore_warn_on_no_per_pg_omap"s,
     "bluestore_max_defer_interval"s,
     "bluestore_onode_segment_size"s,
-    "bluestore_allocator_lookup_policy"s
+    "bluestore_allocator_lookup_policy"s,
+    "bluestore_volume_selection_reserved_factor"s,
+    "bluestore_volume_selection_reserved"s
   };
 }
 
@@ -5839,6 +5841,11 @@ void BlueStore::handle_conf_change(const ConfigProxy& conf,
   }
   if (changed.count("bluestore_allocator_lookup_policy")) {
     _update_allocator_lookup_policy();
+  }
+  if (changed.count("bluestore_volume_selection_reserved_factor") ||
+    changed.count("bluestore_volume_selection_reserved")) {
+    if (bluefs)
+      bluefs->update_volume_selector_from_config();
   }
 }
 
@@ -7684,20 +7691,16 @@ int BlueStore::_open_bluefs(bool create, bool read_only)
         bluefs->get_block_device_size(BlueFS::BDEV_DB) * 95 / 100,
         bluefs->get_block_device_size(BlueFS::BDEV_SLOW) * 95 / 100);
     } else {
-      double reserved_factor = cct->_conf->bluestore_volume_selection_reserved_factor;
-      vselector =
-        new RocksDBBlueFSVolumeSelector(
-          bluefs->get_block_device_size(BlueFS::BDEV_WAL) * 95 / 100,
-          bluefs->get_block_device_size(BlueFS::BDEV_DB) * 95 / 100,
-          bluefs->get_block_device_size(BlueFS::BDEV_SLOW) * 95 / 100,
-	  rocks_opts.write_buffer_size * rocks_opts.max_write_buffer_number,
-          rocks_opts.max_bytes_for_level_base,
-          rocks_opts.max_bytes_for_level_multiplier,
-          reserved_factor,
-          cct->_conf->bluestore_volume_selection_reserved,
-          cct->_conf->bluestore_volume_selection_policy.find("use_some_extra")
-             == 0);
+      vselector = new RocksDBBlueFSVolumeSelector(
+	bluefs->get_block_device_size(BlueFS::BDEV_WAL) * 95 / 100,
+	bluefs->get_block_device_size(BlueFS::BDEV_DB) * 95 / 100,
+	bluefs->get_block_device_size(BlueFS::BDEV_SLOW) * 95 / 100,
+	rocks_opts.write_buffer_size * rocks_opts.max_write_buffer_number,
+	rocks_opts.max_bytes_for_level_base,
+	rocks_opts.max_bytes_for_level_multiplier,
+	cct->_conf->bluestore_volume_selection_policy.find("use_some_extra") == 0);
     }    
+    vselector->update_from_config(cct);
   }
   if (create) {
     bluefs->mkfs(fsid, bluefs_layout);
@@ -19764,9 +19767,7 @@ void RocksDBBlueFSVolumeSelector::dump(ostream& sout) {
 
 BlueFSVolumeSelector* RocksDBBlueFSVolumeSelector::clone_empty() const {
   RocksDBBlueFSVolumeSelector* ns =
-    new RocksDBBlueFSVolumeSelector(0, 0, 0,
-				    0, 0, 0,
-				    0, 0, false);
+    new RocksDBBlueFSVolumeSelector(0, 0, 0, 0, 0, 0, false);
   return ns;
 }
 
