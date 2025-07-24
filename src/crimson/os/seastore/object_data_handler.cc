@@ -109,7 +109,8 @@ ObjectDataHandler::prepare_data_reservation(
     return ctx.tm.reserve_region(
       ctx.t,
       ctx.onode.get_data_hint(),
-      max_object_size
+      max_object_size,
+      extent_types_t::OBJECT_DATA_BLOCK
     ).si_then([max_object_size=max_object_size, &object_data](auto pin) {
       ceph_assert(pin.get_length() == max_object_size);
       object_data.update_reserved(
@@ -133,7 +134,8 @@ ObjectDataHandler::prepare_shared_region(
   LOG_PREFIX(ObjectDataHandler::prepare_shared_region);
   DEBUGT("{}~{}", ctx.t, hint, len);
   assert(!onode.get_shared_clone_id());
-  return ctx.tm.reserve_region(ctx.t, hint, len
+  return ctx.tm.reserve_region(
+    ctx.t, hint, len, extent_types_t::OBJECT_DATA_BLOCK
   ).si_then([ctx, &onode](auto shared_region) {
     onode.update_shared_clone_id(
       ctx.t, shared_region.get_key().get_local_clone_id());
@@ -286,7 +288,9 @@ ObjectDataHandler::write_ret do_zero(
        (data.tailbl ? ctx.tm.get_block_size() : 0)
       ).checked_to_laddr();
     auto len = end.get_byte_distance<extent_len_t>(laddr);
-    return ctx.tm.reserve_region(ctx.t, std::move(zero_pos), laddr, len);
+    return ctx.tm.reserve_region(
+      ctx.t, std::move(zero_pos), laddr, len,
+      extent_types_t::OBJECT_DATA_BLOCK);
   }).si_then([](auto zero_pos) {
     return std::make_optional<LBAMapping>(std::move(zero_pos));
   }).handle_error_interruptible(
@@ -1929,7 +1933,8 @@ ObjectDataHandler::clone_ret ObjectDataHandler::do_clone(
     return ctx.tm.reserve_region(
       ctx.t,
       ctx.d_onode->get_data_hint(),
-      object_data.get_reserved_data_len()
+      object_data.get_reserved_data_len(),
+      extent_types_t::OBJECT_DATA_BLOCK
     ).handle_error_interruptible(
       write_iertr::pass_further{},
       crimson::ct_error::assert_all{"unexpected error"}

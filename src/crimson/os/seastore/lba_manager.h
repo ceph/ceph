@@ -182,7 +182,8 @@ public:
   virtual alloc_extent_ret reserve_region(
     Transaction &t,
     laddr_hint_t hint,
-    extent_len_t len) = 0;
+    extent_len_t len,
+    extent_types_t type) = 0;
 
   /*
    * Inserts a zero mapping at the position "pos" with
@@ -192,7 +193,8 @@ public:
     Transaction &t,
     LBAMapping pos,
     laddr_t hint,
-    extent_len_t len) = 0;
+    extent_len_t len,
+    extent_types_t type) = 0;
 
   struct mapping_update_result_t {
     laddr_t direct_key;
