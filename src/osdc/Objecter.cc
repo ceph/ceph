@@ -251,10 +251,6 @@ void Objecter::handle_conf_change(const ConfigProxy& conf,
   } else if (read_policy == "balance") {
     extra_read_flags = CEPH_OSD_FLAG_BALANCE_READS;
   }
-
-
-  // FIXME: DOn't want this to always be on.
-  extra_read_flags = CEPH_OSD_FLAG_BALANCE_READS;
 }
 
 void Objecter::update_crush_location()
@@ -3091,6 +3087,7 @@ int Objecter::_calc_target(op_target_t *t, const Op *op, bool any_change)
       if (op && op->ops.size() == 1 &&
           is_read &&
           pi->allows_ecoptimizations() &&
+          pi->has_flag(pg_pool_t::FLAG_EC_DIRECT_READS) &&
           (t->flags & CEPH_OSD_FLAG_BALANCE_READS)) {
         uint64_t offset = op->ops[0].op.extent.offset;
         uint64_t length = op->ops[0].op.extent.length;
@@ -3129,8 +3126,9 @@ int Objecter::_calc_target(op_target_t *t, const Op *op, bool any_change)
         }
       }
 
-      ceph_assert(shard);
-      spgid.reset_shard(osdmap->pgtemp_undo_primaryfirst(*pi, actual_pgid, *shard));
+      if(shard) {
+        spgid.reset_shard(osdmap->pgtemp_undo_primaryfirst(*pi, actual_pgid, *shard));
+      }
     }
     t->actual_pgid = spgid;
     t->sort_bitwise = sort_bitwise;
@@ -5295,8 +5293,6 @@ Objecter::Objecter(CephContext *cct,
     ldout(cct, 20) << __func__ << ": read policy: balance" << dendl;
     extra_read_flags = CEPH_OSD_FLAG_BALANCE_READS;
   }
-
-  extra_read_flags = CEPH_OSD_FLAG_BALANCE_READS;
 }
 
 Objecter::~Objecter()
