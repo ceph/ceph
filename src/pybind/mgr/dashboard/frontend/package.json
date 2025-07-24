@@ -146,8 +146,8 @@
     "pretty-quick": "3.0.2",
     "start-server-and-test": "2.0.3",
     "stylelint": "16.20.0",
-    "stylelint-config-standard": "38.0.0",
     "stylelint-scss": "6.12.1",
+    "stylelint-config-standard": "38.0.0",
     "table": "6.8.0",
     "ts-node": "10.9.2",
     "typescript": "5.4.5",
@@ -157,9 +157,6 @@
     "stepDefinitions": "cypress/e2e/common"
   },
   "optionalDependencies": {
-    "@rollup/rollup-linux-arm64-gnu": "4.22.4"
-  },
-  "overrides": {
-    "stylus": "0.0.1-security"
+      "@rollup/rollup-linux-arm64-gnu": "4.22.4"
   }
 }
