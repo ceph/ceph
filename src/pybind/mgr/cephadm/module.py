@@ -2104,12 +2104,13 @@ Then run the following:
 
         notifications: List[str] = []
         error_notifications: List[str] = []
-        okay: bool = True
+        initial_rc = 0
         for daemon_type, daemon_ids in daemon_map.items():
             r = service_registry.get_service(daemon_type_to_service(
                 daemon_type)).ok_to_stop(daemon_ids, force=force)
             if r.retval:
-                okay = False
+                initial_rc = r.retval if initial_rc == 0 else initial_rc
+
                 # collect error notifications so user can see every daemon causing host
                 # to not be okay to stop
                 error_notifications.append(r.stderr)
@@ -2117,9 +2118,9 @@ Then run the following:
                 # if extra notifications to print for user, add them to notifications list
                 notifications.append(r.stdout)
 
-        if not okay:
+        if initial_rc:
             # at least one daemon is not okay to stop
-            return 1, '\n'.join(error_notifications)
+            return initial_rc, '\n'.join(error_notifications)
 
         if notifications:
             return 0, (f'It is presumed safe to stop host {hostname}. '
@@ -2129,7 +2130,7 @@ Then run the following:
     @handle_orch_error
     def host_ok_to_stop(self, hostname: str) -> str:
         if hostname not in self.cache.get_hosts():
-            raise OrchestratorError(f'Cannot find host "{hostname}"')
+            raise OrchestratorError(f'Cannot find host "{hostname}"', errno=errno.EINVAL)
 
         rc, msg = self._host_ok_to_stop(hostname)
         if rc:
@@ -2163,20 +2164,20 @@ Then run the following:
 
         :raises OrchestratorError: Hostname is invalid, host is already in maintenance
         """
+
         if yes_i_really_mean_it and not force:
-            raise OrchestratorError("--force must be passed with --yes-i-really-mean-it")
+            raise OrchestratorError("force must be passed with --yes-i-really-mean-it", errno=errno.EINVAL)
 
         if len(self.cache.get_hosts()) == 1 and not yes_i_really_mean_it:
-            raise OrchestratorError("Maintenance feature is not supported on single node clusters")
+            raise OrchestratorError("Maintenance feature is not supported on single node clusters", errno=errno.ENOTSUP)
 
         # if upgrade is active, deny
         if self.upgrade.upgrade_state and not yes_i_really_mean_it:
-            raise OrchestratorError(
-                f"Unable to place {hostname} in maintenance with upgrade active/paused")
+            raise OrchestratorError(f"Unabe to place {hostname} in maintenance with upgrade active/paused", errno=errno.EAGAIN)
 
         tgt_host = self.inventory._inventory[hostname]
         if tgt_host.get("status", "").lower() == "maintenance":
-            raise OrchestratorError(f"Host {hostname} is already in maintenance")
+            raise OrchestratorError(f"Host {hostname} is already in maintenance", errno=errno.EALREADY)
 
         host_daemons = self.cache.get_daemon_types(hostname)
         self.log.debug("daemons on host {}".format(','.join(host_daemons)))
@@ -2197,9 +2198,7 @@ Then run the following:
                         error_ok=True))
             returned_msg = _err[0].split('\n')[-1]
             if (returned_msg.startswith('failed') or returned_msg.startswith('ERROR')) and not yes_i_really_mean_it:
-                raise OrchestratorError(
-                    f"Failed to place {hostname} into maintenance for cluster {self._cluster_fsid}")
-
+                raise OrchestratorError(f"Failed to place {hostname} into maintenance for cluster {self._cluster_fsid}", errno=errno.EPERM)
             if "osd" in host_daemons:
                 crush_node = hostname if '.' not in hostname else hostname.split('.')[0]
                 rc, out, err = self.mon_command({
@@ -2212,7 +2211,7 @@ Then run the following:
                     self.log.warning(
                         f"maintenance mode request for {hostname} failed to SET the noout group (rc={rc})")
                     raise OrchestratorError(
-                        f"Unable to set the osds on {hostname} to noout (rc={rc})")
+                        f"Unable to set the osds on {hostname} to noout (rc={rc})", errno=errno.EIO)
                 elif not rc:
                     self.log.info(
                         f"maintenance mode request for {hostname} has SET the noout group")
@@ -2243,7 +2242,7 @@ Then run the following:
         """
         tgt_host = self.inventory._inventory[hostname]
         if tgt_host['status'] != "maintenance":
-            raise OrchestratorError(f"Host {hostname} is not in maintenance mode")
+            raise OrchestratorError(f"Host {hostname} is not in maintenance mode", errno=errno.EINVAL)
 
         # Given we do not regularly check maintenance mode hosts for being offline,
         # we have no idea at this point whether the host is online or not.
@@ -2267,14 +2266,14 @@ Then run the following:
 
         if host_offline and not offline:
             raise OrchestratorValidationError(
-                f'{hostname} is offline, please use --offline and --force to take this host out of maintenance mode')
+                f'{hostname} is offline, please use --offline and --force to take this host out of maintenance mode', errno=errno.ENOTSUP)
 
         if not host_offline and offline:
             raise OrchestratorValidationError(
-                f'{hostname} is online, please take host out of maintenance mode without --offline.')
+                f'{hostname} is online, please take host out of maintenance mode without --offline.', errno=errno.EAGAIN)
 
         if offline and not force:
-            raise OrchestratorValidationError("Taking an offline host out of maintenance mode requires --force")
+            raise OrchestratorValidationError("Taking an offline host out of maintenance mode requires --force", errno=errno.EAGAIN)
 
         # no point trying these parts if we know the host is offline
         if not host_offline:
@@ -2288,7 +2287,7 @@ Then run the following:
                     f"Failed to exit maintenance state for host {hostname}, cluster {self._cluster_fsid}")
                 if not force:
                     raise OrchestratorError(
-                        f"Failed to exit maintenance state for host {hostname}, cluster {self._cluster_fsid}")
+                        f"Failed to exit maintenance state for host {hostname}, cluster {self._cluster_fsid}", errno=errno.EPERM)
 
             if "osd" in self.cache.get_daemon_types(hostname):
                 crush_node = hostname if '.' not in hostname else hostname.split('.')[0]
@@ -2302,7 +2301,7 @@ Then run the following:
                     self.log.warning(
                         f"exit maintenance request failed to UNSET the noout group for {hostname}, (rc={rc})")
                     if not force:
-                        raise OrchestratorError(f"Unable to set the osds on {hostname} to noout (rc={rc})")
+                        raise OrchestratorError(f"Unable to set the osds on {hostname} to noout (rc={rc})", errno=errno.EIO)
                 else:
                     self.log.info(
                         f"exit maintenance request has UNSET for the noout group on host {hostname}")
@@ -2731,7 +2730,7 @@ Then run the following:
                 if name in dm:
                     args.append((name, host))
         if not args:
-            raise OrchestratorError('Unable to find daemon(s) %s' % (names))
+            raise OrchestratorError('Unable to find daemon(s) %s' % (names), errno=errno.EINVAL)
         self.log.info('Remove daemons %s' % ' '.join([a[0] for a in args]))
         return self._remove_daemons(args)
 
