@@ -296,7 +296,8 @@ BtreeBackrefManager::merge_cached_backrefs(
               DEBUGT("remove mapping: {}", t, backref_entry.paddr);
               return remove_mapping(
                 t,
-                backref_entry.paddr
+                backref_entry.paddr,
+                backref_entry.type
               ).si_then([](auto&&) {
                 return seastar::now();
               }).handle_error_interruptible(
@@ -500,16 +501,17 @@ BtreeBackrefManager::rewrite_extent(
 BtreeBackrefManager::remove_mapping_ret
 BtreeBackrefManager::remove_mapping(
   Transaction &t,
-  paddr_t addr)
+  paddr_t addr,
+  extent_types_t type)
 {
   auto c = get_context(t);
   return with_btree<BackrefBtree>(
     cache,
     c,
-    [c, addr](auto &btree) mutable {
+    [c, addr, type](auto &btree) mutable {
       return btree.lower_bound(
 	c, addr
-      ).si_then([&btree, c, addr](auto iter)
+      ).si_then([&btree, c, addr, type](auto iter)
 		-> remove_mapping_ret {
 	if (iter.is_end() || iter.get_key() != addr) {
 	  LOG_PREFIX(BtreeBackrefManager::remove_mapping);
@@ -519,10 +521,14 @@ BtreeBackrefManager::remove_mapping(
 	    remove_mapping_result_t>(remove_mapping_result_t());
 	}
 
+	auto val = iter.get_val();
+	if (!is_retired_placeholder_type(type)) {
+	  ceph_assert(type == val.type);
+	}
 	auto ret = remove_mapping_result_t{
 	  iter.get_key(),
-	  iter.get_val().len,
-	  iter.get_val().laddr};
+	  val.len,
+	  val.laddr};
 	return btree.remove(
 	  c,
 	  iter
