@@ -8344,6 +8344,8 @@ int OSDMonitor::prepare_new_pool(string& name,
     enable_pool_ec_optimizations(*pi, nullptr, true);
   }
 
+  enable_pool_ec_direct_reads(*pi);
+
   pending_inc.new_pool_names[pool] = name;
   return 0;
 }
@@ -8436,6 +8438,19 @@ int OSDMonitor::enable_pool_ec_optimizations(pg_pool_t &p,
     }
   }
   return 0;
+}
+
+void OSDMonitor::enable_pool_ec_direct_reads(pg_pool_t &p) {
+  ErasureCodeInterfaceRef erasure_code;
+  stringstream tmp;
+  int err = get_erasure_code(p.erasure_code_profile, &erasure_code, &tmp);
+
+  // FIXME: This should be umbrella, not tentacle.
+  if (err == 0 && erasure_code->get_supported_optimizations() &
+        ErasureCodeInterface::FLAG_EC_PLUGIN_DIRECT_READS &&
+        osdmap.require_osd_release >= ceph_release_t::tentacle) {
+    p.flags |= pg_pool_t::FLAG_EC_DIRECT_READS;
+  }
 }
 
 int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,

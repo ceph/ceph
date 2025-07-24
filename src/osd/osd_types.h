@@ -1309,6 +1309,7 @@ struct pg_pool_t {
     // Note, does not prohibit being created on classic osd.
     FLAG_CRIMSON = 1<<18,
     FLAG_EC_OPTIMIZATIONS = 1<<19, // enable optimizations, once enabled, cannot be disabled
+    FLAG_EC_DIRECT_READS = 1<<20, // Optimized EC is permitted to do direct reads.
   };
 
   static const char *get_flag_name(uint64_t f) {
