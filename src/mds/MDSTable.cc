@@ -169,7 +169,7 @@ void MDSTable::load_2(int r, bufferlist& bl, Context *onfinish)
 {
   ceph_assert(is_opening());
   state = STATE_ACTIVE;
-  if (r == -CEPHFS_EBLOCKLISTED) {
+  if (r == -EBLOCKLISTED) {
     mds->respawn();
     return;
   }
