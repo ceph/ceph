@@ -1578,6 +1578,28 @@ options:
   max: 4_K
   flags:
   - runtime
+- name: mds_use_global_snaprealm_seq_for_subvol
+  type: bool
+  level: advanced
+  default: true
+  services:
+  - mds
+  fmt_desc: MDS will use the global snaprealm's seq to cow old inodes
+    for the directory. If the option is disabled, MDS will use the
+    respective snaprealm seq number for the subvolume snapshot directory
+    i.e., the directory marked with the 'ceph.dir.subvolume'. This is
+    safe because the hardlinks/renames are contained within the subvolume
+    snaprealm with the marking of 'ceph.dir.subvolume'. For the directories
+    above subvolume, it will use the global snaprealm's seq only if there
+    is at least one snapshot of the directory above the subvolume.
+    If the option is enabled, which is the default, it uses the global
+    snaprealm's seq to cow old inodes across the filesystem. Hence,
+    disabling this option is only suitalbe for the cephfs volumes used
+    purely for subvolume usecase where there are no snapshots in the
+    filesystem apart from the subvolume snapshots. So it's a great
+    optimization for subvolumes.
+  flags:
+  - runtime
 - name: mds_asio_thread_count
   type: uint
   level: advanced
