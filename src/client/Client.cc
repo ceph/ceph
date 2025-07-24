@@ -7561,6 +7561,11 @@ int Client::_lookup(const InodeRef& dir, const std::string& name, std::string& a
 
   if (dname == cct->_conf->client_snapdir &&
       dir->snapid == CEPH_NOSNAP) {
+    if (cct->_conf.get_val<bool>("client_respect_subvolume_snapshot_visibility") &&
+      !dir->snaprealm->is_snapdir_visible) {
+      r = -EPERM;
+      goto done;
+    }
     *target = open_snapdir(dir);
     goto done;
   }
