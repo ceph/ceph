@@ -106,7 +106,7 @@ DISK_OCCUPATION = ('ceph_daemon', 'device', 'db_device',
 NUM_OBJECTS = ['degraded', 'misplaced', 'unfound']
 
 SMB_METADATA = ('smb_version', 'volume',
-                'subvolume_group', 'subvolume', 'netbiosname')
+                'subvolume_group', 'subvolume', 'netbiosname', 'share')
 
 alert_metric = namedtuple('alert_metric', 'name description')
 HEALTH_CHECKS = [
@@ -1752,6 +1752,7 @@ class Module(MgrModule, OrchestratorClientMixin):
                             self.log.debug("Skipping share with missing cluster_id")
                             continue
 
+                        share_id = resource.get('share_id', '')
                         cephfs = resource.get('cephfs', {})
                         cephfs_volume = cephfs.get('volume', '')
                         cephfs_subvolumegroup = cephfs.get('subvolumegroup', '_nogroup')
@@ -1761,7 +1762,8 @@ class Module(MgrModule, OrchestratorClientMixin):
                             cephfs_volume,
                             cephfs_subvolumegroup,
                             cephfs_subvolume,
-                            cluster_id
+                            cluster_id,
+                            share_id
                         ))
             except json.JSONDecodeError:
                 self.log.error("Failed to decode SMB module output")
