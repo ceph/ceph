@@ -670,7 +670,7 @@ namespace ceph {
        * to a stripe to be applied using a read-modify-write of a
        * data chunk and the coding parity chunks.
        */
-      PFLAG_EC_PLUGIN_PARITY_DELTA_OPTIMIZATION = 1<<4,
+      FLAG_EC_PLUGIN_PARITY_DELTA_OPTIMIZATION = 1<<4,
       /* This plugin requires sub-chunks (at the time of writing this was only
        * clay). Other plugins will not process the overhead of stub sub-chunks.
        */
@@ -701,6 +701,8 @@ namespace ceph {
       case FLAG_EC_PLUGIN_OPTIMIZED_SUPPORTED: return "optimizedsupport";
       case FLAG_EC_PLUGIN_CRC_ENCODE_DECODE_SUPPORT:
         return "crcencodedecode";
+      case FLAG_EC_PLUGIN_DIRECT_READS:
+        return "directreads";
       default: return "???";
       }
     }
