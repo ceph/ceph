@@ -1852,7 +1852,7 @@ Then run the following:
         self.inventory.add_host(spec)
         self.offline_hosts_remove(spec.hostname)
         if spec.status == 'maintenance':
-            self.set_maintenance_healthcheck()
+            self.update_maintenance_healthcheck()
         self.event.set()  # refresh stray health check
         self.log.info('Added host %s' % spec.hostname)
         return "Added host '{}' with addr '{}'".format(spec.hostname, spec.addr)
@@ -2023,7 +2023,7 @@ Then run the following:
         self.ssh.reset_con(host)
         # if host was in offline host list, we should remove it now.
         self.offline_hosts_remove(host)
-        self.set_maintenance_healthcheck()
+        self.update_maintenance_healthcheck()
         self.event.set()  # refresh stray health check
         self.log.info('Removed host %s' % host)
         return "Removed {} host '{}'".format('offline' if offline else '', host)
@@ -2139,7 +2139,7 @@ Then run the following:
         self.log.info(msg)
         return msg
 
-    def set_maintenance_healthcheck(self) -> None:
+    def update_maintenance_healthcheck(self) -> None:
         """Raise/update or clear the maintenance health check as needed"""
 
         in_maintenance = self.inventory.get_host_with_state("maintenance")
@@ -2221,7 +2221,7 @@ Then run the following:
         self.inventory._inventory[hostname] = tgt_host
         self.inventory.save()
 
-        self.set_maintenance_healthcheck()
+        self.update_maintenance_healthcheck()
         return f'Daemons for Ceph cluster {self._cluster_fsid} stopped on host {hostname}. Host {hostname} moved to maintenance mode'
 
     @handle_orch_error
@@ -2315,7 +2315,7 @@ Then run the following:
         # could have theoretically made a lot of changes to the host.
         self._invalidate_all_host_metadata_and_kick_serve(hostname)
 
-        self.set_maintenance_healthcheck()
+        self.update_maintenance_healthcheck()
 
         return f"Ceph cluster {self._cluster_fsid} on {hostname} has exited maintenance mode"
 
