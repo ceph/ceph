@@ -12,6 +12,51 @@ using std::make_pair;
 
 namespace crimson::osd {
 
+seastar::future<> PGShardMapping::dump_store_shards(Formatter *f) const {
+  f->dump_int("this shard id", seastar::this_shard_id());
+  f->dump_int("osd shard nums", seastar::smp::count);
+  f->dump_int("store_shard_nums", store_shard_nums);
+
+  for (const auto &i : core_to_num_pgs) {
+    f->open_object_section("core_pgs");
+    f->dump_int("core", i.first);
+    f->dump_int("num_pgs", i.second);
+    f->close_section();
+  }
+
+  if (seastar::smp::count < store_shard_nums) {
+    for (auto i = core_shard_to_num_pgs.begin();
+         i != core_shard_to_num_pgs.end(); ++i) {
+      f->open_object_section("core_store");
+      f->dump_int("core", i->first);
+      for (auto j = i->second.begin();
+           j != i->second.end(); ++j) {
+        f->open_object_section("store");
+        f->dump_int("store_index", j->first);
+        f->dump_int("num_pgs", j->second);
+        f->close_section();
+      }
+      f->close_section();
+    }
+  }
+  if(seastar::smp::count > store_shard_nums) {
+    for (auto i = core_alien_to_num_pgs.begin();
+         i != core_alien_to_num_pgs.end(); ++i) {
+      f->open_object_section("core_alien");
+      f->dump_int("core", i->first);
+      for (auto j = i->second.begin();
+           j != i->second.end(); ++j) {
+        f->open_object_section("alien_core");
+        f->dump_int("alien_core_id", j->first);
+        f->dump_int("num_pgs", j->second);
+        f->close_section();
+      }
+      f->close_section();
+    }
+  }
+  return seastar::now();
+}
+
 seastar::future<std::pair<core_id_t, unsigned int>> PGShardMapping::get_or_create_pg_mapping(
   spg_t pgid,
   core_id_t core_expected,
