@@ -45,6 +45,8 @@ public:
 
   size_t get_num_pgs() const { return pg_to_core.size(); }
 
+  seastar::future<> dump_store_shards(Formatter *f) const;
+
   /// Map to cores in [min_core_mapping, core_mapping_limit)
   PGShardMapping(core_id_t min_core_mapping, core_id_t core_mapping_limit, unsigned int store_shard_nums)
     : store_shard_nums(store_shard_nums) {
