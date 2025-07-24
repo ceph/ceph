@@ -1,6 +1,0 @@
-overrides:
-  ceph:
-    conf:
-      client:
-        setuser: ceph
-        setgroup: ceph
