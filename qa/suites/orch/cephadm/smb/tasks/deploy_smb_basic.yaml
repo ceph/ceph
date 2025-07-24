@@ -51,6 +51,8 @@ tasks:
             "kernel share modes" = "no"
             "read only" = "no"
             "browseable" = "yes"
+            "comment" = ""
+            "max connections" = "0"
             [globals.default.options]
             "load printers" = "no"
             "printing" = "bsd"
