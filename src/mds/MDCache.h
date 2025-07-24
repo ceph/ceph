@@ -527,6 +527,42 @@ class MDCache {
 			       std::map<dirfrag_t,std::vector<dirfrag_t> >& subtrees);
   ESubtreeMap *create_subtree_map();
 
+  /**
+   * Helper wrapper, provides both context object with finish function
+   * and placeholder for formatter. Better alternative to passing formatter as another argument
+   * to the MDSCache function
+   */
+  class C_MDS_DumpStrayDirCtx : public MDSInternalContext {
+  public:
+  void finish(int r) override {
+    ceph_assert(on_finish);
+    MDSContext::finish(r);
+    on_finish(r);
+  }
+  Formatter* get_formatter() const {
+    ceph_assert(dump_formatter);
+    return dump_formatter;
+  }
+  void begin_dump() {
+    if(!started) {
+      started = true;
+      get_formatter()->open_array_section("strays");
+    }
+  }
+  void end_dump() {
+    if(started) {
+      get_formatter()->close_section();
+    }
+  }
+  C_MDS_DumpStrayDirCtx(MDCache *c, Formatter* f, std::function<void(int)>&& ext_on_finish) : 
+   MDSInternalContext(c->mds), cache(c), dump_formatter(f), on_finish(std::move(ext_on_finish)) {}
+  private:
+  MDCache *cache;
+  Formatter* dump_formatter;
+  std::function<void(int)> on_finish;
+  bool started = false;
+  };
+
   MDRequestRef lock_path(filepath p, std::vector<std::string> locks);
 
   void clean_open_file_lists();
@@ -958,6 +994,7 @@ class MDCache {
   void dump_tree(CInode *in, const int cur_depth, const int max_depth, Formatter *f);
 
   void cache_status(Formatter *f);
+  int stray_status(std::unique_ptr<C_MDS_DumpStrayDirCtx> ctx);
 
   void dump_resolve_status(Formatter *f) const;
   void dump_rejoin_status(Formatter *f) const;
@@ -1155,7 +1192,7 @@ class MDCache {
   void handle_open_ino(const cref_t<MMDSOpenIno> &m, int err=0);
   void handle_open_ino_reply(const cref_t<MMDSOpenInoReply> &m);
 
-  void scan_stray_dir(dirfrag_t next=dirfrag_t());
+  int scan_stray_dir(dirfrag_t next=dirfrag_t(), std::unique_ptr<C_MDS_DumpStrayDirCtx> ctx = nullptr);
   // -- replicas --
   void handle_discover(const cref_t<MDiscover> &dis);
   void handle_discover_reply(const cref_t<MDiscoverReply> &m);
