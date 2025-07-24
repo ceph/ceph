@@ -618,4 +618,28 @@ private:
 template std::unique_ptr<AdminSocketHook>
 make_asok_hook<DumpRecoveryReservationsHook>(crimson::osd::ShardServices& shard_services);
 
+class StoreShardNumsHook : public AdminSocketHook {
+public:
+  explicit StoreShardNumsHook(crimson::osd::ShardServices& shard_services) :
+    AdminSocketHook{"dump_store_shards", "", "show store shards on each osd shard"},
+    shard_services(shard_services)
+  {}
+  seastar::future<tell_result_t> call(const cmdmap_t&,
+				      std::string_view format,
+				      ceph::bufferlist&& input) const final
+  {
+    LOG_PREFIX(AdminSocketHook::StoreShardNumsHook);
+    DEBUG("");
+    unique_ptr<Formatter> f{Formatter::create(format, "json-pretty", "json-pretty")};
+    f->open_object_section("Store shards");
+    co_await shard_services.dump_store_shards(f.get());
+    f->close_section();
+    co_return std::move(f);
+  }
+private:
+  crimson::osd::ShardServices& shard_services;
+};
+template std::unique_ptr<AdminSocketHook>
+make_asok_hook<StoreShardNumsHook>(crimson::osd::ShardServices& shard_services);
+
 } // namespace crimson::admin
