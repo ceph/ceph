@@ -20,7 +20,8 @@ Cypress.on('uncaught:exception', (err: Error) => {
 
 Cypress.on('fail', (err: Error) => {
   if (err.message.includes('xhr') && err.message.includes('canceled')) {
+    console.info('M logged on fail', err.message);
     return false; // Ignore canceled XHR requests
   }
-  return true;
+  throw err;
 });
