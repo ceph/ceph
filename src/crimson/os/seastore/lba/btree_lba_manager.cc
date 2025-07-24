@@ -316,7 +316,8 @@ BtreeLBAManager::reserve_region(
   Transaction &t,
   LBAMapping pos,
   laddr_t addr,
-  extent_len_t len)
+  extent_len_t len,
+  extent_types_t type)
 {
   LOG_PREFIX(BtreeLBAManager::reserve_region);
   DEBUGT("{} {}~{}", t, pos, addr, len);
@@ -325,10 +326,10 @@ BtreeLBAManager::reserve_region(
   return with_btree<LBABtree>(
     cache,
     c,
-    [pos=std::move(pos), c, addr, len](auto &btree) mutable {
+    [pos=std::move(pos), c, addr, len, type](auto &btree) mutable {
     auto &cursor = pos.get_effective_cursor();
     auto iter = btree.make_partial_iter(c, cursor);
-    lba_map_val_t val{len, pladdr_t{P_ADDR_ZERO}, EXTENT_DEFAULT_REF_COUNT, 0};
+    lba_map_val_t val{len, pladdr_t{P_ADDR_ZERO}, EXTENT_DEFAULT_REF_COUNT, 0, type};
     return btree.insert(c, iter, addr, val
     ).si_then([c](auto p) {
       auto &[iter, inserted] = p;
@@ -387,7 +388,9 @@ BtreeLBAManager::alloc_extents(
 	      ext->get_length(),
 	      pladdr_t{ext->get_paddr()},
 	      EXTENT_DEFAULT_REF_COUNT,
-	      ext->get_last_committed_crc()}
+	      ext->get_last_committed_crc(),
+	      ext->get_type()
+	    }
 	  ).si_then([ext, c, FNAME, &iter, &ret](auto p) {
 	    auto &[it, inserted] = p;
 	    ceph_assert(inserted);
@@ -482,7 +485,7 @@ BtreeLBAManager::clone_mapping(
 	    state.laddr,
             lba_map_val_t{
 	      state.len, pladdr_t{inter_key.get_local_clone_id()},
-	      EXTENT_DEFAULT_REF_COUNT, 0});
+	      EXTENT_DEFAULT_REF_COUNT, 0, extent_types_t::OBJECT_DATA_BLOCK});
 	}).si_then([c, &state](auto p) {
 	  auto &[iter, inserted] = p;
 	  auto &leaf_node = *iter.get_leaf_node();
@@ -1409,6 +1412,7 @@ BtreeLBAManager::remap_mappings(
 	  auto old_key = mapping.get_key();
 	  auto new_key = (old_key + remap.offset).checked_to_laddr();
 	  val.len = remap.len;
+	  val.type = mapping.get_extent_type();
 	  if (pladdr.is_laddr()) {
 	    val.pladdr = pladdr;
 	  } else {
@@ -1520,7 +1524,9 @@ BtreeLBAManager::_copy_mapping(
 	  ? pladdr_t(state.src.get_intermediate_key().get_local_clone_id())
 	  : pladdr_t(state.src.get_val()),
 	EXTENT_DEFAULT_REF_COUNT,
-	state.src.is_indirect() ? 0 : state.src.get_checksum()}
+	state.src.is_indirect() ? 0 : state.src.get_checksum(),
+	state.src.get_extent_type()
+      }
     ).si_then([&state, extent, c](auto p) {
       auto [iter, inserted] = std::move(p);
       ceph_assert(inserted);
