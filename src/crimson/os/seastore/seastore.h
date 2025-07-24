@@ -479,14 +479,6 @@ public:
         onode.get_metadata_hint(device->get_block_size()));
     }
 
-    omap_root_t rename_omap_root(
-      omap_type_t type,
-      Onode& onode,
-      Onode& d_onode) const {
-      return onode.get_root(type).get(
-        d_onode.get_metadata_hint(device->get_block_size()));
-    }
-
     omaptree_get_value_ret omaptree_get_value(
       Transaction& t,
       omap_root_t&& root,
