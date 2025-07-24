@@ -598,3 +598,14 @@ options:
   services:
   - mds_client
   min: 1
+- name: client_respect_subvolume_snapshot_visibility
+  type: bool
+  level: advanced
+  desc: respect subvolume's snapshots visibility
+  long_desc: option to decide whether to respect the is_snapdir_visible flag
+    set in subvolume's snaprealm
+  default: false
+  services:
+  - mds_client
+  flags:
+  - runtime
