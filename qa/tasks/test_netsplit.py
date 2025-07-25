@@ -193,6 +193,50 @@ class TestNetSplit(CephTestCase):
         except Exception:
             return False
 
+    def _check_mon_netsplit_warning(self):
+        """
+        Returns True if MON_NETSPLIT warning exists in health checks.
+        """
+        (client,) = self.ctx.cluster.only(self.CLIENT).remotes.keys()
+        arg = ['ceph', 'health', 'detail', '--format=json']
+        proc = client.run(args=arg, wait=True, stdout=StringIO(), timeout=30)
+        if proc.exitstatus != 0:
+            log.error("ceph health detail failed")
+            raise Exception("ceph health detail failed")
+        out = proc.stdout.getvalue()
+        j = json.loads(out)
+        checks = j.get("checks", {})
+        return "MON_NETSPLIT" in checks
+
+    def _check_mon_netsplit_warning_raised(self, detail):
+        """
+        Check if the MON_NETSPLIT warning with the given detail is raised.
+        """
+        log.info("Checking if MON_NETSPLIT warning is raised with detail: {}".format(detail))
+        (client,) = self.ctx.cluster.only(self.CLIENT).remotes.keys()
+        arg = ['ceph', 'health', 'detail', '--format=json']
+        proc = client.run(args=arg, wait=True, stdout=StringIO(), timeout=30)
+        if proc.exitstatus != 0:
+            log.error("ceph health detail failed")
+            raise Exception("ceph health detail failed")
+        out = proc.stdout.getvalue()
+        j = json.loads(out)
+        # Access health checks
+        checks = j.get("checks", {})
+        netsplit = checks.get("MON_NETSPLIT", {})
+        if not netsplit:
+            log.info("MON_NETSPLIT not found in health checks")
+            return False
+
+        # Check if the expected detail is present
+        for d in netsplit.get("detail", []):
+            if detail in d.get("message", ""):
+                log.info("Found MON_NETSPLIT warning with detail: {}".format(d))
+                return True
+
+        log.info("MON_NETSPLIT found but detail does not match")
+        return False
+
     def test_netsplit_dc1_dc2(self):
         """
         Test Netsplit between dc1 and dc2
@@ -219,6 +263,13 @@ class TestNetSplit(CephTestCase):
         self.wait_until_true(
             lambda: self._check_if_disconnect(config),
             timeout=self.RECOVERY_PERIOD,
+        )
+        # check if the MON_NETSPLIT warning is raised we expect none
+        # because this is stretch mode
+        self.wait_until_true_and_hold(
+            lambda: not self._check_mon_netsplit_warning(),
+            timeout=self.RECOVERY_PERIOD,
+            success_hold_time=self.SUCCESS_HOLD_TIME
         )
         # check the cluster is accessible
         self.wait_until_true_and_hold(
@@ -263,6 +314,12 @@ class TestNetSplit(CephTestCase):
             lambda: self._check_if_connect(config),
             timeout=self.RECOVERY_PERIOD,
         )
+        # check if no MON_NETSPLIT warning is raised
+        self.wait_until_true_and_hold(
+            lambda: not self._check_mon_netsplit_warning(),
+            timeout=self.RECOVERY_PERIOD,
+            success_hold_time=self.SUCCESS_HOLD_TIME
+        )
         # check if all the PGs are active+clean
         self.wait_until_true_and_hold(
             lambda: self._pg_all_active_clean(),
@@ -304,6 +361,13 @@ class TestNetSplit(CephTestCase):
         self.wait_until_true(
             lambda: self._check_if_disconnect(dc1_dc2),
             timeout=self.RECOVERY_PERIOD,
+        )
+        # check if the MON_NETSPLIT warning is raised we expect none
+        # because this is stretch mode
+        self.wait_until_true_and_hold(
+            lambda: not self._check_mon_netsplit_warning(),
+            timeout=self.RECOVERY_PERIOD,
+            success_hold_time=self.SUCCESS_HOLD_TIME
         )
         # check the cluster is accessible
         self.wait_until_true_and_hold(
@@ -351,6 +415,12 @@ class TestNetSplit(CephTestCase):
         self.wait_until_true(
             lambda: self._check_if_connect(dc1_dc2),
             timeout=self.RECOVERY_PERIOD,
+        )
+        # check if the MON_NETSPLIT warning is not raised
+        self.wait_until_true_and_hold(
+            lambda: not self._check_mon_netsplit_warning(),
+            timeout=self.RECOVERY_PERIOD,
+            success_hold_time=self.SUCCESS_HOLD_TIME
         )
         # check if all the PGs are active+clean
         self.wait_until_true_and_hold(
