@@ -72,9 +72,9 @@ int Credentials::generateCredentials(const DoutPrefixProvider *dpp,
   expiration = ceph::to_iso_8601(exp);
 
   //Session Token - Encrypt using AES
-  auto cryptohandler = cct->get_crypto_manager()->get_handler(CEPH_CRYPTO_AES);
+  auto cryptohandler = cct->get_crypto_manager()->get_handler(CEPH_CRYPTO_AES256KRB5);
   if (! cryptohandler) {
-    ldpp_dout(dpp, 0) << "ERROR: No AES crypto handler found !" << dendl;
+    ldpp_dout(dpp, 0) << "ERROR: No AES256KRB5 crypto handler found !" << dendl;
     return -EINVAL;
   }
   string secret_s = cct->_conf->rgw_sts_key;
@@ -86,7 +86,7 @@ int Credentials::generateCredentials(const DoutPrefixProvider *dpp,
   buffer::ptr secret(secret_s.c_str(), secret_s.length());
   int ret = 0;
   if (ret = cryptohandler->validate_secret(secret); ret < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: Invalid rgw sts key, please ensure it is an alphanumeric key of length 16" << dendl;
+    ldpp_dout(dpp, 0) << "ERROR: Invalid rgw sts key, please ensure it is an alphanumeric key of minimum length 32" << dendl;
     return ret;
   }
   string error;
