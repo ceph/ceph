@@ -645,3 +645,40 @@ class SubvolumeBase(object):
                       f"subvolume={self.subvol_name} group={self.group_name} "
                       f"reason={me.args[1]}, errno:{-me.args[0]}, {os.strerror(-me.args[0])}")
             raise VolumeException(-me.args[0], me.args[1])
+
+    def snapshot_visibility_set(self, value):
+        if value not in ("true", "false"):
+            raise VolumeException(-errno.EINVAL, "snapshot visibility value invalid")
+
+        # subvolume_v2.py's open() returns
+        # volumes/<group-name>/<subvolume-name>/<uuid>/ as the path but the
+        # vxattr ceph.dir.subvolume is set on volumes/<group-name>/<subvolume-name>/
+        # and is checked before setting snapdir visibility, hence we pass the
+        # dir path of the uuid dir otherwise it will return EPERM errorno.
+        subvol_parent_path = os.path.dirname(self.path)
+        snaps_visibility_vxattr = "ceph.dir.subvolume.snaps.visible"
+        try:
+            self.fs.setxattr(subvol_parent_path, snaps_visibility_vxattr,
+                             str(value).encode('utf-8'), 0)
+        except cephfs.Error as e:
+            raise VolumeException(-e.args[0], e.args[1])
+
+        try:
+            return self.fs.getxattr(subvol_parent_path,
+                                    snaps_visibility_vxattr).decode('utf-8')
+        except cephfs.Error as e:
+            raise VolumeException(-e.args[0], e.args[1])
+
+    def snapshot_visibility_get(self):
+
+        # subvolume_v2.py's open() returns
+        # volumes/<group-name>/<subvolume-name>/<uuid>/ as the path but the
+        # vxattr ceph.dir.subvolume is set on volumes/<group-name>/<subvolume-name>/
+        # and is checked before setting snapdir visibility, hence we pass the
+        # dir path of the uuid dir otherwise it will return EPERM errorno.
+        subvol_parent_path = os.path.dirname(self.path)
+        try:
+            return self.fs.getxattr(subvol_parent_path,
+                                    "ceph.dir.subvolume.snaps.visible").decode('utf-8')
+        except cephfs.Error as e:
+            raise VolumeException(-e.args[0], e.args[1])
