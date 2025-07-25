@@ -118,6 +118,73 @@ TEST(Histogram, Decay) {
   ASSERT_EQ(4u, h.h.size());
 }
 
+// test to see if values are recorded in hist , verify by checking for min, max latencies and total latency 
+
+TEST(HistogramLinear, BasicRecordValue) {
+  adaptive_linear_hist_t<uint64_t> h(10,0,100);  //interval size is 10
+
+  h.record_value(5);
+  h.record_value(15);
+  h.record_value(25);
+
+  ASSERT_EQ(h.get_total_count(), 3u);
+  ASSERT_EQ(h.get_min_value(), 5u);
+  ASSERT_EQ(h.get_max_value(), 25u);
+}
+ // test to see if values are put in the right bucket 
+ // also checks the export csv function because it outputs the count of each bucket 
+
+TEST(HistogramLinear, Bucketing) {
+  adaptive_linear_hist_t<uint64_t> h(10,0,100);  
+
+  h.record_value(19);  // goes into raw bucket 10 lower bound
+  h.record_value(21);  // goes into raw bucket 20
+
+  std::stringstream out;
+  h.export_csv(out, "latency", "count",
+    [](uint64_t v){ return std::to_string(v); },
+    [](uint64_t c){ return std::to_string(c); });
+
+  std::string csv = out.str();
+  ASSERT_NE(csv.find("10,1"), -1); //count in bucket 10 should be 1 
+  ASSERT_NE(csv.find("20,1"), -1); //count in bucket 20 should be 1 
+}
+
+// tets to check percentile function 
+
+TEST(HistogramLinear, Percentiles) {
+  adaptive_linear_hist_t<uint64_t> h(10,15,100);
+  h.record_value(5);   
+  h.record_value(15);  
+  h.record_value(25); 
+
+
+  ASSERT_EQ(h.value_at_percentile(0), std::numeric_limits<uint64_t>::min());    // First bucket (rounded to 0)
+  ASSERT_EQ(h.value_at_percentile(50), 15u);  // Middle value in [15,25)
+  ASSERT_EQ(h.value_at_percentile(90), 25u);  // Should be in [25,35)
+}
+
+//single value recorded this should be the value for every percentile 
+TEST(HistogramLinear, SingleValuePercentile) {
+  adaptive_linear_hist_t<uint64_t> h(10,20,100);
+  h.record_value(42);
+
+  ASSERT_EQ(h.get_min_value(), 42u);
+  ASSERT_EQ(h.get_max_value(), 42u);
+  ASSERT_EQ(h.get_total_count(), 1u);
+  ASSERT_EQ(h.value_at_percentile(50), 40u); // there is only 1 bucket so this should be the value for any percentile
+
+}
+//case when no value is recorded when we call get percentile function it should return maximum value of the type of histogram created 
+TEST(HistogramLinear, EmptyHistogramPercentileReturnsInfinity) {
+  adaptive_linear_hist_t<uint64_t> h(10,0,100);  
+  double result = h.value_at_percentile(50);
+  ASSERT_EQ(result,std::numeric_limits<uint64_t>::min() );
+}
+
+
+
+
 /*
  * Local Variables:
  * compile-command: "cd ../.. ; make -j4 &&
