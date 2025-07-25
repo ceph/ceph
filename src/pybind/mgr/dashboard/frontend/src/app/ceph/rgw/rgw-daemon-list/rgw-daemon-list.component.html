@@ -28,12 +28,12 @@
                   [grafanaPath]="'rgw-overview?'"
                   [type]="'metrics'"
                   uid="WAkugZpiz"
-                  grafanaStyle="two">
+                  grafanaStyle="three">
       </cd-grafana>
     </ng-template>
   </ng-container>
 
-  <ng-container ngbNavItem
+  <ng-container ngbNavItemgrafanaStyle
                 *ngIf="grafanaPermission.read && isMultiSite">
     <a ngbNavLink
        i18n>Sync Performance</a>
