@@ -26,7 +26,7 @@ import orchestrator
 from orchestrator import OrchestratorError, set_exception_subject, OrchestratorEvent, \
     DaemonDescriptionStatus, daemon_type_to_service
 from cephadm.services.cephadmservice import CephadmDaemonDeploySpec
-from cephadm.schedule import HostAssignment
+from cephadm.schedule import HostAssignment, HostSelector
 from cephadm.autotune import MemoryAutotuner
 from cephadm.utils import forall_hosts, cephadmNoImage, is_repo_digest, \
     CephadmNoImage, CEPH_TYPES, ContainerInspectInfo, SpecialHostLabels
@@ -812,6 +812,7 @@ class CephadmServe:
         rank_map = None
         if svc.ranked(spec):
             rank_map = self.mgr.spec_store[spec.service_name()].rank_map or {}
+        host_selector = _host_selector(svc)
         ha = HostAssignment(
             spec=spec,
             hosts=self.mgr.cache.get_non_draining_hosts() if spec.service_name(
@@ -827,7 +828,8 @@ class CephadmServe:
             primary_daemon_type=svc.primary_daemon_type(spec),
             per_host_daemon_type=svc.per_host_daemon_type(spec),
             rank_map=rank_map,
-            upgrade_in_progress=(self.mgr.upgrade.upgrade_state is not None)
+            upgrade_in_progress=(self.mgr.upgrade.upgrade_state is not None),
+            host_selector=host_selector,
         )
 
         try:
@@ -1832,3 +1834,9 @@ class CephadmServe:
         self.log.info(f"Deploying cephadm binary to {host}")
         await self.mgr.ssh._write_remote_file(host, self.mgr.cephadm_binary_path,
                                               self.mgr._cephadm, addr=addr)
+
+
+def _host_selector(svc: Any) -> Optional[HostSelector]:
+    if hasattr(svc, 'filter_host_candidates'):
+        return cast(HostSelector, svc)
+    return None

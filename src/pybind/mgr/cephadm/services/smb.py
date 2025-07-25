@@ -1,6 +1,7 @@
 import errno
+import ipaddress
 import logging
-from typing import Any, Dict, List, Tuple, cast, Optional
+from typing import Any, Dict, List, Tuple, cast, Optional, Iterable, Union
 
 from mgr_module import HandleCommandResult
 
@@ -14,6 +15,7 @@ from .cephadmservice import (
     CephadmDaemonDeploySpec,
     simplified_keyring,
 )
+from ..schedule import DaemonPlacement
 
 logger = logging.getLogger(__name__)
 
@@ -59,7 +61,51 @@ class SMBService(CephService):
                         if daemon_id is not None:
                             self.fence(smb_spec.cluster_id)
                         del rank_map[rank][gen]
-                        self.mgr.spec_store.save_rank_map(spec.service_name(), rank_map)
+                        self.mgr.spec_store.save_rank_map(
+                            spec.service_name(), rank_map
+                        )
+
+    def filter_host_candidates(
+        self,
+        spec: ServiceSpec,
+        candidates: Iterable[DaemonPlacement],
+    ) -> List[DaemonPlacement]:
+        logger.debug(
+            'SMBService.filter_host_candidates with candidates: %r',
+            candidates,
+        )
+        smb_spec = cast(SMBSpec, spec)
+        if not smb_spec.bind_addrs:
+            return list(candidates)
+        addr_src = AddressPool.from_spec(smb_spec)
+        filtered = [
+            dc
+            for dc in (self._candidate_in(c, addr_src) for c in candidates)
+            if dc is not None
+        ]
+        if len(filtered) != len(list(candidates)):
+            logger.debug('Filtered host candidates to: %r', filtered)
+        return filtered
+
+    def _candidate_in(
+        self, candidate: DaemonPlacement, addr_src: 'AddressPool'
+    ) -> Optional[DaemonPlacement]:
+        hostnw = self.mgr.cache.networks.get(candidate.hostname, {})
+        if not hostnw:
+            return None
+        ips = set()
+        for net_vals in hostnw.values():
+            for if_vals in net_vals.values():
+                ips.update(if_vals)
+        logger.debug(
+            'Checking if IPs %r from %s are in bindable addrs',
+            ips,
+            candidate.hostname,
+        )
+        for ip in ips:
+            if ip in addr_src:
+                return candidate._replace(ip=ip)
+        return None
 
     def prepare_create(
         self, daemon_spec: CephadmDaemonDeploySpec
@@ -111,6 +157,8 @@ class SMBService(CephService):
                 '', force_ceph_image=True
             )
         config_blobs['service_ports'] = smb_spec.service_ports()
+        if smb_spec.bind_addrs:
+            config_blobs['bind_networks'] = smb_spec.bind_networks()
 
         logger.debug('smb generate_config: %r', config_blobs)
         self._configure_cluster_meta(smb_spec, daemon_spec)
@@ -265,11 +313,14 @@ class SMBService(CephService):
 
         from smb import clustermeta
 
+        addr_src = (
+            AddressPool.from_spec(smb_spec) if smb_spec.bind_addrs else None
+        )
         smb_dmap: clustermeta.DaemonMap = {}
         for dd in daemons:
             assert dd.daemon_type and dd.daemon_id
             assert dd.hostname
-            host_ip = dd.ip or self.mgr.inventory.get_addr(dd.hostname)
+            host_ip = self._ctdb_node_ip(dd, addr_src)
             smb_dmap[dd.name()] = {
                 'daemon_type': dd.daemon_type,
                 'daemon_id': dd.daemon_id,
@@ -278,9 +329,7 @@ class SMBService(CephService):
                 # specific ctdb_ip? (someday?)
             }
         if daemon_spec:
-            host_ip = daemon_spec.ip or self.mgr.inventory.get_addr(
-                daemon_spec.host
-            )
+            host_ip = self._ctdb_node_ip(daemon_spec, addr_src)
             smb_dmap[daemon_spec.name()] = {
                 'daemon_type': daemon_spec.daemon_type,
                 'daemon_id': daemon_spec.daemon_id,
@@ -291,3 +340,48 @@ class SMBService(CephService):
         logger.debug("smb daemon map: %r", smb_dmap)
         with clustermeta.rados_object(self.mgr, uri) as cmeta:
             cmeta.sync_ranks(rank_map, smb_dmap)
+
+    def _ctdb_node_ip(
+        self, daemon: Any, addr_src: Optional['AddressPool'] = None
+    ) -> str:
+        if isinstance(daemon, CephadmDaemonDeploySpec):
+            ip = daemon.ip
+            hostname = daemon.host or ''
+        elif isinstance(daemon, DaemonDescription):
+            ip = daemon.ip
+            hostname = daemon.hostname or ''
+        else:
+            raise ValueError('unexpected deamon type: {daemon!r}')
+        logger.debug('_ctdb_node_ip: ip=%r, hostname=%r', ip, hostname)
+        if not ip:
+            assert hostname, 'no hostname available'
+            ip = self.mgr.inventory.get_addr(hostname)
+        assert ip, "failed to assign ip"
+        if addr_src and ip not in addr_src:
+            raise ValueError(
+                f'{ip} for host {hostname} does not match bind_addrs'
+            )
+        return ip
+
+
+Network = Union[ipaddress.IPv4Network, ipaddress.IPv6Network]
+
+
+class AddressPool:
+    def __init__(self, nets: Iterable[Network]) -> None:
+        self._nets = set(nets)
+
+    def __contains__(self, other: Union[str, ipaddress.IPv4Address]) -> bool:
+        if isinstance(other, str):
+            addr = ipaddress.ip_address(other)
+        else:
+            addr = other
+        return any((addr in net) for net in self._nets)
+
+    @classmethod
+    def from_spec(cls, spec: SMBSpec) -> 'AddressPool':
+        nets = set()
+        for baddr in spec.bind_addrs or []:
+            for net in baddr.as_networks():
+                nets.add(net)
+        return cls(nets)
