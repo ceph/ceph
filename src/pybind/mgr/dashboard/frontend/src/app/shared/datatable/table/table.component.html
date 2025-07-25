@@ -228,11 +228,20 @@
 
 <ng-template #rowDetailTpl
              let-row="data">
-  <div *ngIf="row[identifier] === expanded?.[identifier]"
-       (mouseenter)="onRowDetailHover($event)"
-       data-testid="datatable-row-detail">
+  @if (row[identifier] === expanded?.[identifier] && !scrollable) {
+  <div
+    (mouseenter)="onRowDetailHover($event)"
+    data-testid="datatable-row-detail">
     <ng-template [ngTemplateOutlet]="rowDetail.template"></ng-template>
   </div>
+  } @else if (row[identifier] === expanded?.[identifier] && scrollable) {
+  <div
+    (mouseenter)="onRowDetailHover($event)"
+    data-testid="datatable-row-detail"
+    class="scrollable-expanded-row">
+    <ng-template [ngTemplateOutlet]="rowDetail.template"></ng-template>
+  </div>
+  }
 </ng-template>
 
 <ng-template #defaultValueTpl

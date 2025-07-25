@@ -206,6 +206,12 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
   theme: string;
 
   /**
+   * Use to make the expandable row scrollable with max-height
+   */
+  @Input()
+  scrollable: boolean = true;
+
+  /**
    * Should be a function to update the input data if undefined nothing will be triggered
    *
    * Sometimes it's useful to only define fetchData once.
