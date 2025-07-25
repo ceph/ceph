@@ -3,15 +3,15 @@
 Mount CephFS on Windows
 =======================
 
-``ceph-dokan`` can be used for mounting CephFS filesystems on Windows.
-It leverages Dokany, a Windows driver that allows implementing filesystems in
-userspace, pretty much like FUSE.
+``ceph-dokan`` is used to mount CephFS filesystems on Windows.  It leverages
+Dokany, a Windows driver that allows implementing filesystems in userspace in a
+manner similar to FUSE.
 
-Please see the `installation guide`_ to get started.
+See the `installation guide`_ to get started.
 
 .. note::
 
-   Please see the `OS recommendations`_ regarding client package support.
+   See the `OS recommendations`_ for information about client package support.
 
 Usage
 =====
@@ -19,18 +19,18 @@ Usage
 Mounting filesystems
 --------------------
 
-In order to mount a ceph filesystem, the following command can be used::
+Run the following command to mount a Ceph filesystem::
 
-    ceph-dokan.exe -c c:\ceph.conf -l x
+   ceph-dokan.exe -c c:\ceph.conf -l x
 
-This will mount the default ceph filesystem using the drive letter ``x``.
-If ``ceph.conf`` is placed at the default location, which is
-``%ProgramData%\ceph\ceph.conf``, then this argument becomes optional.
+This command mounts the default Ceph filesystem using the drive letter ``x``.
+If ``ceph.conf`` is present in the default location
+(``%ProgramData%\ceph\ceph.conf``, then this argument is optional.
 
-The ``-l`` argument also allows using an empty folder as a mount point
+The ``-l`` argument allows the use of an empty folder as the mount point
 instead of a drive letter.
 
-The uid and gid used for mounting the filesystem default to 0 and may be
+The uid and gid used for mounting the filesystem default to ``0`` and can be
 changed using the following ``ceph.conf`` options::
 
     [client]
@@ -38,13 +38,13 @@ changed using the following ``ceph.conf`` options::
     client_mount_uid = 1000
     client_mount_gid = 1000
 
-If you have more than one FS on your Ceph cluster, use the option
-``--client_fs`` to mount the non-default FS::
+If you have more than one file system on your Ceph cluster, use the option
+``--client_fs`` to mount the non-default file system::
 
     mkdir -Force C:\mnt\mycephfs2
     ceph-dokan.exe --mountpoint C:\mnt\mycephfs2 --client_fs mycephfs2
 
-CephFS subdirectories can be mounted using the ``--root-path`` parameter::
+Mount CephFS subdirectories by using the ``--root-path`` parameter::
 
     ceph-dokan -l y --root-path /a
 
@@ -59,7 +59,7 @@ If the ``-o --removable`` flags are set, the mounts will show up in the
               Z Ceph       Ceph
               W Ceph       Ceph - new_fs
 
-Please use ``ceph-dokan --help`` for a full list of arguments.
+Run ``ceph-dokan --help`` for a full list of arguments.
 
 Credentials
 -----------
