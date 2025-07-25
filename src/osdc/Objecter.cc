@@ -3202,7 +3202,7 @@ int Objecter::_calc_target(op_target_t *t, const Op *op, bool any_change)
             ec_direct = true;
           }
         }
-        ldout(cct, 0) << __func__ << " direct"
+        ldout(cct, 20) << __func__ << " direct"
                       << "_read=" << ec_direct
                       << " offset=" << offset
                       << " length=" << length
