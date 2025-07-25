@@ -1,5 +1,5 @@
 import { Component, OnInit } from '@angular/core';
-import { FormControl, Validators } from '@angular/forms';
+import { AbstractControl, FormControl, Validators } from '@angular/forms';
 import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
 import { CdForm } from '~/app/shared/forms/cd-form';
 import { CdFormBuilder } from '~/app/shared/forms/cd-form-builder';
@@ -9,18 +9,46 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { RgwStorageClassService } from '~/app/shared/api/rgw-storage-class.service';
 import { RgwZonegroupService } from '~/app/shared/api/rgw-zonegroup.service';
 import {
-  CLOUD_TIER,
+  ALLOW_READ_THROUGH_TEXT,
   DEFAULT_PLACEMENT,
+  MULTIPART_MIN_PART_TEXT,
+  MULTIPART_SYNC_THRESHOLD_TEXT,
   PlacementTarget,
   RequestModel,
+  RETAIN_HEAD_OBJECT_TEXT,
   StorageClass,
   Target,
+  TARGET_ACCESS_KEY_TEXT,
+  TARGET_ENDPOINT_TEXT,
+  TARGET_PATH_TEXT,
+  TARGET_REGION_TEXT,
+  TARGET_SECRET_KEY_TEXT,
   TierTarget,
+  TIER_TYPE,
   ZoneGroup,
-  ZoneGroupDetails
+  ZoneGroupDetails,
+  CLOUDS3_STORAGE_CLASS_TEXT,
+  LOCAL_STORAGE_CLASS_TEXT,
+  GLACIER_STORAGE_CLASS_TEXT,
+  GLACIER_RESTORE_DAY_TEXT,
+  GLACIER_RESTORE_TIER_TYPE_TEXT,
+  RESTORE_DAYS_TEXT,
+  READTHROUGH_RESTORE_DAYS_TEXT,
+  RESTORE_STORAGE_CLASS_TEXT,
+  TIER_TYPE_DISPLAY,
+  S3Glacier,
+  StorageClassOption,
+  STORAGE_CLASS_CONSTANTS,
+  STANDARD_TIER_TYPE_TEXT,
+  EXPEDITED_TIER_TYPE_TEXT,
+  TextLabels,
+  CLOUD_TIER_REQUIRED_FIELDS,
+  GLACIER_REQUIRED_FIELDS
 } from '../models/rgw-storage-class.model';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { NotificationService } from '~/app/shared/services/notification.service';
+import { CdValidators } from '~/app/shared/forms/cd-validators';
+import { FormatterService } from '~/app/shared/services/formatter.service';
 
 @Component({
   selector: 'cd-rgw-storage-class-form',
@@ -32,23 +60,21 @@ export class RgwStorageClassFormComponent extends CdForm implements OnInit {
   action: string;
   resource: string;
   editing: boolean;
-  targetPathText: string;
-  targetEndpointText: string;
-  targetRegionText: string;
   showAdvanced: boolean = false;
   defaultZoneGroup: string;
   zonegroupNames: ZoneGroup[];
   placementTargets: string[] = [];
-  multipartMinPartText: string;
-  multipartSyncThreholdText: string;
   selectedZoneGroup: string;
   defaultZonegroup: ZoneGroup;
   zoneGroupDetails: ZoneGroupDetails;
-  targetSecretKeyText: string;
-  targetAccessKeyText: string;
-  retainHeadObjectText: string;
   storageClassInfo: StorageClass;
   tierTargetInfo: TierTarget;
+  glacierStorageClassDetails: S3Glacier;
+  allowReadThrough: boolean = false;
+  TIER_TYPE = TIER_TYPE;
+  TIER_TYPE_DISPLAY = TIER_TYPE_DISPLAY;
+  storageClassOptions: StorageClassOption[];
+  helpTextLabels: TextLabels;
 
   constructor(
     public actionLabels: ActionLabelsI18n,
@@ -57,7 +83,8 @@ export class RgwStorageClassFormComponent extends CdForm implements OnInit {
     private rgwStorageService: RgwStorageClassService,
     private rgwZoneGroupService: RgwZonegroupService,
     private router: Router,
-    private route: ActivatedRoute
+    private route: ActivatedRoute,
+    public formatter: FormatterService
   ) {
     super();
     this.resource = $localize`Tiering Storage Class`;
@@ -66,22 +93,32 @@ export class RgwStorageClassFormComponent extends CdForm implements OnInit {
   }
 
   ngOnInit() {
-    this.multipartMinPartText =
-      'It specifies that objects this size or larger are transitioned to the cloud using multipart upload.';
-    this.multipartSyncThreholdText =
-      'It specifies the minimum part size to use when transitioning objects using multipart upload.';
-    this.targetPathText =
-      'Target Path refers to the storage location (e.g., bucket or container) in the cloud where data will be stored.';
-    this.targetRegionText = 'The region of the remote cloud service where storage is located.';
-    this.targetEndpointText = 'The URL endpoint of the remote cloud service for accessing storage.';
-    this.targetAccessKeyText =
-      "To view or copy your access key, go to your cloud service's user management or credentials section, find your user profile, and locate the access key. You can view and copy the key by following the instructions provided.";
-
-    this.targetSecretKeyText =
-      "To view or copy your secret key, go to your cloud service's user management or credentials section, find your user profile, and locate the access key. You can view and copy the key by following the instructions provided.";
-    this.retainHeadObjectText =
-      'Retain object metadata after transition to the cloud (default: false).';
+    this.helpTextLabels = {
+      targetPathText: TARGET_PATH_TEXT,
+      targetEndpointText: TARGET_ENDPOINT_TEXT,
+      targetRegionText: TARGET_REGION_TEXT,
+      targetAccessKeyText: TARGET_ACCESS_KEY_TEXT,
+      targetSecretKeyText: TARGET_SECRET_KEY_TEXT,
+      retainHeadObjectText: RETAIN_HEAD_OBJECT_TEXT,
+      allowReadThroughText: ALLOW_READ_THROUGH_TEXT,
+      storageClassText: LOCAL_STORAGE_CLASS_TEXT,
+      multipartMinPartText: MULTIPART_MIN_PART_TEXT,
+      multipartSyncThresholdText: MULTIPART_SYNC_THRESHOLD_TEXT,
+      tiertypeText: STANDARD_TIER_TYPE_TEXT,
+      glacierRestoreDayText: GLACIER_RESTORE_DAY_TEXT,
+      glacierRestoreTiertypeText: GLACIER_RESTORE_TIER_TYPE_TEXT,
+      restoreDaysText: RESTORE_DAYS_TEXT,
+      readthroughrestoreDaysText: READTHROUGH_RESTORE_DAYS_TEXT,
+      restoreStorageClassText: RESTORE_STORAGE_CLASS_TEXT
+    };
+    this.storageClassOptions = [
+      { value: TIER_TYPE.LOCAL, label: TIER_TYPE_DISPLAY.LOCAL },
+      { value: TIER_TYPE.CLOUD_TIER, label: TIER_TYPE_DISPLAY.CLOUD_TIER },
+      { value: TIER_TYPE.GLACIER, label: TIER_TYPE_DISPLAY.GLACIER }
+    ];
     this.createForm();
+    this.storageClassTypeText();
+    this.updateTierTypeHelpText();
     this.loadingReady();
     this.loadZoneGroup();
     if (this.editing) {
@@ -95,34 +132,112 @@ export class RgwStorageClassFormComponent extends CdForm implements OnInit {
             placementTargetInfo,
             this.storageClassInfo.storage_class
           );
-          let response = this.tierTargetInfo.val.s3;
+          let response = this.tierTargetInfo?.val?.s3;
           this.storageClassForm.get('zonegroup').disable();
           this.storageClassForm.get('placement_target').disable();
           this.storageClassForm.get('storage_class').disable();
-          this.storageClassForm.get('zonegroup').setValue(this.storageClassInfo.zonegroup_name);
-          this.storageClassForm.get('region').setValue(response.region);
-          this.storageClassForm
-            .get('placement_target')
-            .setValue(this.storageClassInfo.placement_target);
-          this.storageClassForm.get('endpoint').setValue(response.endpoint);
-          this.storageClassForm.get('storage_class').setValue(this.storageClassInfo.storage_class);
-          this.storageClassForm.get('access_key').setValue(response.access_key);
-          this.storageClassForm.get('secret_key').setValue(response.secret);
-          this.storageClassForm.get('target_path').setValue(response.target_path);
-          this.storageClassForm
-            .get('retain_head_object')
-            .setValue(this.tierTargetInfo?.val?.retain_head_object || false);
-          this.storageClassForm
-            .get('multipart_sync_threshold')
-            .setValue(response.multipart_sync_threshold || '');
-          this.storageClassForm
-            .get('multipart_min_part_size')
-            .setValue(response.multipart_min_part_size || '');
+          if (
+            this.tierTargetInfo?.val?.tier_type === TIER_TYPE.CLOUD_TIER ||
+            this.tierTargetInfo?.val?.tier_type === TIER_TYPE.GLACIER
+          ) {
+            this.storageClassForm.get('storageClassType').disable();
+          }
+          this.storageClassForm.patchValue({
+            zonegroup: this.storageClassInfo?.zonegroup_name,
+            region: response?.region,
+            placement_target: this.storageClassInfo?.placement_target,
+            storageClassType: this.tierTargetInfo?.val?.tier_type ?? TIER_TYPE.LOCAL,
+            target_endpoint: response?.endpoint,
+            storage_class: this.storageClassInfo?.storage_class,
+            access_key: response?.access_key,
+            secret_key: response?.secret,
+            target_path: response?.target_path,
+            retain_head_object: this.tierTargetInfo?.val?.retain_head_object || false,
+            multipart_sync_threshold: response?.multipart_sync_threshold || '',
+            multipart_min_part_size: response?.multipart_min_part_size || '',
+            allow_read_through: this.tierTargetInfo?.val?.allow_read_through || false,
+            restore_storage_class: this.tierTargetInfo?.val?.restore_storage_class,
+            read_through_restore_days: this.tierTargetInfo?.val?.read_through_restore_days
+          });
+          if (this.tierTargetInfo?.val?.tier_type == TIER_TYPE.GLACIER) {
+            let glacierResponse = this.tierTargetInfo?.val['s3-glacier'];
+            this.storageClassForm.patchValue({
+              glacier_restore_tier_type: glacierResponse.glacier_restore_tier_type,
+              glacier_restore_days: glacierResponse.glacier_restore_days
+            });
+          }
         });
+    }
+    this.storageClassForm.get('storageClassType').valueChanges.subscribe((value) => {
+      this.updateValidatorsBasedOnStorageClass(value);
+    });
+    this.storageClassForm.get('allow_read_through').valueChanges.subscribe((value) => {
+      this.onAllowReadThroughChange(value);
+    });
+  }
+
+  private updateValidatorsBasedOnStorageClass(value: string) {
+    GLACIER_REQUIRED_FIELDS.forEach((field) => {
+      const control = this.storageClassForm.get(field);
+
+      if (
+        (value === TIER_TYPE.CLOUD_TIER && CLOUD_TIER_REQUIRED_FIELDS.includes(field)) ||
+        (value === TIER_TYPE.GLACIER && GLACIER_REQUIRED_FIELDS.includes(field))
+      ) {
+        control.setValidators([Validators.required]);
+      } else {
+        control.clearValidators();
+      }
+      control.updateValueAndValidity();
+    });
+
+    if (this.editing) {
+      const defaultValues = {
+        allow_read_through: false,
+        read_through_restore_days: STORAGE_CLASS_CONSTANTS.DEFAULT_READTHROUGH_RESTORE_DAYS,
+        restore_storage_class: STORAGE_CLASS_CONSTANTS.DEFAULT_STORAGE_CLASS,
+        multipart_min_part_size: STORAGE_CLASS_CONSTANTS.DEFAULT_MULTIPART_MIN_PART_SIZE,
+        multipart_sync_threshold: STORAGE_CLASS_CONSTANTS.DEFAULT_MULTIPART_SYNC_THRESHOLD
+      };
+      Object.keys(defaultValues).forEach((key) => {
+        this.storageClassForm.get(key).setValue(defaultValues[key]);
+      });
     }
   }
 
+  storageClassTypeText() {
+    this.storageClassForm?.get('storageClassType')?.valueChanges.subscribe((value) => {
+      if (value === TIER_TYPE.LOCAL) {
+        this.helpTextLabels.storageClassText = LOCAL_STORAGE_CLASS_TEXT;
+      } else if (value === TIER_TYPE.CLOUD_TIER) {
+        this.helpTextLabels.storageClassText = CLOUDS3_STORAGE_CLASS_TEXT;
+      } else if (value === TIER_TYPE.GLACIER) {
+        this.helpTextLabels.storageClassText = GLACIER_STORAGE_CLASS_TEXT;
+      }
+    });
+  }
+
+  updateTierTypeHelpText() {
+    this.storageClassForm?.get('glacier_restore_tier_type')?.valueChanges.subscribe((value) => {
+      if (value === STORAGE_CLASS_CONSTANTS.DEFAULT_STORAGE_CLASS) {
+        this.helpTextLabels.tiertypeText = STANDARD_TIER_TYPE_TEXT;
+      } else {
+        this.helpTextLabels.tiertypeText = EXPEDITED_TIER_TYPE_TEXT;
+      }
+    });
+  }
+
   createForm() {
+    const self = this;
+
+    const lockDaysValidator = CdValidators.custom('lockDays', () => {
+      if (!self.storageClassForm || !self.storageClassForm.getRawValue()) {
+        return false;
+      }
+
+      const lockDays = Number(self.storageClassForm.getValue('read_through_restore_days'));
+      return !Number.isInteger(lockDays) || lockDays === 0;
+    });
     this.storageClassForm = this.formBuilder.group({
       storage_class: new FormControl('', {
         validators: [Validators.required]
@@ -130,23 +245,56 @@ export class RgwStorageClassFormComponent extends CdForm implements OnInit {
       zonegroup: new FormControl(this.selectedZoneGroup, {
         validators: [Validators.required]
       }),
-      region: new FormControl('', {
-        validators: [Validators.required]
-      }),
+      region: new FormControl('', [
+        CdValidators.composeIf({ storageClassType: TIER_TYPE.CLOUD_TIER }, [Validators.required])
+      ]),
       placement_target: new FormControl('', {
         validators: [Validators.required]
       }),
-      endpoint: new FormControl(null, {
-        validators: [Validators.required]
+      target_endpoint: new FormControl(null, {
+        validators: [CdValidators.url, Validators.required]
       }),
-      access_key: new FormControl(null, Validators.required),
-      secret_key: new FormControl(null, Validators.required),
-      target_path: new FormControl('', {
-        validators: [Validators.required]
-      }),
-      retain_head_object: new FormControl(false),
-      multipart_sync_threshold: new FormControl(33554432),
-      multipart_min_part_size: new FormControl(33554432)
+      access_key: new FormControl(null, [
+        CdValidators.composeIf({ storageClassType: TIER_TYPE.CLOUD_TIER }, [Validators.required])
+      ]),
+      secret_key: new FormControl(null, [
+        CdValidators.composeIf({ storageClassType: TIER_TYPE.CLOUD_TIER }, [Validators.required])
+      ]),
+      target_path: new FormControl('', [
+        CdValidators.composeIf({ storageClassType: TIER_TYPE.CLOUD_TIER }, [Validators.required])
+      ]),
+      retain_head_object: new FormControl(true),
+      glacier_restore_tier_type: new FormControl(STORAGE_CLASS_CONSTANTS.DEFAULT_STORAGE_CLASS, [
+        CdValidators.composeIf({ storageClassType: TIER_TYPE.GLACIER }, [Validators.required])
+      ]),
+      glacier_restore_days: new FormControl(STORAGE_CLASS_CONSTANTS.DEFAULT_GLACIER_RESTORE_DAYS, [
+        CdValidators.composeIf({ storageClassType: TIER_TYPE.GLACIER || TIER_TYPE.CLOUD_TIER }, [
+          CdValidators.number(false),
+          lockDaysValidator
+        ])
+      ]),
+      restore_storage_class: new FormControl(STORAGE_CLASS_CONSTANTS.DEFAULT_STORAGE_CLASS),
+      read_through_restore_days: new FormControl(
+        {
+          value: STORAGE_CLASS_CONSTANTS.DEFAULT_READTHROUGH_RESTORE_DAYS,
+          disabled: true
+        },
+        CdValidators.composeIf(
+          (form: AbstractControl) => {
+            const type = form.get('storageClassType')?.value;
+            return type === TIER_TYPE.GLACIER || type === TIER_TYPE.CLOUD_TIER;
+          },
+          [CdValidators.number(false), lockDaysValidator]
+        )
+      ),
+      multipart_sync_threshold: new FormControl(
+        STORAGE_CLASS_CONSTANTS.DEFAULT_MULTIPART_SYNC_THRESHOLD
+      ),
+      multipart_min_part_size: new FormControl(
+        STORAGE_CLASS_CONSTANTS.DEFAULT_MULTIPART_MIN_PART_SIZE
+      ),
+      allow_read_through: new FormControl(false),
+      storageClassType: new FormControl(TIER_TYPE.LOCAL, Validators.required)
     });
   }
 
@@ -168,7 +316,6 @@ export class RgwStorageClassFormComponent extends CdForm implements OnInit {
           this.defaultZonegroup = this.zonegroupNames.find(
             (zonegroups: ZoneGroup) => zonegroups.id === data.default_zonegroup
           );
-
           this.storageClassForm.get('zonegroup').setValue(this.defaultZonegroup.name);
           this.onZonegroupChange();
           resolve();
@@ -239,38 +386,129 @@ export class RgwStorageClassFormComponent extends CdForm implements OnInit {
   }
 
   getTierTargetByStorageClass(placementTargetInfo: PlacementTarget, storageClass: string) {
-    const tierTarget = placementTargetInfo.tier_targets.find(
+    const tierTarget = placementTargetInfo?.tier_targets?.find(
       (target: TierTarget) => target.val.storage_class === storageClass
     );
     return tierTarget;
   }
 
+  onAllowReadThroughChange(checked: boolean): void {
+    this.allowReadThrough = checked;
+    const readThroughDaysControl = this.storageClassForm.get('read_through_restore_days');
+    if (this.allowReadThrough) {
+      this.storageClassForm.get('retain_head_object')?.setValue(true);
+      this.storageClassForm.get('retain_head_object')?.disable();
+      readThroughDaysControl?.enable();
+    } else {
+      this.storageClassForm.get('retain_head_object')?.enable();
+      readThroughDaysControl?.disable();
+    }
+  }
+
+  isTierMatch(...types: string[]): boolean {
+    const tierType = this.storageClassForm.getValue('storageClassType');
+    return types.includes(tierType);
+  }
+
   buildRequest() {
+    if (this.storageClassForm.errors) return null;
+
     const rawFormValue = _.cloneDeep(this.storageClassForm.value);
     const zoneGroup = this.storageClassForm.get('zonegroup').value;
     const storageClass = this.storageClassForm.get('storage_class').value;
     const placementId = this.storageClassForm.get('placement_target').value;
-    const requestModel: RequestModel = {
-      zone_group: zoneGroup,
-      placement_targets: [
-        {
-          tags: [],
-          placement_id: placementId,
-          storage_class: storageClass,
-          tier_type: CLOUD_TIER,
-          tier_config: {
-            endpoint: rawFormValue.endpoint,
-            access_key: rawFormValue.access_key,
-            secret: rawFormValue.secret_key,
-            target_path: rawFormValue.target_path,
-            retain_head_object: rawFormValue.retain_head_object,
-            region: rawFormValue.region,
-            multipart_sync_threshold: rawFormValue.multipart_sync_threshold,
-            multipart_min_part_size: rawFormValue.multipart_min_part_size
-          }
-        }
-      ]
+    const storageClassType = this.storageClassForm.get('storageClassType').value;
+    const retain_head_object = this.storageClassForm.get('retain_head_object').value;
+    const multipart_min_part_size = this.formatter.toBytes(
+      this.storageClassForm.get('multipart_min_part_size').value
+    );
+    const multipart_sync_threshold = this.formatter.toBytes(
+      this.storageClassForm.get('multipart_sync_threshold').value
+    );
+    return this.buildPlacementTargets(
+      storageClassType,
+      zoneGroup,
+      placementId,
+      storageClass,
+      retain_head_object,
+      rawFormValue,
+      multipart_sync_threshold,
+      multipart_min_part_size
+    );
+  }
+
+  private buildPlacementTargets(
+    storageClassType: string,
+    zoneGroup: string,
+    placementId: string,
+    storageClass: string,
+    retain_head_object: boolean,
+    rawFormValue: any,
+    multipart_sync_threshold: number,
+    multipart_min_part_size: number
+  ): RequestModel {
+    const baseTarget = {
+      placement_id: placementId,
+      storage_class: storageClass
     };
-    return requestModel;
+
+    if (storageClassType === TIER_TYPE.LOCAL) {
+      return {
+        zone_group: zoneGroup,
+        placement_targets: [baseTarget]
+      };
+    }
+
+    const tierConfig = {
+      endpoint: rawFormValue.target_endpoint,
+      access_key: rawFormValue.access_key,
+      secret: rawFormValue.secret_key,
+      target_path: rawFormValue.target_path,
+      retain_head_object,
+      allow_read_through: rawFormValue.allow_read_through,
+      region: rawFormValue.region,
+      multipart_sync_threshold: multipart_sync_threshold,
+      multipart_min_part_size: multipart_min_part_size,
+      restore_storage_class: rawFormValue.restore_storage_class,
+      ...(rawFormValue.allow_read_through
+        ? { read_through_restore_days: rawFormValue.read_through_restore_days }
+        : {})
+    };
+
+    if (storageClassType === TIER_TYPE.CLOUD_TIER) {
+      return {
+        zone_group: zoneGroup,
+        placement_targets: [
+          {
+            ...baseTarget,
+            tier_type: TIER_TYPE.CLOUD_TIER,
+            tier_config: {
+              ...tierConfig
+            }
+          }
+        ]
+      };
+    }
+
+    if (storageClassType === TIER_TYPE.GLACIER) {
+      return {
+        zone_group: zoneGroup,
+        placement_targets: [
+          {
+            ...baseTarget,
+            tier_type: TIER_TYPE.GLACIER,
+            tier_config: {
+              ...tierConfig,
+              glacier_restore_days: rawFormValue.glacier_restore_days,
+              glacier_restore_tier_type: rawFormValue.glacier_restore_tier_type
+            }
+          }
+        ]
+      };
+    }
+    return {
+      zone_group: zoneGroup,
+      placement_targets: [baseTarget]
+    };
   }
 }

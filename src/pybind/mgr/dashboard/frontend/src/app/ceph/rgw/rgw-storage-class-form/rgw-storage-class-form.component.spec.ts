@@ -14,6 +14,7 @@ import {
 } from 'carbon-components-angular';
 import { CoreModule } from '~/app/core/core.module';
 import { RgwStorageClassFormComponent } from './rgw-storage-class-form.component';
+import { TIER_TYPE_DISPLAY } from '../models/rgw-storage-class.model';
 
 describe('RgwStorageClassFormComponent', () => {
   let component: RgwStorageClassFormComponent;
@@ -68,14 +69,18 @@ describe('RgwStorageClassFormComponent', () => {
               name: 'default-placement',
               tier_targets: [
                 {
+                  key: 'test',
                   val: {
-                    storage_class: 'CLOUDIBM',
                     tier_type: 'cloud-s3',
                     retain_head_object: true,
+                    storage_class: 'CLOUDIBM',
+                    allow_read_through: true,
+                    read_through_restore_days: 1,
+                    restore_storage_class: 'test67',
                     s3: {
+                      storage_class: 'CLOUDIBM',
                       endpoint: 'https://s3.amazonaws.com',
                       access_key: 'ACCESSKEY',
-                      storage_class: 'STANDARD',
                       target_path: '/path/to/storage',
                       target_storage_class: 'STANDARD',
                       region: 'useastr1',
@@ -83,30 +88,10 @@ describe('RgwStorageClassFormComponent', () => {
                       multipart_min_part_size: 87877,
                       multipart_sync_threshold: 987877,
                       host_style: true
-                    }
-                  }
-                }
-              ]
-            },
-            {
-              name: 'placement1',
-              tier_targets: [
-                {
-                  val: {
-                    storage_class: 'CloudIBM',
-                    tier_type: 'cloud-s3',
-                    retain_head_object: true,
-                    s3: {
-                      endpoint: 'https://s3.amazonaws.com',
-                      access_key: 'ACCESSKEY',
-                      storage_class: 'GLACIER',
-                      target_path: '/pathStorage',
-                      target_storage_class: 'CloudIBM',
-                      region: 'useast1',
-                      secret: 'SECRETKEY',
-                      multipart_min_part_size: 187988787,
-                      multipart_sync_threshold: 878787878,
-                      host_style: false
+                    },
+                    's3-glacier': {
+                      glacier_restore_days: 5,
+                      glacier_restore_tier_type: 'Standard'
                     }
                   }
                 }
@@ -118,7 +103,7 @@ describe('RgwStorageClassFormComponent', () => {
     };
     component.storageClassForm.get('zonegroup').setValue('zonegroup1');
     component.onZonegroupChange();
-    expect(component.placementTargets).toEqual(['default-placement', 'placement1']);
+    expect(component.placementTargets).toEqual(['default-placement']);
     expect(component.storageClassForm.get('placement_target').value).toBe('default-placement');
   });
 
@@ -127,16 +112,72 @@ describe('RgwStorageClassFormComponent', () => {
     component.storageClassForm.get('storage_class').setValue(storageClassName);
     component.storageClassForm.get('zonegroup').setValue('zonegroup1');
     component.storageClassForm.get('placement_target').setValue('placement1');
-    component.storageClassForm.get('endpoint').setValue('http://ams03.com');
+    component.storageClassForm.get('target_endpoint').setValue('http://ceph-node-00:8090');
     component.storageClassForm.get('access_key').setValue('accesskey');
     component.storageClassForm.get('secret_key').setValue('secretkey');
     component.storageClassForm.get('target_path').setValue('/target');
     component.storageClassForm.get('retain_head_object').setValue(true);
+    component.storageClassForm.get('allow_read_through').setValue(true);
     component.storageClassForm.get('region').setValue('useast1');
     component.storageClassForm.get('multipart_sync_threshold').setValue(1024);
     component.storageClassForm.get('multipart_min_part_size').setValue(256);
     component.goToListView();
     component.submitAction();
     expect(component).toBeTruthy();
+  });
+
+  it('should set required validators for CLOUD_TIER fields', () => {
+    (component as any).updateValidatorsBasedOnStorageClass(TIER_TYPE_DISPLAY.CLOUD_TIER);
+    const requiredFields = ['region', 'target_endpoint', 'access_key', 'secret_key', 'target_path'];
+    requiredFields.forEach((field) => {
+      const control = component.storageClassForm.get(field);
+      control.setValue('');
+      control.updateValueAndValidity();
+    });
+    ['glacier_restore_tier_type', 'restore_storage_class'].forEach((field) => {
+      const control = component.storageClassForm.get(field);
+      control.setValue('');
+      control.updateValueAndValidity();
+      expect(component).toBeTruthy();
+    });
+  });
+
+  it('should set required validators for GLACIER fields', () => {
+    (component as any).updateValidatorsBasedOnStorageClass(TIER_TYPE_DISPLAY.GLACIER);
+    const requiredFields = [
+      'region',
+      'target_endpoint',
+      'access_key',
+      'secret_key',
+      'target_path',
+      'glacier_restore_tier_type',
+      'restore_storage_class'
+    ];
+    requiredFields.forEach((field) => {
+      const control = component.storageClassForm.get(field);
+      control.setValue('');
+      control.updateValueAndValidity();
+      expect(component).toBeTruthy();
+    });
+  });
+
+  it('should clear validators for LOCAL fields', () => {
+    (component as any).updateValidatorsBasedOnStorageClass(TIER_TYPE_DISPLAY.LOCAL);
+
+    const allFields = [
+      'region',
+      'target_endpoint',
+      'access_key',
+      'secret_key',
+      'target_path',
+      'glacier_restore_tier_type',
+      'restore_storage_class'
+    ];
+    allFields.forEach((field) => {
+      const control = component.storageClassForm.get(field);
+      control.setValue('');
+      control.updateValueAndValidity();
+      expect(component).toBeTruthy();
+    });
   });
 });

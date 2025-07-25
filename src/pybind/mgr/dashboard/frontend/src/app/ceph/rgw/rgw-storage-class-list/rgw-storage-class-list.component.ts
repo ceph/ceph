@@ -4,7 +4,12 @@ import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 
 import { ListWithDetails } from '~/app/shared/classes/list-with-details.class';
-import { StorageClass, ZoneGroupDetails } from '../models/rgw-storage-class.model';
+import {
+  StorageClass,
+  TIER_TYPE,
+  TIER_TYPE_DISPLAY,
+  ZoneGroupDetails
+} from '../models/rgw-storage-class.model';
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { FinishedTask } from '~/app/shared/models/finished-task';
 import { Icons } from '~/app/shared/enum/icons.enum';
@@ -17,7 +22,6 @@ import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { URLBuilderService } from '~/app/shared/services/url-builder.service';
 import { Permission } from '~/app/shared/models/permissions';
 import { BucketTieringUtils } from '../utils/rgw-bucket-tiering';
-
 import { Router } from '@angular/router';
 
 const BASE_URL = 'rgw/tiering';
@@ -51,8 +55,18 @@ export class RgwStorageClassListComponent extends ListWithDetails implements OnI
   ngOnInit() {
     this.columns = [
       {
+        prop: 'uniqueId',
+        isInvisible: true,
+        isHidden: true
+      },
+      {
         name: $localize`Storage Class`,
         prop: 'storage_class',
+        flexGrow: 2
+      },
+      {
+        name: $localize`Type`,
+        prop: 'tier_type',
         flexGrow: 2
       },
       {
@@ -110,7 +124,13 @@ export class RgwStorageClassListComponent extends ListWithDetails implements OnI
         (data: ZoneGroupDetails) => {
           this.storageClassList = [];
           const tierObj = BucketTieringUtils.filterAndMapTierTargets(data);
-          this.storageClassList.push(...tierObj);
+          const tierConfig = tierObj.map((tier) => ({
+            ...tier,
+            tier_type: this.mapTierTypeDisplay(tier.tier_type)
+          }));
+
+          this.transformTierData(tierConfig);
+          this.storageClassList.push(...tierConfig);
           resolve();
         },
         (error) => {
@@ -118,6 +138,29 @@ export class RgwStorageClassListComponent extends ListWithDetails implements OnI
         }
       );
     });
+  }
+
+  private mapTierTypeDisplay(tierType: string): string {
+    switch (tierType?.toLowerCase()) {
+      case TIER_TYPE.CLOUD_TIER:
+        return TIER_TYPE_DISPLAY.CLOUD_TIER;
+      case TIER_TYPE.LOCAL:
+        return TIER_TYPE_DISPLAY.LOCAL;
+      case TIER_TYPE.GLACIER:
+        return TIER_TYPE_DISPLAY.GLACIER;
+      default:
+        return tierType;
+    }
+  }
+
+  transformTierData(tierConfig: any[]) {
+    tierConfig.forEach((item, index) => {
+      const zone_group = item?.zone_group;
+      const storageClass = item?.storage_class;
+      const uniqueId = `${zone_group}-${storageClass}-${index}`;
+      item.uniqueId = uniqueId;
+    });
+    return tierConfig;
   }
 
   removeStorageClassModal() {

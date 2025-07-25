@@ -1875,7 +1875,7 @@ class RgwMultisite:
     def add_placement_targets(self, zonegroup_name: str, placement_targets: List[Dict]):
         rgw_add_placement_cmd = ['zonegroup', 'placement', 'add']
         STANDARD_STORAGE_CLASS = "STANDARD"
-        CLOUD_S3_TIER_TYPE = "cloud-s3"
+        CLOUD_S3_TIER_TYPES = ["cloud-s3", "cloud-s3-glacier"]
 
         for placement_target in placement_targets:  # pylint: disable=R1702
             cmd_add_placement_options = [
@@ -1883,17 +1883,16 @@ class RgwMultisite:
                 '--placement-id', placement_target['placement_id']
             ]
             storage_class_name = placement_target.get('storage_class', None)
+            tier_type = placement_target.get('tier_type', None)
 
-            if (
-                placement_target.get('tier_type') == CLOUD_S3_TIER_TYPE
-                and storage_class_name != STANDARD_STORAGE_CLASS
-            ):
+            if tier_type in CLOUD_S3_TIER_TYPES and storage_class_name != STANDARD_STORAGE_CLASS:
                 tier_config = placement_target.get('tier_config', {})
                 if tier_config:
                     tier_config_items = self.modify_retain_head(tier_config)
                     tier_config_str = ','.join(tier_config_items)
                     cmd_add_placement_options += [
-                        '--tier-type', 'cloud-s3', '--tier-config', tier_config_str
+                        '--tier-type', tier_type,
+                        '--tier-config', tier_config_str
                     ]
 
             if placement_target.get('tags') and storage_class_name != STANDARD_STORAGE_CLASS:
@@ -1920,7 +1919,8 @@ class RgwMultisite:
                         )
                 except SubprocessError as error:
                     raise DashboardException(error, http_status_code=500, component='rgw')
-                self.ensure_realm_and_sync_period()
+                if tier_type in CLOUD_S3_TIER_TYPES:
+                    self.ensure_realm_and_sync_period()
 
             if storage_classes:
                 for sc in storage_classes:
@@ -1943,12 +1943,13 @@ class RgwMultisite:
                                 )
                         except SubprocessError as error:
                             raise DashboardException(error, http_status_code=500, component='rgw')
-                        self.ensure_realm_and_sync_period()
+                        if tier_type in CLOUD_S3_TIER_TYPES:
+                            self.ensure_realm_and_sync_period()
 
     def modify_placement_targets(self, zonegroup_name: str, placement_targets: List[Dict]):
         rgw_add_placement_cmd = ['zonegroup', 'placement', 'modify']
         STANDARD_STORAGE_CLASS = "STANDARD"
-        CLOUD_S3_TIER_TYPE = "cloud-s3"
+        CLOUD_S3_TIER_TYPES = ["cloud-s3", "cloud-s3-glacier"]
 
         for placement_target in placement_targets:  # pylint: disable=R1702,line-too-long # noqa: E501
             cmd_add_placement_options = [
@@ -1956,17 +1957,15 @@ class RgwMultisite:
                 '--placement-id', placement_target['placement_id']
             ]
             storage_class_name = placement_target.get('storage_class', None)
+            tier_type = placement_target.get('tier_type', None)
 
-            if (
-                placement_target.get('tier_type') == CLOUD_S3_TIER_TYPE
-                and storage_class_name != STANDARD_STORAGE_CLASS
-            ):
+            if tier_type in CLOUD_S3_TIER_TYPES and storage_class_name != STANDARD_STORAGE_CLASS:
                 tier_config = placement_target.get('tier_config', {})
                 if tier_config:
                     tier_config_items = self.modify_retain_head(tier_config)
                     tier_config_str = ','.join(tier_config_items)
                     cmd_add_placement_options += [
-                        '--tier-type', 'cloud-s3', '--tier-config', tier_config_str
+                        '--tier-type', tier_type, '--tier-config', tier_config_str
                     ]
 
             if placement_target.get('tags') and storage_class_name != STANDARD_STORAGE_CLASS:
@@ -1993,7 +1992,8 @@ class RgwMultisite:
                         )
                 except SubprocessError as error:
                     raise DashboardException(error, http_status_code=500, component='rgw')
-                self.ensure_realm_and_sync_period()
+                if tier_type in CLOUD_S3_TIER_TYPES:
+                    self.ensure_realm_and_sync_period()
 
             if storage_classes:
                 for sc in storage_classes:
@@ -2016,7 +2016,8 @@ class RgwMultisite:
                                 )
                         except SubprocessError as error:
                             raise DashboardException(error, http_status_code=500, component='rgw')
-                        self.ensure_realm_and_sync_period()
+                        if tier_type in CLOUD_S3_TIER_TYPES:
+                            self.ensure_realm_and_sync_period()
 
     def delete_placement_targets(self, placement_id: str, storage_class: str):
         rgw_zonegroup_delete_cmd = ['zonegroup', 'placement', 'rm',
