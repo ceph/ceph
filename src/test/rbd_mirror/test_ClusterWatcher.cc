@@ -122,42 +122,6 @@ public:
       "}", in_bl, nullptr, nullptr));
   }
 
-  void create_cache_pool(const string &base_pool, string *cache_pool_name) {
-    bufferlist inbl;
-    *cache_pool_name = get_temp_pool_name("test-rbd-mirror-");
-    ASSERT_EQ(0, m_cluster->pool_create(cache_pool_name->c_str()));
-
-    ASSERT_EQ(0, m_cluster->mon_command(
-      "{\"prefix\": \"osd tier add\", \"pool\": \"" + base_pool +
-      "\", \"tierpool\": \"" + *cache_pool_name +
-      "\", \"force_nonempty\": \"--force-nonempty\" }",
-      inbl, NULL, NULL));
-    ASSERT_EQ(0, m_cluster->mon_command(
-      "{\"prefix\": \"osd tier set-overlay\", \"pool\": \"" + base_pool +
-      "\", \"overlaypool\": \"" + *cache_pool_name + "\"}",
-      inbl, NULL, NULL));
-    ASSERT_EQ(0, m_cluster->mon_command(
-      "{\"prefix\": \"osd tier cache-mode\", \"pool\": \"" + *cache_pool_name +
-      "\", \"mode\": \"writeback\"}",
-      inbl, NULL, NULL));
-    m_cluster->wait_for_latest_osdmap();
-  }
-
-  void remove_cache_pool(const string &base_pool, const string &cache_pool) {
-    bufferlist inbl;
-    // tear down tiers
-    ASSERT_EQ(0, m_cluster->mon_command(
-      "{\"prefix\": \"osd tier remove-overlay\", \"pool\": \"" + base_pool +
-      "\"}",
-      inbl, NULL, NULL));
-    ASSERT_EQ(0, m_cluster->mon_command(
-      "{\"prefix\": \"osd tier remove\", \"pool\": \"" + base_pool +
-      "\", \"tierpool\": \"" + cache_pool + "\"}",
-      inbl, NULL, NULL));
-    m_cluster->wait_for_latest_osdmap();
-    m_cluster->pool_delete(cache_pool.c_str());
-  }
-
   void check_peers() {
     m_cluster_watcher->refresh_pools();
     std::lock_guard l{m_lock};
@@ -209,26 +173,6 @@ TEST_F(TestClusterWatcher, ReplicatedPools) {
   delete_pool(first_pool, site1);
   check_peers();
   delete_pool(last_pool, site2);
-  check_peers();
-}
-
-TEST_F(TestClusterWatcher, CachePools) {
-  PeerSpec site1("", "site1", "mirror1");
-  string base1, base2, cache1, cache2;
-  create_pool(true, site1, &site1.uuid, &base1);
-  check_peers();
-
-  create_cache_pool(base1, &cache1);
-  BOOST_SCOPE_EXIT( base1, cache1, this_ ) {
-    this_->remove_cache_pool(base1, cache1);
-  } BOOST_SCOPE_EXIT_END;
-  check_peers();
-
-  create_pool(false, PeerSpec(), nullptr, &base2);
-  create_cache_pool(base2, &cache2);
-  BOOST_SCOPE_EXIT( base2, cache2, this_ ) {
-    this_->remove_cache_pool(base2, cache2);
-  } BOOST_SCOPE_EXIT_END;
   check_peers();
 }
 
