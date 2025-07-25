@@ -3333,6 +3333,9 @@ void PeeringState::proc_master_log(
     apply_pwlc(info.partial_writes_last_complete[from.shard], from, oinfo,
 	       &olog);
   }
+
+  bool invalidate_stats = false;
+
   // For partial writes we may be able to keep some of the divergent entries
   if (olog.head < pg_log.get_head()) {
     // Iterate backwards to divergence
@@ -3410,6 +3413,7 @@ void PeeringState::proc_master_log(
       // This entry can be kept, only shards that didn't participate in
       // the partial write missed the update
       psdout(20) << "keeping entry " << p->version << dendl;
+      invalidate_stats = true;
       eversion_t previous_version;
 	if (p == pg_log.get_log().log.begin()) {
 	  previous_version = pg_log.get_tail();
@@ -3427,6 +3431,7 @@ void PeeringState::proc_master_log(
   // log to be authoritative (i.e., their entries are by definitely
   // non-divergent).
   merge_log(t, oinfo, std::move(olog), from);
+  info.stats.stats_invalid |= invalidate_stats;
   peer_info[from] = oinfo;
   psdout(10) << " peer osd." << from << " now " << oinfo
 	     << " " << omissing << dendl;
