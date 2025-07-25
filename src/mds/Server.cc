@@ -9245,7 +9245,9 @@ bool Server::_dir_has_snaps(const MDRequestRef& mdr, CInode *diri)
   ceph_assert(diri->snaplock.can_read(mdr->get_client()));
 
   SnapRealm *realm = diri->find_snaprealm();
-  return !realm->get_snaps().empty();
+  auto& snaps = realm->get_snaps();
+  auto it = snaps.lower_bound(diri->get_oldest_snap());
+  return it != snaps.end();
 }
 
 bool Server::_dir_is_nonempty(const MDRequestRef& mdr, CInode *in)
