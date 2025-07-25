@@ -2124,6 +2124,36 @@ public:
     }
   };
 
+  struct OpSplit;
+
+  struct OpSplitFinisher : Context {
+    std::shared_ptr<OpSplit> ops;
+    bool done = false;
+    OpSplitFinisher(std::shared_ptr<OpSplit> ops) : ops(ops) {}
+    ~OpSplitFinisher() {
+      ceph_assert(done);
+    }
+    void finish(int r) override {
+      ops->finish(r);
+      done = true;
+    }
+  };
+
+  struct OpSplit {
+    void finish(int r);
+    Op *orig_op;
+    Objecter &objecter;
+    int count = 0;
+    int rc = 0;
+    std::vector<Op*> ops;
+    std::vector<bufferlist> bls;
+
+    OpSplit(Op *op, Objecter &objecter, int count);
+    ~OpSplit();
+
+    static std::shared_ptr<OpSplit> create(Op *op, Objecter &objecter);
+  };
+
   struct CB_Op_Map_Latest {
     Objecter *objecter;
     ceph_tid_t tid;

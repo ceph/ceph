@@ -2317,6 +2317,91 @@ void Objecter::resend_mon_ops()
 
 // read | write ---------------------------
 
+void Objecter::OpSplit::finish(int r) {
+  count--;
+
+  if (rc >= 0 && r >= 0) {
+    rc += r;
+  } else {
+    rc = -EAGAIN;
+  }
+
+  // do callbacks
+  if (count == 0 && rc >= 0) {
+    orig_op->out_bl[0]->append(bls[0]);
+    orig_op->out_bl[0]->append(bls[1]);
+    Op::complete(std::move(orig_op->onfinish), osdcode(rc), rc, objecter.service.get_executor());
+  }
+}
+
+Objecter::OpSplit::~OpSplit() {
+  ceph_assert(count == 0);
+  ceph_assert(orig_op);
+  if (rc >= 0 || count != 0) {
+    objecter._finish_op(orig_op, rc);
+  } else {
+    shunique_lock rl(objecter.rwlock, ceph::acquire_shared);
+    ceph_tid_t tid = 0;
+    objecter._op_submit_with_budget(orig_op, rl, &tid, nullptr);
+  }
+}
+
+Objecter::OpSplit::OpSplit(Op *op, Objecter &objecter, int count) : orig_op(op), objecter(objecter), count(count) {
+  for (int i = 0; i < count; i++) {
+    bls.emplace_back();
+  }
+}
+
+std::shared_ptr<Objecter::OpSplit> Objecter::OpSplit::create(Op *op, Objecter &objecter) {
+  if (op->ops.size() != 1) {
+    return std::shared_ptr<Objecter::OpSplit>();
+  }
+
+  auto t = op->target;
+  const pg_pool_t *pi = objecter.osdmap->get_pg_pool(t.base_oloc.pool);
+
+  if (!pi->allows_ecoptimizations() ||
+      !pi->has_flag(pg_pool_t::FLAG_EC_DIRECT_READS) ||
+      (t.flags & CEPH_OSD_FLAG_BALANCE_READS) == 0) {
+    return std::shared_ptr<Objecter::OpSplit>();
+  }
+
+  ceph_osd_op &osd_op = op->ops[0].op;
+
+  uint64_t off[2];
+  uint64_t len[2];
+
+  off[0] = osd_op.extent.offset;
+  unsigned int data_chunk_count = pi->nonprimary_shards.size() + 1;
+  uint32_t chunk_size = pi->get_stripe_width() / data_chunk_count;
+  uint64_t start_chunk = off[0] / chunk_size;
+  // This calculation is wrong for length = 0, but it doesn't matter if these reads get sent to the primary
+  uint64_t end_chunk = (off[0] + osd_op.extent.length - 1) / chunk_size;
+
+  if (start_chunk + 1 != end_chunk) {
+    return std::shared_ptr<OpSplit>();
+  }
+
+  off[1] = (start_chunk + 1) * chunk_size;
+  len[0] = off[1] - off[0];
+  len[1] = osd_op.extent.length - len[0];
+
+  ceph_assert(len[0] + len[1] == osd_op.extent.length);
+  ceph_assert(len[0] < 0x7FFFFFFFFFFFFFFF);
+  ceph_assert(len[1] < 0x7FFFFFFFFFFFFFFF);
+
+
+  auto ops = std::make_shared<OpSplit>(op, objecter, 2);
+
+  for (int i = 0; i < ops->count; i++) {
+    auto fin = new OpSplitFinisher(ops); // Self-destructs when called.
+    ops->ops.push_back(objecter.prepare_read_op(t.base_oid,
+      t.base_oloc, off[i], len[i], op->snapid, &ops->bls[i], osd_op.flags, fin));
+  }
+
+  return ops;
+}
+
 void Objecter::op_submit(Op *op, ceph_tid_t *ptid, int *ctx_budget)
 {
   shunique_lock rl(rwlock, ceph::acquire_shared);
@@ -2324,7 +2409,16 @@ void Objecter::op_submit(Op *op, ceph_tid_t *ptid, int *ctx_budget)
   if (!ptid)
     ptid = &tid;
   op->trace.event("op submit");
-  _op_submit_with_budget(op, rl, ptid, ctx_budget);
+
+  std::shared_ptr<OpSplit> ops = OpSplit::create(op, *this);
+
+  if (ops) {
+    for (auto &op_i : ops->ops) {
+      _op_submit_with_budget(op_i, rl, ptid, ctx_budget);
+    }
+  } else {
+    _op_submit_with_budget(op, rl, ptid, ctx_budget);
+  }
 }
 
 void Objecter::_op_submit_with_budget(Op *op,
@@ -3115,7 +3209,9 @@ int Objecter::_calc_target(op_target_t *t, const Op *op, bool any_change)
                       << " data_chunk_count=" << data_chunk_count
                       << " chunk_size=" << chunk_size
                       << " start_chunk=" << start_chunk
-                      << " end_chunk=" << end_chunk << dendl;
+                      << " end_chunk=" << end_chunk
+                      << " acting=" << t->acting
+                      << dendl;
       }
 
       if (!shard) {
