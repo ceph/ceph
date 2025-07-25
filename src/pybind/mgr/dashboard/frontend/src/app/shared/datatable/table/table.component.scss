@@ -1,5 +1,9 @@
 @use './src/styles/vendor/variables' as vv;
 @use './src/styles/defaults/mixins';
+@use '@carbon/layout';
+
+$scrollbar-thumb-color: rgba(128, 128, 128, 0.3);
+$scrollbar-track-color: transparent;
 
 @mixin row-details-icon {
   color: vv.$gray-900;
@@ -75,4 +79,26 @@
 
 ::ng-deep div.cds--batch-summary {
   background-color: vv.$primary;
+}
+
+.scrollable-expanded-row {
+  max-height: 40vh;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-color: $scrollbar-thumb-color $scrollbar-track-color;
+  scrollbar-width: thin;
+}
+
+.scrollable-expanded-row::-webkit-scrollbar {
+  height: layout.rem(6px);
+  width: layout.rem(6px);
+}
+
+.scrollable-expanded-row::-webkit-scrollbar-thumb {
+  background-color: $scrollbar-thumb-color; /* Grey with transparency */
+  border-radius: layout.rem(10px);
+}
+
+.scrollable-expanded-row::-webkit-scrollbar-track {
+  background: transparent;
 }
