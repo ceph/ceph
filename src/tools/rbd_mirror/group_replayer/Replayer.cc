@@ -574,9 +574,11 @@ void Replayer<I>::is_resync_requested() {
 
   std::string group_header_oid = librbd::util::group_header_name(
       m_local_group_id);
+  m_in_flight_op_tracker.start_op();
   auto aio_comp = create_rados_callback(
     new LambdaContext([this](int r) {
       handle_is_resync_requested(r);
+      m_in_flight_op_tracker.finish_op();
     }));
 
   int r = m_local_io_ctx.aio_operate(group_header_oid, aio_comp,
@@ -590,6 +592,9 @@ void Replayer<I>::handle_is_resync_requested(int r) {
   std::unique_lock locker{m_lock};
   dout(10) << "r=" << r << dendl;
 
+  if (is_replay_interrupted(&locker)) {
+    return;
+  }
   std::string value;
   if (r == 0) {
     auto it = m_out_bl.cbegin();
@@ -623,9 +628,11 @@ void Replayer<I>::is_rename_requested() {
   librados::ObjectReadOperation op;
   librbd::cls_client::dir_get_name_start(&op, m_remote_group_id);
   m_out_bl.clear();
+  m_in_flight_op_tracker.start_op();
   auto comp = create_rados_callback(
     new LambdaContext([this](int r) {
       handle_is_rename_requested(r);
+      m_in_flight_op_tracker.finish_op();
     }));
 
   int r = m_remote_io_ctx.aio_operate(RBD_GROUP_DIRECTORY, comp, &op,
@@ -639,6 +646,9 @@ void Replayer<I>::handle_is_rename_requested(int r) {
   std::unique_lock locker{m_lock};
   dout(10) << "r=" << r << dendl;
 
+  if (is_replay_interrupted(&locker)) {
+    return;
+  }
   std::string remote_group_name;
   m_rename_requested = false;
   if (r == 0) {
@@ -665,11 +675,6 @@ void Replayer<I>::handle_is_rename_requested(int r) {
 
 template <typename I>
 void Replayer<I>::check_local_group_snapshots(std::unique_lock<ceph::mutex>* locker) {
-
-  if (is_replay_interrupted(locker)) {
-    return;
-  }
-
   if (!m_local_group_snaps.empty()) {
     prune_group_snapshots(locker);
     auto last_local_snap = get_latest_group_snapshot(m_local_group_snaps);
@@ -812,12 +817,14 @@ void Replayer<I>::create_group_snapshot(cls::rbd::GroupSnapshot snap,
       cls::rbd::MIRROR_SNAPSHOT_STATE_NON_PRIMARY :
       cls::rbd::MIRROR_SNAPSHOT_STATE_NON_PRIMARY_DEMOTED;
 
+    m_in_flight_op_tracker.start_op();
     auto ctx = new LambdaContext([this, snap](int r) mutable {
       if (r < 0) {
         dout(10) << "create mirror snapshot failed: " << cpp_strerror(r) << dendl;
         return;
       }
       update_local_group_state(std::move(snap));
+      m_in_flight_op_tracker.finish_op();
     });
 
     create_mirror_snapshot(&snap, snap_state, ctx);
@@ -857,8 +864,10 @@ void Replayer<I>::create_group_snapshot(cls::rbd::GroupSnapshot snap,
     dout(10) << "found regular snap, snap name: " << snap.name
             << ", remote group snap id: " << snap.id << dendl;
 
+    m_in_flight_op_tracker.start_op();
     auto ctx = new LambdaContext([this, snap](int r) mutable {
       dout(10) << "regular snapshot created: " << snap.id << dendl;
+      m_in_flight_op_tracker.finish_op();
     });
     create_regular_snapshot(&snap, ctx);
   }
@@ -869,8 +878,10 @@ void Replayer<I>::update_local_group_state(cls::rbd::GroupSnapshot snap) {
   std::unique_lock locker{m_lock};
 
   if (m_update_group_state) {
+    m_in_flight_op_tracker.start_op();
     auto ctx = new LambdaContext([this, snap](int r) mutable {
       handle_update_local_group_state(r, std::move(snap));
+      m_in_flight_op_tracker.finish_op();
     });
 
     auto req = GroupMirrorStateUpdateRequest<I>::create(m_local_io_ctx,
