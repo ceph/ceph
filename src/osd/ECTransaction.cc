@@ -68,9 +68,9 @@ void ECTransaction::Generate::encode_and_write() {
      */
     read_sem->zero_pad(plan.will_write);
     to_write.pad_with_other(plan.will_write, *read_sem);
-    r = to_write.encode_parity_delta(ec_impl, *read_sem);
+    r = to_write.encode_parity_delta(ec_impl, *read_sem, dpp);
   } else {
-    r = to_write.encode(ec_impl);
+    r = to_write.encode(ec_impl, dpp);
   }
   ceph_assert(r == 0);
   // Remove any unnecessary writes.
