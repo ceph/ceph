@@ -28,6 +28,7 @@
 #include "include/filepath.h"
 
 #include "Capability.h"
+#include "LogSegmentRef.h"
 
 #include "common/StackStringStream.h"
 #include "common/TrackedOp.h"
@@ -241,7 +242,7 @@ public:
   metareqid_t reqid;
   std::optional<int> result;
   __u32 attempt = 0;      // which attempt for this request
-  LogSegment *ls = nullptr;  // the log segment i'm committing to
+  LogSegmentRef ls = nullptr;  // the log segment i'm committing to
 
   // flag mutation as peer
   mds_rank_t peer_to_mds = MDS_RANK_NONE;  // this is a peer request if >= 0.
