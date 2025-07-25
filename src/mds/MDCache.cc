@@ -12012,6 +12012,10 @@ bool MDCache::can_fragment(CInode *diri, const std::vector<CDir*>& dirs)
     dout(7) << "can_fragment: directory inode is quiesced" << dendl;
     return false;
   }
+  if (diri->ino() == CEPH_INO_ROOT) {
+    dout(7) << "can_fragment: i won't fragment root direcory" << dendl;
+    return false;
+  }
 
   for (const auto& dir : dirs) {
     if (dir->scrub_is_in_progress()) {
