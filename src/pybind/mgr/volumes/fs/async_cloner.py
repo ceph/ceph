@@ -84,10 +84,6 @@ def set_clone_state(fs_client, volspec, volname, groupname, subvolname, state):
     with open_at_volume(fs_client, volspec, volname, groupname, subvolname, SubvolumeOpType.CLONE_INTERNAL) as subvolume:
         subvolume.state = (state, True)
 
-def get_clone_source(clone_subvolume):
-    source = clone_subvolume._get_clone_source()
-    return (source['volume'], source.get('group', None), source['subvolume'], source['snapshot'])
-
 def get_next_state_on_error(errnum):
     if errnum == -errno.EINTR:
         next_state = SubvolumeOpSm.transition(SubvolumeTypes.TYPE_CLONE,
@@ -282,7 +278,6 @@ def handle_clone_complete(fs_client, volspec, volname, index, groupname, subvoln
                                            volname, groupname, subvolname) \
                 as (subvol0, subvol1, subvol2):
                 subvol1.detach_snapshot(subvol2, index)
-                subvol0.remove_clone_source(flush=True)
     except (MetadataMgrException, VolumeException) as e:
         log.error("failed to detach clone from snapshot: {0}".format(e))
     return (None, True)
