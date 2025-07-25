@@ -722,6 +722,20 @@ class FSSnapshotMirror:
         except Exception as e:
             return e.args[0], '', 'failed to remove directory'
 
+    def list_dirs(self, filesystem):
+        try:
+            with self.lock:
+                if not self.filesystem_exist(filesystem):
+                    raise MirrorException(-errno.ENOENT, f'filesystem {filesystem} does not exist')
+                fspolicy = self.pool_policy.get(filesystem, None)
+                if not fspolicy:
+                    raise MirrorException(-errno.EINVAL, f'filesystem {filesystem} is not mirrored')
+                return 0, json.dumps(list(fspolicy.policy.dir_states.keys()), indent=4, sort_keys=True), ''
+        except MirrorException as me:
+            return me.args[0], '', me.args[1]
+        except Exception as e:
+            return e.args[0], '', 'failed to list directories'
+
     def status(self,filesystem, dir_path):
         try:
             with self.lock:
