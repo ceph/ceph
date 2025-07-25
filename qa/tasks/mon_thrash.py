@@ -64,7 +64,7 @@ class MonitorThrasher(Thrasher):
                         task to run with as many as just one single monitor.
                         (default: True)
     freeze_mon_probability: how often to freeze the mon instead of killing it,
-                        in % (default: 0)
+                        in % (default: 10)
     freeze_mon_duration: how many seconds to freeze the mon (default: 15)
     scrub               Scrub after each iteration (default: True)
     check_mds_failover  Check if mds failover happened (default: False)
@@ -128,6 +128,15 @@ class MonitorThrasher(Thrasher):
         self.scrub = self.config.get('scrub', True)
 
         self.freeze_mon_probability = float(self.config.get('freeze_mon_probability', 10))
+        # In some cases where many monitors froze at once and revived
+        # after a long time might cause the connection to take more time to establish.
+        # Therefore, we increase the netsplit grace period to 30 seconds.
+        # This is to avoid false positives in the netsplit test, while still keeping
+        # the integrity of the test.
+        if self.freeze_mon_probability > 0:
+            self.manager.raw_cluster_cmd(
+                'config', 'set', 'mon', 'mon_netsplit_grace_period', '30')
+
         self.freeze_mon_duration = float(self.config.get('freeze_mon_duration', 15.0))
 
         assert self.max_killable() > 0, \
