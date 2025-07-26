@@ -593,13 +593,15 @@ int NVMEManager::try_get(const spdk_nvme_transport_id& trid, SharedDriverData **
         int r;
 
         bool local_pci_device = false;
-        int rc = spdk_pci_addr_parse(&addr, trid.traddr);
-        if (!rc) {
-          local_pci_device = true;
-          opts.pci_whitelist = &addr;
-          opts.num_pci_addr = 1;
+        if (trid.trtype == SPDK_NVME_TRANSPORT_PCIE){
+          int rc = spdk_pci_addr_parse(&addr, trid.traddr);
+          if (!rc) {
+            local_pci_device = true;
+            opts.pci_whitelist = &addr;
+            opts.num_pci_addr = 1;
+          }
         }
-
+        
 	spdk_env_opts_init(&opts);
         opts.name = "nvme-device-manager";
         opts.core_mask = coremask_arg.c_str();
