@@ -17,9 +17,10 @@
 
 /* Known versions for communication protocol. */
 #define PROXY_PROTOCOL_V0 0
+#define PROXY_PROTOCOL_V1 1
 
 /* The maximum supported protocol version. */
-#define PROXY_LINK_PROTOCOL_VERSION PROXY_PROTOCOL_V0
+#define PROXY_LINK_PROTOCOL_VERSION PROXY_PROTOCOL_V1
 
 /* Version 0 structure will be used to handle legacy clients that don't support
  * negotiation. */
