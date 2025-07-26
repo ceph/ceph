@@ -1118,6 +1118,9 @@ public:
       std::rethrow_exception(crimson::ct_error::enospc::exception_ptr());
     }
     auto ret = CachedExtent::make_cached_extent_ref<T>(std::move(result->bp));
+    assert(is_rewrite_generation(
+      result->gen,
+      epm.dynamic_max_rewrite_generation));
     ret->init(CachedExtent::extent_state_t::INITIAL_WRITE_PENDING,
               result->paddr,
               hint,
@@ -1163,6 +1166,9 @@ public:
     std::vector<TCachedExtentRef<T>> extents;
     for (auto &result : results) {
       auto ret = CachedExtent::make_cached_extent_ref<T>(std::move(result.bp));
+      assert(is_rewrite_generation(
+	result.gen,
+	epm.dynamic_max_rewrite_generation));
       ret->init(CachedExtent::extent_state_t::INITIAL_WRITE_PENDING,
                 result.paddr,
                 hint,
