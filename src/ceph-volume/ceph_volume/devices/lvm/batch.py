@@ -373,6 +373,7 @@ class Batch(object):
     def _execute(self, plan: List["OSD"]) -> None:
         defaults = common.get_default_args()
         global_args = [
+            'objectstore',
             'bluestore',
             'dmcrypt',
             'with_tpm',
@@ -417,8 +418,7 @@ class Batch(object):
             return plan
         requested_osds = self.args.osds_per_device * len(phys_devs) + len(lvm_devs)
 
-        if self.args.objectstore == 'bluestore':
-            fast_type = 'block_db'
+        fast_type = 'block_db'
         fast_allocations = self.fast_allocations(fast_devices,
                                                  requested_osds,
                                                  num_osds,
