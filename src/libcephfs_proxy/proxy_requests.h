@@ -150,9 +150,7 @@ enum {
 
 #define FIELDS(_fields...) _fields
 #define REQ(_fields...) FIELDS(proxy_link_req_t header; _fields)
-#define REQ_CMOUNT(_fields...) REQ(uint64_t cmount; _fields)
 #define ANS(_fields...) FIELDS(proxy_link_ans_t header; _fields)
-#define ANS_CMOUNT(_fields...) ANS(uint64_t cmount; _fields)
 #define CBK(_fields...) FIELDS(proxy_link_req_t header; _fields)
 
 #define CEPH_TYPE(_name, _req, _ans) \
@@ -195,19 +193,22 @@ CEPH_TYPE(ceph_create,
 	REQ(
 		int16_t id;
 	),
-	ANS_CMOUNT(
+	ANS(
+		uint64_t cmount;
 	)
 );
 
 CEPH_TYPE(ceph_release,
-	REQ_CMOUNT(
+	REQ(
+		uint64_t cmount;
 	),
 	ANS(
 	)
 );
 
 CEPH_TYPE(ceph_conf_read_file,
-	REQ_CMOUNT(
+	REQ(
+		uint64_t cmount;
 		uint16_t path;
 	),
 	ANS(
@@ -215,7 +216,8 @@ CEPH_TYPE(ceph_conf_read_file,
 );
 
 CEPH_TYPE(ceph_conf_get,
-	REQ_CMOUNT(
+	REQ(
+		uint64_t cmount;
 		uint32_t size;
 		uint16_t option;
 	),
@@ -225,7 +227,8 @@ CEPH_TYPE(ceph_conf_get,
 );
 
 CEPH_TYPE(ceph_conf_set,
-	REQ_CMOUNT(
+	REQ(
+		uint64_t cmount;
 		uint16_t option;
 		uint16_t value;
 	),
@@ -234,14 +237,16 @@ CEPH_TYPE(ceph_conf_set,
 );
 
 CEPH_TYPE(ceph_init,
-	REQ_CMOUNT(
+	REQ(
+		uint64_t cmount;
 	),
 	ANS(
 	)
 );
 
 CEPH_TYPE(ceph_select_filesystem,
-	REQ_CMOUNT(
+	REQ(
+		uint64_t cmount;
 		uint16_t fs;
 	),
 	ANS(
@@ -249,7 +254,8 @@ CEPH_TYPE(ceph_select_filesystem,
 );
 
 CEPH_TYPE(ceph_mount,
-	REQ_CMOUNT(
+	REQ(
+		uint64_t cmount;
 		uint16_t root;
 	),
 	ANS(
@@ -257,14 +263,16 @@ CEPH_TYPE(ceph_mount,
 );
 
 CEPH_TYPE(ceph_unmount,
-	REQ_CMOUNT(
+	REQ(
+		uint64_t cmount;
 	),
 	ANS(
 	)
 );
 
 CEPH_TYPE(ceph_ll_statfs,
-	REQ_CMOUNT(
+	REQ(
+		uint64_t cmount;
 		uint64_t inode;
 	),
 	ANS(
@@ -272,7 +280,8 @@ CEPH_TYPE(ceph_ll_statfs,
 );
 
 CEPH_TYPE(ceph_ll_lookup,
-	REQ_CMOUNT(
+	REQ(
+		uint64_t cmount;
 		uint64_t userperm;
 		uint64_t parent;
 		uint32_t want;
@@ -285,7 +294,8 @@ CEPH_TYPE(ceph_ll_lookup,
 );
 
 CEPH_TYPE(ceph_ll_lookup_inode,
-	REQ_CMOUNT(
+	REQ(
+		uint64_t cmount;
 		struct inodeno_t ino;
 	),
 	ANS(
@@ -294,7 +304,8 @@ CEPH_TYPE(ceph_ll_lookup_inode,
 );
 
 CEPH_TYPE(ceph_ll_lookup_root,
-	REQ_CMOUNT(
+	REQ(
+		uint64_t cmount;
 	),
 	ANS(
 		uint64_t inode;
@@ -302,7 +313,8 @@ CEPH_TYPE(ceph_ll_lookup_root,
 );
 
 CEPH_TYPE(ceph_ll_put,
-	REQ_CMOUNT(
+	REQ(
+		uint64_t cmount;
 		uint64_t inode;
 	),
 	ANS(
@@ -310,7 +322,8 @@ CEPH_TYPE(ceph_ll_put,
 );
 
 CEPH_TYPE(ceph_ll_walk,
-	REQ_CMOUNT(
+	REQ(
+		uint64_t cmount;
 		uint64_t userperm;
 		uint32_t want;
 		uint32_t flags;
@@ -322,7 +335,8 @@ CEPH_TYPE(ceph_ll_walk,
 );
 
 CEPH_TYPE(ceph_chdir,
-	REQ_CMOUNT(
+	REQ(
+		uint64_t cmount;
 		uint16_t path;
 	),
 	ANS(
@@ -330,7 +344,8 @@ CEPH_TYPE(ceph_chdir,
 );
 
 CEPH_TYPE(ceph_getcwd,
-	REQ_CMOUNT(
+	REQ(
+		uint64_t cmount;
 	),
 	ANS(
 		uint16_t path;
@@ -338,7 +353,8 @@ CEPH_TYPE(ceph_getcwd,
 );
 
 CEPH_TYPE(ceph_readdir,
-	REQ_CMOUNT(
+	REQ(
+		uint64_t cmount;
 		uint64_t dir;
 	),
 	ANS(
@@ -347,7 +363,8 @@ CEPH_TYPE(ceph_readdir,
 );
 
 CEPH_TYPE(ceph_rewinddir,
-	REQ_CMOUNT(
+	REQ(
+		uint64_t cmount;
 		uint64_t dir;
 	),
 	ANS(
@@ -355,7 +372,8 @@ CEPH_TYPE(ceph_rewinddir,
 );
 
 CEPH_TYPE(ceph_ll_open,
-	REQ_CMOUNT(
+	REQ(
+		uint64_t cmount;
 		uint64_t userperm;
 		uint64_t inode;
 		int32_t flags;
@@ -366,7 +384,8 @@ CEPH_TYPE(ceph_ll_open,
 );
 
 CEPH_TYPE(ceph_ll_create,
-	REQ_CMOUNT(
+	REQ(
+		uint64_t cmount;
 		uint64_t userperm;
 		uint64_t parent;
 		mode_t mode;
@@ -382,7 +401,8 @@ CEPH_TYPE(ceph_ll_create,
 );
 
 CEPH_TYPE(ceph_ll_mknod,
-	REQ_CMOUNT(
+	REQ(
+		uint64_t cmount;
 		uint64_t userperm;
 		uint64_t parent;
 		mode_t mode;
@@ -397,7 +417,8 @@ CEPH_TYPE(ceph_ll_mknod,
 );
 
 CEPH_TYPE(ceph_ll_close,
-	REQ_CMOUNT(
+	REQ(
+		uint64_t cmount;
 		uint64_t fh;
 	),
 	ANS(
@@ -405,7 +426,8 @@ CEPH_TYPE(ceph_ll_close,
 );
 
 CEPH_TYPE(ceph_ll_rename,
-	REQ_CMOUNT(
+	REQ(
+		uint64_t cmount;
 		uint64_t userperm;
 		uint64_t old_parent;
 		uint64_t new_parent;
@@ -417,7 +439,8 @@ CEPH_TYPE(ceph_ll_rename,
 );
 
 CEPH_TYPE(ceph_ll_lseek,
-	REQ_CMOUNT(
+	REQ(
+		uint64_t cmount;
 		uint64_t fh;
 		off_t offset;
 		int32_t whence;
@@ -428,7 +451,8 @@ CEPH_TYPE(ceph_ll_lseek,
 );
 
 CEPH_TYPE(ceph_ll_read,
-	REQ_CMOUNT(
+	REQ(
+		uint64_t cmount;
 		uint64_t fh;
 		int64_t offset;
 		uint64_t len;
@@ -438,7 +462,8 @@ CEPH_TYPE(ceph_ll_read,
 );
 
 CEPH_TYPE(ceph_ll_write,
-	REQ_CMOUNT(
+	REQ(
+		uint64_t cmount;
 		uint64_t fh;
 		int64_t offset;
 		uint64_t len;
@@ -448,7 +473,8 @@ CEPH_TYPE(ceph_ll_write,
 );
 
 CEPH_TYPE(ceph_ll_link,
-	REQ_CMOUNT(
+	REQ(
+		uint64_t cmount;
 		uint64_t userperm;
 		uint64_t inode;
 		uint64_t parent;
@@ -459,7 +485,8 @@ CEPH_TYPE(ceph_ll_link,
 );
 
 CEPH_TYPE(ceph_ll_unlink,
-	REQ_CMOUNT(
+	REQ(
+		uint64_t cmount;
 		uint64_t userperm;
 		uint64_t parent;
 		uint16_t name;
@@ -469,7 +496,8 @@ CEPH_TYPE(ceph_ll_unlink,
 );
 
 CEPH_TYPE(ceph_ll_getattr,
-	REQ_CMOUNT(
+	REQ(
+		uint64_t cmount;
 		uint64_t userperm;
 		uint64_t inode;
 		uint32_t want;
@@ -480,7 +508,8 @@ CEPH_TYPE(ceph_ll_getattr,
 );
 
 CEPH_TYPE(ceph_ll_setattr,
-	REQ_CMOUNT(
+	REQ(
+		uint64_t cmount;
 		uint64_t userperm;
 		uint64_t inode;
 		int32_t mask;
@@ -490,7 +519,8 @@ CEPH_TYPE(ceph_ll_setattr,
 );
 
 CEPH_TYPE(ceph_ll_fallocate,
-	REQ_CMOUNT(
+	REQ(
+		uint64_t cmount;
 		uint64_t fh;
 		int64_t offset;
 		int64_t length;
@@ -501,7 +531,8 @@ CEPH_TYPE(ceph_ll_fallocate,
 );
 
 CEPH_TYPE(ceph_ll_fsync,
-	REQ_CMOUNT(
+	REQ(
+		uint64_t cmount;
 		uint64_t fh;
 		int32_t dataonly;
 	),
@@ -510,7 +541,8 @@ CEPH_TYPE(ceph_ll_fsync,
 );
 
 CEPH_TYPE(ceph_ll_listxattr,
-	REQ_CMOUNT(
+	REQ(
+		uint64_t cmount;
 		uint64_t userperm;
 		uint64_t inode;
 		size_t size;
@@ -521,7 +553,8 @@ CEPH_TYPE(ceph_ll_listxattr,
 );
 
 CEPH_TYPE(ceph_ll_getxattr,
-	REQ_CMOUNT(
+	REQ(
+		uint64_t cmount;
 		uint64_t userperm;
 		uint64_t inode;
 		size_t size;
@@ -532,7 +565,8 @@ CEPH_TYPE(ceph_ll_getxattr,
 );
 
 CEPH_TYPE(ceph_ll_setxattr,
-	REQ_CMOUNT(
+	REQ(
+		uint64_t cmount;
 		uint64_t userperm;
 		uint64_t inode;
 		size_t size;
@@ -544,7 +578,8 @@ CEPH_TYPE(ceph_ll_setxattr,
 );
 
 CEPH_TYPE(ceph_ll_removexattr,
-	REQ_CMOUNT(
+	REQ(
+		uint64_t cmount;
 		uint64_t userperm;
 		uint64_t inode;
 		uint16_t name;
@@ -554,7 +589,8 @@ CEPH_TYPE(ceph_ll_removexattr,
 );
 
 CEPH_TYPE(ceph_ll_readlink,
-	REQ_CMOUNT(
+	REQ(
+		uint64_t cmount;
 		uint64_t userperm;
 		uint64_t inode;
 		size_t size;
@@ -564,7 +600,8 @@ CEPH_TYPE(ceph_ll_readlink,
 );
 
 CEPH_TYPE(ceph_ll_symlink,
-	REQ_CMOUNT(
+	REQ(
+		uint64_t cmount;
 		uint64_t userperm;
 		uint64_t parent;
 		uint32_t want;
@@ -578,7 +615,8 @@ CEPH_TYPE(ceph_ll_symlink,
 );
 
 CEPH_TYPE(ceph_ll_opendir,
-	REQ_CMOUNT(
+	REQ(
+		uint64_t cmount;
 		uint64_t userperm;
 		uint64_t inode;
 	),
@@ -588,7 +626,8 @@ CEPH_TYPE(ceph_ll_opendir,
 );
 
 CEPH_TYPE(ceph_ll_mkdir,
-	REQ_CMOUNT(
+	REQ(
+		uint64_t cmount;
 		uint64_t userperm;
 		uint64_t parent;
 		mode_t mode;
@@ -602,7 +641,8 @@ CEPH_TYPE(ceph_ll_mkdir,
 );
 
 CEPH_TYPE(ceph_ll_rmdir,
-	REQ_CMOUNT(
+	REQ(
+		uint64_t cmount;
 		uint64_t userperm;
 		uint64_t parent;
 		uint16_t name;
@@ -612,7 +652,8 @@ CEPH_TYPE(ceph_ll_rmdir,
 );
 
 CEPH_TYPE(ceph_ll_releasedir,
-	REQ_CMOUNT(
+	REQ(
+		uint64_t cmount;
 		uint64_t dir;
 	),
 	ANS(
@@ -620,7 +661,8 @@ CEPH_TYPE(ceph_ll_releasedir,
 );
 
 CEPH_TYPE(ceph_mount_perms,
-	REQ_CMOUNT(
+	REQ(
+		uint64_t cmount;
 	),
 	ANS(
 		uint64_t userperm;
@@ -628,7 +670,8 @@ CEPH_TYPE(ceph_mount_perms,
 );
 
 CEPH_TYPE(ceph_ll_nonblocking_readv_writev,
-	REQ_CMOUNT(
+	REQ(
+		uint64_t cmount;
 		uint64_t info;
 		uint64_t fh;
 		int64_t off;
