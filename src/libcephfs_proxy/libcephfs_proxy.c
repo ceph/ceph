@@ -267,7 +267,7 @@ __public int ceph_ll_create(struct ceph_mount_info *cmount, Inode *parent,
 	CEPH_REQ(ceph_ll_create, req, 1, ans, 1);
 	int32_t err;
 
-	req.v0.userperm = ptr_value(perms);
+	req.v0.userperm.ptr = ptr_value(perms);
 	req.v0.parent = ptr_value(parent);
 	req.v0.mode = mode;
 	req.v0.oflags = oflags;
@@ -316,7 +316,7 @@ __public int ceph_ll_getattr(struct ceph_mount_info *cmount, struct Inode *in,
 {
 	CEPH_REQ(ceph_ll_getattr, req, 0, ans, 1);
 
-	req.v0.userperm = ptr_value(perms);
+	req.v0.userperm.ptr = ptr_value(perms);
 	req.v0.inode = ptr_value(in);
 	req.v0.want = want;
 	req.v0.flags = flags;
@@ -332,7 +332,7 @@ __public int ceph_ll_getxattr(struct ceph_mount_info *cmount, struct Inode *in,
 {
 	CEPH_REQ(ceph_ll_getxattr, req, 1, ans, 1);
 
-	req.v0.userperm = ptr_value(perms);
+	req.v0.userperm.ptr = ptr_value(perms);
 	req.v0.inode = ptr_value(in);
 	req.v0.size = size;
 	CEPH_STR_ADD(req, v0.name, name);
@@ -348,7 +348,7 @@ __public int ceph_ll_link(struct ceph_mount_info *cmount, struct Inode *in,
 {
 	CEPH_REQ(ceph_ll_link, req, 1, ans, 0);
 
-	req.v0.userperm = ptr_value(perms);
+	req.v0.userperm.ptr = ptr_value(perms);
 	req.v0.inode = ptr_value(in);
 	req.v0.parent = ptr_value(newparent);
 	CEPH_STR_ADD(req, v0.name, name);
@@ -363,7 +363,7 @@ __public int ceph_ll_listxattr(struct ceph_mount_info *cmount, struct Inode *in,
 	CEPH_REQ(ceph_ll_listxattr, req, 0, ans, 1);
 	int32_t err;
 
-	req.v0.userperm = ptr_value(perms);
+	req.v0.userperm.ptr = ptr_value(perms);
 	req.v0.inode = ptr_value(in);
 	req.v0.size = buf_size;
 
@@ -385,7 +385,7 @@ __public int ceph_ll_lookup(struct ceph_mount_info *cmount, Inode *parent,
 	CEPH_REQ(ceph_ll_lookup, req, 1, ans, 1);
 	int32_t err;
 
-	req.v0.userperm = ptr_value(perms);
+	req.v0.userperm.ptr = ptr_value(perms);
 	req.v0.parent = ptr_value(parent);
 	req.v0.want = want;
 	req.v0.flags = flags;
@@ -456,7 +456,7 @@ __public int ceph_ll_mkdir(struct ceph_mount_info *cmount, Inode *parent,
 	CEPH_REQ(ceph_ll_mkdir, req, 1, ans, 1);
 	int32_t err;
 
-	req.v0.userperm = ptr_value(perms);
+	req.v0.userperm.ptr = ptr_value(perms);
 	req.v0.parent = ptr_value(parent);
 	req.v0.mode = mode;
 	req.v0.want = want;
@@ -481,7 +481,7 @@ __public int ceph_ll_mknod(struct ceph_mount_info *cmount, Inode *parent,
 	CEPH_REQ(ceph_ll_mknod, req, 1, ans, 1);
 	int32_t err;
 
-	req.v0.userperm = ptr_value(perms);
+	req.v0.userperm.ptr = ptr_value(perms);
 	req.v0.parent = ptr_value(parent);
 	req.v0.mode = mode;
 	req.v0.rdev = rdev;
@@ -505,7 +505,7 @@ __public int ceph_ll_open(struct ceph_mount_info *cmount, struct Inode *in,
 	CEPH_REQ(ceph_ll_open, req, 0, ans, 0);
 	int32_t err;
 
-	req.v0.userperm = ptr_value(perms);
+	req.v0.userperm.ptr = ptr_value(perms);
 	req.v0.inode = ptr_value(in);
 	req.v0.flags = flags;
 
@@ -524,7 +524,7 @@ __public int ceph_ll_opendir(struct ceph_mount_info *cmount, struct Inode *in,
 	CEPH_REQ(ceph_ll_opendir, req, 0, ans, 0);
 	int32_t err;
 
-	req.v0.userperm = ptr_value(perms);
+	req.v0.userperm.ptr = ptr_value(perms);
 	req.v0.inode = ptr_value(in);
 
 	err = CEPH_PROCESS(cmount, LIBCEPHFSD_OP_LL_OPENDIR, req, ans);
@@ -563,7 +563,7 @@ __public int ceph_ll_readlink(struct ceph_mount_info *cmount, struct Inode *in,
 {
 	CEPH_REQ(ceph_ll_readlink, req, 0, ans, 1);
 
-	req.v0.userperm = ptr_value(perms);
+	req.v0.userperm.ptr = ptr_value(perms);
 	req.v0.inode = ptr_value(in);
 	req.v0.size = bufsize;
 
@@ -588,7 +588,7 @@ __public int ceph_ll_removexattr(struct ceph_mount_info *cmount,
 {
 	CEPH_REQ(ceph_ll_removexattr, req, 1, ans, 0);
 
-	req.v0.userperm = ptr_value(perms);
+	req.v0.userperm.ptr = ptr_value(perms);
 	req.v0.inode = ptr_value(in);
 	CEPH_STR_ADD(req, v0.name, name);
 
@@ -602,7 +602,7 @@ __public int ceph_ll_rename(struct ceph_mount_info *cmount,
 {
 	CEPH_REQ(ceph_ll_rename, req, 2, ans, 0);
 
-	req.v0.userperm = ptr_value(perms);
+	req.v0.userperm.ptr = ptr_value(perms);
 	req.v0.old_parent = ptr_value(parent);
 	req.v0.new_parent = ptr_value(newparent);
 	CEPH_STR_ADD(req, v0.old_name, name);
@@ -626,7 +626,7 @@ __public int ceph_ll_rmdir(struct ceph_mount_info *cmount, struct Inode *in,
 {
 	CEPH_REQ(ceph_ll_rmdir, req, 1, ans, 0);
 
-	req.v0.userperm = ptr_value(perms);
+	req.v0.userperm.ptr = ptr_value(perms);
 	req.v0.parent = ptr_value(in);
 	CEPH_STR_ADD(req, v0.name, name);
 
@@ -639,7 +639,7 @@ __public int ceph_ll_setattr(struct ceph_mount_info *cmount, struct Inode *in,
 {
 	CEPH_REQ(ceph_ll_setattr, req, 1, ans, 0);
 
-	req.v0.userperm = ptr_value(perms);
+	req.v0.userperm.ptr = ptr_value(perms);
 	req.v0.inode = ptr_value(in);
 	req.v0.mask = mask;
 	CEPH_BUFF_ADD(req, stx, sizeof(*stx));
@@ -653,7 +653,7 @@ __public int ceph_ll_setxattr(struct ceph_mount_info *cmount, struct Inode *in,
 {
 	CEPH_REQ(ceph_ll_setxattr, req, 2, ans, 0);
 
-	req.v0.userperm = ptr_value(perms);
+	req.v0.userperm.ptr = ptr_value(perms);
 	req.v0.inode = ptr_value(in);
 	req.v0.size = size;
 	req.v0.flags = flags;
@@ -683,7 +683,7 @@ __public int ceph_ll_symlink(struct ceph_mount_info *cmount, Inode *in,
 	CEPH_REQ(ceph_ll_symlink, req, 2, ans, 1);
 	int32_t err;
 
-	req.v0.userperm = ptr_value(perms);
+	req.v0.userperm.ptr = ptr_value(perms);
 	req.v0.parent = ptr_value(in);
 	req.v0.want = want;
 	req.v0.flags = flags;
@@ -705,7 +705,7 @@ __public int ceph_ll_unlink(struct ceph_mount_info *cmount, struct Inode *in,
 {
 	CEPH_REQ(ceph_ll_unlink, req, 1, ans, 0);
 
-	req.v0.userperm = ptr_value(perms);
+	req.v0.userperm.ptr = ptr_value(perms);
 	req.v0.parent = ptr_value(in);
 	CEPH_STR_ADD(req, v0.name, name);
 
@@ -719,7 +719,7 @@ __public int ceph_ll_walk(struct ceph_mount_info *cmount, const char *name,
 	CEPH_REQ(ceph_ll_walk, req, 1, ans, 1);
 	int32_t err;
 
-	req.v0.userperm = ptr_value(perms);
+	req.v0.userperm.ptr = ptr_value(perms);
 	req.v0.want = want;
 	req.v0.flags = flags;
 	CEPH_STR_ADD(req, v0.path, name);
