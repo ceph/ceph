@@ -1023,6 +1023,13 @@ RandomBlockOolWriter::do_write(
     auto& stats = t.get_ool_write_stats();
     stats.extents.num += 1;
     stats.extents.bytes += ex->get_length();
+    if (is_data_type(ex->get_type()) &&
+	ex->template cast<LogicalCachedExtent>()->is_physical_reserved()) {
+      t.mark_allocated_extent_ool(ex);
+      TRACE("current extent: {}~0x{:x} is physically reserved, so skip to write",
+	paddr, ex->get_length());
+      continue;
+    }
     ex->prepare_write();
 
     bufferptr bp;
