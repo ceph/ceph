@@ -9158,6 +9158,43 @@ int Client::flock(int fd, int operation, uint64_t owner)
   return _flock(f, operation, owner);
 }
 
+int Client::getlk(int fd, struct flock *fl, uint64_t owner)
+{
+  RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
+  if (!mref_reader.is_state_satisfied())
+    return -ENOTCONN;
+
+  tout(cct) << __func__ << std::endl;
+  tout(cct) << fd << std::endl;
+  tout(cct) << owner << std::endl;
+
+  std::scoped_lock lock(client_lock);
+  Fh *fh = get_filehandle(fd);
+  if (!fh)
+    return -EBADF;
+
+  return _getlk(fh, fl, owner);
+}
+
+int Client::setlk(int fd, struct flock *fl, uint64_t owner, int sleep)
+{
+  RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
+  if (!mref_reader.is_state_satisfied())
+    return -ENOTCONN;
+
+  tout(cct) << __func__ << std::endl;
+  tout(cct) << fd << std::endl;
+  tout(cct) << owner << std::endl;
+  tout(cct) << sleep << std::endl;
+
+  std::scoped_lock lock(client_lock);
+  Fh *fh = get_filehandle(fd);
+  if (!fh)
+    return -EBADF;
+
+  return _setlk(fh, fl, owner, sleep);
+}
+
 int Client::opendir(const char *relpath, dir_result_t **dirpp, const UserPerm& perms)
 {
   RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
