@@ -2026,6 +2026,8 @@ int64_t ceph_ll_writev(struct ceph_mount_info *cmount, struct Fh *fh,
 		       const struct iovec *iov, int iovcnt, int64_t off);
 int64_t ceph_ll_nonblocking_readv_writev(struct ceph_mount_info *cmount,
 					 struct ceph_ll_io_info *io_info);
+int64_t ceph_ll_nonblocking_fsync(struct ceph_mount_info *cmount,
+				  Inode *in, struct ceph_ll_io_info *io_info);
 int ceph_ll_close(struct ceph_mount_info *cmount, struct Fh* filehandle);
 int ceph_ll_iclose(struct ceph_mount_info *cmount, struct Inode *in, int mode);
 /**
