@@ -113,6 +113,17 @@ struct OSDSetRequest {
   void decode_json(JSONObj* obj);
 };
 
+  struct OSDEnableApplicationRequest {
+    std::string pool;
+    std::string app;
+    std::optional<bool> yes_i_really_mean_it;
+    std::optional<std::string> key;
+    std::optional<std::string> value;
+
+    void dump(Formatter* f) const;
+    void decode_json(JSONObj* obj);
+  };
+
 // These structures are sent directly to the relevant OSD
 // rather than the monitor
 template <io_exerciser::InjectOpType op_type>

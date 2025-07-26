@@ -184,3 +184,20 @@ void InjectECClearParityRead::decode_json(JSONObj* obj) {
   JSONDecoder::decode_json("pool", pool, obj);
   JSONDecoder::decode_json("objname", objname, obj);
 }
+
+void OSDEnableApplicationRequest::dump(Formatter* f) const {
+  encode_json("prefix", "osd pool application enable", f);
+  encode_json("pool", pool, f);
+  encode_json("app", app, f);
+  encode_json("yes_i_really_mean_it", yes_i_really_mean_it, f);
+  encode_json("key", key, f);
+  encode_json("value", value, f);
+}
+
+void OSDEnableApplicationRequest::decode_json(JSONObj* obj) {
+  JSONDecoder::decode_json("pool", pool, obj);
+  JSONDecoder::decode_json("app", app, obj);
+  JSONDecoder::decode_json("yes_i_really_mean_it", yes_i_really_mean_it, obj);
+  JSONDecoder::decode_json("key", key, obj);
+  JSONDecoder::decode_json("value", value, obj);
+}

@@ -392,11 +392,6 @@ class SelectErasurePool : public ProgramOptionReader<std::string> {
                     bool disable_pool_ec_optimizations);
   const std::string select() override;
   std::string create();
-  void configureServices(bool allow_pool_autoscaling,
-                         bool allow_pool_balancer,
-                         bool allow_pool_deep_scrubbing,
-                         bool allow_pool_scrubbing,
-                         bool test_recovery);
 
   inline bool get_allow_pool_autoscaling() { return allow_pool_autoscaling; }
   inline bool get_allow_pool_balancer() { return allow_pool_balancer; }
@@ -425,6 +420,14 @@ class SelectErasurePool : public ProgramOptionReader<std::string> {
   SelectErasureProfile sep;
 
   std::optional<Profile> profile;
+
+  void configureServices(bool allow_pool_autoscaling,
+                         bool allow_pool_balancer,
+                         bool allow_pool_deep_scrubbing,
+                         bool allow_pool_scrubbing,
+                         bool test_recovery);
+
+ void setApplication(const std::string& pool_name);
 };
 
 class TestObject {
