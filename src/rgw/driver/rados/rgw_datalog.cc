@@ -1397,54 +1397,57 @@ void RGWDataChangesLog::blocking_shutdown()
     return;
   }
   down_flag = true;
-  if (!ran_background)  {
-    return;
-  }
-  renew_stop();
-  // Revisit this later
-  asio::dispatch(renew_strand,
-		 [this]() {
-		   renew_signal.emit(asio::cancellation_type::terminal);
-		 });
-  try {
-    renew_future.wait();
-  } catch (const std::future_error& e) {
-    if (e.code() != std::future_errc::no_state) {
-      throw;
-    }
-  }
-  asio::dispatch(recovery_strand,
-		 [this]() {
-		   recovery_signal.emit(asio::cancellation_type::terminal);
-		 });
-  try {
-    recovery_future.wait();
-  } catch (const std::future_error& e) {
-    if (e.code() != std::future_errc::no_state) {
-      throw;
-    }
-  }
-  asio::dispatch(watch_strand,
-		 [this]() {
-		   watch_signal.emit(asio::cancellation_type::terminal);
-		 });
-  try {
-    watch_future.wait();
-  } catch (const std::future_error& e) {
-    if (e.code() != std::future_errc::no_state) {
-      throw;
-    }
-  }
-  if (watchcookie && rados->check_watch(watchcookie)) {
-    auto wc = watchcookie;
-    watchcookie = 0;
+  if (ran_background)  {
+    renew_stop();
+    // Revisit this later
+    asio::dispatch(renew_strand,
+		   [this]() {
+		     renew_signal.emit(asio::cancellation_type::terminal);
+		   });
     try {
-      rados->unwatch(wc, loc, async::use_blocked);
-    } catch (const std::exception& e) {
-      ldpp_dout(&dp, 2)
-	<< "RGWDataChangesLog::blocking_shutdown: unwatch failed: " << e.what()
-	<< dendl;
+      renew_future.wait();
+    } catch (const std::future_error& e) {
+      if (e.code() != std::future_errc::no_state) {
+	throw;
+      }
     }
+    asio::dispatch(recovery_strand,
+		   [this]() {
+		     recovery_signal.emit(asio::cancellation_type::terminal);
+		   });
+    try {
+      recovery_future.wait();
+    } catch (const std::future_error& e) {
+      if (e.code() != std::future_errc::no_state) {
+	throw;
+      }
+    }
+    asio::dispatch(watch_strand,
+		   [this]() {
+		     watch_signal.emit(asio::cancellation_type::terminal);
+		   });
+    try {
+      watch_future.wait();
+    } catch (const std::future_error& e) {
+      if (e.code() != std::future_errc::no_state) {
+	throw;
+      }
+    }
+    if (watchcookie && rados->check_watch(watchcookie)) {
+      auto wc = watchcookie;
+      watchcookie = 0;
+      try {
+	rados->unwatch(wc, loc, async::use_blocked);
+      } catch (const std::exception& e) {
+	ldpp_dout(&dp, 2)
+	  << "RGWDataChangesLog::blocking_shutdown: unwatch failed: " << e.what()
+	  << dendl;
+      }
+    }
+  }
+  if (bes) {
+    bes->shutdown();
+    bes.reset();
   }
   return;
 }
