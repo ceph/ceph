@@ -89,6 +89,47 @@ bool rgw_s3_key_filter::has_content() const {
   return !(prefix_rule.empty() && suffix_rule.empty() && regex_rule.empty());
 }
 
+void rgw_s3_zone_filter::dump(Formatter *f) const {
+  if (!has_content()) {
+    return;
+  }
+  
+  f->open_array_section("FilterRules");
+  f->open_object_section("");
+  ::encode_json("Name", zone_name, f);
+  f->close_section();
+  f->close_section();
+}
+
+bool rgw_s3_zone_filter::decode_xml(XMLObj* obj) {
+  XMLObjIter iter = obj->find("FilterRule");
+  XMLObj *o;
+
+  const auto throw_if_missing = true;
+  auto not_set = true;
+
+  while ((o = iter.get_next())) {
+    if (not_set) {
+        not_set = false;
+        RGWXMLDecoder::decode_xml("Name", zone_name, o, throw_if_missing);
+    } else {
+        throw RGWXMLDecoder::err("invalid/duplicate S3Zone filter rule");
+    }
+  }
+
+  return true;
+}
+
+void rgw_s3_zone_filter::dump_xml(Formatter *f) const {
+  f->open_object_section("FilterRule");
+  ::encode_xml("Name", zone_name, f);
+  f->close_section();
+}
+
+bool rgw_s3_zone_filter::has_content() const {
+    return !zone_name.empty();
+}
+
 void rgw_s3_key_value_filter::dump(Formatter *f) const {
   if (!has_content()) {
     return;
@@ -138,12 +179,14 @@ void rgw_s3_filter::dump(Formatter *f) const {
   encode_json("S3Key", key_filter, f);
   encode_json("S3Metadata", metadata_filter, f);
   encode_json("S3Tags", tag_filter, f);
+  encode_json("S3Zone", zone_filter, f);
 }
 
 bool rgw_s3_filter::decode_xml(XMLObj* obj) {
   RGWXMLDecoder::decode_xml("S3Key", key_filter, obj);
   RGWXMLDecoder::decode_xml("S3Metadata", metadata_filter, obj);
   RGWXMLDecoder::decode_xml("S3Tags", tag_filter, obj);
+  RGWXMLDecoder::decode_xml("S3Zone", zone_filter, obj);
   return true;
 }
 
@@ -157,12 +200,16 @@ void rgw_s3_filter::dump_xml(Formatter *f) const {
   if (tag_filter.has_content()) {
     ::encode_xml("S3Tags", tag_filter, f);
   }
+    if (zone_filter.has_content()) {
+    ::encode_xml("S3Zone", zone_filter, f);
+  }
 }
 
 bool rgw_s3_filter::has_content() const {
   return key_filter.has_content()  ||
          metadata_filter.has_content() ||
-         tag_filter.has_content();
+         tag_filter.has_content() ||
+         zone_filter.has_content();
 }
 
 bool match(const rgw_s3_key_filter& filter, const std::string& key) {
@@ -218,52 +265,6 @@ bool match(const rgw_s3_key_value_filter& filter, const KeyMultiValueMap& kv) {
   return true;
 }
 
-bool match(const rgw_s3_filter& s3_filter, const rgw::sal::Object* obj) {
-  if (obj == nullptr) {
-    return false;
-  }
-
-  if (match(s3_filter.key_filter, obj->get_name())) {
-    return true;
-  }
-
-  const auto &attrs = obj->get_attrs();
-  if (!s3_filter.metadata_filter.kv.empty()) {
-    KeyValueMap attrs_map;
-    for (auto& attr : attrs) {
-      if (boost::algorithm::starts_with(attr.first, RGW_ATTR_META_PREFIX)) {
-        std::string_view key(attr.first);
-        key.remove_prefix(sizeof(RGW_ATTR_PREFIX)-1);
-        // we want to pass a null terminated version
-        // of the bufferlist, hence "to_str().c_str()"
-        attrs_map.emplace(key, attr.second.to_str().c_str());
-      }
-    }
-    if (match(s3_filter.metadata_filter, attrs_map)) {
-      return true;
-    }
-  }
-
-  if (!s3_filter.tag_filter.kv.empty()) {
-    // tag filter exists
-    // try to fetch tags from the attributes
-    KeyMultiValueMap tags;
-    const auto attr_iter = attrs.find(RGW_ATTR_TAGS);
-    if (attr_iter != attrs.end()) {
-      auto bliter = attr_iter->second.cbegin();
-      RGWObjTags obj_tags;
-      try {
-        ::decode(obj_tags, bliter);
-      } catch (buffer::error &) {
-        // not able to decode tags
-        return false;
-      }
-      tags = std::move(obj_tags.get_tags());
-    }
-    if (match(s3_filter.tag_filter, tags)) {
-      return true;
-    }
-  }
-
-  return false;
+bool match(const rgw_s3_zone_filter& filter, const std::string& zone_name) {
+  return filter.zone_name == zone_name;
 }

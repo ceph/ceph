@@ -39,6 +39,11 @@ struct rgw_pubsub_topic_filter;
           <Value></Value>
         </FilterRule>
       </S3Tags>
+      <S3Zone>
+        <FilterRule>
+          <Name></Name>
+        </FilterRule>
+      </S3Zone>
     </Filter>
     <Id>notification1</Id>
     <Topic>arn:aws:sns:<region>:<account>:<topic></Topic>
@@ -67,6 +72,9 @@ struct rgw_pubsub_s3_notification {
 
 // return true if the key matches the prefix/suffix/regex rules of the key filter
 bool match(const rgw_s3_key_filter& filter, const std::string& key);
+
+// return true if the zone filter matches the zone name
+bool match(const rgw_s3_zone_filter& filter, const std::string& zone_name);
 
 // return true if the key matches the metadata rules of the metadata filter
 bool match(const rgw_s3_key_value_filter& filter, const KeyValueMap& kv);
