@@ -828,3 +828,281 @@ def test_apply_password_filter_in_out(tmodule):
     assert len(out['values']['users']) == 2
     assert out['values']['users'][0]['password'] == 'abracadabra'
     assert out['values']['users'][1]['password'] == 'xyzzy'
+
+
+cert1 = """
+-----BEGIN CERTIFICATE-----
+MIIGFjCCA/6gAwIBAgIUZLL4QTx5ESBYQYS761DcZ7S1c24wDQYJKoZIhvcNAQEN
+BQAwgYgxCzAJBgNVBAYTAlVTMQswCQYDVQQIDAJNQTEPMA0GA1UEBwwGTG93ZWxs
+MR8wHQYDVQQKDBZCaXJjaCBTdHJlZXQgQ29tcHV0aW5nMRYwFAYDVQQDDA1Kb2hu
+IE11bGxpZ2FuMSIwIAYJKoZIhvcNAQkBFhNqb2hubUBhc3luY2hyb25vLnVzMB4X
+DTI1MDYzMDE5MzAwM1oXDTI2MDcyNDE5MzAwM1owbjELMAkGA1UEBhMCVVMxCzAJ
+BgNVBAgMAk1BMQ8wDQYDVQQHDAZMb3dlbGwxHzAdBgNVBAoMFkJpcmNoIFN0cmVl
+dCBDb21wdXRpbmcxIDAeBgNVBAMMF0ROUzpjZXBoMC5jeC5mZG9wZW4ubmV0MIIC
+IjANBgkqhkiG9w0BAQEFAAOCAg8AMIICCgKCAgEApZYqA73a8ojX7QsCJHiXh0J2
+KKEqDU6k0Yjoie9raYCP/aaiJpffSjhKl1rYuIqjBUG5D0tdT3sRw3m96Nw6gkhM
+5J8r02muQpJqmzPmfAn75IVjRkJ9OsHyS1Mf9GADTfv3pMBkwqqrGb8NxWQXeS4s
+PLPBv8SI4ozFNwwlEvZ0kesI4Qf0VRZ1ieSzAArjDWWFX8kURMt6UzN8opnxGvzT
+cfY4J0iKCYBK6Vqmf/OrMg3IjDojKaQqBlMPAQURyiYeF1hfDrcqGQC6S4Iz5mDt
+ZsMywFQFlEhkWkhJdMMkY4bqvn01BKXl3WY0HY5pPslRWWfj4aQeBb8DFH+rFeTf
+I/S02ECE/SKc+O7JJa23HtzJspiaK/MV6XQUDDWYdFQEfLhQb3y3RuYJ7C0WZDMc
+EmJHuB1D0/RS5xWiukTyRbOFf0Dbzn07PPUycE5BaCJ/ekwpMBvYQ6uCZq19CRAE
+v5j7oyC1+rjOCKpTBPGCFWbODJmf5LrfcZLX/VtR+vu3a28OKmbxvdQ3uzLPwjFx
+szzsJRn4URyI5hxl3K0w5Yptd/mvdnSeQTnX9TmMFE/G+EdlGxZtc695mOvWX6gK
+ezwSqwtxVAZ18x/we6NZUkeuaC4+Xec8HoowHYmfRUH1P69ZXAuKKSIZizuvDYIF
+tfcDeDY6s0wp3SKQ1bUCAwEAAaOBkDCBjTAJBgNVHRMEAjAAMEAGA1UdEQQ5MDeC
+E2NlcGgwLmN4LmZkb3Blbi5uZXSCGnJjLnNtYi5jZXBoMC5jeC5mZG9wZW4ubmV0
+hwTAqEzIMB0GA1UdDgQWBBR9bOCw+6pMkeS1HnAuCFhmoM7NPzAfBgNVHSMEGDAW
+gBRsCQk9OUjWypZgtyH+5LxzZ4eBJDANBgkqhkiG9w0BAQ0FAAOCAgEAF6u76+6C
+JkQEqBSYU09JQT8JDWX3AUZDXoCIpv2F1UD26ueAIaYD1dkpKDFg0UOOBwC7TiR9
+uf210HtY5ic++Bm5xavhRk65FGwypv65SqjfehqTiRU+b0my0LG2OaAVrUcKWdbn
+ZvwiBr1I7Wyn0MV1Ko7sqZh0j7Y4kPXCa2D8QG1inr9YBQQpid7CUwNeS5eYAVbP
+gI4zTYKKvJMYPr4lTqsweCDOpctC7fwVb43XGTRVhVXQdOux9n5emROx/Ok0d2xX
+mi5rlUfMxlrWjs7KK336x8z31i3w+1xc1ESaF0eP1byikvpbYBN1dEYahilMaSVl
+3IpDYCwCFMU+ZZUZdqVyQQL+lTxqsc2orzzFgfv594hkEdYNlJ/z/f1b8idYk3g1
+WTrixgd+KYcHoCCS8pHFVs8lankBqQGMckZmIyzfP7RxY43j6XTV+4791O4o0waZ
+I5AwhUmgJj7G2Mp1jacMlHtZPqC0iDlci5fh6KpzVjPzrqA2sIN+9yJAlX8teJnC
+adKnxoY+AbqwLLTHfGx/W0W8jUxmea0eYufgUqxoQv5qdREafcuchGM36bKukVYb
+L3pqleYyvguwxxcc2MJvXjgAiZ5EsNJ2TCr4Mt0mZP406BhEQxfvpBSdRXTiHGJ/
+KNDwOknnnEhdXshW5M8G8ZhkahG8YABHTBw=
+-----END CERTIFICATE-----
+"""
+
+
+def test_tls_credential(tmodule):
+    _example_cfg_1(tmodule)
+
+    txt = json.dumps(
+        {
+            'resource_type': 'ceph.smb.tls.credential',
+            'tls_credential_id': 'tc1',
+            'intent': 'present',
+            'credential_type': 'cert',
+            'value': cert1,
+        }
+    )
+
+    rg = tmodule.apply_resources(txt)
+    assert rg.success, rg.to_simplified()
+    ts = rg.to_simplified()
+    assert len(ts['results']) == 1
+    r = ts['results'][0]['resource']
+    assert r['resource_type'] == 'ceph.smb.tls.credential'
+    out = tmodule.show()
+    res = out.get('resources')
+    assert res
+    assert len(res) == 5
+    clusters = [r for r in res if r['resource_type'] == 'ceph.smb.cluster']
+    assert len(clusters) == 1
+    shares = [r for r in res if r['resource_type'] == 'ceph.smb.share']
+    assert len(shares) == 2
+    jauths = [r for r in res if r['resource_type'] == 'ceph.smb.join.auth']
+    assert len(jauths) == 1
+    tcs = [r for r in res if r['resource_type'] == 'ceph.smb.tls.credential']
+    assert len(tcs) == 1
+    assert tcs[0]['credential_type'] == 'cert'
+    assert tcs[0]['value'] == cert1
+
+
+def test_tls_credential_yaml_show(tmodule):
+    _example_cfg_1(tmodule)
+
+    txt = json.dumps(
+        {
+            'resource_type': 'ceph.smb.tls.credential',
+            'tls_credential_id': 'tc1',
+            'intent': 'present',
+            'credential_type': 'cert',
+            'value': cert1,
+        }
+    )
+
+    rg = tmodule.apply_resources(txt)
+    assert rg.success, rg.to_simplified()
+    ts = rg.to_simplified()
+    assert len(ts['results']) == 1
+    r = ts['results'][0]['resource']
+    assert r['resource_type'] == 'ceph.smb.tls.credential'
+    res, body, status = tmodule.show.command(
+        ['ceph.smb.tls.credential'], format='yaml'
+    )
+    assert res == 0
+    body = body.strip()
+    assert 'value: |' in body
+
+
+def _keybridge_example():
+    return [
+        {
+            'resource_type': 'ceph.smb.tls.credential',
+            'tls_credential_id': 'cert1',
+            'intent': 'present',
+            'credential_type': 'cert',
+            'value': cert1,
+        },
+        {
+            'resource_type': 'ceph.smb.tls.credential',
+            'tls_credential_id': 'key1',
+            'intent': 'present',
+            'credential_type': 'key',
+            'value': cert1,
+        },
+        {
+            'resource_type': 'ceph.smb.tls.credential',
+            'tls_credential_id': 'cacert1',
+            'intent': 'present',
+            'credential_type': 'ca-cert',
+            'value': cert1,
+        },
+        {
+            'resource_type': 'ceph.smb.cluster',
+            'cluster_id': 'foo',
+            'auth_mode': 'active-directory',
+            'intent': 'present',
+            'clustering': 'never',
+            'domain_settings': {
+                'realm': 'dom1.example.com',
+                'join_sources': [
+                    {
+                        'source_type': 'resource',
+                        'ref': 'foo',
+                    }
+                ],
+            },
+            "keybridge": {
+                "scopes": [
+                    {"name": "mem"},
+                    {
+                        "name": "kmip",
+                        "kmip_hosts": ["zorg.example.net"],
+                        "kmip_port": 78989,
+                        "kmip_cert": {"ref": "cert1"},
+                        "kmip_key": {"ref": "key1"},
+                        "kmip_ca_cert": {"ref": "cacert1"},
+                    },
+                ],
+            },
+        },
+        {
+            'resource_type': 'ceph.smb.join.auth',
+            'auth_id': 'foo',
+            'intent': 'present',
+            'auth': {
+                'username': 'testadmin',
+                'password': 'Passw0rd',
+            },
+        },
+        {
+            'resource_type': 'ceph.smb.share',
+            'cluster_id': 'foo',
+            'share_id': 's1',
+            'intent': 'present',
+            'name': 'Ess One',
+            'readonly': False,
+            'browseable': True,
+            'cephfs': {
+                'volume': 'cephfs',
+                'path': '/',
+                'provider': 'samba-vfs',
+                "fscrypt_key": {
+                    "scope": "mem",
+                    "name": "bob",
+                },
+            },
+        },
+    ]
+
+
+def test_keybridge_config(tmodule):
+    txt = json.dumps(_keybridge_example())
+
+    rg = tmodule.apply_resources(txt)
+    assert rg.success, rg.to_simplified()
+
+
+@pytest.mark.parametrize(
+    "params",
+    [
+        dict(scopes=[{'name': 'joe'}], expected='invalid scope type'),
+        dict(scopes=[{'name': 'mem.joe'}], expected='invalid scope name'),
+        dict(scopes=[{'name': 'kmip.00'}], expected='invalid scope name'),
+        dict(scopes=[{'name': 'kmip.'}], expected='invalid scope name'),
+        dict(scopes=[{'name': 'kmip._'}], expected='invalid scope name'),
+        dict(scopes=[], enabled=True, expected='at least one scope'),
+        dict(scopes=[{'name': 'kmip'}], expected='kmip hostname'),
+        dict(
+            scopes=[{'name': 'kmip', 'kmip_hosts': ['foo.example.org']}],
+            expected='kmip server port',
+        ),
+        dict(
+            scopes=[
+                {
+                    'name': 'kmip',
+                    'kmip_hosts': ['foo.example.org'],
+                    'kmip_port': 67890,
+                }
+            ],
+            expected='cert',
+        ),
+        dict(
+            scopes=[
+                {
+                    'name': 'mem',
+                    'kmip_hosts': ['foo.example.org'],
+                    'kmip_port': 67890,
+                }
+            ],
+            expected='mem',
+        ),
+    ],
+)
+def test_keybridge_config_scope_error(tmodule, params):
+    example = _keybridge_example()
+    if enabled := params.get('enabled'):
+        example[3]['keybridge']['enabled'] = enabled
+    example[3]['keybridge']['scopes'] = params['scopes']
+    txt = json.dumps(example)
+
+    rg = tmodule.apply_resources(txt)
+    assert not rg.success, rg.to_simplified()
+    failures = [r for r in rg if not r.success]
+    assert len(failures) == 1
+    failure = failures[0]
+    assert params['expected'] in failure.msg
+
+
+@pytest.mark.parametrize(
+    "params",
+    [
+        dict(fkey={'scope': 'mem', 'name': ''}, expected='valid'),
+        dict(fkey={'scope': 'mem', 'name': '-'}, expected='valid'),
+        dict(fkey={'scope': '-', 'name': 'foo'}, expected='valid'),
+        dict(
+            fkey={'scope': 'mim', 'name': 'foo'},
+            expected='invalid scope type',
+        ),
+        dict(
+            fkey={'scope': 'mem.bob', 'name': 'foo'},
+            expected='invalid scope name',
+        ),
+        dict(
+            fkey={'scope': 'kmip.-', 'name': 'foo'},
+            expected='invalid scope name',
+        ),
+        dict(
+            fkey={'scope': 'kmip.foo', 'name': 'foo'},
+            expected='scope name not known',
+        ),
+    ],
+)
+def test_share_fscrypt_config_error(tmodule, params):
+    example = _keybridge_example()
+    example[-1]['cephfs']['fscrypt_key'] = params['fkey']
+    txt = json.dumps(example)
+
+    rg = tmodule.apply_resources(txt)
+    assert not rg.success, rg.to_simplified()
+    failures = [r for r in rg if not r.success]
+    assert len(failures) == 1
+    failure = failures[0]
+    assert params['expected'] in failure.msg
