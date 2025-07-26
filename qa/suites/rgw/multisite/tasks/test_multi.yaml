@@ -15,3 +15,6 @@ tasks:
 - rgw-multisite-tests:
     config:
       reconfigure_delay: 90
+- radosgw-admin-rest:
+    admin-client: c1.client.0 # create user on master zone
+    rest-client: c2.client.0 # send admin api requests to secondary zone
