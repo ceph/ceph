@@ -21,6 +21,7 @@ set(crimson_common_srcs
   common/buffer_seastar.cc
   crush/CrushLocation.cc)
 
+include_directories(${CMAKE_SOURCE_DIR}/src/dmclock/support/src)
 # the specialized version of ceph-common, where
 #  - the logging is sent to Seastar backend
 #  - and the template parameter of lock_policy is SINGLE

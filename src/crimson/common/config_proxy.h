@@ -5,6 +5,7 @@
 
 #include <seastar/core/reactor.hh>
 #include <seastar/core/sharded.hh>
+#include <seastar/core/thread.hh>
 #include "common/config.h"
 #include "common/config_obs.h"
 #include "common/config_obs_mgr.h"
@@ -69,36 +70,38 @@ class ConfigProxy : public seastar::peering_sharded_service<ConfigProxy>
                                                const std::string &key) {
                                       rev_obs[obs].insert(key);
                                     }, nullptr);
-      for (auto& [obs, keys] : rev_obs) {
-        (*obs)->handle_conf_change(owner, keys);
-      }
+      return seastar::async([rev_obs = std::move(rev_obs), &owner]() mutable {
+        for (auto& [obs, keys] : rev_obs) {
+          (*obs)->handle_conf_change(owner, keys);
+        }
+      }).then ([&owner, new_values] {
+           return seastar::parallel_for_each(std::views::iota(1u, seastar::smp::count),
+                                             [&owner, new_values] (auto cpu) {
+             return owner.container().invoke_on(cpu,
+             [foreign_values = seastar::make_foreign(new_values)](ConfigProxy& proxy) mutable {
+               proxy.values.reset();
+               proxy.values = std::move(foreign_values);
 
-      return seastar::parallel_for_each(std::views::iota(1u, seastar::smp::count),
-                                        [&owner, new_values] (auto cpu) {
-        return owner.container().invoke_on(cpu,
-          [foreign_values = seastar::make_foreign(new_values)](ConfigProxy& proxy) mutable {
-            proxy.values.reset();
-            proxy.values = std::move(foreign_values);
+               std::map<std::string, bool> changes_present;
+               for (const auto& change : proxy.values->changed) {
+                 std::string dummy;
+                 changes_present[change] = proxy.get_val(change, &dummy);
+               }
 
-            std::map<std::string, bool> changes_present;
-            for (const auto& change : proxy.values->changed) {
-              std::string dummy;
-              changes_present[change] = proxy.get_val(change, &dummy);
-            }
-
-            ObserverMgr<ConfigObserver>::rev_obs_map rev_obs;
-            proxy.obs_mgr.for_each_change(changes_present,
-              [&rev_obs](auto obs, const std::string& key) {
-                rev_obs[obs].insert(key);
-              }, nullptr);
-            for (auto& [obs, keys] : rev_obs) {
-              (*obs)->handle_conf_change(proxy, keys);
-            }
-          });
-        }).finally([new_values] {
-          new_values->changed.clear();
-        });
-      });
+               ObserverMgr<ConfigObserver>::rev_obs_map rev_obs;
+               proxy.obs_mgr.for_each_change(changes_present,
+                 [&rev_obs](auto obs, const std::string& key) {
+                   rev_obs[obs].insert(key);
+                 }, nullptr);
+               for (auto& [obs, keys] : rev_obs) {
+                 (*obs)->handle_conf_change(proxy, keys);
+               }
+             });
+           }).finally([new_values] {
+             new_values->changed.clear();
+           });
+         });
+    });
   }
 public:
   ConfigProxy(const EntityName& name, std::string_view cluster);
@@ -152,9 +155,19 @@ public:
       }
     });
   }
+
   int get_val(std::string_view key, std::string *val) const {
     return get_config().get_val(*values, key, val);
   }
+
+  void set_val_default(const std::string& key, const std::string& val) {
+    get_config().set_val_default(*values, obs_mgr, key, val);
+  }
+
+  int rm_val_default(const std::string& key) {
+    return get_config().rm_val(*values, key);
+  }
+
   template<typename T>
   const T get_val(std::string_view key) const {
     return get_config().template get_val<T>(*values, key);

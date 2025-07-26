@@ -58,6 +58,7 @@ add_executable(crimson-osd
   ${PROJECT_SOURCE_DIR}/src/osd/SnapMapper.cc
   ${PROJECT_SOURCE_DIR}/src/osd/osd_perf_counters.cc
   ${PROJECT_SOURCE_DIR}/src/mgr/OSDPerfMetricTypes.cc
+  ${PROJECT_SOURCE_DIR}/src/common/mclock_common.cc
   watch.cc
   )
 if(HAS_VTA)

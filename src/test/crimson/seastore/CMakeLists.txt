@@ -1,4 +1,6 @@
 if(NOT CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|AARCH64|arm|ARM")
+  target_include_directories(unittest-transaction-manager PRIVATE
+  ${CMAKE_SOURCE_DIR}/src/dmclock/support/src)	
   # See https://tracker.ceph.com/issues/70254
   add_executable(unittest-transaction-manager
     test_block.cc

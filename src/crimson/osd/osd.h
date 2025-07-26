@@ -66,6 +66,7 @@ class OSD final : public crimson::net::Dispatcher,
 		  public md_config_obs_t {
   const int whoami;
   const uint32_t nonce;
+  std::optional<bool> is_rotational;
   seastar::abort_source& abort_source;
   seastar::timer<seastar::lowres_clock> beacon_timer;
   // talk with osd
@@ -190,6 +191,7 @@ private:
   seastar::future<> _send_boot();
   seastar::future<> _add_me_to_crush();
   seastar::future<> _add_device_class();
+  //#seastar::future<bool> _get_device_type();
 
   seastar::future<> osdmap_subscribe(version_t epoch, bool force_request);
 
