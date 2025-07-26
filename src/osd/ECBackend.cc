@@ -308,18 +308,66 @@ void ECBackend::RecoveryBackend::handle_recovery_push_reply(
   continue_recovery_op(rop, m);
 }
 
+void ECBackend::RecoveryBackend::update_object_size_after_read(
+    uint64_t size,
+    read_result_t &res,
+    read_request_t &req) {
+  // We didn't know the size before, meaning the zero for decode calculations
+  // will be off. Recalculate them!
+  ECUtil::shard_extent_set_t zero_mask(sinfo.get_k_plus_m());
+  sinfo.ro_size_to_zero_mask(size, zero_mask);
+  ECUtil::shard_extent_set_t read_mask(sinfo.get_k_plus_m());
+  sinfo.ro_size_to_read_mask(size, read_mask);
+  extent_set superset = res.buffers_read.get_extent_superset();
+
+  for (auto &&[shard, eset] : zero_mask) {
+    eset.intersection_of(superset);
+    if (!eset.empty() &&
+        (res.zero_length_reads.contains(shard) ||
+          res.buffers_read.contains(shard))) {
+      req.zeros_for_decode[shard].insert(eset);
+    }
+  }
+
+  /* Correct the shard_want_to_read, to make sure everything is within scope
+   * of the newly found object size.
+   */
+  for (auto iter = req.shard_want_to_read.begin(); iter != req.shard_want_to_read.end();) {
+    auto &&[shard, eset] = *iter;
+    bool erase = false;
+
+    if (read_mask.contains(shard)) {
+      eset.intersection_of(read_mask.get(shard));
+      erase = eset.empty();
+    } else {
+      erase = true;
+    }
+
+    /* Some shards may be empty */
+    if (erase) {
+      iter = req.shard_want_to_read.erase(iter);
+    } else {
+      ++iter;
+    }
+  }
+
+  dout(20) << "Update want and zeros from read:size=" << size
+           << " res=" << res
+           << " req=" << req
+           << dendl;
+}
+
 void ECBackend::RecoveryBackend::handle_recovery_read_complete(
     const hobject_t &hoid,
-    ECUtil::shard_extent_map_t &&buffers_read,
-    std::optional<map<string, bufferlist, less<>>> attrs,
-    const ECUtil::shard_extent_set_t &want_to_read,
+    read_result_t &&res,
+    read_request_t &req,
     RecoveryMessages *m) {
-  dout(10) << __func__ << ": returned " << hoid << " " << buffers_read << dendl;
+  dout(10) << __func__ << ": returned " << hoid << " " << res << dendl;
   ceph_assert(recovery_ops.contains(hoid));
   RecoveryBackend::RecoveryOp &op = recovery_ops[hoid];
 
-  if (attrs) {
-    op.xattrs.swap(*attrs);
+  if (res.attrs) {
+    op.xattrs.swap(*(res.attrs));
 
     if (!op.obc) {
       // attrs only reference the origin bufferlist (decode from
@@ -341,53 +389,31 @@ void ECBackend::RecoveryBackend::handle_recovery_read_complete(
       ceph_assert(op.obc);
       op.recovery_info.size = op.obc->obs.oi.size;
       op.recovery_info.oi = op.obc->obs.oi;
+
+      update_object_size_after_read(op.recovery_info.size, res, req);
     }
   }
   ceph_assert(op.xattrs.size());
   ceph_assert(op.obc);
 
-  op.returned_data.emplace(std::move(buffers_read));
-
-  ECUtil::shard_extent_set_t read_mask(sinfo.get_k_plus_m());
-  sinfo.ro_size_to_read_mask(op.recovery_info.size, read_mask);
-  ECUtil::shard_extent_set_t shard_want_to_read(sinfo.get_k_plus_m());
-
-  for (auto &[shard, eset] : want_to_read) {
-    /* Read buffers do not need recovering! */
-    if (buffers_read.contains(shard)) {
-      continue;
-    }
-
-    /* Read-buffers will be truncated to the end-of-object. Do not attempt
-     * to recover off-the-end.
-     */
-    shard_want_to_read[shard].intersection_of(read_mask.get(shard),eset);
-
-    /* Some shards may be empty */
-    if (shard_want_to_read[shard].empty()) {
-      shard_want_to_read.erase(shard);
-    }
-  }
-
+  op.returned_data.emplace(std::move(res.buffers_read));
   uint64_t aligned_size = ECUtil::align_next(op.obc->obs.oi.size);
 
-  int r = op.returned_data->decode(ec_impl, shard_want_to_read, aligned_size, get_parent()->get_dpp(), true);
+  dout(20) << __func__ << " before decode: oid=" << op.hoid << " EC_DEBUG_BUFFERS: "
+         << op.returned_data->debug_string(2048, 0)
+         << dendl;
+
+  op.returned_data->add_zero_padding_for_decode(req.zeros_for_decode);
+  int r = op.returned_data->decode(ec_impl, req.shard_want_to_read, aligned_size, get_parent()->get_dpp(), true);
   ceph_assert(r == 0);
 
   // Finally, we don't want to write any padding, so truncate the buffer
   // to remove it.
   op.returned_data->erase_after_ro_offset(aligned_size);
 
-  for (auto &&shard: op.missing_on_shards) {
-    if (read_mask.contains(shard) && op.returned_data->contains_shard(shard)) {
-      ceph_assert(read_mask.at(shard).range_end() >=
-        op.returned_data->get_extent_map(shard).get_end_off());
-    }
-  }
-
   dout(20) << __func__ << ": oid=" << op.hoid << dendl;
-  dout(30) << __func__ << "EC_DEBUG_BUFFERS: "
-           << op.returned_data->debug_string(2048, 8)
+  dout(20) << __func__ << " after decode: oid=" << op.hoid << " EC_DEBUG_BUFFERS: "
+           << op.returned_data->debug_string(2048, 0)
            << dendl;
 
   continue_recovery_op(op, m);
@@ -440,9 +466,8 @@ struct RecoveryReadCompleter : ECCommon::ReadCompleter {
     ceph_assert(req.to_read.size() == 0);
     backend.handle_recovery_read_complete(
       hoid,
-      std::move(res.buffers_read),
-      res.attrs,
-      req.shard_want_to_read,
+      std::move(res),
+      req,
       &rm);
   }
 
@@ -503,6 +528,14 @@ void ECBackend::RecoveryBackend::dispatch_recovery_messages(
 
 #if 1
   if (!replies.empty()) {
+    dout(20) << __func__ << " recovery_transactions=";
+    Formatter *f = Formatter::create("json");
+    f->open_object_section("t");
+    m.t.dump(f);
+    f->close_section();
+    f->flush(*_dout);
+    delete f;
+    *_dout << dendl;
     commit_txn_send_replies(std::move(m.t), std::move(replies));
   }
 #endif
@@ -1005,6 +1038,18 @@ void ECBackend::handle_sub_write(
   tls.reserve(2);
   tls.push_back(std::move(op.t));
   tls.push_back(std::move(localt));
+  dout(20) << __func__ << " queue_transactions=";
+  Formatter *f = Formatter::create("json");
+  f->open_array_section("tls");
+  for (ObjectStore::Transaction t: tls) {
+    f->open_object_section("t");
+    t.dump(f);
+    f->close_section();
+  }
+  f->close_section();
+  f->flush(*_dout);
+  delete f;
+  *_dout << dendl;
   get_parent()->queue_transactions(tls, msg);
   dout(30) << __func__ << " missing after" << get_parent()->get_log().
                                                             get_missing().
@@ -1192,6 +1237,11 @@ void ECBackend::handle_sub_read_reply(
       buffers_read.insert_in_shard(from.shard, offset, buffer_list);
     }
     rop.debug_log.emplace_back(ECUtil::READ_DONE, op.from, buffers_read);
+
+    // zero length reads may need to be zero padded during recovery
+    if (!buffers_read.contains_shard(from.shard)) {
+      rop.complete.at(hoid).zero_length_reads.insert(from.shard);
+    }
   }
   for (auto &&[hoid, req]: rop.to_read) {
     if (!rop.complete.contains(hoid)) {
@@ -1230,6 +1280,13 @@ void ECBackend::handle_sub_read_reply(
     rop.debug_log.emplace_back(ECUtil::ERROR, op.from, complete.buffers_read);
     complete.buffers_read.erase_shard(from.shard);
     complete.processed_read_requests.erase(from.shard);
+    // If we are doing redundant reads, then we must take care that any failed
+    // reads are not replaced with a zero buffer. When fast_reads are disabled,
+    // the send_all_remaining_reads() call will replace the zeros_for_decode
+    // based on the recovery read.
+    if (rop.do_redundant_reads) {
+      rop.to_read.at(hoid).zeros_for_decode.erase(from.shard);
+    }
     dout(20) << __func__ << " shard=" << from << " error=" << err << dendl;
   }
 
@@ -1243,9 +1300,10 @@ void ECBackend::handle_sub_read_reply(
   rop.in_progress.erase(from);
   unsigned is_complete = 0;
   bool need_resend = false;
+  bool all_sub_reads_done = rop.in_progress.empty();
   // For redundant reads check for completion as each shard comes in,
   // or in a non-recovery read check for completion once all the shards read.
-  if (rop.do_redundant_reads || rop.in_progress.empty()) {
+  if (rop.do_redundant_reads || all_sub_reads_done) {
     for (auto &&[oid, read_result]: rop.complete) {
       shard_id_set have;
       read_result.processed_read_requests.populate_shard_id_set(have);
@@ -1255,29 +1313,34 @@ void ECBackend::handle_sub_read_reply(
           populate_shard_id_set(want_to_read);
 
       dout(20) << __func__ << " read_result: " << read_result << dendl;
+      // If all reads are done, we can safely assume that zero buffers can
+      // be applied.
+      if (all_sub_reads_done) {
+        rop.to_read.at(oid).zeros_for_decode.populate_shard_id_set(have);
+      }
 
-      int err = ec_impl->minimum_to_decode(want_to_read, have, dummy_minimum,
-                                            nullptr);
+      int err = -EIO; // If attributes needed but not read.
+      if (!rop.to_read.at(oid).want_attrs || rop.complete.at(oid).attrs) {
+        err = ec_impl->minimum_to_decode(want_to_read, have, dummy_minimum,
+                                                    nullptr);
+      }
+
       if (err) {
         dout(20) << __func__ << " minimum_to_decode failed" << dendl;
-        if (rop.in_progress.empty()) {
+        if (all_sub_reads_done) {
           // If we don't have enough copies, try other pg_shard_ts if available.
           // During recovery there may be multiple osds with copies of the same shard,
           // so getting EIO from one may result in multiple passes through this code path.
-          if (!rop.do_redundant_reads) {
-            rop.debug_log.emplace_back(ECUtil::REQUEST_MISSING, op.from);
-            int r = read_pipeline.send_all_remaining_reads(oid, rop);
-            if (r == 0) {
-              // We found that new reads are required to do a decode.
-              need_resend = true;
-              continue;
-            } else if (r > 0) {
-              // No new reads were requested. This means that some parity
-              // shards can be assumed to be zeros.
-              err = 0;
-            }
-            // else insufficient shards are available, keep the errors.
+
+          rop.debug_log.emplace_back(ECUtil::REQUEST_MISSING, op.from);
+          int r = read_pipeline.send_all_remaining_reads(oid, rop);
+          if (r == 0 && !rop.do_redundant_reads) {
+            // We found that new reads are required to do a decode.
+            need_resend = true;
+            continue;
           }
+          // else insufficient shards are available, keep the errors.
+
           // Couldn't read any additional shards so handle as completed with errors
           // We don't want to confuse clients / RBD with objectstore error
           // values in particular ENOENT.  We may have different error returns
@@ -1321,6 +1384,17 @@ void ECBackend::handle_sub_read_reply(
     dout(20) << __func__ << " Complete: " << rop << dendl;
     rop.trace.event("ec read complete");
     rop.debug_log.emplace_back(ECUtil::COMPLETE, op.from);
+
+    /* If do_redundant_reads is set then there might be some in progress
+     * reads remaining.  We need to make sure that these non-read shards
+     * do not get padded. If there was no in progress read, then the zero
+     * padding is allowed to stay.
+     */
+    for (auto pg_shard : rop.in_progress) {
+      for (auto &&[oid, read] : rop.to_read) {
+        read.zeros_for_decode.erase(pg_shard.shard);
+      }
+    }
     read_pipeline.complete_read_op(std::move(rop));
   } else {
     dout(10) << __func__ << " readop not complete: " << rop << dendl;
