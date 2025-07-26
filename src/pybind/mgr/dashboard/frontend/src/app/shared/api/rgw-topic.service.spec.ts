@@ -23,6 +23,7 @@ describe('RgwTopicService', () => {
   it('should be created', () => {
     expect(service).toBeTruthy();
   });
+
   it('should call list with result', () => {
     service.listTopic().subscribe((resp) => {
       let result = resp;
