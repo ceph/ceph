@@ -817,10 +817,12 @@ OMapLeafNode::iterate(
       break;
     }
   }
-  if (!key.empty()) {
+  if (iter == iter_end()) {
+    start_from.seek_position = get_end();
+  } else {
     start_from.seek_position = key;
   }
-  start_from.seek_type = ObjectStore::omap_iter_seek_t::UPPER_BOUND;
+  start_from.seek_type = ObjectStore::omap_iter_seek_t::LOWER_BOUND;
 
   return iterate_iertr::make_ready_future<ObjectStore::omap_iter_ret_t>(std::move(ret));
 }
