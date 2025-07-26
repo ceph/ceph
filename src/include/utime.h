@@ -535,10 +535,16 @@ inline utime_t& operator+=(utime_t& l, double f) {
 }
 
 inline utime_t operator-(const utime_t& l, const utime_t& r) {
+  if (l < r)
+    return utime_t();
   return utime_t( l.sec() - r.sec() - (l.nsec()<r.nsec() ? 1:0),
                   l.nsec() - r.nsec() + (l.nsec()<r.nsec() ? 1000000000:0) );
 }
 inline utime_t& operator-=(utime_t& l, const utime_t& r) {
+  if (l < r) {
+    l = utime_t();
+    return l;
+  }
   l.sec_ref() -= r.sec();
   if (l.nsec() >= r.nsec())
     l.nsec_ref() -= r.nsec();
@@ -549,6 +555,10 @@ inline utime_t& operator-=(utime_t& l, const utime_t& r) {
   return l;
 }
 inline utime_t& operator-=(utime_t& l, double f) {
+  if (l < f) {
+    l = utime_t();
+    return l;
+  }
   double fs = trunc(f);
   double ns = (f - fs) * 1000000000.0;
   l.sec_ref() -= (long)fs;
