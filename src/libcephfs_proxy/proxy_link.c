@@ -343,6 +343,15 @@ static int32_t proxy_link_negotiate_check(proxy_link_negotiate_t *local,
 		goto validate;
 	}
 
+	if (local->v2.protocol > remote->v2.protocol) {
+		local->v2.protocol = remote->v2.protocol;
+	}
+
+	if (local->v2.protocol < PROXY_PROTOCOL_V1) {
+		/* Embedded permissions feature requires protocol version 1 */
+		local->v1.supported &= ~PROXY_FEAT_EMBEDDED_PERMS;
+	}
+
 	supported = local->v1.supported & remote->v1.supported;
 	local->v1.supported = supported;
 
@@ -363,10 +372,6 @@ static int32_t proxy_link_negotiate_check(proxy_link_negotiate_t *local,
 
 	enabled = (local->v1.enabled | remote->v1.enabled) & supported;
 	local->v1.enabled = enabled;
-
-	if (local->v2.protocol > remote->v2.protocol) {
-		local->v2.protocol = remote->v2.protocol;
-	}
 
 	/* NEG_VERSION: Implement handling of negotiate extensions. */
 
@@ -487,6 +492,13 @@ static int32_t proxy_link_negotiate_server(proxy_link_t *link, int32_t sd,
 					 "The client tried to use an "
 					 "unsupported protocol");
 		}
+	}
+
+	if (((neg->v1.enabled & PROXY_FEAT_EMBEDDED_PERMS) != 0) &&
+	    (neg->v2.protocol < PROXY_PROTOCOL_V1)) {
+		return proxy_log(LOG_ERR, EINVAL,
+				 "The client tried to enable embedded perms "
+				 "with an unsupported protocol version");
 	}
 
 	/* NEG_VERSION: Implement any required handling for new negotiate
