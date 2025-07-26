@@ -8,7 +8,7 @@ namespace rgw { namespace cache {
 
 class SSDDriver : public CacheDriver {
 public:
-  SSDDriver(Partition& partition_info) : partition_info(partition_info) {}
+  SSDDriver(Partition& partition_info, bool admin) : partition_info(partition_info), admin(admin) {}
   virtual ~SSDDriver() {}
 
   virtual int initialize(const DoutPrefixProvider* dpp) override;
@@ -39,6 +39,7 @@ private:
   uint64_t free_space;
   CephContext* cct;
   std::mutex cache_lock;
+  bool admin;
 
   struct libaio_read_handler {
     rgw::Aio* throttle = nullptr;
