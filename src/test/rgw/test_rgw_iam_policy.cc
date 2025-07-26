@@ -850,6 +850,8 @@ TEST_F(ManagedPolicyTest, IAMReadOnlyAccess)
   act[iamListAttachedGroupPolicies] = 1;
   act[iamSimulateCustomPolicy] = 1;
   act[iamSimulatePrincipalPolicy] = 1;
+  act[iamGetPolicy] = 1;
+  act[iamListPolicies] = 1;
 
   EXPECT_EQ(act, p->statements[0].action);
 }
