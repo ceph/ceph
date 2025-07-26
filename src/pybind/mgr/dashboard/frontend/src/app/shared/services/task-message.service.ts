@@ -404,6 +404,9 @@ export class TaskMessageService {
     'nfs/delete': this.newTaskMessage(this.commonOperations.delete, (metadata) =>
       this.nfs(metadata)
     ),
+    'rgw/topic/delete': this.newTaskMessage(this.commonOperations.delete, (metadata) =>
+      this.topic(metadata)
+    ),
     // Grafana tasks
     'grafana/dashboards/update': this.newTaskMessage(
       this.commonOperations.update,
@@ -615,6 +618,9 @@ export class TaskMessageService {
     return $localize`SMB users and groups access resource '${metadata.usersGroupsId}'`;
   }
 
+  topic(metadata: any) {
+    return $localize`Topic  '${metadata.name}'`;
+  }
   service(metadata: any) {
     return $localize`service '${metadata.service_name}'`;
   }
