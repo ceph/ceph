@@ -208,6 +208,31 @@
       </cds-checkbox>
     </div>
 
+    @if(userForm.getValue('account_id') && !userForm.getValue('account_root_user')) {
+    <!-- Managed policies -->
+    <fieldset>
+      <div class="form-item">
+        <legend i18n
+                class="cd-header">Managed policies</legend>
+        <cds-combo-box label="Policies"
+                       type="multi"
+                       selectionFeedback="top-after-reopen"
+                       formControlName="account_policies"
+                       id="account_policies"
+                       placeholder="Select managed policies..."
+                       i18n-placeholder
+                       [appendInline]="true"
+                       [items]="managedPolicies"
+                       (selected)="multiSelector($event)"
+                       itemValueKey="name"
+                       i18n-label
+                       i18n>
+          <cds-dropdown-list></cds-dropdown-list>
+        </cds-combo-box>
+      </div>
+    </fieldset>
+    }
+
     <!-- S3 key -->
     <fieldset *ngIf="!editing">
       <legend i18n
