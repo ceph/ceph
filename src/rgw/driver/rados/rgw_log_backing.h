@@ -225,6 +225,9 @@ public:
   ///
   /// @param new_tail Lowest non-empty generation
   virtual void handle_empty_to(uint64_t new_tail) = 0;
+
+  /// If you override this, call the superclass method *at the end*.
+  virtual void shutdown();
 };
 
 inline std::string gencursor(uint64_t gen_id, std::string_view cursor) {

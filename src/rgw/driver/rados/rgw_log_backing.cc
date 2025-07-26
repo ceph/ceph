@@ -224,16 +224,26 @@ asio::awaitable<void> log_remove(
   co_return;
 }
 
-logback_generations::~logback_generations() {
+void logback_generations::shutdown() {
   if (watchcookie > 0) {
     auto cct = rados.cct();
     sys::error_code ec;
-    rados.unwatch(watchcookie, loc, asio::detached);
+    rados.unwatch(watchcookie, loc, async::use_blocked[ec]);
     if (ec) {
       lderr(cct) << __PRETTY_FUNCTION__ << ":" << __LINE__
 		 << ": failed unwatching oid=" << oid
 		 << ", " << ec.message() << dendl;
     }
+    watchcookie = 0;
+  }
+}
+
+
+logback_generations::~logback_generations() {
+  auto cct = rados.cct();
+  if (watchcookie > 0) {
+    lderr(cct) << __PRETTY_FUNCTION__ << ":" << __LINE__
+	       << ": logback_generations destroyed without shutdown." << dendl;
   }
 }
 
