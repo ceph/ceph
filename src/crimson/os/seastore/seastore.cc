@@ -30,6 +30,7 @@
 #include "crimson/os/seastore/omap_manager/btree/btree_omap_manager.h"
 #include "crimson/os/seastore/onode_manager.h"
 #include "crimson/os/seastore/object_data_handler.h"
+#include "crimson/os/seastore/logstore/log_node.h"
 
 using crimson::common::local_conf;
 
@@ -78,6 +79,7 @@ SET_SUBSYS(seastore);
 namespace crimson::os::seastore {
 
 using crimson::os::seastore::omap_manager::BtreeOMapManager;
+using crimson::os::seastore::logstore_manager::LogStoreManager;
 
 static OMapManager::initialize_omap_ret
 omaptree_initialize(
@@ -89,6 +91,18 @@ omaptree_initialize(
 {
   return mgr.initialize_omap(
     t, onode.get_metadata_hint(device.get_block_size()), type);
+}
+
+static LogStoreManager::initialize_lsm_ret
+log_initialize(
+  Transaction& t,
+  LogStoreManager& mgr,
+  omap_type_t type,
+  Onode& onode,
+  Device& device)
+{
+  return mgr.initialize_lsm(
+    t, onode.get_metadata_hint(device.get_block_size()));
 }
 
 class FileMDStore final : public SeaStore::MDStore {
@@ -1789,6 +1803,14 @@ SeaStore::Shard::_do_transaction_step(
 	auto root = select_log_omap_root(*onode);
         DEBUGT("op OMAP_SETKEYS, oid={}, omap size={}, type={} ...",
                *ctx.transaction, oid, aset.size(), root.get_type());
+	auto log_root = get_omap_root(omap_type_t::LOG, *onode);
+	if (!log_root.is_null()) {
+	  return log_set_keys(
+	    *ctx.transaction,
+	    std::move(root),
+	    *onode,
+	    std::move(aset));
+	}
         return omaptree_set_keys(
           *ctx.transaction,
           std::move(root),
@@ -1852,8 +1874,8 @@ SeaStore::Shard::_do_transaction_step(
 	  ceph_assert(get_omap_root(omap_type_t::LOG, *onode).is_null());
 	  ceph_assert(get_omap_root(omap_type_t::OMAP, *onode).is_null());
 	  // BtreeOMapManager doesn't need a do_with yet.
-	  auto mgr = BtreeOMapManager(*transaction_manager);
-	  return omaptree_initialize(
+	  auto mgr = LogStoreManager(*transaction_manager);
+	  return log_initialize(
 	    *ctx.transaction, mgr, omap_type_t::LOG, *onode, *device
 	  ).si_then([&onode, &ctx](auto new_root) {
 	    onode->update_log_root(*ctx.transaction, new_root);
@@ -2518,6 +2540,31 @@ SeaStore::Shard::omaptree_get_value(
   omap_root_t&& root,
   std::string_view key) const
 {
+  if (root.get_type() == omap_type_t::LOG) {
+    return seastar::do_with(
+      LogStoreManager(*transaction_manager),
+      std::move(root),
+      std::string(key),
+      [&t](auto &manager, auto& root, auto& key) -> omaptree_get_value_ret
+    {
+      LOG_PREFIX(SeaStoreS::omaptree_get_value);
+      auto type = root.get_type();
+      if (root.is_null()) {
+	DEBUGT("{} key={} is absent because of null root", t, type, key);
+	return crimson::ct_error::enodata::make();
+      }
+      DEBUGT("{} key={} ...", t, type, key);
+      return manager.log_get_value(root, t, key
+      ).si_then([&key, &t, FNAME, type](auto opt) -> omaptree_get_value_ret {
+	if (!opt) {
+	  DEBUGT("{} key={} is absent", t, type, key);
+	  return crimson::ct_error::enodata::make();
+	}
+	DEBUGT("{} key={}, value length=0x{:x}", t, type, key, opt->length());
+	return seastar::make_ready_future<ceph::bufferlist>(std::move(*opt));
+      });
+    });
+  }
   return seastar::do_with(
     BtreeOMapManager(*transaction_manager),
     std::move(root),
@@ -2556,6 +2603,38 @@ SeaStore::Shard::omaptree_get_values(
     return seastar::make_ready_future<omap_values_t>();
   }
   DEBUGT("{} {} keys ...", t, type, keys.size());
+  if (type == omap_type_t::LOG) {
+    return seastar::do_with(
+      LogStoreManager(*transaction_manager),
+      std::move(root),
+      omap_values_t(),
+      [&t, &keys, type, FNAME](auto &manager, auto &root, auto &ret)
+    {
+      return trans_intr::do_for_each(
+	keys.begin(),
+	keys.end(),
+	[&t, &manager, &root, &ret](auto &key)
+      {
+	return manager.log_get_value(
+	  root,
+	  t,
+	  key
+	).si_then([&ret, &key](auto &&p) {
+	  if (p) {
+	    bufferlist bl;
+	    bl.append(*p);
+	    ret.emplace(
+	      std::move(key),
+	      std::move(bl));
+	  }
+	  return seastar::now();
+	});
+      }).si_then([&t, &ret, &keys, type, FNAME] {
+	DEBUGT("{} {} keys got {} values", t, type, keys.size(), ret.size());
+	return std::move(ret);
+      });
+    });
+  }
   return seastar::do_with(
     BtreeOMapManager(*transaction_manager),
     std::move(root),
@@ -2622,6 +2701,18 @@ SeaStore::Shard::omaptree_list(
     return seastar::make_ready_future<omaptree_list_bare_ret>(
       true, omap_values_t{}
     );
+  }
+
+  if (root.get_type() == omap_type_t::LOG) {
+    return seastar::do_with(
+      LogStoreManager(*transaction_manager),
+      std::move(root),
+      start,
+      std::optional<std::string>(std::nullopt),
+      [&t, config](auto &manager, auto &root, auto &start, auto &end)
+    {
+      return manager.omap_list(root, t, start, end, config);
+    });
   }
   return seastar::do_with(
     BtreeOMapManager(*transaction_manager),
@@ -2820,6 +2911,44 @@ SeaStore::Shard::omaptree_set_keys(
 }
 
 SeaStore::base_iertr::future<>
+SeaStore::Shard::log_set_keys(
+  Transaction& t,
+  omap_root_t&& root,
+  Onode& onode,
+  std::map<std::string, ceph::bufferlist>&& kvs)
+{
+  return seastar::do_with(
+    LogStoreManager(*transaction_manager),
+    std::move(root),
+    [this, &t, &onode, kvs=std::move(kvs)]
+    (auto &log_manager, auto &root) mutable
+  {
+    assert(root.get_type() < omap_type_t::NONE);
+    base_iertr::future<> maybe_create_root = base_iertr::now();
+    if (root.is_null()) {
+      maybe_create_root = log_initialize(
+        t, log_manager, root.get_type(), onode, *device
+      ).si_then([&root](auto new_root) {
+        root = new_root;
+      });
+    }
+    return std::move(maybe_create_root
+    ).si_then([&t, &root, &log_manager, kvs=std::move(kvs)]() mutable {
+      return log_manager.log_set_keys(root, t, std::move(kvs));
+    }).si_then([&root] {
+      return base_iertr::make_ready_future<omap_root_t>(std::move(root));
+    });
+  }).si_then([&onode, &t](auto root) {
+
+  LOG_PREFIX(SeaStoreS::log_set_keys);
+  DEBUGT(" omw after log_set_keys ...", t);
+    if (root.must_update()) {
+      omaptree_update_root(t, root, onode);
+    }
+  });
+}
+
+SeaStore::base_iertr::future<>
 SeaStore::Shard::omaptree_rm_keys(
   Transaction& t,
   omap_root_t&& root,
@@ -2833,6 +2962,40 @@ SeaStore::Shard::omaptree_rm_keys(
     return seastar::now();
   }
   DEBUGT("{} {} keys ...", t, type, keys.size());
+  if (type == omap_type_t::LOG) {
+    return seastar::do_with(
+      LogStoreManager(*transaction_manager),
+      std::move(root),
+      std::move(keys),
+      [&t, &onode, FNAME, type]
+      (auto &omap_manager, auto &root, auto &keys)
+    {
+      // TODO: deletion for log is done by rm_keys. For instance,
+      // omaptree_rm_keys is invoked with from 0011.0001 to 0011.0010
+      // one by one 
+      // Fix me
+      if (keys.size() > 10) {
+	return omap_manager.log_rm_key(root, t, *keys.rbegin()
+	).si_then([&t, &root, &onode] {
+	  if (root.must_update()) {
+	    omaptree_update_root(t, root, onode);
+	  }
+	});
+      }
+      return trans_intr::do_for_each(
+	keys.begin(),
+	keys.end(),
+	[&omap_manager, &t, &root, FNAME, type](auto &p)
+      {
+	DEBUGT("{} remove key={} ...", t, type, p);
+	return omap_manager.log_rm_key(root, t, p);
+      }).si_then([&t, &root, &onode] {
+	if (root.must_update()) {
+	  omaptree_update_root(t, root, onode);
+	}
+      });
+    });
+  }
   return seastar::do_with(
     BtreeOMapManager(*transaction_manager),
     std::move(root),
@@ -2845,6 +3008,9 @@ SeaStore::Shard::omaptree_rm_keys(
       keys.end(),
       [&omap_manager, &t, &root, FNAME, type](auto &p)
     {
+      if (p == "_fastinfo") {
+	return OMapManager::omap_rm_key_iertr::now();
+      }
       DEBUGT("{} remove key={} ...", t, type, p);
       return omap_manager.omap_rm_key(root, t, p);
     }).si_then([&t, &root, &onode] {
@@ -2874,6 +3040,28 @@ SeaStore::Shard::omaptree_rm_keyrange(
     return seastar::now();
   }
   DEBUGT("{} {} ~ {} ...", t, type, first, last);
+  if (type == omap_type_t::LOG) {
+    return seastar::do_with(
+      LogStoreManager(*transaction_manager),
+      std::move(root),
+      std::move(first),
+      std::move(last),
+      [&t, &onode, FNAME]
+      (auto &omap_manager, auto &root, auto &first, auto &last)
+    {
+      auto config = OMapManager::omap_list_config_t()
+	.with_inclusive(true, false)
+	.without_max();
+      return omap_manager.log_rm_key_range(
+	root, t, first, last, config
+      ).si_then([&t, &root, &onode, FNAME] {
+	if (root.must_update()) {
+	  omaptree_update_root(t, root, onode);
+	}
+	DEBUGT("done", t);
+      });
+    });
+  }
   return seastar::do_with(
     BtreeOMapManager(*transaction_manager),
     std::move(root),
@@ -2909,6 +3097,22 @@ SeaStore::Shard::omaptree_rm_key(
     return base_iertr::now();
   }
   DEBUGT("{} key={} ...", t, root.get_type(), name);
+  if (root.get_type() == omap_type_t::LOG) {
+    return seastar::do_with(
+      LogStoreManager(*transaction_manager),
+      std::move(root),
+      std::move(name),
+      [&t, &onode, FNAME](auto &omap_manager, auto &root, auto &name)
+    {
+      return omap_manager.log_rm_key(root, t, name
+      ).si_then([&t, &root, &onode, &name, FNAME] {
+	if (root.must_update()) {
+	  omaptree_update_root(t, root, onode);
+	}
+	DEBUGT("{} key={} removed", t, root.get_type(), name);
+      });
+    });
+  }
   return seastar::do_with(
     BtreeOMapManager(*transaction_manager),
     std::move(root),

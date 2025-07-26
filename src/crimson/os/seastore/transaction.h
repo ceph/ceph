@@ -798,6 +798,7 @@ private:
 
   std::list<view_ref> views;
 
+
   /**
    * retire_set
    *

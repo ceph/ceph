@@ -519,6 +519,12 @@ public:
       Onode& onode,
       std::map<std::string, ceph::bufferlist>&& aset);
 
+    base_iertr::future<> log_set_keys(
+      Transaction& t,
+      omap_root_t&& root,
+      Onode& onode,
+      std::map<std::string, ceph::bufferlist>&& kvs);
+
     base_iertr::future<> omaptree_rm_key(
       Transaction& t,
       omap_root_t&& root,

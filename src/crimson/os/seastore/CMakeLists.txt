@@ -53,6 +53,7 @@ set(crimson_seastore_srcs
   segment_manager_group.cc
   record_scanner.cc
   journal/circular_bounded_journal.cc
+  logstore/log_node.cc
   ../../../test/crimson/seastore/test_block.cc
   ${PROJECT_SOURCE_DIR}/src/os/Transaction.cc
 	)

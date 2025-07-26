@@ -1457,8 +1457,10 @@ enum class extent_types_t : uint8_t {
   TEST_BLOCK_PHYSICAL = 14,
   BACKREF_INTERNAL = 15,
   BACKREF_LEAF = 16,
+  LOG_NODE = 17,
+  LOG_LEAF = 18,
   // None and the number of valid extent_types_t
-  NONE = 17,
+  NONE = 19,
 };
 using extent_types_le_t = uint8_t;
 constexpr auto EXTENT_TYPES_MAX = static_cast<uint8_t>(extent_types_t::NONE);
@@ -1473,14 +1475,18 @@ constexpr bool is_data_type(extent_types_t type) {
 }
 
 constexpr bool is_logical_metadata_type(extent_types_t type) {
-  return type >= extent_types_t::ROOT_META &&
-         type <= extent_types_t::COLL_BLOCK;
+  return (type >= extent_types_t::ROOT_META &&
+         type <= extent_types_t::COLL_BLOCK) ||
+	 type == extent_types_t::LOG_NODE ||
+	 type == extent_types_t::LOG_LEAF;
 }
 
 constexpr bool is_logical_type(extent_types_t type) {
   if ((type >= extent_types_t::ROOT_META &&
        type <= extent_types_t::OBJECT_DATA_BLOCK) ||
-      type == extent_types_t::TEST_BLOCK) {
+      type == extent_types_t::TEST_BLOCK ||
+      type == extent_types_t::LOG_NODE ||
+      type == extent_types_t::LOG_LEAF) {
     assert(is_logical_metadata_type(type) ||
            is_data_type(type));
     return true;
@@ -1534,7 +1540,10 @@ constexpr bool is_backref_mapped_type(extent_types_t type) {
   if ((type >= extent_types_t::LADDR_INTERNAL &&
        type <= extent_types_t::OBJECT_DATA_BLOCK) ||
       type == extent_types_t::TEST_BLOCK ||
-      type == extent_types_t::TEST_BLOCK_PHYSICAL) {
+      type == extent_types_t::TEST_BLOCK_PHYSICAL ||
+      type == extent_types_t::LOG_NODE ||
+      type == extent_types_t::LOG_LEAF
+      ) {
     assert(is_logical_type(type) ||
 	   is_lba_node(type) ||
 	   type == extent_types_t::TEST_BLOCK_PHYSICAL);
@@ -1832,13 +1841,15 @@ struct omap_root_t {
   laddr_t hint = L_ADDR_MIN;
   bool mutated = false;
   omap_type_t type = omap_type_t::NONE;
+  paddr_t paddr = P_ADDR_NULL;
 
   omap_root_t() = default;
-  omap_root_t(laddr_t addr, depth_t depth, laddr_t addr_min, omap_type_t type)
+  omap_root_t(laddr_t addr, depth_t depth, laddr_t addr_min, omap_type_t type, paddr_t paddr = P_ADDR_NULL)
     : addr(addr),
       depth(depth),
       hint(addr_min),
-      type(type) {}
+      type(type), 
+      paddr(paddr) {}
 
   omap_root_t(const omap_root_t &o) = default;
   omap_root_t(omap_root_t &&o) = default;
@@ -1853,12 +1864,13 @@ struct omap_root_t {
     return mutated;
   }
   
-  void update(laddr_t _addr, depth_t _depth, laddr_t _hint, omap_type_t _type) {
+  void update(laddr_t _addr, depth_t _depth, laddr_t _hint, omap_type_t _type, paddr_t _paddr = P_ADDR_NULL) {
     mutated = true;
     addr = _addr;
     depth = _depth;
     hint = _hint;
     type = _type;
+    paddr = _paddr;
   }
   
   laddr_t get_location() const {
@@ -1876,6 +1888,10 @@ struct omap_root_t {
   omap_type_t get_type() const {
     return type;
   }
+
+  paddr_t get_paddr() const {
+    return paddr;
+  }
 };
 std::ostream &operator<<(std::ostream &out, const omap_root_t &root);
 
@@ -1883,6 +1899,7 @@ class __attribute__((packed)) omap_root_le_t {
   laddr_le_t addr = laddr_le_t(L_ADDR_NULL);
   depth_le_t depth = init_depth_le(0);
   omap_type_t type = omap_type_t::NONE;
+  paddr_le_t paddr = paddr_le_t(P_ADDR_NULL);
 
 public: 
   omap_root_le_t() = default;
@@ -1901,10 +1918,11 @@ public:
     addr = nroot.get_location();
     depth = init_depth_le(nroot.get_depth());
     type = nroot.get_type();
+    paddr = nroot.get_paddr();
   }
   
   omap_root_t get(laddr_t hint) const {
-    return omap_root_t(addr, depth, hint, type);
+    return omap_root_t(addr, depth, hint, type, paddr);
   }
   
   omap_type_t get_type() const {
