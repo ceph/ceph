@@ -105,6 +105,33 @@ struct omap_manager_test_t :
     return key;
   }
 
+  std::vector<std::string> set_random_keys(
+    omap_root_t &omap_root,
+    Transaction &t,
+    size_t count) {
+    std::map<std::string, ceph::bufferlist> kvs;
+    std::vector<std::string> keys;
+    keys.reserve(count);
+
+    while (kvs.size() < count) {
+      auto k = rand_name(STR_LEN);
+      auto v = rand_buffer(STR_LEN);
+      // 'inserted' will be true only if the key did not already exist.
+      if (auto [_, inserted] = kvs.emplace(k, v); inserted) {
+        test_omap_mappings[k] = v;
+        keys.push_back(k);
+      }
+    }
+
+    with_trans_intr(
+      t,
+      [&, this](auto &t) {
+        return omap_manager->omap_set_keys(omap_root, t, std::move(kvs));
+      }).unsafe_get();
+
+    return keys;
+  }
+
   void get_value(
     omap_root_t &omap_root,
     Transaction &t,
@@ -340,34 +367,96 @@ struct omap_manager_test_t :
   }
 };
 
-TEST_P(omap_manager_test_t, basic)
+TEST_P(omap_manager_test_t, set_key)
 {
   run_async([this] {
     omap_root_t omap_root = initialize();
 
-    string key = "owner";
-    string val = "test";
+    for (int i = 0; i < 8; ++i) {
+      auto t = create_mutate_transaction();
+      set_random_key(omap_root, *t);
+      check_mappings(omap_root, *t);
+      submit_transaction(std::move(t));
+      check_mappings(omap_root);
+    }
+  });
+}
 
-    {
+TEST_P(omap_manager_test_t, set_keys)
+{
+  run_async([this] {
+    omap_root_t omap_root = initialize();
+
+    for (int i = 0; i < 8; ++i) {
       auto t = create_mutate_transaction();
-      logger().debug("first transaction");
-      set_key(omap_root, *t, key, val);
-      get_value(omap_root, *t, key);
+      set_random_keys(omap_root, *t, std::pow(2, i));
+      check_mappings(omap_root, *t);
       submit_transaction(std::move(t));
+      check_mappings(omap_root);
     }
-    {
+  });
+}
+
+TEST_P(omap_manager_test_t, rm_key)
+{
+  run_async([this] {
+    omap_root_t omap_root = initialize();
+
+    auto t = create_mutate_transaction();
+    set_random_keys(omap_root, *t, 8);
+    submit_transaction(std::move(t));
+    check_mappings(omap_root);
+
+    while (test_omap_mappings.size() > 0) {
       auto t = create_mutate_transaction();
-      logger().debug("second transaction");
-      get_value(omap_root, *t, key);
-      rm_key(omap_root, *t, key);
-      get_value(omap_root, *t, key);
+      rm_key(omap_root, *t, test_omap_mappings.begin()->first);
+      check_mappings(omap_root, *t);
       submit_transaction(std::move(t));
+      check_mappings(omap_root);
     }
+  });
+}
+
+TEST_P(omap_manager_test_t, rm_key_range)
+{
+  run_async([this] {
+    omap_root_t omap_root = initialize();
+
+    auto t = create_mutate_transaction();
+    set_random_keys(omap_root, *t, 1200);
+    submit_transaction(std::move(t));
+    check_mappings(omap_root);
+
+    std::vector<std::string> keys;
+    for (const auto& [k, _] : test_omap_mappings) {
+      keys.push_back(k);
+    }
+
+    logger().debug("== delete the middle 400 keys");
     {
       auto t = create_mutate_transaction();
-      logger().debug("third transaction");
-      get_value(omap_root, *t, key);
+      rm_key_range(omap_root, *t, keys[400], keys[799]);
+      check_mappings(omap_root, *t);
       submit_transaction(std::move(t));
+      check_mappings(omap_root);
+    }
+
+    logger().debug("== delete the first 400 keys");
+    {
+      auto t = create_mutate_transaction();
+      rm_key_range(omap_root, *t, keys[0], keys[399]);
+      check_mappings(omap_root, *t);
+      submit_transaction(std::move(t));
+      check_mappings(omap_root);
+    }
+
+    logger().debug("== delete the last 400 keys");
+    {
+      auto t = create_mutate_transaction();
+      rm_key_range(omap_root, *t, keys[800], keys[1199]);
+      check_mappings(omap_root, *t);
+      submit_transaction(std::move(t));
+      check_mappings(omap_root);
     }
   });
 }
