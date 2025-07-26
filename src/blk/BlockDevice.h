@@ -294,7 +294,9 @@ public:
     bool buffered,
     int write_hint = WRITE_LIFE_NOT_SET) = 0;
   virtual int flush() = 0;
-  virtual bool try_discard(interval_set<uint64_t> &to_release, bool async=true) { return false; }
+  virtual bool try_discard(interval_set<uint64_t> &to_release,
+                           bool async=true,
+                           bool force=false) { return false; }
   virtual void discard_drain() { return; }
   virtual void swap_discard_queued(interval_set<uint64_t>& other)  { other.clear(); }
   // for managing buffered readers/writers
