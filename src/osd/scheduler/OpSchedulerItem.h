@@ -232,13 +232,22 @@ public:
     return op;
   }
 
-   SchedulerClass get_scheduler_class() const final {
+  SchedulerClass get_scheduler_class() const final {
     auto type = op->get_req()->get_type();
-    if (type == CEPH_MSG_OSD_OP ||
-	type == CEPH_MSG_OSD_BACKOFF) {
-      return SchedulerClass::client;
-    } else {
-      return SchedulerClass::immediate;
+    switch (type) {
+      case CEPH_MSG_OSD_OP:
+      case CEPH_MSG_OSD_BACKOFF:
+        return SchedulerClass::client;
+      case MSG_OSD_EC_READ: {
+        auto priority = op->get_req()->get_priority();
+        if (priority <= PeeringState::recovery_msg_priority_t::BEST_EFFORT) {
+          return SchedulerClass::background_best_effort;
+        } else {
+          return SchedulerClass::client;
+        }
+      }
+      default:
+        return SchedulerClass::immediate;
     }
   }
 
