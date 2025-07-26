@@ -884,8 +884,15 @@ CtPtr ProtocolV1::handle_message_data(char *buffer, int r) {
 
   auto bp = data_blp.get_current_ptr();
   unsigned read_len = std::min(bp.length(), msg_left);
-  ceph_assert(read_len <
-	      static_cast<unsigned>(std::numeric_limits<int>::max()));
+  if (cct->_conf->ms_assert_read_len_exceeded) {
+    // Execute assertion when ms_assert_read_len_exceeded is true
+    ceph_assert(read_len < std::numeric_limits<int>::max());
+  } else {
+    if (read_len >= std::numeric_limits<int>::max()) {
+      ldout(cct, 0) << __func__ << " read_len exceeds maximum int value, the current value: " << read_len << dendl;
+      return _fault();
+    }
+  }
   data_blp += read_len;
   data.append(bp, 0, read_len);
   msg_left -= read_len;
