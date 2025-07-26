@@ -111,14 +111,17 @@ struct lba_map_val_t {
 			   //	laddr of a direct lba mapping(see btree_lba_manager.h)
   extent_ref_count_t refcount = 0; ///< refcount
   checksum_t checksum = 0; ///< checksum of original block written at paddr (TODO)
+  extent_types_t type;
 
   lba_map_val_t() = default;
   lba_map_val_t(
     extent_len_t len,
     pladdr_t pladdr,
     extent_ref_count_t refcount,
-    checksum_t checksum)
-    : len(len), pladdr(pladdr), refcount(refcount), checksum(checksum) {}
+    checksum_t checksum,
+    extent_types_t type)
+    : len(len), pladdr(pladdr), refcount(refcount),
+      checksum(checksum), type(type) {}
   bool operator==(const lba_map_val_t&) const = default;
 };
 
@@ -134,6 +137,7 @@ struct __attribute__((packed)) lba_map_val_le_t {
   pladdr_le_t pladdr;
   extent_ref_count_le_t refcount{0};
   checksum_le_t checksum{0};
+  extent_types_le_t type{EXTENT_TYPES_MAX};
 
   lba_map_val_le_t() = default;
   lba_map_val_le_t(const lba_map_val_le_t &) = default;
@@ -141,10 +145,14 @@ struct __attribute__((packed)) lba_map_val_le_t {
     : len(init_extent_len_le(val.len)),
       pladdr(pladdr_le_t(val.pladdr)),
       refcount(val.refcount),
-      checksum(val.checksum) {}
+      checksum(val.checksum),
+      type(static_cast<extent_types_le_t>(val.type)) {}
 
   operator lba_map_val_t() const {
-    return lba_map_val_t{ len, pladdr, refcount, checksum };
+    return lba_map_val_t{
+      len, pladdr, refcount, checksum,
+      static_cast<extent_types_t>(type)
+    };
   }
 };
 
@@ -198,7 +206,9 @@ struct __attribute__((packed)) backref_map_val_le_t {
  * time.
  */
 template <typename key_t, typename val_t>
-struct BtreeCursor {
+struct BtreeCursor
+  : public boost::intrusive_ref_counter<
+      BtreeCursor<key_t, val_t>, boost::thread_unsafe_counter> {
   BtreeCursor(
     op_context_t &ctx,
     CachedExtentRef parent,
@@ -247,14 +257,18 @@ struct BtreeCursor {
     assert(!is_end());
     return val->len;
   }
+
+  extent_types_t get_extent_type() const {
+    assert(val->type != extent_types_t::NONE);
+    return val->type;
+  }
 };
 
 struct LBACursor : BtreeCursor<laddr_t, lba::lba_map_val_t> {
   using Base = BtreeCursor<laddr_t, lba::lba_map_val_t>;
   using Base::BtreeCursor;
   bool is_indirect() const {
-    assert(!is_end());
-    return val->pladdr.is_laddr();
+    return !is_end() && val->pladdr.is_laddr();
   }
   laddr_t get_laddr() const {
     return key;
@@ -267,28 +281,34 @@ struct LBACursor : BtreeCursor<laddr_t, lba::lba_map_val_t> {
   laddr_t get_intermediate_key() const {
     assert(is_indirect());
     assert(!is_end());
-    return val->pladdr.get_laddr();
+    return val->pladdr.build_laddr(key);
   }
   checksum_t get_checksum() const {
     assert(!is_end());
     assert(!is_indirect());
     return val->checksum;
   }
+  bool contains(laddr_t laddr) const {
+    return get_laddr() <= laddr && get_laddr() + get_length() > laddr;
+  }
   extent_ref_count_t get_refcount() const {
     assert(!is_end());
     assert(!is_indirect());
     return val->refcount;
   }
-  std::unique_ptr<LBACursor> duplicate() const {
-    return std::make_unique<LBACursor>(*this);
-  }
+
+  using base_ertr = crimson::errorator<
+    crimson::ct_error::input_output_error>;
+  using base_iertr = trans_iertr<base_ertr>;
+  base_iertr::future<> refresh();
 };
-using LBACursorRef = std::unique_ptr<LBACursor>;
+using LBACursorRef = boost::intrusive_ptr<LBACursor>;
 
 struct BackrefCursor : BtreeCursor<paddr_t, backref::backref_map_val_t> {
   using Base = BtreeCursor<paddr_t, backref::backref_map_val_t>;
   using Base::BtreeCursor;
   paddr_t get_paddr() const {
+    assert(key.is_absolute());
     return key;
   }
   laddr_t get_laddr() const {
@@ -300,7 +320,7 @@ struct BackrefCursor : BtreeCursor<paddr_t, backref::backref_map_val_t> {
     return val->type;
   }
 };
-using BackrefCursorRef = std::unique_ptr<BackrefCursor>;
+using BackrefCursorRef = boost::intrusive_ptr<BackrefCursor>;
 
 template <typename key_t, typename val_t>
 std::ostream &operator<<(
@@ -318,7 +338,7 @@ std::ostream &operator<<(
   if (cursor.is_end()) {
     return out << "END)";
   }
-  return out << "," << cursor.key
+  return out << cursor.key
 	     << "~" << *cursor.val
 	     << ")";
 }
