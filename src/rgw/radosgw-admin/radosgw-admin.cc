@@ -9237,6 +9237,12 @@ next:
 	dedup_type = dedup_req_type_t::DEDUP_TYPE_ESTIMATE;
       }
       else {
+	if (!yes_i_really_mean_it) {
+	  cerr << "Full Dedup is dangerous and could lead to data loss!\n"
+	       << "do you really mean it? (requires --yes-i-really-mean-it)"
+	       << std::endl;
+	  return EINVAL;
+	}
 	dedup_type = dedup_req_type_t::DEDUP_TYPE_FULL;
 #ifndef FULL_DEDUP_SUPPORT
 	std::cerr << "Only dedup estimate is supported!" << std::endl;
