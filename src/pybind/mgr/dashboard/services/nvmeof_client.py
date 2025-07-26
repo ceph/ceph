@@ -6,7 +6,7 @@ from collections.abc import Iterable
 from typing import Any, Callable, Dict, List, NamedTuple, Optional, Type
 
 from ..exceptions import DashboardException
-from .nvmeof_conf import NvmeofGatewaysConfig
+from .nvmeof_conf import NvmeofGatewaysConfig, is_mtls_enabled
 
 logger = logging.getLogger("nvmeof_client")
 
@@ -62,16 +62,14 @@ else:
                 if matched_gateway:
                     self.gateway_addr = matched_gateway.get('service_url')
                     logger.debug("Gateway address set to: %s", self.gateway_addr)
-
-            root_ca_cert = NvmeofGatewaysConfig.get_root_ca_cert(service_name)
-            if root_ca_cert:
+            enable_auth = is_mtls_enabled(service_name)
+            if enable_auth:
                 client_key = NvmeofGatewaysConfig.get_client_key(service_name)
                 client_cert = NvmeofGatewaysConfig.get_client_cert(service_name)
-
-            if root_ca_cert and client_key and client_cert:
+                server_cert = NvmeofGatewaysConfig.get_server_cert(service_name)
                 logger.info('Securely connecting to: %s', self.gateway_addr)
                 credentials = grpc.ssl_channel_credentials(
-                    root_certificates=root_ca_cert,
+                    root_certificates=server_cert,
                     private_key=client_key,
                     certificate_chain=client_cert,
                 )
