@@ -3315,8 +3315,8 @@ class SMBClusterBindIPSpec:
 
 class SMBSpec(ServiceSpec):
     service_type = 'smb'
-    _valid_features = {'domain', 'clustered', 'cephfs-proxy'}
-    _valid_service_names = {'smb', 'smbmetrics', 'ctdb'}
+    _valid_features = {'domain', 'clustered', 'cephfs-proxy', 'remote-control'}
+    _valid_service_names = {'smb', 'smbmetrics', 'ctdb', 'remote-control'}
     _default_cluster_meta_obj = 'cluster.meta.json'
     _default_cluster_lock_obj = 'cluster.meta.lock'
 
@@ -3376,6 +3376,10 @@ class SMBSpec(ServiceSpec):
         # not listed the default port will be used.
         custom_ports: Optional[Dict[str, int]] = None,
         bind_addrs: Optional[List[SMBClusterBindIPSpec]] = None,
+        # === remote control server ===
+        remote_control_ssl_cert: Optional[str] = None,
+        remote_control_ssl_key: Optional[str] = None,
+        remote_control_ca_cert: Optional[str] = None,
         # --- genearal tweaks ---
         extra_container_args: Optional[GeneralArgList] = None,
         extra_entrypoint_args: Optional[GeneralArgList] = None,
@@ -3410,6 +3414,9 @@ class SMBSpec(ServiceSpec):
         )
         self.custom_ports = custom_ports
         self.bind_addrs = SMBClusterBindIPSpec.convert_list(bind_addrs)
+        self.remote_control_ssl_cert = remote_control_ssl_cert
+        self.remote_control_ssl_key = remote_control_ssl_key
+        self.remote_control_ca_cert = remote_control_ca_cert
         self.validate()
 
     def validate(self) -> None:
@@ -3462,6 +3469,7 @@ class SMBSpec(ServiceSpec):
             'smb': 445,
             'smbmetrics': 9922,
             'ctdb': 4379,
+            'remote-control': 54445,
         }
 
     def service_ports(self) -> Dict[str, int]:
