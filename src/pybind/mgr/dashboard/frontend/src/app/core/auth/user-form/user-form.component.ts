@@ -13,7 +13,7 @@ import { SettingsService } from '~/app/shared/api/settings.service';
 import { UserService } from '~/app/shared/api/user.service';
 import { ConfirmationModalComponent } from '~/app/shared/components/confirmation-modal/confirmation-modal.component';
 import { SelectMessages } from '~/app/shared/components/select/select-messages.model';
-import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
+import { ActionLabelsI18n, USER } from '~/app/shared/constants/app.constants';
 import { Icons } from '~/app/shared/enum/icons.enum';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { CdForm } from '~/app/shared/forms/cd-form';
@@ -268,8 +268,8 @@ export class UserFormComponent extends CdForm implements OnInit {
 
   private hasUserReadUpdatePermissions(roles: Array<string> = []) {
     for (const role of this.allRoles) {
-      if (roles.indexOf(role.name) !== -1 && role.scopes_permissions['user']) {
-        const userPermissions = role.scopes_permissions['user'];
+      if (roles.indexOf(role.name) !== -1 && role.scopes_permissions[USER]) {
+        const userPermissions = role.scopes_permissions[USER];
         return ['read', 'update'].every((permission) => {
           return userPermissions.indexOf(permission) !== -1;
         });

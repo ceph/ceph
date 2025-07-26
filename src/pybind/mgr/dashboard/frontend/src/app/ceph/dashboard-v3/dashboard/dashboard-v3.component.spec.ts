@@ -23,11 +23,12 @@ import { PgSummaryPipe } from '../pg-summary.pipe';
 import { DashboardV3Component } from './dashboard-v3.component';
 import { OrchestratorService } from '~/app/shared/api/orchestrator.service';
 import { AlertClass } from '~/app/shared/enum/health-icon.enum';
+import { VERSION_PREFIX } from '~/app/shared/constants/app.constants';
 
 export class SummaryServiceMock {
   summaryDataSource = new BehaviorSubject({
     version:
-      'ceph version 17.0.0-12222-gcd0cd7cb ' +
+      `${VERSION_PREFIX} 17.0.0-12222-gcd0cd7cb ` +
       '(b8193bb4cda16ccc5b028c3e1df62bc72350a15d) quincy (dev)'
   });
   summaryData$ = this.summaryDataSource.asObservable();

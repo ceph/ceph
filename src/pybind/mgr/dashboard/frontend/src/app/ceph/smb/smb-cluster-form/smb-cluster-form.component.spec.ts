@@ -11,6 +11,7 @@ import { AUTHMODE } from '../smb.model';
 import { FOO_USERSGROUPS } from '../smb-usersgroups-form/smb-usersgroups-form.component.spec';
 import { of } from 'rxjs';
 import { By } from '@angular/platform-browser';
+import { USER } from '~/app/shared/constants/app.constants';
 
 describe('SmbClusterFormComponent', () => {
   let component: SmbClusterFormComponent;
@@ -73,7 +74,7 @@ describe('SmbClusterFormComponent', () => {
 
   it('should change the form when authmode is changed', () => {
     const authModeControl = component.smbForm.get('auth_mode');
-    authModeControl?.setValue('user');
+    authModeControl?.setValue(USER);
     component.onAuthModeChange();
     fixture.detectChanges();
     const joinSourcesControl = component.smbForm.get('joinSources') as FormArray;
