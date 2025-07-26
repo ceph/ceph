@@ -40,3 +40,6 @@ safe_exec python.exe -m py_tests.rbd_wnbd.service_restart_test `
     --test-name=RbdFsFioTest --iterations=3 --image-count=8 --concurrency=8 --image-size-mb=64
 safe_exec python.exe -m py_tests.rbd_wnbd.service_restart_test `
     --test-name=RbdFsStampTest --iterations=3 --image-count=8 --concurrency=8 --image-size-mb=64
+
+# Automatically detect and run Python tests that use the unittest framework.
+safe_exec python.exe -m unittest discover -s "$scriptLocation"
