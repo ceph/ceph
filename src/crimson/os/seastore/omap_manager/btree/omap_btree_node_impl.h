@@ -120,7 +120,7 @@ struct OMapInnerNode
     }
   }
 
-  void on_invalidated(Transaction &t) final {
+  void lcn_on_invalidated(Transaction &t) final {
     this->child_node_t::on_invalidated();
   }
 
@@ -329,7 +329,7 @@ struct OMapLeafNode
     }
   }
 
-  void on_invalidated(Transaction &t) final {
+  void lcn_on_invalidated(Transaction &t) final {
     this->child_node_t::on_invalidated();
   }
 
