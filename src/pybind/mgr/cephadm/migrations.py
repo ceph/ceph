@@ -14,7 +14,7 @@ from orchestrator import OrchestratorError, DaemonDescription
 if TYPE_CHECKING:
     from .module import CephadmOrchestrator
 
-LAST_MIGRATION = 7
+LAST_MIGRATION = 8
 
 logger = logging.getLogger(__name__)
 
@@ -108,6 +108,10 @@ class Migrations:
         if self.mgr.migration_current == 6:
             if self.migrate_6_7():
                 self.set(7)
+
+        if self.mgr.migration_current == 7:
+            if self.migrate_7_8():
+                self.set(8)
 
     def migrate_0_1(self) -> bool:
         """
@@ -440,6 +444,17 @@ class Migrations:
         # NOTE: prometheus, alertmanager, and node-exporter certs were not stored
         # and appeared to just be generated at daemon deploy time if secure_monitoring_stack
         # was set to true. Therefore we have nothing to migrate for those daemons
+        return True
+
+    def migrate_7_8(self) -> bool:
+        """
+        Update mon store entry registry_credentials, if exists
+        """
+        registry_creds = self.mgr.get_store('registry_credentials')
+        if registry_creds:
+            new_registry_creds = {'registry_credentials': [json.loads(registry_creds)]}
+            logger.debug('Updating registry_credentials value')
+            self.mgr.set_store('registry_credentials', json.dumps(new_registry_creds))
         return True
 
 
