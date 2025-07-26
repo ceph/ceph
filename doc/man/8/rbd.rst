@@ -895,7 +895,7 @@ Per mapping (block device) `rbd device map` options:
   backend that the data is incompressible, disabling compression in aggressive
   mode (since 5.8).
 
-* ms_mode=legacy - Use msgr1 on-the-wire protocol (since 5.11, default).
+* ms_mode=legacy - Use msgr1 on-the-wire protocol (since 5.11).
 
 * ms_mode=crc - Use msgr2.1 on-the-wire protocol, select 'crc' mode, also
   referred to as plain mode (since 5.11).  If the daemon denies 'crc' mode,
@@ -907,8 +907,8 @@ Per mapping (block device) `rbd device map` options:
   fail the connection.
 
 * ms_mode=prefer-crc - Use msgr2.1 on-the-wire protocol, select 'crc'
-  mode (since 5.11).  If the daemon denies 'crc' mode in favor of 'secure'
-  mode, agree to 'secure' mode.
+  mode (since 5.11, default).  If the daemon denies 'crc' mode in favor of
+  'secure' mode, agree to 'secure' mode.
 
 * ms_mode=prefer-secure - Use msgr2.1 on-the-wire protocol, select 'secure'
   mode (since 5.11).  If the daemon denies 'secure' mode in favor of 'crc'
