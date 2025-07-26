@@ -2,6 +2,7 @@ from textwrap import dedent
 import json
 import urllib.parse
 import yaml
+import re
 from mgr_util import build_url
 
 import pytest
@@ -35,6 +36,7 @@ from ceph.deployment.service_spec import (
     MgmtGatewaySpec,
     OAuth2ProxySpec
 )
+from ceph.deployment.hostspec import SpecValidationError
 from cephadm.tests.fixtures import with_host, with_service, _run_cephadm, async_side_effect, wait
 
 from ceph.utils import datetime_now
@@ -511,23 +513,23 @@ timeout = 1.0\n"""
     @patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
     def test_validate_service_id_matches_group_on_apply(self, cephadm_module: CephadmOrchestrator):
         matching_nvmeof_spec_group_service_id = NvmeofServiceSpec(
-            service_id='pool1.right_group',
-            group='right_group',
+            service_id='pool1.rightgroup',
+            group='rightgroup',
             pool='pool1'
         )
         mismatch_nvmeof_spec_group_service_id = NvmeofServiceSpec(
-            service_id='pool2.wrong_group',
-            group='right_group',
+            service_id='pool2.wronggroup',
+            group='rightgroup',
             pool='pool2'
         )
         matching_nvmeof_spec_group_service_id_with_dot = NvmeofServiceSpec(
-            service_id='pool3.right.group',
-            group='right.group',
+            service_id='pool3.some.group',
+            group='some.group',
             pool='pool3'
         )
-        mismatch_nvmeof_spec_group_service_id_with_dot = NvmeofServiceSpec(
-            service_id='pool4.wrong.group',
-            group='right.group',
+        matching_nvmeof_spec_group_service_id_with_dollar = NvmeofServiceSpec(
+            service_id='pool4.some$group',
+            group='some$group',
             pool='pool4'
         )
         with with_host(cephadm_module, 'test'):
@@ -535,16 +537,21 @@ timeout = 1.0\n"""
             with pytest.raises(
                 OrchestratorError,
                 match='The \'nvmeof\' service id/name must end with \'.<nvmeof-group-name>\'. Found '
-                      'group name \'right_group\' and service id \'pool2.wrong_group\''
+                      'group name \'rightgroup\' and service id \'pool2.wronggroup\''
             ):
                 cephadm_module._apply_service_spec(mismatch_nvmeof_spec_group_service_id)
-            cephadm_module._apply_service_spec(matching_nvmeof_spec_group_service_id_with_dot)
             with pytest.raises(
-                OrchestratorError,
-                match='The \'nvmeof\' service id/name must end with \'.<nvmeof-group-name>\'. Found '
-                      'group name \'right.group\' and service id \'pool4.wrong.group\''
+                SpecValidationError,
+                match=re.escape('Group name contains invalid characters, only [a-zA-Z0-9] allowed')
             ):
-                cephadm_module._apply_service_spec(mismatch_nvmeof_spec_group_service_id_with_dot)
+                cephadm_module._apply_service_spec(matching_nvmeof_spec_group_service_id_with_dot)
+            with pytest.raises(
+                SpecValidationError,
+                match=re.escape('Service id contains invalid characters, only [a-zA-Z0-9.] '
+                                'allowed for NVMeoF')
+            ):
+                cephadm_module._apply_service_spec(
+                    matching_nvmeof_spec_group_service_id_with_dollar)
 
 
 class TestMonitoring:
