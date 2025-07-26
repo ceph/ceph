@@ -1736,7 +1736,8 @@ static void serve_binary(proxy_client_t *client)
 
 static int32_t server_negotiation_check(proxy_link_negotiate_t *neg)
 {
-	proxy_log(LOG_INFO, 0, "Features enabled: %08x", neg->v1.enabled);
+	proxy_log(LOG_INFO, 0, "Features enabled: %08x, protocol: %u",
+		  neg->v1.enabled, neg->v2.protocol);
 
 	return 0;
 }
@@ -1748,7 +1749,8 @@ static void serve_connection(proxy_worker_t *worker)
 
 	client = container_of(worker, proxy_client_t, worker);
 
-	proxy_link_negotiate_init(&client->neg, 0, PROXY_FEAT_ALL, 0, 0);
+	proxy_link_negotiate_init(&client->neg, 0, PROXY_FEAT_ALL, 0, 0,
+				  PROXY_LINK_PROTOCOL_VERSION);
 
 	err = proxy_link_handshake_server(client->link, client->sd,
 					  &client->neg,
