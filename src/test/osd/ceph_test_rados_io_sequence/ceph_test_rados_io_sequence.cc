@@ -846,9 +846,10 @@ const std::string ceph::io_sequence::tester::SelectErasurePool::select() {
     }
 
     if (!dry_run) {
-      configureServices(allow_pool_autoscaling, allow_pool_balancer,
+      configureServices(force_value.value_or(created_pool_name),
+                        allow_pool_autoscaling, allow_pool_balancer,
                         allow_pool_deep_scrubbing, allow_pool_scrubbing,
-                        test_recovery);
+                        disable_pool_ec_optimizations, true, test_recovery);
     }
   }
 
@@ -875,10 +876,13 @@ std::string ceph::io_sequence::tester::SelectErasurePool::create() {
 }
 
 void ceph::io_sequence::tester::SelectErasurePool::configureServices(
+    const std::string& pool_name,
     bool allow_pool_autoscaling,
     bool allow_pool_balancer,
     bool allow_pool_deep_scrubbing,
     bool allow_pool_scrubbing,
+    bool disable_pool_ec_optimizations,
+    bool allow_pool_ec_overwrites,
     bool test_recovery) {
   int rc;
   bufferlist inbl, outbl;
@@ -922,9 +926,33 @@ void ceph::io_sequence::tester::SelectErasurePool::configureServices(
 
   if (!allow_pool_scrubbing) {
     ceph::messaging::osd::OSDSetRequest no_scrub_request{"noscrub",
-                                                          std::nullopt};
+                                                         std::nullopt};
     rc = send_mon_command(no_scrub_request, rados, "OSDSetRequest", inbl,
                           &outbl, formatter.get());
+    ceph_assert(rc == 0);
+  }
+
+  if (!disable_pool_ec_optimizations)
+  {
+    ceph::messaging::osd::OSDPoolSetRequest
+        allow_ec_optimisations_request{pool_name,
+                                       "allow_ec_optimizations",
+                                       "true",
+                                       std::nullopt};
+    rc = send_mon_command(allow_ec_optimisations_request, rados,
+                          "OSDPoolSetRequest", inbl, &outbl, formatter.get());
+    ceph_assert(rc == 0);
+  }
+
+  if (allow_pool_ec_overwrites)
+  {
+    ceph::messaging::osd::OSDPoolSetRequest
+        allow_ec_optimisations_request{pool_name,
+                                       "allow_ec_overwrites",
+                                       "true",
+                                       std::nullopt};
+    rc = send_mon_command(allow_ec_optimisations_request, rados,
+                          "OSDPoolSetRequest", inbl, &outbl, formatter.get());
     ceph_assert(rc == 0);
   }
 
