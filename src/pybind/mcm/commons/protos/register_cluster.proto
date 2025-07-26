@@ -1,0 +1,33 @@
+syntax = "proto3";
+
+package agent.Commons;
+
+service RegisterCluster {
+  rpc Register (ClusterDetails) returns (ClusterDetails);
+}
+
+message ClusterDetails {
+  string id = 1;
+  string status = 2;
+  string name = 3;
+  string version = 4;
+  Capacity capacity = 5;
+}
+
+message Capacity {
+  double used_bytes = 1;
+  double up_converted_used_capacity = 2;
+  StorageUnit used_capacity_unit = 3;
+  double total_bytes = 4;
+  double up_converted_total_capacity = 5;
+  StorageUnit total_capacity_unit = 6;
+}
+
+enum StorageUnit {
+  BYTES = 0;
+  KIB = 1;
+  MIB = 2;
+  GIB = 3;
+  TIB = 4;
+  PIB = 5;
+}

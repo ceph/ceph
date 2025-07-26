@@ -1,0 +1,27 @@
+syntax = "proto3";
+
+package agent.HeartBeat;
+
+import "google/protobuf/timestamp.proto";
+import "register_cluster.proto";
+
+service HeartBeat {
+  rpc SendHeartBeat (HeartBeatInfo) returns (Response);
+}
+
+message HeartBeatInfo {
+  agent.Commons.Cluster clusterInfo = 1;
+  google.protobuf.Timestamp timestamp = 2;
+}
+
+message Response {
+  Status status = 1;
+  string message = 2;
+}
+
+enum Status {
+  UNKNOWN = 0;
+  OK = 1;
+  ERROR = 2;
+  UnManaged = 3;
+}

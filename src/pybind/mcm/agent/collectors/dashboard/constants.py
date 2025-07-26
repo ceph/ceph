@@ -1,0 +1,7 @@
+DASHBOARD_LOGIN_PATH = "/api/auth"
+DASHBOARD_USERNAME_KEY = "username"
+DASHBOARD_PASSWORD_KEY = "password"
+DASHBOARD_CEPH_VERSION_API = "/api/summary"
+DASHBOARD_CEPH_CLUSTER_FSID_API = "/api/health/get_cluster_fsid"
+DASHBOARD_CLUSTER_CAPACITY_API = "/api/health/get_cluster_capacity"
+DASHBOARD_CLUSTER_HEALTH_API = "/api/health/minimal"
