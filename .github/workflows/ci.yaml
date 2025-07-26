@@ -1,0 +1,119 @@
+name: CI Build and Test
+
+on:
+    push:
+        branches:
+            - main
+    pull_request:
+        branches:
+            - main
+
+# https://docs.github.com/en/actions/writing-workflows/workflow-syntax-for-github-actions#defining-access-for-the-github_token-scopes
+permissions: {}
+
+jobs:
+    create-build-container:
+      runs-on: ubuntu-latest
+      strategy:
+        fail-fast: false
+        matrix:
+          include:
+            - distro-name: centos
+              distro-release: stream9
+              distro-image: quay.io/centos/centos:stream9
+              git-install: dnf install -y git-core
+              # cache_package_path: |
+              #   /var/lib/dnf
+              #   /var/cache/dnf
+              # cache_package_hashfiles: |
+              #   ceph.spec.in
+            - distro-name: ubuntu
+              distro-release: 22.04
+              distro-image: ubuntu:22.04
+              git-install: apt-get update && apt-get install -y git
+      container:
+        image: ${{ matrix.distro-image }}
+        # options: --user root
+        # env:
+        #   BASH_ENV: ./run-make-check.sh
+        #   SHELLOPTS: xtrace
+        #   FOR_MAKE_CHECK: 1
+        #   DNF_INSTALL_OPTIONS: >-
+        #     --setopt=install_weak_deps=False
+        #     --setopt=keepcache=True
+        #     --setopt=fastestmirror=True
+        #     --nodocs
+      # defaults:
+      #   run:
+      #     shell: bash
+      # env:
+      #   CACHE_PACKAGE_HASHFILES: |
+      #     install-deps.sh
+      #     run-make-check.sh
+      #     do_cmake.sh
+      #     src/script/run-make.sh
+      #     src/script/lib-build.sh
+      name: "${{ matrix.distro-name }}:${{ matrix.distro-release }}"
+      timeout-minutes: 120
+      steps:
+        - run: export
+        - name: Install git
+          run: "${{ matrix.git-install }}"
+        - name: Git check-out
+          uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+          with:
+            set-safe-directory: '/__w/ceph/ceph'
+        - name: Install Dependencies
+          run: ./install-deps.sh
+        - name: Configure Build Environment
+          run: ./do_cmake.sh
+        # - name: Build
+        #  run: cd build && ninja -j $(nproc) ceph-mon
+        # - run: |
+        #     dnf install -y $DNF_INSTALL_OPTIONS git-core
+        # - run: export
+        # - run: set
+        # - name: Restore package cache
+        #   uses: actions/checkout@v3
+        #   with:
+        #     submodules: true
+        # - run: git config --global --add safe.directory $GITHUB_WORKSPACE
+        # - name: Restore ccache
+        #   uses: actions/cache@v3
+        #   with:
+        #     path: ~/.ccache
+        #     key: ccache-${{ matrix.distro-name }}-${{ matrix.distro-release }}-${{ github.ref_name }}
+        #     restore-keys: |
+        #       packages-${{ matrix.distro-name }}-${{ matrix.distro-release }}-
+        # - uses: actions/cache@v3
+        #   with:
+        #     path: ${{ matrix.cache_package_path }}
+        #     key: packages-${{ matrix.distro-name }}-${{ matrix.distro-release }}-${{ hashFiles(env.CACHE_PACKAGE_HASHFILES, matrix.cache_package_hashfiles) }}
+        #     restore-keys: |
+        #       packages-${{ matrix.distro-name }}-${{ matrix.distro-release }}-
+        # - run: prepare
+        # - run: ccache -s
+        # - run: configure
+        # - run: build vstart
+        # - name: Test
+        #   run: |
+        #     build tests
+        #     cd build
+        #     run
+
+
+    # build-and-test:
+    #     runs-on: ubuntu-latest
+
+    #     steps:
+    #     - name: Checkout code
+    #       uses: actions/checkout@v4.2.2
+
+    #     - name: Install dependencies
+    #       run: ./install-deps.sh
+
+    #     - name: Configure
+    #       run: ./do_cmake.sh $CMAKE_ARGS
+
+    #     - name: Build
+    #       run: cd build && ninja -j$(nproc)
