@@ -74,7 +74,7 @@ inline std::ostream& operator <<(std::ostream& m, const log_type& t) {
 /// Look over the shards in a log and determine the type.
 asio::awaitable<log_type>
 log_backing_type(const DoutPrefixProvider* dpp,
-		 neorados::RADOS& rados,
+		 neorados::RADOS rados,
                  const neorados::IOContext& loc,
 		 log_type def,
 		 int shards,
@@ -83,7 +83,7 @@ log_backing_type(const DoutPrefixProvider* dpp,
 /// Remove all log shards and associated parts of fifos.
 asio::awaitable<void> log_remove(
   const DoutPrefixProvider *dpp,
-  neorados::RADOS& rados,
+  neorados::RADOS rados,
   const neorados::IOContext& loc,
   int shards,
   const fu2::unique_function<std::string(int) const>& get_oid,
@@ -121,10 +121,10 @@ public:
   using entries_t = container::flat_map<uint64_t, logback_generation>;
 
 protected:
-  neorados::RADOS& rados;
+  neorados::RADOS rados;
   neorados::IOContext loc;
   logback_generations(
-    neorados::RADOS& rados,
+    neorados::RADOS rados,
     neorados::Object oid,
     neorados::IOContext loc,
     fu2::unique_function<std::string(uint64_t, int) const> get_oid,
@@ -183,7 +183,7 @@ public:
   template<typename T, typename... Args>
   static asio::awaitable<std::unique_ptr<T>> init(
     const DoutPrefixProvider *dpp,
-    neorados::RADOS& r_,
+    neorados::RADOS r_,
     const neorados::Object& oid_,
     const neorados::IOContext& loc_,
     fu2::unique_function<std::string(uint64_t, int) const>&& get_oid_,
@@ -225,6 +225,9 @@ public:
   ///
   /// @param new_tail Lowest non-empty generation
   virtual void handle_empty_to(uint64_t new_tail) = 0;
+
+  /// If you override this, call the superclass method *at the end*.
+  virtual void shutdown();
 };
 
 inline std::string gencursor(uint64_t gen_id, std::string_view cursor) {
@@ -252,7 +255,7 @@ cursorgen(std::optional<std::string> cursor_) {
 }
 
 class LazyFIFO {
-  neorados::RADOS& r;
+  neorados::RADOS r;
   const std::string oid;
   const neorados::IOContext loc;
   std::mutex m;
@@ -299,7 +302,7 @@ class LazyFIFO {
 
 public:
 
-  LazyFIFO(neorados::RADOS& r,  std::string oid, neorados::IOContext loc)
+  LazyFIFO(neorados::RADOS r,  std::string oid, neorados::IOContext loc)
     : r(r), oid(std::move(oid)), loc(std::move(loc)) {}
 
   asio::awaitable<void> push(const DoutPrefixProvider *dpp,
