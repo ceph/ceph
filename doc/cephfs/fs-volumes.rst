@@ -276,6 +276,12 @@ List snapshots of a subvolume group by running a command of the following form:
 
    ceph fs subvolumegroup snapshot ls <vol_name> <group_name>
 
+List snapshots of a subvolume group with search string filter by running a command of the following form:
+
+.. prompt:: bash #
+
+   ceph fs subvolumegroup snapshot ls <vol_name> <group_name> --snap_filter <filter_string>
+
 
 FS Subvolumes
 -------------
@@ -517,6 +523,12 @@ Use a command of the following form to list subvolumes:
 
    ceph fs subvolume ls <vol_name> [--group_name <subvol_group_name>]
 
+Use a command of the following form to list subvolumes with search string filter:
+
+.. prompt:: bash #
+
+   ceph fs subvolume ls <vol_name> --subvol_filter <filter_string> [--group_name <subvol_group_name>]
+
 .. note:: Subvolumes that have been removed but have snapshots retained, are
    also listed.
 
@@ -656,6 +668,12 @@ Use a command of the following from to list the snapshots of a subvolume:
 .. prompt:: bash #
 
    ceph fs subvolume snapshot ls <vol_name> <subvol_name> [--group_name <subvol_group_name>]
+
+Use a command of the following from to list the snapshots of a subvolume with search string filter:
+
+.. prompt:: bash #
+
+   ceph fs subvolume snapshot ls <vol_name> <subvol_name> --snap_filter <filter_string> [--group_name <subvol_group_name>]
 
 Fetching a Snapshot's Information
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
