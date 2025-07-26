@@ -2562,6 +2562,22 @@ int Locker::get_allowed_caps(CInode *in, Capability *cap,
   return allowed;
 }
 
+void Locker::dump_in_flight_cap_revokes(client_t client, Formatter *f) {
+  dout(20) << ": client=" << client << dendl;
+
+  auto it = revoking_caps_by_client.find(client);
+  if (it == revoking_caps_by_client.end()) {
+    return;
+  }
+
+  f->open_object_section("revoking_caps");
+  for (elist<Capability*>::iterator iter = it->second.begin(); !iter.end(); ++iter) {
+    Capability *cap = *iter;
+    cap->dump(f);
+  }
+  f->close_section();
+}
+
 int Locker::issue_caps(CInode *in, Capability *only_cap)
 {
   dout(20) << __func__ << ": " << *in;
@@ -3729,11 +3745,17 @@ void Locker::process_request_cap_release(const MDRequestRef& mdr, client_t clien
     
   if (ceph_seq_cmp(mseq, cap->get_mseq()) < 0) {
     dout(7) << " mseq " << mseq << " < " << cap->get_mseq() << ", dropping" << dendl;
+    if (mds->logger) {
+      mds->logger->inc(l_mdsss_request_cap_release_dropped);
+    }
     return;
   }
 
   if (cap->get_cap_id() != cap_id) {
     dout(7) << " cap_id " << cap_id << " != " << cap->get_cap_id() << ", dropping" << dendl;
+    if (mds->logger) {
+      mds->logger->inc(l_mdsss_request_cap_release_dropped);
+    }
     return;
   }
 
