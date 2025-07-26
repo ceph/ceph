@@ -4169,6 +4169,9 @@ class TestCustomContainer:
                 )
 
 
+_SAMBA_METRICS_IMAGE = 'quay.io/samba.org/samba-metrics:devbuilds-centos-amd64'
+
+
 class TestSMB:
     @patch("cephadm.module.CephadmOrchestrator.get_unique_name")
     @patch("cephadm.serve.CephadmServe._run_cephadm")
@@ -4208,7 +4211,7 @@ class TestSMB:
                 'config': '',
                 'keyring': '[client.smb.config.tango.briskly]\nkey = None\n',
                 'config_auth_entity': 'client.smb.config.tango.briskly',
-                'metrics_image': 'quay.io/samba.org/samba-metrics:latest',
+                'metrics_image': _SAMBA_METRICS_IMAGE,
                 'service_ports': {'smb': 445, 'smbmetrics': 9922, 'ctdb': 4379},
             },
         }
@@ -4283,7 +4286,7 @@ class TestSMB:
                     '[client.smb.fs.fs2.share3]\nkey = None\n'
                 ),
                 'config_auth_entity': 'client.smb.config.tango.briskly',
-                'metrics_image': 'quay.io/samba.org/samba-metrics:latest',
+                'metrics_image': _SAMBA_METRICS_IMAGE,
                 'service_ports': {'smb': 445, 'smbmetrics': 9922, 'ctdb': 4379},
             },
         }
