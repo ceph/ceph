@@ -16,6 +16,7 @@
 #include "gtest/gtest.h"
 
 using namespace std;
+using namespace Scrub;
 
 template <typename T>
 typename T::iterator rand_choose(T &cont) {
@@ -41,10 +42,10 @@ class PausyAsyncMap : public MapCacher::StoreDriver<string, bufferlist> {
   };
   typedef std::shared_ptr<_Op> Op;
   struct Remove : public _Op {
-    set<string> to_remove;
-    explicit Remove(const set<string> &to_remove) : to_remove(to_remove) {}
+    vector<string> to_remove;
+    explicit Remove(const vector<string> &to_remove) : to_remove(to_remove) {}
     void operate(map<string, bufferlist> *store) override {
-      for (set<string>::iterator i = to_remove.begin();
+      for (auto i = to_remove.begin();
 	   i != to_remove.end();
 	   ++i) {
 	store->erase(*i);
@@ -52,10 +53,10 @@ class PausyAsyncMap : public MapCacher::StoreDriver<string, bufferlist> {
     }
   };
   struct Insert : public _Op {
-    map<string, bufferlist> to_insert;
-    explicit Insert(const map<string, bufferlist> &to_insert) : to_insert(to_insert) {}
+    vector<pair<string, bufferlist>> to_insert;
+    explicit Insert(const vector<pair<string, bufferlist>> &to_insert) : to_insert(to_insert) {}
     void operate(map<string, bufferlist> *store) override {
-      for (map<string, bufferlist>::iterator i = to_insert.begin();
+      for (auto i = to_insert.begin();
 	   i != to_insert.end();
 	   ++i) {
 	store->erase(i->first);
@@ -76,11 +77,11 @@ public:
     list<Op> ops;
     list<Op> callbacks;
   public:
-    void set_keys(const map<string, bufferlist> &i) override {
+    void set_keys(const vector<pair<string, bufferlist>> &i) override {
       ops.push_back(Op(new Insert(i)));
     }
-    void remove_keys(const set<string> &r) override {
-      ops.push_back(Op(new Remove(r)));
+    void remove_keys(const vector<string> &r) override {
+      ops.emplace_back(Op(new Remove(r)));
     }
     void add_callback(Context *c) override {
       callbacks.push_back(Op(new Callback(c)));
@@ -169,15 +170,13 @@ public:
     doer.join();
   }
   int get_keys(
-    const set<string> &keys,
+    const vector<string> &keys,
     map<string, bufferlist> *out) override {
     std::lock_guard l{lock};
-    for (set<string>::const_iterator i = keys.begin();
-	 i != keys.end();
-	 ++i) {
-      map<string, bufferlist>::iterator j = store.find(*i);
+    for (auto& s : keys) {
+      map<string, bufferlist>::iterator j = store.find(s);
       if (j != store.end())
-	out->insert(*j);
+	out->emplace(*j);
     }
     return 0;
   }
@@ -294,15 +293,14 @@ public:
   }
   void do_set() {
     size_t set_size = random_num();
-    map<string, bufferlist> to_set;
+    vector<pair<string, bufferlist>> to_set;
     for (size_t i = 0; i < set_size; ++i) {
       bufferlist bl;
       random_bl(random_size(), &bl);
       string key = *rand_choose(names);
-      to_set.insert(
-	make_pair(key, bl));
+      to_set.emplace_back(key, bl);
     }
-    for (map<string, bufferlist>::iterator i = to_set.begin();
+    for (auto i = to_set.begin();
 	 i != to_set.end();
 	 ++i) {
       truth.erase(i->first);
@@ -316,11 +314,12 @@ public:
   }
   void remove() {
     size_t remove_size = random_num();
-    set<string> to_remove;
+    vector<string> to_remove;
+    to_remove.reserve(remove_size);
     for (size_t i = 0; i < remove_size ; ++i) {
-      to_remove.insert(*rand_choose(names));
+      to_remove.emplace_back(*rand_choose(names));
     }
-    for (set<string>::iterator i = to_remove.begin();
+    for (auto i = to_remove.begin();
 	 i != to_remove.end();
 	 ++i) {
       truth.erase(*i);
@@ -332,19 +331,18 @@ public:
     }
   }
   void get() {
-    set<string> to_get;
+    vector<string> to_get;
     size_t get_size = random_num();
+    to_get.reserve(get_size);
     for (size_t i = 0; i < get_size; ++i) {
-      to_get.insert(*rand_choose(names));
+      to_get.emplace_back(*rand_choose(names));
     }
 
     map<string, bufferlist> got_truth;
-    for (set<string>::iterator i = to_get.begin();
-	 i != to_get.end();
-	 ++i) {
-      map<string, bufferlist>::iterator j = truth.find(*i);
+    for (auto& s : to_get) {
+      map<string, bufferlist>::iterator j = truth.find(s);
       if (j != truth.end())
-	got_truth.insert(*j);
+	got_truth.emplace(*j);
     }
 
     map<string, bufferlist> got;
@@ -395,18 +393,20 @@ public:
 TEST_F(MapCacherTest, Simple)
 {
   driver->pause();
+  vector<pair<string, bufferlist>> truth0;
   map<string, bufferlist> truth;
-  set<string> truth_keys;
+  vector<string> truth_keys;
   string blah("asdf");
   bufferlist bl;
   encode(blah, bl);
-  truth[string("asdf")] = bl;
-  truth_keys.insert(truth.begin()->first);
+  truth0.emplace_back("asdf", bl);
+  truth.emplace("asdf", bl);
+  truth_keys.push_back(truth.begin()->first);
   {
     PausyAsyncMap::Transaction t;
-    cache->set_keys(truth, &t);
+    cache->set_keys(truth0, &t);
     driver->submit(&t);
-    cache->set_keys(truth, &t);
+    cache->set_keys(truth0, &t);
     driver->submit(&t);
   }
 
@@ -485,12 +485,15 @@ public:
       0, random_string(rand() % 16));
   }
 
-  void choose_random_snaps(int num, set<snapid_t> *snaps) {
+  void choose_random_snaps(int num, vector<snapid_t> *snaps) {
     ceph_assert(snaps);
     ceph_assert(!snap_to_hobject.empty());
-    for (int i = 0; i < num || snaps->empty(); ++i) {
-      snaps->insert(rand_choose(snap_to_hobject)->first);
+    // use intermediate std::set to make sure we don't have duplicates
+    set<snapid_t> snaps0;
+    for (int i = 0; i < num || snaps0.empty(); ++i) {
+      snaps0.insert(rand_choose(snap_to_hobject)->first);
     }
+    snaps->insert(snaps->end(), snaps0.begin(), snaps0.end());
   }
 
   snapid_t create_snap() {
@@ -503,8 +506,8 @@ public:
 
   // must be called with lock held to protect access to
   // hobject_to_snap and snap_to_hobject
-  void add_object_to_snaps(const hobject_t & obj, const set<snapid_t> &snaps) {
-    hobject_to_snap[obj] = snaps;
+  void add_object_to_snaps(const hobject_t & obj, const vector<snapid_t> &snaps) {
+    hobject_to_snap[obj] = std::set<snapid_t>(snaps.begin(), snaps.end());
     for (auto snap : snaps) {
       map<snapid_t, set<hobject_t> >::iterator j = snap_to_hobject.find(snap);
       ceph_assert(j != snap_to_hobject.end());
@@ -525,8 +528,7 @@ public:
     do {
       obj = random_hobject();
     } while (hobject_to_snap.count(obj));
-
-    set<snapid_t> snaps;
+    vector<snapid_t> snaps;
     choose_random_snaps(1 + (rand() % 20), &snaps);
     add_object_to_snaps(obj, snaps);
   }
@@ -566,14 +568,15 @@ public:
 
 	map<hobject_t, set<snapid_t>>::iterator j = hobject_to_snap.find(hoid);
 	ceph_assert(j->second.contains(snapid));
-	set<snapid_t> old_snaps(j->second);
+	vector<snapid_t> old_snaps(j->second.begin(), j->second.end());
 	j->second.erase(snapid);
+	vector<snapid_t> new_snaps(j->second.begin(), j->second.end());
 
 	{
 	  PausyAsyncMap::Transaction t;
 	  mapper->update_snaps(
 	    hoid,
-	    j->second,
+	    std::move(new_snaps),
 	    &old_snaps,
 	    &t);
 	  driver->submit(&t);
@@ -661,10 +664,10 @@ public:
       return;
     map<hobject_t, set<snapid_t>>::iterator obj =
       rand_choose(hobject_to_snap);
-    set<snapid_t> snaps;
+    vector<snapid_t> snaps;
     int r = mapper->get_snaps(obj->first, &snaps);
     ceph_assert(r == 0);
-    ASSERT_EQ(snaps, obj->second);
+    ASSERT_EQ(std::set(snaps.begin(), snaps.end()), obj->second);
   }
 
   void test_prefix_itr() {
@@ -676,7 +679,7 @@ public:
 
     const int64_t     pool(0);
     const std::string nspace("GBH");
-    set<snapid_t>     snaps = { snapid };
+    vector<snapid_t>  snaps(1, snapid);
     set<hobject_t>&   hobjects = snap_to_hobject[snapid];
     vector<hobject_t> trimmed_objs;
     vector<hobject_t> stored_objs;
@@ -734,7 +737,7 @@ public:
 
     const int64_t     pool(0);
     const std::string nspace("GBH");
-    set<snapid_t>     snaps = { snapid };
+    vector<snapid_t>     snaps(1, snapid);
     vector<hobject_t> trimmed_objs;
     vector<hobject_t> stored_objs;
 
@@ -776,7 +779,7 @@ public:
 			 const std::string& nspace,
 			 vector<hobject_t>& stored_objs) {
     constexpr unsigned MAX_VAL = 1000;
-    set<snapid_t> snaps = { snapid };
+    vector<snapid_t> snaps(1, snapid);
     for (unsigned i = 0; i < count; i++) {
       hobject_t hobj;
       do {
@@ -1059,7 +1062,7 @@ public:
       0, random_string(rand() % 16));
   }
 
-  void create_object(const hobject_t& obj, const set<snapid_t> &snaps) {
+  void create_object(const hobject_t& obj, const vector<snapid_t> &snaps) {
     std::lock_guard l{lock};
       PausyAsyncMap::Transaction t;
       mapper->add_oid(obj, snaps, &t);
@@ -1083,14 +1086,14 @@ public:
 
     // find the value for this key
     map<string, bufferlist> kvmap;
-    auto r = mapper->backend.get_keys(set{k}, &kvmap);
+    auto r = mapper->backend.get_keys(vector{1, k}, &kvmap);
     ASSERT_GE(r, 0);
 
     // replace the key with its shortened version
     PausyAsyncMap::Transaction t;
-    mapper->backend.remove_keys(set{k}, &t);
+    mapper->backend.remove_keys(vector{k}, &t);
     auto short_k = k.substr(0, 10);
-    mapper->backend.set_keys(map<string, bufferlist>{{short_k, kvmap[k]}}, &t);
+    mapper->backend.set_keys(vector<pair<string, bufferlist>>{{short_k, kvmap[k]}}, &t);
     driver->submit(&t);
     driver->flush();
   }
@@ -1124,14 +1127,17 @@ void DirectMapperTest::TearDown()
 TEST_F(DirectMapperTest, BasciObject)
 {
   auto obj = direct->random_hobject();
-  set<snapid_t> snaps{100, 200};
+  vector<snapid_t> snaps(2);
+  snaps[0] = 100;
+  snaps[1] = 200;
   direct->create_object(obj, snaps);
 
   // verify that the OBJ_ & SNA_ entries are there
   auto osn1 = direct->mapper->get_snaps(obj);
   ASSERT_EQ(snaps, osn1);
-  auto vsn1 = direct->mapper->get_snaps_check_consistency(obj);
-  ASSERT_EQ(snaps, vsn1);
+  auto vsn1 = direct->mapper->get_snaps_check_consistency(obj, snaps);
+  ASSERT_TRUE(!vsn1);
+  ASSERT_EQ(vsn1.error().code, SnapMapReaderI::result_t::code_t::matched);
 }
 
 TEST_F(DirectMapperTest, CorruptedSnaRecord)
@@ -1142,9 +1148,13 @@ TEST_F(DirectMapperTest, CorruptedSnaRecord)
   hobject_t head{base_name, key, CEPH_NOSNAP, 0x17, 0, ""};
   hobject_t cln1{base_name, key, 10, 0x17, 0, ""};
   hobject_t cln2{base_name, key, 20, 0x17, 0, ""}; // the oldest version
-  set<snapid_t> head_snaps{400, 500};
-  set<snapid_t> cln1_snaps{300};
-  set<snapid_t> cln2_snaps{100, 200};
+  vector<snapid_t> head_snaps(2);
+  head_snaps[0] = 400;
+  head_snaps[1] = 500;
+  vector<snapid_t> cln1_snaps(1, 300);
+  vector<snapid_t> cln2_snaps(2);
+  cln2_snaps[0] = 100;
+  cln2_snaps[1] = 200;
 
   PausyAsyncMap::Transaction t;
   direct->mapper->add_oid(head, head_snaps, &t);
@@ -1163,25 +1173,31 @@ TEST_F(DirectMapperTest, CorruptedSnaRecord)
     EXPECT_EQ(head_snaps, osnh);
   }
   {
-    auto vsn1 = direct->mapper->get_snaps_check_consistency(cln1);
-    EXPECT_EQ(cln1_snaps, vsn1);
-    auto vsn2 = direct->mapper->get_snaps_check_consistency(cln2);
-    EXPECT_EQ(cln2_snaps, vsn2);
-    auto vsnh = direct->mapper->get_snaps_check_consistency(head);
-    EXPECT_EQ(head_snaps, vsnh);
+    auto vsn1 = direct->mapper->get_snaps_check_consistency(cln1, cln1_snaps);
+    ASSERT_TRUE(!vsn1);
+    ASSERT_EQ(vsn1.error().code, SnapMapReaderI::result_t::code_t::matched);
+    auto vsn2 = direct->mapper->get_snaps_check_consistency(cln2, cln2_snaps);
+    ASSERT_TRUE(!vsn2);
+    ASSERT_EQ(vsn2.error().code, SnapMapReaderI::result_t::code_t::matched);
+    auto vsnh = direct->mapper->get_snaps_check_consistency(head, head_snaps);
+    ASSERT_TRUE(!vsnh);
+    ASSERT_EQ(vsnh.error().code, SnapMapReaderI::result_t::code_t::matched);
   }
 
   // corrupt the SNA_ entry for cln1
   direct->shorten_mapping_key(300, cln1);
   {
-    auto vsnh = direct->mapper->get_snaps_check_consistency(head);
-    EXPECT_EQ(head_snaps, vsnh);
+    auto vsnh = direct->mapper->get_snaps_check_consistency(head, head_snaps);
+    ASSERT_TRUE(!vsnh);
+    ASSERT_EQ(vsnh.error().code, SnapMapReaderI::result_t::code_t::matched);
     auto vsn1 = direct->mapper->get_snaps(cln1);
     EXPECT_EQ(cln1_snaps, vsn1);
-    auto osn1 = direct->mapper->get_snaps_check_consistency(cln1);
-    EXPECT_NE(cln1_snaps, osn1);
-    auto vsn2 = direct->mapper->get_snaps_check_consistency(cln2);
-    EXPECT_EQ(cln2_snaps, vsn2);
+    auto osn1 = direct->mapper->get_snaps_check_consistency(cln1, cln1_snaps);
+    ASSERT_TRUE(!osn1);
+    ASSERT_EQ(osn1.error().code, SnapMapReaderI::result_t::code_t::inconsistent);
+    auto vsn2 = direct->mapper->get_snaps_check_consistency(cln2, cln2_snaps);
+    ASSERT_TRUE(!vsn2);
+    ASSERT_EQ(vsn2.error().code, SnapMapReaderI::result_t::code_t::matched);
   }
 }
 

@@ -273,7 +273,7 @@ void PGBackend::rollback(
       temp.append(t);
       temp.swap(t);
     }
-    void update_snaps(const set<snapid_t> &snaps) override {
+    void update_snaps(const vector<snapid_t> &snaps) override {
       ObjectStore::Transaction temp;
       pg->get_parent()->pgb_set_object_snap_mapping(hoid, snaps, &temp);
       temp.append(t);
