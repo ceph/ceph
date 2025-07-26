@@ -100,6 +100,8 @@ RGW_METADATA = ('ceph_daemon', 'hostname', 'ceph_version', 'instance_id')
 RBD_MIRROR_METADATA = ('ceph_daemon', 'id', 'instance_id', 'hostname',
                        'ceph_version')
 
+NVMEOF_METADATA = ('ceph_daemon', 'hostname', 'version', 'status')
+
 DISK_OCCUPATION = ('ceph_daemon', 'device', 'db_device',
                    'wal_device', 'instance', 'devices', 'device_ids')
 
@@ -743,6 +745,13 @@ class Module(MgrModule, OrchestratorClientMixin):
             RBD_MIRROR_METADATA
         )
 
+        metrics['nvmeof_metadata'] = Metric(
+            'untyped',
+            'nvmeof_metadata',
+            'NVMeoF Metadata',
+            NVMEOF_METADATA
+        )
+
         metrics['pg_total'] = Metric(
             'gauge',
             'pg_total',
@@ -1335,6 +1344,14 @@ class Module(MgrModule, OrchestratorClientMixin):
                 self.metrics['rbd_mirror_metadata'].set(
                     1, rbd_mirror_metadata
                 )
+            elif service_type == "nvmeof" and self.orch_is_available():
+                nvmeof_daemons = raise_if_exception(self.list_daemons(daemon_type='nvmeof'))
+                for daemon in nvmeof_daemons:
+                    self.metrics['nvmeof_metadata'].set(
+                        1, (f"{daemon.daemon_type}.{daemon.daemon_id}",
+                            str(daemon.hostname),
+                            str(daemon.version),
+                            str(daemon.status.value if daemon.status is not None else None)))
 
     @profile_method()
     def get_num_objects(self) -> None:
