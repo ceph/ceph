@@ -4894,7 +4894,7 @@ int OSD::check_crush_weight()
   }
 
   double expected_weight = std::max(.00001,
-                g_conf().get_val<double>("osd_crush_scaling_factor") *
+		osdmap->get_osd_crush_scaling_factor() *
                 double(st.total) /
                 double(1ull << 40 /* TiB */));
 
@@ -4914,6 +4914,8 @@ int OSD::check_crush_weight()
 
 int OSD::update_crush_location()
 {
+  OSDMapRef osdmap = get_osdmap();
+
   if (!cct->_conf->osd_crush_update_on_start) {
     dout(10) << __func__ << " osd_crush_update_on_start = false" << dendl;
     return 0;
@@ -4932,7 +4934,7 @@ int OSD::update_crush_location()
     }
     snprintf(weight, sizeof(weight), "%.4lf",
 	     std::max(.00001,
-                      g_conf().get_val<double>("osd_crush_scaling_factor") *
+		      osdmap->get_osd_crush_scaling_factor() *
 		      double(st.total) /
 		      double(1ull << 40 /* TiB */)));
   }
