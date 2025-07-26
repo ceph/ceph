@@ -354,11 +354,13 @@ class MonitorThrasher(Thrasher):
 
             if mons_to_freeze:
                 for mon in mons_to_freeze:
+                    self.log('freezing mon.{m}'.format(m=mon))
                     self.freeze_mon(mon)
                 self.log('waiting for {delay} secs to unfreeze mons'.format(
                     delay=self.freeze_mon_duration))
                 time.sleep(self.freeze_mon_duration)
                 for mon in mons_to_freeze:
+                    self.log('unfreezing mon.{m}'.format(m=mon))
                     self.unfreeze_mon(mon)
 
             if self.maintain_quorum:
@@ -382,15 +384,18 @@ class MonitorThrasher(Thrasher):
             self.switch_task()
 
             for mon in mons_to_kill:
+                self.log('reviving mon.{m}'.format(m=mon))
                 self.revive_mon(mon)
             # do more freezes
             if mons_to_freeze:
                 for mon in mons_to_freeze:
+                    self.log('freezing mon.{m}'.format(m=mon))
                     self.freeze_mon(mon)
                 self.log('waiting for {delay} secs to unfreeze mons'.format(
                     delay=self.freeze_mon_duration))
                 time.sleep(self.freeze_mon_duration)
                 for mon in mons_to_freeze:
+                    self.log('unfreezing mon.{m}'.format(m=mon))
                     self.unfreeze_mon(mon)
 
             self.manager.wait_for_mon_quorum_size(len(mons))
