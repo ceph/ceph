@@ -838,10 +838,10 @@ void KernelDevice::_discard_thread(uint64_t tid)
       discard_running ++;
       l.unlock();
       dout(20) << __func__ << " finishing" << dendl;
-      logger->inc(l_blk_kernel_device_discard_op, discard_processing.num_intervals());
       for (auto p = discard_processing.begin(); p != discard_processing.end(); ++p) {
         _discard(p.get_start(), p.get_len());
       }
+      logger->inc(l_blk_kernel_device_discard_op, discard_processing.num_intervals());
 
       discard_callback(discard_callback_priv, static_cast<void*>(&discard_processing));
       discard_processing.clear();
@@ -891,9 +891,11 @@ bool KernelDevice::_queue_discard(interval_set<uint64_t> &to_release)
 
 // return true only if discard was queued, so caller won't have to do
 // alloc->release, otherwise return false
-bool KernelDevice::try_discard(interval_set<uint64_t> &to_release, bool async)
+bool KernelDevice::try_discard(interval_set<uint64_t> &to_release,
+                               bool async,
+                               bool force)
 {
-  if (!support_discard || !cct->_conf->bdev_enable_discard)
+  if (!support_discard || !(force || cct->_conf->bdev_enable_discard))
     return false;
 
   if (async && _discard_started()) {
@@ -902,6 +904,7 @@ bool KernelDevice::try_discard(interval_set<uint64_t> &to_release, bool async)
     for (auto p = to_release.begin(); p != to_release.end(); ++p) {
       _discard(p.get_start(), p.get_len());
     }
+    logger->inc(l_blk_kernel_device_discard_op, to_release.num_intervals());
   }
   return false;
 }
@@ -1217,10 +1220,23 @@ int KernelDevice::_discard(uint64_t offset, uint64_t len)
 	       << dendl;
     return 0;
   }
-  dout(10) << __func__
-           << " 0x" << std::hex << offset << "~" << len << std::dec
-           << dendl;
-  r = BlkDev{fd_directs[WRITE_LIFE_NOT_SET]}.discard((int64_t)offset, (int64_t)len);
+  uint64_t max_len = cct->_conf->bdev_max_discard_length;
+  if (max_len) {
+    while (len > 0 && r == 0) {
+      auto l = std::min(max_len, len);
+      dout(10) << __func__
+               << " 0x" << std::hex << offset << "~" << l << std::dec
+               << dendl;
+      r = BlkDev{fd_directs[WRITE_LIFE_NOT_SET]}.discard((int64_t)offset, (int64_t)l);
+      offset += l;
+      len -= l;
+    }
+  } else {
+    dout(10) << __func__
+             << " 0x" << std::hex << offset << "~" << len << std::dec
+             << dendl;
+    r = BlkDev{fd_directs[WRITE_LIFE_NOT_SET]}.discard((int64_t)offset, (int64_t)len);
+  }
   return r;
 }
 

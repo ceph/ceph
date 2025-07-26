@@ -7077,10 +7077,13 @@ int BlueStore::_open_bdev(bool create)
   if (r < 0)
     goto fail;
 
-  if (create && cct->_conf->bdev_enable_discard) {
+  if (create &&
+      cct->_conf.get_val<bool>("bluestore_discard_on_mkfs")) {
     interval_set<uint64_t> whole_device;
+    dout(5) << __func__ << " trimming device:" << p << dendl;
     whole_device.insert(0, bdev->get_size());
-    bdev->try_discard(whole_device, false);
+    bdev->try_discard(whole_device, false, true);
+    dout(5) << __func__ << " trimmed device:" << p << dendl;
   }
 
   if (bdev->supported_bdev_label()) {
@@ -7566,10 +7569,10 @@ int BlueStore::_minimal_open_bluefs(bool create)
   struct stat st;
 
   bfn = path + "/block.db";
+  bool trim_db_wal =
+    create && cct->_conf.get_val<bool>("bluestore_discard_on_mkfs");
   if (::stat(bfn.c_str(), &st) == 0) {
-    r = bluefs->add_block_device(
-      BlueFS::BDEV_DB, bfn,
-      create && cct->_conf->bdev_enable_discard);
+    r = bluefs->add_block_device(BlueFS::BDEV_DB, bfn, trim_db_wal);
     if (r < 0) {
       derr << __func__ << " add block device(" << bfn << ") returned: "
             << cpp_strerror(r) << dendl;
@@ -7614,8 +7617,7 @@ int BlueStore::_minimal_open_bluefs(bool create)
 
   bfn = path + "/block.wal";
   if (::stat(bfn.c_str(), &st) == 0) {
-    r = bluefs->add_block_device(BlueFS::BDEV_WAL, bfn,
-				 create && cct->_conf->bdev_enable_discard);
+    r = bluefs->add_block_device(BlueFS::BDEV_WAL, bfn, trim_db_wal);
     if (r < 0) {
       derr << __func__ << " add block device(" << bfn << ") returned: "
 	    << cpp_strerror(r) << dendl;

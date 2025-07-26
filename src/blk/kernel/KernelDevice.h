@@ -96,7 +96,9 @@ private:
   void _aio_thread();
   void _discard_thread(uint64_t tid);
   bool _queue_discard(interval_set<uint64_t> &to_release);
-  bool try_discard(interval_set<uint64_t> &to_release, bool async = true) override;
+  bool try_discard(interval_set<uint64_t> &to_release,
+                   bool async = true,
+                   bool force = false) override;
 
   int _aio_start();
   void _aio_stop();
