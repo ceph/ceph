@@ -33,7 +33,8 @@ static bool client_stop(proxy_link_t *link)
 
 static int32_t proxy_negotiation_check(proxy_link_negotiate_t *neg)
 {
-	proxy_log(LOG_INFO, 0, "Features enabled: %08x", neg->v1.enabled);
+	proxy_log(LOG_INFO, 0, "Features enabled: %08x, protocol: %u",
+		  neg->v1.enabled, neg->v2.protocol);
 
 	return 0;
 }
@@ -75,7 +76,7 @@ static int32_t proxy_global_connect(void)
 		}
 
 		proxy_link_negotiate_init(&global_cmount.neg, 0, PROXY_FEAT_ALL,
-					  0, 0);
+					  0, 0, PROXY_LINK_PROTOCOL_VERSION);
 
 		err = proxy_link_handshake_client(&global_cmount.link, err,
 						  &global_cmount.neg,
@@ -181,7 +182,8 @@ __public int ceph_create(struct ceph_mount_info **cmount, const char *const id)
 	sd = err;
 
 	proxy_link_negotiate_init(&ceph_mount->neg, 0, PROXY_FEAT_ALL, 0,
-				  PROXY_FEAT_ASYNC_IO);
+				  PROXY_FEAT_ASYNC_IO,
+				  PROXY_LINK_PROTOCOL_VERSION);
 
 	err = proxy_link_handshake_client(&ceph_mount->link, sd,
 					  &ceph_mount->neg,

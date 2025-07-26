@@ -16,7 +16,8 @@ typedef struct _proxy_version {
 #define DEFINE_VERSION(_num) [_num] = NEG_VERSION_SIZE(_num)
 
 static uint32_t negotiation_sizes[PROXY_LINK_NEGOTIATE_VERSION + 1] = {
-	DEFINE_VERSION(1)
+	DEFINE_VERSION(1),
+	DEFINE_VERSION(2)
 
 	/* NEG_VERSION: Add newly defined versions above this comment. */
 };
@@ -323,11 +324,18 @@ static int32_t proxy_link_negotiate_check(proxy_link_negotiate_t *local,
 					 "features");
 		}
 
+		/* NEG_VERSION: Check if there's any incompatibility with new
+		 *              extensions that are not supported by an old
+		 *              peer. */
+
 		/* The peer is running the old version, but it is compatible
 		 * with us, so everything is fine and the connection can be
 		 * completed successfully with all features disabled. */
 
 		local->v1.enabled = 0;
+		local->v2.protocol = 0;
+
+		/* NEG_VERSION: Initialize default values for new extensions. */
 
 		proxy_log(LOG_INFO, 0,
 			  "Connected to legacy peer. No features enabled");
@@ -355,6 +363,10 @@ static int32_t proxy_link_negotiate_check(proxy_link_negotiate_t *local,
 
 	enabled = (local->v1.enabled | remote->v1.enabled) & supported;
 	local->v1.enabled = enabled;
+
+	if (local->v2.protocol > remote->v2.protocol) {
+		local->v2.protocol = remote->v2.protocol;
+	}
 
 	/* NEG_VERSION: Implement handling of negotiate extensions. */
 
@@ -402,6 +414,20 @@ static int32_t proxy_link_negotiate_client(proxy_link_t *link, int32_t sd,
 		return err;
 	}
 
+	if (remote.v0.version == 1) {
+		return 0;
+	}
+
+	/* For version 2 and higher, send the agreed protocol. */
+	err = proxy_link_write(link, sd, &neg->v2.protocol,
+			       sizeof(neg->v2.protocol));
+	if (err < 0) {
+		return err;
+	}
+
+	/* NEG_VERSION: Send any extension related information to the server.
+	 *              Make the changes above this line. */
+
 	return 0;
 }
 
@@ -445,6 +471,21 @@ static int32_t proxy_link_negotiate_server(proxy_link_t *link, int32_t sd,
 			return proxy_log(LOG_ERR, EINVAL,
 					 "The client tried to disable a "
 					 "required feature");
+		}
+	}
+
+	if (remote.v0.version > 1) {
+		/* Read the agreed protocol version. */
+		err = proxy_link_read(link, sd, &neg->v2.protocol,
+				      sizeof(neg->v2.protocol));
+		if (err < 0) {
+			return err;
+		}
+
+		if (neg->v2.protocol > PROXY_LINK_PROTOCOL_VERSION) {
+			return proxy_log(LOG_ERR, EINVAL,
+					 "The client tried to use an "
+					 "unsupported protocol");
 		}
 	}
 
