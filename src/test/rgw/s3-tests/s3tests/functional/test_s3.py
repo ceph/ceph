@@ -13575,7 +13575,72 @@ def test_put_object_if_match():
     e = assert_raises(ClientError, client.put_object, Bucket=bucket, Key=key, IfMatch='badetag')
     assert (404, 'NoSuchKey') == _get_status_and_error_code(e.response)
 
-    client.put_object(Bucket=bucket, Key=key, IfNoneMatch=etag)
+    response = client.put_object(Bucket=bucket, Key=key, IfNoneMatch=etag)
+    assert 200 == response['ResponseMetadata']['HTTPStatusCode']
+    response = client.put_object(Bucket=bucket, Key=key, IfMatch='*')
+    assert 200 == response['ResponseMetadata']['HTTPStatusCode']
+    e = assert_raises(ClientError, client.put_object, Bucket=bucket, Key=key, IfMatch='badetag')
+    assert (412, 'PreconditionFailed') == _get_status_and_error_code(e.response)
+    response = client.put_object(Bucket=bucket, Key=key, IfMatch=etag)
+    assert 200 == response['ResponseMetadata']['HTTPStatusCode']
+
+@pytest.mark.conditional_write
+def test_put_current_object_if_none_match():
+    client = get_client()
+    bucket = get_new_bucket(client)
+    check_configure_versioning_retry(bucket, "Enabled", "Enabled")
+    key = 'obj'
+    data1 = 'data1'
+    data2 = 'data2'
+
+    response = client.put_object(Bucket=bucket, Key=key, Body=data1, IfNoneMatch='*')
+    etag = response['ETag']
+
+    response = client.put_object(Bucket=bucket, Key=key, Body=data2)
+    etag2 = response['ETag']
+
+    e = assert_raises(ClientError, client.put_object, Bucket=bucket, Key=key, IfNoneMatch='*')
+    assert (412, 'PreconditionFailed') == _get_status_and_error_code(e.response)
+    e = assert_raises(ClientError, client.put_object, Bucket=bucket, Key=key, IfNoneMatch=etag2)
+    assert (412, 'PreconditionFailed') == _get_status_and_error_code(e.response)
+
+    # we can't specify a version, so we only check against current object
+    response = client.put_object(Bucket=bucket, Key=key, IfNoneMatch=etag)
+    assert 200 == response['ResponseMetadata']['HTTPStatusCode']
+    response = client.put_object(Bucket=bucket, Key=key, IfNoneMatch='badetag')
+    assert 200 == response['ResponseMetadata']['HTTPStatusCode']
+
+    client.delete_object(Bucket=bucket, Key=key)
+
+@pytest.mark.conditional_write
+def test_put_current_object_if_match():
+    client = get_client()
+    bucket = get_new_bucket(client)
+    check_configure_versioning_retry(bucket, "Enabled", "Enabled")
+    key = 'obj'
+    data1 = 'data1'
+    data2 = 'data2'
+    etag = 'deadbeef'
+
+    e = assert_raises(ClientError, client.put_object, Bucket=bucket, Key=key, IfMatch='*')
+    assert (404, 'NoSuchKey') == _get_status_and_error_code(e.response)
+    e = assert_raises(ClientError, client.put_object, Bucket=bucket, Key=key, IfMatch='badetag')
+    assert (404, 'NoSuchKey') == _get_status_and_error_code(e.response)
+
+    response = client.put_object(Bucket=bucket, Key=key, Body=data1, IfNoneMatch=etag)
+    assert 200 == response['ResponseMetadata']['HTTPStatusCode']
+    etag = response['ETag']
+    versionId = response['VersionId']
+    response = client.put_object(Bucket=bucket, Key=key, Body=data2, IfMatch='*')
+    assert 200 == response['ResponseMetadata']['HTTPStatusCode']
+    etag2 = response['ETag']
+
+    e = assert_raises(ClientError, client.put_object, Bucket=bucket, Key=key, IfMatch='badetag')
+    assert (412, 'PreconditionFailed') == _get_status_and_error_code(e.response)
+    e = assert_raises(ClientError, client.put_object, Bucket=bucket, Key=key, IfMatch=etag)
+    assert (412, 'PreconditionFailed') == _get_status_and_error_code(e.response)
+    response = client.put_object(Bucket=bucket, Key=key, IfMatch=etag2)
+    assert 200 == response['ResponseMetadata']['HTTPStatusCode']
 
 @pytest.mark.conditional_write
 def test_put_object_current_if_match():
@@ -13590,6 +13655,8 @@ def test_put_object_current_if_match():
     assert (412, 'PreconditionFailed') == _get_status_and_error_code(e.response)
     e = assert_raises(ClientError, client.put_object, Bucket=bucket, Key=key, IfNoneMatch=etag)
     assert (412, 'PreconditionFailed') == _get_status_and_error_code(e.response)
+    response = client.put_object(Bucket=bucket, Key=key, IfNoneMatch='badetag')
+    assert 200 == response['ResponseMetadata']['HTTPStatusCode']
 
     client.put_object(Bucket=bucket, Key=key, IfMatch=etag)
 
