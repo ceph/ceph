@@ -1,3 +1,6 @@
+set(HDRHISTOGRAM_PATH ${CMAKE_SOURCE_DIR}/HdrHistogram_c)
+add_subdirectory(${HDRHISTOGRAM_PATH} ${CMAKE_BINARY_DIR}/HdrHistogram_c_build)
+include_directories(${HDRHISTOGRAM_PATH}/include)
 add_executable(crimson-store-nbd
 	store_nbd/store-nbd.cc
 	store_nbd/tm_driver.cc
@@ -12,7 +15,8 @@ add_executable(crimson-store-bench
 	store_bench/store-bench.cc
   )
 target_link_libraries(crimson-store-bench
-  crimson-os)
+  crimson-os
+  hdr_histogram_static)
 install(TARGETS crimson-store-bench DESTINATION bin)
 
 add_executable(perf-crimson-msgr perf_crimson_msgr.cc)

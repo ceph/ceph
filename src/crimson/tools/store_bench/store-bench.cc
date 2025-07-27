@@ -24,6 +24,7 @@
    ./build/bin/crimson-store-bench --store-path store_bench_dir --smp 4 "$@"
  */
 
+#include <fstream>
 #include <random>
 #include <vector>
 
@@ -46,17 +47,84 @@
 
 #include "crimson/os/futurized_collection.h"
 #include "crimson/os/futurized_store.h"
+#include <hdr/hdr_histogram.h>
 
 namespace po = boost::program_options;
 
 using namespace ceph;
 
 SET_SUBSYS(osd);
+// also i dont think we need to have a histogram for each coroutine
+// my understanding is that everytime run_con_io calls the actual function it
+// suspends there and launches the next co routine the actual function then
+// suspends at the transaction once the transaction is resolved actual function
+// resumes and the latency is calculated then we go back to run_io which also
+// resumes
+//  not loosing access to any object
+// my question -unrelated- lets say we have a vector that we read and write to
+// now lets say that co_routine 1 decides it wants to read from index 0 it reads
+// the value 10 and begins a write that is a co_await so it does +1 ,now before
+// co_rotinue 1 is completed co_routine 2 starts also reads from 0 reads 0 and
+// writes+1 wont both of them end up writing 1 and not 2?
+class latency_histogram {
+private:
+  hdr_histogram *histogram = nullptr;
+
+public:
+  latency_histogram(int upper_bound) {
+    int upper_bound_milli = upper_bound * 1000;
+    hdr_init(1, upper_bound_milli, 3,
+             &histogram); // min is 1 microsec, max is upper_bound micro sec, 3
+                          // sig figs precision
+  }
+  ~latency_histogram() {
+    if (histogram) {
+      hdr_close(histogram);
+    }
+  }
+  void record_latency_nanosec(std::chrono::nanoseconds latency_ns) {
+    auto latency_milli =
+        std::chrono::duration_cast<std::chrono::milliseconds>(latency_ns)
+            .count();
+    hdr_record_value(histogram, latency_milli);
+  }
+  void print_stats() {
+    // this always returns an intger output but we can control bucket size by
+    // adjusting the granularity size,essential saying 3 means that buckets have
+    // size 10^-3
+    LOG_PREFIX(print_stats);
+    ERROR("Min latency is {}", hdr_min(histogram));
+    ERROR("Max latency is {}", hdr_max(histogram));
+    ERROR("Average latency is {}", hdr_mean(histogram));
+
+    std::vector<int> percentiles = {25, 50, 75, 90, 95, 99};
+    for (auto i : percentiles) {
+      ERROR("the {} percentile is {}", i,
+            hdr_value_at_percentile(histogram, i));
+    }
+  }
+  void export_csv(std::string filename) {
+    LOG_PREFIX(export_csv);
+    if (!(histogram)) {
+      return;
+    }
+    std::ofstream myfile(filename);
+    if (!myfile.is_open()) {
+      ERROR("failed to open file");
+    }
+    myfile << "latency(ms),count\n";
+    hdr_iter iter;
+    hdr_iter_recorded_init(&iter, histogram);
+    while (hdr_iter_next(&iter)) {
+      myfile << iter.value << "," << iter.count << "\n";
+    }
+    myfile.close();
+  }
+};
 
 /**
  * These are functions that are used in both types of work_loads
  */
-
 /**
  * Creates ghobject_t object identifier from integer identifier.
  */
@@ -72,49 +140,55 @@ ghobject_t create_hobj(unsigned id) {
 
 /**
  * The function is called whenever we create an object
- * This function creates a collection identified by pg_id and shard_id 
- * we calculate pg_id as integer division of obj_id/num_objects_per_collection 
- * This ensures that the number of objects in each collection is essentially dependent on objects_per_collection
- * in the case of pg_workload we set this to 1 , so every object will fall into a different pg
- * in the case of rgw_workload we set it to x so all objects with obj id be 0 and x-1 will fall into 1 collection 
+ * This function creates a collection identified by pg_id and shard_id
+ * we calculate pg_id as integer division of obj_id/num_objects_per_collection
+ * This ensures that the number of objects in each collection is essentially
+ * dependent on objects_per_collection in the case of pg_workload we set this to
+ * 1 , so every object will fall into a different pg in the case of rgw_workload
+ * we set it to x so all objects with obj id be 0 and x-1 will fall into 1
+ * collection
  */
 coll_t make_cid(int obj_id, int num_objects_per_collection) {
-  int pg_id=obj_id/num_objects_per_collection;
+  int pg_id = obj_id / num_objects_per_collection;
   return coll_t(spg_t(pg_t(pg_id, 0)));
 }
 
 /**
- * The struct stores the number of operations and the total latency for all these operations
- * For the pg workload type write+delete increases the number of operations by 1 
- * For the rgw index workload, each write increases the num_operations by 1 
- * Each delete increases the number of operations by 1 
+ * The struct stores the number of operations and the total latency for all
+ * these operations For the pg workload type write+delete increases the number
+ * of operations by 1 For the rgw index workload, each write increases the
+ * num_operations by 1 Each delete increases the number of operations by 1
  */
 struct results_t {
   int num_operations = 0;
-  std::chrono::duration<double> tot_latency_sec = std::chrono::duration<double>(0.0);
+  std::chrono::duration<double> tot_latency_sec =
+      std::chrono::duration<double>(0.0);
   int duration = 0;
 
-  results_t& operator+=(const results_t& other_result){
+  results_t &operator+=(const results_t &other_result) {
     num_operations += other_result.num_operations;
-    tot_latency_sec+=other_result.tot_latency_sec;
+    tot_latency_sec += other_result.tot_latency_sec;
     return *this;
   }
 
-  void dump(ceph::Formatter& json_formatter_object){
+  void dump(ceph::Formatter &json_formatter_object) {
     json_formatter_object.open_object_section("results_t");
     json_formatter_object.dump_int("number of operations done", num_operations);
-    json_formatter_object.dump_float("the total latency aka time for these operations", tot_latency_sec.count());
-    json_formatter_object.dump_int("the time the workload took to run is ", duration);
+    json_formatter_object.dump_float(
+        "the total latency aka time for these operations",
+        tot_latency_sec.count());
+    json_formatter_object.dump_int("the time the workload took to run is ",
+                                   duration);
     json_formatter_object.close_section();
   }
 };
 
 /**
  * This function is used to run a workload num_con_io times concurrently
- * the  parallel_for_each loop launches k co_routines 
+ * the  parallel_for_each loop launches k co_routines
  * Each coroutine is the actual work_load function which returns a
- * future<results_t> Since its a co_await once that future is resolved it is added
- * to the vector so all_io_res containes resolved futures
+ * future<results_t> Since its a co_await once that future is resolved it is
+ * added to the vector so all_io_res containes resolved futures
  */
 seastar::future<results_t>
 run_concurrent_ios(int duration, int num_concurrent_io,
@@ -132,8 +206,9 @@ run_concurrent_ios(int duration, int num_concurrent_io,
         co_return;
       })));
 
-  results_t total_result_all_io = {0, std::chrono::duration<double>(0.0), duration};
-  for(const auto res:all_io_res){
+  results_t total_result_all_io = {0, std::chrono::duration<double>(0.0),
+                                   duration};
+  for (const auto res : all_io_res) {
     total_result_all_io += res;
   }
   ceph::JSONFormatter jf;
@@ -157,6 +232,7 @@ seastar::future<> pg_log_workload(crimson::os::FuturizedStore &global_store,
                                   int duration, int log_size, int log_length) {
   LOG_PREFIX(pg_log_workload);
   auto &local_store = global_store.get_sharded_store();
+  latency_histogram my_hist(duration);
 
   std::map<int, coll_t> collection_id;
   std::map<int, crimson::os::CollectionRef> coll_ref_map;
@@ -171,7 +247,7 @@ seastar::future<> pg_log_workload(crimson::os::FuturizedStore &global_store,
   auto pre_fill_logs = [&]() -> seastar::future<> {
     for (int i = 0; i < num_logs; ++i) {
       auto obj_i = create_hobj(i);
-      auto coll_id = make_cid(i,1);
+      auto coll_id = make_cid(i, 1);
       collection_id[i] = coll_id;
       auto coll_ref = co_await local_store.create_new_collection(coll_id);
       coll_ref_map[i] = coll_ref;
@@ -204,10 +280,12 @@ seastar::future<> pg_log_workload(crimson::os::FuturizedStore &global_store,
    */
   auto add_remove_entry = [&]() -> seastar::future<results_t> {
     int num_ops = 0;
-    std::chrono::duration<double> tot_latency = std::chrono::duration<double>(0.0);
+    std::chrono::duration<double> tot_latency =
+        std::chrono::duration<double>(0.0);
     auto start = ceph::mono_clock::now();
 
-    while (ceph::mono_clock::now() - start <=(std::chrono::seconds(duration))) { //duration is an int 
+    while (ceph::mono_clock::now() - start <=
+           (std::chrono::seconds(duration))) { // duration is an int
       int obj_num = std::rand() % num_logs;
 
       auto object = create_hobj(obj_num);
@@ -234,15 +312,19 @@ seastar::future<> pg_log_workload(crimson::os::FuturizedStore &global_store,
                                           std::move(one_write_delete));
       auto latency_end = ceph::mono_clock::now();
 
-      auto time_nanosec =(latency_end -latency_start);
-      std::chrono::duration<double> time_sec = std::chrono::duration<double>(time_nanosec);
+      auto time_nanosec = (latency_end - latency_start);
+      std::chrono::duration<double> time_sec =
+          std::chrono::duration<double>(time_nanosec);
+      my_hist.record_latency_nanosec(time_nanosec);
       tot_latency += time_sec;
       num_ops++;
     }
-    co_return results_t{num_ops, tot_latency,duration};
+    co_return results_t{num_ops, tot_latency, duration};
   };
   co_await pre_fill_logs();
   co_await run_concurrent_ios(duration, num_concurrent_io, add_remove_entry);
+  my_hist.print_stats();
+  my_hist.export_csv("latency values pg workload");
   co_return;
 }
 
@@ -272,15 +354,15 @@ std::string generate_random_string(int key_size) {
  * into the keyset of the bucket is completed after the transaction to write the
  * key is submitted this method returns a future of type result_t, with the
  * number of operations as 1, and the time as the time it took for the write
- * every time this method is called we will incremnet the number of operations by
- * 1 and the latency by the time it took for this operation
+ * every time this method is called we will incremnet the number of operations
+ * by 1 and the latency by the time it took for this operation
  */
 
-seastar::future<results_t> write_unique_key(
-    crimson::os::FuturizedStore::Shard &shard_ref, coll_t coll_id,
-    crimson::os::CollectionRef coll_ref,
-    ghobject_t bucket, std::set<std::string> &existing_keys,
-    int key_size, int value_size) {
+seastar::future<results_t>
+write_unique_key(crimson::os::FuturizedStore::Shard &shard_ref, coll_t coll_id,
+                 crimson::os::CollectionRef coll_ref, ghobject_t bucket,
+                 std::set<std::string> &existing_keys, int key_size,
+                 int value_size, latency_histogram &hist) {
   std::string new_key = generate_random_string(key_size);
   while (existing_keys.count(new_key) > 0) {
     new_key = generate_random_string(key_size);
@@ -298,6 +380,7 @@ seastar::future<results_t> write_unique_key(
   co_await shard_ref.do_transaction(coll_ref, std::move(one_write));
   auto latency_end = ceph::mono_clock::now();
   auto time_per_write = (latency_end - latency_start);
+  hist.record_latency_nanosec(time_per_write);
   std::chrono::duration<double> time_per_write_sec = time_per_write;
 
   existing_keys.insert(new_key);
@@ -316,10 +399,11 @@ seastar::future<results_t> write_unique_key(
  * latency by the time it took for this operation
  */
 
-seastar::future<results_t> delete_random_key(
-    crimson::os::FuturizedStore::Shard &shard_ref, coll_t &coll_id,
-    crimson::os::CollectionRef coll_ref,
-    ghobject_t &bucket, std::set<std::string> &existing_keys) {
+seastar::future<results_t>
+delete_random_key(crimson::os::FuturizedStore::Shard &shard_ref,
+                  coll_t &coll_id, crimson::os::CollectionRef coll_ref,
+                  ghobject_t &bucket, std::set<std::string> &existing_keys,
+                  latency_histogram &hist) {
   int index = std::rand() % existing_keys.size();
   auto it = existing_keys.begin();
   std::advance(it, index);
@@ -331,8 +415,9 @@ seastar::future<results_t> delete_random_key(
   auto latency_start = ceph::mono_clock::now();
   co_await shard_ref.do_transaction(coll_ref, std::move(one_delete));
   auto latency_end = ceph::mono_clock::now();
-  auto time_per_delete = (latency_end - latency_start).count();
-  std::chrono::duration<double> time_per_delete_sec=time_per_delete;
+  auto time_per_delete = (latency_end - latency_start);
+  hist.record_latency_nanosec(time_per_delete);
+  std::chrono::duration<double> time_per_delete_sec = time_per_delete;
   co_return results_t{1, time_per_delete_sec};
 }
 
@@ -350,14 +435,19 @@ seastar::future<> rgw_index_workload(crimson::os::FuturizedStore &global_store,
                                      int num_indices, int num_concurrent_io,
                                      int duration, int key_size, int value_size,
                                      int target_keys_per_bucket,
-                                     int tolerance_range,int num_buckets_per_collection) {
+                                     int tolerance_range,
+                                     int num_buckets_per_collection) {
 
   LOG_PREFIX(rgw_index_workload);
   auto &local_store = global_store.get_sharded_store();
+  latency_histogram rgw_histogram(duration);
   std::map<int, coll_t> collection_id_for_rgw;
-  std::map<int,crimson::os::CollectionRef> coll_ref_map_rgw; // map of bucket number and coll_ref
-  std::vector<std::set<std::string>> keys_per_bucket(num_indices); // vector where each index is the bucket number and the
-                                                                  // value at that index is a set of existing keys in that// bucket
+  std::map<int, crimson::os::CollectionRef>
+      coll_ref_map_rgw; // map of bucket number and coll_ref
+  std::vector<std::set<std::string>> keys_per_bucket(
+      num_indices); // vector where each index is the bucket number and the
+                    // value at that index is a set of existing keys in that//
+                    // bucket
 
   /**
    * This method returns a future with pre filled buckets
@@ -370,7 +460,7 @@ seastar::future<> rgw_index_workload(crimson::os::FuturizedStore &global_store,
   auto pre_fill_buckets = [&]() -> seastar::future<> {
     for (int i = 0; i < num_indices; ++i) {
       auto bucket_i = create_hobj(i);
-      auto coll_id = make_cid(i,num_buckets_per_collection);
+      auto coll_id = make_cid(i, num_buckets_per_collection);
       collection_id_for_rgw[i] = coll_id;
       auto coll_ref = co_await local_store.create_new_collection(coll_id);
       coll_ref_map_rgw[i] = coll_ref;
@@ -417,10 +507,11 @@ seastar::future<> rgw_index_workload(crimson::os::FuturizedStore &global_store,
    */
   auto rgw_actual_test = [&]() -> seastar::future<results_t> {
     int num_ops = 0;
-    std::chrono::duration<double> tot_latency = std::chrono::duration<double>(0.0);
+    std::chrono::duration<double> tot_latency =
+        std::chrono::duration<double>(0.0);
     auto start = ceph::mono_clock::now();
 
-    while (ceph::mono_clock::now() - start <=std::chrono::seconds(duration)){
+    while (ceph::mono_clock::now() - start <= std::chrono::seconds(duration)) {
 
       int bucket_num_we_choose = std::rand() % num_indices;
       auto bucket = create_hobj(bucket_num_we_choose);
@@ -434,40 +525,46 @@ seastar::future<> rgw_index_workload(crimson::os::FuturizedStore &global_store,
       // to delete
       if (size_bucket_we_choose <= min_size) {
         results_t result = co_await write_unique_key(
-            local_store, coll_id, coll_ref, bucket, keys_in_that_bucket,key_size, value_size);
-        size_per_bucket[bucket_num_we_choose]+=1;
+            local_store, coll_id, coll_ref, bucket, keys_in_that_bucket,
+            key_size, value_size, rgw_histogram);
+        size_per_bucket[bucket_num_we_choose] += 1;
         tot_latency += result.tot_latency_sec;
         num_ops += result.num_operations;
 
       } else if (size_bucket_we_choose >= max_size) {
-        results_t result = co_await delete_random_key(
-            local_store, coll_id, coll_ref, bucket, keys_in_that_bucket);
-        size_per_bucket[bucket_num_we_choose]-=1;
+        results_t result =
+            co_await delete_random_key(local_store, coll_id, coll_ref, bucket,
+                                       keys_in_that_bucket, rgw_histogram);
+        size_per_bucket[bucket_num_we_choose] -= 1;
         tot_latency += result.tot_latency_sec;
         num_ops += result.num_operations;
-      }else {
+      } else {
         int choice = std::rand() % 2;
         // choice 0 is write, choice 1 is delete
         if (choice == 0) {
           results_t result = co_await write_unique_key(
-              local_store, coll_id, coll_ref, bucket, keys_in_that_bucket,key_size, value_size);
-          size_per_bucket[bucket_num_we_choose]+=1;
+              local_store, coll_id, coll_ref, bucket, keys_in_that_bucket,
+              key_size, value_size, rgw_histogram);
+          size_per_bucket[bucket_num_we_choose] += 1;
           tot_latency += result.tot_latency_sec;
           num_ops += result.num_operations;
         } else {
-          results_t result = co_await delete_random_key(
-              local_store, coll_id, coll_ref, bucket, keys_in_that_bucket);
-          size_per_bucket[bucket_num_we_choose]-=1;
+          results_t result =
+              co_await delete_random_key(local_store, coll_id, coll_ref, bucket,
+                                         keys_in_that_bucket, rgw_histogram);
+          size_per_bucket[bucket_num_we_choose] -= 1;
           tot_latency += result.tot_latency_sec;
           num_ops += result.num_operations;
         }
       };
     }
-    co_return results_t{num_ops, tot_latency,duration};
+    co_return results_t{num_ops, tot_latency, duration};
   };
 
   co_await pre_fill_buckets();
   co_await run_concurrent_ios(duration, num_concurrent_io, rgw_actual_test);
+  rgw_histogram.print_stats();
+  rgw_histogram.export_csv("latency values rgw workload");
   co_return;
 };
 
@@ -531,7 +628,7 @@ int main(int argc, char **argv) {
   int num_indices = 0;
   int target_keys_per_bucket = 0;
   int tolerance_range = 0;
-  int num_buckets_per_collection=0;
+  int num_buckets_per_collection = 0;
 
   std::vector<char *> av{argv[0]};
   std::transform(std::begin(unrecognized_options),
@@ -546,35 +643,36 @@ int main(int argc, char **argv) {
        "how many different logs we create; aka, we create a log for every "
        "object,so how many objects we create")
 
-      ("log_length", po::value<int>(&log_length),
-        "number of entries per log")
+          ("log_length", po::value<int>(&log_length),
+           "number of entries per log")
 
-      ("log_size", po::value<int>(&log_size), "size of each log entry")
+              ("log_size", po::value<int>(&log_size), "size of each log entry")
 
-      ("num_concurrent_io", po::value<int>(&num_concurrent_io),
-        "number of IOs happening simultaneously")
+                  ("num_concurrent_io", po::value<int>(&num_concurrent_io),
+                   "number of IOs happening simultaneously")
 
-      ("duration", po::value<int>(&duration),
-        "how long in seconds the actual testing loop runs "
-        "for")
+                      ("duration", po::value<int>(&duration),
+                       "how long in seconds the actual testing loop runs "
+                       "for")
       // for rgw
       ("num_indices", po::value<int>(&num_indices),
        "number of RGW indices/buckets")
 
-      ("key_size", po::value<int>(&key_size), "size of keys in bytes")
+          ("key_size", po::value<int>(&key_size), "size of keys in bytes")
 
-      ("value_size", po::value<int>(&value_size),
-        "size of values in bytes")
+              ("value_size", po::value<int>(&value_size),
+               "size of values in bytes")
 
-      ("target_keys_per_bucket",
-        po::value<int>(&target_keys_per_bucket),
-        "target number of keys per bucket")
+                  ("target_keys_per_bucket",
+                   po::value<int>(&target_keys_per_bucket),
+                   "target number of keys per bucket")
 
-      ("tolerance_range", po::value<int>(&tolerance_range),
-        "tolerance range percentage")
-      
-      ("num_buckets_per_collection", po::value<int>(&num_buckets_per_collection),
-        "the number of objects in each collection ");
+                      ("tolerance_range", po::value<int>(&tolerance_range),
+                       "tolerance range percentage")
+
+                          ("num_buckets_per_collection",
+                           po::value<int>(&num_buckets_per_collection),
+                           "the number of objects in each collection ");
 
   return app.run(
       av.size(), av.data(),
@@ -667,7 +765,8 @@ int main(int argc, char **argv) {
             } else if (work_load_type == "rgw_index") {
               co_await rgw_index_workload(
                   store_ref, num_indices, num_concurrent_io, duration, key_size,
-                  value_size, target_keys_per_bucket, tolerance_range,num_buckets_per_collection);
+                  value_size, target_keys_per_bucket, tolerance_range,
+                  num_buckets_per_collection);
             }
             co_return;
           };
