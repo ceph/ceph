@@ -19,6 +19,7 @@
 #include "common/Formatter.h"
 #include "common/ceph_json.h"
 #include <time.h>
+#include <chrono>
 #include "include/utime.h"
 #include "include/encoding.h"
 #include "common/dout.h"
@@ -85,6 +86,84 @@ namespace rgw::dedup {
     uint8_t flags;
   };
 
+
+  class Throttle {
+  public:
+    // N: number of passes allowed per second
+    Throttle(size_t N=1) {
+      reset(N);
+    }
+
+    void reset(size_t N) {
+      interval_ns = (1000000000LL / N);
+      next_pass_time = std::chrono::steady_clock::now();
+    }
+
+    // Blocks until allowed to proceed
+    void acquire() {
+      auto now = std::chrono::steady_clock::now();
+      if (now < next_pass_time) {
+        std::this_thread::sleep_until(next_pass_time);
+      }
+      next_pass_time += std::chrono::nanoseconds(interval_ns);
+    }
+
+  private:
+    uint64_t interval_ns;
+    std::chrono::steady_clock::time_point next_pass_time;
+  };
+
+  struct op_time_t {
+    //---------------------------------------------------------------------------
+    void start_timer() {
+      clock_begin = std::chrono::steady_clock::now();
+    }
+
+    //---------------------------------------------------------------------------
+    void end_timer() {
+      auto clock_end = std::chrono::steady_clock::now();
+      auto duration = clock_end - clock_begin;
+      uint64_t duration_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(duration).count();
+
+      op_count++;
+      if (duration_ns > op_max_time_ns) {
+        op_max_time_ns = duration_ns;
+      }
+      if (duration_ns < op_min_time_ns) {
+        op_min_time_ns = duration_ns;
+      }
+      op_time_aggragted_ns += duration_ns;
+    }
+
+    //---------------------------------------------------------------------------
+    uint64_t get_op_max_time_ns() {
+      return op_max_time_ns;
+    }
+
+    //---------------------------------------------------------------------------
+    uint64_t get_op_min_time_ns() {
+      return op_min_time_ns;
+    }
+
+    //---------------------------------------------------------------------------
+    uint64_t get_op_time_aggragted_ns() {
+      return op_time_aggragted_ns;
+    }
+
+  private:
+    std::chrono::steady_clock::time_point clock_begin;
+    uint64_t op_count = 0;
+    uint64_t op_max_time_ns = 0;
+    uint64_t op_min_time_ns = std::numeric_limits<uint64_t>::max();
+    uint64_t op_time_aggragted_ns = 0;
+  };
+
+  struct dedup_throttle_t {
+    uint32_t bucket_index_list_usec;
+    uint32_t slab_read_usec;
+    uint32_t slab_write_usec;
+  };
+
   struct dedup_stats_t {
     dedup_stats_t& operator+=(const dedup_stats_t& other);
 
@@ -139,6 +218,7 @@ namespace rgw::dedup {
 
     dedup_stats_t small_objs_stat;
     dedup_stats_t big_objs_stat;
+    uint64_t ingress_slabs = 0;
     uint64_t ingress_failed_load_bucket = 0;
     uint64_t ingress_failed_get_object = 0;
     uint64_t ingress_failed_get_obj_attrs = 0;
