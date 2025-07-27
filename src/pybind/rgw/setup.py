@@ -193,7 +193,7 @@ setup(
         "and file operations."
     ),
     url='https://github.com/ceph/ceph/tree/master/src/pybind/rgw',
-    license='LGPLv2+',
+    license='LGPL-2.0-or-later',
     platforms='Linux',
     ext_modules=cythonize(
         [
@@ -210,7 +210,6 @@ setup(
     classifiers=[
         'Intended Audience :: Developers',
         'Intended Audience :: System Administrators',
-        'License :: OSI Approved :: GNU Lesser General Public License v2 or later (LGPLv2+)',
         'Operating System :: POSIX :: Linux',
         'Programming Language :: Cython',
         'Programming Language :: Python :: 3',
