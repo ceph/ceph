@@ -3,6 +3,7 @@
 
 #include "crimson/os/seastore/extent_placement_manager.h"
 
+#include "crimson/common/errorator-loop.h"
 #include "crimson/common/config_proxy.h"
 #include "crimson/os/seastore/logging.h"
 
@@ -1104,7 +1105,7 @@ RandomBlockOolWriter::do_write(
       stats.num_records += writes.size();
       auto& trans_stats = get_by_src(w_stats.stats_by_src, t.get_src());
       trans_stats.num_records += writes.size();
-      return crimson::do_for_each(writes,
+      return alloc_write_ertr::parallel_for_each(writes,
         [](auto& info) {
         return info.rbm->write(info.offset, info.bp
         ).handle_error(
