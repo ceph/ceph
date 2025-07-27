@@ -1101,10 +1101,13 @@ class ServiceSpec(object):
                 raise SpecValidationError(
                         f'Service of type \'{self.service_type}\' should not contain a service id')
 
-        if self.service_id:
-            if not re.match('^[a-zA-Z0-9_.-]+$', str(self.service_id)):
+        if self.service_type == 'nvmeof':
+            if self.service_id and not re.match('^[a-zA-Z0-9.]+$', str(self.service_id)):
                 raise SpecValidationError('Service id contains invalid characters, '
-                                          'only [a-zA-Z0-9_.-] allowed')
+                                          'only [a-zA-Z0-9.] allowed for NVMeoF')
+        elif self.service_id and not re.match('^[a-zA-Z0-9_.-]+$', str(self.service_id)):
+            raise SpecValidationError('Service id contains invalid characters, '
+                                      'only [a-zA-Z0-9_.-] allowed')
 
         if self.placement is not None:
             self.placement.validate()
@@ -1733,6 +1736,9 @@ class NvmeofServiceSpec(ServiceSpec):
                 err_msg += 'attribute(s) not set in the spec'
                 raise SpecValidationError(err_msg)
 
+        if self.group and not re.match('^[a-zA-Z0-9]+$', self.group):
+            raise SpecValidationError('Group name contains invalid characters, '
+                                      'only [a-zA-Z0-9] allowed')
         if self.transports not in ['tcp']:
             raise SpecValidationError('Invalid transport. Valid values are tcp')
 
