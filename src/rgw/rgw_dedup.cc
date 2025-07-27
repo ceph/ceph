@@ -532,6 +532,7 @@ namespace rgw::dedup {
         continue;
       }
       librados::IoCtx ioctx = obj.ioctx;
+      d_metadata_access_throttle.acquire();
       ldpp_dout(dpp, 20) << __func__ << "::removing tail object: " << raw_obj.oid
                          << dendl;
       ret = ioctx.remove(raw_obj.oid);
@@ -567,6 +568,8 @@ namespace rgw::dedup {
       }
 
       ObjectWriteOperation op;
+      d_metadata_access_throttle.acquire();
+      ldpp_dout(dpp, 20) << __func__ << "::dec ref-count on tail object: " << raw_obj.oid << dendl;
       cls_refcount_put(op, ref_tag, true);
       rgw::AioResultList completed = aio->get(obj.obj,
                                               rgw::Aio::librados_op(obj.ioctx, std::move(op), null_yield),
@@ -602,6 +605,7 @@ namespace rgw::dedup {
 
       ObjectWriteOperation op;
       cls_refcount_get(op, ref_tag, true);
+      d_metadata_access_throttle.acquire();
       ldpp_dout(dpp, 20) << __func__ << "::inc ref-count on tail object: " << raw_obj.oid << dendl;
       rgw::AioResultList completed = aio->get(obj.obj,
                                               rgw::Aio::librados_op(obj.ioctx, std::move(op), null_yield),
@@ -782,6 +786,7 @@ namespace rgw::dedup {
     ldpp_dout(dpp, 20) << __func__ << "::ref_tag=" << ref_tag << dendl;
     int ret = inc_ref_count_by_manifest(ref_tag, src_oid, src_manifest);
     if (ret == 0) {
+      d_metadata_access_throttle.acquire();
       ldpp_dout(dpp, 20) << __func__ << "::send TGT CLS (Shared_Manifest)" << dendl;
       ret = tgt_ioctx.operate(tgt_oid, &tgt_op);
       if (unlikely(ret != 0)) {
@@ -809,6 +814,7 @@ namespace rgw::dedup {
           p_stats->set_sha256_attrs++;
         }
 
+        d_metadata_access_throttle.acquire();
         ldpp_dout(dpp, 20) << __func__ <<"::send SRC CLS (Shared_Manifest)"<< dendl;
         ret = src_ioctx.operate(src_oid, &src_op);
         if (unlikely(ret != 0)) {
@@ -1083,6 +1089,7 @@ namespace rgw::dedup {
       return 0;
     }
 
+    d_metadata_access_throttle.acquire();
     ret = p_obj->get_obj_attrs(null_yield, dpp);
     if (unlikely(ret < 0)) {
       p_stats->ingress_failed_get_obj_attrs++;
@@ -1401,6 +1408,7 @@ namespace rgw::dedup {
         }
       }
 
+      p_stats->ingress_slabs++;
       (*p_slab_count)++;
       failure_count = 0;
       unsigned slab_rec_count = 0;
@@ -1654,9 +1662,11 @@ namespace rgw::dedup {
       const string& oid = oids[current_shard];
       rgw_cls_list_ret result;
       librados::ObjectReadOperation op;
+      d_bucket_index_throttle.acquire();
       // get bucket-indices of @current_shard
       cls_rgw_bucket_list_op(op, marker, null_prefix, null_delimiter, max_entries,
                              list_versions, &result);
+      //auto before = std::chrono::steady_clock::now();
       int ret = rgw_rados_operate(dpp, ioctx, oid, std::move(op), nullptr, null_yield);
       if (unlikely(ret < 0)) {
         ldpp_dout(dpp, 1) << __func__ << "::ERR: failed rgw_rados_operate() ret="
@@ -1666,6 +1676,8 @@ namespace rgw::dedup {
         continue;
       }
       obj_count += result.dir.m.size();
+      //auto duration = std::chrono::steady_clock::now() - before;
+      //op_time_aggragted_usec += std::chrono::duration_cast<std::chrono::microseconds>(duration_cast).count();
       for (auto& entry : result.dir.m) {
         const rgw_bucket_dir_entry& dirent = entry.second;
         if (unlikely((!dirent.exists && !dirent.is_delete_marker()) || !dirent.pending_map.empty())) {
@@ -2049,6 +2061,7 @@ namespace rgw::dedup {
     }
     //ldpp_dout(dpp, 0) << __func__ << "::sleep for 2 seconds\n" << dendl;
     //std::this_thread::sleep_for(std::chrono::seconds(2));
+    //std::this_thread::sleep_forstd::chrono::microseconds(usec_timeout);
     return ret;
   }
 
@@ -2298,14 +2311,27 @@ namespace rgw::dedup {
   {
     int ret = 0;
     int32_t urgent_msg = URGENT_MSG_NONE;
+    auto bl_iter = bl.cbegin();
     try {
-      auto bl_iter = bl.cbegin();
       ceph::decode(urgent_msg, bl_iter);
     } catch (buffer::error& err) {
       ldpp_dout(dpp, 1) << __func__ << "::ERROR: bad urgent_msg" << dendl;
-      ret = -EINVAL;
+      cluster::ack_notify(store, dpp, &d_ctl, notify_id, cookie, -EINVAL);
+      return;
     }
-    ldpp_dout(dpp, 5) << __func__ << "::-->" << get_urgent_msg_names(urgent_msg) << dendl;
+    ldpp_dout(dpp, 5) << __func__ << "::" << get_urgent_msg_names(urgent_msg) << dendl;
+
+    throttle_msg_t throttle_msg;
+    if (urgent_msg == URGENT_MSG_THROTTLE) {
+      try {
+        decode(throttle_msg, bl_iter);
+        ldpp_dout(dpp, 5) << __func__ << "::" << throttle_msg << dendl;
+      } catch (buffer::error& err) {
+        ldpp_dout(dpp, 1) << __func__ << "::ERROR: bad throttle_msg" << dendl;
+        cluster::ack_notify(store, dpp, &d_ctl, notify_id, cookie, -EINVAL);
+        return;
+      }
+    }
 
     // use lock to prevent concurrent pause/resume requests
     std::unique_lock cond_lock(d_cond_mutex); // [------>open lock block
@@ -2364,6 +2390,19 @@ namespace rgw::dedup {
       }
       else {
         ldpp_dout(dpp, 5) << __func__ << "::dedup is not paused->nothing to do" << dendl;
+      }
+      break;
+    case URGENT_MSG_THROTTLE:
+      if (throttle_msg.op_type == BUCKET_INDEX_OP) {
+        d_bucket_index_throttle.reset(throttle_msg.limit);
+      }
+      else if (throttle_msg.op_type == METADATA_ACCESS_OP) {
+        d_metadata_access_throttle.reset(throttle_msg.limit);
+      }
+      else {
+        ldpp_dout(dpp, 1) << __func__ << "::unexpected throttle_msg "
+                          << throttle_msg.op_type << dendl;
+        ret = -EINVAL;
       }
       break;
     default:

@@ -1185,20 +1185,10 @@ namespace rgw::dedup {
 
   //---------------------------------------------------------------------------
   // command-line called from radosgw-admin.cc
-  int cluster::dedup_control(rgw::sal::RadosStore *store,
-                             const DoutPrefixProvider *dpp,
-                             urgent_msg_t urgent_msg)
+  int cluster::dedup_control_bl(rgw::sal::RadosStore *store,
+                                const DoutPrefixProvider *dpp,
+                                bufferlist urgent_msg_bl)
   {
-    ldpp_dout(dpp, 10) << __func__ << "::dedup_control req = "
-                       << get_urgent_msg_names(urgent_msg) << dendl;
-    if (urgent_msg != URGENT_MSG_RESUME  &&
-        urgent_msg != URGENT_MSG_PASUE   &&
-        urgent_msg != URGENT_MSG_RESTART &&
-        urgent_msg != URGENT_MSG_ABORT) {
-      ldpp_dout(dpp, 1) << __func__ << "::illegal urgent_msg="<< urgent_msg << dendl;
-      return -EINVAL;
-    }
-
     librados::IoCtx ctl_ioctx;
     int ret = get_control_ioctx(store, dpp, ctl_ioctx);
     if (unlikely(ret != 0)) {
@@ -1207,8 +1197,7 @@ namespace rgw::dedup {
 
     // 10 seconds timeout
     const uint64_t timeout_ms = 10*1000;
-    bufferlist reply_bl, urgent_msg_bl;
-    ceph::encode(urgent_msg, urgent_msg_bl);
+    bufferlist reply_bl;
     ret = rgw_rados_notify(dpp, ctl_ioctx, DEDUP_WATCH_OBJ, urgent_msg_bl,
                            timeout_ms, &reply_bl, null_yield);
     if (ret < 0) {
@@ -1244,9 +1233,29 @@ namespace rgw::dedup {
         return ret;
       }
     }
-    ldpp_dout(dpp, 10) << __func__ << "::" << get_urgent_msg_names(urgent_msg)
-                       << " finished successfully!" << dendl;
+    ldpp_dout(dpp, 10) << __func__ << "::finished successfully!" << dendl;
     return 0;
+  }
+
+  //---------------------------------------------------------------------------
+  // command-line called from radosgw-admin.cc
+  int cluster::dedup_control(rgw::sal::RadosStore *store,
+                             const DoutPrefixProvider *dpp,
+                             urgent_msg_t urgent_msg)
+  {
+    ldpp_dout(dpp, 10) << __func__ << "::dedup_control req = "
+                       << get_urgent_msg_names(urgent_msg) << dendl;
+    if (urgent_msg != URGENT_MSG_RESUME  &&
+        urgent_msg != URGENT_MSG_PASUE   &&
+        urgent_msg != URGENT_MSG_RESTART &&
+        urgent_msg != URGENT_MSG_ABORT) {
+      ldpp_dout(dpp, 1) << __func__ << "::illegal urgent_msg="<< urgent_msg << dendl;
+      return -EINVAL;
+    }
+
+    bufferlist urgent_msg_bl;
+    ceph::encode(urgent_msg, urgent_msg_bl);
+    return dedup_control_bl(store, dpp, urgent_msg_bl);
   }
 
   //---------------------------------------------------------------------------
