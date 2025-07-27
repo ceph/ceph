@@ -25,6 +25,7 @@ struct ceph_mount_info {
 	proxy_link_t link;
 	proxy_link_negotiate_t neg;
 	proxy_async_t async;
+	char *cwd_path;
 	uint64_t cmount;
 };
 
@@ -161,10 +162,28 @@ static bool proxy_embed_perms(struct ceph_mount_info *cmount,
 __public int ceph_chdir(struct ceph_mount_info *cmount, const char *path)
 {
 	CEPH_REQ(ceph_chdir, req, 1, ans, 0);
+	char *new_path;
+	int32_t err;
+
+	if (strcmp(path, cmount->cwd_path) == 0) {
+		return 0;
+	}
+
+	new_path = proxy_strdup(path);
+	if (new_path == NULL) {
+		return -ENOMEM;
+	}
 
 	CEPH_STR_ADD(req, v0.path, path);
 
-	return CEPH_PROCESS(cmount, LIBCEPHFSD_OP_CHDIR, req, ans);
+	err = CEPH_PROCESS(cmount, LIBCEPHFSD_OP_CHDIR, req, ans);
+	if (err >= 0) {
+		new_path = __atomic_exchange_n(&cmount->cwd_path, new_path,
+					       __ATOMIC_SEQ_CST);
+	}
+	proxy_free(new_path);
+
+	return err;
 }
 
 __public int ceph_conf_get(struct ceph_mount_info *cmount, const char *option,
@@ -210,6 +229,11 @@ __public int ceph_create(struct ceph_mount_info **cmount, const char *const id)
 	ceph_mount = proxy_malloc(sizeof(struct ceph_mount_info));
 	if (ceph_mount == NULL) {
 		return -ENOMEM;
+	}
+	ceph_mount->cwd_path = proxy_strdup("/");
+	if (ceph_mount->cwd_path == NULL) {
+		err = -ENOMEM;
+		goto failed;
 	}
 
 	err = proxy_connect(&ceph_mount->link);
@@ -262,21 +286,7 @@ failed:
 
 __public const char *ceph_getcwd(struct ceph_mount_info *cmount)
 {
-	static char cwd[PATH_MAX];
-	int32_t err;
-
-	CEPH_REQ(ceph_getcwd, req, 0, ans, 1);
-
-	CEPH_BUFF_ADD(ans, cwd, sizeof(cwd));
-
-	err = CEPH_PROCESS(cmount, LIBCEPHFSD_OP_GETCWD, req, ans);
-	if (err >= 0) {
-		return cwd;
-	}
-
-	errno = -err;
-
-	return NULL;
+	return cmount->cwd_path;
 }
 
 __public int ceph_init(struct ceph_mount_info *cmount)
