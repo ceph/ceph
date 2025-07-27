@@ -1070,13 +1070,24 @@ def read_dedup_stats(dry_run):
 
 
 #-------------------------------------------------------------------------------
+def set_bucket_index_throttling(limit):
+    cmd = ['dedup', 'throttle', '--max-bucket-index-ops', str(limit)]
+    result = admin(cmd)
+    assert result[1] == 0
+    log.debug(result[0])
+
+#-------------------------------------------------------------------------------
 def exec_dedup_internal(expected_dedup_stats, dry_run, max_dedup_time):
+    ### set throttling to a rand val between 50-200 IOPS (i.e. 50K-200K objs)
+    limit=random.randint(50, 200)
+    set_bucket_index_throttling(limit)
+
     log.debug("sending exec_dedup request: dry_run=%d", dry_run)
     if dry_run:
         result = admin(['dedup', 'estimate'])
         reset_full_dedup_stats(expected_dedup_stats)
     else:
-        result = admin(['dedup', 'restart'])
+        result = admin(['dedup', 'exec'])
 
     assert result[1] == 0
     log.debug("wait for dedup to complete")
@@ -1095,7 +1106,10 @@ def exec_dedup_internal(expected_dedup_stats, dry_run, max_dedup_time):
             wait_for_completion = False
             log.info("dedup completed in %d seconds", dedup_time)
             return (dedup_time, ret[1], ret[2], ret[3])
-
+        else:
+            ### set throttling to a rand val between 50-200 IOPS (i.e. 50K-200K objs)
+            limit=random.randint(50, 200)
+            set_bucket_index_throttling(limit)
 
 #-------------------------------------------------------------------------------
 def exec_dedup(expected_dedup_stats, dry_run, verify_stats=True):
@@ -1308,7 +1322,7 @@ def check_full_dedup_state():
     global full_dedup_state_was_checked
     global full_dedup_state_disabled
     log.debug("check_full_dedup_state:: sending FULL Dedup request")
-    result = admin(['dedup', 'restart'])
+    result = admin(['dedup', 'exec'])
     if result[1] == 0:
         log.debug("full dedup is enabled!")
         full_dedup_state_disabled = False
