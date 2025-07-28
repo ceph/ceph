@@ -2,53 +2,82 @@
 ---
 
 options:
+
+# seastar CPU pinning (only 1 option applies):
+
+- name: crimson_seastar_num_threads
+  type: uint
+  level: advanced
+  default: 0
+  desc: The number of threads for serving seastar reactors without CPU pinning, overridden if crimson_seastar_cpu_cores is set.
+  long_desc: The number of threads for serving seastar reactors without CPU pinning,
+             overridden if crimson_seastar_cpu_cores is set.
+             smp::count is deduced from this option.
+  flags:
+  - startup
+  min: 0
+  max: 32
+
+- name: crimson_seastar_cpu_cores
+  type: str
+  level: advanced
+  desc: CPU cores on which seastar reactor threads will run in cpuset(7) format, smp::count is deduced from this option
+  long_desc: CPU cores on which seastar reactor threads will run in cpuset(7) format.
+             overrides crimson_seastar_num_threads.
+             smp::count is deduced from this option
+  flags:
+  - startup
+
+# alienstore CPU pinning (only relevant when using Bluestore):
+
+- name: crimson_alien_op_num_threads
+  type: uint
+  level: advanced
+  desc: The number of threads for serving alienized ObjectStore. Only relevant when using Bluestore.
+  default: 6
+  flags:
+  - startup
+
+- name: crimson_alien_thread_cpu_cores
+  type: str
+  level: advanced
+  desc: CPU cores on which alienstore threads will run in cpuset(7) format.
+  long_desc: CPU cores on which alienstore threads will run in cpuset(7) format.
+             If not set, alienstore threads will not be pinned.
+             Only relevant when using Bluestore.
+  flags:
+  - startup
+
+# crimson options:
+
 - name: crimson_osd_obc_lru_size
   type: uint
   level: advanced
   desc: Number of obcs to cache
   default: 512
+
 - name: crimson_osd_scheduler_concurrency
   type: uint
   level: advanced
   desc: The maximum number concurrent IO operations, 0 for unlimited
   default: 0
-- name: crimson_alien_op_num_threads
-  type: uint
-  level: advanced
-  desc: The number of threads for serving alienized ObjectStore
-  default: 6
-  flags:
-  - startup
-- name: crimson_seastar_cpu_cores
-  type: str
-  level: advanced
-  desc: CPU cores on which seastar reactor threads will run in cpuset(7) format, smp::count is deduced from this option
-  flags:
-  - startup
-- name: crimson_alien_thread_cpu_cores
-  type: str
-  level: advanced
-  desc: CPU cores on which alienstore threads will run in cpuset(7) format
-  flags:
-  - startup
-- name: crimson_seastar_num_threads
-  type: uint
+
+- name: crimson_osd_stat_interval
+  type: int
   level: advanced
   default: 0
-  desc: The number of threads for serving seastar reactors without CPU pinning, overridden if crimson_seastar_cpu_cores is set
-  flags:
-  - startup
-  min: 0
-  max: 32
-- name: crimson_reactor_task_quota_ms
-  type: float
+  desc: Report OSD status periodically in seconds, 0 to disable
+
+# reactor options:
+
+- name: crimson_poll_mode
+  type: bool
   level: advanced
-  default: 0.5
-  desc: The maximum time (ms) Seastar reactors will wait between polls.
-  long_desc: The maximum time (ms) Seastar reactors will wait between polls.
-             Shorter time between pools will result in larger CPU utilization.
+  default: false
+  desc: Let the seastar reactor poll continuously without sleeping at the expense of 100% cpu usage.
   flags:
   - startup
+
 - name: crimson_reactor_idle_poll_time_us
   type: uint
   level: advanced
@@ -58,6 +87,7 @@ options:
              Longer reactor poll time will result in larger CPU utilization.
   flags:
   - startup
+
 - name: crimson_reactor_io_latency_goal_ms
   type: float
   level: advanced
@@ -69,17 +99,14 @@ options:
              Increasing this value will allow more IO requests to be dispatched concurrently.
   flags:
   - startup
-- name: crimson_osd_stat_interval
-  type: int
-  level: advanced
-  default: 0
-  desc: Report OSD status periodically in seconds, 0 to disable
 
-- name: crimson_poll_mode
-  type: bool
+- name: crimson_reactor_task_quota_ms
+  type: float
   level: advanced
-  default: false
-  desc: Let the seastar reactor poll continuously without sleeping at the expense of 100% cpu usage.
+  default: 0.5
+  desc: The maximum time (ms) Seastar reactors will wait between polls.
+  long_desc: The maximum time (ms) Seastar reactors will wait between polls.
+             Shorter time between pools will result in larger CPU utilization.
   flags:
   - startup
 
