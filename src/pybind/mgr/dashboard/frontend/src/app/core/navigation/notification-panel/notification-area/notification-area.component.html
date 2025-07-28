@@ -9,7 +9,7 @@
       <div class="notification-content">
         <div class="notification-timestamp">{{ notification.timestamp | relativeDate }}</div>
         <div class="notification-title">{{ notification.title }}</div>
-        <div class="notification-message">{{ notification.message }}</div>
+        <div class="notification-message" [innerHTML]="notification.message | sanitizeHtml"></div>
       </div>
       <button cdsButton="ghost" size="sm" class="notification-close" (click)="removeNotification(notification, $event)">
         <svg cdsIcon="close" size="16"></svg>
@@ -30,7 +30,7 @@
       <div class="notification-content">
         <div class="notification-timestamp">{{ notification.timestamp | relativeDate }}</div>
         <div class="notification-title">{{ notification.title }}</div>
-        <div class="notification-message">{{ notification.message }}</div>
+        <div class="notification-message" [innerHTML]="notification.message | sanitizeHtml"></div>
       </div>
       <button cdsButton="ghost" size="sm" class="notification-close" (click)="removeNotification(notification, $event)">
         <svg cdsIcon="close" size="16"></svg>
