@@ -116,6 +116,13 @@ struct ECSubRead {
   std::map<hobject_t, std::list<boost::tuple<uint64_t, uint64_t, uint32_t> >> to_read;
   std::set<hobject_t> attrs_to_read;
   std::map<hobject_t, std::vector<std::pair<int, int>>> subchunks;
+  /**
+    * Calculate the cost of the SubOp read operation for mClock scheduler.
+    *
+    * @param pair<int, int>&: subchunk_count and subchunk_size
+    * @return uint64_t - Cost of EC SubOpRead (size in Bytes)
+    */
+  uint64_t cost(std::pair<int, int>& subchunk_info);
   void encode(ceph::buffer::list &bl, uint64_t features) const;
   void decode(ceph::buffer::list::const_iterator &bl);
   void dump(ceph::Formatter *f) const;

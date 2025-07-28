@@ -256,6 +256,43 @@ void ECSubRead::decode(bufferlist::const_iterator &bl)
   DECODE_FINISH(bl);
 }
 
+/**
+ * Calculate the cost of the SubOp read operation for mClock scheduler.
+ * Cost is calculated based on whether the complete chunk/shard
+ * or a subchunk needs to be read:
+ * Case 1. Read the complete chunk aligned length:
+ *  - Cost is set to the length of the chunk aligned extent size.
+ * Case 2. Fragmented reads:
+ *  - Cost is set by considering the subchunk length and count.
+ *
+ * Note: Return a cost of '0' as before for WeightedPriorityQueue
+ *       to preserve the legacy behavior.
+ */
+uint64_t ECSubRead::cost(std::pair<int, int>& subchunk_info)
+{
+  uint64_t cost = 0;
+  // Note: 'to_read': map<hobject_t, list<tuple<offset, length, flags>>>
+  for (auto &&[hoid, tl] : to_read) {
+    for ([[maybe_unused]] auto &&[offset, len, flags] : tl) {
+      auto &sc = subchunks.at(hoid);
+      if ((sc.size() == 1) &&
+          (sc.front().second == subchunk_info.first)) {
+        // Case 1
+        cost += len;
+      } else {
+        // Case 2
+        auto sinfo_chunk_size = subchunk_info.first * subchunk_info.second;
+        for (int m = 0; m < (int)len;  m += sinfo_chunk_size) {
+          for (auto &&k : sc) {
+            cost += k.second * subchunk_info.second;
+          }
+        }
+      }
+    }
+  }
+  return cost;
+}
+
 std::ostream &operator<<(
   std::ostream &lhs, const ECSubRead &rhs)
 {
