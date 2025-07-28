@@ -1605,6 +1605,46 @@ void PeeringState::reject_reservation()
 }
 
 /**
+ * calculate_maxlesf_and_minlua
+ *
+ * Calculate max_last_epoch_started and
+ * min_last_update_acceptable
+ */
+void PeeringState::calculate_maxles_and_minlua( const map<pg_shard_t, pg_info_t> &infos,
+						epoch_t& max_last_epoch_started,
+						eversion_t& min_last_update_acceptable,
+						bool *history_les_bound) const
+{
+  /* See doc/dev/osd_internals/last_epoch_started.rst before attempting
+   * to make changes to this process.  Also, make sure to update it
+   * when you find bugs! */
+  max_last_epoch_started = 0;
+  for (auto i = infos.begin(); i != infos.end(); ++i) {
+    if (!cct->_conf->osd_find_best_info_ignore_history_les &&
+	max_last_epoch_started < i->second.history.last_epoch_started) {
+      if (history_les_bound) {
+	*history_les_bound = true;
+      }
+      max_last_epoch_started = i->second.history.last_epoch_started;
+    }
+    if (!i->second.is_incomplete() &&
+	max_last_epoch_started < i->second.last_epoch_started) {
+      if (history_les_bound) {
+	*history_les_bound = false;
+      }
+      max_last_epoch_started = i->second.last_epoch_started;
+    }
+  }
+  min_last_update_acceptable = eversion_t::max();
+  for (auto i = infos.begin(); i != infos.end(); ++i) {
+    if (max_last_epoch_started <= i->second.last_epoch_started) {
+      if (min_last_update_acceptable > i->second.last_update)
+	min_last_update_acceptable = i->second.last_update;
+    }
+  }
+}
+
+/**
  * find_best_info
  *
  * Returns an iterator to the best info in infos sorted by:
@@ -1618,30 +1658,13 @@ map<pg_shard_t, pg_info_t>::const_iterator PeeringState::find_best_info(
   bool exclude_nonprimary_shards,
   bool *history_les_bound) const
 {
-  ceph_assert(history_les_bound);
-  /* See doc/dev/osd_internals/last_epoch_started.rst before attempting
-   * to make changes to this process.  Also, make sure to update it
-   * when you find bugs! */
-  epoch_t max_last_epoch_started_found = 0;
-  for (auto i = infos.begin(); i != infos.end(); ++i) {
-    if (!cct->_conf->osd_find_best_info_ignore_history_les &&
-	max_last_epoch_started_found < i->second.history.last_epoch_started) {
-      *history_les_bound = true;
-      max_last_epoch_started_found = i->second.history.last_epoch_started;
-    }
-    if (!i->second.is_incomplete() &&
-	max_last_epoch_started_found < i->second.last_epoch_started) {
-      *history_les_bound = false;
-      max_last_epoch_started_found = i->second.last_epoch_started;
-    }
-  }
-  eversion_t min_last_update_acceptable = eversion_t::max();
-  for (auto i = infos.begin(); i != infos.end(); ++i) {
-    if (max_last_epoch_started_found <= i->second.last_epoch_started) {
-      if (min_last_update_acceptable > i->second.last_update)
-	min_last_update_acceptable = i->second.last_update;
-    }
-  }
+  epoch_t max_last_epoch_started;
+  eversion_t min_last_update_acceptable;
+  calculate_maxles_and_minlua( infos,
+			       max_last_epoch_started,
+			       min_last_update_acceptable,
+			       history_les_bound);
+
   if (min_last_update_acceptable == eversion_t::max())
     return infos.end();
 
@@ -1658,7 +1681,7 @@ map<pg_shard_t, pg_info_t>::const_iterator PeeringState::find_best_info(
     if (p->second.last_update < min_last_update_acceptable)
       continue;
     // Disqualify anyone with a too old last_epoch_started
-    if (p->second.last_epoch_started < max_last_epoch_started_found)
+    if (p->second.last_epoch_started < max_last_epoch_started)
       continue;
     // Disqualify anyone who is incomplete (not fully backfilled)
     if (p->second.is_incomplete())
@@ -2462,9 +2485,9 @@ void PeeringState::choose_async_recovery_replicated(
  */
 bool PeeringState::choose_acting(pg_shard_t &auth_log_shard_id,
 				 bool restrict_to_up_acting,
+				 bool request_pg_temp_change_only,
 				 bool *history_les_bound,
-				 bool *repeat_getlog,
-				 bool request_pg_temp_change_only)
+				 bool *repeat_getlog)
 {
   map<pg_shard_t, pg_info_t> all_info(peer_info.begin(), peer_info.end());
   all_info[pg_whoami] = info;
@@ -6246,9 +6269,8 @@ PeeringState::Recovering::react(const RequestBackfill &evt)
   // as backfill might take a long time to complete..
   if (!ps->async_recovery_targets.empty()) {
     pg_shard_t auth_log_shard;
-    bool history_les_bound = false;
     // FIXME: Uh-oh we have to check this return value; choose_acting can fail!
-    ps->choose_acting(auth_log_shard, true, &history_les_bound, nullptr);
+    ps->choose_acting(auth_log_shard, true);
   }
   return transit<WaitLocalBackfillReserved>();
 }
@@ -6321,13 +6343,12 @@ PeeringState::Recovered::Recovered(my_context ctx)
   }
 
   // adjust acting set?  (e.g. because backfill completed...)
-  bool history_les_bound = false;
   if (ps->acting != ps->up &&
-      !ps->choose_acting(auth_log_shard, true, &history_les_bound, nullptr)) {
+      !ps->choose_acting(auth_log_shard, true)) {
     ceph_assert(ps->want_acting.size());
   } else if (!ps->async_recovery_targets.empty()) {
     // FIXME: Uh-oh we have to check this return value; choose_acting can fail!
-    ps->choose_acting(auth_log_shard, true, &history_les_bound, nullptr);
+    ps->choose_acting(auth_log_shard, true);
   }
 
   if (context< Active >().all_replicas_activated  &&
@@ -6473,9 +6494,8 @@ boost::statechart::result PeeringState::Active::react(const AdvMap& advmap)
     // note that we leave restrict_to_up_acting to false in order to
     // not overkill any chosen stray that is still alive.
     pg_shard_t auth_log_shard;
-    bool history_les_bound = false;
     ps->remove_down_peer_info(advmap.osdmap);
-    ps->choose_acting(auth_log_shard, false, &history_les_bound, nullptr, true);
+    ps->choose_acting(auth_log_shard, false, true);
   }
 
   /* Check for changes in pool size (if the acting set changed as a result,
@@ -6554,9 +6574,8 @@ boost::statechart::result PeeringState::Active::react(const MNotifyRec& notevt)
     // check if it is a previous down acting member that's coming back.
     // if so, request pg_temp change to trigger a new interval transition
     pg_shard_t auth_log_shard;
-    bool history_les_bound = false;
     // FIXME: Uh-oh we have to check this return value; choose_acting can fail!
-    ps->choose_acting(auth_log_shard, false, &history_les_bound, nullptr, true);
+    ps->choose_acting(auth_log_shard, false, true);
     if (!ps->want_acting.empty() && ps->want_acting != ps->acting) {
       psdout(10) << "Active: got notify from previous acting member "
                  << notevt.from << ", requesting pg_temp change"
@@ -7446,7 +7465,7 @@ PeeringState::GetLog::GetLog(my_context ctx)
   ps->log_weirdness();
 
   // adjust acting?
-  if (!ps->choose_acting(auth_log_shard, false,
+  if (!ps->choose_acting(auth_log_shard, false, false,
 			 &context< Peering >().history_les_bound,
                          &repeat_getlog)) {
     if (!ps->want_acting.empty()) {
