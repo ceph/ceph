@@ -383,7 +383,10 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
     });
   }
   private previousRows = new Map<string | number, TableItem[]>();
+<<<<<<< HEAD
   private debouncedSearch = this.reloadData.bind(this);
+=======
+>>>>>>> 2989cb99df7 (mgr/dashboard: fix table dom re-rendering)
 
   constructor(
     // private ngZone: NgZone,
