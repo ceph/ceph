@@ -3401,7 +3401,19 @@ void PeeringState::proc_master_log(
     // See if we can wind forward partially written entries
     map<pg_shard_t, pg_info_t> all_info(peer_info.begin(), peer_info.end());
     all_info[pg_whoami] = info;
+    epoch_t max_last_epoch_started;
+    eversion_t min_last_update_acceptable;
+    calculate_maxles_and_minlua(all_info,
+				max_last_epoch_started,
+				min_last_update_acceptable);
     PGLog::LogEntryHandlerRef rollbacker{pl->get_log_handler(t)};
+    shard_id_set shards_currently_present;
+    for (auto&& [pg_shard, pi] : all_info) {
+      if ((pi.last_update >= min_last_update_acceptable) &&
+	  (pi.last_epoch_started >= max_last_epoch_started)) {
+	shards_currently_present.insert(pg_shard.shard);
+      }
+    }
     while (p != pg_log.get_log().log.end()) {
       if (p->is_written_shard(from.shard)) {
         psdout(10) << "entry " << p->version << " has written shards "
@@ -3432,13 +3444,18 @@ void PeeringState::proc_master_log(
       }
       psdout(20) << "shards_with_update=" << shards_with_update
 		 << " shards_without_update=" << shards_without_update
+		 << " shards_currently_present=" << shards_currently_present
 		 << dendl;
-      if (!shards_without_update.empty()) {
-	// A shard is missing this write - this is the first divergent entry
+      if (!shard_id_set::intersection(shards_without_update,
+				      shards_currently_present).empty()) {
+	// One or more of the currently present shards is missing this write - this
+	// is the first divergent entry
 	break;
       }
       // This entry can be kept, only shards that didn't participate in
-      // the partial write missed the update
+      // the partial write or are not currently present missed the update.
+      // If shards are not currently present there are still enough remaining
+      // shards to reconstruct the data.
       psdout(20) << "keeping entry " << p->version << dendl;
       invalidate_stats = true;
       eversion_t previous_version;
