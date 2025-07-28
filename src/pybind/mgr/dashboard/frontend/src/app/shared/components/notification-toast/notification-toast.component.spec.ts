@@ -3,15 +3,15 @@ import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { of } from 'rxjs';
 import { ToastContent } from 'carbon-components-angular';
 
-import { Toast } from './notification-toast.component';
+import { ToastComponent } from './notification-toast.component';
 import { NotificationService } from '../../services/notification.service';
 import { configureTestBed } from '~/testing/unit-test-helper';
 
 jest.mock('../../services/notification.service');
 
-describe('Toast', () => {
-  let component: Toast;
-  let fixture: ComponentFixture<Toast>;
+describe('ToastComponent', () => {
+  let component: ToastComponent;
+  let fixture: ComponentFixture<ToastComponent>;
   let notificationService: NotificationService;
   let mockToasts: ToastContent[];
 
@@ -21,7 +21,7 @@ describe('Toast', () => {
   };
 
   configureTestBed({
-    declarations: [Toast],
+    declarations: [ToastComponent],
     imports: [NoopAnimationsModule],
     providers: [
       {
@@ -32,7 +32,7 @@ describe('Toast', () => {
   });
 
   beforeEach(() => {
-    fixture = TestBed.createComponent(Toast);
+    fixture = TestBed.createComponent(ToastComponent);
     component = fixture.componentInstance;
     notificationService = TestBed.inject(NotificationService);
     mockToasts = [
