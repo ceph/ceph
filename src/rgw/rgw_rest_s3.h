@@ -131,10 +131,7 @@ public:
   RGWListBuckets_ObjStore_S3() {}
   ~RGWListBuckets_ObjStore_S3() override {}
 
-  int get_params(optional_yield y) override {
-    limit = -1; /* no limit */
-    return 0;
-  }
+  int get_params(optional_yield y) override;
   void send_response_begin(bool has_buckets) override;
   void send_response_data(std::span<const RGWBucketEnt> buckets) override;
   void send_response_end() override;
