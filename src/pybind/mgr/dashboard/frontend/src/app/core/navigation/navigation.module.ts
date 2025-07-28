@@ -31,6 +31,7 @@ import { NotificationsComponent } from './notifications/notifications.component'
 import { NotificationPanelComponent } from './notification-panel/notification-panel.component';
 import { NotificationHeaderComponent } from './notification-panel/header/notification-header.component';
 import { NotificationAreaComponent } from './notification-panel/notification-area/notification-area.component';
+import { NotificationFooterComponent } from './notification-panel/notification-footer/notification-footer.component';
 
 // Icons
 import UserFilledIcon from '@carbon/icons/es/user--filled/20';
@@ -78,6 +79,7 @@ import LogoutIcon from '@carbon/icons/es/logout/16';
     NotificationPanelComponent,
     NotificationHeaderComponent,
     NotificationAreaComponent,
+    NotificationFooterComponent,
     DashboardHelpComponent,
     AdministrationComponent,
     IdentityComponent
