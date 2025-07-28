@@ -6,15 +6,7 @@ overrides:
     conf:
       osd:
         osd shutdown pgref assert: true
-        crimson bluestore cpu set: 6-7
-      osd.0:
-        crimson cpu set: 0-2
-      osd.1:
-        crimson cpu set: 3-5
-      osd.2:
-        crimson cpu set: 0-2
-      osd.3:
-        crimson cpu set: 3-5
+        crimson cpu num: 3
       global:
         ms cluster mode: crc
         ms service mode: crc
