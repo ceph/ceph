@@ -9,12 +9,16 @@ if(${WITH_CEPHFS})
   add_executable(ceph_test_trim_caps
     test_trim_caps.cc
   )
-  target_link_libraries(ceph_test_trim_caps ceph-common cephfs)
+  target_link_libraries(ceph_test_trim_caps
+      cephfs
+  )
   install(TARGETS ceph_test_trim_caps DESTINATION ${CMAKE_INSTALL_BINDIR})
 
   add_executable(ceph_test_ino_release_cb
     test_ino_release_cb.cc
   )
-  target_link_libraries(ceph_test_ino_release_cb ceph-common cephfs)
+  target_link_libraries(ceph_test_ino_release_cb
+      cephfs
+  )
   install(TARGETS ceph_test_ino_release_cb DESTINATION ${CMAKE_INSTALL_BINDIR})
 endif(${WITH_CEPHFS})
