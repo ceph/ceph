@@ -498,6 +498,10 @@ void ECCommon::ReadPipeline::do_read_op(ReadOp &rop) {
       msg->trace.init("ec sub read", nullptr, &rop.trace);
       msg->trace.keyval("shard", pg_shard.shard.id);
     }
+    std::pair<int, int> subchunk_info =
+      std::make_pair(ec_impl->get_sub_chunk_count(),
+        sinfo.get_chunk_size() / ec_impl->get_sub_chunk_count());
+    msg->compute_cost(cct, subchunk_info);
     m.push_back(std::make_pair(pg_shard.osd, msg));
   }
   if (!m.empty()) {
