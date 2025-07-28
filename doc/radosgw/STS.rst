@@ -60,6 +60,17 @@ The following STS REST APIs have been implemented in Ceph Object Gateway:
     **WebIdentityToken** (String/ Required): The OpenID Connect/ OAuth2.0 token, which the
     application gets in return after authenticating its user with an IDP.
 
+#. GetCallerIdentity: Returns details about the IAM user or role whose credentials are used to call the operation.
+
+   Response:
+    **Account** (The account ID that owns or contains the calling entity.
+
+    **Arn** The ARN associated with the calling entity.
+
+    **UserId** The unique identifier of the calling entity(user or assumed role).
+
+.. note:: No permissions are required to perform GetCallerIdentity.
+
 Before invoking AssumeRoleWithWebIdentity, an OpenID Connect Provider entity (which the web application
 authenticates with), needs to be created in RGW.
 
@@ -227,6 +238,85 @@ Examples
     bucket_name = 'my-bucket'
     s3bucket = s3client.create_bucket(Bucket=bucket_name)
     resp = s3client.list_buckets()
+
+
+#. The following is an example of GetCallerIdentity API call assuming a role, which shows steps to create a role, 
+   assuming a role to get temporary credentials and getting caller identity using those credentials.
+
+   .. code-block:: python
+
+    import boto3
+    import json
+
+    USER_ID = 'tester'
+    ACCESS_KEY = 'TESTER'
+    SECRET_KEY = 'test123'
+    ENDPOINT_URL = 'http://localhost:8000'
+    REGION = 'us-east-1'
+
+    ROLE_NAME = 'S3Access'
+    ROLE_SESSION_NAME = 'Bob'
+    DURATION_SECONDS = 3600
+
+    iam_client = boto3.client('iam',
+        aws_access_key_id=ACCESS_KEY,
+        aws_secret_access_key=SECRET_KEY,
+        endpoint_url=ENDPOINT_URL,
+        region_name=REGION
+    )
+
+    trust_policy = json.dumps({
+        "Version": "2012-10-17",
+        "Statement": [{
+            "Effect": "Allow",
+            "Principal": { "AWS": [f"arn:aws:iam:::user/{USER_ID}"] },
+            "Action": ["sts:AssumeRole"]
+        }]
+    })
+
+    role_response = iam_client.create_role(
+        RoleName=ROLE_NAME,
+        Path='/xxx/policy/',
+        AssumeRolePolicyDocument=trust_policy
+    )
+
+    sts_client = boto3.client('sts',
+        aws_access_key_id=ACCESS_KEY,
+        aws_secret_access_key=SECRET_KEY,
+        endpoint_url=ENDPOINT_URL,
+        region_name=REGION
+    )
+
+    response = sts_client.assume_role(
+        RoleArn=role_response['Role']['Arn'],
+        RoleSessionName=ROLE_SESSION_NAME,
+        DurationSeconds=DURATION_SECONDS
+    )
+    creds = response['Credentials']
+
+    session_sts = boto3.client('sts',
+        aws_access_key_id=creds['AccessKeyId'],
+        aws_secret_access_key=creds['SecretAccessKey'],
+        aws_session_token=creds['SessionToken'],
+        endpoint_url=ENDPOINT_URL,
+        region_name=REGION
+    )
+    identity = session_sts.get_caller_identity()
+
+#. The following is an example of GetCallerIdentity API call with user credentials
+
+  .. code-block:: python
+
+    import boto3
+
+    sts = boto3.client('sts',
+        aws_access_key_id=<access_key>,
+        aws_secret_access_key=<secret_key>,
+        endpoint_url='http://localhost:8000',
+        region_name='us-east-1'
+    )
+
+    identity = sts.get_caller_identity()
 
 How to obtain thumbprint of an OpenID Connect Provider IDP
 ==========================================================
