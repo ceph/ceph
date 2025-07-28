@@ -8757,6 +8757,294 @@ class TestSubvolumeSnapshotClones(TestVolumesHelper):
         self._wait_for_trash_empty()
 
 
+class TestSubvolumeSnapshotVisibility(TestVolumesHelper):
+    CONFIG = "client_respect_subvolume_snapshot_visibility"
+
+    def _fs_cmd_grouped(self, *args):
+        """
+        Wrapper around _fs_cmd that handles optional group
+        usage by omitting group arguments when empty.
+        """
+        if args[-1] == "":
+            if args[-2] == "--group-name":
+                args = args[:-2]
+            else:
+                args = args[:-1]
+
+        return self._fs_cmd(*args)
+
+    def set_client_snapshot_visbility_flag(self, value: str):
+        self.get_ceph_cmd_stdout(f"config set mgr {self.CONFIG} {value}")
+        self.assertEqual(self.get_ceph_cmd_stdout("config get mgr "
+                                                  f"{self.CONFIG}").strip(),
+                         value)
+
+    def get_client_snapshot_visbility_flag(self):
+        return self.get_ceph_cmd_stdout("config get mgr "
+                                        f"{self.CONFIG}").strip()
+    def _test_snapshot_visibility(self, respect_client_config: bool,
+                                  grouped: bool):
+        """
+        Helper function to test snapshot visibility with/with subvolumegroup
+        with client config client_respect_subvolume_snapshot_visibility
+        """
+        if respect_client_config:
+            self.set_client_snapshot_visbility_flag("true")
+
+        group = ""
+        if grouped:
+            group = self._gen_subvol_grp_name()
+        subvolume = self._gen_subvol_name()
+        snapshot = self._gen_subvol_snap_name()
+
+        if grouped:
+            self._fs_cmd_grouped("subvolumegroup", "create", self.volname, group)
+        self._fs_cmd_grouped("subvolume", "create", self.volname, subvolume, group)
+        self._fs_cmd_grouped("subvolume", "snapshot", "create", self.volname,
+                             subvolume, snapshot, group)
+
+        # ensure visibility
+        snapshot_visibility = self._fs_cmd_grouped("subvolume", "snapshot_visibility",
+                                                   "get", self.volname,
+                                                   subvolume, group)
+        self.assertEqual(snapshot_visibility.strip(), "1")
+        snapshotls = json.loads(self._fs_cmd_grouped("subvolume", "snapshot",
+                                                     "ls", self.volname,
+                                                     subvolume, group))
+        self.assertEqual(snapshotls[0]['name'], snapshot)
+
+        # disable visibility
+        self._fs_cmd_grouped("subvolume", "snapshot_visibility", "set",
+                             self.volname, subvolume, "false", group)
+        if respect_client_config:
+            with self.assertRaises(CommandFailedError):
+                self._fs_cmd_grouped("subvolume", "snapshot", "ls",
+                                     self.volname, subvolume, group)
+        else:
+            # otherwise subvolume flag snapshot_visibility has no effect
+            snapshotls = json.loads(self._fs_cmd_grouped("subvolume",
+                                                         "snapshot", "ls",
+                                                         self.volname, subvolume,
+                                                         group))
+            self.assertEqual(snapshotls[0]['name'], snapshot)
+
+        # enable visilibity
+        self._fs_cmd_grouped("subvolume", "snapshot_visibility", "set",
+                             self.volname,
+                             subvolume, "true", group)
+        snapshotls = json.loads(self._fs_cmd_grouped("subvolume", "snapshot",
+                                                     "ls", self.volname,
+                                                     subvolume, group))
+        self.assertEqual(snapshotls[0]['name'], snapshot)
+
+        # cleanup
+        self._fs_cmd_grouped("subvolume", "snapshot", "rm", self.volname,
+                             subvolume, snapshot, group)
+        self._fs_cmd_grouped("subvolume", "rm", self.volname, subvolume, group)
+        if grouped:
+            self._fs_cmd_grouped("subvolumegroup", "rm", self.volname, group)
+        # reset to default
+        if respect_client_config:
+            self.set_client_snapshot_visbility_flag("false")
+        self._wait_for_trash_empty()
+
+    def _test_snapshot_clone(self, respect_client_config: bool,
+                             with_group: bool):
+        """
+        test cloning subvolume snapshot with/without subvolumegroup with
+        client config client_respect_subvolume_snapshot_visibility
+        """
+        if respect_client_config:
+            self.set_client_snapshot_visbility_flag("true")
+
+        group = self._gen_subvol_grp_name() if with_group else ""
+        subvolume = self._gen_subvol_name()
+        subvolume_clone_1 = self._gen_subvol_name()
+        subvolume_clone_2 = self._gen_subvol_name()
+        subvolume_clone_3 = self._gen_subvol_name() if not respect_client_config else ""
+        snapshot = self._gen_subvol_snap_name()
+        if with_group:
+            self._fs_cmd_grouped("subvolumegroup", "create", self.volname,
+                                 group)
+        self._fs_cmd_grouped("subvolume", "create", self.volname, subvolume,
+                             group)
+        self._fs_cmd_grouped("subvolume", "snapshot", "create", self.volname,
+                     subvolume, snapshot, group)
+
+        # ensure visibility
+        snapshot_visibility = self._fs_cmd_grouped("subvolume", "snapshot_visibility",
+                                                   "get", self.volname, subvolume,
+                                                   group)
+        self.assertEqual(snapshot_visibility.strip(), "1")
+        # ensure clone succeeds
+        self._fs_cmd_grouped("subvolume", "snapshot", "clone", self.volname,
+                     subvolume, snapshot, subvolume_clone_1,
+                     "--group-name", group)
+
+        subvolume_ls = self._fs_cmd_grouped("subvolume", "ls", self.volname)
+        self.assertIn(subvolume_clone_1, subvolume_ls)
+        time.sleep(2)
+
+        # disable visibility
+        self._fs_cmd_grouped("subvolume", "snapshot_visibility", "set",
+                             self.volname, subvolume, "false", group)
+        if respect_client_config:
+            with self.assertRaises(CommandFailedError):
+                self._fs_cmd_grouped("subvolume", "snapshot", "clone",
+                                     self.volname, subvolume, snapshot,
+                                    subvolume_clone_2, "--group-name", group)
+        else:
+            self._fs_cmd_grouped("subvolume", "snapshot", "clone",
+                                 self.volname, subvolume, snapshot,
+                                 subvolume_clone_2, "--group-name", group)
+
+        subvolume_ls = self._fs_cmd_grouped("subvolume", "ls", self.volname)
+        # if the client config was true, clone should've failed and shouldn't
+        # reflect in subvolume ls
+        if respect_client_config:
+            self.assertNotIn(subvolume_clone_2, subvolume_ls)
+        else:
+            self.assertIn(subvolume_clone_2, subvolume_ls)
+
+        # enable visilibity
+        self._fs_cmd_grouped("subvolume", "snapshot_visibility", "set",
+                             self.volname, subvolume, "true", group)
+        # clone should succeed
+        if respect_client_config:
+            self._fs_cmd_grouped("subvolume", "snapshot", "clone",
+                                 self.volname, subvolume, snapshot,
+                                 subvolume_clone_2, "--group-name", group)
+        else:
+            self._fs_cmd_grouped("subvolume", "snapshot", "clone",
+                                 self.volname, subvolume, snapshot,
+                                 subvolume_clone_3, "--group-name", group)
+
+        subvolume_ls = self._fs_cmd_grouped("subvolume", "ls", self.volname)
+        if respect_client_config:
+            self.assertIn(subvolume_clone_2, subvolume_ls)
+        else:
+            self.assertIn(subvolume_clone_3, subvolume_ls)
+
+        # cleanup
+        self._fs_cmd_grouped("subvolume", "rm", self.volname,
+                             subvolume_clone_1)
+        self._fs_cmd_grouped("subvolume", "rm", self.volname,
+                             subvolume_clone_2)
+        if not respect_client_config:
+            self._fs_cmd_grouped("subvolume", "rm", self.volname,
+                                 subvolume_clone_3)
+        self._fs_cmd_grouped("subvolume", "snapshot", "rm", self.volname, subvolume,
+                             snapshot, group)
+        self._fs_cmd_grouped("subvolume", "rm", self.volname, subvolume, group)
+        if with_group:
+            self._fs_cmd_grouped("subvolumegroup", "rm", self.volname, group)
+        # reset to default
+        if respect_client_config:
+            self.set_client_snapshot_visbility_flag("false")
+        self._wait_for_trash_empty()
+
+    def test_toggling_snapshot_visibility_flag(self):
+        """
+        that toggling snapshot_visibility works as intended
+        """
+        subvolume = self._gen_subvol_name()
+
+        self._fs_cmd("subvolume", "create", self.volname, subvolume)
+
+        # default visibility is true
+        snapshot_visibility = self._fs_cmd("subvolume", "snapshot_visibility",
+                                           "get", self.volname, subvolume)
+        self.assertEqual(snapshot_visibility.strip(), "1")
+
+        self._fs_cmd("subvolume", "snapshot_visibility", "set", self.volname,
+                     subvolume, "false")
+        snapshot_visibility = self._fs_cmd("subvolume", "snapshot_visibility",
+                                           "get", self.volname, subvolume)
+        self.assertEqual(snapshot_visibility.strip(), "0")
+
+        self._fs_cmd("subvolume", "snapshot_visibility", "set", self.volname,
+                     subvolume, "true")
+        snapshot_visibility = self._fs_cmd("subvolume", "snapshot_visibility",
+                                           "get", self.volname, subvolume)
+        self.assertEqual(snapshot_visibility.strip(), "1")
+
+        # cleanup
+        self._fs_cmd("subvolume", "rm", self.volname, subvolume)
+        self._wait_for_trash_empty()
+
+    def test_snapshot_visibility_nogroup_no_respect_client_config(self):
+        """
+        that flag snapshot_visibility has no effect on a nongroup subvolume
+        if client config client_respect_subvolume_snapshot_visibility is false
+        """
+        self._test_snapshot_visibility(respect_client_config=False,
+                                       grouped=False)
+
+    def test_snapshot_visibility_nogroup_respect_client_config(self):
+        """
+        that flag snapshot_visibility is adhered for a nongrouped subvolume
+        if client config client_respect_subvolume_snapshot_visibility is true
+        """
+        self._test_snapshot_visibility(respect_client_config=True,
+                                       grouped=False)
+
+    def test_snapshot_visibility_grouped_no_respect_client_config(self):
+        """
+        that flag snapshot_visibility has no effect on a grouped subvolume
+        if client config client_respect_subvolume_snapshot_visibility is false
+        """
+        self._test_snapshot_visibility(respect_client_config=False,
+                                       grouped=True)
+
+    def test_snapshot_visibility_grouped_respect_client_config(self):
+        """
+        that flag snapshot_visibility is adhered for a grouped subvolume
+        if client config client_respect_subvolume_snapshot_visibility is true
+        """
+        self._test_snapshot_visibility(respect_client_config=True,
+                                       grouped=True)
+
+    def test_clones_nogroup_no_respect_client_config(self):
+        """
+        that toggling snapshot_visibility doesn't prevent clones creation
+        for a non-group subvolume
+        """
+        # ensure the client config is false
+        self.assertEqual(self.get_client_snapshot_visbility_flag(), "false")
+        self._test_snapshot_clone(respect_client_config=False,
+                                  with_group=False)
+
+    def test_clones_nogroup_respect_client_config(self):
+        """
+        that toggling snapshot_visibility prevents clones creation for a
+        non-group subvolume
+        """
+        # ensure the client config is false
+        self.assertEqual(self.get_client_snapshot_visbility_flag(), "false")
+        self._test_snapshot_clone(respect_client_config=True,
+                                  with_group=False)
+
+    def test_clones_group_no_respect_client_config(self):
+        """
+        that toggling snapshot_visibility doesn't prevent clone creation
+        for a grouped subvolume
+        """
+        # ensure the client config is false
+        self.assertEqual(self.get_client_snapshot_visbility_flag(), "false")
+        self._test_snapshot_clone(respect_client_config=False,
+                                  with_group=True)
+
+    def test_clones_group_respect_client_config(self):
+        """
+        that toggling snapshot_visibility prevents clones creation for a
+        grouped subvolume
+        """
+        # ensure the client config is false
+        self.assertEqual(self.get_client_snapshot_visbility_flag(), "false")
+        self._test_snapshot_clone(respect_client_config=True,
+                                  with_group=True)
+
+
 class TestMisc(TestVolumesHelper):
     """Miscellaneous tests related to FS volume, subvolume group, and subvolume operations."""
     def test_connection_expiration(self):
