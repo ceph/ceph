@@ -360,6 +360,8 @@ class OperationThrottler : public BlockerT<OperationThrottler>,
 
 public:
   OperationThrottler(ConfigProxy &conf);
+  void start();
+  seastar::future<> stop();
 
   std::vector<std::string> get_tracked_keys() const noexcept final;
   void handle_conf_change(const ConfigProxy& conf,
@@ -394,6 +396,7 @@ public:
     });
   }
 
+  void initialize_scheduler(CephContext* cct, ConfigProxy &conf, bool is_rotational, int whoami);
 private:
   void dump_detail(Formatter *f) const final;
 
@@ -403,13 +406,21 @@ private:
   uint64_t in_progress = 0;
 
   uint64_t pending = 0;
+  bool started = false;
+  bool stopped = false;
+
+  seastar::condition_variable cv;
+  std::optional<seastar::future<>> bg_future;
 
   void wake();
+
+  seastar::future<> wake_set();
 
   seastar::future<> acquire_throttle(
     crimson::osd::scheduler::params_t params);
 
   void release_throttle();
+  seastar::future<> background_task();
 };
 
 }

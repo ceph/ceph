@@ -66,6 +66,7 @@ class OSD final : public crimson::net::Dispatcher,
 		  public md_config_obs_t {
   const int whoami;
   const uint32_t nonce;
+  std::optional<bool> is_rotational;
   seastar::abort_source& abort_source;
   seastar::timer<seastar::lowres_clock> beacon_timer;
   // talk with osd
