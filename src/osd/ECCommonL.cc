@@ -488,6 +488,7 @@ void ECCommonL::ReadPipeline::do_read_op(ReadOp &op)
       msg->trace.init("ec sub read", nullptr, &op.trace);
       msg->trace.keyval("shard", i->first.shard.id);
     }
+    msg->compute_cost(cct);
     m.push_back(std::make_pair(i->first.osd, msg));
   }
   if (!m.empty()) {

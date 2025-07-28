@@ -116,6 +116,7 @@ struct ECSubRead {
   std::map<hobject_t, std::list<boost::tuple<uint64_t, uint64_t, uint32_t> >> to_read;
   std::set<hobject_t> attrs_to_read;
   std::map<hobject_t, std::vector<std::pair<int, int>>> subchunks;
+  uint64_t cost(CephContext *cct);
   void encode(ceph::buffer::list &bl, uint64_t features) const;
   void decode(ceph::buffer::list::const_iterator &bl);
   void dump(ceph::Formatter *f) const;
