@@ -107,6 +107,8 @@ def create_volume(mgr, volname, placement, data_pool, metadata_pool):
     # are passed by user they must exist already), leave it here so that some
     # future readers know that this case is already considered and not missed
     # by chance.
+    data_pool_was_created = False
+    metadata_pool_was_created = False
     if data_pool and metadata_pool:
         pass
     elif not data_pool and metadata_pool:
@@ -119,6 +121,8 @@ def create_volume(mgr, volname, placement, data_pool, metadata_pool):
         retval = create_fs_pools(mgr, volname, data_pool, metadata_pool)
         success = retval.pop(0)
         if success:
+            data_pool_was_created = True
+            metadata_pool_was_created = True
             data_pool, metadata_pool = retval
         else:
             return retval
@@ -128,8 +132,10 @@ def create_volume(mgr, volname, placement, data_pool, metadata_pool):
     if r != 0:
         log.error("Filesystem creation error: {0} {1} {2}".format(r, outb, outs))
         #cleanup
-        remove_pool(mgr, data_pool)
-        remove_pool(mgr, metadata_pool)
+        if data_pool_was_created:
+            remove_pool(mgr, data_pool)
+        if metadata_pool_was_created:
+            remove_pool(mgr, metadata_pool)
         return r, outb, outs
     return create_mds(mgr, volname, placement)
 
