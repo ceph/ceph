@@ -26,4 +26,4 @@ describe('NotificationFooterComponent', () => {
     const button = compiled.querySelector('cds-button');
     expect(button?.textContent).toContain('View all');
   });
-}); 
+});

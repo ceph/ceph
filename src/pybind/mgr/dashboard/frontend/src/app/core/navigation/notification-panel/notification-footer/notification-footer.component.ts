@@ -7,4 +7,4 @@ import { Component } from '@angular/core';
 })
 export class NotificationFooterComponent {
   // Component logic will be added here when needed
-} 
+}

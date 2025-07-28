@@ -49,6 +49,12 @@ import ObservabilityIcon from '@carbon/icons/es/observed--hail/20';
 import AdminIcon from '@carbon/icons/es/network--admin-control/20';
 import LockedIcon from '@carbon/icons/es/locked/16';
 import LogoutIcon from '@carbon/icons/es/logout/16';
+import CheckmarkFilledIcon from '@carbon/icons/es/checkmark--filled/16';
+import ErrorFilledIcon from '@carbon/icons/es/error--filled/16';
+import InformationFilledIcon from '@carbon/icons/es/information--filled/16';
+import WarningFilledIcon from '@carbon/icons/es/warning--filled/16';
+import NotificationFilledIcon from '@carbon/icons/es/notification--filled/16';
+import CloseIcon from '@carbon/icons/es/close/16';
 
 @NgModule({
   imports: [
@@ -104,7 +110,13 @@ export class NavigationModule {
       ObservabilityIcon,
       AdminIcon,
       LockedIcon,
-      LogoutIcon
+      LogoutIcon,
+      CheckmarkFilledIcon,
+      ErrorFilledIcon,
+      InformationFilledIcon,
+      WarningFilledIcon,
+      NotificationFilledIcon,
+      CloseIcon
     ]);
   }
 }

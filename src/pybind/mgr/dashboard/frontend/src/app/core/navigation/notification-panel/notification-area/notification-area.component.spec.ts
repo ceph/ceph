@@ -2,6 +2,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { BehaviorSubject } from 'rxjs';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
+import { IconModule, IconService } from 'carbon-components-angular';
 
 import { NotificationAreaComponent } from './notification-area.component';
 import { NotificationService } from '../../../../shared/services/notification.service';
@@ -9,6 +10,13 @@ import { CdNotification, CdNotificationConfig } from '../../../../shared/models/
 import { NotificationType } from '../../../../shared/enum/notification-type.enum';
 import { SharedModule } from '../../../../shared/shared.module';
 import { configureTestBed } from '~/testing/unit-test-helper';
+
+import CheckmarkFilledIcon from '@carbon/icons/es/checkmark--filled/16';
+import ErrorFilledIcon from '@carbon/icons/es/error--filled/16';
+import InformationFilledIcon from '@carbon/icons/es/information--filled/16';
+import WarningFilledIcon from '@carbon/icons/es/warning--filled/16';
+import NotificationFilledIcon from '@carbon/icons/es/notification--filled/16';
+import CloseIcon from '@carbon/icons/es/close/16';
 
 describe('NotificationAreaComponent', () => {
   let component: NotificationAreaComponent;
@@ -37,7 +45,7 @@ describe('NotificationAreaComponent', () => {
   ];
 
   configureTestBed({
-    imports: [SharedModule, NoopAnimationsModule],
+    imports: [SharedModule, NoopAnimationsModule, IconModule],
     declarations: [NotificationAreaComponent]
   });
 
@@ -50,6 +58,17 @@ describe('NotificationAreaComponent', () => {
     };
 
     TestBed.overrideProvider(NotificationService, { useValue: spy });
+
+    const iconService = TestBed.inject(IconService);
+    iconService.registerAll([
+      CheckmarkFilledIcon,
+      ErrorFilledIcon,
+      InformationFilledIcon,
+      WarningFilledIcon,
+      NotificationFilledIcon,
+      CloseIcon
+    ]);
+
     fixture = TestBed.createComponent(NotificationAreaComponent);
     component = fixture.componentInstance;
     notificationService = TestBed.inject(NotificationService);
@@ -122,9 +141,15 @@ describe('NotificationAreaComponent', () => {
     expect(
       firstNotification.query(By.css('.notification-message')).nativeElement.textContent
     ).toContain('message');
-    expect(
-      firstNotification.query(By.css('.notification-icon svg')).attributes['ng-reflect-cds-icon']
-    ).toBe('checkmark--filled');
+
+    const svgElement = firstNotification.query(By.css('.notification-icon svg'));
+    expect(svgElement).toBeTruthy();
+
+    const cdsIconAttr =
+      svgElement.attributes['ng-reflect-cds-icon'] ||
+      svgElement.attributes['cds-icon'] ||
+      svgElement.attributes['icon'];
+    expect(cdsIconAttr).toBe('checkmark--filled');
   });
 
   it('should show section headings correctly', () => {
