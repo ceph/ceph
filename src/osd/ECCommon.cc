@@ -499,6 +499,9 @@ void ECCommon::ReadPipeline::do_read_op(ReadOp &rop) {
   std::optional<ECSubRead> local_read_op;
   std::vector<std::pair<int, Message*>> m;
   m.reserve(messages.size());
+  std::pair<int, int> subchunk_info =
+    std::make_pair(ec_impl->get_sub_chunk_count(),
+      sinfo.get_chunk_size() / ec_impl->get_sub_chunk_count());
   for (auto &&[pg_shard, read]: messages) {
     rop.in_progress.insert(pg_shard);
     shard_to_read_map[pg_shard].insert(rop.tid);
@@ -522,6 +525,7 @@ void ECCommon::ReadPipeline::do_read_op(ReadOp &rop) {
       msg->trace.init("ec sub read", nullptr, &rop.trace);
       msg->trace.keyval("shard", pg_shard.shard.id);
     }
+    msg->compute_cost(cct, subchunk_info);
     m.push_back(std::make_pair(pg_shard.osd, msg));
     dout(10) << __func__ << ": will send msg " << *msg
              << " to osd." << pg_shard << dendl;

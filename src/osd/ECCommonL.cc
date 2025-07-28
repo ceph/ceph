@@ -467,6 +467,9 @@ void ECCommonL::ReadPipeline::do_read_op(ReadOp &op)
 
   std::vector<std::pair<int, Message*>> m;
   m.reserve(messages.size());
+  std::pair<int, int> subchunk_info =
+    std::make_pair(ec_impl->get_sub_chunk_count(),
+      sinfo.get_chunk_size() / ec_impl->get_sub_chunk_count());
   for (map<pg_shard_t, ECSubRead>::iterator i = messages.begin();
        i != messages.end();
        ++i) {
@@ -488,6 +491,7 @@ void ECCommonL::ReadPipeline::do_read_op(ReadOp &op)
       msg->trace.init("ec sub read", nullptr, &op.trace);
       msg->trace.keyval("shard", i->first.shard.id);
     }
+    msg->compute_cost(cct, subchunk_info);
     m.push_back(std::make_pair(i->first.osd, msg));
   }
   if (!m.empty()) {

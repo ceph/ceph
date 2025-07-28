@@ -14,6 +14,8 @@
 
 #include "ECMsgTypes.h"
 
+#include "common/ceph_context.h"
+
 using std::list;
 using std::make_pair;
 using std::map;
@@ -250,6 +252,66 @@ void ECSubRead::decode(bufferlist::const_iterator &bl)
     }
   }
   DECODE_FINISH(bl);
+}
+
+/**
+ * Calculate the cost of the SubOp read operation for mClock scheduler.
+ * Cost is calculated based on whether the complete chunk/shard
+ * or a subchunk needs to be read:
+ * Case 1. Read the complete chunk aligned length:
+ *  - Cost is set to the length of the chunk aligned extent size.
+ * Case 2. Fragmented reads:
+ *  - Cost is set by considering the subchunk length and count.
+ *
+ * Note: To retain the legacy behavior, a cost of '0' is returned as
+ *       before for WeightedPriorityQueue scheduler.
+ */
+uint64_t ECSubRead::cost(CephContext *cct, std::pair<int, int>& subchunk_info)
+{
+  uint64_t total_cost = 0;
+  /**
+   * While the cost is calculated by the primary shard with mClock
+   * scheduler being active, the replica shard could still be
+   * running on the legacy WPQ scheduler. In such a case, the
+   * replica shard's decoding logic would set the cost to 0, which
+   * is consistent with what the legacy WPQ scheduler expects.
+   *
+   * In the converse case, the primary shard running with the
+   * legacy WPQ scheduler sends a cost of 0. The replica shard
+   * running with mClock scheduler will interpret this and set
+   * the cost to 1 accordingly.
+   */
+  if (cct->_conf->osd_op_queue != "mclock_scheduler") {
+    return total_cost; // Legacy behavior for WPQ scheduler
+  }
+
+  uint64_t subchunk_size = subchunk_info.second;
+
+  for (auto &&[hoid, tl] : to_read) {
+    auto it = subchunks.find(hoid);
+    if (it == subchunks.end()) continue;
+
+    auto &sc = it->second;
+    if (sc.empty()) continue;
+
+    // Case 1: Optimized / Complete chunk aligned read
+    if (sc.size() == 1 && sc.front().second == subchunk_info.first) {
+      for ([[maybe_unused]] auto &&[offset, len, flags] : tl) {
+        total_cost += len;
+      }
+      continue;
+    }
+
+    // Case 2: Fragmented / Subchunk Reads
+    uint64_t fragmented_shard_bytes = 0;
+    for (auto &&k : sc) {
+      fragmented_shard_bytes += (uint64_t)k.second * subchunk_size;
+    }
+    total_cost += fragmented_shard_bytes * tl.size();
+  }
+
+  // Safety Boundary: mClock requires non-zero costs for tracking active ops
+  return std::max<uint64_t>(total_cost, 1ULL);
 }
 
 std::ostream &operator<<(
