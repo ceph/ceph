@@ -428,6 +428,8 @@ void PyModuleRegistry::get_health_checks(health_check_map_t *checks)
         //   checks (to avoid outputting two health messages about a
         //   module that said can_run=false but we tried running it anyway)
         failed_modules[module->get_name()] = module->get_error_string();
+      } else if ((active_modules->is_pending(module->get_name()))) {
+        failed_modules[module->get_name()] = "Module failed to initialize.";
       }
     }
 

@@ -68,7 +68,8 @@ Mgr::Mgr(MonClient *monc_, const MgrMap& mgrmap,
   clog(clog_),
   audit_clog(audit_clog_),
   initialized(false),
-  initializing(false)
+  initializing(false),
+  initialization_start_time(ceph::coarse_mono_clock::zero())
 {
   cluster_state.set_objecter(objecter);
 }
@@ -166,6 +167,7 @@ void Mgr::background_init(Context *completion)
   ceph_assert(!initializing);
   ceph_assert(!initialized);
   initializing = true;
+  initialization_start_time = ceph::coarse_mono_clock::now();
 
   finisher.start();
 
@@ -760,6 +762,32 @@ bool Mgr::got_mgr_map(const MgrMap& m)
   server.got_mgr_map();
 
   return false;
+}
+
+bool Mgr::exceeded_initialization_expiration()
+{
+  // initialization_start_time=0 when initialization hasn't started yet,
+  // so know we can't have exceeded the time expiration.
+  if (ceph::coarse_mono_clock::is_zero(initialization_start_time)) {
+    return false;
+  }
+
+  // Save the amount of time elapsed
+  auto time_elapsed = ceph::coarse_mono_clock::now() - initialization_start_time;
+  dout(20) << "time elapsed since mgr initialization: " << time_elapsed << dendl;
+
+  // Reset start time if the expiration time has been exceeded.
+  // Signal initialization=true so the mgr forcibly sends an "active" beacon
+  auto expiration = g_conf().get_val<std::chrono::milliseconds>("mgr_module_load_expiration");
+  bool exceeded_expiration = time_elapsed > expiration;
+  if (exceeded_expiration) {
+    std::lock_guard l(lock);
+    initialization_start_time = ceph::coarse_mono_clock::zero();
+    initializing = false;
+    initialized = true;
+  }
+
+  return exceeded_expiration;
 }
 
 void Mgr::handle_mgr_digest(ref_t<MMgrDigest> m)
