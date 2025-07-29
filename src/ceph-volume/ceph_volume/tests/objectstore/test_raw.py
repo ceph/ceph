@@ -1,13 +1,13 @@
 import pytest
 from unittest.mock import patch, Mock, MagicMock, call
-from ceph_volume.objectstore.rawbluestore import RawBlueStore
+from ceph_volume.objectstore.raw import Raw
 from ceph_volume.util import system
 
 
-class TestRawBlueStore:
-    @patch('ceph_volume.objectstore.rawbluestore.prepare_utils.create_key', Mock(return_value=['AQCee6ZkzhOrJRAAZWSvNC3KdXOpC2w8ly4AZQ==']))
+class TestRaw:
+    @patch('ceph_volume.objectstore.raw.prepare_utils.create_key', Mock(return_value=['AQCee6ZkzhOrJRAAZWSvNC3KdXOpC2w8ly4AZQ==']))
     def setup_method(self, m_create_key):
-        self.raw_bs = RawBlueStore([])
+        self.raw_bs = Raw([])
 
     def test_prepare_dmcrypt(self,
                              device_info,
@@ -26,7 +26,7 @@ class TestRawBlueStore:
         assert self.raw_bs.db_device_path == "/dev/mapper/ceph--foo0-db-dmcrypt"
         assert self.raw_bs.wal_device_path == "/dev/mapper/ceph--foo0-wal-dmcrypt"
 
-    @patch('ceph_volume.objectstore.rawbluestore.RawBlueStore.enroll_tpm2', Mock(return_value=MagicMock()))
+    @patch('ceph_volume.objectstore.raw.Raw.enroll_tpm2', Mock(return_value=MagicMock()))
     def test_prepare_dmcrypt_with_tpm(self,
                                       device_info,
                                       fake_call,
@@ -46,8 +46,8 @@ class TestRawBlueStore:
         assert self.raw_bs.wal_device_path == "/dev/mapper/ceph--foo0-wal-dmcrypt"
         assert self.raw_bs.enroll_tpm2.mock_calls == [call('/dev/foo0'), call('/dev/foo1'), call('/dev/foo2')]
 
-    @patch('ceph_volume.objectstore.rawbluestore.rollback_osd')
-    @patch('ceph_volume.objectstore.rawbluestore.RawBlueStore.prepare')
+    @patch('ceph_volume.objectstore.raw.rollback_osd')
+    @patch('ceph_volume.objectstore.raw.Raw.prepare')
     def test_safe_prepare_raises_exception(self,
                                            m_prepare,
                                            m_rollback_osd,
@@ -62,7 +62,7 @@ class TestRawBlueStore:
             self.raw_bs.safe_prepare()
         assert m_rollback_osd.mock_calls == [call('1')]
 
-    @patch('ceph_volume.objectstore.rawbluestore.RawBlueStore.prepare', MagicMock())
+    @patch('ceph_volume.objectstore.raw.Raw.prepare', MagicMock())
     def test_safe_prepare(self,
                           factory,
                           capsys):
@@ -73,8 +73,8 @@ class TestRawBlueStore:
         assert "prepare successful for: /dev/foo" in stderr
 
     @patch.dict('os.environ', {'CEPH_VOLUME_DMCRYPT_SECRET': 'dmcrypt-key'})
-    @patch('ceph_volume.objectstore.rawbluestore.prepare_utils.create_id')
-    @patch('ceph_volume.objectstore.rawbluestore.system.generate_uuid')
+    @patch('ceph_volume.objectstore.raw.prepare_utils.create_id')
+    @patch('ceph_volume.objectstore.raw.system.generate_uuid')
     def test_prepare(self, m_generate_uuid, m_create_id, is_root, factory):
         m_generate_uuid.return_value = 'fake-uuid'
         m_create_id.return_value = MagicMock()
@@ -94,13 +94,13 @@ class TestRawBlueStore:
         assert self.raw_bs.prepare_dmcrypt.called
 
     @patch('ceph_volume.conf.cluster', 'ceph')
-    @patch('ceph_volume.objectstore.rawbluestore.prepare_utils.link_wal')
-    @patch('ceph_volume.objectstore.rawbluestore.prepare_utils.link_db')
-    @patch('ceph_volume.objectstore.rawbluestore.prepare_utils.link_block')
+    @patch('ceph_volume.objectstore.raw.prepare_utils.link_wal')
+    @patch('ceph_volume.objectstore.raw.prepare_utils.link_db')
+    @patch('ceph_volume.objectstore.raw.prepare_utils.link_block')
     @patch('os.path.exists')
     @patch('os.unlink')
-    @patch('ceph_volume.objectstore.rawbluestore.prepare_utils.create_osd_path')
-    @patch('ceph_volume.objectstore.rawbluestore.process.run')
+    @patch('ceph_volume.objectstore.raw.prepare_utils.create_osd_path')
+    @patch('ceph_volume.objectstore.raw.process.run')
     def test__activate(self,
                        m_run,
                        m_create_osd_path,
@@ -157,10 +157,10 @@ class TestRawBlueStore:
                                                    'type': 'bluestore'},
                                                    tmpfs=True)]
 
-    @patch('ceph_volume.objectstore.rawbluestore.encryption_utils.rename_mapper', Mock(return_value=MagicMock()))
+    @patch('ceph_volume.objectstore.raw.encryption_utils.rename_mapper', Mock(return_value=MagicMock()))
     @patch('ceph_volume.util.disk.get_bluestore_header')
-    @patch('ceph_volume.objectstore.rawbluestore.encryption_utils.luks_close', Mock(return_value=MagicMock()))
-    @patch('ceph_volume.objectstore.rawbluestore.encryption_utils.luks_open', Mock(return_value=MagicMock()))
+    @patch('ceph_volume.objectstore.raw.encryption_utils.luks_close', Mock(return_value=MagicMock()))
+    @patch('ceph_volume.objectstore.raw.encryption_utils.luks_open', Mock(return_value=MagicMock()))
     def test_activate_dmcrypt_tpm(self, m_bs_header, rawbluestore, fake_lsblk_all, mock_raw_direct_report, is_root) -> None:
         m_bs_header.return_value = {
             "/dev/mapper/activating-sdb": {
@@ -203,7 +203,7 @@ class TestRawBlueStore:
         mock_luks2_4.is_ceph_encrypted = True
         mock_luks2_4.is_tpm2_enrolled = True
         mock_luks2_4.osd_fsid = 'abcd'
-        with patch('ceph_volume.objectstore.rawbluestore.encryption_utils.CephLuks2', side_effect=[mock_luks2_1,
+        with patch('ceph_volume.objectstore.raw.encryption_utils.CephLuks2', side_effect=[mock_luks2_1,
                                                                                                    mock_luks2_2,
                                                                                                    mock_luks2_3,
                                                                                                    mock_luks2_4]):
