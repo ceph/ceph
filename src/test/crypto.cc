@@ -480,8 +480,8 @@ TEST(AES256KRB5, Encrypt) {
     bufferlist cipher;
     std::string error;
 
-    std::unique_ptr<CryptoKeyHandler> kh(h->get_key_handler_ext(secret, t.usage, error));
-    int r = kh->encrypt_ext(g_ceph_context, plaintext, &confounder, cipher, &error);
+    std::unique_ptr<CryptoKeyHandler> kh(h->get_key_handler_ext(secret, { t.usage }, error));
+    int r = kh->encrypt_ext(g_ceph_context, t.usage, plaintext, &confounder, cipher, &error);
     ASSERT_EQ(r, 0);
     ASSERT_EQ(error, "");
 
@@ -491,6 +491,51 @@ TEST(AES256KRB5, Encrypt) {
     dump_buf("EXPECTED:", (unsigned char *)want_cipher.c_str(), want_cipher.length());
 
     int err;
+    err = memcmp(cipher.c_str(), want_cipher.c_str(), want_cipher.length());
+    ASSERT_EQ(0, err);
+  }
+}
+
+TEST(AES256KRB5, EncryptUsage) {
+  for (int i = 0; !tv[i].secret.empty(); ++i) {
+    auto h = g_ceph_context->get_crypto_manager()->get_handler(CEPH_CRYPTO_AES256KRB5);
+    
+    tvbl t(tv[i]);
+
+    auto& secret = t.secret;
+    auto& confounder = t.confounder;
+    auto& plaintext = t.plaintext;
+    auto& want_cipher = t.ciphertext;
+
+    bufferlist cipher;
+    std::string error;
+
+    std::unique_ptr<CryptoKeyHandler> kh(h->get_key_handler_ext(secret, { t.usage, t.usage + 1 }, error));
+    int r = kh->encrypt_ext(g_ceph_context, t.usage + 1, plaintext, &confounder, cipher, &error);
+    ASSERT_EQ(r, 0);
+    ASSERT_EQ(error, "");
+
+    ASSERT_EQ(want_cipher.length(), cipher.length());
+
+    dump_buf("ENCRYPTED:", (unsigned char *)cipher.c_str(), cipher.length());
+    dump_buf("NOT EXPECTED:", (unsigned char *)want_cipher.c_str(), want_cipher.length());
+
+    int err;
+    err = memcmp(cipher.c_str(), want_cipher.c_str(), want_cipher.length());
+    ASSERT_NE(0, err);
+
+    /* use default usage */
+    cipher.clear();
+
+    r = kh->encrypt_ext(g_ceph_context, plaintext, &confounder, cipher, &error);
+    ASSERT_EQ(r, 0);
+    ASSERT_EQ(error, "");
+
+    ASSERT_EQ(want_cipher.length(), cipher.length());
+
+    dump_buf("ENCRYPTED:", (unsigned char *)cipher.c_str(), cipher.length());
+    dump_buf("EXPECTED:", (unsigned char *)want_cipher.c_str(), want_cipher.length());
+
     err = memcmp(cipher.c_str(), want_cipher.c_str(), want_cipher.length());
     ASSERT_EQ(0, err);
   }
@@ -510,7 +555,7 @@ TEST(AES256KRB5, EncryptNoBl) {
     const CryptoKey::in_slice_t confounder_slice { confounder.length(), (const unsigned char *)confounder.c_str() };
 
     std::string error;
-    std::unique_ptr<CryptoKeyHandler> kh(h->get_key_handler_ext(secret, t.usage, error));
+    std::unique_ptr<CryptoKeyHandler> kh(h->get_key_handler_ext(secret, { t.usage }, error));
 
     const CryptoKey::in_slice_t plain_slice { plaintext.length(), (const unsigned char *)plaintext.c_str() };
 
@@ -545,7 +590,7 @@ TEST(AES256KRB5, Decrypt) {
 
     std::string error;
     bufferlist plaintext;
-    std::unique_ptr<CryptoKeyHandler> kh(h->get_key_handler_ext(secret, t.usage, error));
+    std::unique_ptr<CryptoKeyHandler> kh(h->get_key_handler_ext(secret, { t.usage }, error));
     int r = kh->decrypt(g_ceph_context, ciphertext, plaintext, &error);
     ASSERT_EQ(r, 0);
     ASSERT_EQ(error, "");
@@ -556,6 +601,40 @@ TEST(AES256KRB5, Decrypt) {
 
     int err;
     err = memcmp(plaintext.c_str(), want_plaintext.c_str(), plaintext.length());
+    ASSERT_EQ(0, err);
+  }
+}
+
+TEST(AES256KRB5, DecryptUsage) {
+  for (int i = 0; !tv[i].secret.empty(); ++i) {
+    auto h = g_ceph_context->get_crypto_manager()->get_handler(CEPH_CRYPTO_AES256KRB5);
+
+    tvbl t(tv[i]);
+
+    auto& secret = t.secret;
+    auto& want_plaintext = t.plaintext;
+    auto& ciphertext = t.ciphertext;
+
+    std::string error;
+    bufferlist plaintext;
+    std::unique_ptr<CryptoKeyHandler> kh(h->get_key_handler_ext(secret, { t.usage, t.usage + 1 }, error));
+
+    /* decrypt with the wrong usage should fail */
+    int r = kh->decrypt_ext(g_ceph_context, t.usage + 1, ciphertext, plaintext, &error);
+    ASSERT_NE(r, 0);
+
+    plaintext.clear();
+
+    /* correct usage this time */
+    r = kh->decrypt_ext(g_ceph_context, t.usage, ciphertext, plaintext, &error);
+    ASSERT_EQ(r, 0);
+    ASSERT_EQ(error, "");
+
+    dump_buf("DECRYPTED:", (unsigned char *)plaintext.c_str(), plaintext.length());
+    dump_buf("NOT EXPECTED:", (unsigned char *)want_plaintext.c_str(), want_plaintext.length());
+    ASSERT_EQ(want_plaintext.length(), plaintext.length());
+
+    int err = memcmp(plaintext.c_str(), want_plaintext.c_str(), plaintext.length());
     ASSERT_EQ(0, err);
   }
 }
@@ -574,7 +653,7 @@ TEST(AES256KRB5, DecryptNoBl) {
     unsigned char plaintext[plain_buf_size];
 
     std::string error;
-    std::unique_ptr<CryptoKeyHandler> kh(h->get_key_handler_ext(secret, t.usage, error));
+    std::unique_ptr<CryptoKeyHandler> kh(h->get_key_handler_ext(secret, { t.usage }, error));
 
     CryptoKey::in_slice_t cipher_slice { ciphertext.length(), (const unsigned char *)ciphertext.c_str() };
     CryptoKey::out_slice_t plain_slice { plain_buf_size, plaintext };
