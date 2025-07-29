@@ -266,10 +266,8 @@ SeaStore::mount_ertr::future<> SeaStore::test_mount()
   INFO("...");
 
   ceph_assert(seastar::this_shard_id() == primary_core);
-  return shard_stores.local().mount_managers(
-  ).then([FNAME] {
-    INFO("done");
-  });
+  co_await shard_stores.local().mount_managers();
+  INFO("done");
 }
 
 SeaStore::mount_ertr::future<> SeaStore::mount()
