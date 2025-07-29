@@ -4641,7 +4641,7 @@ int main(int argc, const char **argv)
                                         null_yield,
 					cfgstore.get(),
 					need_cache && g_conf()->rgw_cache_enabled,
-					need_gc);
+					need_gc, true /* admin */);
     }
     if (!driver) {
       cerr << "couldn't init storage provider" << std::endl;
