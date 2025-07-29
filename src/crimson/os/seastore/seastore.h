@@ -186,7 +186,7 @@ public:
 
   // only exposed to SeaStore
   public:
-    seastar::future<> umount();
+    base_ertr::future<> umount();
     // init managers and mount transaction_manager
     seastar::future<> mount_managers();
 
