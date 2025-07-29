@@ -170,6 +170,7 @@ int CryptoRandom::open_urandom()
 
 std::size_t CryptoKeyHandler::encrypt_ext(
   CephContext *cct,
+  uint32_t usage,
   const CryptoKeyHandler::in_slice_t& in,
   const CryptoKeyHandler::in_slice_t *confounder,
   const CryptoKeyHandler::out_slice_t& out) const
@@ -189,7 +190,7 @@ std::size_t CryptoKeyHandler::encrypt_ext(
   }
   ceph::bufferlist ciphertext;
   std::string error;
-  const int ret = encrypt_ext(cct, plaintext, (confounder ? &confounder_bl : nullptr), ciphertext, &error);
+  const int ret = encrypt_ext(cct, usage, plaintext, (confounder ? &confounder_bl : nullptr), ciphertext, &error);
   if (ret != 0 || !error.empty()) {
     throw std::runtime_error(std::move(error));
   }
@@ -203,8 +204,9 @@ std::size_t CryptoKeyHandler::encrypt_ext(
   return todo_len;
 }
 
-std::size_t CryptoKeyHandler::decrypt(
+std::size_t CryptoKeyHandler::decrypt_ext(
   CephContext *cct,
+  uint32_t usage,
   const CryptoKeyHandler::in_slice_t& in,
   const CryptoKeyHandler::out_slice_t& out) const
 {
@@ -214,7 +216,7 @@ std::size_t CryptoKeyHandler::decrypt(
 
   ceph::bufferlist plaintext;
   std::string error;
-  const int ret = decrypt(cct, ciphertext, plaintext, &error);
+  const int ret = decrypt_ext(cct, usage, ciphertext, plaintext, &error);
   if (ret != 0 || !error.empty()) {
     throw std::runtime_error(std::move(error));
   }
@@ -264,15 +266,16 @@ public:
   }
 
   using CryptoKeyHandler::encrypt_ext;
-  using CryptoKeyHandler::decrypt;
+  using CryptoKeyHandler::decrypt_ext;
 
-  int encrypt_ext(CephContext *cct, const bufferlist& in, const bufferlist *confounder,
+  int encrypt_ext(CephContext *cct, uint32_t usage,
+                  const bufferlist& in, const bufferlist *confounder,
                   bufferlist& out, std::string *error) const override {
     out = in;
     return 0;
   }
-  int decrypt(CephContext *cct, const bufferlist& in,
-	      bufferlist& out, std::string *error) const override {
+  int decrypt_ext(CephContext *cct, uint32_t usage, const bufferlist& in,
+                  bufferlist& out, std::string *error) const override {
     out = in;
     return 0;
   }
@@ -291,7 +294,7 @@ public:
   int validate_secret(const bufferptr& secret) override {
     return 0;
   }
-  CryptoKeyHandler *get_key_handler_ext(const bufferptr& secret, uint32_t usage, string& error) override {
+  CryptoKeyHandler *get_key_handler_ext(const bufferptr& secret, const std::vector<uint32_t>& usages, string& error) override {
     return new CryptoNoneKeyHandler;
   }
 };
@@ -309,7 +312,7 @@ public:
   }
   int create(CryptoRandom *random, bufferptr& secret) override;
   int validate_secret(const bufferptr& secret) override;
-  CryptoKeyHandler *get_key_handler_ext(const bufferptr& secret, uint32_t usage /* unused */, string& error) override;
+  CryptoKeyHandler *get_key_handler_ext(const bufferptr& secret, const std::vector<uint32_t>& usages /* unused */, string& error) override;
 };
 
 // when we say AES, we mean AES-128
@@ -327,6 +330,7 @@ public:
 
   using CryptoKeyHandler::encrypt;
   using CryptoKeyHandler::encrypt_ext;
+  using CryptoKeyHandler::decrypt_ext;
 
   int init(const bufferptr& s, ostringstream& err) {
     secret = s;
@@ -350,7 +354,8 @@ public:
     return 0;
   }
 
-  int encrypt_ext(CephContext *cct, const ceph::bufferlist& in,
+  int encrypt_ext(CephContext *cct, uint32_t usage,
+                  const ceph::bufferlist& in,
                   const bufferlist *confounder /* ignored */,
 	      ceph::bufferlist& out,
               std::string* /* unused */) const override {
@@ -394,9 +399,10 @@ public:
     return 0;
   }
 
-  int decrypt(CephContext *cct, const ceph::bufferlist& in,
-	      ceph::bufferlist& out,
-	      std::string* /* unused */) const override {
+  int decrypt_ext(CephContext *cct, uint32_t usage,
+                  const ceph::bufferlist& in,
+                  ceph::bufferlist& out,
+                  std::string* /* unused */) const override {
     ldout(cct, 20) << "CryptoAESKeyHandler::decrypt()" << dendl;
     // PKCS#7 padding enlarges even empty plain-text to take 16 bytes.
     if (in.length() < AES_BLOCK_LEN || in.length() % AES_BLOCK_LEN) {
@@ -473,8 +479,9 @@ public:
     return main_encrypt_size + tail_encrypt_size;
   }
 
-  std::size_t decrypt(CephContext *cct, const in_slice_t& in,
-		      const out_slice_t& out) const override {
+  std::size_t decrypt_ext(CephContext *cct, uint32_t usage,
+                          const in_slice_t& in,
+                          const out_slice_t& out) const override {
     if (in.length % AES_BLOCK_LEN != 0 || in.length < AES_BLOCK_LEN) {
       throw std::runtime_error("input not aligned to AES_BLOCK_LEN");
     } else if (out.buf == nullptr) {
@@ -523,7 +530,7 @@ int CryptoAES::validate_secret(const bufferptr& secret)
 }
 
 CryptoKeyHandler *CryptoAES::get_key_handler_ext(const bufferptr& secret,
-                                                 uint32_t usage,
+                                                 const std::vector<uint32_t>& usages,
                                                  string& error)
 {
   CryptoAESKeyHandler *ckh = new CryptoAESKeyHandler;
@@ -551,7 +558,7 @@ public:
   }
   int create(CryptoRandom *random, bufferptr& secret) override;
   int validate_secret(const bufferptr& secret) override;
-  CryptoKeyHandler *get_key_handler_ext(const bufferptr& secret, uint32_t usage, string& error) override;
+  CryptoKeyHandler *get_key_handler_ext(const bufferptr& secret, const std::vector<uint32_t>& usages, string& error) override;
 };
 
 static constexpr const std::size_t AES256KRB5_KEY_LEN{32};
@@ -562,10 +569,86 @@ static constexpr const std::size_t SHA384_LEN{48};
 class CryptoAES256KRB5KeyHandler : public CryptoKeyHandler {
   EVP_CIPHER *cipher{nullptr};
 
-  ceph::bufferlist ki;
-  const unsigned char *ki_raw;
-  ceph::bufferlist ke;
-  const unsigned char *ke_raw;
+  struct usage_keys {
+    ceph::bufferlist ki;
+    const unsigned char *ki_raw;
+    ceph::bufferlist ke;
+    const unsigned char *ke_raw;
+  };
+
+  usage_keys default_usage_keys;
+
+  using usage_keys_ref = std::shared_ptr<usage_keys>;
+
+  std::vector<usage_keys_ref> keys;
+
+  int do_init_usage_keys(uint32_t usage, usage_keys *uk, ostringstream& err) {
+    int r = calc_kx(secret, usage,
+                    0x55 /* Ki type */,
+                    AES256KRB5_HASH_LEN /* 192 bit */,
+                    uk->ki,
+                    err);
+    if (r < 0) {
+      return r;
+    }
+    uk->ki_raw = reinterpret_cast<const unsigned char *>(uk->ki.c_str()); /* needed so that we can use ki in const methods */
+
+    r = calc_kx(secret, usage,
+                0xAA /* Ke type */,
+                32 /* 256 bit */,
+                uk->ke,
+                err);
+    if (r < 0) {
+      return r;
+    }
+    uk->ke_raw = reinterpret_cast<const unsigned char *>(uk->ke.c_str()); /* same reason as with ki */
+
+    return 0;
+  }
+
+  usage_keys *init_usage_keys(uint32_t usage) {
+    string err_str;
+    ostringstream err(err_str);
+
+    if (usage == default_usage) {
+      int r = do_init_usage_keys(usage, &default_usage_keys, err);
+      if (r < 0) {
+        return nullptr;
+      }
+      return &default_usage_keys;
+    }
+
+    if (usage >= keys.size()) {
+      keys.resize(usage + 8); /* so that we don't resize every time */
+    }
+
+    auto& uk = keys[usage];
+    if (!uk) {
+      uk = std::make_shared<usage_keys>();
+    }
+
+    int r = do_init_usage_keys(usage, uk.get(), err);
+    if (r < 0) {
+      return nullptr;
+    }
+    return uk.get();
+  }
+
+  const usage_keys *get_usage_keys(uint32_t usage) const {
+    if (usage == default_usage) {
+      return &default_usage_keys;
+    }
+
+    if (keys.size() <= usage) {
+      return nullptr;
+    }
+    auto& k_ref = keys[usage];
+    if (!k_ref) {
+      return nullptr;
+    }
+
+    return k_ref.get();
+  }
 
 static void dump_buf(CephContext *cct, string title, const unsigned char *buf, int len)
 {
@@ -664,6 +747,7 @@ static void dump_buf(CephContext *cct, string title, const unsigned char *buf, i
   int encrypt_AES256_CTS(CephContext *cct,
                          ceph::bufferlist& plaintext,
                          const unsigned char* iv, int iv_size,
+                         uint32_t usage,
                          unsigned char *ciphertext,
                          int ciphertext_len) const {
     if (!cipher) {
@@ -683,7 +767,13 @@ static void dump_buf(CephContext *cct, string title, const unsigned char *buf, i
       return -EIO;
     }
 
-    if (!EVP_EncryptInit_ex2(ctx, cipher, ke_raw, iv, params)) {
+    auto *uk = get_usage_keys(usage);
+    if (!uk) {
+      ldout(cct, 0) << "ERROR: usage keys is null, cannot encrypt" << dendl;
+      return -EIO;
+    }
+
+    if (!EVP_EncryptInit_ex2(ctx, cipher, uk->ke_raw, iv, params)) {
       ldout(cct, 20) << "EVP_EncryptInit() failed" << dendl;
       return -EIO;
     }
@@ -761,37 +851,28 @@ public:
   }
 
   using CryptoKeyHandler::encrypt_ext;
-  using CryptoKeyHandler::decrypt;
+  using CryptoKeyHandler::decrypt_ext;
   using CryptoKeyHandler::encrypt;
 
-  int init(const ceph::bufferptr& s, uint32_t usage, ostringstream& err) {
+  int init(const ceph::bufferptr& s, const std::vector<uint32_t>& usages, ostringstream& err) {
     cipher = EVP_CIPHER_fetch(NULL, "AES-256-CBC-CTS", NULL);
     secret = s;
-
-    int r = calc_kx(secret, usage,
-                    0x55 /* Ki type */,
-                    AES256KRB5_HASH_LEN /* 192 bit */,
-                    ki,
-                    err);
-    if (r < 0) {
-      return r;
+    if (usages.size() > 0) {
+      default_usage = usages[0];
     }
-    ki_raw = reinterpret_cast<const unsigned char *>(ki.c_str()); /* needed so that we can use ki in const methods */
 
-    r = calc_kx(secret, usage,
-                0xAA /* Ke type */,
-                32 /* 256 bit */,
-                ke,
-                err);
-    if (r < 0) {
-      return r;
+    for (auto usage : usages) {
+      auto *uk = init_usage_keys(usage);
+      if (!uk) {
+        return -EIO;
+      }
     }
-    ke_raw = reinterpret_cast<const unsigned char *>(ke.c_str()); /* same reason as with ki */
 
     return 0;
   }
 
-  int encrypt_ext(CephContext *cct, const ceph::bufferlist& in,
+  int encrypt_ext(CephContext *cct, uint32_t usage,
+                  const ceph::bufferlist& in,
                   const ceph::bufferlist *confounder,
                   ceph::bufferlist& out,
                   std::string* /* unused */) const override {
@@ -828,7 +909,7 @@ public:
     unsigned char iv[AES_BLOCK_LEN];
     memset(iv, 0, sizeof(iv));
 
-    int r = encrypt_AES256_CTS(cct, incopy, iv, sizeof(iv), (unsigned char *)aes_enc, aes_enc_len);
+    int r = encrypt_AES256_CTS(cct, incopy, iv, sizeof(iv), usage, (unsigned char *)aes_enc, aes_enc_len);
     if (r < 0) {
       return r;
     }
@@ -836,9 +917,15 @@ public:
 
     char *hmac = out_tmp.c_str() + AES256KRB5_BLOCK_LEN + in.length();
 
+    auto *uk = get_usage_keys(usage);
+    if (!uk) {
+      ldout(cct, 0) << "ERROR: usage keys is null, cannot encrypt" << dendl;
+      return -EIO;
+    }
+
     ostringstream err;
     r = calc_hmac_sha384((const unsigned char *)aes_enc, aes_enc_len, 
-                         ki_raw, ki.length(),
+                         uk->ki_raw, uk->ki.length(),
                          iv, sizeof(iv),
                          hmac, AES256KRB5_HASH_LEN, err);
     if (r < 0) {
@@ -849,9 +936,10 @@ public:
     return 0;
   }
 
-  int decrypt(CephContext *cct, const ceph::bufferlist& in,
-	      ceph::bufferlist& out,
-	      std::string* /* unused */) const override {
+  int decrypt_ext(CephContext *cct, uint32_t usage,
+                  const ceph::bufferlist& in,
+                  ceph::bufferlist& out,
+                  std::string* /* unused */) const override {
 
     ldout(cct, 20) << "CryptoAES256KRB5KeyHandler::decrypt()" << dendl;
     if (in.length() < AES256KRB5_BLOCK_LEN + AES256KRB5_HASH_LEN) { /* minimum size: confounder + hmac */
@@ -876,12 +964,17 @@ public:
     unsigned char iv[AES_BLOCK_LEN];
     memset(iv, 0, sizeof(iv));
 
+    auto *uk = get_usage_keys(usage);
+    if (!uk) {
+      ldout(cct, 0) << "ERROR: usage keys is null, cannot encrypt" << dendl;
+      return -EIO;
+    }
 
     /* first need to compare hmac to calculated hmac */
     char hmac[AES256KRB5_HASH_LEN];
     ostringstream err;
     int r = calc_hmac_sha384((const unsigned char *)indata.c_str(), indata.length(),
-                             ki_raw, ki.length(),
+                             uk->ki_raw, uk->ki.length(),
                              iv, sizeof(iv),
                              hmac, sizeof(hmac), err);
     if (r < 0) {
@@ -902,7 +995,7 @@ public:
     bufferptr tmp_out(indata.length());
 
     r = decrypt_AES256_CTS(indata, 
-                           ke_raw, iv, sizeof(iv),
+                           uk->ke_raw, iv, sizeof(iv),
                            tmp_out);
     if (r < 0) {
       return r;
@@ -925,7 +1018,7 @@ public:
   int encrypt(CephContext *cct, const ceph::bufferlist& in,
 	      ceph::bufferlist& out,
               std::string* unused) const override {
-    return encrypt_ext(cct, in, nullptr,  out, unused);
+    return encrypt_ext(cct, default_usage, in, nullptr,  out, unused);
   }
 
   std::size_t enc_size(const in_slice_t& in,
@@ -955,12 +1048,12 @@ int CryptoAES256KRB5::validate_secret(const bufferptr& secret)
 }
 
 CryptoKeyHandler *CryptoAES256KRB5::get_key_handler_ext(const bufferptr& secret,
-                                                        uint32_t usage,
+                                                        const std::vector<uint32_t>& usages,
                                                         string& error)
 {
   CryptoAES256KRB5KeyHandler *ckh = new CryptoAES256KRB5KeyHandler;
   ostringstream oss;
-  if (ckh->init(secret, usage, oss) < 0) {
+  if (ckh->init(secret, usages, oss) < 0) {
     error = oss.str();
     delete ckh;
     return NULL;

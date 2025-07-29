@@ -71,23 +71,47 @@ public:
     static_assert(BlockSizeT::value <= MAX_BLOCK_SIZE);
   }
 
+  uint32_t default_usage{0};
+
   virtual ~CryptoKeyHandler() {}
 
   virtual int encrypt(CephContext *cct,
                       const ceph::buffer::list& in,
 		      ceph::buffer::list& out, std::string *error) const {
-    return encrypt_ext(cct, in, nullptr, out, error);
+    return encrypt_ext(cct, default_usage, in, nullptr, out, error);
+  }
+
+  virtual int encrypt_ext(CephContext *cct,
+                          uint32_t usage,
+                          const ceph::buffer::list& in,
+                          ceph::buffer::list& out, std::string *error) const {
+    return encrypt_ext(cct, usage, in, nullptr, out, error);
   }
 
   /* should either used internally, or for unitests. Confounder should be nullptr otherwise */
   virtual int encrypt_ext(CephContext *cct,
                           const ceph::buffer::list& in,
                           const ceph::buffer::list *confounder,
+                          ceph::buffer::list& out, std::string *error) const {
+    return encrypt_ext(cct, default_usage, in, confounder, out, error);
+  }
+
+  virtual int encrypt_ext(CephContext *cct,
+                          uint32_t usage,
+                          const ceph::buffer::list& in,
+                          const ceph::buffer::list *confounder,
                           ceph::buffer::list& out, std::string *error) const = 0;
 
   virtual int decrypt(CephContext *cct,
                       const ceph::buffer::list& in,
-		      ceph::buffer::list& out, std::string *error) const = 0;
+		      ceph::buffer::list& out, std::string *error) const {
+    return decrypt_ext(cct, default_usage, in, out, error);
+  }
+
+  virtual int decrypt_ext(CephContext *cct,
+                          uint32_t usage,
+                          const ceph::buffer::list& in,
+                          ceph::buffer::list& out, std::string *error) const = 0;
 
   virtual std::size_t enc_size(const in_slice_t& in,
                        const in_slice_t *confounder) const {
@@ -97,13 +121,35 @@ public:
   virtual std::size_t encrypt(CephContext *cct,
                               const in_slice_t& in,
 			      const out_slice_t& out) const {
-    return encrypt_ext(cct, in, nullptr, out);
+    return encrypt_ext(cct, default_usage, in, nullptr, out);
+  }
+  virtual std::size_t encrypt_ext(CephContext *cct,
+                              uint32_t usage,
+                              const in_slice_t& in,
+			      const out_slice_t& out) const {
+    return encrypt_ext(cct, usage,
+                       in, nullptr, out);
   }
   virtual std::size_t encrypt_ext(CephContext *cct,
                               const in_slice_t& in,
                               const in_slice_t *confounder,
+			      const out_slice_t& out) const {
+    return encrypt_ext(cct, default_usage,
+                       in, confounder, out);
+  }
+  virtual std::size_t encrypt_ext(CephContext *cct,
+                              uint32_t usage,
+                              const in_slice_t& in,
+                              const in_slice_t *confounder,
 			      const out_slice_t& out) const;
+
   virtual std::size_t decrypt(CephContext *cct,
+                              const in_slice_t& in,
+			      const out_slice_t& out) const {
+    return decrypt_ext(cct, default_usage, in, out);
+  }
+  virtual std::size_t decrypt_ext(CephContext *cct,
+                              uint32_t usage,
                               const in_slice_t& in,
 			      const out_slice_t& out) const;
 
@@ -242,12 +288,12 @@ public:
   virtual int create(CryptoRandom *random, ceph::buffer::ptr& secret) = 0;
   virtual int validate_secret(const ceph::buffer::ptr& secret) = 0;
   virtual CryptoKeyHandler *get_key_handler_ext(const ceph::buffer::ptr& secret,
-                                                uint32_t usage,
+                                                const std::vector<uint32_t>& usages,
                                                 std::string& error) = 0;
 
   virtual CryptoKeyHandler *get_key_handler(const ceph::buffer::ptr& secret,
                                             std::string& error) {
-    return get_key_handler_ext(secret, 0, error);
+    return get_key_handler_ext(secret, {0}, error);
   }
 
   static CryptoHandler *create(int type);
