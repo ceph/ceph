@@ -16,10 +16,95 @@
 #include <list>
 #include "include/encoding.h"
 #include "include/intarith.h"
+#include <limits>
+#include <fstream>
 
 namespace ceph {
   class Formatter;
 }
+class adaptive_linear_hist_t{
+  private:
+  std::map<double,int>latency_buckets_counts;
+  double user_specified_granularity;
+  int user_min_value;
+  int user_max_value;
+  double min_latency_observed;
+  double max_latency_observed;
+  double total_latency_count=0.0;
+
+  public:
+  //constructor 
+  adaptive_linear_hist_t(int min_value, int max_value,int interval_size){
+    this->user_min_value=min_value;
+    this->user_max_value=max_value;
+    this->user_specified_granularity=interval_size;
+    this->min_latency_observed=std::numeric_limits<double>::infinity();
+    this->max_latency_observed=0.0;
+  }
+  void record_latencies(double latency_value){
+    int bucket_number= latency_value/user_specified_granularity;
+    double bucket_lower_bound=std::round(bucket_number * user_specified_granularity * 1000.0) / 1000.0;
+    latency_buckets_counts[bucket_lower_bound]++;
+    if (latency_value<min_latency_observed){
+      min_latency_observed=latency_value;
+    }
+    if (latency_value>max_latency_observed){
+      max_latency_observed=latency_value;
+    }
+    total_latency_count+=1;
+  }
+  double value_at_percentile(double percentile){
+    double running_total=0.0;
+    double threshold=total_latency_count*percentile/100.0;
+    for (const auto& [latency, count] : latency_buckets_counts) {
+        running_total += count;
+        if (running_total >= threshold) {
+            return latency;
+        }
+    }
+    return std::numeric_limits<double>::infinity();
+  }
+  double get_min_latency(){
+    return min_latency_observed;
+  }
+  double get_max_latency(){
+    return max_latency_observed;
+  }
+
+  void print_stats() {
+    // this always returns an intger output but we can control bucket size by
+    // adjusting the granularity size,essential saying 3 means that buckets have
+    // size 10^-3
+    //LOG_PREFIX(print_stats);
+    //cout<<"Min latency is {}"<< get_min_latency()<<dendl;
+    //ERROR("Max latency is {}", get_max_latency());
+  }
+  // see my idea was to define a vector that had size (max_observed -min_observed)/granualrity buckets
+  //so that if there were any buckets in between that had 0 count we would be able to see them 
+  //but i think a smarter way would be to iterate through the dictionary and if we are missing a bucket we can add it to the csv 
+
+  void export_csv(std::string filename){
+    std::ofstream myfile(filename); //open the file and call it something in this case myfile 
+    if (!(myfile.is_open())){
+      //ERROR("failed to open file");
+    }
+    myfile << "latency(ms),count\n";
+    double min_bucket = latency_buckets_counts.begin()->first;
+    double max_bucket = latency_buckets_counts.rbegin()->first;
+    for(double bucket=min_bucket; bucket<=max_bucket;bucket+=user_specified_granularity ){
+      double rounded = std::round(bucket * 1000.0) / 1000.0;
+      int count=0;
+      if (latency_buckets_counts.find(rounded)!=latency_buckets_counts.end()){
+        count=latency_buckets_counts[rounded];
+      }
+      myfile<<rounded<<","<<count<<"\n";
+    }
+    }
+  
+
+
+
+};
 
 /**
  * power of 2 histogram
