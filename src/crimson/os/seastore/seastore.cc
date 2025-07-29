@@ -342,19 +342,15 @@ seastar::future<> SeaStore::write_fsid(uuid_d new_osd_fsid)
 {
   ceph_assert(seastar::this_shard_id() == primary_core);
   LOG_PREFIX(SeaStore::write_fsid);
-  return read_meta("fsid").then([this, FNAME, new_osd_fsid] (auto tuple) {
-    auto [ret, fsid] = tuple;
-    std::string str_fsid = stringify(new_osd_fsid);
-    if (ret == -1) {
-      return write_meta("fsid", stringify(new_osd_fsid));
-    } else if (ret == 0 && fsid != str_fsid) {
-      ERROR("on-disk fsid {} != provided {}",
-            fsid, stringify(new_osd_fsid));
-      throw std::runtime_error("store fsid error");
-    } else {
-      return seastar::now();
-    }
-  });
+  auto [ret, fsid] = co_await read_meta("fsid");
+  std::string str_fsid = stringify(new_osd_fsid);
+  if (ret == -1) {
+    co_return co_await write_meta("fsid", stringify(new_osd_fsid));
+  } else if (ret == 0 && fsid != str_fsid) {
+    ERROR("on-disk fsid {} != provided {}",
+          fsid, stringify(new_osd_fsid));
+    throw std::runtime_error("store fsid error");
+  };
 }
 
 TransactionManager::alloc_extent_ertr::future<>
