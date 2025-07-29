@@ -589,7 +589,16 @@ public:
   seastar::future<> start() final;
   seastar::future<> stop() final;
 
-  mount_ertr::future<> mount() final;
+  Device::access_ertr::future<> _mount();
+
+  // FuturizedStore::mount_ertr only supports a stateful_ec
+  // to keep the interface intact, convert to stateful_ec.
+  crimson::os::FuturizedStore::mount_ertr::future<> mount() final {
+    return _mount().handle_error(
+      Device::access_ertr::all_same_way([](auto& code) {
+        return crimson::stateful_ec{code};
+    }));
+  }
   seastar::future<> umount() final;
 
   mkfs_ertr::future<> mkfs(uuid_d new_osd_fsid) final;
