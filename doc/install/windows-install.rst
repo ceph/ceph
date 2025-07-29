@@ -79,10 +79,9 @@ Further reading
 ===============
 
 * `RBD Windows documentation`_
-* `CephFS Windows documentation`_
+* :ref:`CephFS Windows documentation <ceph-dokan>`
 * `Windows troubleshooting`_
 
-.. _CephFS Windows documentation: ../../cephfs/ceph-dokan
 .. _Windows configuration sample: ../windows-basic-config
 .. _RBD Windows documentation: ../../rbd/rbd-windows/
 .. _Windows troubleshooting: ../windows-troubleshooting
