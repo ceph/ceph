@@ -270,51 +270,33 @@ SeaStore::mount_ertr::future<> SeaStore::test_mount()
   INFO("done");
 }
 
-SeaStore::mount_ertr::future<> SeaStore::mount()
+Device::access_ertr::future<> SeaStore::_mount()
 {
   LOG_PREFIX(SeaStore::mount);
   INFO("...");
 
   ceph_assert(seastar::this_shard_id() == primary_core);
-  return device->mount(
-  ).safe_then([this] {
-    ceph_assert(device->get_sharded_device().get_block_size()
-		>= laddr_t::UNIT_SIZE);
-    auto &sec_devices = device->get_sharded_device().get_secondary_devices();
-    return crimson::do_for_each(sec_devices, [this](auto& device_entry) {
-      device_id_t id = device_entry.first;
-      magic_t magic = device_entry.second.magic;
-      device_type_t dtype = device_entry.second.dtype;
-      std::string path =
-        fmt::format("{}/block.{}.{}", root, dtype, std::to_string(id));
-      return Device::make_device(path, dtype
-      ).then([this, path, magic](DeviceRef sec_dev) {
-        return sec_dev->start(
-        ).then([this, magic, sec_dev = std::move(sec_dev)]() mutable {
-          return sec_dev->mount(
-          ).safe_then([this, sec_dev=std::move(sec_dev), magic]() mutable {
-	    ceph_assert(sec_dev->get_sharded_device().get_block_size()
-			>= laddr_t::UNIT_SIZE);
-            boost::ignore_unused(magic);  // avoid clang warning;
-            assert(sec_dev->get_sharded_device().get_magic() == magic);
-            secondaries.emplace_back(std::move(sec_dev));
-          });
-        }).safe_then([this] {
-          return set_secondaries();
-        });
-      });
-    });
-  }).safe_then([this] {
-    return shard_stores.invoke_on_all([](auto &local_store) {
-      return local_store.mount_managers();
-    });
-  }).safe_then([FNAME] {
-    INFO("done");
-  }).handle_error(
-    crimson::ct_error::assert_all{
-      "Invalid error in SeaStore::mount"
-    }
-  );
+  co_await device->mount();
+  ceph_assert(device->get_sharded_device().get_block_size() >= laddr_t::UNIT_SIZE);
+
+  auto &sec_devices = device->get_sharded_device().get_secondary_devices();
+  for (auto& device_entry : sec_devices) {
+    device_id_t id = device_entry.first;
+    [[maybe_unused]] magic_t magic = device_entry.second.magic;
+    device_type_t dtype = device_entry.second.dtype;
+    std::string path = fmt::format("{}/block.{}.{}", root, dtype, std::to_string(id));
+    DeviceRef sec_dev = co_await Device::make_device(path, dtype);
+    co_await sec_dev->start();
+    co_await sec_dev->mount();
+    ceph_assert(sec_dev->get_sharded_device().get_block_size() >= laddr_t::UNIT_SIZE);
+    assert(sec_dev->get_sharded_device().get_magic() == magic);
+    secondaries.emplace_back(std::move(sec_dev));
+    co_await set_secondaries();
+  }
+  co_await shard_stores.invoke_on_all([](auto &local_store) {
+    return local_store.mount_managers();
+  });
+  INFO("done");
 }
 
 seastar::future<> SeaStore::Shard::mount_managers()
