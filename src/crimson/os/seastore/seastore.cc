@@ -223,16 +223,12 @@ seastar::future<> SeaStore::start()
          d_type == device_type_t::RANDOM_BLOCK_SSD);
 
   ceph_assert(root != "");
-  return Device::make_device(root, d_type
-  ).then([this](DeviceRef device_obj) {
-    device = std::move(device_obj);
-    return device->start();
-  }).then([this, is_test] {
-    ceph_assert(device);
-    return shard_stores.start(root, device.get(), is_test);
-  }).then([FNAME] {
-    INFO("done");
-  });
+  DeviceRef device_obj = co_await Device::make_device(root, d_type);
+  device = std::move(device_obj);
+  co_await device->start();
+  ceph_assert(device);
+  co_await shard_stores.start(root, device.get(), is_test);
+  INFO("done");
 }
 
 seastar::future<> SeaStore::test_start(DeviceRef device_obj)
