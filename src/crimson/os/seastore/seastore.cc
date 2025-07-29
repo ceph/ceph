@@ -249,20 +249,15 @@ seastar::future<> SeaStore::stop()
   INFO("...");
 
   ceph_assert(seastar::this_shard_id() == primary_core);
-  return seastar::do_for_each(secondaries, [](auto& sec_dev) {
-    return sec_dev->stop();
-  }).then([this] {
+  for (auto& sec_dev : secondaries) {
+    co_await sec_dev->stop();
     secondaries.clear();
     if (device) {
-      return device->stop();
-    } else {
-      return seastar::now();
+      co_await device->stop();
     }
-  }).then([this] {
-    return shard_stores.stop();
-  }).then([FNAME] {
-    INFO("done");
-  });
+  }
+  co_await shard_stores.stop();
+  INFO("done");
 }
 
 SeaStore::mount_ertr::future<> SeaStore::test_mount()
