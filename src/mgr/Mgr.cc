@@ -68,7 +68,8 @@ Mgr::Mgr(MonClient *monc_, const MgrMap& mgrmap,
   clog(clog_),
   audit_clog(audit_clog_),
   initialized(false),
-  initializing(false)
+  initializing(false),
+  initialization_retries(0)
 {
   cluster_state.set_objecter(objecter);
 }
@@ -760,6 +761,23 @@ bool Mgr::got_mgr_map(const MgrMap& m)
   server.got_mgr_map();
 
   return false;
+}
+
+bool Mgr::exceeded_initialization_retires() const
+{
+  uint64_t max_retries = g_conf().get_val<uint64_t>("mgr_module_load_max_retries");
+  return initialization_retries > max_retries;
+}
+
+void Mgr::update_initialization_retries()
+{
+  std::lock_guard l(lock);
+  if (!is_initialized()) {
+    initialization_retries++;
+  } else {
+    initialization_retries = 0;
+  }
+  dout(20) << "initialization retries: " << initialization_retries << dendl;
 }
 
 void Mgr::handle_mgr_digest(ref_t<MMgrDigest> m)

@@ -66,6 +66,7 @@ protected:
 
   bool initialized;
   bool initializing;
+  uint64_t initialization_retries;
 
 public:
   Mgr(MonClient *monc_, const MgrMap& mgrmap,
@@ -75,6 +76,8 @@ public:
   ~Mgr();
 
   bool is_initialized() const {return initialized;}
+  bool exceeded_initialization_retires() const;
+  void update_initialization_retries();
   entity_addrvec_t get_server_addrs() const {
     return server.get_myaddrs();
   }
