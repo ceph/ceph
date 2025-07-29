@@ -112,6 +112,12 @@ enum {
 	LIBCEPHFSD_OP_LL_RELEASEDIR,
 	LIBCEPHFSD_OP_MOUNT_PERMS,
 	LIBCEPHFSD_OP_LL_NONBLOCKING_RW,
+	LIBCEPHFSD_OP_ADD_FSCRYPT_KEY,
+	LIBCEPHFSD_OP_REMOVE_FSCRYPT_KEY,
+	LIBCEPHFSD_OP_GET_FSCRYPT_KEY_STATUS,
+	LIBCEPHFSD_OP_LL_SET_FSCRYPT_POLICY_V2,
+	LIBCEPHFSD_OP_LL_GET_FSCRYPT_POLICY_V2,
+	LIBCEPHFSD_OP_LL_IS_ENCRYPTED,
 
 	/* Add more operations above this comment. */
 
@@ -317,6 +323,30 @@ CEPH_TYPE(ceph_ll_nonblocking_readv_writev,
 		     bool write; bool fsync; bool syncdataonly;),
 	  ANS(int64_t res;));
 
+CEPH_TYPE(ceph_add_fscrypt_key,
+	  REQ_CMOUNT(uint32_t user; uint32_t kid; uint16_t key;),
+	  ANS());
+
+CEPH_TYPE(ceph_remove_fscrypt_key,
+	  REQ_CMOUNT(uint32_t user; uint32_t arg;),
+	  ANS());
+
+CEPH_TYPE(ceph_get_fscrypt_key_status,
+	  REQ_CMOUNT(uint32_t arg;),
+	  ANS());
+
+CEPH_TYPE(ceph_ll_set_fscrypt_policy_v2,
+	  REQ_CMOUNT(uint64_t inode; uint32_t policy;),
+	  ANS());
+
+CEPH_TYPE(ceph_ll_get_fscrypt_policy_v2,
+	  REQ_CMOUNT(uint64_t inode; uint32_t policy;),
+	  ANS());
+
+CEPH_TYPE(ceph_ll_is_encrypted,
+	  REQ_CMOUNT(uint64_t inode; uint16_t tag;),
+	  ANS(uint32_t policy;));
+
 typedef union _proxy_req {
 	proxy_link_req_t header;
 
@@ -368,6 +398,12 @@ typedef union _proxy_req {
 	proxy_ceph_ll_releasedir_req_t ll_releasedir;
 	proxy_ceph_mount_perms_req_t mount_perms;
 	proxy_ceph_ll_nonblocking_readv_writev_req_t ll_nonblocking_rw;
+	proxy_ceph_add_fscrypt_key_req_t add_fscrypt_key;
+	proxy_ceph_remove_fscrypt_key_req_t remove_fscrypt_key;
+	proxy_ceph_get_fscrypt_key_status_req_t get_fscrypt_key_status;
+	proxy_ceph_ll_set_fscrypt_policy_v2_req_t ll_set_fscrypt_policy_v2;
+	proxy_ceph_ll_get_fscrypt_policy_v2_req_t ll_get_fscrypt_policy_v2;
+	proxy_ceph_ll_is_encrypted_req_t ll_is_encrypted;
 } proxy_req_t;
 
 CEPH_TYPE_CBK(ceph_ll_nonblocking_readv_writev,
