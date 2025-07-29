@@ -108,19 +108,15 @@ Once the file system is created and the MDS is active, you are ready to mount
 the file system.  If you have created more than one file system, you will
 choose which to use when mounting.
 
-  - `Mount CephFS`_
-  - `Mount CephFS as FUSE`_
-  - `Mount CephFS on Windows`_
-
-.. _Mount CephFS: ../../cephfs/mount-using-kernel-driver
-.. _Mount CephFS as FUSE: ../../cephfs/mount-using-fuse
-.. _Mount CephFS on Windows: ../../cephfs/ceph-dokan
+  - :ref:`cephfs_mount_using_kernel_driver`
+  - :ref:`cephfs_mount_using_fuse`
+  - :ref:`ceph-dokan`
 
 If you have created more than one file system, and a client does not
 specify a file system when mounting, you can control which file system
 they will see by using the ``ceph fs set-default`` command.
 
-Adding a Data Pool to the File System 
+Adding a Data Pool to the File System
 -------------------------------------
 
 See :ref:`adding-data-pool-to-file-system`.
@@ -134,7 +130,7 @@ You may use Erasure Coded pools as CephFS data pools as long as they have overwr
 .. code:: bash
 
     ceph osd pool set my_ec_pool allow_ec_overwrites true
-    
+
 Note that EC overwrites are only supported when using OSDs with the BlueStore backend.
 
 If you are storing lots of small files or are frequently modifying files you can improve performance by enabling EC optimizations, which is done as follows:
