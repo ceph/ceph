@@ -13,10 +13,20 @@
 */
 
 #include <catch2/catch_config.hpp>
+
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/catch_template_test_macros.hpp>
+
 #include <catch2/generators/catch_generators.hpp>
 #include <catch2/generators/catch_generators_adapters.hpp>
+
+#include <catch2/matchers/catch_matchers_all.hpp>
+/*
+#include <catch2/matchers/catch_matchers_range.hpp>
+#include <catch2/matchers/catch_matchers_templated.hpp>
+#include <catch2/matchers/catch_matchers_predicate.hpp>
+#include <catch2/matchers/catch_matchers_range_equals.hpp>
+*/
 #define CATCH_CONFIG_MAIN
 
 #include <fmt/format.h>
@@ -24,6 +34,7 @@
 #include <fmt/ranges.h>
 
 #include "rgw/fdb/fdb.h"
+#include "rgw/rgw_fdb_conversion.h"
 
 #include "include/random.h"
 
@@ -31,15 +42,20 @@
 #include <list>
 #include <chrono>
 
+using Catch::Matchers::AllMatch;
+
+using fmt::format;
+using fmt::println;
+
+using std::end;
+using std::begin;
+
 using std::string;
 using std::string_view;
 
 using std::to_string;
 
 using namespace std::literals::string_literals;
-
-using fmt::format;
-using fmt::println;
 
 namespace lfdb = ceph::libfdb;
 
@@ -57,6 +73,12 @@ inline std::map<std::string, std::string> make_monotonic_kvs(const unsigned N)
 
  return kvs;
 }
+
+constexpr auto pearl_msg =
+"Perle, plesaunte to prynces paye"
+"To clanly clos in golde so clere;"
+"Oute of oryent, I hardyly saye."
+"Ne proved I never her precios pere.";
 
 // Basically, make sure we're actually linking with the library:
 TEST_CASE()
@@ -130,7 +152,6 @@ TEST_CASE("fdb simple", "[rgw][fdb]") {
 
 TEMPLATE_PRODUCT_TEST_CASE("A Template product test case", "[template][product]", 
 (std::vector, std::list), (string_pair)) {
-
  auto dbh = lfdb::make_database();
  CHECK(nullptr != dbh);
 
@@ -166,7 +187,7 @@ TEMPLATE_PRODUCT_TEST_CASE("A Template product test case", "[template][product]"
 
   for(auto i = ceph::util::generate_random_number(20); --i;) {
     int n = ceph::util::generate_random_number(99);
-
+ 
     auto k = fmt::format("key_{}", n);
     auto v = fmt::format("value_{}", n);
 
@@ -175,20 +196,151 @@ TEMPLATE_PRODUCT_TEST_CASE("A Template product test case", "[template][product]"
  }
 }
 
-TEST_CASE("fdb selectors", "[fdb]") {
+TEST_CASE("fdb conversions (built-in)", "[fdb][rgw]") {
+ // Manual tests of conversions to and from supported FDB built-in types.
+ 
+ const char *msg = "Hello, World!";
+ const char msg_with_null[] = { '\0', 'H', 'i', '\0', ' ', 't', 'h', 'e', 'r', 'e', '!', '\0'};
 
- lfdb::select s0 { "x", "xx" };
- lfdb::select_view s1 { "x", "xx" };
+ SECTION("serialize/deserialize built-in FDB types") {
+
+  // int64 -> int64 -> int64
+  {
+  const std::int64_t n = 1770;		// input type (T)
+  std::int64_t x;			// type used by FDB (F)
+  ceph::libfdb::to::convert(n, x);	// map T -> F
+
+  std::int64_t o;			// output type (T) (i.e. user type) 
+  ceph::libfdb::from::convert(x, o); 
+ 
+  REQUIRE(n == o); 
+  }
+
+  // string_view -> span<uint8> -> string
+  {
+  const std::string_view n = "Hello, World!";
+  std::span<const std::uint8_t> x;
+  ceph::libfdb::to::convert(n, x);
+
+  std::string o;
+  ceph::libfdb::from::convert(std::move(x), o); 
+ 
+  REQUIRE_THAT(n, Catch::Matchers::RangeEquals(o));
+  }
+
+  // span<uint8_t> -> span<uint8_t> -> vector<uint8_t>
+  {
+  const std::span<const std::uint8_t> n((const std::uint8_t *)msg, sizeof(msg));
+
+  std::span<const std::uint8_t> x;
+  ceph::libfdb::to::convert(n, x);
+
+  std::vector<std::uint8_t> o;
+  ceph::libfdb::from::convert(std::move(x), o); 
+
+  REQUIRE_THAT(n, Catch::Matchers::RangeEquals(o));
+  }
+
+  // with NULL data-- span<uint8_t> -> span<uint8_t> -> vector<uint8_t>
+  {
+  const std::span<const std::uint8_t> n((const std::uint8_t *)msg_with_null, sizeof(msg_with_null));
+
+  std::span<const std::uint8_t> x;
+  ceph::libfdb::to::convert(n, x);
+
+  std::vector<std::uint8_t> o;
+  ceph::libfdb::from::convert(std::move(x), o); 
+
+  REQUIRE_THAT(n, Catch::Matchers::RangeEquals(o));
+  REQUIRE_THAT(msg_with_null, Catch::Matchers::RangeEquals(o));
+  }
+
+ }
 }
 
-TEST_CASE("multi-key CRD", "[rgw][fdb]")
-{
- const std::map<std::string, std::string> kvs {
-    { "key", "value" }, 
-    { "mortal", "wombat" } 
-  };
+TEST_CASE("fdb conversions (ceph)", "[fdb][rgw]") {
 
- // JFW: TBD
+ const char *msg = "Hello, World!";
+
+ // ceph::buffer::list -> span<uint8_t> -> std::string
+ {
+  ceph::buffer::list n;
+  n.append(msg);
+
+  std::span<const std::uint8_t> x;
+  ceph::libfdb::to::convert(n, x);
+
+  std::string o;
+  ceph::libfdb::from::convert(std::move(x), o); 
+
+  REQUIRE_THAT(n, Catch::Matchers::RangeEquals(o));
+  }
+
+ // buffer::list -> span<uint8_t> -> buffer::list 
+ {
+ ceph::buffer::list n;
+ n.append(msg);
+
+ std::span<const std::uint8_t> x;
+ ceph::libfdb::to::convert(n, x);
+
+ ceph::buffer::list o;
+ ceph::libfdb::from::convert(std::move(x), o);
+
+ REQUIRE_THAT(n, Catch::Matchers::RangeEquals(o));
+ }
+
+INFO("JFW: buffer::list <> with null characters next");
+}
+
+TEST_CASE("fdb conversions (round-trip)", "[fdb][rgw]") {
+ // Actually store and retrieve converted data via the DB:
+ auto dbh = lfdb::make_database();
+
+ // string_view -> string
+ {
+ const std::string_view n = "Hello, World!";
+ std::string o;
+
+ lfdb::set(lfdb::make_transaction(dbh), "key", n, lfdb::commit_after_op::commit);
+ lfdb::get(lfdb::make_transaction(dbh), "key", o);
+
+ REQUIRE_THAT(n, Catch::Matchers::RangeEquals(o));
+ }
+
+}
+
+TEST_CASE("fdb conversions (round-trip, ceph)", "[fdb][rgw]") {
+
+  auto dbh = lfdb::make_database();
+
+  // string_view -> buffer::list
+  {
+  const std::string_view n = "Hello, World!";
+  ceph::buffer::list o;
+
+  lfdb::set(lfdb::make_transaction(dbh), "key", n, lfdb::commit_after_op::commit);
+  lfdb::get(lfdb::make_transaction(dbh), "key", o);
+
+  REQUIRE_THAT(n, Catch::Matchers::RangeEquals(o));
+  }
+
+  // buffer::list -> buffer::list
+  {
+  ceph::buffer::list n;
+  n.append("Hello, World!");
+  ceph::buffer::list o;
+
+  o.append(n);
+
+  lfdb::set(lfdb::make_transaction(dbh), "key", n, lfdb::commit_after_op::commit);
+  lfdb::get(lfdb::make_transaction(dbh), "key", o);
+
+  REQUIRE_THAT(n, Catch::Matchers::RangeEquals(o));
+  }
+
+INFO("JFW: next: reified keys! Yay!");
+INFO("JFW: implement key reification");
 }
 
 TEST_CASE("fdb misc", "[fdb]")
@@ -210,7 +362,7 @@ int main(int argc, char **argv)
   int result = Catch::Session().run(argc, argv);
 
   // Make sure that FoundationDB is shut down once and only once:
-  ceph::libfdb::database_system::shutdown_fdb(); 
+  ceph::libfdb::shutdown_libfdb(); 
 
   return result;
 }
