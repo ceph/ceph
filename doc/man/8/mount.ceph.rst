@@ -134,10 +134,12 @@ Advanced
     int, cap release delay, Default: 5
 
 :command:`dirstat`
-    funky `cat dirname` for stats, Default: off
+    enable reporting of file stats for a directory by running `cat dirname`. Note that these
+    stats are updated lazily and thus may be outdated for a time after changes to the
+    directory. Default: off
 
 :command:`nodirstat`
-    no funky `cat dirname` for stats
+    disable reporting of file stats for a directory by running  `cat dirname`.
 
 :command:`ip`
     my ip
