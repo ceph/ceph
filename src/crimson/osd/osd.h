@@ -221,8 +221,8 @@ private:
   seastar::future<> handle_mark_me_down(crimson::net::ConnectionRef conn,
                                         Ref<MOSDMarkMeDown> m);
 
-  seastar::future<> committed_osd_maps(version_t first,
-                                       version_t last,
+  seastar::future<> committed_osd_maps(epoch_t first,
+                                       epoch_t last,
                                        Ref<MOSDMap> m);
 
   seastar::future<> check_osdmap_features();
