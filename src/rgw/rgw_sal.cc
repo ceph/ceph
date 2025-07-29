@@ -13,14 +13,16 @@
  *
  */
 
+#include <optional>
+
 #include <errno.h>
 #include <stdlib.h>
-#include <system_error>
 #include <unistd.h>
-#include <sstream>
 
 #include "common/errno.h"
 //#include "common/dout.h"
+
+#include "common/async/blocked_completion.h"
 
 #include "rgw_sal.h"
 #include "rgw_sal_rados.h"
@@ -68,6 +70,22 @@ extern rgw::sal::Driver* newBaseFilter(rgw::sal::Driver* next);
 extern rgw::sal::Driver* newD4NFilter(rgw::sal::Driver* next, boost::asio::io_context& io_context, bool admin);
 #endif
 }
+
+
+#ifdef WITH_RADOSGW_RADOS
+std::optional<neorados::RADOS>
+make_neorados(const DoutPrefixProvider* dpp, boost::asio::io_context& io_context) {
+  try {
+    auto neorados = neorados::RADOS::make_with_cct(dpp->get_cct(), io_context,
+						   ceph::async::use_blocked);
+    return neorados;
+  } catch (const std::exception& e) {
+    ldpp_dout(dpp, 0) << "Failed constructing neroados handle: " << e.what()
+		      << dendl;
+  }
+  return std::nullopt;
+}
+#endif
 
 rgw::sal::Driver* DriverManager::init_storage_provider(const DoutPrefixProvider* dpp,
 						     CephContext* cct,
@@ -119,7 +137,11 @@ rgw::sal::Driver* DriverManager::init_storage_provider(const DoutPrefixProvider*
   }
 #ifdef WITH_RADOSGW_RADOS
   else if (cfg.store_name.compare("d3n") == 0) {
-    driver = new rgw::sal::RadosStore(io_context);
+    auto neorados = make_neorados(dpp, io_context);
+    if (!neorados) {
+      return nullptr;
+    }
+    driver = new rgw::sal::RadosStore(*neorados);
     RGWRados* rados = new D3nRGWDataCache<RGWRados>;
     dynamic_cast<rgw::sal::RadosStore*>(driver)->setRados(rados);
     rados->set_store(static_cast<rgw::sal::RadosStore* >(driver));

@@ -167,7 +167,7 @@ inline std::unique_ptr<sal::RadosStore> make_store() {
   struct StoreBundle : public sal::RadosStore {
     std::unique_ptr<ceph::async::io_context_pool> context_pool;
     StoreBundle(std::unique_ptr<ceph::async::io_context_pool> context_pool_)
-      : sal::RadosStore(*context_pool_.get()),
+      : sal::RadosStore(*make_neorados(nullptr, *context_pool_.get())),
         context_pool(std::move(context_pool_)) {
       setRados(new RGWRados);
     }
