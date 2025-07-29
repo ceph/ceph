@@ -15,7 +15,8 @@
                  for="name"
                  i18n>Name</label>
           <div class="cd-col-form-input">
-            <input id="name"
+            <input data-testid="pool-name"
+                   id="name"
                    type="text"
                    class="form-control"
                    placeholder="Name..."
@@ -87,6 +88,7 @@
             <div class="cd-col-form-input">
               <input class="form-control"
                      id="pgNum"
+                     data-testid="pgNum"
                      formControlName="pgNum"
                      min="1"
                      type="number"
