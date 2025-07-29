@@ -315,40 +315,27 @@ seastar::future<> SeaStore::umount()
   INFO("...");
 
   ceph_assert(seastar::this_shard_id() == primary_core);
-  return shard_stores.invoke_on_all([](auto &local_store) {
-    return local_store.umount();
-  }).then([FNAME] {
-    INFO("done");
+  co_await shard_stores.invoke_on_all([](auto &local_store) {
+    return local_store.umount().handle_error(
+      crimson::ct_error::assert_all{"Invalid error in SeaStoreS::umount"}
+    );
   });
+  INFO("done");
 }
 
-seastar::future<> SeaStore::Shard::umount()
+base_ertr::future<> SeaStore::Shard::umount()
 {
-  return [this] {
-    if (transaction_manager) {
-      return transaction_manager->close();
-    } else {
-      return TransactionManager::close_ertr::now();
-    }
-  }().safe_then([this] {
-    return crimson::do_for_each(
-      secondaries,
-      [](auto& sec_dev) -> SegmentManager::close_ertr::future<>
-    {
-      return sec_dev->close();
-    });
-  }).safe_then([this] {
-    return device->close();
-  }).safe_then([this] {
-    secondaries.clear();
-    transaction_manager.reset();
-    collection_manager.reset();
-    onode_manager.reset();
-  }).handle_error(
-    crimson::ct_error::assert_all{
-      "Invalid error in SeaStoreS::umount"
-    }
-  );
+  if (transaction_manager) {
+    co_await transaction_manager->close();
+  }
+  for (auto& sec_dev : secondaries) {
+   co_await sec_dev->close();
+  }
+  co_await device->close();
+  secondaries.clear();
+  transaction_manager.reset();
+  collection_manager.reset();
+  onode_manager.reset();
 }
 
 seastar::future<> SeaStore::write_fsid(uuid_d new_osd_fsid)
