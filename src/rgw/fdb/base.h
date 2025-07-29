@@ -160,38 +160,6 @@ namespace ceph::libfdb::detail {
 
 } // namespace ceph::libfdb::detail
 
-namespace ceph::libfdb::detail {
-
-// FoundationDB likes to deal in uint8_t buffers, so we'll need this somewhat often:
-inline void buffer_to_string(const uint8_t *buffer, int buffer_len, std::string& out)
-{
-#ifdef __cpp_lib_string_resize_and_overwrite
-      out.resize_and_overwrite(buffer_len, [&buffer, &buffer_len](char *out_p, std::string::size_type sz) noexcept {
-            std::copy(buffer, buffer_len + buffer, out_p);
-	    return sz;
-          });
-#else
-    out.resize(buffer_len);
-    std::copy(buffer, buffer_len + buffer, std::begin(out));
-#endif
-}
-
-inline std::pair<std::string, std::string> to_string_pair(const FDBKeyValue kv)
-{
- return {
-          { (const char *)kv.key, static_cast<std::string::size_type>(kv.key_length) },
-          { (const char *)kv.value, static_cast<std::string::size_type>(kv.value_length) }
-        };
-}
-
-// The alternatives were "spanlike" or even "Span-ish", but that was a little /too/ cute:
-auto ptr_and_sz(const auto& spanoid)
-{
- return std::tuple { spanoid.data(), spanoid.size() };
-} 
-
-} // namespace ceph::libfdb::detail
-
 namespace ceph::libfdb {
 
 struct database;
@@ -245,7 +213,8 @@ class transaction final
  private:
  void commit();
 
- void set(std::string_view k, std::string_view v) {
+//JFW: void set(std::string_view k, std::string_view v) {
+ void set(std::string_view k, std::span<std::uint8_t> v) {
     fdb_transaction_set(raw_handle(),
                         (const uint8_t*)k.data(), k.size(),
                         (const uint8_t*)v.data(), v.size());
