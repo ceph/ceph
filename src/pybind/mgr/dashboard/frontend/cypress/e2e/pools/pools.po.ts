@@ -26,7 +26,7 @@ export class PoolPageHelper extends PageHelper {
     cy.get('[data-testid="pgNum"]').clear().type(`${placement_groups}`);
     this.setApplications(apps);
     if (mirroring) {
-      cy.get('#rbdMirroring').check({ force: true });
+      cy.get('[data-testid="rbd-mirroring-check"]').check({ force: true });
     }
     cy.get('cd-submit-button').click();
   }
@@ -36,7 +36,7 @@ export class PoolPageHelper extends PageHelper {
     this.navigateEdit(name);
 
     if (mirroring) {
-      cy.get('#rbdMirroring').should('be.checked');
+      cy.get('[data-testid="rbd-mirroring-check"]').should('be.checked');
     }
 
     cy.get('[data-testid="pgNum"]').clear().type(`${new_pg}`);
