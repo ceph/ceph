@@ -788,6 +788,34 @@ TEST_P(omap_manager_test_t, omap_iterate)
   });
 }
 
+TEST_P(omap_manager_test_t, full_range_list)
+{
+  run_async([this] {
+    omap_root_t omap_root = initialize();
+    std::optional<std::string> first = std::nullopt;
+    std::optional<std::string> last = std::nullopt;
+
+    auto full_range_list_and_log = [&](unsigned target_depth, std::string_view label) {
+      do {
+        auto t = create_mutate_transaction();
+        for (unsigned i = 0; i < 100; ++i) {
+          set_random_key(omap_root, *t);
+        }
+        submit_transaction(std::move(t));
+      } while (omap_root.depth < target_depth);
+
+      auto t = create_read_transaction();
+      logger().debug("[depth={}] {}", target_depth, label);
+      list(omap_root, *t, first, last, test_omap_mappings.size());
+    };
+
+    full_range_list_and_log(1, "full range list single leaf node");
+    full_range_list_and_log(2, "full range list single inner node with multiple leaf nodes");
+    // Skipped: covered by omap_manager_test_t.force_inner_node_split_list_rmkey_range.
+    // full_range_list_and_log(3, "full range list multiple inner and leaf nodes");
+  });
+}
+
 INSTANTIATE_TEST_SUITE_P(
   omap_manager_test,
   omap_manager_test_t,
