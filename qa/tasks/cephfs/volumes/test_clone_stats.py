@@ -529,7 +529,7 @@ class TestCloneProgressReporter(CloneProgressReporterHelper):
                     time.sleep(1)
                     continue
                 elif len(pev) > 1:
-                    raise RuntimeError('For 1 clone "ceph status" output has 2 '
+                    raise RuntimeError('For 4 clone "ceph status" output has 2 '
                                        'progress bars, it should have only 1 '
                                        f'progress bar.\npev -\n{pev}')
 
