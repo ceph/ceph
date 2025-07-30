@@ -1590,7 +1590,7 @@ private:
             remap_offset,
             remap_len,
             std::nullopt);
-          boost::ignore_unused(cold_ext);
+          cold_ext->set_shadow_extent(true);
         }
         // user must initialize the logical extent themselves.
         remapped_extent->set_seen_by_users();
