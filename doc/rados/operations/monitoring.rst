@@ -296,6 +296,8 @@ following command to the mgr:
         ...
 
 
+.. _rados-monitoring-muting-health-checks:
+
 
 Muting Health Checks
 --------------------
