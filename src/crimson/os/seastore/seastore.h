@@ -23,6 +23,7 @@
 
 #include "crimson/os/seastore/device.h"
 #include "crimson/os/seastore/transaction.h"
+#include "crimson/os/seastore/transaction_interruptor.h"
 #include "crimson/os/seastore/onode_manager.h"
 #include "crimson/os/seastore/omap_manager.h"
 #include "crimson/os/seastore/collection_manager.h"
@@ -71,8 +72,14 @@ struct col_obj_ranges_t {
 
 class SeaStore final : public FuturizedStore {
 public:
-  using base_ertr = TransactionManager::base_ertr;
-  using base_iertr = TransactionManager::base_iertr;
+  using mkfs_iertr = TransactionManager::alloc_extent_iertr;
+
+  // we already have a mkfs_ertr, this is temporary until
+  // *all* ertr in Seastore would be reorganized.
+  using seastore_mkfs_ertr = crimson::errorator<
+    crimson::ct_error::input_output_error,
+    crimson::ct_error::enospc
+  >;
 
   class MDStore {
   public:
@@ -207,7 +214,7 @@ public:
 
     uuid_d get_fsid() const;
 
-    seastar::future<> mkfs_managers();
+    seastore_mkfs_ertr::future<> mkfs_managers();
 
     void init_managers();
 
