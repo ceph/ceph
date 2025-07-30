@@ -155,9 +155,19 @@
   This restriction does not apply to operator-initiated scrubs, nor to repair scrubs.
   It can be disabled by setting ``osd_scrub_queued_snaptrims_limit`` to 0.
 * RGW: Add SSE-KMS secrets cache
+
 >=21.0.0
 
+* CephX: a new key type ``aes256k`` has been introduced to address
+  vulnerabilities in the existing encryption schemes. It is necessary to
+  perform an upgrade of all CephX keys used by daemons or clients. Please see
+  :ref:`cephx-upgrade` for more information.
 * The ``auth_supported`` config has been removed.
+* The monitor map includes new settings relating to CephX: auth_service_cipher,
+  auth_allowed_ciphers, and auth_preferred_cipher. These are used to control
+  which CephX key types may be used in the cluster.
+* A new --key-type argument has been introduced for all commands which produce CephX keys. This includes monitor commands as well as Ceph cluster bootstrap commands like ceph-authtool and monmaptool.
+* The ``mon.`` credential is now authoritatively stored in the Monitor "auth" database. The monitor keyring file is only used as a fallback. The ``ceph-mon`` command now includes a --use-mon-keyring switch for recovery if the ``mon.`` key in the auth database is lost.
 
 * RADOS: Stretch mode can now be entered even if the two dividing buckets differ
   in weight by a small fraction (default 0.1). This is tunable via
