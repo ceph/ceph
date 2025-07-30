@@ -19,21 +19,27 @@ void rgw_s3_key_filter::dump(Formatter *f) const {
     f->open_object_section("");
     ::encode_json("Name", "prefix", f);
     ::encode_json("Value", prefix_rule, f);
-    ::encode_json("Type", is_prefix_negative == true ? "OUT" : "IN", f);
+    if(is_prefix_negative) {
+      ::encode_json("Exclude", is_prefix_negative, f);
+    }
     f->close_section();
   }
   if (!suffix_rule.empty()) {
     f->open_object_section("");
     ::encode_json("Name", "suffix", f);
     ::encode_json("Value", suffix_rule, f);
-    ::encode_json("Type", is_suffix_negative == true ? "OUT" : "IN", f);
+    if(is_suffix_negative) {
+      ::encode_json("Exclude", is_prefix_negative, f);
+    }
     f->close_section();
   }
   if (!regex_rule.empty()) {
     f->open_object_section("");
     ::encode_json("Name", "regex", f);
     ::encode_json("Value", regex_rule, f);
-    ::encode_json("Type", is_regex_negative == true ? "OUT" : "IN", f);
+    if(is_regex_negative) {
+      ::encode_json("Exclude", is_regex_negative, f);
+    }
     f->close_section();
   }
   f->close_section();
@@ -55,20 +61,20 @@ bool rgw_s3_key_filter::decode_xml(XMLObj* obj) {
     if (name == "prefix" && prefix_not_set) {
       prefix_not_set = false;
       RGWXMLDecoder::decode_xml("Value", prefix_rule, o, throw_if_missing);
-      if(RGWXMLDecoder::decode_xml("Type", type, o, !throw_if_missing)) {
-        is_prefix_negative = type == "OUT" ? true : false;
+      if(RGWXMLDecoder::decode_xml("Exclude", type, o, !throw_if_missing)) {
+        is_prefix_negative = true;
       }
     } else if (name == "suffix" && suffix_not_set) {
       suffix_not_set = false;
       RGWXMLDecoder::decode_xml("Value", suffix_rule, o, throw_if_missing);
-      if(RGWXMLDecoder::decode_xml("Type", type, o, !throw_if_missing)) {
-        is_suffix_negative = type == "OUT" ? true : false;
+      if(RGWXMLDecoder::decode_xml("Exclude", type, o, !throw_if_missing)) {
+        is_suffix_negative = true;
       }
     } else if (name == "regex" && regex_not_set) {
       regex_not_set = false;
       RGWXMLDecoder::decode_xml("Value", regex_rule, o, throw_if_missing);
-      if(RGWXMLDecoder::decode_xml("Type", type, o, !throw_if_missing)) {
-        is_regex_negative = type == "OUT" ? true : false;
+      if(RGWXMLDecoder::decode_xml("Exclude", type, o, !throw_if_missing)) {
+        is_regex_negative = true;
       }
     } else {
       throw RGWXMLDecoder::err("invalid/duplicate S3Key filter rule name: '" + name + "'");
@@ -82,21 +88,27 @@ void rgw_s3_key_filter::dump_xml(Formatter *f) const {
     f->open_object_section("FilterRule");
     ::encode_xml("Name", "prefix", f);
     ::encode_xml("Value", prefix_rule, f);
-    ::encode_xml("Type",  is_prefix_negative == true ? "OUT" : "IN", f); 
+    if(is_prefix_negative) {
+      ::encode_xml("Exclude",  true, f); 
+    }
     f->close_section();
   }
   if (!suffix_rule.empty()) {
     f->open_object_section("FilterRule");
     ::encode_xml("Name", "suffix", f);
     ::encode_xml("Value", suffix_rule, f);
-    ::encode_xml("Type", is_suffix_negative == true ? "OUT" : "IN", f); 
+    if(is_suffix_negative) {
+      ::encode_xml("Exclude",  true, f); 
+    }
     f->close_section();
   }
   if (!regex_rule.empty()) {
     f->open_object_section("FilterRule");
     ::encode_xml("Name", "regex", f);
     ::encode_xml("Value", regex_rule, f);
-    ::encode_xml("Type", is_regex_negative == true ? "OUT" : "IN", f); 
+    if(is_regex_negative) {
+      ::encode_xml("Exclude",  true, f); 
+    }
     f->close_section();
   }
 }
@@ -110,18 +122,20 @@ void rgw_s3_key_value_filter::dump(Formatter *f) const {
     return;
   }
   f->open_array_section("FilterRules");
-  for (const auto& key_value_type : kvt) {
+  for (const auto& key_value_type : kve) {
     f->open_object_section("");
     ::encode_json("Name", key_value_type.first, f);
     ::encode_json("Value", key_value_type.second.first, f);
-    ::encode_json("Type", key_value_type.second.second == true ? "OUT" : "IN", f);
+    if(key_value_type.second.second) {
+      ::encode_json("Exclude", true, f);
+    }
     f->close_section();
   }
   f->close_section();
 }
 
 bool rgw_s3_key_value_filter::decode_xml(XMLObj* obj) {
-  kvt.clear();
+  kve.clear();
   XMLObjIter iter = obj->find("FilterRule");
   XMLObj *o;
 
@@ -136,26 +150,28 @@ bool rgw_s3_key_value_filter::decode_xml(XMLObj* obj) {
     is_negative = false;
     RGWXMLDecoder::decode_xml("Name", key, o, throw_if_missing);
     RGWXMLDecoder::decode_xml("Value", value, o, throw_if_missing);
-    if(RGWXMLDecoder::decode_xml("Type", type, o, !throw_if_missing)) {
-      is_negative = type == "IN" ? false : true;
+    if(RGWXMLDecoder::decode_xml("Exclude", type, o, !throw_if_missing)) {
+      is_negative = true;
     }
-    kvt.emplace(key, std::make_pair(value, is_negative));
+    kve.emplace(key, std::make_pair(value, is_negative));
   }
   return true;
 }
 
 void rgw_s3_key_value_filter::dump_xml(Formatter *f) const {
-  for (const auto& key_value_type : kvt) {
+  for (const auto& key_value_type : kve) {
     f->open_object_section("FilterRule");
     ::encode_xml("Name", key_value_type.first, f);
     ::encode_xml("Value", key_value_type.second.first, f);
-    ::encode_xml("Type", key_value_type.second.second == true ? "OUT" : "IN", f);
+    if(key_value_type.second.second) {
+      ::encode_xml("Exclude", true , f);
+    }
     f->close_section();
   }
 }
 
 bool rgw_s3_key_value_filter::has_content() const {
-  return !kvt.empty();
+  return !kve.empty();
 }
 
 void rgw_s3_zone_filter::dump(Formatter *f) const {
@@ -166,13 +182,12 @@ void rgw_s3_zone_filter::dump(Formatter *f) const {
   for(const auto &zone: in_list){
     f->open_object_section("");
     ::encode_json("Name", zone, f);
-    ::encode_json("Type", "IN", f);
     f->close_section();
   }
   for(const auto &zone: out_list){
     f->open_object_section("");
     ::encode_json("Name", zone, f);
-    ::encode_json("Type", "OUT", f);
+    ::encode_json("Exclude", true, f);
     f->close_section();
   }
   f->close_section();
@@ -192,21 +207,15 @@ bool rgw_s3_zone_filter::decode_xml(XMLObj *obj){
 
   while ((o = iter.get_next())) {
     RGWXMLDecoder::decode_xml("Name", zone, o, throw_if_missing);
-    if(!RGWXMLDecoder::decode_xml("Type", type, o, !throw_if_missing)) {
-      type = "IN";
-    }
-
     if(seen.find(zone) != seen.end())
       throw RGWXMLDecoder::err("duplicate zone filter rule: '" + zone + "'");
     else 
       seen.insert(zone);
-
-    if(type == "IN")
-      in_list.emplace_back(zone); 
-    else if (type == "OUT")
+    if(RGWXMLDecoder::decode_xml("Exclude", type, o, !throw_if_missing)) {
       out_list.emplace_back(zone); 
-    else
-      throw RGWXMLDecoder::err("invalid zone filter rule type: '" + type + "'");
+    } else {
+      in_list.emplace_back(zone);
+    }
   }
   return true; 
 }
@@ -215,13 +224,12 @@ void rgw_s3_zone_filter::dump_xml(Formatter *f) const {
   for(const auto &zone: in_list){
     f->open_object_section("FilterRule");
     ::encode_xml("Name", zone, f);
-    ::encode_xml("Type", "IN", f);
     f->close_section();
   }
   for(const auto &zone: out_list){
     f->open_object_section("FilterRule");
     ::encode_xml("Name", zone, f);
-    ::encode_xml("Type", "OUT", f);
+    ::encode_xml("Exclude", false, f);
     f->close_section();
   }
 }
@@ -234,14 +242,14 @@ void rgw_s3_filter::dump(Formatter *f) const {
   encode_json("S3Key", key_filter, f);
   encode_json("S3Metadata", metadata_filter, f);
   encode_json("S3Tags", tag_filter, f);
-  encode_json("Zones", zone_filter, f);
+  encode_json("S3Zones", zone_filter, f);
 }
 
 bool rgw_s3_filter::decode_xml(XMLObj* obj) {
   RGWXMLDecoder::decode_xml("S3Key", key_filter, obj);
   RGWXMLDecoder::decode_xml("S3Metadata", metadata_filter, obj);
   RGWXMLDecoder::decode_xml("S3Tags", tag_filter, obj);
-  RGWXMLDecoder::decode_xml("Zones", zone_filter, obj);
+  RGWXMLDecoder::decode_xml("S3Zones", zone_filter, obj);
   return true;
 }
 
@@ -256,7 +264,7 @@ void rgw_s3_filter::dump_xml(Formatter *f) const {
     ::encode_xml("S3Tags", tag_filter, f);
   }
   if (zone_filter.has_content()) {
-    ::encode_xml("Zones", zone_filter, f);
+    ::encode_xml("S3Zones", zone_filter, f);
   }
 }
 
@@ -272,7 +280,7 @@ bool match(const rgw_s3_key_filter& filter, const std::string& key) {
   const auto prefix_size = filter.prefix_rule.size();
   if (prefix_size != 0) {
     // prefix rule exists
-    bool is_negative = filter.is_prefix_negative == true;
+    const bool is_negative = filter.is_prefix_negative;
     if (prefix_size > key_size) {
       // if prefix is longer than key, we fail if filter is positive, else continue
       if(!is_negative) {
@@ -283,14 +291,14 @@ bool match(const rgw_s3_key_filter& filter, const std::string& key) {
     // if prefix matches but filter is negative, we fail
     // else continue
     bool does_prefix_match = std::equal(filter.prefix_rule.begin(), filter.prefix_rule.end(), key.begin()); 
-    if (!(is_negative ^ does_prefix_match)) {
+    if (is_negative == does_prefix_match) {
       return false; 
     }
   }
   const auto suffix_size = filter.suffix_rule.size();
   if (suffix_size != 0) {
     // suffix rule exists
-    bool is_negative = filter.is_suffix_negative == true;
+    const bool is_negative = filter.is_suffix_negative;
     if (suffix_size > key_size) {
       // if suffix is longer than key, we fail if filter is positive, else continue
       if(!is_negative) {
@@ -301,7 +309,7 @@ bool match(const rgw_s3_key_filter& filter, const std::string& key) {
     // if suffix matches but filter is negative, we fail
     // else continue
     bool does_suffix_match = std::equal(filter.suffix_rule.begin(), filter.suffix_rule.end(), (key.end() - suffix_size));
-    if (!(is_negative ^ does_suffix_match)) {
+    if (is_negative == does_suffix_match) {
       return false;
     }
   }
@@ -311,9 +319,9 @@ bool match(const rgw_s3_key_filter& filter, const std::string& key) {
     // if regex does not match, and if filter is positive, we fail or
     // if regex matches but filter is negative, we fail
     // else continue
-    bool is_negative = filter.is_regex_negative == true; 
+    const bool is_negative = filter.is_regex_negative; 
     bool does_regex_match = std::regex_match(key, base_regex); 
-    if (!(is_negative ^ does_regex_match)) {
+    if (is_negative == does_regex_match) {
       return false;
     }
   }
@@ -323,7 +331,7 @@ bool match(const rgw_s3_key_filter& filter, const std::string& key) {
 bool match(const rgw_s3_key_value_filter& filter, const KeyValueMap& kv) {
   // all filter pairs must exist with the same value in the object's metadata/tags
   // object metadata/tags may include items not in the filter 
-  return std::all_of(filter.kvt.begin(), filter.kvt.end(), [&](const auto& p){ 
+  return std::all_of(filter.kve.begin(), filter.kve.end(), [&](const auto& p){ 
     bool is_negative = p.second.second; 
     auto it = kv.find(p.first);
     bool match_negative = it == kv.end() || it->second != p.second.first; 
@@ -335,14 +343,14 @@ bool match(const rgw_s3_key_value_filter& filter, const KeyValueMap& kv) {
 bool match(const rgw_s3_key_value_filter& filter, const KeyMultiValueMap& kv) {
   // all filter pairs must exist with the same value in the object's metadata/tags
   // object metadata/tags may include items not in the filter
-  for (auto& filter : filter.kvt) {
+  for (auto& filter : filter.kve) {
     auto result = kv.equal_range(filter.first);
     bool is_negative = filter.second.second;
     // For negative filters, all values must NOT match filter.second.first
     // For positive filters, at least one value must match filter.second.first
     bool match_negative = std::all_of(result.first, result.second, [&filter](const std::pair<std::string, std::string>&p){ return p.second != filter.second.first;}); 
     bool match_positive = std::any_of(result.first, result.second, [&filter](const std::pair<std::string, std::string>&p){ return p.second == filter.second.first;});
-    if(is_negative && !match_negative || !is_negative && !match_positive) {
+    if((is_negative && !match_negative) || (!is_negative && !match_positive)) {
       return false;
     }
   }
