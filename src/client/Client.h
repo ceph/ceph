@@ -1618,7 +1618,7 @@ private:
 
     void wait() {
       std::unique_lock l{lock};
-      if (!done) {
+      while (!done) {
         cond.wait(l);
       }
     }
