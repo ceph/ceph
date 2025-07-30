@@ -10,7 +10,7 @@ Terminology:
 In order to initialize a new monitor, it must always be fed:
 
 #. a logical name
-#. secret keys
+#. The ``mon.`` secret key. Note this is not qualified with an id since all Monitors share the same secret.
 #. a cluster fsid (uuid)
 
 In addition, a monitor needs to know two things:
@@ -29,7 +29,7 @@ cluster.  For example, if the logical id is ``foo``, the monitor's
 name will be ``mon.foo``.
 
 For most users, there is no more than one monitor per host, which
-makes the short hostname logical choice.
+makes the short hostname a logical choice.
 
 Secret keys
 ===========
@@ -45,6 +45,11 @@ to administer the system::
         ceph-authtool /path/to/keyring --gen-key -n client.admin --cap mon 'allow *' --cap osd 'allow *' --cap mds 'allow'
 
 The resulting keyring is fed to ``ceph-mon --mkfs`` with the ``--keyring <keyring>`` command-line argument.
+
+.. note:: The Monitor keyring file is a fallback store for the KeyServer used
+          to store keys via the usual `ceph auth` command suite. For this
+          reason, the ``client.admin`` key may be placed in this keyring but a future
+          rotation or update to the ``client.admin`` credential may obviate it.
 
 Cluster fsid
 ============
@@ -205,8 +210,3 @@ When the daemon is started, ``mon initial members`` must be set via the command 
      ceph-mon -i <myid> --mon-initial-members foo,bar,baz
 
 to prevent any risk of split-brain.
-  
-
-
-
-

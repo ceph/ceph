@@ -103,17 +103,8 @@ Authentication
 
 .. versionadded:: Bobtail 0.56
 
-Authentication is explicitly enabled or disabled in the ``[global]`` section of
-the Ceph configuration file, as shown here:
-
-.. code-block:: ini
-
-    auth_cluster_required = cephx
-    auth_service_required = cephx
-    auth_client_required = cephx
-
-In addition, you should enable message signing. For details, see `Cephx Config
-Reference`_.
+Presently, CephX is the default and sole authentication mechanism for Ceph.
+Full documentation should be consulted in `Cephx Config Reference`_.
 
 .. _Cephx Config Reference: ../auth-config-ref
 

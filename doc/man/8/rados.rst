@@ -206,11 +206,11 @@ Generic options
 
 .. option:: --id ID
 
-   Set ID portion of my name.
+   Set ID portion of a client entity. e.g. admin for client.admin
 
 .. option:: -n TYPE.ID, --name TYPE.ID
 
-   Set cephx user name.
+   Set the full entity name. e.g. client.admin
 
 .. option:: --cluster NAME
 
