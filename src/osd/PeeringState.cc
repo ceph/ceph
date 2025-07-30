@@ -3428,10 +3428,8 @@ void PeeringState::proc_master_log(
       for (auto&& [pg_shard, pi] : all_info) {
 	psdout(20) << "version " << p->version
 		   << " testing osd " << pg_shard
-		   << " written=" << p->written_shards
-		   << " present=" << p->present_shards << dendl;
-	if (p->is_present_shard(pg_shard.shard) &&
-	    p->is_written_shard(pg_shard.shard)) {
+		   << " written=" << p->written_shards << dendl;
+	if (p->is_written_shard(pg_shard.shard)) {
 	  if (pi.last_update < p->version) {
 	    if (!shards_with_update.contains(pg_shard.shard)) {
 	      shards_without_update.insert(pg_shard.shard);
