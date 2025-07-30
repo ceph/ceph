@@ -361,6 +361,7 @@ seastar::future<>
 SeaStore::Shard::mkfs_managers()
 {
   init_managers();
+
   return transaction_manager->mkfs(
   ).safe_then([this] {
     init_managers();
@@ -397,12 +398,7 @@ SeaStore::Shard::mkfs_managers()
     crimson::ct_error::assert_all{
       "Invalid error in Shard::mkfs_managers"
     }
-  ).finally([this] {
-    assert(shard_stats.pending_io_num);
-    --(shard_stats.pending_io_num);
-    // XXX: it's wrong to assume no failure
-    --(shard_stats.processing_postlock_io_num);
-  });
+  );
 }
 
 seastar::future<> SeaStore::set_secondaries()
