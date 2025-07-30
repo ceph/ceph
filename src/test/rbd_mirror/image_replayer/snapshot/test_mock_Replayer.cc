@@ -1787,6 +1787,7 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, ResyncRequested) {
                                    mock_replayer_listener,
                                    mock_image_meta,
                                    &update_watch_ctx));
+
   // inject a primary snapshot
   mock_remote_image_ctx.snap_info = {
     {1U, librbd::SnapInfo{"snap1", cls::rbd::MirrorSnapshotNamespace{
@@ -1803,6 +1804,7 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, ResyncRequested) {
 
   // wait for sync to complete and expect replay complete
   ASSERT_EQ(0, wait_for_notification(1));
+  ASSERT_TRUE(mock_replayer.is_resync_requested());
   ASSERT_FALSE(mock_replayer.is_replaying());
 
   ASSERT_EQ(0, shut_down_entry_replayer(mock_replayer, mock_threads,
@@ -1876,6 +1878,8 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, ResyncRequestedRemoteNotPrimary) {
     mock_local_image_ctx, 11, true, 0, 0);
   expect_notify_update(mock_local_image_ctx);
   expect_notify_sync_complete(mock_instance_watcher, mock_local_image_ctx.id);
+
+  // idle
   expect_load_image_meta(mock_image_meta, true, 0);
   expect_is_refresh_required(mock_remote_image_ctx, false);
   expect_is_refresh_required(mock_local_image_ctx, true);
@@ -1890,7 +1894,8 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, ResyncRequestedRemoteNotPrimary) {
   // wake-up replayer
   update_watch_ctx->handle_notify();
 
-  ASSERT_EQ(0, wait_for_notification(1));
+  ASSERT_EQ(0, wait_for_notification(2));
+  ASSERT_FALSE(mock_replayer.is_resync_requested());
   ASSERT_FALSE(mock_replayer.is_replaying());
 
   ASSERT_EQ(0, shut_down_entry_replayer(mock_replayer, mock_threads,
