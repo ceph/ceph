@@ -70,7 +70,7 @@
 	"S3RepSource": {
 	    "type": "structure",
 	    "members": {
-                "Zones": {
+                "S3Zones": {
                     "shape":"ZoneList",
                     "documentation":"<p>Array of replication source zone names.</p>",
 		    "locationName":"Zone"
@@ -79,7 +79,7 @@
         },
 	"Destination": {
 	    "members": {
-                "Zones": {
+                "S3Zones": {
                     "shape":"ZoneList",
                     "documentation":"<p>Array of replication destination zone names.</p>",
 		    "locationName":"Zone"
@@ -183,9 +183,9 @@
                     "shape":"FilterRuleValue",
                     "documentation":"<p>The value that the filter searches for in object key names.</p>"
                 }, 
-                "Type": {
-                    "shape":"FilterRuleType",
-                    "documentation":"<p>Type of the filter rule. The type can be <code>IN</code> or <code>OUT</code>. Defaults to <code>IN</code> by default, <code>IN</code> indicates filter is honoured, else it is a negative filter.</p>"
+                "Exclude": {
+                    "shape":"FilterRuleExclude",
+                    "documentation":"<p>Exclude Flag for filter rule. If true, acts as negative filter. Defaults to false.</p>"
                 }
             },
             "documentation":"<p>Specifies the Amazon S3 object key name to filter on and whether to filter on the suffix, prefix or regex of the key name.</p>"
@@ -198,12 +198,8 @@
                 "regex"
             ]
         },
-        "FilterRuleType":{
-            "type":"string",
-            "enum":[
-                "IN",
-                "OUT"
-            ]
+        "FilterRuleExclude":{
+            "type":"boolean"
         },
         "NotificationConfigurationFilter":{
             "type":"structure",
@@ -223,10 +219,10 @@
                     "documentation":"<p/>",
                     "locationName":"S3Tags"
                 }, 
-                "Zones":{
-                    "shape":"ZonesFilter",
+                "S3Zones":{
+                    "shape":"S3ZonesFilter",
                     "documentation":"<p/>",
-                    "locationName":"Zones"
+                    "locationName":"S3Zones"
                 }
             },
             "documentation":"<p>Specifies object key name filtering rules. For information about key name filtering, see <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/dev/NotificationHowTo.html\">Configuring Event Notifications</a> in the <i>Amazon Simple Storage Service Developer Guide</i>.</p>"
@@ -264,7 +260,7 @@
             },
             "documentation":"<p>A container for object tags filtering rules.</p>"
         },
-        "ZonesFilter": {
+        "S3ZonesFilter": {
             "type":"structure",
             "members":{
                 "FilterRules":{
