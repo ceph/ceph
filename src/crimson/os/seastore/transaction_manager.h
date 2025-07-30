@@ -444,10 +444,7 @@ public:
     SUBDEBUGT(seastore_tm, "{} hint {}~0x{:x} phint={} ...",
               t, T::TYPE, laddr_hint, len, placement_hint);
     auto ext = cache->alloc_new_non_data_extent<T>(
-      t,
-      len,
-      placement_hint,
-      INIT_GENERATION);
+      t, len, {placement_hint, INIT_GENERATION});
     // user must initialize the logical extent themselves.
     assert(is_user_transaction(t.get_src()));
     ext->set_seen_by_users();
@@ -486,10 +483,7 @@ public:
               t, T::TYPE, laddr_hint, len, placement_hint);
     return seastar::do_with(
       cache->alloc_new_data_extents<T>(
-	t,
-	len,
-	placement_hint,
-	INIT_GENERATION),
+	t, len, {placement_hint, INIT_GENERATION}),
       [pos=std::move(pos), this, &t,
       FNAME, laddr_hint](auto &exts) mutable {
       // user must initialize the logical extent themselves

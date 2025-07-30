@@ -333,6 +333,13 @@ public:
     return background_process.start_background();
   }
 
+  struct alloc_option_t {
+    placement_hint_t hint;
+    rewrite_gen_t gen;
+#ifdef UNIT_TESTS_BUILT
+    std::optional<paddr_t> external_paddr = std::nullopt;
+#endif
+  };
   struct alloc_result_t {
     paddr_t paddr;
     bufferptr bp;
@@ -342,34 +349,27 @@ public:
     Transaction& t,
     extent_types_t type,
     extent_len_t length,
-    placement_hint_t hint,
-#ifdef UNIT_TESTS_BUILT
-    rewrite_gen_t gen,
-    std::optional<paddr_t> external_paddr = std::nullopt
-#else
-    rewrite_gen_t gen
-#endif
+    alloc_option_t opt
   ) {
-    assert(hint < placement_hint_t::NUM_HINTS);
-    assert(is_target_rewrite_generation(gen, dynamic_max_rewrite_generation));
-    assert(gen == INIT_GENERATION || hint == placement_hint_t::REWRITE);
+    assert(opt.hint < placement_hint_t::NUM_HINTS);
+    assert(is_target_rewrite_generation(opt.gen, dynamic_max_rewrite_generation));
+    assert(opt.gen == INIT_GENERATION || opt.hint == placement_hint_t::REWRITE);
 
     data_category_t category = get_extent_category(type);
-    gen = adjust_generation(category, type, hint, gen);
+    opt.gen = adjust_generation(category, type, opt.hint, opt.gen);
 
     paddr_t addr;
 #ifdef UNIT_TESTS_BUILT
-    if (unlikely(external_paddr.has_value())) {
-      assert(external_paddr->is_fake());
-      addr = *external_paddr;
-    } else if (gen == INLINE_GENERATION) {
-#else
-    if (gen == INLINE_GENERATION) {
+    if (unlikely(opt.external_paddr.has_value())) {
+      assert(opt.external_paddr->is_fake());
+      addr = *opt.external_paddr;
+    } else
 #endif
+      if (opt.gen == INLINE_GENERATION) {
       addr = make_record_relative_paddr(0);
     } else {
       assert(category == data_category_t::METADATA);
-      addr = get_writer(hint, category, gen)->alloc_paddr(length);
+      addr = get_writer(opt.hint, category, opt.gen)->alloc_paddr(length);
     }
     assert(!(category == data_category_t::DATA));
 
@@ -381,44 +381,37 @@ public:
     // according to the allocator.
     auto bp = create_extent_ptr_zero(length);
 
-    return alloc_result_t{addr, std::move(bp), gen};
+    return alloc_result_t{addr, std::move(bp), opt.gen};
   }
 
   std::list<alloc_result_t> alloc_new_data_extents(
     Transaction& t,
     extent_types_t type,
     extent_len_t length,
-    placement_hint_t hint,
-#ifdef UNIT_TESTS_BUILT
-    rewrite_gen_t gen,
-    std::optional<paddr_t> external_paddr = std::nullopt
-#else
-    rewrite_gen_t gen
-#endif
+    alloc_option_t opt
   ) {
     LOG_PREFIX(ExtentPlacementManager::alloc_new_data_extents);
-    assert(hint < placement_hint_t::NUM_HINTS);
-    assert(is_target_rewrite_generation(gen, dynamic_max_rewrite_generation));
-    assert(gen == INIT_GENERATION || hint == placement_hint_t::REWRITE);
+    assert(opt.hint < placement_hint_t::NUM_HINTS);
+    assert(is_target_rewrite_generation(opt.gen, dynamic_max_rewrite_generation));
+    assert(opt.gen == INIT_GENERATION || opt.hint == placement_hint_t::REWRITE);
 
     data_category_t category = get_extent_category(type);
-    gen = adjust_generation(category, type, hint, gen);
-    assert(gen != INLINE_GENERATION);
+    opt.gen = adjust_generation(category, type, opt.hint, opt.gen);
+    assert(opt.gen != INLINE_GENERATION);
 
     // XXX: bp might be extended to point to different memory (e.g. PMem)
     // according to the allocator.
     std::list<alloc_result_t> allocs;
 #ifdef UNIT_TESTS_BUILT
-    if (unlikely(external_paddr.has_value())) {
-      assert(external_paddr->is_fake());
+    if (unlikely(opt.external_paddr.has_value())) {
+      assert(opt.external_paddr->is_fake());
       auto bp = create_extent_ptr_zero(length);
-      allocs.emplace_back(alloc_result_t{*external_paddr, std::move(bp), gen});
-    } else {
-#else
-    {
+      allocs.emplace_back(alloc_result_t{*opt.external_paddr, std::move(bp), opt.gen});
+    } else
 #endif
+    {
       assert(category == data_category_t::DATA);
-      auto addrs = get_writer(hint, category, gen)->alloc_paddrs(length);
+      auto addrs = get_writer(opt.hint, category, opt.gen)->alloc_paddrs(length);
       for (auto &ext : addrs) {
         auto left = ext.len;
         while (left > 0) {
@@ -430,10 +423,10 @@ public:
           auto start = ext.start.is_delayed()
                         ? ext.start
                         : ext.start + (ext.len - left);
-          allocs.emplace_back(alloc_result_t{start, std::move(bp), gen});
+          allocs.emplace_back(alloc_result_t{start, std::move(bp), opt.gen});
           SUBDEBUGT(seastore_epm,
-                    "allocated {} 0x{:x}B extent at {}, hint={}, gen={}",
-                    t, type, len, start, hint, gen);
+                    "allocated {} 0x{:x}B extent at {}, opt.hint={}, opt.gen={}",
+                    t, type, len, start, opt.hint, opt.gen);
           left -= len;
         }
       }

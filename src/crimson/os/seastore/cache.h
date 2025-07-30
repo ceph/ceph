@@ -1109,6 +1109,7 @@ public:
     }
   }
 
+  using alloc_option_t = ExtentPlacementManager::alloc_option_t;
   /**
    * alloc_new_non_data_extent
    *
@@ -1119,22 +1120,12 @@ public:
   TCachedExtentRef<T> alloc_new_non_data_extent(
     Transaction &t,         ///< [in, out] current transaction
     extent_len_t length,    ///< [in] length
-    placement_hint_t hint,  ///< [in] user hint
-#ifdef UNIT_TESTS_BUILT
-    rewrite_gen_t gen,      ///< [in] rewrite generation
-    std::optional<paddr_t> epaddr = std::nullopt ///< [in] paddr fed by callers
-#else
-    rewrite_gen_t gen
-#endif
+    alloc_option_t opt
   ) {
     LOG_PREFIX(Cache::alloc_new_non_data_extent);
-    SUBTRACET(seastore_cache, "allocate {} 0x{:x}B, hint={}, gen={}",
-              t, T::TYPE, length, hint, rewrite_gen_printer_t{gen});
-#ifdef UNIT_TESTS_BUILT
-    auto result = epm.alloc_new_non_data_extent(t, T::TYPE, length, hint, gen, epaddr);
-#else
-    auto result = epm.alloc_new_non_data_extent(t, T::TYPE, length, hint, gen);
-#endif
+    SUBTRACET(seastore_cache, "allocate {} 0x{:x}B, opt.hint={}, gen={}",
+              t, T::TYPE, length, opt.hint, rewrite_gen_printer_t{opt.gen});
+    auto result = epm.alloc_new_non_data_extent(t, T::TYPE, length, opt);
     if (!result) {
       SUBERRORT(seastore_cache, "insufficient space", t);
       std::rethrow_exception(crimson::ct_error::enospc::exception_ptr());
@@ -1145,14 +1136,14 @@ public:
       epm.dynamic_max_rewrite_generation));
     ret->init(CachedExtent::extent_state_t::INITIAL_WRITE_PENDING,
               result->paddr,
-              hint,
+              opt.hint,
               result->gen,
 	      t.get_trans_id());
     t.add_fresh_extent(ret);
     SUBDEBUGT(seastore_cache,
               "allocated {} 0x{:x}B extent at {}, hint={}, gen={} -- {}",
               t, T::TYPE, length, result->paddr,
-              hint, rewrite_gen_printer_t{result->gen}, *ret);
+              opt.hint, rewrite_gen_printer_t{result->gen}, *ret);
     return ret;
   }
   /**
@@ -1165,22 +1156,12 @@ public:
   std::vector<TCachedExtentRef<T>> alloc_new_data_extents(
     Transaction &t,         ///< [in, out] current transaction
     extent_len_t length,    ///< [in] length
-    placement_hint_t hint,  ///< [in] user hint
-#ifdef UNIT_TESTS_BUILT
-    rewrite_gen_t gen,      ///< [in] rewrite generation
-    std::optional<paddr_t> epaddr = std::nullopt ///< [in] paddr fed by callers
-#else
-    rewrite_gen_t gen
-#endif
+    alloc_option_t opt
   ) {
     LOG_PREFIX(Cache::alloc_new_data_extents);
     SUBTRACET(seastore_cache, "allocate {} 0x{:x}B, hint={}, gen={}",
-              t, T::TYPE, length, hint, rewrite_gen_printer_t{gen});
-#ifdef UNIT_TESTS_BUILT
-    auto results = epm.alloc_new_data_extents(t, T::TYPE, length, hint, gen, epaddr);
-#else
-    auto results = epm.alloc_new_data_extents(t, T::TYPE, length, hint, gen);
-#endif
+              t, T::TYPE, length, opt.hint, rewrite_gen_printer_t{opt.gen});
+    auto results = epm.alloc_new_data_extents(t, T::TYPE, length, opt);
     if (results.empty()) {
       SUBERRORT(seastore_cache, "insufficient space", t);
       std::rethrow_exception(crimson::ct_error::enospc::exception_ptr());
@@ -1193,14 +1174,14 @@ public:
 	epm.dynamic_max_rewrite_generation));
       ret->init(CachedExtent::extent_state_t::INITIAL_WRITE_PENDING,
                 result.paddr,
-                hint,
+                opt.hint,
                 result.gen,
                 t.get_trans_id());
       t.add_fresh_extent(ret);
       SUBDEBUGT(seastore_cache,
                 "allocated {} 0x{:x}B extent at {}, hint={}, gen={} -- {}",
                 t, T::TYPE, length, result.paddr,
-                hint, rewrite_gen_printer_t{result.gen}, *ret);
+                opt.hint, rewrite_gen_printer_t{result.gen}, *ret);
       extents.emplace_back(std::move(ret));
     }
     return extents;

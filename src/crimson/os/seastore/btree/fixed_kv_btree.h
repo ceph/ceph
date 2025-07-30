@@ -471,10 +471,7 @@ public:
   static mkfs_ret mkfs(RootBlockRef &root_block, op_context_t c) {
     assert(root_block->is_mutation_pending());
     auto root_leaf = c.cache.template alloc_new_non_data_extent<leaf_node_t>(
-      c.trans,
-      node_size,
-      placement_hint_t::HOT,
-      INIT_GENERATION);
+      c.trans, node_size, {placement_hint_t::HOT, INIT_GENERATION});
     root_leaf->set_size(0);
     fixed_kv_node_meta_t<node_key_t> meta{min_max_t<node_key_t>::min, min_max_t<node_key_t>::max, 1};
     root_leaf->set_meta(meta);
@@ -1203,14 +1200,17 @@ public:
     assert(is_lba_backref_node(e->get_type()));
     
     auto do_rewrite = [&](auto &fixed_kv_extent) {
+      auto opt = Cache::alloc_option_t {
+        fixed_kv_extent.get_user_hint(),
+        // get target rewrite generation
+        fixed_kv_extent.get_rewrite_generation()
+      };
       auto n_fixed_kv_extent = c.cache.template alloc_new_non_data_extent<
         std::remove_reference_t<decltype(fixed_kv_extent)>
         >(
         c.trans,
         fixed_kv_extent.get_length(),
-        fixed_kv_extent.get_user_hint(),
-        // get target rewrite generation
-        fixed_kv_extent.get_rewrite_generation());
+        opt);
       n_fixed_kv_extent->rewrite(c.trans, fixed_kv_extent, 0);
       
       SUBTRACET(
@@ -1989,7 +1989,7 @@ private:
       if (split_from == iter.get_depth()) {
         assert(iter.is_full());
         auto nroot = c.cache.template alloc_new_non_data_extent<internal_node_t>(
-          c.trans, node_size, placement_hint_t::HOT, INIT_GENERATION);
+          c.trans, node_size, {placement_hint_t::HOT, INIT_GENERATION});
         fixed_kv_node_meta_t<node_key_t> meta{
           min_max_t<node_key_t>::min, min_max_t<node_key_t>::max, iter.get_depth() + 1};
         nroot->set_meta(meta);
