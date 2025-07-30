@@ -512,29 +512,29 @@ Parameters are XML encoded in the body of the request, in the following format:
                    <FilterRule>
                        <Name></Name>
                        <Value></Value>
-                       <Type></Type>
+                       <Exclude></Exclude>
                    </FilterRule>
                 </S3Key>
                 <S3Metadata>
                     <FilterRule>
                         <Name></Name>
                         <Value></Value>
-                        <Type></Type>
+                        <Exclude></Exclude>
                     </FilterRule>
                 </S3Metadata>
                 <S3Tags>
                     <FilterRule>
                         <Name></Name>
                         <Value></Value>
-                        <Type></Type>
+                        <Exclude></Exclude>
                     </FilterRule>
                 </S3Tags>
-                <Zones>
+                <S3Zones>
                     <FilterRule>
                         <Name></Name>
-                        <Type></Type>
+                        <Exclude></Exclude>
                     </FilterRule>
-                </Zones>
+                </S3Zones>
             </Filter>
        </TopicConfiguration>
    </NotificationConfiguration>
@@ -569,26 +569,29 @@ Parameters are XML encoded in the body of the request, in the following format:
 |                               |           | All filter rules in the list must match the tags defined on the object. However,     |          |
 |                               |           | the object still match it it has other tags not listed in the filter.                |          |
 +-------------------------------+-----------+--------------------------------------------------------------------------------------+----------+
-| ``S3Key.FilterRule``          | Container | Holding ``Name``, ``Value`` and ``Type`` entities. ``Name`` would  be: ``prefix``,   | Yes      |
+| ``S3Key.FilterRule``          | Container | Holding ``Name``, ``Value`` and ``Exclude`` entities. ``Name`` would  be: ``prefix``,| Yes      |
 |                               |           | ``suffix``, or ``regex``. The ``Value`` would hold the key prefix, key suffix        |          |
-|                               |           | or a regular expression for matching the key, accordingly. The ``Type`` entity is    |          |
-|                               |           | optional, and can hold ``IN`` or ``OUT``. It defaults to ``IN`` when not specified.  |          |
-|                               |           | ``IN`` means the key must match the rule, ``OUT`` means the key must not match the   |          |
-|                               |           | rule.                                                                                |          |
+|                               |           | or a regular expression for matching the key, accordingly. The ``Exclude`` entity is |          |
+|                               |           | optional, and can hold ``true`` or ``false``. It defaults to ``false`` if            |          |
+|                               |           | unspecified. ``false`` means the key must match the rule, ``true`` means the key     |          |
+|                               |           | must not match the rule.                                                             |          |
 +-------------------------------+-----------+--------------------------------------------------------------------------------------+----------+
-| ``S3Metadata.FilterRule``     | Container | Holding ``Name`` and ``Value`` entities. ``Name`` would be the name of the metadata  | Yes      |
-|                               |           | attribute (e.g. ``x-amz-meta-xxx``). The ``Value`` would be the expected value for   |          |
-|                               |           | this attribute.                                                                      |          |
+| ``S3Metadata.FilterRule``     | Container | Holding ``Name``, ``Value`` and ``Exclude`` entities. ``Name`` would be the name of  | Yes      |
+|                               |           | the metadata attribute (e.g., ``x-amz-meta-xxx``). The ``Value`` would be the        |          |
+|                               |           | expected value for this attribute. The ``Exclude`` entity is  optional, and can hold |          |
+|                               |           | ``true`` or ``false``. It defaults to ``false`` if unspecified. ``false``            |          |
+|                               |           | means the key must match the rule,  ``true`` means the key must not match the rule.  |          |
 +-------------------------------+-----------+--------------------------------------------------------------------------------------+----------+
-| ``S3Tags.FilterRule``         | Container | Holding ``Name`` and ``Value`` entities. ``Name`` would be the tag key,              |  Yes     |
-|                               |           | and ``Value`` would be the tag value.                                                |          |
+| ``S3Tags.FilterRule``         | Container | Holding ``Name``, ``Value`` and ``Exclude`` entities. ``Name`` would be the tag key, | Yes      |
+|                               |           | and ``Value`` would be the tag value. The ``Exclude`` entity is  optional, and can   |          |
+|                               |           | hold ``true`` or ``false``. It defaults to ``false`` if unspecified. ``false``       |          |
+|                               |           | means the key must match the rule,  ``true`` means the key must not match the rule.  |          |
 +-------------------------------+-----------+--------------------------------------------------------------------------------------+----------+
-| ``Zones.FilterRule``          | Container | Holding ``Name`` and ``Type`` entities. ``Name`` would be the zone name, and ``Type` |  Yes     |
-|                               |           | would be the zone type. The zone type is one of: ``IN`` or ``OUT``. It defaults to   |          |
-|                               |           | ``IN`` if unspecified. The filter matches if the zone is in the list of ``IN`` zones |          |
-|                               |           | and not in the list of ``OUT`` zones. If no zones are defined, the filter matches    |          |
-|                               |           | all zones. If no zones are defined as ``OUT``, the filter only matches zones with    |          |
-|                               |           | type ``IN``.                                                                         |          |
+| ``S3Zones.FilterRule``        | Container | Holding ``Name`` and ``Exclude`` entities. ``Name`` would be the zone name,          |  Yes     |
+|                               |           | ``Exclude`` determines if a zone is to be exclude. The ``Exclude`` entity is         |          |
+|                               |           | optional, and can  hold ``true`` or ``false``. It defaults to ``false``              |          |
+|                               |           | if unspecified. ``false`` means the zone is not honored,  ``true`` means             |          |
+|                               |           | the zone is honored.                                                                 |          |
 +-------------------------------+-----------+--------------------------------------------------------------------------------------+----------+
 HTTP Response
 ~~~~~~~~~~~~~
@@ -682,29 +685,29 @@ Response is XML encoded in the body of the request, in the following format:
                    <FilterRule>
                        <Name></Name>
                        <Value></Value>
-                       <Type></Type>
+                       <Exclude></Exclude>
                    </FilterRule>
                 </S3Key>
                 <S3Metadata>
                     <FilterRule>
                         <Name></Name>
                         <Value></Value>
-                        <Type></Type>
+                        <Exclude></Exclude>
                     </FilterRule>
                 </S3Metadata>
                 <S3Tags>
                     <FilterRule>
                         <Name></Name>
                         <Value></Value>
-                        <Type></Type>
+                        <Exclude></Exclude>
                     </FilterRule>
                 </S3Tags>
-                <Zones>
+                <S3Zones>
                     <FilterRule>
                         <Name></Name>
-                        <Type></Type>
+                        <Exclude></Exclude>
                     </FilterRule>
-                </Zones>
+                </S3Zones>
             </Filter>
        </TopicConfiguration>
    </NotificationConfiguration>
