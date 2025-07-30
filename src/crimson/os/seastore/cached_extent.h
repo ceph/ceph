@@ -866,6 +866,14 @@ public:
     last_touch_end = touch_end;
   }
 
+  bool is_shadow_extent() const {
+    return is_shadow;
+  }
+
+  void set_shadow_extent(bool b) {
+    is_shadow = b;
+  }
+
 private:
   template <typename T>
   friend class read_set_item_t;
@@ -978,6 +986,8 @@ private:
 
   // This field is used by ExtentPinboard
   extent_pin_state_t pin_state = extent_pin_state_t::Fresh;
+
+  bool is_shadow = false;
 
 protected:
   trans_view_set_t mutation_pending_extents;

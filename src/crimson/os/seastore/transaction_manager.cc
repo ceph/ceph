@@ -1058,7 +1058,7 @@ TransactionManager::promote_extent(
       offset,
       slice_length,
       std::nullopt);
-    boost::ignore_unused(remapped_cold_extent);
+    remapped_cold_extent->set_shadow_extent(true);
 
     offset += slice_length;
   }
