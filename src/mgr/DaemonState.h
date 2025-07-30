@@ -261,9 +261,13 @@ public:
   template<typename Callback, typename...Args>
   auto with_daemons_by_server(Callback&& cb, Args&&... args) const ->
     decltype(cb(by_server, std::forward<Args>(args)...)) {
-    std::shared_lock l{lock};
-    
-    return std::forward<Callback>(cb)(by_server, std::forward<Args>(args)...);
+    decltype(by_server) by_server_copy;
+    {
+        // Don't hold the lock any longer than necessary
+        std::shared_lock l{lock};
+        by_server_copy = by_server;
+    }
+    return std::forward<Callback>(cb)(by_server_copy, std::forward<Args>(args)...);
   }
 
   template<typename Callback, typename...Args>
