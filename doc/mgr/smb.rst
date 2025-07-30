@@ -450,8 +450,8 @@ custom_dns
 custom_ports
     Optional. A mapping of service names to port numbers that will override the
     default ports used for those services. The service names are:
-    ``smb``, ``smbmetrics``, and ``ctdb``. If a service name is not
-    present in the mapping the default port will be used.
+    ``smb``, ``smbmetrics``, ``ctdb``, and ``remote-control``. If a service
+    name is not present in the mapping the default port will be used.
     For example, ``{"smb": 4455, "smbmetrics": 9009}`` will change the
     ports used by smb for client access and the metrics exporter, but
     not change the port used by the CTDB clustering daemon.
@@ -506,6 +506,84 @@ public_addrs
         host. Run ``cephadm list-networks`` for an example of these mappings.
         If destination is not supplied the network is automatically determined
         using the address value supplied and taken as the destination.
+remote_control
+    Optional object. This object configures an smb cluster to deploy an extra
+    ``remote control`` service. This service provides a gRPC server that
+    can be used to enumerate connected clients and disconnect clients from
+    shares. This service uses mTLS for authentication. If the service is
+    enabled and any of the ``cert``, ``key``, or ``ca_cert`` fields are not
+    populated mTLS will be disabled and the service will operate in a read-only
+    mode. Running the service with mTLS disabled is not recommended.
+    Fields:
+
+    enabled
+        Optional boolean. If explicitly set to ``true`` or ``false`` this
+        field will enable or disable the remote control service. If left
+        unset the TLS fields will be checked - if the TLS fields are filled
+        automatically enable the service.
+    cert
+        Optional object. The fields are described in :ref:`tls source
+        fields<tls-source-fields>`
+    key
+        Optional object. The fields are described in :ref:`tls source
+        fields<tls-source-fields>`
+    ca_cert
+        Optional object. The fields are described in :ref:`tls source
+        fields<tls-source-fields>`
+keybridge
+    Optional object. This object configures an smb cluster to deploy an extra
+    ``keybridge`` service. This service acts as a bridge between the Samba file
+    server and external cryptographic and key management services. This can
+    then be used to unlock cephfs subvolumes protected with fscrypt. The
+    configuration of the keybridge is based on ``scopes``. Each scope maps to
+    a different mechanism for fetching keys.
+    Fields:
+
+    enabled
+        Optional boolean. If explicitly set to ``true`` or ``false`` this
+        field will enable or disable the keybridge service. If left
+        unset the ``scopes`` fields will be checked - if scopes are defined
+        this will automatically enable the service.
+    scopes
+        Optional list of objects. Each object in the list defines and configures
+        a new keybridge scope. A scope of the type ``mem`` stores keys in
+        memory and is only for testing and debugging. A scope of the type
+        ``kmip`` proxies requests to KMIP servers.
+        Fields:
+
+        name
+            String. The name of the scope defines the type and identification
+            of the scope. The name takes the form ``<type>[.<sub_name>]``.
+            Each name must be unique. Current types are ``mem`` and ``kmip``.
+            Sub-names are only supported for ``kmip`` scope. The ``mem``
+            scope is unique per-cluster. If the sub-name is left off the
+            system will implcitly name the scope. This can be done only once
+            per-type.
+        kmip_hosts
+            Optional list of strings. Required for type ``kmip``.
+            Specify the hosts the ``kmip`` scope will proxy to. The host values
+            may be DNS names or IPv4 or IPv6 addresses. An optional port value
+            following a colon (``:``) is supported. For IPv6 addresses only:
+            surround the address with square brackets before specificying the
+            port (example: ``[2001:db8::cafe]:9999``).
+        kmip_port
+            Optional integer. Required for type ``kmip`` unless all host
+            values include ports. Specify the port used for KMIP connections
+            for host entries that do not specify a port.
+        kmip_cert
+            Optional object. Required for type ``kmip``.
+            The fields are described in :ref:`tls source fields<tls-source-fields>`
+        kmip_key
+            Optional object. Required for type ``kmip``.
+            The fields are described in :ref:`tls source fields<tls-source-fields>`
+        kmip_ca_cert
+            Optional object. Required for type ``kmip``.
+            The fields are described in :ref:`tls source fields<tls-source-fields>`
+   peer_policy
+        Optional, one of ``restricted`` or ``unrestricted``.
+        Used to control what processes the keybridge server will permit
+        for access. This option is meant for testing and development only.
+        If left unspecified the default behavior is ``restricted``.
 custom_smb_global_options
     Optional mapping. Specify key-value pairs that will be directly added to
     the global ``smb.conf`` options (or equivalent) of a Samba server.  Do
@@ -560,6 +638,16 @@ source_type
 ref
     String. Required for ``source_type: resource``. Must refer to the ID of a
     ``ceph.smb.join.auth`` resource
+
+.. _tls-source-fields:
+
+A tls source object supports the following fields:
+
+source_type
+    Optional. Must be ``resource`` if specified.
+ref
+    String. Required for ``source_type: resource``. Must refer to the ID of a
+    ``ceph.smb.tls.resource`` resource
 
 .. note::
    The ``source_type`` ``empty`` is generally only for debugging and testing
@@ -666,6 +754,19 @@ cephfs
         based implementation, currently ``samba-vfs/proxied``. This option is
         suitable for the majority of use cases and can be left unspecified for most
         shares.
+    fscrypt_key
+        Optional object. Configures the CephFS storage used by the share to
+        enable FSCrypt. The FSCrypt key will be acquired using the keybridge
+        service. The fields select the keybridge scope to use and the name
+        of the key.
+        Fields:
+
+        scope
+            String. A value matching one of the keybridge scopes defined for
+            the cluster this share belongs to.
+        name
+            String. A value indicating what fscrypt key to fetch. The specific
+            value of the name depends on the scope being used.
 restrict_access
     Optional boolean, defaulting to false. If true the share will only permit
     access by users explicitly listed in ``login_control``.
@@ -802,6 +903,70 @@ Example:
         - name: steves
           password: F00Bar123
         groups: []
+
+
+TLS Credential Resource
+------------------------
+
+TLS credential resources store copies of TLS files such as Certificates, Keys,
+or CA Certificates.
+A TLS credential resource supports the following fields:
+
+resource_type
+    A literal string ``ceph.smb.tls.credential``
+tls_credential_id
+    A short string identifying the TLS credential resource
+intent
+    One of ``present`` or ``removed``. If not provided, ``present`` is assumed.
+    If ``removed`` all following fields are optional
+credential_type
+    Required string.  The value may be one of ``cert``, ``key``, or ``ca-cert``.
+    This value indicates what type of TLS credential the value field holds.
+value:
+    A string containing the TLS certificate or key value in PEM encoding.
+linked_to_cluster:
+    Optional. A string containing a cluster id. If set, the resource may only
+    be used with the linked cluster and will automatically be removed when the
+    linked cluster is removed.
+
+Example:
+
+.. code-block:: yaml
+
+    resource_type: ceph.smb.tls.credential
+    tls_credential_id: mycert1
+    credential_type: cert
+    value: |
+      -----BEGIN CERTIFICATE-----
+      MIIFDjCCA/agAwIBAgISBtFQfoXc4RmyVabbv28RClKdMA0GCSqGSIb3DQEBCwUA
+      MDMxCzAJBgNVBAYTAlVTMRYwFAYDVQQKEw1MZXQncyBFbmNyeXB0MQwwCgYDVQQD
+      EwNSMTAwHhcNMjUwNTE5MTAyNzUyWhcNMjUwODE3MTAyNzUxWjASMRAwDgYDVQQD
+      EwdjZXBoLmlvMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAx6fif6PQ
+      LOTdnO8d1JHcF7D+oB/mQlplFz4vwq/GB6Y4oWK3uCQ4PPz/qyvE4wyvc5EPhjfg
+      d8XNc4ajEBcSUoRj3UwWwiA4oht0SyoJIfwVGp/kF5jxHhVCLdoaaqAxv7nAghWM
+      xJ+jBhWyLAo7cEW7pjlKxQDTzCe3naPVTpVSCgrD8g7y1qPFjwzycQiJ/jGbCD48
+      bCP6IJR0Gg4xqa6oSIaCojYrocwQThTjb5Vlt4jn4BbbP7NtT0XY4E3V6SdNLv8K
+      /Tn5BPmDRHHsZBJ61veir0lgzA/46kxBG0FYY6+GkxKCyahWhEa9T2Nox/O6J28y
+      eyw9tqdKPqjDyQIDAQABo4ICOzCCAjcwDgYDVR0PAQH/BAQDAgWgMB0GA1UdJQQW
+      MBQGCCsGAQUFBwMBBggrBgEFBQcDAjAMBgNVHRMBAf8EAjAAMB0GA1UdDgQWBBQ+
+      7yTEkQNqw5sxDuG+NuV72aiUMzAfBgNVHSMEGDAWgBS7vMNHpeS8qcbDpHIMEI2i
+      NeHI6DAzBggrBgEFBQcBAQQnMCUwIwYIKwYBBQUHMAKGF2h0dHA6Ly9yMTAuaS5s
+      ZW5jci5vcmcvMDcGA1UdEQQwMC6CCGNlcGguY29tggdjZXBoLmlvggx3d3cuY2Vw
+      aC5jb22CC3d3dy5jZXBoLmlvMBMGA1UdIAQMMAowCAYGZ4EMAQIBMC4GA1UdHwQn
+      MCUwI6AhoB+GHWh0dHA6Ly9yMTAuYy5sZW5jci5vcmcvMzAuY3JsMIIBAwYKKwYB
+      BAHWeQIEAgSB9ASB8QDvAHYApELFBklgYVSPD9TqnPt6LSZFTYepfy/fRVn2J086
+      hFQAAAGW6Et7FAAABAMARzBFAiAWRTxiUFKKPd0L67O+aaVlcFk4eJpiumpC0QdA
+      p1SsjgIhAP57wTzRDTjnSVjEZ1phLTJLF5oq6M7+5WFlbWIsTIXtAHUAGgT/SdBU
+      HUCv9qDDv/HYxGcvTuzuI0BomGsXQC7ciX0AAAGW6Et7cwAABAMARjBEAiBcEtcL
+      P66yMkNpvHDd/dHGp66AEghGmWKvS2ukBroJkgIgcr8FMjVJhATge/rnccAm6bza
+      kK9ppF1p5JZF1UyYvjMwDQYJKoZIhvcNAQELBQADggEBAK5iBvCv4Zk6tQINQe7n
+      yS5/9EzSxOqb/0HsyyIDOgapj9EVyyovkVZNIHZOqNvspvDd2FGgbQr1btBJiI7W
+      v2Fcs48Oy4ciJnvmTaJbFWeBTx5pbUUbT0D0IRQmhRMPDxLXz6OXB0C+MB6TKOsh
+      bFpzIKKrF+NP5n7K2m8gVO1StCpr6VKxygyMfTvWUF4zyKzutY+1cy0R6SqkIrY1
+      M0QTI1unJ4V6yH5CPFu/zR1Q+3ZjXpriQcDVxvSR8o29WN2ifEIk/NQsQxN227pQ
+      HLRxXIAMoI1O/4+5FwpXbcZM/JmNuLUa4qPzBSQmmtwQwIkDDho02pCLzn3bOoUQ
+      6Dg=
+      -----END CERTIFICATE-----
 
 
 A Declarative Configuration Example

@@ -3314,9 +3314,29 @@ class SMBClusterBindIPSpec:
 
 
 class SMBSpec(ServiceSpec):
+    # feature names. use for feature flags and (optionally) service names if it
+    # spawns a network service. helps avoid typos and ensure consistent
+    # spelling. Keep sorted.
+    _cephfs_proxy = 'cephfs-proxy'
+    _clustered = 'clustered'
+    _ctdb = 'ctdb'
+    _domain = 'domain'
+    _keybridge = 'keybridge'
+    _remote_control = 'remote-control'
+    _smb = 'smb'
+    _smbmetrics = 'smbmetrics'
+
     service_type = 'smb'
-    _valid_features = {'domain', 'clustered', 'cephfs-proxy'}
-    _valid_service_names = {'smb', 'smbmetrics', 'ctdb'}
+    _valid_features = {
+        # core features
+        _domain,
+        _clustered,
+        _cephfs_proxy,
+        # peripheral features
+        _remote_control,
+        _keybridge,
+    }
+    _valid_service_names = {_smb, _smbmetrics, _ctdb, _remote_control}
     _default_cluster_meta_obj = 'cluster.meta.json'
     _default_cluster_lock_obj = 'cluster.meta.lock'
 
@@ -3376,6 +3396,14 @@ class SMBSpec(ServiceSpec):
         # not listed the default port will be used.
         custom_ports: Optional[Dict[str, int]] = None,
         bind_addrs: Optional[List[SMBClusterBindIPSpec]] = None,
+        # === remote control server ===
+        remote_control_ssl_cert: Optional[str] = None,
+        remote_control_ssl_key: Optional[str] = None,
+        remote_control_ca_cert: Optional[str] = None,
+        # == keybridge ==
+        keybridge_kmip_ssl_cert: Optional[str] = None,
+        keybridge_kmip_ssl_key: Optional[str] = None,
+        keybridge_kmip_ca_cert: Optional[str] = None,
         # --- genearal tweaks ---
         extra_container_args: Optional[GeneralArgList] = None,
         extra_entrypoint_args: Optional[GeneralArgList] = None,
@@ -3410,6 +3438,12 @@ class SMBSpec(ServiceSpec):
         )
         self.custom_ports = custom_ports
         self.bind_addrs = SMBClusterBindIPSpec.convert_list(bind_addrs)
+        self.remote_control_ssl_cert = remote_control_ssl_cert
+        self.remote_control_ssl_key = remote_control_ssl_key
+        self.remote_control_ca_cert = remote_control_ca_cert
+        self.keybridge_kmip_ssl_cert = keybridge_kmip_ssl_cert
+        self.keybridge_kmip_ssl_key = keybridge_kmip_ssl_key
+        self.keybridge_kmip_ca_cert = keybridge_kmip_ca_cert
         self.validate()
 
     def validate(self) -> None:
@@ -3423,23 +3457,23 @@ class SMBSpec(ServiceSpec):
                 raise ValueError(
                     f'invalid feature flags: {", ".join(invalid)}'
                 )
-        if 'clustered' in self.features and not self.cluster_meta_uri:
+        if self._clustered in self.features and not self.cluster_meta_uri:
             # derive a cluster meta uri from config uri by default (if possible)
             self.cluster_meta_uri = self._derive_cluster_uri(
                 self.config_uri,
                 self._default_cluster_meta_obj,
             )
-        if 'clustered' not in self.features and self.cluster_meta_uri:
+        if self._clustered not in self.features and self.cluster_meta_uri:
             raise ValueError(
                 'cluster meta uri unsupported when "clustered" feature not set'
             )
-        if 'clustered' in self.features and not self.cluster_lock_uri:
+        if self._clustered in self.features and not self.cluster_lock_uri:
             # derive a cluster meta uri from config uri by default (if possible)
             self.cluster_lock_uri = self._derive_cluster_uri(
                 self.config_uri,
                 self._default_cluster_lock_obj,
             )
-        if 'clustered' not in self.features and self.cluster_lock_uri:
+        if self._clustered not in self.features and self.cluster_lock_uri:
             raise ValueError(
                 'cluster lock uri unsupported when "clustered" feature not set'
             )
@@ -3459,9 +3493,10 @@ class SMBSpec(ServiceSpec):
 
     def _default_ports(self) -> Dict[str, int]:
         return {
-            'smb': 445,
-            'smbmetrics': 9922,
-            'ctdb': 4379,
+            self._smb: 445,
+            self._smbmetrics: 9922,
+            self._ctdb: 4379,
+            self._remote_control: 54445,
         }
 
     def service_ports(self) -> Dict[str, int]:
@@ -3471,13 +3506,13 @@ class SMBSpec(ServiceSpec):
         return ports
 
     def metrics_exporter_port(self) -> int:
-        return self.service_ports()['smbmetrics']
+        return self.service_ports()[self._smbmetrics]
 
     def get_port_start(self) -> List[int]:
         _ports = self.service_ports()
-        ports = [_ports['smb'], _ports['smbmetrics']]
-        if 'clustered' in self.features:
-            ports.append(_ports['ctdb'])
+        ports = [_ports[self._smb], _ports[self._smbmetrics]]
+        if self._clustered in self.features:
+            ports.append(_ports[self._ctdb])
         return ports
 
     def strict_cluster_ip_specs(self) -> List[Dict[str, Any]]:
