@@ -3627,7 +3627,7 @@ void pg_history_t::generate_test_instances(list<pg_history_t*>& o)
 
 void pg_info_t::encode(ceph::buffer::list &bl) const
 {
-  ENCODE_START(33, 26, bl);
+  ENCODE_START(34, 26, bl);
   encode(pgid.pgid, bl);
   encode(last_update, bl);
   encode(last_complete, bl);
@@ -3644,12 +3644,13 @@ void pg_info_t::encode(ceph::buffer::list &bl) const
   encode(true, bl); // was last_backfill_bitwise
   encode(last_interval_started, bl);
   encode(partial_writes_last_complete, bl);
+  encode(partial_writes_last_complete_epoch, bl);
   ENCODE_FINISH(bl);
 }
 
 void pg_info_t::decode(ceph::buffer::list::const_iterator &bl)
 {
-  DECODE_START(33, bl);
+  DECODE_START(34, bl);
   decode(pgid.pgid, bl);
   decode(last_update, bl);
   decode(last_complete, bl);
@@ -3681,6 +3682,9 @@ void pg_info_t::decode(ceph::buffer::list::const_iterator &bl)
   if (struct_v >= 33) {
     decode(partial_writes_last_complete, bl);
   }
+  if (struct_v >= 34) {
+    decode(partial_writes_last_complete_epoch, bl);
+  }
   DECODE_FINISH(bl);
 }
 
@@ -3705,6 +3709,7 @@ void pg_info_t::dump(Formatter *f) const
     f->close_section();
   }
   f->close_section();
+  f->dump_stream("partial_writes_last_complete_epoch") << partial_writes_last_complete_epoch;
   f->open_array_section("purged_snaps");
   for (interval_set<snapid_t>::const_iterator i=purged_snaps.begin();
        i != purged_snaps.end();
