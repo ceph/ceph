@@ -264,6 +264,13 @@ private:
   map_t buffer_map;
 };
 
+enum class extent_2q_state_t : uint8_t {
+  Fresh = 0,
+  WarmIn,
+  Hot,
+  Max
+};
+
 class ExtentIndex;
 class CachedExtent
   : public boost::intrusive_ref_counter<
@@ -815,6 +822,28 @@ public:
   std::pair<bool, viewable_state_t>
   is_viewable_by_trans(Transaction &t);
 
+  extent_2q_state_t get_2q_state() const {
+    assert("2Q" == crimson::common::get_conf<std::string>
+	   ("seastore_cachepin_type"));
+    return cache_state;
+  }
+
+  void set_2q_state(extent_2q_state_t state) {
+    assert("2Q" == crimson::common::get_conf<std::string>
+	   ("seastore_cachepin_type"));
+    assert(state < extent_2q_state_t::Max);
+    cache_state = state;
+  }
+
+  extent_len_t get_last_touch_end() const {
+    return last_touch_end;
+  }
+
+  void set_last_touch_end(extent_len_t touch_end) {
+    assert(touch_end != 0);
+    last_touch_end = touch_end;
+  }
+
 private:
   template <typename T>
   friend class read_set_item_t;
@@ -837,8 +866,12 @@ private:
   friend class ExtentIndex;
   friend class Transaction;
 
-  bool is_linked() {
+  bool is_linked_to_index() {
     return extent_index_hook.is_linked();
+  }
+
+  bool is_linked_to_list() {
+    return primary_ref_list_hook.is_linked();
   }
 
   /// hook for intrusive ref list (mainly dirty or lru list)
@@ -917,6 +950,13 @@ private:
   // the target rewrite generation for the followup rewrite
   // or the rewrite generation for the fresh write
   rewrite_gen_t rewrite_generation = NULL_GENERATION;
+
+  // save the end offset of the most recent of extent touching,
+  // see Cache::touch_extent_by_range() and ExtentPinboardTwoQ.
+  extent_len_t last_touch_end = 0;
+
+  // This field is unused when the ExtentPinboard use LRU algorithm
+  extent_2q_state_t cache_state = extent_2q_state_t::Fresh;
 
 protected:
   trans_view_set_t mutation_pending_extents;
@@ -1008,6 +1048,9 @@ protected:
   }
 
   friend class Cache;
+  friend class ExtentQueue;
+  friend class ExtentPinboardLRU;
+  friend class ExtentPinboardTwoQ;
   template <typename T, typename... Args>
   static TCachedExtentRef<T> make_cached_extent_ref(
     Args&&... args) {
@@ -1267,7 +1310,7 @@ public:
 
   void erase(CachedExtent &extent) {
     assert(extent.parent_index);
-    assert(extent.is_linked());
+    assert(extent.is_linked_to_index());
     [[maybe_unused]] auto erased = extent_index.erase(
       extent_index.s_iterator_to(extent));
     extent.parent_index = nullptr;
@@ -1537,3 +1580,24 @@ template <> struct fmt::formatter<crimson::os::seastore::CachedExtent> : fmt::os
 template <> struct fmt::formatter<crimson::os::seastore::CachedExtent::viewable_state_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::LogicalCachedExtent> : fmt::ostream_formatter {};
 #endif
+
+template <>
+struct fmt::formatter<crimson::os::seastore::extent_2q_state_t>
+    : public fmt::formatter<std::string_view> {
+  using State = crimson::os::seastore::extent_2q_state_t;
+  auto format(const State &s, auto &ctx) const {
+    switch (s) {
+    case State::Fresh:
+      return fmt::format_to(ctx.out(), "Fresh");
+    case State::WarmIn:
+      return fmt::format_to(ctx.out(), "WarmIn");
+    case State::Hot:
+      return fmt::format_to(ctx.out(), "Hot");
+    case State::Max:
+      return fmt::format_to(ctx.out(), "Max");
+    default:
+      __builtin_unreachable();
+      return ctx.out();
+    }
+  }
+};

@@ -147,11 +147,32 @@ options:
   level: advanced
   desc: Max size in bytes that an extent can be, 0 to disable
   default: 0
-- name: seastore_cache_lru_size
+- name: seastore_cachepin_size_pershard
   type: size
   level: advanced
   desc: Size in bytes of extents to keep in cache (per reactor).
   default: 2_G
+- name: seastore_cachepin_type
+  type: str
+  level: dev
+  desc: The cache replacement algorithm used by extent pinboard in seastore. (LRU/2Q)
+  default: LRU
+  enum_values:
+  - LRU
+  - 2Q
+- name: seastore_cachepin_2q_in_ratio
+  type: float
+  level: advanced
+  desc: Ratio of A1_in queue size to cache size(seastore_cachepin_size_pershard) in 2Q cache algorithm.
+        Note that the size of Am(primary) queue in 2Q is cache_size * (1 - in_ratio).
+  default: 0.5
+- name: seastore_cachepin_2q_out_ratio
+  type: float
+  level: advanced
+  desc: Ratio of A1_out queue size to cache size(seastore_cachepin_size_pershard) in 2Q cache algorithm.
+        Note this size ratio does not reflect actual memory usage, as it represents the size of evicted
+        pages from A1_in queue.
+  default: 0.5
 - name: seastore_obj_data_write_amplification
   type: float
   level: advanced
