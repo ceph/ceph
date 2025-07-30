@@ -20,6 +20,13 @@ public:
   template <typename... T>
   LogicalChildNode(T&&... t) : LogicalCachedExtent(std::forward<T>(t)...) {}
 
+  virtual void lcn_on_invalidated(Transaction &t) {}
+
+  void on_invalidated(Transaction &t) final {
+    this->lba_child_node_t::on_invalidated();
+    lcn_on_invalidated(t);
+  }
+
   virtual ~LogicalChildNode() {
     if (this->is_stable()) {
       lba_child_node_t::destroy();
