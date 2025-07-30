@@ -423,7 +423,6 @@ void PGBackend::partial_write(
   auto dpp = get_parent()->get_dpp();
   ldpp_dout(dpp, 20) << __func__ << " version=" << entry.version
 		     << " written_shards=" << entry.written_shards
-		     << " present_shards=" << entry.present_shards
 		     << " pwlc=" << info->partial_writes_last_complete
 		     << " previous_version=" << previous_version
 		     << dendl;
