@@ -74,6 +74,8 @@ the default virtual host is selected when no configured dns names match the Host
 
 s3 vhost-style requests depend on wildcard matching (ex `bucketname.s3.ceph.example.com` matches `s3.ceph.example.com`), but also support [CNAME records](https://docs.aws.amazon.com/AmazonS3/latest/userguide/VirtualHosting.html#VirtualHostingCustomURLs) where the Host header only contains the bucket name. to support this, radosgw must map all non-matching dns names to the s3 api - meaning that s3 must be in the default virtual host
 
+multisite expects a single zone/zonegroup endpoint to serve both s3 and admin apis, so `rgw_dns_admin_name` should not be overridden in multisite configurations
+
 for apis currently routed by `RGWRESTMgr_S3`:
 * create `RGWRESTMgr` classes for each and register with virtual host when configured
 * `RGWRESTMgr_S3(bool enable_s3website, bool enable_sts, bool enable_iam, bool enable_pubsub)` only enables nesting when `rgw_dns_{api}_name` is empty
