@@ -308,6 +308,7 @@ indefinitely by running the following command:
    ceph config set mon mon_warn_on_insecure_global_id_reclaim_allowed false
 
 
+.. _auth-insecure-keys-creatable:
 
 AUTH_INSECURE_KEYS_CREATABLE
 ____________________________
@@ -333,6 +334,7 @@ manually setting this configuration to false.
 .. note:: cephadm and Rook should automate this process for you.
 
 
+.. _auth-insecure-service-tickets:
 
 AUTH_INSECURE_SERVICE_TICKETS
 _____________________________
@@ -365,6 +367,7 @@ The Ceph Monitors will begin issuing tickets using the more secure cipher type.
 .. note:: cephadm and Rook should automate this process for you.
 
 
+.. _auth-insecure-service-key-type:
 
 AUTH_INSECURE_SERVICE_KEY_TYPE
 ______________________________
@@ -407,6 +410,7 @@ Do this for each daemon.
 .. note:: cephadm and Rook should automate this process for you.
 
 
+.. _auth-insecure-rotating-service-key-type:
 
 AUTH_INSECURE_ROTATING_SERVICE_KEY_TYPE
 _______________________________________
@@ -470,6 +474,7 @@ The warning should resolve immediately.
 .. note:: cephadm and Rook should automate this process for you.
 
 
+.. _auth-insecure-client-key-type:
 
 AUTH_INSECURE_CLIENT_KEY_TYPE
 _____________________________
@@ -507,6 +512,8 @@ Do this for each client.
 
 .. note:: Rook should automate this process for you. cephadm does not generally administer client credentials.
 
+
+.. _auth-insecure-keys-allowed:
 
 AUTH_INSECURE_KEYS_ALLOWED
 __________________________
@@ -598,6 +605,7 @@ The warning should now be resolved.
 .. note:: Rook should automate this process for you. cephadm will not change this as it may adversely affect existing clients.
 
 
+.. _auth-emergency-ciphers-set:
 
 AUTH_EMERGENCY_CIPHERS_SET
 __________________________
