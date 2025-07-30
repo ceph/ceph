@@ -1,3 +1,4 @@
+#include <charconv> // for std::to_chars()
 #include <string>
 #include <lua.hpp>
 #include "common/ceph_context.h"
