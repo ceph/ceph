@@ -72,7 +72,7 @@ on startup, apis from `rgw_enable_apis` register to the virtual host correspondi
 
 the default virtual host is selected when no configured dns names match the Host header. backward compatible with existing configuration
 
-s3 vhost-style requests depend on wildcard matching (ex `bucketname.s3.ceph.example.com` matches `s3.ceph.example.com`). should all virtual hosts match their subdomains too, or just s3/s3website/s3control that explicitly support it?
+s3 vhost-style requests depend on wildcard matching (ex `bucketname.s3.ceph.example.com` matches `s3.ceph.example.com`), but also support [CNAME records](https://docs.aws.amazon.com/AmazonS3/latest/userguide/VirtualHosting.html#VirtualHostingCustomURLs) where the Host header only contains the bucket name. to support this, radosgw must map all non-matching dns names to the s3 api - meaning that s3 must be in the default virtual host
 
 for apis currently routed by `RGWRESTMgr_S3`:
 * create `RGWRESTMgr` classes for each and register with virtual host when configured
