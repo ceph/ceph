@@ -51,7 +51,7 @@ Terms
 Terminology
 -----------
 
-``{foo, bar}^secret`` denotes encryption by secret.
+``{X, Y, ...}^secret`` denotes encryption of values ``X + Y + ...`` by ``secret``.
 
 
 Context
@@ -89,7 +89,7 @@ principal_secret.::
     CephXAuthenticate {
       u8 2                     # 2 means nautilus+
       u64 client_challenge     # random (by client)
-      u64 key = {client_challenge ^ server_challenge}^principal_secret   # (roughly)
+      u64 key = digest({client_challenge, server_challenge}^principal_secret)   # (roughly)
       blob old_ticket          # old ticket, if we are reconnecting or renewing
       u32 other_keys           # bit mask of service keys we want
     }
@@ -99,14 +99,17 @@ Prior to nautilus,::
     CephXAuthenticate {
       u8 1                     # 2 means nautilus+
       u64 client_challenge     # random (by client)
-      u64 key = {client_challenge + server_challenge}^principal_secret   # (roughly)
+      u64 key = digest({client_challenge, server_challenge}^principal_secret)   # (roughly)
       blob old_ticket          # old ticket, if we are reconnecting or renewing
     }
 
-The monitor looks up principal_secret in database, and verifies the
-key is correct.  If old_ticket is present, verify it is valid, and we
-can reuse the same global_id.  (Otherwise, a new global_id is assigned
-by the monitor.)::
+.. note:: This is not an authentication step in this protocol. The
+          ``server_challenge`` is vulnerable to MitM attacks. This can be
+          considered a DoS filter and little else.
+
+The monitor looks up ``principal_secret`` in database, and verifies the key is
+correct.  If ``old_ticket`` is present, verify that it is valid and reuse the
+same ``global_id``. Otherwise, the monitors assign a new ``global_id``::
 
   a->p :
     CephxReplyHeader {
@@ -115,7 +118,7 @@ by the monitor.)::
     }
     u8 encoding_version = 1
     u32 num_tickets ( = 1)
-    ticket_info           # (N = 1)
+    ticket_info           # (N = 1) for AUTH ticket
 
 plus (for Nautilus and later)::
 
@@ -139,9 +142,9 @@ where::
     }
 
     service_ticket_info {
-      u32 service_id       # CEPH_ENTITY_TYPE_{OSD,MDS,MGR}
+      u32 service_id       # CEPH_ENTITY_TYPE_{MON,MGR,OSD,MDS}
       u8 msg_version (1)
-      {CephXServiceTicket service_ticket}^principal_secret
+      {CephXServiceTicket service_ticket}^session_key
       CephxTicketBlob ticket_blob
     }
 
@@ -152,7 +155,7 @@ where::
 
     CephxTicketBlob {
       u64 secret_id             # which service ticket encrypted this; -1 == monsecret, otherwise service's rotating key id
-      {CephXServiceTicketInfo ticket}^mon_secret
+      {CephxServiceTicketInfo ticket}^rotating_service_secret
     }
 
     CephxServiceTicketInfo {
@@ -167,6 +170,12 @@ where::
       AuthCapsInfo       # what client is allowed to do
       u32 flags = 0      # unused
     }
+
+.. note:: The rotating_service_secret is one of three (by default) secrets that
+          services of the given type share. The Monitors have two service types for
+          this purpose: CEPH_ENTITY_TYPE_MON for protecting mon authorizations and
+          CEPH_ENTITY_TYPE_AUTH for securing the "auth" tickets. The "auth" tickets
+          permit a client to reacquire an assigned global_id.
 
 So: for each ticket, principal gets a part that it decrypts with its
 secret to get the session_key (CephxServiceTicket).  And the
@@ -213,10 +222,10 @@ where::
       u64 server_challenge_plus_one = 0 # not used here
     }
 
-The monitor validates the authorizer by decrypting the auth_ticket
-with ``mon_secret`` and confirming that it says this principal is who
-they say they are in the CephxAuthorizer fields.  Note that the nonce
-random bytes aren't used here (the field exists for Phase III below).
+The monitor validates the authorizer by decrypting the auth_ticket with
+``rotating_service_secret`` and confirming that it says this principal is who
+they say they are in the CephxAuthorizer fields.  Note that the nonce random
+bytes aren't used here (the field exists for Phase III below).
 
 Assuming all is well, the authorizer can generate service tickets
 based on the CEPH_ENTITY_TYPE_* bits in the ``keys`` bitmask.

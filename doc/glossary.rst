@@ -203,9 +203,10 @@
 	CephX
                 The Ceph authentication protocol. CephX authenticates users and
                 daemons. CephX operates like Kerberos, but it has no single
-                point of failure. See the :ref:`High-availability
-                Authentication section<arch_high_availability_authentication>`
-                of the Architecture document and the :ref:`CephX Configuration
+                point of failure and allows authentication to a class of
+                services. See the :ref:`High-availability Authentication
+                section<arch_high_availability_authentication>` of the
+                Architecture document and the :ref:`CephX Configuration
                 Reference<rados-cephx-config-ref>`. 
 
 	Client

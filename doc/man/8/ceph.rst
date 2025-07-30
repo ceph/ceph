@@ -84,7 +84,9 @@ file, or random key if no input is given and/or any caps specified in the comman
 
 Usage::
 
-	ceph auth add <entity> {<caps> [<caps>...]}
+	  ceph auth add [--key-type=<cipher>] <entity> {<caps> [<caps>...]}
+
+No key information is output. If ``--key-type`` is omitted, the cluster's preferred cipher is used.
 
 Subcommand ``caps`` updates caps for **name** from caps specified in the command.
 
@@ -123,7 +125,9 @@ command.
 
 Usage::
 
-	ceph auth get-or-create <entity> {<caps> [<caps>...]}
+	  ceph auth get-or-create [--key-type=<cipher>] <entity> {<caps> [<caps>...]}
+
+The output is the new key in the ``.ini`` file format. If ``--key-type`` is omitted, the cluster's preferred cipher is used.
 
 Subcommand ``get-or-create-key`` gets or adds key for ``name`` from system/caps
 pairs specified in the command.  If key already exists, any given caps must match
@@ -132,6 +136,8 @@ the existing caps for that key.
 Usage::
 
 	ceph auth get-or-create-key <entity> {<caps> [<caps>...]}
+
+The output is the new key in plain text. If ``--key-type`` is omitted, the cluster's preferred cipher is used.
 
 Subcommand ``import`` reads keyring from input file.
 
@@ -155,8 +161,29 @@ Subcommand ``print_key`` displays requested key.
 
 Usage::
 
-	ceph auth print_key <entity>
+	  ceph auth print_key <entity>
 
+Subcommand ``rotate`` rotates the key for the given entity.
+
+Usage::
+
+	ceph auth rotate [--key-type=<cipher>] <entity>
+
+The output is the new key in the ``.ini`` file format. If ``--key-type`` is omitted, the cluster's preferred cipher is used.
+
+Subcommand ``dump-keys`` dumps the entire key database including rotating service keys.
+
+Usage::
+
+	ceph --format=json auth dump-keys
+
+The output format must be ``json`` or ``json-pretty``.
+
+Subcommand ``wipe-rotating-service-keys`` wipes all rotating service keys and forces the Monitors to refresh all keys. **Do not** run this command without understanding its full effects and purpose. Consult the Ceph documentation for more information.
+
+Usage::
+
+	ceph auth wipe-rotating-service-keys
 
 compact
 -------
@@ -381,7 +408,9 @@ capability that client already holds.
 
 Usage::
 
-    ceph fs authorize <fs_name> client.<client_id> <path> <perms> [<path> <perms>...]
+    ceph fs authorize [--key-type=<cipher>] <fs_name> client.<client_id> <path> <perms> [<path> <perms>...]
+
+The output is the new key in the ``.ini`` file format with caps. If ``--key-type`` is omitted, the cluster's preferred cipher is used.
 
 Subcommand ``dump`` displays the FSMap at the given epoch (default: current).
 This includes all file system settings, MDS daemons and the ranks they hold
@@ -663,6 +692,17 @@ Usage::
 
 	ceph mon stat
 
+Subcommand ``set`` sets various Monitor map settings.
+
+Usage::
+
+	ceph mon set <name> <value>
+
+Valid names include ``auth_service_cipher``, ``auth_allowed_ciphers``, and
+``auth_preferred_cipher``. The meaning of these settings and the valid values
+are as described in :manpage:`monmaptool(8)`.
+
+
 mgr
 ---
 
@@ -768,10 +808,10 @@ Usage::
 
 Subcommand ``new`` can be used to create a new OSD or to recreate a previously
 destroyed OSD with a specific *id*. The new OSD will have the specified *uuid*,
-and the command expects a JSON file containing the base64 cephx key for auth
-entity *client.osd.<id>*, as well as optional base64 cepx key for dm-crypt
+and the command expects a JSON file containing the base64 CephX key for auth
+entity *client.osd.<id>*, as well as optional base64 CephX key for dm-crypt
 lockbox access and a dm-crypt key. Specifying a dm-crypt requires specifying
-the accompanying lockbox cephx key.
+the accompanying lockbox CephX key.
 
 Usage::
 
@@ -1322,7 +1362,7 @@ Usage::
 
 	ceph osd rm <ids> [<ids>...]
 
-Subcommand ``destroy`` marks OSD *id* as *destroyed*, removing its cephx
+Subcommand ``destroy`` marks OSD *id* as *destroyed*, removing its CephX
 entity's keys and all of its dm-crypt and daemon-private config key
 entries.
 
