@@ -1278,7 +1278,7 @@ TransactionManager::promote_extent(
       0,
       orig_ext->get_length(),
       std::nullopt);
-    boost::ignore_unused(remapped_cold_extent);
+    remapped_cold_extent->set_shadow_extent(true);
 
     remapped_cold_extent->set_shadow_extent(true);
   }

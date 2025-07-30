@@ -28,7 +28,7 @@ public:
   }
 
   virtual ~LogicalChildNode() {
-    if (this->is_stable()) {
+    if (this->is_stable() && !is_shadow_extent()) {
       lba_child_node_t::destroy();
     }
   }

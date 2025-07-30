@@ -908,6 +908,14 @@ public:
     last_touch_end = touch_end;
   }
 
+  bool is_shadow_extent() const {
+    return is_shadow;
+  }
+
+  void set_shadow_extent(bool b) {
+    is_shadow = b;
+  }
+
 private:
   template <typename T>
   friend class read_set_item_t;
@@ -1035,6 +1043,8 @@ private:
   void new_committer(Transaction &t);
 
   seastar::shared_mutex commit_lock;
+
+  bool is_shadow = false;
 
 protected:
   trans_view_set_t mutation_pending_extents;
