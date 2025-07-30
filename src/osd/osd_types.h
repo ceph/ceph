@@ -4497,7 +4497,6 @@ struct pg_log_entry_t {
   ObjectCleanRegions clean_regions;
 
   shard_id_set written_shards; // EC partial writes do not update every shard
-  shard_id_set present_shards; // EC partial writes need to know set of present shards
 
   pg_log_entry_t()
    : user_version(0), return_code(0), op(0),
@@ -4571,9 +4570,6 @@ struct pg_log_entry_t {
   /// EC partial writes: test if a shard was written
   bool is_written_shard(const shard_id_t shard) const {
     return written_shards.empty() || written_shards.contains(shard);
-  }
-  bool is_present_shard(const shard_id_t shard) const {
-    return present_shards.empty() || present_shards.contains(shard);
   }
 
   void encode_with_checksum(ceph::buffer::list& bl) const;
