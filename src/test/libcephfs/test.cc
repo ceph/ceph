@@ -3854,6 +3854,31 @@ TEST(LibCephFS, FsCrypt) {
   ceph_shutdown(cmount);
 }
 
+TEST(LibCephFS, EncTag) {
+  struct ceph_mount_info *cmount;
+  ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+  ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
+  ASSERT_EQ(do_ceph_mount(cmount, NULL), 0);
+
+  char test_xattr_file[NAME_MAX];
+  sprintf(test_xattr_file, "test_fscrypt_%d", getpid());
+  int fd = ceph_open(cmount, test_xattr_file, O_RDWR|O_CREAT, 0666);
+  ASSERT_GT(fd, 0);
+
+  char enctagbuf[] = "foo";
+  ASSERT_EQ(0, ceph_fsetxattr(cmount, fd, "ceph.fscrypt.auth", "foo", 3, CEPH_XATTR_CREATE));
+  ASSERT_EQ(0, ceph_fsetxattr(cmount, fd, "user.ceph.subvolume.enctag", enctagbuf, sizeof(enctagbuf), CEPH_XATTR_CREATE));
+
+  char enctagread[4];
+  ASSERT_EQ(1, ceph_is_encrypted(cmount, fd, enctagread));
+  ASSERT_EQ(0, strcmp(enctagbuf, enctagread));
+  ASSERT_EQ(0, ceph_close(cmount, fd));
+
+  ASSERT_EQ(0, ceph_unmount(cmount));
+  ceph_shutdown(cmount);
+}
+
 TEST(LibCephFS, SnapdirAttrs) {
   struct ceph_mount_info *cmount;
   ASSERT_EQ(ceph_create(&cmount, NULL), 0);

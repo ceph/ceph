@@ -18381,15 +18381,29 @@ int Client::is_encrypted(int fd, UserPerm& perms, char* enctag)
     return -EBADF;
   }
 
-  return ll_is_encrypted(f->inode.get(), perms, enctag);
+  auto *in = f->inode.get();
+  if (in->is_fscrypt_enabled()) {
+    std::scoped_lock lock(client_lock);
+    char name[] = "user.ceph.subvolume.enctag";
+    int r = _getxattr(in, name, enctag, sizeof(enctag), perms);
+    // dir can be encrypted and xattr DNE if it isn't setup via mgr subvolume
+    if (r < 0) {
+      enctag = nullptr;
+    }
+
+    return 1;
+  }
+  enctag = nullptr;
+  return -EINVAL;
 }
 
 int Client::ll_is_encrypted(Inode *in, UserPerm& perms, char *enctag)
 {
-  if (in->is_encrypted()) {
-    int r = ll_getxattr(in, "user.ceph.subvolume.enctag", enctag, sizeof(enctag), perms);
+  if (in->is_fscrypt_enabled()) {
+    std::scoped_lock lock(client_lock);
+    char name[] = "user.ceph.subvolume.enctag";
+    int r = _getxattr(in, name, enctag, sizeof(enctag), perms);
     // dir can be encrypted and xattr DNE if it isn't setup via mgr subvolume
-    // this is an expected scenario
     if (r < 0) {
       enctag = nullptr;
     }
