@@ -215,20 +215,23 @@ See the :ref:`monitor-config-reference` for more detail on configuring monitors.
 High Availability Authentication
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The ``cephx`` authentication system is used by Ceph to authenticate users and
-daemons and to protect against man-in-the-middle attacks.
+The CephX authentication system is used by Ceph to authenticate users and
+daemons and to protect against man-in-the-middle attacks. Simultaneously, CephX
+provides a mechanism to grant authorizations to clients for using Ceph
+services. These authorizations are encoded as CephX Capabilities which are
+interpreted by the respective services as to what they grant the client to do.
+The authorizations take the form of time-limited tickets which must be
+periodically refreshed by the Ceph client.
 
-.. note:: The ``cephx`` protocol does not address data encryption in transport
+.. note:: The CephX protocol does not address data encryption in transport
    (for example, SSL/TLS) or encryption at rest.
 
-``cephx`` uses shared secret keys for authentication. This means that both the
-client and the monitor cluster keep a copy of the client's secret key.
+CephX uses shared secret keys for authentication. This means that both the
+client and the Monitors keep a copy of the client's secret key.
 
-The ``cephx`` protocol makes it possible for each party to prove to the other
-that it has a copy of the key without revealing it. This provides mutual
-authentication and allows the cluster to confirm (1) that the user has the
-secret key and (2) that the user can be confident that the cluster has a copy
-of the secret key.
+The CephX protocol makes it possible for each party to prove to the other
+that it has a copy of the key without revealing it while preventing an
+adversary to learn the key or replay messages to masquerade key ownership.
 
 As stated in :ref:`Scalability and High Availability
 <arch_scalability_and_high_availability>`, Ceph does not have any centralized
@@ -236,37 +239,52 @@ interface between clients and the Ceph object store. By avoiding such a
 centralized interface, Ceph avoids the bottlenecks that attend such centralized
 interfaces. However, this means that clients must interact directly with OSDs.
 Direct interactions between Ceph clients and OSDs require authenticated
-connections. The ``cephx`` authentication system establishes and sustains these
+connections. The CephX authentication system establishes and sustains these
 authenticated connections.
 
-The ``cephx`` protocol operates in a manner similar to `Kerberos`_.
+The CephX protocol operates in a manner similar to `Kerberos`_. A user invokes
+a Ceph client which automatically contacts a Monitor. Like Kerberos, each
+Monitor can independently authenticate users and distribute tickets to clients.
+Consequently, there is no single point of failure and no bottleneck when using
+CephX.
 
-A user invokes a Ceph client to contact a monitor. Unlike Kerberos, each
-monitor can authenticate users and distribute keys, which means that there is
-no single point of failure and no bottleneck when using ``cephx``. The monitor
-returns an authentication data structure that is similar to a Kerberos ticket.
-This authentication data structure contains a session key for use in obtaining
-Ceph services. The session key is itself encrypted with the user's permanent
-secret key, which means that only the user can request services from the Ceph
-Monitors. The client then uses the session key to request services from the
-monitors, and the monitors provide the client with a ticket that authenticates
-the client against the OSDs that actually handle data. Ceph Monitors and OSDs
-share a secret, which means that the clients can use the ticket provided by the
-monitors to authenticate against any OSD or metadata server in the cluster.
+Like Kerberos, a Monitor responding to a client authentication request will
+return an session key encrypted by the credential secret and a set of encrypted
+tickets for use by the client to access Ceph services which its credential is
+authorized to use. The session key and auth service ticket together can be used
+for obtaining new or refreshed tickets for Ceph services. For each Ceph service
+(AUTH, MON, MGR, OSD, MDS), a client might receive a ticket for each of the
+rotating service keys (usually 3).
 
-Like Kerberos tickets, ``cephx`` tickets expire. An attacker cannot use an
+CephX uses rotating service keys which are securely distributed to each service
+type, e.g. the CephFS Metadata Servers (MDS). The tickets encrypted with those
+rotating service keys can then be decrypted by any service daemon to learn the
+identity of the client (entity name), the client's global identifier or
+incarnation, the time when the ticket was created and will expire, and all
+capabilities (authorizations) the Client has with the service.
+
+Like Kerberos tickets, CephX tickets expire. An attacker cannot use an
 expired ticket or session key that has been obtained surreptitiously. This form
 of authentication prevents attackers who have access to the communications
 medium from creating bogus messages under another user's identity and prevents
 attackers from altering another user's legitimate messages, as long as the
 user's secret key is not divulged before it expires.
 
-An administrator must set up users before using ``cephx``.  In the following
-diagram, the ``client.admin`` user invokes ``ceph auth get-or-create-key`` from
-the command line to generate a username and secret key. Ceph's ``auth``
-subsystem generates the username and key, stores a copy on the monitor(s), and
-transmits the user's secret back to the ``client.admin`` user. This means that
-the client and the monitor share a secret key.
+CephX also supports rotating a credential's secret key to address leaks
+or scope changes when desired. It is expected to be routine in future
+Ceph installations (2025+) that the service daemon keys (e.g. ``mgr.x``)
+might be rotated whenever the daemon is relocated or even restarted.
+The same can be done for any entity type, including clients. Finally, this 
+mechanism can be used to effect key type upgrades as necessary when ciphers
+are upgraded to improve security.
+
+To use CephX, an administrator must set up each user/credential in advance. The
+first credential routinely created for new Ceph installs is the
+``client.admin`` key which can be used to administer the cluster. In the
+following diagram, that ``client.admin`` user may invoke ``ceph auth
+get-or-create-key`` from the command line to generate a new entity and secret
+key. Ceph's ``auth`` subsystem generates the username and key, stores a copy on
+all Monitors, and returns the new entity's secret back to administrator.
 
 .. note:: The ``client.admin`` user must provide the user ID and
    secret key to the user in a secure manner.
@@ -284,16 +302,24 @@ the client and the monitor share a secret key.
                 | transmit key  |
                 |               |
 
-Here is how a client authenticates with a monitor. The client passes the user
-name to the monitor. The monitor generates a session key that is encrypted with
-the secret key associated with the ``username``. The monitor transmits the
-encrypted ticket to the client. The client uses the shared secret key to
-decrypt the payload. The session key identifies the user, and this act of
-identification will last for the duration of the session.  The client requests
-a ticket for the user, and the ticket is signed with the session key. The
-monitor generates a ticket and uses the user's secret key to encrypt it. The
-encrypted ticket is transmitted to the client. The client decrypts the ticket
-and uses it to sign requests to OSDs and to metadata servers in the cluster.
+
+Here is how a client authenticates with a Monitor with entity
+``client.username``. The client passes the user name to the Monitor. The
+Monitor generates an **auth session key** that is encrypted with the secret key
+associated with ``client.username``. The Monitor transmits the encrypted
+``auth`` ticket to the client. The client uses its principal's secret key to
+decrypt the payload. The newly established **auth session key** now identifies
+the user and will persist for the duration of its instance (incarnation).
+
+When the client requests a service ticket, the Monitor will generate new
+tickets with the latest rotating service secrets for the requested service
+type. Within each ticket is a fresh **service session key** only for use with
+that ticket. The **service session key** is encrypted twice: once using the
+**auth session key** and a second time within the encrypted service ticket
+which can only be decrypted by the service daemon. This new **service session
+key** thereby allows the client and service daemon to mutually authenticate
+each other when establishing a session.
+
 
 .. ditaa::
 
@@ -323,9 +349,9 @@ and uses it to sign requests to OSDs and to metadata servers in the cluster.
                 |<----+         |
 
 
-The ``cephx`` protocol authenticates ongoing communications between the clients
+The CephX protocol authenticates ongoing communications between the clients
 and Ceph daemons. After initial authentication, each message sent between a
-client and a daemon is signed using a ticket that can be verified by monitors,
+client and a daemon is signed using a ticket that can be verified by Monitors,
 OSDs, and metadata daemons. This ticket is verified by using the secret shared
 between the client and the daemon.
 
@@ -365,16 +391,18 @@ between the client and the daemon.
 
 This authentication protects only the connections between Ceph clients and Ceph
 daemons. The authentication is not extended beyond the Ceph client. If a user
-accesses the Ceph client from a remote host, cephx authentication will not be
+accesses the Ceph client from a remote host, CephX authentication will not be
 applied to the connection between the user's host and the client host.
 
-See :ref:`rados-cephx-config-ref` for more on configuration details.
+See :ref:`rados-cephx-config-ref` for more on configuration and operational
+details for CephX.
 
-See :ref:`user-management` for more on user management.
+See :ref:`user-management` for more on user management and service
+authorizations (CephX Capabilities).
 
-See :ref:`A Detailed Description of the Cephx Authentication Protocol
+See :ref:`A Detailed Description of the CephX Authentication Protocol
 <cephx_2012_peter>` for more on the distinction between authorization and
-authentication and for a step-by-step explanation of the setup of ``cephx``
+authentication and for a step-by-step explanation of the setup of CephX
 tickets and session keys.
 
 .. index:: architecture; smart daemons and scalability
