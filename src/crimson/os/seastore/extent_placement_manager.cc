@@ -194,10 +194,11 @@ void ExtentPlacementManager::init(
 {
   writer_refs.clear();
   auto cold_segment_cleaner = dynamic_cast<SegmentCleaner*>(cold_cleaner.get());
-  dynamic_max_rewrite_generation = MIN_COLD_GENERATION - 1;
+  dynamic_max_rewrite_generation = hot_tier_generations - 1;
   if (cold_segment_cleaner) {
-    dynamic_max_rewrite_generation = MAX_REWRITE_GENERATION;
+    dynamic_max_rewrite_generation = hot_tier_generations + cold_tier_generations - 1;
   }
+  ceph_assert(dynamic_max_rewrite_generation > MIN_REWRITE_GENERATION);
 
   if (trimmer->get_backend_type() == backend_type_t::SEGMENTED) {
     auto segment_cleaner = dynamic_cast<SegmentCleaner*>(cleaner.get());
@@ -205,7 +206,7 @@ void ExtentPlacementManager::init(
     auto num_writers = generation_to_writer(dynamic_max_rewrite_generation + 1);
 
     data_writers_by_gen.resize(num_writers, nullptr);
-    for (rewrite_gen_t gen = OOL_GENERATION; gen < MIN_COLD_GENERATION; ++gen) {
+    for (rewrite_gen_t gen = OOL_GENERATION; gen < hot_tier_generations; ++gen) {
       writer_refs.emplace_back(std::make_unique<SegmentedOolWriter>(
 	    data_category_t::DATA, gen, *segment_cleaner,
             *ool_segment_seq_allocator));
@@ -213,7 +214,7 @@ void ExtentPlacementManager::init(
     }
 
     md_writers_by_gen.resize(num_writers, {});
-    for (rewrite_gen_t gen = OOL_GENERATION; gen < MIN_COLD_GENERATION; ++gen) {
+    for (rewrite_gen_t gen = OOL_GENERATION; gen < hot_tier_generations; ++gen) {
       writer_refs.emplace_back(std::make_unique<SegmentedOolWriter>(
 	    data_category_t::METADATA, gen, *segment_cleaner,
             *ool_segment_seq_allocator));
@@ -242,13 +243,13 @@ void ExtentPlacementManager::init(
   }
 
   if (cold_segment_cleaner) {
-    for (rewrite_gen_t gen = MIN_COLD_GENERATION; gen < REWRITE_GENERATIONS; ++gen) {
+    for (rewrite_gen_t gen = hot_tier_generations; gen <= dynamic_max_rewrite_generation; ++gen) {
       writer_refs.emplace_back(std::make_unique<SegmentedOolWriter>(
             data_category_t::DATA, gen, *cold_segment_cleaner,
             *ool_segment_seq_allocator));
       data_writers_by_gen[generation_to_writer(gen)] = writer_refs.back().get();
     }
-    for (rewrite_gen_t gen = MIN_COLD_GENERATION; gen < REWRITE_GENERATIONS; ++gen) {
+    for (rewrite_gen_t gen = hot_tier_generations; gen <= dynamic_max_rewrite_generation; ++gen) {
       writer_refs.emplace_back(std::make_unique<SegmentedOolWriter>(
             data_category_t::METADATA, gen, *cold_segment_cleaner,
             *ool_segment_seq_allocator));
@@ -262,7 +263,8 @@ void ExtentPlacementManager::init(
 
   background_process.init(std::move(trimmer),
                           std::move(cleaner),
-                          std::move(cold_cleaner));
+                          std::move(cold_cleaner),
+                          hot_tier_generations);
   if (cold_segment_cleaner) {
     ceph_assert(get_main_backend_type() == backend_type_t::SEGMENTED);
     ceph_assert(background_process.has_cold_tier());
@@ -305,7 +307,7 @@ ExtentPlacementManager::get_device_stats(
     main_stats.add(main_writer_stats.back());
     // 2. mainmdat
     main_writer_stats.emplace_back();
-    for (rewrite_gen_t gen = MIN_REWRITE_GENERATION; gen < MIN_COLD_GENERATION; ++gen) {
+    for (rewrite_gen_t gen = MIN_REWRITE_GENERATION; gen < hot_tier_generations; ++gen) {
       const auto &writer = get_writer(METADATA, gen);
       ceph_assert(writer->get_type() == backend_type_t::SEGMENTED);
       main_writer_stats.back().add(writer->get_stats());
@@ -313,7 +315,7 @@ ExtentPlacementManager::get_device_stats(
     main_stats.add(main_writer_stats.back());
     // 3. maindata
     main_writer_stats.emplace_back();
-    for (rewrite_gen_t gen = MIN_REWRITE_GENERATION; gen < MIN_COLD_GENERATION; ++gen) {
+    for (rewrite_gen_t gen = MIN_REWRITE_GENERATION; gen < hot_tier_generations; ++gen) {
       const auto &writer = get_writer(DATA, gen);
       ceph_assert(writer->get_type() == backend_type_t::SEGMENTED);
       main_writer_stats.back().add(writer->get_stats());
@@ -334,7 +336,9 @@ ExtentPlacementManager::get_device_stats(
   if (has_cold_tier) {
     // 0. coldmdat
     cold_writer_stats.emplace_back();
-    for (rewrite_gen_t gen = MIN_COLD_GENERATION; gen < REWRITE_GENERATIONS; ++gen) {
+    for (rewrite_gen_t gen = hot_tier_generations;
+        gen <= dynamic_max_rewrite_generation;
+        ++gen) {
       const auto &writer = get_writer(METADATA, gen);
       ceph_assert(writer->get_type() == backend_type_t::SEGMENTED);
       cold_writer_stats.back().add(writer->get_stats());
@@ -342,7 +346,9 @@ ExtentPlacementManager::get_device_stats(
     cold_stats.add(cold_writer_stats.back());
     // 1. colddata
     cold_writer_stats.emplace_back();
-    for (rewrite_gen_t gen = MIN_COLD_GENERATION; gen < REWRITE_GENERATIONS; ++gen) {
+    for (rewrite_gen_t gen = hot_tier_generations;
+        gen <= dynamic_max_rewrite_generation;
+        ++gen) {
       const auto &writer = get_writer(DATA, gen);
       ceph_assert(writer->get_type() == backend_type_t::SEGMENTED);
       cold_writer_stats.back().add(writer->get_stats());
@@ -466,7 +472,7 @@ ExtentPlacementManager::dispatch_delayed_extents(Transaction &t)
       res.usage.cleaner_usage.main_usage += extent->get_length();
       t.mark_delayed_extent_inline(extent);
     } else {
-      if (extent->get_rewrite_generation() < MIN_COLD_GENERATION) {
+      if (extent->get_rewrite_generation() < hot_tier_generations) {
         res.usage.cleaner_usage.main_usage += extent->get_length();
       } else {
         assert(background_process.has_cold_tier());
