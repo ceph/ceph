@@ -1,6 +1,5 @@
 #include "acconfig.h"
 #include <cstdint>
-using namespace std;
 #include "include/ceph_features.h"
 
 #define TYPE(t)
