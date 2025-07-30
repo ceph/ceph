@@ -583,6 +583,13 @@ CephFS: Disallow delegating preallocated inode ranges to clients. Config
 * RGW: The serialized format of notification and topics has changed, so that 
   new/updated topics will be unreadable by old RGWs. We recommend completing 
   the RGW upgrades before creating or modifying any notification topics.
+* RGW: New rate limiting options have been added to control the number of
+  bucket listing requests (`radosgw-admin ratelimit set ... --max-list-ops=`)
+  and delete operations (`radosgw-admin ratelimit set ... --max-delete-ops=`)
+  per accumulation interval, along with the ability to configure the
+  accumulation interval duration (`rgw_ratelimit_interval`).
+  Their default value is `0`, which keeps backward compatibility to the
+  previous behavior of READ and WRITE operations rate limiting.
 * RBD: Trailing newline in passphrase files (`<passphrase-file>` argument in
   `rbd encryption format` command and `--encryption-passphrase-file` option
   in other commands) is no longer stripped.
