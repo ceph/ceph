@@ -23,6 +23,7 @@ AuthRegistry::AuthRegistry(CephContext *cct)
   : cct(cct)
 {
   cct->_conf.add_observer(this);
+  _refresh_config();
 }
 
 AuthRegistry::~AuthRegistry()
@@ -53,6 +54,7 @@ void AuthRegistry::handle_conf_change(
   const ConfigProxy& conf,
   const std::set<std::string>& changed)
 {
+  ldout(cct, 20) << __func__ << ": changed: " << changed << dendl;
   std::scoped_lock l(lock);
   _refresh_config();
 }
