@@ -60,6 +60,7 @@ class ObjectCacher {
   struct ObjectSet;
   class C_ReadFinish;
 
+  //pair is <offset, len>
   using ObjHole = std::pair<uint64_t, uint64_t>;
 
   typedef void (*flush_set_callback_t) (void *p, ObjectSet *oset);

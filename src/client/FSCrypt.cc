@@ -184,6 +184,9 @@ static int calc_hmac_sha512(const char *key, int key_len,
 
 #define SALT_LEN_DEFAULT 32
 
+//no salt is used since master key is pseudorandom
+//See kernel explaination for more:
+//https://github.com/torvalds/linux/blob/66701750d5565c574af42bef0b789ce0203e3071/fs/crypto/hkdf.c#L41-L43
 static char default_salt[SALT_LEN_DEFAULT] = { 0 };
 
 static int hkdf_extract(const char *_salt, int salt_len,

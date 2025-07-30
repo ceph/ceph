@@ -7904,13 +7904,6 @@ int Client::path_walk(InodeRef dirinode, const filepath& origpath,
     /* Get extra requested caps on the last component */
     if (i == (path.depth() - 1)) {
       caps |= extra_options.mask;
-      #if 0
-      if (diri->is_fscrypt_enabled()) {
-        if (extra_options.mask & CEPH_FILE_MODE_WR) {
-          caps |= CEPH_FILE_MODE_RD;
-        }
-      }
-      #endif
     }
 
     int r = _lookup(diri, dname, alternate_name, caps, &next, perms, extra_options.is_rename);
@@ -12096,7 +12089,7 @@ int64_t Client::_write_success(Fh *f, utime_t start, uint64_t fpos,
   if (request_size + request_offset > in->effective_size()) {
     if (encrypted) {
       in->set_effective_size(request_size + request_offset);
-      in->mark_caps_dirty(CEPH_CAP_FILE_EXCL);
+      in->mark_caps_dirty(CEPH_CAP_FILE_WR);
     }
     ldout(cct, 7) << "in->effective_size()=" << in->effective_size() << dendl;
     in->size = totalwritten + offset;
@@ -12259,7 +12252,7 @@ int Client::WriteEncMgr::init()
 int Client::WriteEncMgr::read(uint64_t off, uint64_t len, bufferlist *bl,
                                      iofinish_method_ctx<WriteEncMgr> *ioctx)
 {
-  ldout(cct, 20) << __func__ << dendl;
+  ldout(cct, 20) << __func__ << " off=" << off << " len=" << len << " bl=" << bl << " ioctx=" << ioctx << dendl;
   get();
 
   if (off >= in->size) {
@@ -12449,7 +12442,6 @@ bool Client::WriteEncMgr::do_try_finish(int r)
   }
 
   clnt->put_cap_ref(in, CEPH_CAP_FILE_RD);
-  in->mark_caps_dirty(CEPH_CAP_FILE_RD);
 
   update_write_params();
 
