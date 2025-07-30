@@ -38,8 +38,11 @@ function(add_denc_mod name)
 endfunction()
 
 add_denc_mod(denc-mod-common
+  ../../include/uuid.cc
+  ../../include/utime.cc
   common_types.cc)
 target_link_libraries(denc-mod-common
+  ceph-common
   journal
   cls_cas_internal
   cls_lock_client
