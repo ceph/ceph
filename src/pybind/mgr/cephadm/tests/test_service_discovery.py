@@ -1,14 +1,16 @@
 from unittest.mock import MagicMock
 from cephadm.service_discovery import Root
+from cephadm.services.service_registry import service_registry
 
 
 class FakeDaemonDescription:
-    def __init__(self, ip, ports, hostname, service_name='', daemon_type=''):
+    def __init__(self, ip, ports, hostname, service_name='', daemon_type='', daemon_id=''):
         self.ip = ip
         self.ports = ports
         self.hostname = hostname
         self._service_name = service_name
         self.daemon_type = daemon_type
+        self.daemon_id = daemon_id if daemon_id else hostname
 
     def service_name(self):
         return self._service_name
@@ -35,12 +37,20 @@ class FakeCache:
             return [FakeDaemonDescription('1.2.3.4', [9123], 'node0'),
                     FakeDaemonDescription('1.2.3.5', [9123], 'node1')]
 
+        if service_type == 'mgr':
+            return [FakeDaemonDescription('1.2.3.4', [9922], 'node0', daemon_type='mgr', daemon_id='fake_active_mgr'),
+                    FakeDaemonDescription('1.2.3.5', [9922], 'node1', daemon_type='mgr', daemon_id='fake_standby_mgr')]
+
         return [FakeDaemonDescription('1.2.3.4', [9100], 'node0'),
                 FakeDaemonDescription('1.2.3.5', [9200], 'node1')]
 
     def get_daemons_by_type(self, daemon_type):
-        return [FakeDaemonDescription('1.2.3.4', [9100], 'node0', 'ingress', 'haproxy'),
-                FakeDaemonDescription('1.2.3.5', [9200], 'node1', 'ingress', 'haproxy')]
+        if daemon_type == 'ingress':
+            return [FakeDaemonDescription('1.2.3.4', [9100], 'node0', 'ingress', 'haproxy'),
+                    FakeDaemonDescription('1.2.3.5', [9200], 'node1', 'ingress', 'haproxy')]
+        else:
+            return [FakeDaemonDescription('1.2.3.4', [1234], 'node0', daemon_type, daemon_type),
+                    FakeDaemonDescription('1.2.3.5', [1234], 'node1', daemon_type, daemon_type)]
 
 
 class FakeInventory:
@@ -84,22 +94,10 @@ class FakeMgr:
         self.inventory = FakeInventory()
         self.cache = FakeCache()
         self.spec_store = FakeSpecStore(self)
+        service_registry.init_services(self)
 
     def get_mgr_id(self):
         return 'mgr-1'
-
-    def list_servers(self):
-
-        servers = [
-            {'hostname': 'node0',
-             'ceph_version': '16.2',
-             'services': [{'type': 'mgr', 'id': 'mgr-1'}, {'type': 'mon'}]},
-            {'hostname': 'node1',
-             'ceph_version': '16.2',
-             'services': [{'type': 'mgr', 'id': 'mgr-2'}, {'type': 'mon'}]}
-        ]
-
-        return servers
 
     def _check_mon_command(self, cmd_dict, inbuf=None):
         prefix = cmd_dict.get('prefix')
@@ -112,6 +110,14 @@ class FakeMgr:
 
     def get_module_option_ex(self, module, option, default_value):
         return "9283"
+
+    def daemon_is_self(self, d_type, d_id) -> bool:
+        if d_type == 'mgr' and d_id == 'fake_active_mgr':
+            return True
+        return False
+
+    def get_fqdn(self, hostname: str) -> str:
+        return hostname
 
 
 class TestServiceDiscovery:
