@@ -64,8 +64,8 @@ Run ``ceph-dokan --help`` for a full list of arguments.
 Credentials
 -----------
 
-The ``--id`` option passes the name of the CephX user whose keyring we intend to
-use for mounting CephFS. The following commands are equivalent::
+The ``--id`` option passes the name of the CephX user whose keyring 
+is used when mounting CephFS. The following commands are equivalent::
 
     ceph-dokan --id foo -l x
     ceph-dokan --name client.foo -l x
@@ -78,28 +78,26 @@ like so::
 
     ceph-dokan.exe unmap -l x
 
-Note that when unmapping Ceph filesystems, the exact same mount point argument
-must be used as when the mapping was created.
+.. note:: When unmapping Ceph filesystems, you must specify the mount point
+   argument that was used at the time of the creation of the mapping. 
 
 Limitations
 -----------
 
-Be aware that Windows ACLs are ignored. Posix ACLs are supported but cannot be
-modified using the current CLI. In the future, we may add some command actions
-to change file ownership or permissions.
+Windows ACLs are ignored. Posix ACLs are supported but cannot be modified using
+the current CLI. In the future, we may add some command actions that change
+file ownership or permissions.
 
-Another thing to note is that CephFS doesn't support mandatory file locks, which
-Windows relies heavily upon. At present Ceph lets Dokan handle file
-locks, which are only enforced locally.
+CephFS doesn't support mandatory file locks, which Windows relies heavily upon.
+Ceph relies upon Dokan to handle file locks, which are only enforced locally.
 
-Unlike ``rbd-wnbd``, ``ceph-dokan`` doesn't currently provide a ``service``
-command. In order for the cephfs mount to survive host reboots, consider using
-``NSSM``.
+Unlike ``rbd-wnbd``, ``ceph-dokan`` doesn't provide a ``service`` command.  To
+make a CephFS mount survive host reboots, use ``NSSM``.
 
 Troubleshooting
 ===============
 
-Please consult the `Windows troubleshooting`_ page.
+See the `Windows troubleshooting`_ page.
 
 .. _Windows troubleshooting: ../../install/windows-troubleshooting
 .. _installation guide: ../../install/windows-install
