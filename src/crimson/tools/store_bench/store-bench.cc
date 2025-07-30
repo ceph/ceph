@@ -258,15 +258,12 @@ seastar::future<> pg_log_workload(crimson::os::FuturizedStore &global_store,
   };
   co_await pre_fill_logs();
   co_await run_concurrent_ios(duration, num_concurrent_io, add_remove_entry);
-  my_hist.print_stats();
+  //my_hist.print_stats();
   my_hist.export_csv("latency values pg workload"+std::to_string(seastar::this_shard_id()));
   co_return;
 }
 
 // rgw start
-
-
- 
 
 /**
  * This function is a helper function specfically for the rgw workload
@@ -300,7 +297,7 @@ seastar::future<results_t>
 write_unique_key(crimson::os::FuturizedStore::Shard &shard_ref, coll_t coll_id,
                  crimson::os::CollectionRef coll_ref, ghobject_t bucket,
                  std::set<std::string> &existing_keys, int key_size,
-                 int value_size) {
+                 int value_size, adaptive_linear_hist_t &hist) {
   std::string new_key = generate_random_string(key_size);
   while (existing_keys.count(new_key) > 0) {
     new_key = generate_random_string(key_size);
@@ -318,7 +315,8 @@ write_unique_key(crimson::os::FuturizedStore::Shard &shard_ref, coll_t coll_id,
   co_await shard_ref.do_transaction(coll_ref, std::move(one_write));
   auto latency_end = ceph::mono_clock::now();
   auto time_per_write = (latency_end - latency_start);
-  //hist.record_latency_nanosec(time_per_write);
+  auto rgw_latency_milli =std::chrono::duration_cast<std::chrono::milliseconds>(time_per_write).count();
+  hist.record_latencies(rgw_latency_milli);
   std::chrono::duration<double> time_per_write_sec = time_per_write;
 
   existing_keys.insert(new_key);
@@ -335,12 +333,12 @@ write_unique_key(crimson::os::FuturizedStore::Shard &shard_ref, coll_t coll_id,
  * operations as 1, and the time as the time it took for the write every time
  * this method is called we will incremnet the number of operations by 1 and the
  * latency by the time it took for this operation
- */
+ */ 
 
 seastar::future<results_t>
 delete_random_key(crimson::os::FuturizedStore::Shard &shard_ref,
                   coll_t &coll_id, crimson::os::CollectionRef coll_ref,
-                  ghobject_t &bucket, std::set<std::string> &existing_keys) {
+                  ghobject_t &bucket, std::set<std::string> &existing_keys, adaptive_linear_hist_t &hist) {
   int index = std::rand() % existing_keys.size();
   auto it = existing_keys.begin();
   std::advance(it, index);
@@ -353,7 +351,8 @@ delete_random_key(crimson::os::FuturizedStore::Shard &shard_ref,
   co_await shard_ref.do_transaction(coll_ref, std::move(one_delete));
   auto latency_end = ceph::mono_clock::now();
   auto time_per_delete = (latency_end - latency_start);
-  //hist.record_latency_nanosec(time_per_delete);
+  auto rgw_latency_milli =std::chrono::duration_cast<std::chrono::milliseconds>(time_per_delete).count();
+  hist.record_latencies(rgw_latency_milli);
   std::chrono::duration<double> time_per_delete_sec = time_per_delete;
   co_return results_t{1, time_per_delete_sec};
 }
@@ -373,11 +372,11 @@ seastar::future<> rgw_index_workload(crimson::os::FuturizedStore &global_store,
                                      int duration, int key_size, int value_size,
                                      int target_keys_per_bucket,
                                      int tolerance_range,
-                                     int num_buckets_per_collection) {
+                                     int num_buckets_per_collection, double interval_size) {
 
   LOG_PREFIX(rgw_index_workload);
   auto &local_store = global_store.get_sharded_store();
-  //latency_histogram rgw_histogram(duration);
+  adaptive_linear_hist_t rgw_hist(1,duration*1000,interval_size);
   std::map<int, coll_t> collection_id_for_rgw;
   std::map<int, crimson::os::CollectionRef>
       coll_ref_map_rgw; // map of bucket number and coll_ref
@@ -463,7 +462,7 @@ seastar::future<> rgw_index_workload(crimson::os::FuturizedStore &global_store,
       if (size_bucket_we_choose <= min_size) {
         results_t result = co_await write_unique_key(
             local_store, coll_id, coll_ref, bucket, keys_in_that_bucket,
-            key_size, value_size);
+            key_size, value_size,rgw_hist);
         size_per_bucket[bucket_num_we_choose] += 1;
         tot_latency += result.tot_latency_sec;
         num_ops += result.num_operations;
@@ -471,7 +470,7 @@ seastar::future<> rgw_index_workload(crimson::os::FuturizedStore &global_store,
       } else if (size_bucket_we_choose >= max_size) {
         results_t result =
             co_await delete_random_key(local_store, coll_id, coll_ref, bucket,
-                                       keys_in_that_bucket);
+                                       keys_in_that_bucket,rgw_hist);
         size_per_bucket[bucket_num_we_choose] -= 1;
         tot_latency += result.tot_latency_sec;
         num_ops += result.num_operations;
@@ -481,14 +480,14 @@ seastar::future<> rgw_index_workload(crimson::os::FuturizedStore &global_store,
         if (choice == 0) {
           results_t result = co_await write_unique_key(
               local_store, coll_id, coll_ref, bucket, keys_in_that_bucket,
-              key_size, value_size);
+              key_size, value_size,rgw_hist);
           size_per_bucket[bucket_num_we_choose] += 1;
           tot_latency += result.tot_latency_sec;
           num_ops += result.num_operations;
         } else {
           results_t result =
               co_await delete_random_key(local_store, coll_id, coll_ref, bucket,
-                                         keys_in_that_bucket);
+                                         keys_in_that_bucket,rgw_hist);
           size_per_bucket[bucket_num_we_choose] -= 1;
           tot_latency += result.tot_latency_sec;
           num_ops += result.num_operations;
@@ -501,7 +500,7 @@ seastar::future<> rgw_index_workload(crimson::os::FuturizedStore &global_store,
   co_await pre_fill_buckets();
   co_await run_concurrent_ios(duration, num_concurrent_io, rgw_actual_test);
   //rgw_histogram.print_stats();
-  //rgw_histogram.export_csv("latency values rgw workload");
+  rgw_hist.export_csv("latency values rgw workload"+std::to_string(seastar::this_shard_id()));
   co_return;
 };
 
@@ -708,7 +707,7 @@ int main(int argc, char **argv) {
               co_await rgw_index_workload(
                   store_ref, num_indices, num_concurrent_io, duration, key_size,
                   value_size, target_keys_per_bucket, tolerance_range,
-                  num_buckets_per_collection);
+                  num_buckets_per_collection,interval_size);
             }
             co_return;
           };
