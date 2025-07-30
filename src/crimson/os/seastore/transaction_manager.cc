@@ -690,7 +690,7 @@ TransactionManager::get_extents_if_live(
 
   // This only works with segments to check if alive,
   // as parallel transactions may split the extent at the same time.
-  ceph_assert(paddr.is_absolute_segmented());
+  //ceph_assert(paddr.is_absolute_segmented());
 
   return cache->get_extent_if_cached(t, paddr, len, type
   ).si_then([this, FNAME, type, paddr, laddr, len, &t](auto extent)
@@ -704,6 +704,12 @@ TransactionManager::get_extents_if_live(
       return get_extents_if_live_ret(
 	interruptible::ready_future_marker{},
 	res);
+    }
+    
+    if (paddr.is_absolute_random_block()) {
+      return get_extents_if_live_ret(
+	interruptible::ready_future_marker{},
+	std::list<CachedExtentRef>());
     }
 
     if (is_logical_type(type)) {
