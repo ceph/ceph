@@ -610,10 +610,10 @@ def test_ftruncate(testdir):
 def test_fallocate(testdir):
     fd = cephfs.open(b'/file-fallocate', 'w', 0o755)
     assert_raises(TypeError, cephfs.fallocate, b'/file-fallocate', 0, 10)
-    cephfs.fallocate(fd, 0, 10)
+    assert_raises(libcephfs.OperationNotSupported, cephfs.fallocate, fd, 0, 10)
     stat = cephfs.fsync(fd, 0)
     st = cephfs.fstat(fd)
-    assert_equal(st.st_size, 10)
+    assert_equal(st.st_size, 0)
     cephfs.close(fd)
     cephfs.unlink(b'/file-fallocate')
 
