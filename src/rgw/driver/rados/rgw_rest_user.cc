@@ -35,7 +35,13 @@ int fetch_access_keys_from_master(const DoutPrefixProvider* dpp, req_state* s,
   }
 
   RGWUserInfo ui;
-  ui.decode_json(&jp);
+  try {
+    ui.decode_json(&jp);
+  } catch (const JSONDecoder::err& e) {
+    cout << "failed to decode JSON input: " << e.what() << std::endl;
+    return -EINVAL;
+  }
+
   keys = std::move(ui.access_keys);
   create_date = ui.create_date;
   return 0;
@@ -719,9 +725,6 @@ void RGWOp_Key_Create::execute(optional_yield y)
     op_state.access_key_active = active;
   }
 
-  if (gen_key)
-    op_state.set_generate_key();
-
   if (!key_type_str.empty()) {
     int32_t key_type = KEY_TYPE_UNDEFINED;
     if (key_type_str.compare("swift") == 0)
@@ -730,6 +733,34 @@ void RGWOp_Key_Create::execute(optional_yield y)
       key_type = KEY_TYPE_S3;
 
     op_state.set_key_type(key_type);
+  }
+
+  if (!s->penv.site->is_meta_master()) {
+    bufferlist data;
+    JSONParser jp;
+    int ret = rgw_forward_request_to_master(this, *s->penv.site, s->user->get_id(),
+                                            &data, &jp, s->info, s->err, y);
+    if (ret < 0) {
+      ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << ret << dendl;
+      return;
+    }
+
+    RGWAccessKey key;
+    try {
+      key.decode_json(&jp);
+    } catch (const JSONDecoder::err& e) {
+      cout << "failed to decode JSON input: " << e.what() << std::endl;
+      ret = -EINVAL;
+      return;
+    }
+    op_state.op_master_key = std::move(key);
+
+    // set_generate_key() is not set if keys have already been fetched from master zone
+    gen_key = false;
+  }
+
+  if (gen_key) {
+    op_state.set_generate_key();
   }
 
   op_ret = RGWUserAdminOp_Key::create(s, driver, op_state, flusher, y);
@@ -777,6 +808,13 @@ void RGWOp_Key_Remove::execute(optional_yield y)
       key_type = KEY_TYPE_S3;
 
     op_state.set_key_type(key_type);
+  }
+
+  op_ret = rgw_forward_request_to_master(this, *s->penv.site, s->user->get_id(),
+                                         nullptr, nullptr, s->info, s->err, y);
+  if (op_ret < 0) {
+    ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
+    return;
   }
 
   op_ret = RGWUserAdminOp_Key::remove(s, driver, op_state, flusher, y);
