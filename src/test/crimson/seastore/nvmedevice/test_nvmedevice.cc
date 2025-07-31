@@ -65,6 +65,7 @@ TEST_F(nvdev_test_t, write_and_verify_test)
 	device_spec_t{
 	(magic_t)std::rand(),
 	device_type_t::RANDOM_BLOCK_SSD,
+	backend_type_t::RANDOM_BLOCK,
 	static_cast<device_id_t>(DEVICE_ID_RANDOM_BLOCK_MIN)},
 	seastore_meta_t{uuid_d()},
 	secondary_device_set_t()}
