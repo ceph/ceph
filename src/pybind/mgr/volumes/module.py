@@ -582,7 +582,9 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                    'name=target_sub_name,type=CephString '
                    'name=pool_layout,type=CephString,req=false '
                    'name=group_name,type=CephString,req=false '
-                   'name=target_group_name,type=CephString,req=false ',
+                   'name=target_group_name,type=CephString,req=false '
+                   'name=uid,type=CephInt,req=false '
+                   'name=gid,type=CephInt,req=false ',
             'desc': "Clone a snapshot to target subvolume",
             'perm': 'rw'
         },
@@ -1133,7 +1135,9 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         return self.vc.clone_subvolume_snapshot(
             vol_name=cmd['vol_name'], sub_name=cmd['sub_name'], snap_name=cmd['snap_name'],
             group_name=cmd.get('group_name', None), pool_layout=cmd.get('pool_layout', None),
-            target_sub_name=cmd['target_sub_name'], target_group_name=cmd.get('target_group_name', None))
+            target_sub_name=cmd['target_sub_name'],
+            target_group_name=cmd.get('target_group_name', None),
+            uid=cmd.get('uid', None), gid=cmd.get('gid', None))
 
     @mgr_cmd_wrap
     def _cmd_fs_clone_status(self, inbuf, cmd):
