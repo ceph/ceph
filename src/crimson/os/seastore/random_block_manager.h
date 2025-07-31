@@ -114,7 +114,7 @@ namespace random_block_device {
 }
 
 seastar::future<std::unique_ptr<random_block_device::RBMDevice>> 
-  get_rb_device(const std::string &device);
+  get_rb_device(const std::string &device, device_type_t dtype);
 
 std::ostream &operator<<(std::ostream &out, const rbm_extent_state_t &state);
 }

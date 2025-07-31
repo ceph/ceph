@@ -966,6 +966,7 @@ enum class device_type_t : uint8_t {
   EPHEMERAL_MAIN,
   RANDOM_BLOCK_SSD,
   RANDOM_BLOCK_EPHEMERAL,
+  RANDOM_BLOCK_HDD,
   NUM_TYPES
 };
 

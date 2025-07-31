@@ -1245,6 +1245,9 @@ device_type_t string_to_device_type(std::string type) {
   if (type == "RANDOM_BLOCK_SSD") {
     return device_type_t::RANDOM_BLOCK_SSD;
   }
+  if (type == "RANDOM_BLOCK_HDD") {
+    return device_type_t::RANDOM_BLOCK_HDD;
+  }
   return device_type_t::NONE;
 }
 
@@ -1267,6 +1270,8 @@ std::ostream& operator<<(std::ostream& out, device_type_t t)
     return out << "RANDOM_BLOCK_SSD";
   case device_type_t::RANDOM_BLOCK_EPHEMERAL:
     return out << "RANDOM_BLOCK_EPHEMERAL";
+  case device_type_t::RANDOM_BLOCK_HDD:
+    return out << "RANDOM_BLOCK_HDD";
   default:
     return out << "INVALID_DEVICE_TYPE!";
   }

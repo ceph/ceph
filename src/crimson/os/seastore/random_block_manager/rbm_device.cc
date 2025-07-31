@@ -29,7 +29,6 @@ RBMDevice::mkfs_ret RBMDevice::do_primary_mkfs(device_config_t config,
     maybe_create = check_create_device(get_device_path(), size);
   }
 
-
   co_await std::move(maybe_create);
   auto st = co_await stat_device(
   ).safe_then([] (auto st) mutable {
@@ -44,9 +43,11 @@ RBMDevice::mkfs_ret RBMDevice::do_primary_mkfs(device_config_t config,
     );
   }
 
+  config.spec.id |= 0x80;
   const size_t cur_block_size = (*st).block_size;
   const size_t cur_total_size = (*st).size;
-  ceph_assert_always(journal_size > 0);
+  ceph_assert_always(journal_size > 0 ||
+                     config.spec.dtype == device_type_t::RANDOM_BLOCK_HDD);
   ceph_assert_always(cur_total_size >= journal_size);
   ceph_assert_always(shard_num > 0);
 
