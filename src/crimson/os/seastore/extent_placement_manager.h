@@ -23,6 +23,89 @@ namespace crimson::os::seastore {
 
 class Cache;
 
+class TokenBucket {
+  struct Blocker {
+    uint64_t size = 0;
+    seastar::promise<> pr;
+  };
+public:
+  TokenBucket(uint64_t mt) :
+    tokens(mt), max_tokens(mt), timer() {}
+
+  void start() {
+    if (max_tokens != 0) {
+      tokens = max_tokens;
+      timer.set_callback([this] {
+        if (tokens == max_tokens) {
+          return;
+        }
+        assert(tokens < max_tokens);
+        tokens += std::min(
+          max_tokens / 10 + 1,
+          max_tokens - tokens);
+        do_wake();
+      });
+      if (!timer.armed()) {
+        timer.arm_periodic(std::chrono::milliseconds(100));
+      }
+    }
+  }
+
+  void stop() {
+    if (max_tokens != 0) {
+      timer.cancel();
+      tokens = std::numeric_limits<uint64_t>::max();
+      do_wake();
+    }
+  }
+
+  seastar::future<> get(uint64_t size) {
+    if (max_tokens == 0) {
+      return seastar::now();
+    }
+    if (tokens < size) {
+      size -= tokens;
+      tokens = 0;
+      blockers.emplace_back(size);
+      return blockers.back().pr.get_future();
+    } else {
+      tokens -= size;
+      return seastar::now();
+    }
+  }
+
+  void release(uint64_t size) {
+    if (tokens == max_tokens) {
+      return;
+    }
+    assert(tokens < max_tokens);
+    tokens += std::min(size, max_tokens - tokens);
+    do_wake();
+  }
+
+private:
+  void do_wake() {
+    while (!blockers.empty()) {
+      auto &next = blockers.front();
+      if (tokens < next.size) {
+        next.size -= tokens;
+        tokens = 0;
+        break;
+      } else {
+        tokens -= next.size;
+        next.pr.set_value();
+        blockers.pop_front();
+      }
+    }
+  }
+  uint64_t tokens;
+  const uint64_t max_tokens;
+  seastar::timer<seastar::steady_clock_type> timer;
+  std::list<Blocker> blockers;
+};
+
+using TokenBucketRef = std::unique_ptr<TokenBucket>;
+
 /**
  * ExtentOolWriter
  *
@@ -75,7 +158,8 @@ public:
                      data_category_t category,
                      rewrite_gen_t gen,
                      SegmentProvider &sp,
-                     SegmentSeqAllocator &ssa);
+                     SegmentSeqAllocator &ssa,
+                     TokenBucket &buckets);
 
   backend_type_t get_type() const final {
     return backend_type_t::SEGMENTED;
@@ -129,13 +213,14 @@ private:
   journal::SegmentAllocator segment_allocator;
   journal::RecordSubmitter record_submitter;
   seastar::gate write_guard;
+  TokenBucket &token_bucket;
 };
 
 
 class RandomBlockOolWriter : public ExtentOolWriter {
 public:
-  RandomBlockOolWriter(RBMCleaner* rb_cleaner) :
-    rb_cleaner(rb_cleaner) {}
+  RandomBlockOolWriter(RBMCleaner* rb_cleaner, TokenBucket &bucket) :
+    rb_cleaner(rb_cleaner), token_bucket(bucket) {}
 
   backend_type_t get_type() const final {
     return backend_type_t::RANDOM_BLOCK;
@@ -222,6 +307,7 @@ private:
   seastar::gate write_guard;
   writer_stats_t w_stats;
   mutable writer_stats_t last_w_stats;
+  TokenBucket &token_bucket;
 };
 
 struct cleaner_usage_t {
@@ -1215,6 +1301,7 @@ private:
   std::vector<ExtentOolWriter*> data_writers_by_gen;
   // gen 0 METADATA writer is the journal writer
   std::vector<ExtentOolWriter*> md_writers_by_gen;
+  std::vector<TokenBucketRef> token_buckets;
 
   std::vector<Device*> devices_by_id;
   Device* primary_device = nullptr;
