@@ -2847,19 +2847,17 @@ cdef class LibCephFS(object):
         finally:
            free(buf)
 
-    # following code includes rmtree() and related helper methods and classes.
+    def rmtree(self, trash_path, should_cancel, suppress_errors=False):
+        '''
+        Delete entire file hierarchy present under trash_path when trash_path is
+        a dir.
 
-    def __rm_non_dir_objects(self, trash_path, stx_b):
+        If trash_path is a path to regfile or a symlink, delete them and return.
         '''
-        If the root of the file heirarchy passed through trash_path points to a
-        file or symlink, unlink them and return.
-        '''
+        # stx_b = statx buffer
+        stx_b = self.statx(trash_path, CEPH_STATX_MODE, AT_SYMLINK_NOFOLLOW)
         if stat.S_ISDIR(stx_b['mode']):
-            log.error('when trash_path is a path to a dir, it should\'ve been '
-                      'handled in the previous method and therefore it should '
-                      'be impossible to reach here')
-            raise RuntimeError('received dir at point where it should\'ve not '
-                               'been received')
+            Rmtree(self, trash_path, should_cancel, suppress_errors).rmtree()
         else:
             try:
                 self.unlink(trash_path)
@@ -2869,23 +2867,46 @@ cdef class LibCephFS(object):
                          f'file at path {trash_path}: {e}')
                 raise
 
-    def __add_dir_to_stack(self, de_name, stack, curr_dir,
-                           suppress_errors=False):
+
+class Rmtree:
+    '''
+    Contains the code where file tree is deleted with depth-first, non-recursive
+    approach along with some helper methods.
+    '''
+
+    def __init__(self, fs, trash_path, should_cancel, suppress_errors=False):
+        self.fs = fs
+        self.trash_path = trash_path
+
+        self.should_cancel = should_cancel
+        self.suppress_errors = suppress_errors
+
+        # Stack needed for traversing the file heirarchy under trash_path in
+        # depth-first, non-recursive fashion. each stack member is an instance
+        # of class RmtreeDir (declared above, inside this method).
+        self.stack = deque([])
+
+        # current directory, dir entries of which are being removed right now,
+        # it's always the directory at the top of stack, it's always an instance
+        # of class RmtreeDir.
+        self.curr_dir = None
+
+    def add_dir_to_stack(self, de_name):
         '''
         Add new dir to stack. If it succeeds, call rewinddir() for current dir.
         If it fails, add this new dir to current dir's ignorelist
         '''
-        de_path = os.path.join(curr_dir.path, de_name)
+        de_path = os.path.join(self.curr_dir.path, de_name)
         try:
-            stack.append(RmtreeDir(self, de_path, suppress_errors))
+            self.stack.append(RmtreeDir(self.fs, de_path))
         # RmtreeDir() eventually/indirectly calls opendir(). If it fails, it is
         # most likely due to lack of permissions on de_path. Skip it and proceed
         # deleting rest of files in current directories.
         except Error as e:
             log.error(f'Exception occured: "{e}"')
-            curr_dir.add_to_de_ignore_list(de_name)
+            self.curr_dir.add_to_de_ignore_list(de_name)
 
-            if suppress_errors:
+            if self.suppress_errors:
                 return 'break'
             else:
                 raise
@@ -2894,107 +2915,89 @@ cdef class LibCephFS(object):
         # dir will be traversed now. Else, future call to current dir's
         # readdir() will have implementation-defined behaviour, which might be
         # different from the expected behaviour.
-        curr_dir.handle.rewinddir()
+        self.curr_dir.handle.rewinddir()
 
         # since a new non-empty dir has been encountered abort traversing
         # current dir for now and traverse this new dir instead
         return 'break'
 
-    def __notify_parent_dir(self, stack, curr_dir):
+    def notify_parent_dir(self):
         '''
         Add current dir's name to parent dir's "de_ignore_list". This is \
         necessary since parent dir can't be deleted when current dir can't be
         deleted.
         '''
         # ensure we are dealing with the dir at the top of the stack.
-        assert curr_dir is stack[-1]
+        assert self.curr_dir is self.stack[-1]
 
         try:
-            parent_dir = stack[-2]
+            parent_dir = self.stack[-2]
             # Save as byte instead of str since it is de.d_name fetched by
             # readdir() is always bytes.
-            parent_dir.add_to_de_ignore_list(curr_dir.name)
+            parent_dir.add_to_de_ignore_list(self.curr_dir.name)
         except IndexError:
             pass
 
-    def _rmtree(self, trash_path, should_cancel, suppress_errors=False):
+    def rmtree(self):
         '''
         This is where depth-first, non-recursive traversal is done.
         '''
         try:
-            # Stack needed for traversing the file heirarchy under
-            # trash_path in depth-first, non-recursive fashion. each
-            # stack member is an instance of class RmtreeDir (declared above,
-            # inside this method).
-            stack = deque([])
-            stack.append(RmtreeDir(self, trash_path, suppress_errors))
+            self.stack.append(RmtreeDir(self.fs, self.trash_path))
         except Exception as e:
             log.error('opening root dir of the file tree failed with exception '
                       f'"{e}", exiting.')
-            if suppress_errors:
+            if self.suppress_errors:
                 return
             else:
                 raise
 
-        while stack:
-            if should_cancel():
+        while self.stack:
+            if self.should_cancel():
                 raise OpCancelled('rmtree')
 
-            curr_dir = stack[-1]
+            self.curr_dir = self.stack[-1]
 
             # de = directory entry
-            de = curr_dir.read_dir()
+            de = self.curr_dir.read_dir()
             while de:
-                if should_cancel():
+                if self.should_cancel():
                     raise OpCancelled('rmtree')
 
                 de_name = de.d_name.decode()
                 if de.is_dir():
                     try:
-                        retval = curr_dir.try_rmdir(de_name)
+                        retval = self.curr_dir.try_rmdir(de_name,
+                                                         self.suppress_errors)
                     except ObjectNotEmpty:
-                        retval = self.__add_dir_to_stack(de_name, stack, curr_dir,
-                                                         suppress_errors)
+                        retval = self.add_dir_to_stack(de_name)
                 else:
-                    retval = curr_dir.try_unlink(de_name)
+                    retval = self.curr_dir.try_unlink(de_name,
+                                                      self.suppress_errors)
 
                 if retval == 'break':
                     break
 
-                de = curr_dir.read_dir()
-                if not de and curr_dir.de_has_been_removed:
-                    curr_dir.handle.rewinddir()
-                    curr_dir.de_has_been_removed = False
-                    de = curr_dir.read_dir()
+                de = self.curr_dir.read_dir()
+                if not de and self.curr_dir.de_has_been_removed:
+                    self.curr_dir.handle.rewinddir()
+                    self.curr_dir.de_has_been_removed = False
+                    de = self.curr_dir.read_dir()
 
-            if curr_dir.has_any_fs_op_failed() or curr_dir.is_empty:
-                if curr_dir.has_any_fs_op_failed():
-                    self.__notify_parent_dir(stack, curr_dir)
+            if self.curr_dir.has_any_fs_op_failed() or self.curr_dir.is_empty:
+                if self.curr_dir.has_any_fs_op_failed():
+                    self.notify_parent_dir()
 
-                if curr_dir.is_empty:
+                if self.curr_dir.is_empty:
                     try:
-                        self.rmdir(curr_dir.path)
+                        self.fs.rmdir(self.curr_dir.path)
                     # If curr_dir is empty and yet if ObjectNotFound is raised while
                     # running rmdir(), then it implies that curr_dir contains a
                     # snapshot in its snap dir.
                     except ObjectNotEmpty:
-                        self.__notify_parent_dir(stack, curr_dir)
+                        self.notify_parent_dir()
 
-                stack.pop()
-
-    def rmtree(self, trash_path, should_cancel, suppress_errors=False):
-        '''
-        Delete entire file hierarchy present under trash_path using a
-        depth-first, non-recursive approach.
-
-        If trash_path is a path to regfile or a symlink, delete them and return.
-        '''
-        # stx_b = statx buffer
-        stx_b = self.statx(trash_path, CEPH_STATX_MODE, AT_SYMLINK_NOFOLLOW)
-        if stat.S_ISDIR(stx_b['mode']):
-            self._rmtree(trash_path, should_cancel, suppress_errors)
-        else:
-            self.__rm_non_dir_objects(trash_path, stx_b)
+                self.stack.pop()
 
 
 class RmtreeDir:
@@ -3003,9 +3006,8 @@ class RmtreeDir:
     with some helper code.
     '''
 
-    def __init__(self, fs, path, suppress_errors=False):
+    def __init__(self, fs, path):
         self.fs = fs
-        self.suppress_errors = suppress_errors
 
         self.path = path
         self.name = os.path.basename(self.path)
@@ -3087,7 +3089,7 @@ class RmtreeDir:
             log.error(f'Exception occured: "{e}"')
             self.set_readdir_error()
 
-    def try_rmdir(self, de_name):
+    def try_rmdir(self, de_name, suppress_errors=False):
         '''
         Remove given directory. If that fails because its not empty, raise the
         exception, the caller should handle it.
@@ -3108,10 +3110,10 @@ class RmtreeDir:
                       f'"{e}"')
             self.add_to_de_ignore_list(de_name)
 
-            if not self.suppress_errors:
+            if not suppress_errors:
                 raise
 
-    def try_unlink(self, de_name):
+    def try_unlink(self, de_name, suppress_errors=False):
         '''
         Unlink given regfile or link and if that fails add it to the ignorelist.
 
@@ -3127,5 +3129,5 @@ class RmtreeDir:
                       f'"{e}"')
             self.add_to_de_ignore_list(de_name)
 
-            if not self.suppress_errors:
+            if not suppress_errors:
                 raise
