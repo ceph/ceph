@@ -1041,50 +1041,6 @@ void BtreeLBAManager::register_metrics()
   );
 }
 
-BtreeLBAManager::_decref_intermediate_ret
-BtreeLBAManager::_decref_intermediate(
-  Transaction &t,
-  laddr_t addr,
-  extent_len_t len)
-{
-  auto c = get_context(t);
-  return with_btree<LBABtree>(
-    cache,
-    c,
-    [c, addr, len](auto &btree) mutable {
-    return btree.upper_bound_right(
-      c, addr
-    ).si_then([&btree, addr, len, c](auto iter) {
-      ceph_assert(!iter.is_end());
-      laddr_t key = iter.get_key();
-      ceph_assert(key <= addr);
-      auto val = iter.get_val();
-      ceph_assert(key + val.len >= addr + len);
-      ceph_assert(val.pladdr.is_paddr());
-      ceph_assert(val.refcount >= 1);
-      val.refcount -= 1;
-
-      LOG_PREFIX(BtreeLBAManager::_decref_intermediate);
-      TRACET("decreased refcount of intermediate key {} -- {}",
-	     c.trans, key, val);
-
-      if (val.refcount == 0) {
-	return btree.remove(c, iter
-	).si_then([key, val, c](auto iter) {
-	  return ref_iertr::make_ready_future<
-	    update_mapping_ret_bare_t>(key, val, iter.get_cursor(c));
-	});
-      } else {
-	return btree.update(c, iter, val
-	).si_then([c](auto iter) {
-	  return ref_iertr::make_ready_future<
-	    update_mapping_ret_bare_t>(iter.get_cursor(c));
-	});
-      }
-    });
-  });
-}
-
 BtreeLBAManager::update_refcount_ret
 BtreeLBAManager::update_refcount(
   Transaction &t,
