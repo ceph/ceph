@@ -402,7 +402,7 @@ Client::Client(Messenger *m, MonClient *mc, Objecter *objecter_)
     objecter_finisher(m->cct),
     m_command_hook(this),
     fscid(0),
-    subvolume_tracker{std::make_unique<SubvolumeTracker>(cct, whoami)}
+    subvolume_tracker{std::make_unique<SubvolumeMetricTracker>(cct, whoami)}
 {
   /* We only use the locale for normalization/case folding. That is unaffected
    * by the locale but required by the API.
@@ -867,10 +867,6 @@ void Client::update_io_stat_write(utime_t latency) {
   logger->set(l_c_wr_sqsum, n_sqsum);
   logger->set(l_c_wr_ops, nr_write_request);
 }
-
-void Client::update_subvolume_metric(bool write, utime_t start, utime_t end, uint64_t size, Inode *in) {
-}
-
 // ===================
 // metadata cache stuff
 
@@ -3738,14 +3734,14 @@ private:
   Client *client;
   InodeRef inode;
 public:
-  C_Client_FlushComplete(Client *c, Inode *in) : client(c), inode(in) {}
+  C_Client_FlushComplete(Client *c, Inode *in) : client(c), inode(in) { }
   void finish(int r) override {
     ceph_assert(ceph_mutex_is_locked_by_me(client->client_lock));
     if (r != 0) {
       client_t const whoami = client->whoami;  // For the benefit of ldout prefix
       ldout(client->cct, 1) << "I/O error from flush on inode " << inode
-                            << " 0x" << std::hex << inode->ino << std::dec
-                            << ": " << r << "(" << cpp_strerror(r) << ")" << dendl;
+        << " 0x" << std::hex << inode->ino << std::dec
+        << ": " << r << "(" << cpp_strerror(r) << ")" << dendl;
       inode->set_async_err(r);
     }
   }
@@ -17670,9 +17666,9 @@ mds_rank_t Client::_get_random_up_mds() const
 }
 
 // --- subvolume metrics tracking --- //
-SubvolumeTracker::SubvolumeTracker(CephContext *ct, client_t id) : cct(ct), whoami(id) {}
+SubvolumeMetricTracker::SubvolumeMetricTracker(CephContext *ct, client_t id) : cct(ct), whoami(id) {}
 
-void SubvolumeTracker::dump(Formatter *f) {
+void SubvolumeMetricTracker::dump(Formatter *f) {
   auto current_metrics = aggregate(false);
   f->open_array_section("current_metrics");
   for (auto &met : current_metrics) {
@@ -17692,10 +17688,10 @@ void SubvolumeTracker::dump(Formatter *f) {
   f->close_section();
 }
 
-void SubvolumeTracker::add_inode(inodeno_t inode, inodeno_t subvol) {
+void SubvolumeMetricTracker::add_inode(inodeno_t inode, inodeno_t subvol) {
   ldout(cct, 20) << __func__ << " subv_metric " << inode << "-" << subvol << dendl;
   std::unique_lock l(metrics_lock);
-  if (inode_subvolume.contains(inode)) {
+  if (likely(inode_subvolume.contains(inode))) {
     ldout(cct, 10) << __func__ << " " << inode << "-" << subvol << " subv_metric inode exists" << dendl;
     return;
   }
@@ -17709,7 +17705,7 @@ void SubvolumeTracker::add_inode(inodeno_t inode, inodeno_t subvol) {
   ldout(cct, 10) << __func__ << " add " << inode << "-" << subvol << dendl;
 }
 
-void SubvolumeTracker::remove_inode(inodeno_t inode) {
+void SubvolumeMetricTracker::remove_inode(inodeno_t inode) {
   ldout(cct, 20) << __func__ << " subv_metric " << inode << "-" << dendl;
   std::unique_lock l(metrics_lock);
   auto it = inode_subvolume.find(inode);
@@ -17728,7 +17724,7 @@ void SubvolumeTracker::remove_inode(inodeno_t inode) {
   ldout(cct, 20) << __func__ << " subv_metric end " << inode << dendl;
 }
 
-void SubvolumeTracker::add_metric(inodeno_t inode, SimpleIOMetric&& metric) {
+void SubvolumeMetricTracker::add_metric(inodeno_t inode, SimpleIOMetric&& metric) {
   ldout(cct, 10) << __func__ << " " << inode << dendl;
   std::shared_lock l(metrics_lock);
   auto it = inode_subvolume.find(inode);
@@ -17742,7 +17738,7 @@ void SubvolumeTracker::add_metric(inodeno_t inode, SimpleIOMetric&& metric) {
   entry.metrics.emplace_back(metric);
 }
 
-std::vector<AggregatedIOMetrics> SubvolumeTracker::aggregate(bool clean) {
+std::vector<AggregatedIOMetrics> SubvolumeMetricTracker::aggregate(bool clean) {
   ldout(cct, 20) << __func__ << dendl;
   std::vector<AggregatedIOMetrics> res;
   res.reserve(subvolume_metrics.size());

@@ -55,8 +55,6 @@ void MetricsHandler::init() {
         update_rank0();
       }
     });
-
-
 }
 
 void MetricsHandler::shutdown() {

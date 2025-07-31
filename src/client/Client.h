@@ -265,10 +265,10 @@ struct dir_result_t {
  * Maps subvolume_id(which is in fact inode id) to the vector of SimpleIOMetric instances.
  * Each simple metric records the single IO operation on the client.
  * On clients metric message to the MDS, client will aggregate all simple metrics for each subvolume
- * into the AggregatedIOMetric struct and clean the current metrics list.
+ * into the AggregatedIOMetric struct and clear the current metrics list.
  * TODO: limit the cap for each subvolume? in the case client sends metrics to the MDS not so often?
  */
-class SubvolumeTracker {
+class SubvolumeMetricTracker {
 public:
     struct SubvolumeEntry {
         std::vector<SimpleIOMetric> metrics;
@@ -279,7 +279,7 @@ public:
         }
     };
 
-    SubvolumeTracker(CephContext *ct, client_t id);
+    SubvolumeMetricTracker(CephContext *ct, client_t id);
     void dump(Formatter *f);
     void add_inode(inodeno_t inode, inodeno_t subvol);
     void remove_inode(inodeno_t inode);
@@ -1910,7 +1910,6 @@ private:
   void update_io_stat_metadata(utime_t latency);
   void update_io_stat_read(utime_t latency);
   void update_io_stat_write(utime_t latency);
-  void update_subvolume_metric(bool write, utime_t start, utime_t end, uint64_t size, Inode *in);
 
   bool should_check_perms() const {
     return (is_fuse && !fuse_default_permissions) || (!is_fuse && client_permissions);
@@ -1964,7 +1963,7 @@ private:
   fs_cluster_id_t fscid;
 
   // subvolume metrics tracker
-  std::unique_ptr<SubvolumeTracker> subvolume_tracker = nullptr;
+  std::unique_ptr<SubvolumeMetricTracker> subvolume_tracker = nullptr;
 
   // file handles, etc.
   interval_set<int> free_fd_set;  // unused fds

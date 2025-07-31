@@ -616,7 +616,7 @@ struct SimpleIOMetric {
 
     SimpleIOMetric() : packed_data(0) {}
 
-    bool get_is_write() const {
+    bool is_write() const {
       return (packed_data & IS_WRITE_MASK) != 0;
     }
 
@@ -630,14 +630,14 @@ struct SimpleIOMetric {
 
     // --- Dump method ---
     void dump(Formatter *f) const {
-      f->dump_string("op", get_is_write() ? "w" : "r");
+      f->dump_string("op", is_write() ? "w" : "r");
       f->dump_unsigned("lat_us", get_latency_us());
       f->dump_unsigned("size", get_payload_size());
     }
 };
 
 /**
- * brief holds resuolt of the SimpleIOMetrics aggregation, for each subvolume, on the client
+ * brief holds result of the SimpleIOMetrics aggregation, for each subvolume, on the client
  * the aggregation occurs just before sending metrics to the MDS
  */
 struct AggregatedIOMetrics {
@@ -652,7 +652,7 @@ struct AggregatedIOMetrics {
 
     void add(const SimpleIOMetric& m) {
       auto lat = m.get_latency_us();
-      if (m.get_is_write()) {
+      if (m.is_write()) {
         ++write_count;
         write_bytes += m.get_payload_size();
         write_latency_us += lat;
@@ -680,23 +680,23 @@ struct AggregatedIOMetrics {
     }
 
     double read_iops() const {
-      return read_latency_us > 0 ? static_cast<double>(read_count) * 1e9 / read_latency_us : 0.0;
+      return read_latency_us > 0 ? static_cast<double>(read_count) * 1e6 / read_latency_us : 0.0;
     }
 
     double write_iops() const {
-      return write_latency_us > 0 ? static_cast<double>(write_count) * 1e9 / write_latency_us : 0.0;
+      return write_latency_us > 0 ? static_cast<double>(write_count) * 1e6 / write_latency_us : 0.0;
     }
 
     void dump(Formatter *f) const {
       f->dump_unsigned("subvolume_id", subvolume_id);
       f->dump_unsigned("read_count", read_count);
       f->dump_unsigned("read_bytes", read_bytes);
-      f->dump_unsigned("avg_read_latency_ns", avg_read_latency_us());
+      f->dump_unsigned("avg_read_latency_us", avg_read_latency_us());
       f->dump_unsigned("read_iops", read_iops());
-      f->dump_float("avg_read_tp_Bpb", avg_read_throughput_Bps());
+      f->dump_float("avg_read_tp_Bps", avg_read_throughput_Bps());
       f->dump_unsigned("write_count", write_count);
       f->dump_unsigned("write_bytes", write_bytes);
-      f->dump_unsigned("avg_write_latency_ns", avg_write_latency_us());
+      f->dump_unsigned("avg_write_latency_us", avg_write_latency_us());
       f->dump_float("write_iops", write_iops());
       f->dump_float("avg_write_tp_Bps", avg_write_throughput_Bps());
       f->dump_unsigned("time_stamp", time_stamp);
