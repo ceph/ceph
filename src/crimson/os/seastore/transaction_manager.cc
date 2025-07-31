@@ -254,7 +254,13 @@ TransactionManager::ref_iertr::future<LBAMapping> TransactionManager::remove(
   LBAMapping mapping)
 {
   LOG_PREFIX(TransactionManager::remove);
-  return mapping.refresh().si_then([&t, this, FNAME](auto mapping) {
+  return mapping.refresh().si_then([&t, this](auto mapping) {
+    if (mapping.is_indirect()) {
+      return lba_manager->complete_indirect_lba_mapping(t, std::move(mapping));
+    }
+    return LBAManager::complete_lba_mapping_iertr::make_ready_future<
+      LBAMapping>(std::move(mapping));
+  }).si_then([&t, this, FNAME](auto mapping) {
     auto fut = base_iertr::make_ready_future<LogicalChildNodeRef>();
     if (!mapping.is_indirect() && mapping.get_val().is_real_location()) {
       auto ret = get_extent_if_linked<LogicalChildNode>(t, mapping);
