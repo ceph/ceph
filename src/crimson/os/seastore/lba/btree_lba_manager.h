@@ -636,13 +636,6 @@ private:
       return resolve_indirect_cursor(c, btree, indirect_cursor);
     });
   }
-
-  using _decref_intermediate_ret = ref_iertr::future<
-    update_mapping_ret_bare_t>;
-  _decref_intermediate_ret _decref_intermediate(
-    Transaction &t,
-    laddr_t addr,
-    extent_len_t len);
 };
 using BtreeLBAManagerRef = std::unique_ptr<BtreeLBAManager>;
 
