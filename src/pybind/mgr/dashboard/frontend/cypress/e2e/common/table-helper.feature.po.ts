@@ -88,7 +88,7 @@ And('I should see row {string} of the expanded row to have a usage bar', (row: s
   cy.get('[data-testid="datatable-row-detail"]').within(() => {
     cy.get('.cds--search-input').first().clear().type(row);
     cy.contains(`[cdstablerow] [cdstabledata]`, row).should('exist');
-    cy.get('[cdstablerow] [cdstabledata] cd-usage-bar .progress').should('exist');
+    cy.get('[cdstablerow] [cdstabledata] cd-usage-bar').should('exist');
   });
 });
 
