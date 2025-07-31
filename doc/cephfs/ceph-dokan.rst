@@ -3,9 +3,9 @@
 Mount CephFS on Windows
 =======================
 
-``ceph-dokan`` is used to mount CephFS filesystems on Windows.  It leverages
-Dokany, a Windows driver that allows implementing filesystems in userspace in a
-manner similar to FUSE.
+``ceph-dokan`` is used to mount CephFS file systems on Windows. It leverages
+Dokany, a Windows driver that allows implementing file systems in userspace in
+a manner similar to FUSE.
 
 See the `installation guide`_ to get started.
 
@@ -16,21 +16,21 @@ See the `installation guide`_ to get started.
 Usage
 =====
 
-Mounting filesystems
---------------------
+Mounting file systems
+---------------------
 
-Run the following command to mount a Ceph filesystem::
+Run the following command to mount a Ceph file system::
 
    ceph-dokan.exe -c c:\ceph.conf -l x
 
-This command mounts the default Ceph filesystem using the drive letter ``x``.
+This command mounts the default Ceph file system using the drive letter ``x``.
 If ``ceph.conf`` is present in the default location
 (``%ProgramData%\ceph\ceph.conf``, then this argument is optional.
 
 The ``-l`` argument allows the use of an empty folder as the mount point
 instead of a drive letter.
 
-The uid and gid used for mounting the filesystem default to ``0`` and can be
+The uid and gid used for mounting the file system default to ``0`` and can be
 changed using the following ``ceph.conf`` options::
 
     [client]
@@ -64,35 +64,35 @@ Run ``ceph-dokan --help`` for a full list of arguments.
 Credentials
 -----------
 
-The ``--id`` option passes the name of the CephX user whose keyring 
-is used when mounting CephFS. The following commands are equivalent::
+The ``--id`` option passes the name of the CephX user whose keyring is used
+when mounting a CephFS file system. The following commands are equivalent::
 
     ceph-dokan --id foo -l x
     ceph-dokan --name client.foo -l x
 
-Unmounting filesystems
-----------------------
+Unmounting file systems
+-----------------=-----
 
 The mount can be removed by either issuing ctrl-c or using the unmap command,
 like so::
 
     ceph-dokan.exe unmap -l x
 
-.. note:: When unmapping Ceph filesystems, you must specify the mount point
+.. note:: When unmapping CephFS file systems, you must specify the mount point
    argument that was used at the time of the creation of the mapping. 
 
 Limitations
 -----------
 
 Windows ACLs are ignored. Posix ACLs are supported but cannot be modified using
-the current CLI. In the future, we may add some command actions that change
-file ownership or permissions.
+the current CLI. In the future, we may add command actions that change file
+ownership or permissions.
 
 CephFS doesn't support mandatory file locks, which Windows relies heavily upon.
-Ceph relies upon Dokan to handle file locks, which are only enforced locally.
+Ceph relies upon Dokan to handle file locks, which are enforced only locally.
 
-Unlike ``rbd-wnbd``, ``ceph-dokan`` doesn't provide a ``service`` command.  To
-make a CephFS mount survive host reboots, use ``NSSM``.
+Unlike ``rbd-wnbd``, ``ceph-dokan`` doesn't provide a ``service`` command. To
+ensure that a CephFS mount survives reboots of its host, use ``NSSM``.
 
 Troubleshooting
 ===============
