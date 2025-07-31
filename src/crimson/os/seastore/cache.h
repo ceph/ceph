@@ -735,6 +735,10 @@ public:
     return epm.get_block_size();
   }
 
+  ExtentPinboard *get_extent_pinboard() {
+    return pinboard.get();
+  }
+
 // Interfaces only for tests.
 public:
   CachedExtentRef test_query_cache(paddr_t offset) {

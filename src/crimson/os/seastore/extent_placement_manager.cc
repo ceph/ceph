@@ -190,7 +190,8 @@ SegmentedOolWriter::alloc_write_ool_extents(
 void ExtentPlacementManager::init(
     JournalTrimmerImplRef &&trimmer,
     AsyncCleanerRef &&cleaner,
-    AsyncCleanerRef &&cold_cleaner)
+    AsyncCleanerRef &&cold_cleaner,
+    ExtentPinboard *pinboard)
 {
   writer_refs.clear();
   auto cold_segment_cleaner = dynamic_cast<SegmentCleaner*>(cold_cleaner.get());
@@ -264,7 +265,8 @@ void ExtentPlacementManager::init(
   background_process.init(std::move(trimmer),
                           std::move(cleaner),
                           std::move(cold_cleaner),
-                          hot_tier_generations);
+                          hot_tier_generations,
+                          pinboard);
   if (cold_segment_cleaner) {
     ceph_assert(get_main_backend_type() == backend_type_t::SEGMENTED);
     ceph_assert(background_process.has_cold_tier());

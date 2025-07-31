@@ -11,6 +11,8 @@
 #include "crimson/os/seastore/journal/segment_allocator.h"
 #include "crimson/os/seastore/journal/record_submitter.h"
 #include "crimson/os/seastore/transaction.h"
+#include "crimson/os/seastore/extent_pinboard.h"
+#include "crimson/os/seastore/logical_bucket.h"
 #include "crimson/os/seastore/random_block_manager.h"
 #include "crimson/os/seastore/random_block_manager/block_rb_manager.h"
 #include "crimson/os/seastore/randomblock_manager_group.h"
@@ -272,7 +274,8 @@ public:
       cold_tier_generations, hot_tier_generations);
   }
 
-  void init(JournalTrimmerImplRef &&, AsyncCleanerRef &&, AsyncCleanerRef &&);
+  void init(JournalTrimmerImplRef &&, AsyncCleanerRef &&, AsyncCleanerRef &&,
+            ExtentPinboard *pinboard);
 
   SegmentSeqAllocator &get_ool_segment_seq_allocator() const {
     return *ool_segment_seq_allocator;
@@ -314,6 +317,10 @@ public:
     const writer_stats_t &journal_stats,
     bool report_detail,
     double seconds) const;
+
+  LogicalBucket *get_logical_bucket() {
+    return background_process.get_logical_bucket();
+  }
 
   using mount_ertr = crimson::errorator<
       crimson::ct_error::input_output_error>;
@@ -707,7 +714,8 @@ private:
     void init(JournalTrimmerImplRef &&_trimmer,
               AsyncCleanerRef &&_cleaner,
               AsyncCleanerRef &&_cold_cleaner,
-              rewrite_gen_t hot_tier_generations) {
+              rewrite_gen_t hot_tier_generations,
+              ExtentPinboard *_pinboard) {
       trimmer = std::move(_trimmer);
       trimmer->set_background_callback(this);
       main_cleaner = std::move(_cleaner);
@@ -724,6 +732,7 @@ private:
           cleaners_by_device_id[id] = cold_cleaner.get();
         }
 
+        using crimson::common::get_conf;
         eviction_state.init(
           crimson::common::get_conf<double>(
             "seastore_multiple_tiers_stop_evict_ratio"),
@@ -732,7 +741,19 @@ private:
           crimson::common::get_conf<double>(
             "seastore_multiple_tiers_fast_evict_ratio"),
           hot_tier_generations);
+
+        pinboard = _pinboard;
+        ceph_assert(pinboard != nullptr);
+        pinboard->set_background_callback(this);
+
+        logical_bucket = create_logical_bucket(
+          get_conf<Option::size_t>("seastore_logical_bucket_capacity"),
+          get_conf<Option::size_t>("seastore_logical_bucket_proceed_size_per_cycle"));
       }
+    }
+
+    LogicalBucket *get_logical_bucket() {
+      return logical_bucket.get();
     }
 
     backend_type_t get_backend_type() const {
@@ -756,6 +777,8 @@ private:
       main_cleaner->set_extent_callback(cb);
       if (has_cold_tier()) {
         cold_cleaner->set_extent_callback(cb);
+        pinboard->set_extent_callback(cb);
+        logical_bucket->set_extent_callback(cb);
       }
     }
 
@@ -941,7 +964,8 @@ private:
 
     bool main_cleaner_should_fast_evict() const {
       return has_cold_tier() &&
-         main_cleaner->can_clean_space() &&
+          (main_cleaner->can_clean_space() ||
+           (logical_bucket && logical_bucket->could_demote())) &&
          eviction_state.is_fast_mode();
     }
 
@@ -1102,6 +1126,8 @@ private:
 
     JournalTrimmerImplRef trimmer;
     AsyncCleanerRef main_cleaner;
+    ExtentPinboard *pinboard = nullptr;
+    LogicalBucketRef logical_bucket;
 
     /*
      * cold tier (optional, see has_cold_tier())

@@ -46,6 +46,10 @@ TransactionManager::TransactionManager(
 {
   epm->set_extent_callback(this);
   journal->set_write_pipeline(&write_pipeline);
+  if (epm->has_cold_tier()) {
+    logical_bucket = epm->get_logical_bucket();
+    assert(support_logical_bucket());
+  }
 }
 
 TransactionManager::mkfs_ertr::future<> TransactionManager::mkfs()
@@ -1377,7 +1381,8 @@ TransactionManagerRef make_transaction_manager(
 
   epm->init(std::move(journal_trimmer),
 	    std::move(cleaner),
-	    std::move(cold_segment_cleaner));
+	    std::move(cold_segment_cleaner),
+	    cache->get_extent_pinboard());
   epm->set_primary_device(primary_device);
 
   return std::make_unique<TransactionManager>(

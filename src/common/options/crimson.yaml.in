@@ -257,3 +257,13 @@ options:
   level: advanced
   desc: Size in bytes of extents to be promoted from cold devices, set 0 to disable promotion
   default: 2_M
+- name: seastore_logical_bucket_capacity
+  type: size
+  level: advanced
+  desc: Size in bytes of memory used by logical bucket
+  default: 200_M
+- name: seastore_logical_bucket_proceed_size_per_cycle
+  type: size
+  level: advanced
+  desc: Size in bytes of extents to be demoted from logical bucket
+  default: 2_M
