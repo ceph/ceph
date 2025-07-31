@@ -204,7 +204,7 @@ Metadata Structures
 Device Types
 ------------
 
-Configured via the ``seastore_main_device_type`` option, the device types are
+Configured via the ``seastore_hot_device_type`` option, the device types are
 separated into **Segmented** and **RBM** backend types as follows:
 
 
