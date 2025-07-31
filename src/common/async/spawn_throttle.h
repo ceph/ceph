@@ -19,14 +19,11 @@
 
 #include <boost/intrusive_ptr.hpp>
 #include "cancel_on_error.h"
-#include "yield_context.h"
 
 namespace ceph::async {
 
-/// A coroutine throttle that allows a thread of execution to spawn and manage
+/// A coroutine throttle that allows a parent coroutine to spawn and manage
 /// multiple child coroutines, while enforcing an upper bound on concurrency.
-/// The parent may either be a synchronous function or a stackful coroutine,
-/// depending on the optional_yield constructor argument.
 ///
 /// Child coroutines take boost::asio::yield_context as the only argument.
 /// Exceptions thrown by children are reported to the caller on its next call
@@ -44,10 +41,10 @@ namespace ceph::async {
 /// @code
 /// void child(boost::asio::yield_context yield);
 ///
-/// void parent(size_t count, optional_yield y)
+/// void parent(size_t count, boost::asio::yield_context yield)
 /// {
 ///   // spawn all children, up to 10 at a time
-///   auto throttle = ceph::async::spawn_throttle{y, 10};
+///   auto throttle = ceph::async::spawn_throttle{yield, 10};
 ///
 ///   for (size_t i = 0; i < count; i++) {
 ///     throttle.spawn(child);
@@ -60,9 +57,9 @@ class spawn_throttle {
   boost::intrusive_ptr<impl_type> impl;
 
  public:
-  spawn_throttle(optional_yield y, size_t limit,
+  spawn_throttle(boost::asio::yield_context yield, size_t limit,
                  cancel_on_error on_error = cancel_on_error::none)
-    : impl(detail::spawn_throttle_impl::create(y, limit, on_error))
+    : impl(new detail::spawn_throttle_impl(yield, limit, on_error))
   {}
 
   spawn_throttle(spawn_throttle&&) = default;
@@ -75,7 +72,7 @@ class spawn_throttle {
   ~spawn_throttle()
   {
     if (impl) {
-      impl->cancel(true);
+      impl->cancel();
     }
   }
 
@@ -119,7 +116,7 @@ class spawn_throttle {
   /// Cancel all outstanding coroutines.
   void cancel()
   {
-    impl->cancel(false);
+    impl->cancel();
   }
 };
 
