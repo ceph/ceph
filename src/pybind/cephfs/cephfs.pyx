@@ -19,11 +19,17 @@ ELSE:
     from c_cephfs cimport *
     from rados cimport Rados
 
-from collections import namedtuple
+from collections import namedtuple, deque
 from datetime import datetime
 import os
 import time
+import stat
 from typing import Any, Dict, Optional
+from logging import getLogger
+
+
+log = getLogger(__name__)
+
 
 AT_SYMLINK_NOFOLLOW = 0x0100
 AT_STATX_SYNC_TYPE  = 0x6000
@@ -198,6 +204,14 @@ class DiskQuotaExceeded(OSError):
     pass
 class PermissionDenied(OSError):
     pass
+
+class OpCancelled(OSError):
+    def __init__(self, op_name):
+        self.errno = 125
+        self.strerror = f'CephFS op {op_name} was cancelled'
+
+        super(OpCancelled, self).__init__(self.errno, self.strerror)
+
 
 cdef errno_to_exception =  {
     EPERM      : PermissionError,
@@ -2832,3 +2846,276 @@ cdef class LibCephFS(object):
 
         finally:
            free(buf)
+
+    # following code includes cptree() and related helper methods.
+
+    def __cp_non_dir_objects(self, src, dst, stx_b):
+        '''
+        If the root of the file heirarchy passed through tree_path points to a
+        file or symlink, unlink them and return.
+        '''
+        mode = stx_b["mode"] & ~stat.S_IFMT(stx_b["mode"])
+        if stat.S_ISDIR(stx_b['mode']):
+            # when tree_path is a path to a dir, it should've been handled in
+            # the previous method and therefore it should be impossible to reach
+            # here.
+            assert False
+        elif stat.S_ISREG(stx_b['mode']):
+            try:
+                self._cp_regfile(src, dst, mode)
+                return
+            except Exception as e:
+                log.info('Following exception occurred while copying '
+                         f'regular file: {e}')
+                raise
+        elif stat.S_ISLNK(stx_b["mode"]):
+            try:
+                target = self.readlink(src, 4096)
+                self.symlink(target, dst)
+                return
+            except Exception as e:
+                log.info('Following exception occurred while copying '
+                         f'symlink: {e}')
+                raise
+        else:
+            raise RuntimeError('expected a regfile or symlink but found '
+                               f'something else. src = {src}')
+
+    def _cp_tree(self, src, dst, should_cancel, suppress_errors=False):
+        try:
+            # Stack needed for traversing the file heirarchy under
+            # trash_path in depth-first, non-recursive fashion. each
+            # stack member is an instance of class CptreeDir.
+            stack = deque([CpTreeDir(src, dst, self, should_cancel,
+                                    suppress_errors),])
+        except Exception as e:
+            log.error('opening root dir of the file tree failed with exception '
+                      f'"{e}", exiting.')
+            if suppress_errors:
+                return
+            else:
+                raise
+
+        while stack:
+            if should_cancel():
+                return
+
+            curr_dir = stack[-1]
+
+            # subdir_de = directory entry for a subdir
+            subdir_de = curr_dir.get_subdir()
+            if subdir_de:
+                subdir_name = subdir_de.d_name.decode()
+                retval = curr_dir.add_dir_to_stack(subdir_name, stack)
+                # TODO: consider the case where we don't have perm on src
+                break
+            else:
+                curr_dir.copy_all_contents()
+                stack.pop()
+
+            # TODO: evaluate if this is necessary
+            if curr_dir.has_any_fs_op_failed():
+                self.__notify_parent_dir(stack, curr_dir)
+                stack.pop()
+
+    def cp_tree(self, src, dst, should_cancel, suppress_errors=False):
+        # stx_b = statx buffer
+        stx_b = self.statx(src, dst, CEPH_STATX_MODE, AT_SYMLINK_NOFOLLOW)
+        if not stat.S_ISDIR(stx_b['mode']):
+            self._cp_non_dir_objects(src, dst, stx_b, should_cancel)
+            return
+
+        self._cp_tree(src, dst, should_cancel, suppress_errors)
+
+
+class CpTreeDir:
+    '''
+    Holds the path and handle for the directory being traversed.
+
+    Besides, it holds -
+        - a boolean value to indicate whether this dir is empty and
+        - a boolean value to indicate whether an exception had occurred
+          while calling readdir() for this dir handle, and
+        - a list of dir entries for which unlink()/rmdir() failed.
+    '''
+
+    def __init__(self, path, fs, suppress_errors=False):
+        self.fs = fs
+        self.suppress_errors = suppress_errors
+
+        self.path = path
+        self.name = os.path.basename(self.path)
+        self.handle = self.try_opendir()
+
+        # Is this directory empty? This will be set by self.read_dir().
+        self.is_empty = None
+
+        # List of dir entries to be ignored instead of calling rmdir()
+        # or unlink() for them.
+        self.de_ignore_list = []
+
+        # Indicates whether an error occured during call to readdir().
+        self.has_readdir_failed = False
+
+    def __str__(self):
+        return self.path
+
+    def add_to_de_ignore_list(self, de_name):
+        self.de_ignore_list.append(de_name)
+
+    def set_readdir_error(self):
+        self.has_readdir_failed = True
+
+    def should_skip_d_name(self, de_name):
+        return de_name in self.de_ignore_list
+
+    def has_any_fs_op_failed(self):
+        return self.has_readdir_failed or len(self.de_ignore_list) > 0
+
+    def try_opendir(self):
+        '''
+        Open this directory.
+
+        Note: In case suppress_errors it true, the caller must handle the raised
+        exeption.
+        '''
+        try:
+            return self.fs.opendir(self.path)
+        except Error as e:
+            log.error('Exception occured during opendir(): '
+                      f'"{e}"')
+            raise
+
+    def read_dir(self):
+        '''
+        Read this dir, return a dentry besides . and .. and ignorelist-ed
+        dentries.
+        '''
+        # Assuming True for now, if it's not empty it will be set to
+        # False by the following loop.
+        self.is_empty = True
+
+        try:
+            de = self.fs.readdir(self.handle)
+            while de:
+                if de.d_name in (b'.', b'..'):
+                    de = self.fs.readdir(self.handle)
+                elif de.d_name in self.de_ignore_list:
+                    self.is_empty = False
+                    log.debug(
+                        'readdir()/rmdir()/unlink() has previously '
+                        f'failed for dir entry "{de.d_name}", avoiding '
+                        'running readdir() on it again.')
+                    de = self.fs.readdir(self.handle)
+                else:
+                    self.is_empty = False
+                    return de
+        except Error as e:
+            # This is the tricky one: it's an error on this
+            # directory, not on a entry in this directory
+            log.error(f'Exception occured: "{e}"')
+            self.set_readdir_error()
+
+
+
+    def __init__(self, src, dst, fs, should_cancel=None, suppress_errors=False):
+        self.__init__(src, fs, suppress_errors)
+        del self.path
+        self.src = src
+        self.dst = dst
+
+        self.fs.mkdir(dst)
+
+        # list of subdirs that've for which copying has been done
+        self.list_of_prev_stacked_subdirs = []
+
+    def mark_subdir_as_stacked(self, de_name):
+        self.list_of_prev_stacked_subdirs.append(de_name)
+
+    def get_subdir(self):
+        de = self.read_dir()
+        while de:
+            if de.is_dir():
+                if de.d_name not in self.list_of_prev_stacked_subdirs:
+                    return de
+            de = self.read_dir()
+        return None
+
+    def add_dir_to_stack(self, de_name, stack):
+        src = os.path.join(self.src, de_name)
+        dst = os.path.join(self.dst, de_name)
+        stack.append([CpTreeDir(src, dst, self.fs, self.should_cancel, self.suppress_errors)])
+        self.mark_subdir_as_stacked(de_name)
+
+    def copy_regfile(self, de_name):
+        # TOOD: this is a dummy value to server purpose, fetch actual value
+        mode = 0o755
+        src_file = os.path.join(self.src, de_name)
+        dst_file = os.path.join(self.dst, de_name)
+
+        src_file_fd = dst_file_fd = None
+        try:
+            src_file_fd = self.fs.open(src_file, os.O_RDONLY)
+            dst_file_fd = self.fs.open(dst_file, os.O_CREAT | os.O_TRUNC | os.O_WRONLY, mode)
+        except Error:
+            if src_file_fd:
+                self.close(src_file_fd)
+            if dst_file_fd:
+                self.close(dst_file_fd)
+            raise
+
+        while True:
+            if self.should_cancel and self.should_cancel():
+                raise OpCancelled('cp_tree')
+
+            data = self.fs.read(src_file_fd, -1, 1 * 1024 * 1024)
+            if not len(data):
+                break
+
+            written = 0
+            while written < len(data):
+                written += self.fs.write(dst_file_fd, data[written:], -1)
+
+        self.fs.fsync(dst_file_fd, 0)
+        self.fs.close(src_file_fd)
+        self.fs.close(dst_file_fd)
+
+    def copy_symlink(self, de_name):
+        src_file = os.path.join(self.src, de_name)
+        dst_file = os.path.join(self.dst, de_name)
+
+        try:
+            target = self.fs.readlink(src_file, 4096)
+        except Exception as e:
+            log.info('Following exception occurred while reading '
+                     f'symlink: {e}')
+            raise
+
+        try:
+            self.fs.symlink(target, dst_file)
+        except Exception as e:
+            log.info('Following exception occurred while creating '
+                     f'symlink: {e}')
+            raise
+
+    def copy_all_contents(self):
+        # de = directory entry
+        de = self.read_dir()
+        while de:
+            if self.should_cancel():
+                return
+
+            de_name = de.d_name.decode()
+            if de.is_symbol_file():
+                retval = self.copy_synlink(de_name)
+            elif de.is_file():
+                retval = self.copy_regfile(de_name)
+            elif de.is_dir():
+                raise RuntimeError('shouldn\'t have encountered a directory at '
+                                   'this point')
+            else:
+                raise RuntimeError('shouldn\'t have encountered anything other '
+                                   'than directory, regular file or symbolic '
+                                   'link  at this point')
+
+            de = self.read_dir()
