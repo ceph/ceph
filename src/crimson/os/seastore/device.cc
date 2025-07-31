@@ -47,7 +47,7 @@ Device::make_device(
     });
   } else {
     ceph_assert(btype != backend_type_t::NONE);
-    return get_rb_device(device
+    return get_rb_device(device, dtype
     ).then([](DeviceRef ret) {
       return ret;
     });

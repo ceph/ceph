@@ -1245,6 +1245,7 @@ TransactionManagerRef make_transaction_manager(
     shard_stats_t& shard_stats,
     bool is_test)
 {
+  LOG_PREFIX(make_transaction_manager);
   rewrite_gen_t hot_tier_generations = crimson::common::get_conf<uint64_t>(
     "seastore_hot_tier_generations");
   rewrite_gen_t cold_tier_generations = crimson::common::get_conf<uint64_t>(
@@ -1257,9 +1258,11 @@ TransactionManagerRef make_transaction_manager(
   auto rbs = std::make_unique<RBMDeviceGroup>();
   auto backref_manager = create_backref_manager(*cache);
   SegmentManagerGroupRef cold_sms = nullptr;
+  RBMDeviceGroupRef cold_rbs = nullptr;
   std::vector<SegmentProvider*> segment_providers_by_id{DEVICE_ID_MAX, nullptr};
 
   auto p_backend_type = primary_device->get_backend_type();
+  INFO("primary backend: {}", p_backend_type);
 
   if (p_backend_type == backend_type_t::SEGMENTED) {
     auto dtype = primary_device->get_device_type();
@@ -1267,6 +1270,7 @@ TransactionManagerRef make_transaction_manager(
 		dtype != device_type_t::EPHEMERAL_COLD);
     sms->add_segment_manager(static_cast<SegmentManager*>(primary_device));
   } else {
+    assert(p_backend_type != backend_type_t::NONE);
     auto rbm = std::make_unique<BlockRBManager>(
       static_cast<RBMDevice*>(primary_device), "", is_test);
     rbs->add_rb_manager(std::move(rbm));
@@ -1275,17 +1279,29 @@ TransactionManagerRef make_transaction_manager(
   for (auto &p_dev : secondary_devices) {
     if (p_dev->get_backend_type() == backend_type_t::SEGMENTED) {
       if (p_dev->get_device_type() == primary_device->get_device_type()) {
+	INFO("add {} to main segment backend", device_id_printer_t{p_dev->get_device_id()});
         sms->add_segment_manager(static_cast<SegmentManager*>(p_dev));
       } else {
         if (!cold_sms) {
           cold_sms = std::make_unique<SegmentManagerGroup>();
         }
+	INFO("add {} to cold segment backend", device_id_printer_t{p_dev->get_device_id()});
         cold_sms->add_segment_manager(static_cast<SegmentManager*>(p_dev));
       }
     } else {
+      assert(p_backend_type != backend_type_t::NONE);
       auto rbm = std::make_unique<BlockRBManager>(
 	static_cast<RBMDevice*>(p_dev), "", is_test);
-      rbs->add_rb_manager(std::move(rbm));
+      if (p_dev->get_device_type() == primary_device->get_device_type()) {
+	INFO("add {} to rbm backend", device_id_printer_t{p_dev->get_device_id()});
+	rbs->add_rb_manager(std::move(rbm));
+      } else {
+	if (!cold_rbs) {
+	  cold_rbs = std::make_unique<RBMDeviceGroup>();
+	}
+	INFO("add {} to cold rbm backend", device_id_printer_t{p_dev->get_device_id()});
+	cold_rbs->add_rb_manager(std::move(rbm));
+      }
     }
   }
 
@@ -1330,10 +1346,11 @@ TransactionManagerRef make_transaction_manager(
   AsyncCleanerRef cleaner;
   JournalRef journal;
 
-  SegmentCleanerRef cold_segment_cleaner = nullptr;
+  AsyncCleanerRef cold_cleaner = nullptr;
 
   if (cold_sms) {
-    cold_segment_cleaner = SegmentCleaner::create(
+    assert(!cold_rbs);
+    auto segment_cleaner = SegmentCleaner::create(
       cleaner_config,
       std::move(cold_sms),
       *backref_manager,
@@ -1342,11 +1359,17 @@ TransactionManagerRef make_transaction_manager(
       cleaner_is_detailed,
       /* is_cold = */ true);
     if (backend_type == backend_type_t::SEGMENTED) {
-      for (auto id : cold_segment_cleaner->get_device_ids()) {
+      for (auto id : segment_cleaner->get_device_ids()) {
         segment_providers_by_id[id] =
-          static_cast<SegmentProvider*>(cold_segment_cleaner.get());
+          static_cast<SegmentProvider*>(segment_cleaner.get());
       }
     }
+    cold_cleaner = std::move(segment_cleaner);
+  } else if (cold_rbs) {
+    cold_cleaner = RBMCleaner::create(
+      std::move(cold_rbs),
+      *backref_manager,
+      cleaner_is_detailed);
   }
 
   if (backend_type == backend_type_t::SEGMENTED) {
@@ -1381,7 +1404,7 @@ TransactionManagerRef make_transaction_manager(
 
   epm->init(std::move(journal_trimmer),
 	    std::move(cleaner),
-	    std::move(cold_segment_cleaner),
+	    std::move(cold_cleaner),
 	    cache->get_extent_pinboard());
   epm->set_primary_device(primary_device);
 

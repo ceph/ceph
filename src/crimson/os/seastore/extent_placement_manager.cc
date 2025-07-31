@@ -194,9 +194,8 @@ void ExtentPlacementManager::init(
     ExtentPinboard *pinboard)
 {
   writer_refs.clear();
-  auto cold_segment_cleaner = dynamic_cast<SegmentCleaner*>(cold_cleaner.get());
   dynamic_max_rewrite_generation = hot_tier_generations - 1;
-  if (cold_segment_cleaner) {
+  if (cold_cleaner) {
     dynamic_max_rewrite_generation = hot_tier_generations + cold_tier_generations - 1;
   }
   ceph_assert(dynamic_max_rewrite_generation > MIN_REWRITE_GENERATION);
@@ -241,34 +240,58 @@ void ExtentPlacementManager::init(
     for (auto *rb : rb_cleaner->get_rb_group()->get_rb_managers()) {
       add_device(rb->get_device());
     }
-  }
-
-  if (cold_segment_cleaner) {
-    for (rewrite_gen_t gen = hot_tier_generations; gen <= dynamic_max_rewrite_generation; ++gen) {
-      writer_refs.emplace_back(std::make_unique<SegmentedOolWriter>(
-            data_category_t::DATA, gen, *cold_segment_cleaner,
-            *ool_segment_seq_allocator));
+    for (rewrite_gen_t gen = OOL_GENERATION; gen < hot_tier_generations; ++gen) {
       data_writers_by_gen[generation_to_writer(gen)] = writer_refs.back().get();
     }
-    for (rewrite_gen_t gen = hot_tier_generations; gen <= dynamic_max_rewrite_generation; ++gen) {
-      writer_refs.emplace_back(std::make_unique<SegmentedOolWriter>(
-            data_category_t::METADATA, gen, *cold_segment_cleaner,
-            *ool_segment_seq_allocator));
+    for (rewrite_gen_t gen = OOL_GENERATION; gen < hot_tier_generations; ++gen) {
       md_writers_by_gen[generation_to_writer(gen)] = writer_refs.back().get();
-    }
-    for (auto *device : cold_segment_cleaner->get_segment_manager_group()
-                                            ->get_segment_managers()) {
-      add_device(device);
     }
   }
 
+  if (cold_cleaner) {
+    if (cold_cleaner->get_backend_type() == backend_type_t::SEGMENTED) {
+      auto cold_segment_cleaner = static_cast<SegmentCleaner*>(cold_cleaner.get());
+      for (rewrite_gen_t gen = hot_tier_generations; gen <= dynamic_max_rewrite_generation; ++gen) {
+        writer_refs.emplace_back(std::make_unique<SegmentedOolWriter>(
+              data_category_t::DATA, gen, *cold_segment_cleaner,
+              *ool_segment_seq_allocator));
+        data_writers_by_gen[generation_to_writer(gen)] = writer_refs.back().get();
+      }
+      for (rewrite_gen_t gen = hot_tier_generations; gen <= dynamic_max_rewrite_generation; ++gen) {
+        writer_refs.emplace_back(std::make_unique<SegmentedOolWriter>(
+              data_category_t::METADATA, gen, *cold_segment_cleaner,
+              *ool_segment_seq_allocator));
+        md_writers_by_gen[generation_to_writer(gen)] = writer_refs.back().get();
+      }
+      for (auto *device : cold_segment_cleaner->get_segment_manager_group()
+                                              ->get_segment_managers()) {
+        add_device(device);
+      }
+    } else {
+      ceph_assert(cold_cleaner->get_backend_type() == backend_type_t::RANDOM_BLOCK);
+      auto rb_cleaner = static_cast<RBMCleaner*>(cold_cleaner.get());
+      ceph_assert(rb_cleaner);
+      writer_refs.emplace_back(std::make_unique<RandomBlockOolWriter>(rb_cleaner));
+      for (rewrite_gen_t gen = hot_tier_generations; gen <= dynamic_max_rewrite_generation; ++gen) {
+        data_writers_by_gen[generation_to_writer(gen)] = writer_refs.back().get();
+      }
+      for (rewrite_gen_t gen = hot_tier_generations; gen <= dynamic_max_rewrite_generation; ++gen) {
+        md_writers_by_gen[generation_to_writer(gen)] = writer_refs.back().get();
+      }
+      for (auto *rb : rb_cleaner->get_rb_group()->get_rb_managers()) {
+        add_device(rb->get_device());
+      }
+     }
+   }
+
+  auto cold_cleaner_ = cold_cleaner.get();
   background_process.init(std::move(trimmer),
                           std::move(cleaner),
                           std::move(cold_cleaner),
                           hot_tier_generations,
                           pinboard);
   ceph_assert(get_main_backend_type() != backend_type_t::NONE);
-  if (cold_segment_cleaner) {
+  if (cold_cleaner_) {
     ceph_assert(get_main_backend_type() == backend_type_t::SEGMENTED);
     ceph_assert(background_process.has_cold_tier());
   } else {
