@@ -7529,7 +7529,7 @@ void RGWDeleteMultiObj::write_ops_log_entry(rgw_log_entry& entry) const {
   entry.delete_multi_obj_meta.objects = std::move(ops_log_entries);
 }
 
-void RGWDeleteMultiObj::handle_individual_object(const RGWMultiDelObject& object, optional_yield y)
+void RGWDeleteMultiObj::handle_individual_object(const RGWMultiDelObject& object, optional_yield y, const bool skip_olh_obj_update)
 {
   const string& key = object.get_key();
   const string& instance = object.get_version_id();
@@ -7620,11 +7620,11 @@ void RGWDeleteMultiObj::handle_individual_object(const RGWMultiDelObject& object
   del_op->params.if_match = object.get_if_match();
   del_op->params.size_match = object.get_size_match();
 
-  op_ret = del_op->delete_obj(dpp, y, rgw::sal::FLAG_LOG_OP);
+  op_ret = del_op->delete_obj(dpp, y, rgw::sal::FLAG_LOG_OP | (skip_olh_obj_update ? rgw::sal::FLAG_SKIP_UPDATE_OLH : 0));
   if (op_ret == -ENOENT) {
     op_ret = 0;
   }
-      
+
   if (auto ret = rgw::bucketlogging::log_record(driver, rgw::bucketlogging::LoggingType::Any, obj.get(), s, canonical_name(), etag, obj_size, this, y, true, false); ret < 0) {
     // don't reply with an error in case of failed delete logging
     ldpp_dout(this, 5) << "WARNING: multi DELETE operation ignores bucket logging failure: " << ret << dendl;
@@ -7648,9 +7648,11 @@ void RGWDeleteMultiObj::handle_objects(const std::vector<RGWMultiDelObject>& obj
 {
   auto group = ceph::async::spawn_throttle{yield, max_aio};
 
-  for (const auto& object : objects) {
-    group.spawn([this, &object] (boost::asio::yield_context yield) {
-                  handle_individual_object(object, yield);
+  for (size_t i = 0; i < objects.size(); ++i) {
+    const auto& object = objects[i];
+    const bool skip_olh_obj_update = (i != (objects.size() - 1));
+    group.spawn([this, &object, skip_olh_obj_update] (boost::asio::yield_context yield) {
+                  handle_individual_object(object, yield, skip_olh_obj_update);
                 });
 
     rgw_flush_formatter(s, s->formatter);
