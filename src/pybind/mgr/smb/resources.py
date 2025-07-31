@@ -4,6 +4,7 @@ import base64
 import dataclasses
 import errno
 import json
+from dataclasses import replace
 
 import yaml
 
@@ -132,6 +133,18 @@ class _RBase:
 
 
 @resourcelib.component()
+class QoSConfig(_RBase):
+    """Quality of Service configuration for CephFS shares."""
+
+    read_iops_limit: Optional[int] = None
+    write_iops_limit: Optional[int] = None
+    read_bw_limit: Optional[int] = None
+    write_bw_limit: Optional[int] = None
+    read_delay_max: Optional[int] = 10
+    write_delay_max: Optional[int] = 10
+
+
+@resourcelib.component()
 class CephFSStorage(_RBase):
     """Description of where in a CephFS file system a share is located."""
 
@@ -140,6 +153,8 @@ class CephFSStorage(_RBase):
     subvolumegroup: str = ''
     subvolume: str = ''
     provider: CephFSStorageProvider = CephFSStorageProvider.SAMBA_VFS
+    qos: Optional[QoSConfig] = None
+    DELAY_MAX_LIMIT = 100
 
     def __post_init__(self) -> None:
         # Allow a shortcut form of <subvolgroup>/<subvol> in the subvolume
@@ -173,7 +188,44 @@ class CephFSStorage(_RBase):
     def _customize_resource(rc: resourcelib.Resource) -> resourcelib.Resource:
         rc.subvolumegroup.quiet = True
         rc.subvolume.quiet = True
+        rc.qos.quiet = True
         return rc
+
+    def update_qos(
+        self,
+        *,
+        read_iops_limit: Optional[int] = None,
+        write_iops_limit: Optional[int] = None,
+        read_bw_limit: Optional[int] = None,
+        write_bw_limit: Optional[int] = None,
+        read_delay_max: Optional[int] = 10,
+        write_delay_max: Optional[int] = 10,
+    ) -> Self:
+        """Return a new CephFSStorage instance with updated QoS values."""
+
+        qos_updates = {}
+        new_qos: Optional[QoSConfig] = None
+        if read_iops_limit is not None and read_iops_limit > 0:
+            qos_updates["read_iops_limit"] = read_iops_limit
+        if write_iops_limit is not None and write_iops_limit > 0:
+            qos_updates["write_iops_limit"] = write_iops_limit
+        if read_bw_limit is not None and read_bw_limit > 0:
+            qos_updates["read_bw_limit"] = read_bw_limit
+        if write_bw_limit is not None and write_bw_limit > 0:
+            qos_updates["write_bw_limit"] = write_bw_limit
+        if read_delay_max is not None and read_delay_max > 0:
+            qos_updates["read_delay_max"] = min(
+                read_delay_max, self.DELAY_MAX_LIMIT
+            )
+        if write_delay_max is not None and write_delay_max > 0:
+            qos_updates["write_delay_max"] = min(
+                write_delay_max, self.DELAY_MAX_LIMIT
+            )
+
+        if qos_updates:
+            new_qos = replace(self.qos or QoSConfig(), **qos_updates)
+
+        return replace(self, qos=new_qos)
 
 
 @resourcelib.component()
