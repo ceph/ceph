@@ -6808,7 +6808,8 @@ void RGWDeleteMultiObj::wait_flush(optional_yield y,
 }
 
 void RGWDeleteMultiObj::handle_individual_object(const rgw_obj_key& o, optional_yield y,
-                                                 boost::asio::deadline_timer *formatter_flush_cond)
+                                                 boost::asio::deadline_timer *formatter_flush_cond,
+                                                 const bool skip_olh_obj_update)
 {
   std::unique_ptr<rgw::sal::Object> obj = bucket->get_object(o);
   if (o.empty()) {
@@ -6882,10 +6883,12 @@ void RGWDeleteMultiObj::handle_individual_object(const rgw_obj_key& o, optional_
   del_op->params.bucket_owner = s->bucket_owner.id;
   del_op->params.marker_version_id = version_id;
 
-  op_ret = del_op->delete_obj(this, y, rgw::sal::FLAG_LOG_OP);
+  op_ret = del_op->delete_obj(this, y,
+                              rgw::sal::FLAG_LOG_OP | (skip_olh_obj_update ? rgw::sal::FLAG_SKIP_UPDATE_OLH : 0));
   if (op_ret == -ENOENT) {
     op_ret = 0;
   }
+
   if (op_ret == 0) {
     // send request to notification manager
     int ret = res->publish_commit(this, obj_size, ceph::real_clock::now(), etag, version_id);
@@ -6898,12 +6901,105 @@ void RGWDeleteMultiObj::handle_individual_object(const rgw_obj_key& o, optional_
   send_partial_response(o, del_op->result.delete_marker, del_op->result.version_id, op_ret, formatter_flush_cond);
 }
 
+void RGWDeleteMultiObj::handle_versioned_objects(const std::vector<rgw_obj_key>& objects,
+                                                 uint32_t max_aio,
+                                                 boost::asio::yield_context y)
+{
+  std::optional<boost::asio::deadline_timer> formatter_flush_cond;
+  auto ex = y.get_executor();
+  formatter_flush_cond = std::make_optional<boost::asio::deadline_timer>(ex);
+  uint32_t aio_count = 0;
+  std::map<std::string, std::vector<rgw_obj_key>> grouped_objects;
+
+  // group objects by their keys
+  for (const auto& object : objects) {
+    const std::string& key = object.name;
+    grouped_objects[key].push_back(object);
+  }
+
+  // for each group of objects, handle all but the last object and skip update_olh
+  for (const auto& kv : grouped_objects) {
+    const auto& group = kv.second;
+    for (size_t i = 0; i + 1 < group.size(); ++i) { // skip the last element
+      wait_flush(y, &*formatter_flush_cond, [&aio_count, max_aio] {
+        return aio_count < max_aio;
+      });
+      aio_count++;
+      const rgw_obj_key obj = group[i];
+      boost::asio::spawn(y, [this, &aio_count, obj, &formatter_flush_cond](boost::asio::yield_context yield) {
+        handle_individual_object(obj, yield, &*formatter_flush_cond, true /* skip_olh_obj_update */);
+        aio_count--;
+      }, [] (std::exception_ptr eptr) {
+        if (eptr) std::rethrow_exception(eptr);
+      });
+    }
+  }
+  wait_flush(y, &*formatter_flush_cond, [this, n=objects.size()-grouped_objects.size()] {
+    return n == ops_log_entries.size();
+  });
+
+  // Now handle the last object of each group with update_olh
+  for (const auto& kv : grouped_objects) {
+    const rgw_obj_key obj = kv.second.back();
+
+    wait_flush(y, &*formatter_flush_cond, [&aio_count, max_aio] {
+      return aio_count < max_aio;
+    });
+    aio_count++;
+    boost::asio::spawn(y, [this, &aio_count, obj, &formatter_flush_cond] (boost::asio::yield_context yield) {
+      handle_individual_object(obj, yield, &*formatter_flush_cond);
+      aio_count--;
+    }, [] (std::exception_ptr eptr) {
+      if (eptr) std::rethrow_exception(eptr);
+    });
+  }
+  wait_flush(y, &*formatter_flush_cond, [this, n=objects.size()] {
+    return n == ops_log_entries.size();
+  });
+}
+
+void RGWDeleteMultiObj::handle_non_versioned_objects(const std::vector<rgw_obj_key>& objects,
+                                                     uint32_t max_aio,
+                                                     boost::asio::yield_context y)
+{
+  std::optional<boost::asio::deadline_timer> formatter_flush_cond;
+  auto ex = y.get_executor();
+  formatter_flush_cond = std::make_optional<boost::asio::deadline_timer>(ex);
+  uint32_t aio_count = 0;
+
+  for (const auto& object : objects) {
+    wait_flush(y, &*formatter_flush_cond, [&aio_count, max_aio] {
+      return aio_count < max_aio;
+    });
+    aio_count++;
+    boost::asio::spawn(y, [this, &aio_count, object, &formatter_flush_cond] (boost::asio::yield_context yield) {
+      handle_individual_object(object, yield, &*formatter_flush_cond);
+      aio_count--;
+    }, [] (std::exception_ptr eptr) {
+      if (eptr) std::rethrow_exception(eptr);
+    });
+  }
+
+  wait_flush(y, &*formatter_flush_cond, [this, n=objects.size()] {
+    return n == ops_log_entries.size();
+  });
+}
+
+void RGWDeleteMultiObj::handle_objects(const std::vector<rgw_obj_key>& objects,
+                                       uint32_t max_aio,
+                                       boost::asio::yield_context yield)
+{
+  if (bucket->versioned()) {
+    handle_versioned_objects(objects, max_aio, yield);
+  } else {
+    handle_non_versioned_objects(objects, max_aio, yield);
+  }
+}
+
 void RGWDeleteMultiObj::execute(optional_yield y)
 {
   RGWMultiDelDelete *multi_delete;
-  vector<rgw_obj_key>::iterator iter;
   RGWMultiDelXMLParser parser;
-  uint32_t aio_count = 0;
   const uint32_t max_aio = std::max<uint32_t>(1, s->cct->_conf->rgw_multi_obj_del_max_aio);
   char* buf;
   std::optional<boost::asio::deadline_timer> formatter_flush_cond;
@@ -6968,29 +7064,22 @@ void RGWDeleteMultiObj::execute(optional_yield y)
     goto done;
   }
 
-  for (iter = multi_delete->objects.begin();
-        iter != multi_delete->objects.end();
-        ++iter) {
-    rgw_obj_key obj_key = *iter;
-    if (y) {
-      wait_flush(y, &*formatter_flush_cond, [&aio_count, max_aio] {
-        return aio_count < max_aio;
-      });
-      aio_count++;
-      boost::asio::spawn(y.get_yield_context(), [this, &aio_count, obj_key, &formatter_flush_cond] (boost::asio::yield_context yield) {
-        handle_individual_object(obj_key, yield, &*formatter_flush_cond);
-        aio_count--;
-      }, [] (std::exception_ptr eptr) {
-        if (eptr) std::rethrow_exception(eptr);
-      }); 
-    } else {
-      handle_individual_object(obj_key, y, nullptr);
-    }
-  }
-  if (formatter_flush_cond) {
-    wait_flush(y, &*formatter_flush_cond, [this, n=multi_delete->objects.size()] {
-      return n == ops_log_entries.size();
-    });
+  // if we're not already running in a coroutine, spawn one
+  if (!y) {
+    auto& objects = multi_delete->objects;
+
+    boost::asio::io_context context;
+    boost::asio::spawn(context,
+        [this, &objects, max_aio] (boost::asio::yield_context yield) {
+          handle_objects(objects, max_aio, yield);
+        },
+        [] (std::exception_ptr eptr) {
+          if (eptr) std::rethrow_exception(eptr);
+        });
+    context.run();
+  } else {
+    // use the existing coroutine's yield context
+    handle_objects(multi_delete->objects, max_aio, y.get_yield_context());
   }
 
   /*  set the return code to zero, errors at this point will be
