@@ -15,7 +15,8 @@ SegmentedOolWriter::SegmentedOolWriter(
   data_category_t category,
   rewrite_gen_t gen,
   SegmentProvider& sp,
-  SegmentSeqAllocator &ssa)
+  SegmentSeqAllocator &ssa,
+  TokenBucket &bucket)
   : segment_allocator(nullptr, category, gen, sp, ssa),
     record_submitter(crimson::common::get_conf<uint64_t>(
                        "seastore_journal_iodepth_limit"),
@@ -25,7 +26,8 @@ SegmentedOolWriter::SegmentedOolWriter(
                        "seastore_journal_batch_flush_size"),
                      crimson::common::get_conf<double>(
                        "seastore_journal_batch_preferred_fullness"),
-                     segment_allocator)
+                     segment_allocator),
+    token_bucket(bucket)
 {
 }
 
@@ -183,7 +185,15 @@ SegmentedOolWriter::alloc_write_ool_extents(
     return alloc_write_iertr::now();
   }
   return seastar::with_gate(write_guard, [this, &t, &extents] {
-    return do_write(t, extents);
+    uint64_t size = 0;
+    for (auto &e : extents) {
+      size += e->get_length();
+    }
+    return trans_intr::make_interruptible(
+      token_bucket.get(size)
+    ).then_interruptible([this, &t, &extents] {
+      return do_write(t, extents);
+    });
   });
 }
 
@@ -200,6 +210,14 @@ void ExtentPlacementManager::init(
   }
   ceph_assert(dynamic_max_rewrite_generation > MIN_REWRITE_GENERATION);
 
+  auto main_bw_limit = crimson::common::get_conf<
+    Option::size_t>("seastore_main_backend_bw_throttle");
+  auto secondary_bw_limit = crimson::common::get_conf<
+    Option::size_t>("seastore_secondary_backend_bw_throttle");
+
+  token_buckets.emplace_back(std::make_unique<TokenBucket>(main_bw_limit));
+  token_buckets.back()->start();
+
   if (trimmer->get_backend_type() == backend_type_t::SEGMENTED) {
     auto segment_cleaner = dynamic_cast<SegmentCleaner*>(cleaner.get());
     ceph_assert(segment_cleaner != nullptr);
@@ -209,7 +227,7 @@ void ExtentPlacementManager::init(
     for (rewrite_gen_t gen = OOL_GENERATION; gen < hot_tier_generations; ++gen) {
       writer_refs.emplace_back(std::make_unique<SegmentedOolWriter>(
 	    data_category_t::DATA, gen, *segment_cleaner,
-            *ool_segment_seq_allocator));
+            *ool_segment_seq_allocator, *token_buckets.back()));
       data_writers_by_gen[generation_to_writer(gen)] = writer_refs.back().get();
     }
 
@@ -217,7 +235,7 @@ void ExtentPlacementManager::init(
     for (rewrite_gen_t gen = OOL_GENERATION; gen < hot_tier_generations; ++gen) {
       writer_refs.emplace_back(std::make_unique<SegmentedOolWriter>(
 	    data_category_t::METADATA, gen, *segment_cleaner,
-            *ool_segment_seq_allocator));
+            *ool_segment_seq_allocator, *token_buckets.back()));
       md_writers_by_gen[generation_to_writer(gen)] = writer_refs.back().get();
     }
 
@@ -233,7 +251,7 @@ void ExtentPlacementManager::init(
     data_writers_by_gen.resize(num_writers, nullptr);
     md_writers_by_gen.resize(num_writers, {});
     writer_refs.emplace_back(std::make_unique<RandomBlockOolWriter>(
-	    rb_cleaner));
+	    rb_cleaner, *token_buckets.back()));
     // TODO: implement eviction in RBCleaner and introduce further writers
     data_writers_by_gen[generation_to_writer(OOL_GENERATION)] = writer_refs.back().get();
     md_writers_by_gen[generation_to_writer(OOL_GENERATION)] = writer_refs.back().get();
@@ -249,18 +267,20 @@ void ExtentPlacementManager::init(
   }
 
   if (cold_cleaner) {
+    token_buckets.emplace_back(std::make_unique<TokenBucket>(secondary_bw_limit));
+    token_buckets.back()->start();
     if (cold_cleaner->get_backend_type() == backend_type_t::SEGMENTED) {
       auto cold_segment_cleaner = static_cast<SegmentCleaner*>(cold_cleaner.get());
       for (rewrite_gen_t gen = hot_tier_generations; gen <= dynamic_max_rewrite_generation; ++gen) {
         writer_refs.emplace_back(std::make_unique<SegmentedOolWriter>(
               data_category_t::DATA, gen, *cold_segment_cleaner,
-              *ool_segment_seq_allocator));
+              *ool_segment_seq_allocator, *token_buckets.back()));
         data_writers_by_gen[generation_to_writer(gen)] = writer_refs.back().get();
       }
       for (rewrite_gen_t gen = hot_tier_generations; gen <= dynamic_max_rewrite_generation; ++gen) {
         writer_refs.emplace_back(std::make_unique<SegmentedOolWriter>(
               data_category_t::METADATA, gen, *cold_segment_cleaner,
-              *ool_segment_seq_allocator));
+              *ool_segment_seq_allocator, *token_buckets.back()));
         md_writers_by_gen[generation_to_writer(gen)] = writer_refs.back().get();
       }
       for (auto *device : cold_segment_cleaner->get_segment_manager_group()
@@ -271,7 +291,7 @@ void ExtentPlacementManager::init(
       ceph_assert(cold_cleaner->get_backend_type() == backend_type_t::RANDOM_BLOCK);
       auto rb_cleaner = static_cast<RBMCleaner*>(cold_cleaner.get());
       ceph_assert(rb_cleaner);
-      writer_refs.emplace_back(std::make_unique<RandomBlockOolWriter>(rb_cleaner));
+      writer_refs.emplace_back(std::make_unique<RandomBlockOolWriter>(rb_cleaner, *token_buckets.back()));
       for (rewrite_gen_t gen = hot_tier_generations; gen <= dynamic_max_rewrite_generation; ++gen) {
         data_writers_by_gen[generation_to_writer(gen)] = writer_refs.back().get();
       }
@@ -568,6 +588,9 @@ ExtentPlacementManager::close()
 {
   LOG_PREFIX(ExtentPlacementManager::close);
   INFO("started");
+  for (auto &token_bucket : token_buckets) {
+    token_bucket->stop();
+  }
   return crimson::do_for_each(data_writers_by_gen, [](auto &writer) {
     if (writer) {
       return writer->close();
@@ -1083,18 +1106,26 @@ RandomBlockOolWriter::alloc_write_ool_extents(
     return alloc_write_iertr::now();
   }
   return seastar::with_gate(write_guard, [this, &t, &extents] {
-    seastar::lw_shared_ptr<rbm_pending_ool_t> ptr =
-      seastar::make_lw_shared<rbm_pending_ool_t>();
-    ptr->pending_extents = t.get_pre_alloc_list();
-    assert(!t.is_conflicted());
-    t.set_pending_ool(ptr);
-    return do_write(t, extents
-    ).finally([this, ptr=ptr] {
-      if (ptr->is_conflicted) {
-	for (auto &e : ptr->pending_extents) {
-	  rb_cleaner->mark_space_free(e->get_paddr(), e->get_length());
-	}
-      }
+    uint64_t size = 0;
+    for (auto &extent : extents) {
+      size += extent->get_length();
+    }
+    return trans_intr::make_interruptible(
+      token_bucket.get(size)
+    ).then_interruptible([this, &t, &extents] {
+      seastar::lw_shared_ptr<rbm_pending_ool_t> ptr =
+          seastar::make_lw_shared<rbm_pending_ool_t>();
+      ptr->pending_extents = t.get_pre_alloc_list();
+      assert(!t.is_conflicted());
+      t.set_pending_ool(ptr);
+      return do_write(t, extents
+      ).finally([this, ptr=ptr] {
+        if (ptr->is_conflicted) {
+          for (auto &e : ptr->pending_extents) {
+            rb_cleaner->mark_space_free(e->get_paddr(), e->get_length());
+          }
+        }
+      });
     });
   });
 }

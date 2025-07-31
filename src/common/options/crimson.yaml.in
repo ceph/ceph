@@ -206,6 +206,11 @@ options:
   level: dev
   desc: The backend used by main device (SEGMENTED or RANDOM_BLOCK)
   default: SEGMENTED
+- name: seastore_main_backend_bw_throttle
+  type: size
+  level: advanced
+  desc: Size in bytes per second written to the main devices, 0 incidates no limit
+  default: 0
 - name: seastore_secondary_device_type
   type: str
   level: dev
@@ -216,6 +221,11 @@ options:
   level: dev
   desc: The backend used by secondary device (SEGMENTED or RANDOM_BLOCK)
   default: SEGMENTED
+- name: seastore_secondary_backend_bw_throttle
+  type: size
+  level: advanced
+  desc: Size in bytes per second written to the main devices, 0 incidates no limit
+  default: 100_M
 - name: seastore_cbjournal_size
   type: size
   level: dev
