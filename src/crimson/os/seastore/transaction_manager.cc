@@ -174,6 +174,7 @@ TransactionManager::mount()
     return epm->open_for_write();
   }).safe_then([FNAME, this] {
     epm->start_background();
+    cache->boot_done();
     INFO("done");
   }).handle_error(
     mount_ertr::pass_further{},
