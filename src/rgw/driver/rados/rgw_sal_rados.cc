@@ -3225,18 +3225,20 @@ int RadosObject::handle_obj_expiry(const DoutPrefixProvider* dpp, optional_yield
     obj_key.instance = "null";
   }
 
-  real_time read_mtime;
-  std::unique_ptr<rgw::sal::Object::ReadOp> read_op(get_read_op());
-  read_op->params.lastmod = &read_mtime;
-  ret = read_op->prepare(y, dpp);
+  ret = get_obj_attrs(y, dpp);
   if (ret < 0) {
     ldpp_dout(dpp, -1) << "handle_obj_expiry Obj:" << get_key() << 
-	    ", read_op failed ret=" << ret << dendl;
+	    ", getting object attrs failed ret=" << ret << dendl;
     return ret;
   }
 
   if (obj_key.instance == "null") {
     obj_key.instance.clear();
+  }
+
+  // ensure object is not overwritten and is really expired
+  if (!is_expired()) {
+    return 0;
   }
 
   set_atomic(true);
@@ -3270,7 +3272,7 @@ int RadosObject::handle_obj_expiry(const DoutPrefixProvider* dpp, optional_yield
           obj_op.meta.if_nomatch = NULL;
           obj_op.meta.user_data = NULL;
           obj_op.meta.zones_trace = NULL;
-          obj_op.meta.set_mtime = read_mtime;
+          obj_op.meta.set_mtime = state.mtime;
 
           RGWObjManifest *pmanifest;
           pmanifest = &m;
@@ -3301,6 +3303,7 @@ int RadosObject::handle_obj_expiry(const DoutPrefixProvider* dpp, optional_yield
           attrs.erase(RGW_ATTR_RESTORE_EXPIRY_DATE);
           attrs.erase(RGW_ATTR_CLOUDTIER_STORAGE_CLASS);
       	  attrs.erase(RGW_ATTR_RESTORE_VERSIONED_EPOCH);
+      	  attrs.erase(RGW_ATTR_DELETE_AT);
 
           bufferlist bl;
           bl.append(tier_config.name);
@@ -3322,12 +3325,9 @@ int RadosObject::handle_obj_expiry(const DoutPrefixProvider* dpp, optional_yield
     }
   }
   // object is not restored/temporary; go for regular deletion
-  // ensure object is not overwritten and is really expired
-  if (is_expired()) {
     ldpp_dout(dpp, 10) << "Deleting expired obj:" << get_key() << dendl;
 
     ret = obj->delete_object(dpp, null_yield, rgw::sal::FLAG_LOG_OP, nullptr, nullptr);
-  }
 
   return ret;
 }

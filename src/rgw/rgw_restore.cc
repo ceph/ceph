@@ -425,7 +425,6 @@ int Restore::process_restore_entry(RestoreEntry& entry, optional_yield y)
     decode(restore_status, iter);
   }
   if (restore_status != rgw::sal::RGWRestoreStatus::RestoreAlreadyInProgress) {
-    // XXX: Check if expiry-date needs to be update
     ldpp_dout(this, 5) << __PRETTY_FUNCTION__ << ": Restore of object " << obj->get_key()
 	   	       << " not in progress state" << dendl;
 
@@ -508,6 +507,84 @@ int Restore::set_cloud_restore_status(const DoutPrefixProvider* dpp,
   encode(restore_status, bl);
 
   ret = pobj->modify_obj_attrs(RGW_ATTR_RESTORE_STATUS, bl, y, dpp, false);
+
+  return ret;
+}
+
+void Restore::get_expiration_date(const DoutPrefixProvider* dpp,
+                               int expiry_days, ceph::real_time& exp_date) {
+  constexpr int32_t secs_in_a_day = 24 * 60 * 60;
+  ceph::real_time cur_time = real_clock::now();
+
+  ldpp_dout(dpp, 5) << "Calculating expiration date for days:" << expiry_days << dendl;
+  if (cct->_conf->rgw_restore_debug_interval > 0) {
+    exp_date = cur_time + make_timespan(double(expiry_days)*cct->_conf->rgw_restore_debug_interval);
+  } else {
+    exp_date = cur_time + make_timespan(double(expiry_days) * secs_in_a_day);
+  }
+  ldpp_dout(dpp, 5) << "expiration date: " << exp_date << " , cur_time: " << cur_time << ", restore_interval: " << cct->_conf->rgw_restore_debug_interval  << dendl;
+}
+
+/*
+ * As per AWS spec (https://docs.aws.amazon.com/AmazonS3/latest/API/API_RestoreObject.html), 
+ * After restoring an archived object, you can update the restoration period by reissuing the
+ * request with a new period. Amazon S3 updates the restoration period relative to the current time.
+ * You cannot update the restoration period when Amazon S3 is actively processing your current restore
+ * request for the object.
+ */
+int Restore::update_cloud_restore_exp_date(rgw::sal::Bucket* pbucket,
+	       			       rgw::sal::Object* pobj,
+				       std::optional<uint64_t> days,
+				       const DoutPrefixProvider* dpp,
+				       optional_yield y)
+{
+  int ret = -1;
+  ceph::real_time cur_time = real_clock::now();
+
+  if (!pobj)
+    return ret;
+
+  if (!days) {// days should be present as we should update
+              // expiry date only for temp copies
+    return ret;
+  }
+
+  ret = pobj->get_obj_attrs(y, dpp);
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: failed to read object attrs " << cpp_strerror(-ret) << dendl;
+    return ret;
+  }
+
+  ceph::real_time expiration_date;
+  get_expiration_date(dpp, days.value(), expiration_date);
+
+  auto& attrs = pobj->get_attrs();
+  {
+    bufferlist bl;
+    using ceph::encode;
+    encode(expiration_date, bl);
+    attrs[RGW_ATTR_RESTORE_EXPIRY_DATE] = attrs[RGW_ATTR_DELETE_AT] = bl;
+  }
+  {
+    bufferlist bl;
+    using ceph::encode;
+    encode(cur_time, bl);
+    attrs[RGW_ATTR_INTERNAL_MTIME] = bl;
+  }
+
+  pobj->set_atomic(true);
+
+
+  ret = pobj->set_obj_attrs(dpp, &attrs, nullptr, y, 0);
+
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: failed to update restore expiry date ret=" << ret << dendl;
+    return ret;
+  }
+
+  ldpp_dout(dpp, 5) << "Updated Restore expiry time to: " << expiration_date << " , cur_time: " << cur_time << ", restore_interval: " << cct->_conf->rgw_restore_debug_interval  << dendl;
+  pobj->set_atomic(false);
+
 
   return ret;
 }

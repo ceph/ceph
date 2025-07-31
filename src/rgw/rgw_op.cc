@@ -1042,6 +1042,16 @@ int handle_cloudtier_obj(req_state* s, const DoutPrefixProvider *dpp, rgw::sal::
       } 
     } else if (restore_status == rgw::sal::RGWRestoreStatus::CloudRestored) {
       // corresponds to CLOUD_RESTORED
+      if (!read_through) { //update expiry date iff its temp restored copy
+        op_ret = driver->get_rgwrestore()->update_cloud_restore_exp_date(s->bucket.get(),
+                                              		      s->object.get(), days, dpp, y);
+
+        if (op_ret < 0) {
+	        ldpp_dout(dpp, 20) << "Updating expiry-date of restored object " << s->object->get_key() << " failed - " << op_ret << dendl;
+          s->err.message = "failed to update expiry-date of the restored object";
+          return op_ret;
+        }
+      }
       return static_cast<int>(rgw::sal::RGWRestoreStatus::CloudRestored);
     } else { // first time restore or previous restore failed.
       // Restore the object.
