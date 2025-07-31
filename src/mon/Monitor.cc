@@ -375,28 +375,45 @@ int Monitor::do_admin_command(
     start_election();
     elector.stop_participating();
     out << "stopped responding to quorum, initiated new election";
-  } else if (command == "ops") {
-    (void)op_tracker.dump_ops_in_flight(f);
   } else if (command == "sessions") {
     f->open_array_section("sessions");
     for (auto p : session_map.sessions) {
       f->dump_object("session", *p);
     }
     f->close_section();
-  } else if (command == "dump_historic_ops") {
-    if (!op_tracker.dump_historic_ops(f)) {
-      err << "op_tracker tracking is not enabled now, so no ops are tracked currently, even those get stuck. \
-        please enable \"mon_enable_op_tracker\", and the tracker will start to track new ops received afterwards.";
-    }
-  } else if (command == "dump_historic_ops_by_duration" ) {
-    if (op_tracker.dump_historic_ops(f, true)) {
-      err << "op_tracker tracking is not enabled now, so no ops are tracked currently, even those get stuck. \
-        please enable \"mon_enable_op_tracker\", and the tracker will start to track new ops received afterwards.";
-    }
-  } else if (command == "dump_historic_slow_ops") {
-    if (op_tracker.dump_historic_slow_ops(f, {})) {
-      err << "op_tracker tracking is not enabled now, so no ops are tracked currently, even those get stuck. \
-        please enable \"mon_enable_op_tracker\", and the tracker will start to track new ops received afterwards.";
+  } else if (command == "dump_ops_in_flight" ||
+             command == "ops" ||
+             command == "dump_historic_ops" ||
+             command == "dump_historic_ops_by_duration" ||
+             command == "dump_historic_slow_ops") {
+    const string error_str = "op_tracker tracking is not enabled now, so no ops are tracked currently, \
+even those get stuck. Please enable \"mon_enable_op_tracker\", and the tracker \
+will start to track new ops received afterwards.";
+    if (command == "dump_historic_ops") {
+      if (!op_tracker.dump_historic_ops(f)) {
+        err << error_str;
+        r = -EINVAL;
+        goto abort;
+      }
+    } else if (command == "dump_historic_ops_by_duration" ) {
+      if (!op_tracker.dump_historic_ops(f, true)) {
+        err << error_str;
+        r = -EINVAL;
+        goto abort;
+      }
+    } else if (command == "dump_historic_slow_ops") {
+      if (!op_tracker.dump_historic_slow_ops(f, {})) {
+        err << error_str;
+        r = -EINVAL;
+        goto abort;
+      }
+    } else if (command == "ops" ||
+               command == "dump_ops_in_flight") {
+      if (!op_tracker.dump_ops_in_flight(f)) {
+        err << error_str;
+        r = -EINVAL;
+        goto abort;
+      }
     }
   } else if (command == "quorum") {
     string quorumcmd;
@@ -647,7 +664,8 @@ std::vector<std::string> Monitor::get_tracked_keys() const noexcept
     "mon_osdmap_full_prune_txsize"s,
     // debug options - observed, not handled
     "mon_debug_extra_checks"s,
-    "mon_debug_block_osdmap_trim"s
+    "mon_debug_block_osdmap_trim"s,
+    "mon_enable_op_tracker"s,
   };
 }
 
@@ -686,6 +704,10 @@ void Monitor::handle_conf_change(const ConfigProxy& conf,
       std::lock_guard l{lock};
       scrub_update_interval(scrub_interval);
     }});
+  }
+  
+  if (changed.count("mon_enable_op_tracker")) {
+    op_tracker.set_tracking(conf.get_val<bool>("mon_enable_op_tracker"));
   }
 }
 
