@@ -974,7 +974,8 @@ std::ostream& operator<<(std::ostream& out, device_type_t t);
 bool can_delay_allocation(device_type_t type);
 device_type_t string_to_device_type(std::string type);
 
-enum class backend_type_t {
+enum class backend_type_t : uint8_t {
+  NONE,
   SEGMENTED,    // SegmentManager: SSD, ZBD, HDD
   RANDOM_BLOCK  // RBMDevice:      RANDOM_BLOCK_SSD
 };
@@ -983,7 +984,7 @@ std::ostream& operator<<(std::ostream& out, backend_type_t);
 
 constexpr backend_type_t get_default_backend_of_device(device_type_t dtype) {
   assert(dtype != device_type_t::NONE &&
-	 dtype != device_type_t::NUM_TYPES);
+        dtype != device_type_t::NUM_TYPES);
   if (dtype >= device_type_t::HDD &&
       dtype <= device_type_t::EPHEMERAL_MAIN) {
     return backend_type_t::SEGMENTED;
@@ -991,6 +992,8 @@ constexpr backend_type_t get_default_backend_of_device(device_type_t dtype) {
     return backend_type_t::RANDOM_BLOCK;
   }
 }
+
+backend_type_t string_to_backend_type(const std::string &str);
 
 /**
  * Monotonically increasing identifier for the location of a

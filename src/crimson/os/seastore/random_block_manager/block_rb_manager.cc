@@ -31,7 +31,7 @@ device_config_t get_rbm_ephemeral_device_config(
          ++secondary_index) {
       device_id_t secondary_id = static_cast<device_id_t>(secondary_index);
       secondary_devices.insert({
-        secondary_index, device_spec_t{magic, type, secondary_id}
+        secondary_index, device_spec_t{magic, type, backend_type_t::RANDOM_BLOCK, secondary_id}
       });
     }
   } else { // index > 0
@@ -41,7 +41,7 @@ device_config_t get_rbm_ephemeral_device_config(
   device_id_t id = static_cast<device_id_t>(DEVICE_ID_RANDOM_BLOCK_MIN + index);
   seastore_meta_t meta = {};
   return {is_major_device,
-          device_spec_t{magic, type, id},
+          device_spec_t{magic, type, backend_type_t::RANDOM_BLOCK, id},
           meta,
           secondary_devices};
 }
