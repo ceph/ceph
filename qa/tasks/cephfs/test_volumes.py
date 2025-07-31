@@ -8918,6 +8918,147 @@ class TestSubvolumeSnapshotClones(TestVolumesHelper):
         # verify trash dir is clean
         self._wait_for_trash_empty()
 
+    def test_subvolume_snapshot_create_with_uid(self):
+        subvol = 'sv1'
+        snap = 'snap1'
+        clone = 'clone1'
+
+        # NOTE: creating new user is necessary to get a new UID/GID. if random
+        # UID/GID is passed to the clone command and if a user with this UID/GID
+        # already exists then this test will fail since it expects UID/GID
+        # number in to be printed in the "ls -l" output but "ls -l" output will
+        # contain the username.
+        username = 'tempuser' + str(random.randint(1000, 2000))
+        # NOTE: create user on the remote machine where self.mount_a is mounted.
+        # that's where "ls -l" will be run and username is expected in its
+        # output.
+        self.mount_a.run_shell(args=f'sudo useradd {username}', omit_sudo=False)
+
+        try:
+            uid = self.mount_a.get_shell_stdout(args=f'id -u {username}').\
+                strip()
+
+            self.run_ceph_cmd(f'fs subvolume create {self.volname} {subvol} '
+                               '--mode 777')
+            self._do_subvolume_io(subvol, number_of_files=3)
+            self.run_ceph_cmd(f'fs subvolume snapshot create {self.volname} '
+                              f'{subvol} {snap}')
+            self.run_ceph_cmd(f'fs subvolume snapshot clone {self.volname} '
+                              f'{subvol} {snap} {clone} --uid {uid}')
+            self._wait_for_clone_to_complete(clone)
+
+            clone_path = self.get_ceph_cmd_stdout('fs subvolume getpath '
+                                                  f'{self.volname} {clone}')
+            # remove preceding '/' and trailing '\n'
+            clone_path = clone_path[1:-1]
+            CLONE_BASE_PATH = os.path.dirname(clone_path)
+            CLONE_UUID = os.path.basename(clone_path)
+
+            output = self.mount_a.get_shell_stdout(f'ls -l {CLONE_BASE_PATH} | grep '
+                                                   f'{CLONE_UUID} | ' + "awk '{print $3}'")
+            self.assertIn(username, output)
+        except:
+            raise
+        # cleanup
+        finally:
+            self.mount_a.run_shell(args=f'sudo userdel {username}',
+                                         omit_sudo=False)
+
+    def test_subvolume_snapshot_create_with_gid(self):
+        subvol = 'sv1'
+        snap = 'snap1'
+        clone = 'clone1'
+
+        # NOTE: creating new user is necessary to get a new UID/GID. if random
+        # UID/GID is passed to the clone command and if a user with this UID/GID
+        # already exists then this test will fail since it expects UID/GID
+        # number in to be printed in the "ls -l" output but "ls -l" output will
+        # contain the user name.
+        username = 'tempuser' + str(random.randint(1000, 2000))
+        # NOTE: create user on the remote machine where self.mount_a is mounted.
+        # that's where "ls -l" will be run and username is expected in its
+        # output.
+        self.mount_a.run_shell(args=f'sudo useradd {username}', omit_sudo=False)
+
+        try:
+            gid = self.mount_a.get_shell_stdout(args=f'id -g {username}').strip()
+
+            self.run_ceph_cmd(f'fs subvolume create {self.volname} {subvol} --mode 777')
+            self._do_subvolume_io(subvol, number_of_files=3)
+            self.run_ceph_cmd(f'fs subvolume snapshot create {self.volname} '
+                              f'{subvol} {snap}')
+            self.run_ceph_cmd(f'fs subvolume snapshot clone {self.volname} '
+                              f'{subvol} {snap} {clone} --gid {gid}')
+            self._wait_for_clone_to_complete(clone)
+
+            clone_path = self.get_ceph_cmd_stdout('fs subvolume getpath '
+                                                  f'{self.volname} {clone}')
+            # remove preceding '/' and trailing '\n'
+            clone_path = clone_path[1:-1]
+            CLONE_BASE_PATH = os.path.dirname(clone_path)
+            CLONE_UUID = os.path.basename(clone_path)
+
+            output = self.mount_a.get_shell_stdout(f'ls -l {CLONE_BASE_PATH} | grep '
+                                                   f'{CLONE_UUID} | ' + "awk '{print $4}'")
+            self.assertIn(username, output)
+        except:
+            raise
+        # cleanup
+        finally:
+            self.mount_a.run_shell(args=f'sudo userdel {username}',
+                                   omit_sudo=False)
+
+    def test_subvolume_snapshot_create_with_uid_and_gid(self):
+        subvol = 'sv1'
+        snap = 'snap1'
+        clone = 'clone1'
+
+        # NOTE: creating new user is necessary to get a new UID/GID. if random
+        # UID/GID is passed to the clone command and if a user with this UID/GID
+        # already exists then this test will fail since it expects UID/GID
+        # number in to be printed in the "ls -l" output but "ls -l" output will
+        # contain the user name.
+        username = 'tempuser' + str(random.randint(1000, 2000))
+        # NOTE: create user on the remote machine where self.mount_a is mounted.
+        # that's where "ls -l" will be run and username is expected in its
+        # output.
+        self.mount_a.run_shell(args=f'sudo useradd {username}', omit_sudo=False)
+
+        try:
+            uid = self.mount_a.get_shell_stdout(args=f'id -u {username}').\
+                strip()
+            gid = self.mount_a.get_shell_stdout(args=f'id -g {username}').\
+                strip()
+
+            self.run_ceph_cmd(f'fs subvolume create {self.volname} {subvol} '
+                               '--mode 777')
+            self._do_subvolume_io(subvol, number_of_files=3)
+            self.run_ceph_cmd(f'fs subvolume snapshot create {self.volname} '
+                              f'{subvol} {snap}')
+            self.run_ceph_cmd(f'fs subvolume snapshot clone {self.volname} '
+                              f'{subvol} {snap} {clone} --uid {uid} --gid {gid}')
+            self._wait_for_clone_to_complete(clone)
+
+            clone_path = self.get_ceph_cmd_stdout(f'fs subvolume getpath '
+                                                  f'{self.volname} {clone}')
+            # remove preceding '/' and trailing '\n'
+            clone_path = clone_path[1:-1]
+            CLONE_BASE_PATH = os.path.dirname(clone_path)
+            CLONE_UUID = os.path.basename(clone_path)
+
+            output = self.mount_a.get_shell_stdout(f'ls -l {CLONE_BASE_PATH} | grep '
+                                                   f'{CLONE_UUID} | ' + "awk '{print $3}'")
+            self.assertIn(username, output)
+            output = self.mount_a.get_shell_stdout(f'ls -l {CLONE_BASE_PATH} | grep '
+                                                   f'{CLONE_UUID} | ' + "awk '{print $4}'")
+            self.assertIn(username, output)
+        except:
+            raise
+        # cleanup
+        finally:
+            self.mount_a.run_shell(args=f'sudo userdel {username}',
+                                   omit_sudo=False)
+
     def test_subvolume_snapshot_clone_with_upgrade(self):
         """
         yet another poor man's upgrade test -- rather than going through a full
