@@ -27,7 +27,8 @@ def create_subvol(mgr, fs, vol_spec, group, subvolname, size, isolate_nspace, po
     subvolume.create(size, isolate_nspace, pool, mode, uid, gid, earmark, normalization, casesensitive)
 
 
-def create_clone(mgr, fs, vol_spec, group, subvolname, pool, source_volume, source_subvolume, snapname):
+def create_clone(mgr, fs, vol_spec, group, subvolname, pool, source_volume,
+                 source_subvolume, snapname, uid, gid):
     """
     create a cloned subvolume.
 
@@ -42,7 +43,8 @@ def create_clone(mgr, fs, vol_spec, group, subvolname, pool, source_volume, sour
     :return None
     """
     subvolume = loaded_subvolumes.get_subvolume_object_max(mgr, fs, vol_spec, group, subvolname)
-    subvolume.create_clone(pool, source_volume, source_subvolume, snapname)
+    subvolume.create_clone(pool, source_volume, source_subvolume, snapname,
+                           uid, gid)
 
 
 def remove_subvol(mgr, fs, vol_spec, group, subvolname, force=False, retainsnaps=False):
