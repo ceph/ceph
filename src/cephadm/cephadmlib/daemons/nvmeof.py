@@ -202,6 +202,21 @@ class CephNvmeof(ContainerDaemonForm):
         # populate files from the config-json
         populate_files(data_dir, self.files, uid, gid)
 
+        # create /dev/dsa if DSA acceleration is enabled and the device doesn't exist
+        if (
+            'enable_dsa_acceleration' in self.files
+            and self.files['enable_dsa_acceleration'] == 'True'
+        ):
+            if not os.path.exists('/dev/dsa'):
+                try:
+                    # create a /dev/dsa as a directory to avoid podman start failure
+                    os.mkdir('/dev/dsa', mode=0o755)
+                    logger.info(
+                        'Created /dev/dsa directory, device file was not found'
+                    )
+                except Exception:
+                    logger.exception('Failed to create /dev/dsa')
+
     @staticmethod
     def configfs_mount_umount(data_dir, mount=True):
         # type: (str, bool) -> List[str]
