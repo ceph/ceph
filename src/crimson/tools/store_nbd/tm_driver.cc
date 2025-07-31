@@ -171,7 +171,10 @@ seastar::future<> TMDriver::mkfs()
 {
   assert(config.path);
   logger().debug("mkfs");
-  return Device::make_device(*config.path, device_type_t::SSD
+  return Device::make_device(
+    *config.path,
+    device_type_t::SSD,
+    backend_type_t::SEGMENTED
   ).then([this](DeviceRef dev) {
     device = std::move(dev);
     seastore_meta_t meta;
@@ -179,9 +182,12 @@ seastar::future<> TMDriver::mkfs()
     return device->mkfs(
       device_config_t{
         true,
-        (magic_t)std::rand(),
-        device_type_t::SSD,
-        0,
+        device_spec_t{
+	  (magic_t)std::rand(),
+	  device_type_t::SSD,
+	  backend_type_t::SEGMENTED,
+	  0
+	},
         meta,
         secondary_device_set_t()});
   }).safe_then([this] {
@@ -213,7 +219,10 @@ seastar::future<> TMDriver::mount()
 {
   return (config.mkfs ? mkfs() : seastar::now()
   ).then([this] {
-    return Device::make_device(*config.path, device_type_t::SSD);
+    return Device::make_device(
+      *config.path,
+      device_type_t::SSD,
+      backend_type_t::SEGMENTED);
   }).then([this](DeviceRef dev) {
     device = std::move(dev);
     return device->mount();

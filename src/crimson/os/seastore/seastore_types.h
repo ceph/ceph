@@ -979,23 +979,15 @@ std::ostream& operator<<(std::ostream& out, device_type_t t);
 bool can_delay_allocation(device_type_t type);
 device_type_t string_to_device_type(std::string type);
 
-enum class backend_type_t {
+enum class backend_type_t : uint8_t {
+  NONE,
   SEGMENTED,    // SegmentManager: SSD, ZBD, HDD
   RANDOM_BLOCK  // RBMDevice:      RANDOM_BLOCK_SSD
 };
 
 std::ostream& operator<<(std::ostream& out, backend_type_t);
 
-constexpr backend_type_t get_default_backend_of_device(device_type_t dtype) {
-  assert(dtype != device_type_t::NONE &&
-	 dtype != device_type_t::NUM_TYPES);
-  if (dtype >= device_type_t::HDD &&
-      dtype <= device_type_t::EPHEMERAL_MAIN) {
-    return backend_type_t::SEGMENTED;
-  } else {
-    return backend_type_t::RANDOM_BLOCK;
-  }
-}
+backend_type_t string_to_backend_type(const std::string &str);
 
 /**
  * Monotonically increasing identifier for the location of a
@@ -3604,6 +3596,7 @@ template <> struct fmt::formatter<crimson::os::seastore::paddr_t> : fmt::ostream
 template <> struct fmt::formatter<crimson::os::seastore::pladdr_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::placement_hint_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::device_type_t> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::os::seastore::backend_type_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::record_group_header_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::record_group_size_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::record_header_t> : fmt::ostream_formatter {};

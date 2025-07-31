@@ -1224,10 +1224,24 @@ std::ostream& operator<<(std::ostream& out, device_type_t t)
   }
 }
 
-std::ostream& operator<<(std::ostream& out, backend_type_t btype) {
-  if (btype == backend_type_t::SEGMENTED) {
-    return out << "SEGMENTED";
+backend_type_t string_to_backend_type(const std::string &str) {
+  if (str == "SEGMENTED") {
+    return backend_type_t::SEGMENTED;
+  } else if (str == "RANDOM_BLOCK") {
+    return backend_type_t::RANDOM_BLOCK;
   } else {
+    ceph_abort("backend str not valid");
+    return backend_type_t::SEGMENTED;
+  }
+}
+
+std::ostream& operator<<(std::ostream& out, backend_type_t btype) {
+  switch (btype) {
+  case backend_type_t::NONE:
+    return out << "NONE";
+  case backend_type_t::SEGMENTED:
+    return out << "SEGMENTED";
+  case backend_type_t::RANDOM_BLOCK:
     return out << "RANDOM_BLOCK";
   }
 }

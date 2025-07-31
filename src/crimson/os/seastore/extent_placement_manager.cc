@@ -267,6 +267,7 @@ void ExtentPlacementManager::init(
                           std::move(cold_cleaner),
                           hot_tier_generations,
                           pinboard);
+  ceph_assert(get_main_backend_type() != backend_type_t::NONE);
   if (cold_segment_cleaner) {
     ceph_assert(get_main_backend_type() == backend_type_t::SEGMENTED);
     ceph_assert(background_process.has_cold_tier());

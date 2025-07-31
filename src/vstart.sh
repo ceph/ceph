@@ -200,7 +200,10 @@ declare -a bluestore_db_devs
 declare -a bluestore_wal_devs
 declare -a secondary_block_devs
 declare -a cpu_table
-secondary_block_devs_type="SSD"
+seastore_main_device_type="SSD"
+seastore_main_backend_type="SEGMENTED"
+seastore_secondary_device_type="SSD"
+seastore_secondary_backend_type="SEGMENTED"
 
 VSTART_SEC="client.vstart.sh"
 
@@ -272,7 +275,10 @@ options:
 	--seastore-device-size: set total size of seastore
 	--seastore-devs: comma-separated list of blockdevs to use for seastore
 	--seastore-secondary-devs: comma-separated list of secondary blockdevs to use for seastore
-	--seastore-secondary-devs-type: device type of all secondary blockdevs. HDD, SSD(default), ZNS or RANDOM_BLOCK_SSD
+	--seastore-main-device-type: device type of main blockdevs. (SSD or RANDOM_BLOCK_SSD)
+	--seastore-main-backend-type: the driver used by main blockdevs (SEGMENTED or RANDOM_BLOCK)
+	--seastore-secondary-device-type: device type of all secondary blockdevs. HDD, SSD(default), ZNS or RANDOM_BLOCK_SSD
+	--seastore-secondary-backend-type: the driver used by secondary blockdevs (SEGMENTED or RANDOM_BLOCK)
 	--crimson-smp: number of cores to use for crimson
 	--crimson-alien-num-threads: number of alien-tp threads
 	--crimson-reactor-physical-only: use only one cpu per physical core for seastar reactors
@@ -613,12 +619,24 @@ case $1 in
         parse_block_devs --seastore-devs "$2"
         shift
         ;;
+    --seastore-main-device-type)
+        seastore_main_device_type="$2"
+        shift
+        ;;
+    --seastore-main-backend-type)
+        seastore_main_backend_type="$2"
+        shift
+        ;;
     --seastore-secondary-devs)
         parse_secondary_devs --seastore-devs "$2"
         shift
         ;;
-    --seastore-secondary-devs-type)
-        secondary_block_devs_type="$2"
+    --seastore-secondary-device-type)
+        seastore_secondary_device_type="$2"
+        shift
+        ;;
+    --seastore-secondary-backend-type)
+        seastore_secondary_backend_type="$2"
         shift
         ;;
     --crimson-smp)
@@ -958,6 +976,11 @@ EOF
         SEASTORE_OPTS="
         seastore device size = $seastore_size"
       fi
+      SEASTORE_OPTS+="
+        seastore_main_device_type=$seastore_main_device_type
+        seastore_main_backend_type=$seastore_main_backend_type
+        seastore_secondary_device_type=$seastore_secondary_device_type
+        seastore_secondary_backend_type=$seastore_secondary_backend_type"
     fi
 
     wconf <<EOF
@@ -1305,8 +1328,8 @@ EOF
                 fi
                 if [ -n "${secondary_block_devs[$osd]}" ]; then
                     dd if=/dev/zero of=${secondary_block_devs[$osd]} bs=1M count=1
-                    mkdir -p $CEPH_DEV_DIR/osd$osd/block.${secondary_block_devs_type}.1
-                    ln -s ${secondary_block_devs[$osd]} $CEPH_DEV_DIR/osd$osd/block.${secondary_block_devs_type}.1/block
+                    mkdir -p $CEPH_DEV_DIR/osd$osd/block.1
+                    ln -s ${secondary_block_devs[$osd]} $CEPH_DEV_DIR/osd$osd/block.1/block
                 fi
             fi
             if [ "$objectstore" == "bluestore" ]; then

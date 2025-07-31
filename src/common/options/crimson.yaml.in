@@ -201,6 +201,21 @@ options:
   level: dev
   desc: The main device type seastore uses (SSD or RANDOM_BLOCK_SSD)
   default: SSD
+- name: seastore_main_backend_type
+  type: str
+  level: dev
+  desc: The backend used by main device (SEGMENTED or RANDOM_BLOCK)
+  default: SEGMENTED
+- name: seastore_secondary_device_type
+  type: str
+  level: dev
+  desc: The secondary device type seastore uses (RANDOM_BLOCK_SSD, SSD or HDD)
+  default: HDD
+- name: seastore_secondary_backend_type
+  type: str
+  level: dev
+  desc: The backend used by secondary device (SEGMENTED or RANDOM_BLOCK)
+  default: SEGMENTED
 - name: seastore_cbjournal_size
   type: size
   level: dev
