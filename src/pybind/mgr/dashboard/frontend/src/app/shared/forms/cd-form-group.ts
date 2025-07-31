@@ -4,7 +4,8 @@ import {
   AsyncValidatorFn,
   UntypedFormGroup,
   NgForm,
-  ValidatorFn
+  ValidatorFn,
+  FormGroupDirective
 } from '@angular/forms';
 
 /**
@@ -65,7 +66,7 @@ export class CdFormGroup extends UntypedFormGroup {
   /**
    * Indicates errors of the control in templates
    */
-  showError(controlName: string, form: NgForm, errorName?: string): boolean {
+  showError(controlName: string, form: NgForm | FormGroupDirective, errorName?: string): boolean {
     const control = this.get(controlName);
     return (
       (form?.submitted || control.dirty) &&
