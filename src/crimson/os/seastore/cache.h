@@ -411,6 +411,7 @@ public:
 
     SUBTRACET(seastore_cache, "{} {}~0x{:x} is absent on t, query cache ...",
 	      t, T::TYPE, offset, length);
+    ceph_assert(!booting);
     const auto t_src = t.get_src();
 
     // partial read
@@ -464,6 +465,49 @@ public:
     paddr_t offset,
     extent_len_t length,
     Func &&extent_init_func) {
+    return get_absent_extent<T>(t, offset, length, 0, length,
+      std::forward<Func>(extent_init_func));
+  }
+
+  template <typename T, typename Func>
+  get_extent_iertr::future<TCachedExtentRef<T>> maybe_get_absent_extent(
+    Transaction &t,
+    paddr_t offset,
+    extent_len_t length,
+    Func &&extent_init_func) {
+    LOG_PREFIX(Cache::maybe_get_absent_extent);
+    if (unlikely(booting)) {
+#ifndef NDEBUG
+      CachedExtentRef ret;
+      auto r = t.get_extent(offset, &ret);
+      if (r != Transaction::get_extent_ret::ABSENT) {
+	SUBERRORT(seastore_cache, "unexpected non-absent extent {}", t, *ret);
+	ceph_abort();
+      }
+#endif
+
+      SUBTRACET(seastore_cache, "{} {}~0x{:x} is absent on t, query cache ...",
+		t, T::TYPE, offset, length);
+      const auto t_src = t.get_src();
+      auto f = [&t, this, t_src](CachedExtent &ext) {
+	// XXX: is_stable_dirty() may not be linked in lba tree
+	assert(ext.is_stable());
+	assert(T::TYPE == ext.get_type());
+	cache_access_stats_t& access_stats = get_by_ext(
+	  get_by_src(stats.access_by_src_ext, t_src),
+	  T::TYPE);
+	++access_stats.load_absent;
+	++stats.access.load_absent;
+
+	t.add_to_read_set(CachedExtentRef(&ext));
+	touch_extent_fully(ext, &t_src, t.get_cache_hint());
+      };
+      return trans_intr::make_interruptible(
+	do_get_caching_extent<T>(
+	  offset, length, 0, length,
+	  std::forward<Func>(extent_init_func), std::move(f), &t_src)
+      );
+    }
     return get_absent_extent<T>(t, offset, length, 0, length,
       std::forward<Func>(extent_init_func));
   }
@@ -1557,6 +1601,9 @@ public:
     return stats.omap_tree_depth;
   }
 
+  void boot_done() {
+    booting = false;
+  }
 private:
   void touch_extent_fully(
       CachedExtent &ext,
@@ -1943,6 +1990,8 @@ private:
       return CachedExtentRef();
     }
   }
+
+  bool booting = true;
 };
 using CacheRef = std::unique_ptr<Cache>;
 
