@@ -1279,6 +1279,8 @@ public:
 
   virtual const std::set<device_id_t>& get_device_ids() const = 0;
 
+  virtual backend_type_t get_backend_type() const = 0;
+
   virtual std::size_t get_reclaim_size_per_cycle() const = 0;
 
   // Periodic hook for adaptive threshold control. Default: no-op.
@@ -1501,6 +1503,10 @@ public:
 
   const std::set<device_id_t>& get_device_ids() const final {
     return sm_group->get_device_ids();
+  }
+
+  backend_type_t get_backend_type() const final {
+    return backend_type_t::SEGMENTED;
   }
 
   std::size_t get_reclaim_size_per_cycle() const final {
@@ -1849,6 +1855,10 @@ public:
 
   const std::set<device_id_t>& get_device_ids() const final {
     return rb_group->get_device_ids();
+  }
+
+  backend_type_t get_backend_type() const final {
+    return backend_type_t::RANDOM_BLOCK;
   }
 
   std::size_t get_reclaim_size_per_cycle() const final {
