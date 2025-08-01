@@ -24,6 +24,9 @@ def image_validator(image: rbd.Image) -> None:
     if mode != rbd.RBD_MIRROR_IMAGE_MODE_SNAPSHOT:
         raise rbd.InvalidArgument("Invalid mirror image mode")
 
+    if image.group()['pool'] != -1:
+        raise ValueError("image {} is part of a group".format(image.get_name()))
+
 
 class ImageSpec(NamedTuple):
     pool_id: str
@@ -457,6 +460,9 @@ class MirrorSnapshotScheduleHandler:
                     image_name = image_names.get(image_id)
                     if not image_name:
                         continue
+                    with rbd.Image(ioctx, image_name, read_only=True) as img:
+                        if img.group()['pool'] != -1:
+                            continue
                     if namespace:
                         name = "{}/{}/{}".format(pool_name, namespace,
                                                  image_name)
