@@ -352,7 +352,7 @@ if(WITH_OPENLDAP)
 endif()
 if(WITH_RADOSGW_LUA_PACKAGES)
   target_link_libraries(rgw_common
-    PRIVATE Boost::filesystem StdFilesystem::filesystem)
+    PRIVATE Boost::filesystem StdFilesystem::filesystem Boost::process)
 endif()
 
 if(WITH_LTTNG)
