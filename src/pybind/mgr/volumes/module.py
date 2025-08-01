@@ -91,7 +91,9 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                    'name=pool_layout,type=CephString,req=false '
                    'name=uid,type=CephInt,req=false '
                    'name=gid,type=CephInt,req=false '
-                   'name=mode,type=CephString,req=false ',
+                   'name=mode,type=CephString,req=false '
+                   'name=normalization,type=CephChoices,strings=nfd|nfc|nfkd|nfkc,req=false '
+                   'name=casesensitive,type=CephBool,req=false ',
             'desc': "Create a CephFS subvolume group in a volume, and optionally, "
                     "with a specific data pool layout, and a specific numeric mode",
             'perm': 'rw'
@@ -727,7 +729,9 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         return self.vc.create_subvolume_group(
             vol_name=cmd['vol_name'], group_name=cmd['group_name'], size=cmd.get('size', None),
             pool_layout=cmd.get('pool_layout', None), mode=cmd.get('mode', '755'),
-            uid=cmd.get('uid', None), gid=cmd.get('gid', None))
+            uid=cmd.get('uid', None), gid=cmd.get('gid', None),
+            normalization=cmd.get('normalization', None),
+            casesensitive=cmd.get('casesensitive', None))
 
     @mgr_cmd_wrap
     def _cmd_fs_subvolumegroup_rm(self, inbuf, cmd):
