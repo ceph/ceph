@@ -15,8 +15,21 @@
 #include "common/ceph_argparse.h"
 #include "include/expected.hpp"
 #include "include/random.h"
+#include "include/encoding.h"
 
 namespace crimson::osd {
+
+struct crimson_options_t {
+  bool mkkey = false;
+  bool mkfs = false;
+  bool debug = false;
+  bool trace = false;
+  std::string osdspec_affinity;
+  uint16_t prometheus_port = 0;
+  std::string prometheus_address = "0.0.0.0";
+  std::string prometheus_prefix = "osd";
+  bool show_help = false;
+};
 
 void usage(const char* prog);
 
@@ -34,6 +47,9 @@ struct early_config_t {
   std::string cluster_name{"ceph"};
   std::string conf_file_list;
   CephInitParameters init_params{CEPH_ENTITY_TYPE_OSD};
+
+  // Crimson-specific options
+  crimson_options_t crimson_options;
 
   /// Returned vector must not outlive in
   auto to_ptr_vector(const std::vector<std::string> &in) {
