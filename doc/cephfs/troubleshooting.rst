@@ -70,6 +70,11 @@ complete. This is done by examining the journal replay status:
 Replay completes when the ``journal_read_pos`` reaches the
 ``journal_write_pos``. The write position will not change during replay. Track
 the progression of the read position to compute the expected time to complete.
+The MDS emits `MDS_ESTIMATED_REPLAY_TIME` warning when replaying the journal
+takes more than 30 seconds. The warning message includes an estimated journal
+replay completion time::
+
+  mds.a(mds.0): replay: 50.0446% complete - elapsed time: 582s, estimated time remaining: 581s
 
 
 Avoiding recovery roadblocks
