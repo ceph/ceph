@@ -38,7 +38,8 @@ from .api import PSTopicS3, \
     delete_all_objects, \
     delete_all_topics, \
     put_object_tagging, \
-    admin
+    admin, \
+    change_rgw_config_option
 
 from nose import SkipTest
 from nose.tools import assert_not_equal, assert_equal, assert_in, assert_not_in, assert_true
@@ -3004,13 +3005,13 @@ def wait_for_queue_to_drain(topic_name, tenant=None, account=None, http_port=Non
         entries = parsed_result['Topic Stats']['Entries']
         retries += 1
         time_diff = time.time() - start_time
-        log.info('queue %s has %d entries after %ds', topic_name, entries, time_diff)
-        if retries > 30:
-            log.warning('queue %s still has %d entries after %ds', topic_name, entries, time_diff)
+        log.info('shards for %s has %d entries after %ds', topic_name, entries, time_diff)
+        if retries > 100:
+            log.warning('shards for %s still has %d entries after %ds', topic_name, entries, time_diff)
             assert_equal(entries, 0)
         time.sleep(5)
     time_diff = time.time() - start_time
-    log.info('waited for %ds for queue %s to drain', time_diff, topic_name)
+    log.info('waited for %ds for shards of %s to drain', time_diff, topic_name)
 
 
 def persistent_topic_stats(conn, endpoint_type):
@@ -5939,3 +5940,25 @@ def test_topic_migration_to_an_account():
             get_config_cluster(),
         )
         admin(["account", "rm", "--account-id", account_id], get_config_cluster())
+
+def test_persistent_notification_shard_config_change(conn): 
+    """ test persistent notification shard config change """
+    """ test to check if notifications work when config value for determining num_shards is changed..."""
+    default_config_value = 11
+    config_values = [0, 1, 3, 97, 111]
+    for config_value in config_values:
+        change_rgw_config_option(get_config_port(), 'rgw_bucket_persistent_notif_num_shards', config_value)
+        if conn == 'http':
+            test_notification_push_http()
+        elif conn == 'kafka':
+            test_notification_push_kafka()
+    ## changing to default value for other tests
+    change_rgw_config_option(get_config_port(), 'rgw_bucket_persistent_notif_num_shards', default_config_value)
+
+@attr('http_test')
+def test_persistent_notification_shard_config_change_http(): 
+    test_persistent_notification_shard_config_change('http')
+
+@attr('kafka_test')
+def test_persistent_notification_shard_config_change_kafka(): 
+    test_persistent_notification_shard_config_change('kafka')
