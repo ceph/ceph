@@ -8,6 +8,13 @@ target_link_libraries(crimson-store-nbd
   crimson-os)
 install(TARGETS crimson-store-nbd DESTINATION bin)
 
+add_executable(crimson-store-bench
+	store_bench/store-bench.cc
+  )
+target_link_libraries(crimson-store-bench
+  crimson-os)
+install(TARGETS crimson-store-bench DESTINATION bin)
+
 add_executable(perf-crimson-msgr perf_crimson_msgr.cc)
 target_link_libraries(perf-crimson-msgr crimson)
 
