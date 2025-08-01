@@ -45,9 +45,9 @@ export class SilenceListComponent extends PrometheusListHelper {
   selection = new CdTableSelection();
   modalRef: NgbModalRef;
   customCss = {
-    'badge badge-danger': 'active',
-    'badge badge-warning': 'pending',
-    'badge badge-default': 'expired'
+    'tags-danger': 'active',
+    'tags-warning': 'pending',
+    'tags-default': 'expired'
   };
   sorts: CdSortPropDir[] = [{ prop: 'endsAt', dir: CdSortDirection.desc }];
   rules: PrometheusRule[];

@@ -82,7 +82,7 @@ export class HostsPageHelper extends PageHelper {
     } else {
       for (const label of labels) {
         cy.contains('cd-modal .badge', new RegExp(`^${label}$`))
-          .find('.badge-remove')
+          .find('.tags-remove')
           .click();
       }
     }

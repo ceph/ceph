@@ -293,11 +293,11 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
         cellTransformation: CellTemplate.badge,
         customTemplateConfig: {
           map: {
-            in: { class: 'badge-success' },
-            up: { class: 'badge-success' },
-            down: { class: 'badge-danger' },
-            out: { class: 'badge-danger' },
-            destroyed: { class: 'badge-danger' }
+            in: { class: 'tags-success' },
+            up: { class: 'tags-success' },
+            down: { class: 'tags-danger' },
+            out: { class: 'tags-danger' },
+            destroyed: { class: 'tags-danger' }
           }
         }
       },
@@ -308,8 +308,8 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
         cellTransformation: CellTemplate.badge,
         customTemplateConfig: {
           map: {
-            hdd: { class: 'badge-hdd' },
-            ssd: { class: 'badge-ssd' }
+            hdd: { class: 'tags-hdd' },
+            ssd: { class: 'tags-ssd' }
           }
         }
       },

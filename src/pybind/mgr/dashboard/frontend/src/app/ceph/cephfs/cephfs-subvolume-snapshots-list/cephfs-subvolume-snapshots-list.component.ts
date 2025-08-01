@@ -94,8 +94,8 @@ export class CephfsSubvolumeSnapshotsListComponent implements OnInit, OnChanges 
         cellTransformation: CellTemplate.badge,
         customTemplateConfig: {
           map: {
-            no: { class: 'badge-success' },
-            yes: { class: 'badge-info' }
+            no: { class: 'tags-success' },
+            yes: { class: 'tags-info' }
           }
         }
       }
