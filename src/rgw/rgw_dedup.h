@@ -245,6 +245,8 @@ namespace rgw::dedup {
     std::thread d_runner;
     std::mutex  d_cond_mutex;
     std::condition_variable d_cond;
+
+    Throttle d_bucket_index_throttle;
   };
 
 } //namespace rgw::dedup

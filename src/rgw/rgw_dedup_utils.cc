@@ -413,6 +413,7 @@ namespace rgw::dedup {
   {
     this->small_objs_stat               += other.small_objs_stat;
     this->big_objs_stat                 += other.big_objs_stat;
+    this->ingress_slabs                 += other.ingress_slabs;
     this->ingress_failed_load_bucket    += other.ingress_failed_load_bucket;
     this->ingress_failed_get_object     += other.ingress_failed_get_object;
     this->ingress_failed_get_obj_attrs  += other.ingress_failed_get_obj_attrs;
@@ -476,6 +477,7 @@ namespace rgw::dedup {
 
       f->dump_unsigned("Total processed objects", this->processed_objects);
       f->dump_unsigned("Loaded objects", this->loaded_objects);
+      f->dump_unsigned("Ingress Slabs", this->ingress_slabs);
       f->dump_unsigned("Set Shared-Manifest SRC", this->set_shared_manifest_src);
       f->dump_unsigned("Deduped Obj (this cycle)", this->deduped_objects);
       f->dump_unsigned("Deduped Bytes(this cycle)", this->deduped_objects_bytes);
@@ -601,6 +603,7 @@ namespace rgw::dedup {
 
     encode(m.small_objs_stat, bl);
     encode(m.big_objs_stat, bl);
+    encode(m.ingress_slabs, bl);
     encode(m.ingress_failed_load_bucket, bl);
     encode(m.ingress_failed_get_object, bl);
     encode(m.ingress_failed_get_obj_attrs, bl);
@@ -651,6 +654,7 @@ namespace rgw::dedup {
     DECODE_START(1, bl);
     decode(m.small_objs_stat, bl);
     decode(m.big_objs_stat, bl);
+    decode(m.ingress_slabs, bl);
     decode(m.ingress_failed_load_bucket, bl);
     decode(m.ingress_failed_get_object, bl);
     decode(m.ingress_failed_get_obj_attrs, bl);

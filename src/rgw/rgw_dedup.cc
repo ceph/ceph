@@ -1401,6 +1401,7 @@ namespace rgw::dedup {
         }
       }
 
+      p_stats->ingress_slabs++;
       (*p_slab_count)++;
       failure_count = 0;
       unsigned slab_rec_count = 0;
@@ -1654,9 +1655,11 @@ namespace rgw::dedup {
       const string& oid = oids[current_shard];
       rgw_cls_list_ret result;
       librados::ObjectReadOperation op;
+      d_bucket_index_throttle.acquire();
       // get bucket-indices of @current_shard
       cls_rgw_bucket_list_op(op, marker, null_prefix, null_delimiter, max_entries,
                              list_versions, &result);
+      //auto before = std::chrono::steady_clock::now();
       int ret = rgw_rados_operate(dpp, ioctx, oid, std::move(op), nullptr, null_yield);
       if (unlikely(ret < 0)) {
         ldpp_dout(dpp, 1) << __func__ << "::ERR: failed rgw_rados_operate() ret="
@@ -1666,6 +1669,8 @@ namespace rgw::dedup {
         continue;
       }
       obj_count += result.dir.m.size();
+      //auto duration = std::chrono::steady_clock::now() - before;
+      //op_time_aggragted_usec += std::chrono::duration_cast<std::chrono::microseconds>(duration_cast).count();
       for (auto& entry : result.dir.m) {
         const rgw_bucket_dir_entry& dirent = entry.second;
         if (unlikely((!dirent.exists && !dirent.is_delete_marker()) || !dirent.pending_map.empty())) {
@@ -2049,6 +2054,7 @@ namespace rgw::dedup {
     }
     //ldpp_dout(dpp, 0) << __func__ << "::sleep for 2 seconds\n" << dendl;
     //std::this_thread::sleep_for(std::chrono::seconds(2));
+    //std::this_thread::sleep_forstd::chrono::microseconds(usec_timeout);
     return ret;
   }
 
