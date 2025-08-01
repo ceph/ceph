@@ -19,11 +19,17 @@ ELSE:
     from c_cephfs cimport *
     from rados cimport Rados
 
-from collections import namedtuple
+from collections import namedtuple, deque
 from datetime import datetime
 import os
 import time
+import stat
 from typing import Any, Dict, Optional
+from logging import getLogger
+
+
+log = getLogger(__name__)
+
 
 AT_SYMLINK_NOFOLLOW = 0x0100
 AT_STATX_SYNC_TYPE  = 0x6000
@@ -198,6 +204,14 @@ class DiskQuotaExceeded(OSError):
     pass
 class PermissionDenied(OSError):
     pass
+
+class OpCancelled(OSError):
+    def __init__(self, op_name):
+        self.errno = 125
+        self.strerror = f'CephFS op {op_name} was cancelled'
+
+        super(OpCancelled, self).__init__(self.errno, self.strerror)
+
 
 cdef errno_to_exception =  {
     EPERM      : PermissionError,
@@ -2832,3 +2846,288 @@ cdef class LibCephFS(object):
 
         finally:
            free(buf)
+
+    def rmtree(self, trash_path, should_cancel, suppress_errors=False):
+        '''
+        Delete entire file hierarchy present under trash_path when trash_path is
+        a dir.
+
+        If trash_path is a path to regfile or a symlink, delete them and return.
+        '''
+        # stx_b = statx buffer
+        stx_b = self.statx(trash_path, CEPH_STATX_MODE, AT_SYMLINK_NOFOLLOW)
+        if stat.S_ISDIR(stx_b['mode']):
+            Rmtree(self, trash_path, should_cancel, suppress_errors).rmtree()
+        else:
+            try:
+                self.unlink(trash_path)
+                return
+            except Exception as e:
+                log.info('Following exception occurred while handling '
+                         f'file at path {trash_path}: {e}')
+                raise
+
+
+class Rmtree:
+    '''
+    Contains the code where file tree is deleted with depth-first, non-recursive
+    approach along with some helper methods.
+    '''
+
+    def __init__(self, fs, trash_path, should_cancel, suppress_errors=False):
+        self.fs = fs
+        self.trash_path = trash_path
+
+        self.should_cancel = should_cancel
+        self.suppress_errors = suppress_errors
+
+        # Stack needed for traversing the file heirarchy under trash_path in
+        # depth-first, non-recursive fashion. each stack member is an instance
+        # of class RmtreeDir (declared above, inside this method).
+        self.stack = deque([])
+
+        # current directory, dir entries of which are being removed right now,
+        # it's always the directory at the top of stack, it's always an instance
+        # of class RmtreeDir.
+        self.curr_dir = None
+
+    def add_dir_to_stack(self, de_name):
+        '''
+        Add new dir to stack. If it succeeds, call rewinddir() for current dir.
+        If it fails, add this new dir to current dir's ignorelist
+        '''
+        de_path = os.path.join(self.curr_dir.path, de_name)
+        try:
+            self.stack.append(RmtreeDir(self.fs, de_path))
+        # RmtreeDir() eventually/indirectly calls opendir(). If it fails, it is
+        # most likely due to lack of permissions on de_path. Skip it and proceed
+        # deleting rest of files in current directories.
+        except Error as e:
+            log.error(f'Exception occured: "{e}"')
+            self.curr_dir.add_to_de_ignore_list(de_name)
+
+            if self.suppress_errors:
+                return 'break'
+            else:
+                raise
+
+        # New dir has been added to the stack, call rewinddir() since the new
+        # dir will be traversed now. Else, future call to current dir's
+        # readdir() will have implementation-defined behaviour, which might be
+        # different from the expected behaviour.
+        self.curr_dir.handle.rewinddir()
+
+        # since a new non-empty dir has been encountered abort traversing
+        # current dir for now and traverse this new dir instead
+        return 'break'
+
+    def notify_parent_dir(self):
+        '''
+        Add current dir's name to parent dir's "de_ignore_list". This is \
+        necessary since parent dir can't be deleted when current dir can't be
+        deleted.
+        '''
+        # ensure we are dealing with the dir at the top of the stack.
+        assert self.curr_dir is self.stack[-1]
+
+        try:
+            parent_dir = self.stack[-2]
+            # Save as byte instead of str since it is de.d_name fetched by
+            # readdir() is always bytes.
+            parent_dir.add_to_de_ignore_list(self.curr_dir.name)
+        except IndexError:
+            pass
+
+    def rmtree(self):
+        '''
+        This is where depth-first, non-recursive traversal is done.
+        '''
+        try:
+            self.stack.append(RmtreeDir(self.fs, self.trash_path))
+        except Exception as e:
+            log.error('opening root dir of the file tree failed with exception '
+                      f'"{e}", exiting.')
+            if self.suppress_errors:
+                return
+            else:
+                raise
+
+        while self.stack:
+            if self.should_cancel():
+                raise OpCancelled('rmtree')
+
+            self.curr_dir = self.stack[-1]
+
+            # de = directory entry
+            de = self.curr_dir.read_dir()
+            while de:
+                if self.should_cancel():
+                    raise OpCancelled('rmtree')
+
+                de_name = de.d_name.decode()
+                if de.is_dir():
+                    try:
+                        retval = self.curr_dir.try_rmdir(de_name,
+                                                         self.suppress_errors)
+                    except ObjectNotEmpty:
+                        retval = self.add_dir_to_stack(de_name)
+                else:
+                    retval = self.curr_dir.try_unlink(de_name,
+                                                      self.suppress_errors)
+
+                if retval == 'break':
+                    break
+
+                de = self.curr_dir.read_dir()
+                if not de and self.curr_dir.de_has_been_removed:
+                    self.curr_dir.handle.rewinddir()
+                    self.curr_dir.de_has_been_removed = False
+                    de = self.curr_dir.read_dir()
+
+            if self.curr_dir.has_any_fs_op_failed() or self.curr_dir.is_empty:
+                if self.curr_dir.has_any_fs_op_failed():
+                    self.notify_parent_dir()
+
+                if self.curr_dir.is_empty:
+                    try:
+                        self.fs.rmdir(self.curr_dir.path)
+                    # If curr_dir is empty and yet if ObjectNotFound is raised while
+                    # running rmdir(), then it implies that curr_dir contains a
+                    # snapshot in its snap dir.
+                    except ObjectNotEmpty:
+                        self.notify_parent_dir()
+
+                self.stack.pop()
+
+
+class RmtreeDir:
+    '''
+    Holds the path, name and handle of the directory being traversed along
+    with some helper code.
+    '''
+
+    def __init__(self, fs, path):
+        self.fs = fs
+
+        self.path = path
+        self.name = os.path.basename(self.path)
+        self.handle = self.try_opendir()
+
+        # Is this directory empty? This will be set by self.read_dir().
+        self.is_empty = None
+
+        # List of dir entries to be ignored instead of calling rmdir()
+        # or unlink() for them.
+        self.de_ignore_list = []
+
+        # Indicates whether an error occured during call to readdir().
+        self.has_readdir_failed = False
+
+        # If a dir entry has been removed and reddir() returns None,
+        # rewinddir() should be called since POSIX doesn't guarantee
+        # anything regarding behaviour of readdir() when readdir() and
+        # unlink()/rmdir() calls are interleaved. Whenever calls to
+        # unlink()/rmdir() are made, reading dir might've to be
+        # restarted.
+        self.de_has_been_removed = False
+
+    def __str__(self):
+        return self.path
+
+    def add_to_de_ignore_list(self, de_name):
+        self.de_ignore_list.append(de_name)
+
+    def set_readdir_error(self):
+        self.has_readdir_failed = True
+
+    def should_skip_d_name(self, de_name):
+        return de_name in self.de_ignore_list
+
+    def has_any_fs_op_failed(self):
+        return self.has_readdir_failed or len(self.de_ignore_list) > 0
+
+    def try_opendir(self):
+        try:
+            return self.fs.opendir(self.path)
+        except Error as e:
+            log.error('Exception occured during opendir(): '
+                      f'"{e}"')
+            raise
+
+    def read_dir(self):
+        '''
+        Read this dir, return a dentry besides . and .. and ignorelist-ed
+        dentries.
+
+        If a dentry was removed, rewind the dir and staring read the dir again.
+        '''
+        # Assuming True for now, if it's not empty it will be set to
+        # False by the following loop.
+        self.is_empty = True
+
+        try:
+            de = self.fs.readdir(self.handle)
+            while de:
+                if de.d_name in (b'.', b'..'):
+                    de = self.fs.readdir(self.handle)
+                elif de.d_name.decode() in self.de_ignore_list:
+                    self.is_empty = False
+                    de = self.fs.readdir(self.handle)
+                    if not de and self.de_has_been_removed:
+                        log.debug('rewinding and restarting reading curr dir '
+                                  f'"{self.name}" since a dentry was removed.')
+                        self.handle.rewinddir()
+                        # reset self.de_has_been_removed
+                        self.de_has_been_removed = False
+                        de = self.fs.readdir(self.handle)
+                else:
+                    self.is_empty = False
+                    return de
+        except Error as e:
+            # This is the tricky one: it's an error on this
+            # directory, not on a entry in this directory
+            log.error(f'Exception occured: "{e}"')
+            self.set_readdir_error()
+
+    def try_rmdir(self, de_name, suppress_errors=False):
+        '''
+        Remove given directory. If that fails because its not empty, raise the
+        exception, the caller should handle it.
+
+        In case of a failure for some other reason, add it to the ignorelist
+        and tell caller whether to continue or break loop based through the
+        return value.
+        '''
+        de_path = os.path.join(self.path, de_name)
+        try:
+            self.fs.rmdir(de_path)
+            self.de_has_been_removed = True
+        except ObjectNotEmpty:
+            # XXX: push this dir to stack, done in the caller method
+            raise
+        except Error as e:
+            log.error('Exception occured during rmdir(): '
+                      f'"{e}"')
+            self.add_to_de_ignore_list(de_name)
+
+            if not suppress_errors:
+                raise
+
+    def try_unlink(self, de_name, suppress_errors=False):
+        '''
+        Unlink given regfile or link and if that fails add it to the ignorelist.
+
+        Also, tell whether caller whether to continue looping when exception
+        occurs and self.suppress_errors is True.
+        '''
+        de_path = os.path.join(self.path, de_name)
+        try:
+            self.fs.unlink(de_path)
+            self.de_has_been_removed = True
+        except Error as e:
+            log.error('Exception occured during unlink(): '
+                      f'"{e}"')
+            self.add_to_de_ignore_list(de_name)
+
+            if not suppress_errors:
+                raise
