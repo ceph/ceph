@@ -244,14 +244,21 @@ int RGWPolicy::check(RGWPolicyEnv *env, string& err_msg)
 }
 
 
-int RGWPolicy::from_json(bufferlist& bl, string& err_msg)
+int RGWPolicy::from_json(bufferlist& bl, string& err_msg, bool JFW_this_was_hacked)
 {
   JSONParser parser;
 
-  if (!parser.parse(bl.c_str(), bl.length())) {
-    err_msg = "Malformed JSON";
-    dout(0) << "malformed json" << dendl;
-    return -EINVAL;
+// JFW: - 1 hack goes here:
+int result = 0;
+std::string_view sv;
+if(JFW_this_was_hacked)
+ result = parser.parse(bl.c_str(), bl.length() - 1);
+else
+ result = parser.parse(bl); 
+ 
+  if (!parser.parse(bl)) {
+    err_msg = fmt::format("malformed JSON (RGWPolicy) length = {}:\n{}\n----\n", bl.length(), bl.c_str());
+    dout(0) << err_msg << dendl;
   }
 
   // as no time was included in the request, we hope that the user has included a short timeout
