@@ -74,7 +74,6 @@ int read(const DoutPrefixProvider* dpp,
          const RGWZoneParams& zone,
          std::string_view account_id,
          RGWAccountInfo& info,
-         std::map<std::string, ceph::buffer::list>& attrs,
          ceph::real_time& mtime,
          RGWObjVersionTracker& objv);
 
@@ -86,7 +85,6 @@ int read_by_name(const DoutPrefixProvider* dpp,
                  std::string_view tenant,
                  std::string_view name,
                  RGWAccountInfo& info,
-                 std::map<std::string, ceph::buffer::list>& attrs,
                  RGWObjVersionTracker& objv);
 
 /// Read account info by email
@@ -96,7 +94,6 @@ int read_by_email(const DoutPrefixProvider* dpp,
                   const RGWZoneParams& zone,
                   std::string_view email,
                   RGWAccountInfo& info,
-                  std::map<std::string, ceph::buffer::list>& attrs,
                   RGWObjVersionTracker& objv);
 
 /// Write account info and update name/email indices
@@ -106,7 +103,6 @@ int write(const DoutPrefixProvider* dpp,
           const RGWZoneParams& zone,
           const RGWAccountInfo& info,
           const RGWAccountInfo* old_info,
-          const std::map<std::string, ceph::buffer::list>& attrs,
           ceph::real_time mtime,
           bool exclusive,
           RGWObjVersionTracker& objv);

@@ -307,7 +307,7 @@ options:
                 any ``radosgw`` instance that is meant to
                 participate in a `multi-site <../multisite>`_
                 configuration.
-  default: s3, s3website, swift, swift_auth, admin, sts, iam, notifications
+  default: s3, s3control, s3website, swift, swift_auth, admin, sts, iam, notifications
   services:
   - rgw
   with_legacy: true
