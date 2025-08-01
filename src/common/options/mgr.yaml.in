@@ -160,6 +160,23 @@ options:
   flags:
   - no_mon_update
   - cluster_create
+- name: mgr_module_load_delay
+  type: millisecs
+  level: dev
+  default: 0
+  desc: Amount of milliseconds a mgr module delays loading. For testing purposes only.
+  flags:
+  - runtime
+  services:
+  - mgr
+- name: mgr_module_load_delay_name
+  type: str
+  level: dev
+  desc: Choose which mgr module to inject a load delay. For testing purposes only.
+  flags:
+  - runtime
+  services:
+  - mgr
 - name: cephadm_path
   type: str
   level: advanced
