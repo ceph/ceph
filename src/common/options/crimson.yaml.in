@@ -173,13 +173,6 @@ options:
         Note this size ratio does not reflect actual memory usage, as it represents the size of evicted
         pages from A1_in queue.
   default: 0.5
-- name: seastore_obj_data_write_amplification
-  type: float
-  level: advanced
-  desc: split extent if ratio of total extent size to write size exceeds this value
-  default: 1.25
-# TODO: seastore_obj_data_write_amplification is no longer correct if 
-#       seastore_data_delta_based_overwrite is enabled. So, this should be reconsidered.
 - name: seastore_max_concurrent_transactions
   type: uint
   level: advanced
