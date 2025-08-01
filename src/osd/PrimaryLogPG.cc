@@ -413,11 +413,10 @@ void PrimaryLogPG::on_local_recover(
   clear_object_snap_mapping(t, hoid);
   if (!is_delete && recovery_info.soid.is_snap()) {
     OSDriver::OSTransaction _t(osdriver.get_transaction(t));
-    set<snapid_t> snaps;
     dout(20) << " snapset " << recovery_info.ss << dendl;
     auto p = recovery_info.ss.clone_snaps.find(hoid.snap);
     if (p != recovery_info.ss.clone_snaps.end()) {
-      snaps.insert(p->second.begin(), p->second.end());
+      const auto& snaps = p->second;
       dout(20) << " snaps " << snaps << dendl;
       snap_mapper.add_oid(
 	recovery_info.soid,
@@ -3146,7 +3145,7 @@ void PrimaryLogPG::finish_proxy_read(hobject_t oid, ceph_tid_t tid, int r)
 	     << " soid " << prdop->soid << dendl;
     return;
   }
-  proxyread_ops.erase(tid);
+  proxyread_ops.erase(p);
 
   map<hobject_t, list<OpRequestRef>>::iterator q = in_progress_proxy_ops.find(oid);
   if (q == in_progress_proxy_ops.end()) {
@@ -4710,7 +4709,11 @@ int PrimaryLogPG::trim_object(
 		       << " for object " << coid << "\n";
     return -ENOENT;
   }
-  set<snapid_t> old_snaps(citer->second.begin(), citer->second.end());
+  vector<snapid_t> old_snaps;
+  old_snaps.reserve(citer->second.size());
+  for (auto &s : citer->second) {
+    old_snaps.emplace_back(s);
+  }
   if (old_snaps.empty()) {
     osd->clog->error() << "No object info snaps for object " << coid;
     return -ENOENT;
@@ -4723,14 +4726,13 @@ int PrimaryLogPG::trim_object(
     return -ENOENT;
   }
 
-  set<snapid_t> new_snaps;
+  vector<snapid_t> new_snaps;
+  new_snaps.reserve(old_snaps.size());
   const OSDMapRef& osdmap = get_osdmap();
-  for (set<snapid_t>::iterator i = old_snaps.begin();
-       i != old_snaps.end();
-       ++i) {
-    if (!osdmap->in_removed_snaps_queue(info.pgid.pgid.pool(), *i) &&
-	*i != snap_to_trim) {
-      new_snaps.insert(*i);
+  for (auto &s : old_snaps) {
+    if (!osdmap->in_removed_snaps_queue(info.pgid.pgid.pool(), s) &&
+	s != snap_to_trim) {
+      new_snaps.emplace_back(s);
     }
   }
 
@@ -4835,8 +4837,8 @@ int PrimaryLogPG::trim_object(
     t->remove(coid);
     t->update_snaps(
       coid,
-      old_snaps,
-      new_snaps);
+      std::move(old_snaps),
+      std::move(new_snaps));
 
     coi = object_info_t(coid);
 
@@ -4870,8 +4872,8 @@ int PrimaryLogPG::trim_object(
 
     t->update_snaps(
       coid,
-      old_snaps,
-      new_snaps);
+      std::move(old_snaps),
+      std::move(new_snaps));
   }
 
   // save head snapset
@@ -7855,7 +7857,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
     case CEPH_OSD_OP_OMAPGETVALSBYKEYS:
       ++ctx->num_read;
       {
-	set<string> keys_to_get;
+	vector<string> keys_to_get;
 	try {
 	  decode(keys_to_get, bp);
 	}
@@ -7897,11 +7899,12 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	map<string, bufferlist> out;
 
 	if (oi.is_omap()) {
-	  set<string> to_get;
+	  vector<string> to_get;
+          to_get.reserve(assertions.size());
 	  for (map<string, pair<bufferlist, int> >::iterator i = assertions.begin();
 	       i != assertions.end();
 	       ++i)
-	    to_get.insert(i->first);
+	    to_get.emplace_back(i->first);
 	  int r = osd->store->omap_get_values(ch, ghobject_t(soid),
 					      to_get, &out);
 	  if (r < 0) {
@@ -7973,14 +7976,12 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	tracepoint(osd, do_osd_op_pre_omapsetvals, soid.oid.name.c_str(), soid.snap.val);
 	if (cct->_conf->subsys.should_gather<dout_subsys, 20>()) {
 	  dout(20) << "setting vals: " << dendl;
-	  map<string,bufferlist> to_set;
+	  vector<pair<string,bufferlist>> to_set;
 	  bufferlist::const_iterator pt = to_set_bl.begin();
 	  decode(to_set, pt);
-	  for (map<string, bufferlist>::iterator i = to_set.begin();
-	       i != to_set.end();
-	       ++i) {
-	    dout(20) << "\t" << i->first << dendl;
-	  }
+          for (auto &p : to_set) {
+            dout(20) << "\t" << p.first << dendl;
+          }
 	}
 	t->omap_setkeys(soid, to_set_bl);
 	ctx->clean_regions.mark_omap_dirty();
@@ -10079,10 +10080,7 @@ void PrimaryLogPG::_write_copy_chunk(CopyOpRef cop, PGTransaction *t)
 	cop->omap_header.clear();
       }
       if (cop->omap_data.length()) {
-	map<string,bufferlist> omap;
-	bufferlist::const_iterator p = cop->omap_data.begin();
-	decode(omap, p);
-	t->omap_setkeys(cop->results.temp_oid, omap);
+	t->omap_setkeys(cop->results.temp_oid, cop->omap_data);
 	cop->omap_data.clear();
       }
     }
@@ -15892,9 +15890,10 @@ boost::statechart::result PrimaryLogPG::AwaitAsyncWork::react(const DoSnapWork&)
 
     pg->snap_trimq.erase(snap_to_trim);
 
-    if (pg->snap_trimq_repeat.count(snap_to_trim)) {
+    auto it = pg->snap_trimq_repeat.find(snap_to_trim);
+    if (it != pg->snap_trimq_repeat.end()) {
       ldout(pg->cct, 10) << " removing from snap_trimq_repeat" << dendl;
-      pg->snap_trimq_repeat.erase(snap_to_trim);
+      pg->snap_trimq_repeat.erase(it);
     } else {
       ldout(pg->cct, 10) << "adding snap " << snap_to_trim
 			 << " to purged_snaps"

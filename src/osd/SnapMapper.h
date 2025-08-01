@@ -60,11 +60,11 @@ public:
       : cid(cid), hoid(hoid), t(t) {}
   public:
     void set_keys(
-      const std::map<std::string, ceph::buffer::list> &to_set) override {
+      const std::vector<std::pair<std::string, ceph::buffer::list>> &to_set) override {
       t->omap_setkeys(cid, hoid, to_set);
     }
     void remove_keys(
-      const std::set<std::string> &to_remove) override {
+      const std::vector<std::string> &to_remove) override {
       t->omap_rmkeys(cid, hoid, to_remove);
     }
     void add_callback(
@@ -88,7 +88,7 @@ public:
     hoid(hoid) {}
 
   int get_keys(
-    const std::set<std::string> &keys,
+    const std::vector<std::string> &keys,
     std::map<std::string, ceph::buffer::list> *out) override;
   int get_next(
     const std::string &key,
@@ -129,10 +129,12 @@ public:
   CephContext* cct;
   struct object_snaps {
     hobject_t oid;
-    std::set<snapid_t> snaps;
-    object_snaps(hobject_t oid, const std::set<snapid_t> &snaps)
+    std::vector<snapid_t> snaps;
+    object_snaps(hobject_t oid, const std::vector<snapid_t> &snaps)
       : oid(oid), snaps(snaps) {}
     object_snaps() {}
+    static void encode(const hobject_t& oid, const std::vector<snapid_t> snaps,
+                       ceph::buffer::list &bl);
     void encode(ceph::buffer::list &bl) const;
     void decode(ceph::buffer::list::const_iterator &bp);
     void dump(ceph::Formatter *f) const;
@@ -172,7 +174,6 @@ public:
   static const std::string LEGACY_MAPPING_PREFIX;
   static const std::string MAPPING_PREFIX;
   static const std::string OBJECT_PREFIX;
-  static const char *PURGED_SNAP_EPOCH_PREFIX;
   static const char *PURGED_SNAP_PREFIX;
 
 #ifndef WITH_CRIMSON
@@ -225,7 +226,7 @@ private:
     snapid_t *begin, snapid_t *end);
   static void make_purged_snap_key_value(
     int64_t pool, snapid_t begin,
-    snapid_t end, std::map<std::string,ceph::buffer::list> *m);
+    snapid_t end, std::vector<std::pair<std::string,ceph::buffer::list>> *m);
   static std::string make_purged_snap_key(int64_t pool, snapid_t last);
 
   // note: marked 'mutable', as functions as a cache and used in some 'const'
@@ -251,13 +252,13 @@ private:
 
   int get_snaps(const hobject_t &oid, object_snaps *out) const;
 
-  std::set<std::string> to_raw_keys(
+  std::vector<std::string> to_raw_keys(
     const hobject_t &clone,
-    const std::set<snapid_t> &snaps) const;
+    const std::vector<snapid_t> &snaps) const;
 
   void set_snaps(
     const hobject_t &oid,
-    const object_snaps &out,
+    const std::vector<snapid_t> &snaps,
     MapCacher::Transaction<std::string, ceph::buffer::list> *t);
 
   void clear_snaps(
@@ -333,15 +334,15 @@ private:
   /// Update snaps for oid, empty new_snaps removes the mapping
   int update_snaps(
     const hobject_t &oid,       ///< [in] oid to update
-    const std::set<snapid_t> &new_snaps, ///< [in] new snap std::set
-    const std::set<snapid_t> *old_snaps, ///< [in] old snaps (for debugging)
+    std::vector<snapid_t> &&new_snaps,      ///< [in, out] new snaps
+    const std::vector<snapid_t> *old_snaps, ///< [in] old snaps (for debugging)
     MapCacher::Transaction<std::string, ceph::buffer::list> *t ///< [out] transaction
     ); ///@ return error, 0 on success
 
   /// Add mapping for oid, must not already be mapped
   void add_oid(
     const hobject_t &oid,       ///< [in] oid to add
-    const std::set<snapid_t>& new_snaps, ///< [in] snaps
+    const std::vector<snapid_t>& new_snaps, ///< [in] snaps
     MapCacher::Transaction<std::string, ceph::buffer::list> *t ///< [out] transaction
     );
 
@@ -360,7 +361,7 @@ private:
   /// Get snaps for oid
   int get_snaps(
     const hobject_t &oid,     ///< [in] oid to get snaps for
-    std::set<snapid_t> *snaps ///< [out] snaps
+    std::vector<snapid_t> *snaps ///< [out] snaps
     ) const; ///< @return error, -ENOENT if oid is not recorded
 
   void update_snap_map(
@@ -368,7 +369,7 @@ private:
     MapCacher::Transaction<std::string, ceph::buffer::list> *t);
 
   /// Get snaps for oid - alternative interface
-  tl::expected<std::set<snapid_t>, SnapMapReaderI::result_t> get_snaps(
+  tl::expected<std::vector<snapid_t>, SnapMapReaderI::result_t> get_snaps(
     const hobject_t &hoid) const final;
 
   /**
@@ -377,8 +378,8 @@ private:
    * Returns snaps for hoid as in get_snaps(), but additionally validates the
    * snap->hobject_t mappings ('SNA_' entries).
    */
-  tl::expected<std::set<snapid_t>, SnapMapReaderI::result_t>
-  get_snaps_check_consistency(const hobject_t &hoid) const final;
+  tl::expected<std::vector<snapid_t>, SnapMapReaderI::result_t>
+  get_snaps_check_consistency(const hobject_t &hoid, const std::vector<snapid_t>& matching) const final;
 };
 WRITE_CLASS_ENCODER(SnapMapper::object_snaps)
 WRITE_CLASS_ENCODER(SnapMapper::Mapping)

@@ -2140,8 +2140,8 @@ void OSD::write_superblock(CephContext* cct, OSDSuperblock& sb, ObjectStore::Tra
   encode(sb, bl);
   t.truncate(coll_t::meta(), OSD_SUPERBLOCK_GOBJECT, 0);
   t.write(coll_t::meta(), OSD_SUPERBLOCK_GOBJECT, 0, bl.length(), bl);
-  std::map<std::string, ceph::buffer::list> attrs;
-  attrs.emplace(OSD_SUPERBLOCK_OMAP_KEY, bl);
+  std::vector<std::pair<std::string, ceph::buffer::list>> attrs;
+  attrs.emplace_back(OSD_SUPERBLOCK_OMAP_KEY, bl);
   t.omap_setkeys(coll_t::meta(), OSD_SUPERBLOCK_GOBJECT, attrs);
 }
 
@@ -4948,8 +4948,7 @@ int OSD::read_superblock()
   // mismatch.
   bufferlist bl;
 
-  set<string> keys;
-  keys.insert(OSD_SUPERBLOCK_OMAP_KEY);
+  vector<string> keys(1, OSD_SUPERBLOCK_OMAP_KEY);
   map<string, bufferlist> vals;
   OSDSuperblock super_omap;
   OSDSuperblock super_disk;
@@ -6566,14 +6565,14 @@ void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
     ObjectStore::Transaction t;
 
     if (command == "setomapval") {
-      map<string, bufferlist> newattrs;
+      vector<std::pair<string, bufferlist>> newattrs;
       bufferlist val;
       string key, valstr;
       cmd_getval(cmdmap, "key", key);
       cmd_getval(cmdmap, "val", valstr);
 
       val.append(valstr);
-      newattrs[key] = val;
+      newattrs.emplace_back(key, val);
       t.omap_setkeys(coll_t(pgid), ghobject_t(obj), newattrs);
       r = store->queue_transaction(service->meta_ch, std::move(t));
       if (r < 0)
