@@ -1689,6 +1689,7 @@ private:
   void calculate_maxles_and_minlua( const std::map<pg_shard_t, pg_info_t> &infos,
 				    epoch_t& max_last_epoch_started,
 				    eversion_t& min_last_update_acceptable,
+				    bool exclude_nonprimary_shards = false,
 				    bool *history_les_bound = nullptr) const;
 
   // acting std::set
