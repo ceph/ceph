@@ -34,6 +34,7 @@
 #include "include/types.h"
 #include "include/ceph_features.h"
 #include "auth/Crypto.h"
+#include "common/Clock.h" // for ceph_clock_now()
 #include "common/item_history.h"
 #include "auth/AuthRegistry.h"
 #include "compressor_registry.h"

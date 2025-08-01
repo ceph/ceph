@@ -5,6 +5,7 @@
 
 #include <iostream>
 
+#include "common/strtol.h" // for strict_strtoll()
 #include "include/types.h"
 
 #include "rgw_xml.h"
