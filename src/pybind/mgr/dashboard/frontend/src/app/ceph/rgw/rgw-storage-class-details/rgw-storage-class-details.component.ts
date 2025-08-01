@@ -1,4 +1,4 @@
-import { Component, Input, OnChanges } from '@angular/core';
+import { Component, Input, OnChanges, OnInit, SimpleChanges } from '@angular/core';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import {
   ALLOW_READ_THROUGH_TEXT,
@@ -17,14 +17,16 @@ import {
   RESTORE_DAYS_TEXT,
   READTHROUGH_RESTORE_DAYS_TEXT,
   RESTORE_STORAGE_CLASS_TEXT,
-  ZONEGROUP_TEXT
+  ZONEGROUP_TEXT,
+  ACL,
+  GroupedACLs
 } from '../models/rgw-storage-class.model';
 @Component({
   selector: 'cd-rgw-storage-class-details',
   templateUrl: './rgw-storage-class-details.component.html',
   styleUrls: ['./rgw-storage-class-details.component.scss']
 })
-export class RgwStorageClassDetailsComponent implements OnChanges {
+export class RgwStorageClassDetailsComponent implements OnChanges, OnInit {
   @Input()
   selection: StorageClassDetails;
   columns: CdTableColumn[] = [];
@@ -45,31 +47,48 @@ export class RgwStorageClassDetailsComponent implements OnChanges {
   readthroughrestoreDaysText = READTHROUGH_RESTORE_DAYS_TEXT;
   restoreStorageClassText = RESTORE_STORAGE_CLASS_TEXT;
   zoneGroupText = ZONEGROUP_TEXT;
+  groupedACLs: GroupedACLs = {};
 
-  ngOnChanges() {
-    if (this.selection) {
+  ngOnChanges(changes: SimpleChanges): void {
+    if (changes['selection']) {
       this.storageDetails = {
-        zonegroup_name: this.selection.zonegroup_name,
-        placement_targets: this.selection.placement_targets,
-        access_key: this.selection.access_key,
-        secret: this.selection.secret,
-        target_path: this.selection.target_path,
-        tier_type: this.selection.tier_type,
-        multipart_min_part_size: this.selection.multipart_min_part_size,
-        multipart_sync_threshold: this.selection.multipart_sync_threshold,
-        host_style: this.selection.host_style,
-        retain_head_object: this.selection.retain_head_object,
-        allow_read_through: this.selection.allow_read_through,
-        glacier_restore_days: this.selection.glacier_restore_days,
-        glacier_restore_tier_type: this.selection.glacier_restore_tier_type,
-        restore_storage_class: this.selection.restore_storage_class,
-        read_through_restore_days: this.selection.read_through_restore_days
+        zonegroup_name: this.selection?.zonegroup_name,
+        placement_targets: this.selection?.placement_targets,
+        access_key: this.selection?.access_key,
+        secret: this.selection?.secret,
+        target_path: this.selection?.target_path,
+        tier_type: this.selection?.tier_type,
+        multipart_min_part_size: this.selection?.multipart_min_part_size,
+        multipart_sync_threshold: this.selection?.multipart_sync_threshold,
+        host_style: this.selection?.host_style,
+        retain_head_object: this.selection?.retain_head_object,
+        allow_read_through: this.selection?.allow_read_through,
+        glacier_restore_days: this.selection?.glacier_restore_days,
+        glacier_restore_tier_type: this.selection?.glacier_restore_tier_type,
+        restore_storage_class: this.selection?.restore_storage_class,
+        read_through_restore_days: this.selection?.read_through_restore_days
       };
     }
+  }
+
+  ngOnInit() {
+    this.groupedACLs = this.groupByType(this.selection.acl_mappings);
   }
 
   isTierMatch(...types: string[]): boolean {
     const tier_type = this.selection.tier_type?.toLowerCase();
     return types.some((type) => type.toLowerCase() === tier_type);
+  }
+
+  groupByType(acls: ACL[]): GroupedACLs {
+    return acls?.reduce((groupAcls: GroupedACLs, item: ACL) => {
+      const type = item.val?.type?.toUpperCase();
+      groupAcls[type] = groupAcls[type] ?? [];
+      groupAcls[type].push({
+        source_id: item.val?.source_id,
+        dest_id: item.val?.dest_id
+      });
+      return groupAcls;
+    }, {});
   }
 }
