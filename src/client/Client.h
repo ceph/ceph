@@ -1755,6 +1755,8 @@ private:
   loff_t _lseek(Fh *fh, loff_t offset, int whence);
   int64_t _read(Fh *fh, int64_t offset, uint64_t size, bufferlist *bl,
   		Context *onfinish = nullptr);
+  void do_readahead(Fh *f, Inode *in, uint64_t off, uint64_t len,
+                    const std::pair<uint64_t, uint64_t>& readahead_extent);
   void do_readahead(Fh *f, Inode *in, uint64_t off, uint64_t len);
   int64_t _write_success(Fh *fh, utime_t start, uint64_t fpos,
           int64_t offset, uint64_t size, Inode *in);
