@@ -34,6 +34,7 @@
 #include "include/btree_map.h"
 #include "include/common_fwd.h"
 #include "include/fs_types.h" // for struct file_layout_t
+#include "include/expected.hpp"
 #include "include/types.h"
 #include "common/ceph_releases.h"
 #include "osd_types.h"
@@ -1176,14 +1177,25 @@ public:
     const std::string& key,
     const std::string& nspace,
     pg_t *pg) const;
+
+  tl::expected<pg_t, int> map_to_pg(
+    int64_t pool,
+    std::string_view name,
+    std::string_view key,
+    std::string_view nspace) const;
+
   int object_locator_to_pg(const object_t& oid, const object_locator_t& loc,
 			   pg_t &pg) const;
+
+  tl::expected<pg_t, int> object_locator_to_expected_pg(
+    const object_t& oid,
+    const object_locator_t& loc) const;
+
   pg_t object_locator_to_pg(const object_t& oid,
 			    const object_locator_t& loc) const {
-    pg_t pg;
-    int ret = object_locator_to_pg(oid, loc, pg);
-    ceph_assert(ret == 0);
-    return pg;
+    auto expected_pg = object_locator_to_expected_pg(oid, loc);
+    ceph_assert(expected_pg.has_value());
+    return expected_pg.value();
   }
 
 
