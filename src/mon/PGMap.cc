@@ -3494,6 +3494,21 @@ void PGMap::get_health_checks(
       d.detail.swap(detail);
     }
   }
+
+  // LARGE_CRUSH_BUCKET
+  if (g_conf().get_val<bool>("mon_warn_on_large_crush_bucket")) {
+    for (int b = 0; b < osdmap.crush->get_max_buckets(); ++b) {
+      int bid = -1 - b;
+      if (osdmap.crush->bucket_exists(bid) &&
+          osdmap.crush->get_bucket_weightf(bid) > 60000.0) {
+        ostringstream ss;
+        ss << "CRUSH bucket " << osdmap.crush->get_item_name(bid)
+           << " is nearing the maximum weight of 65535";
+        auto& d = checks->add("LARGE_CRUSH_BUCKET", HEALTH_WARN, ss.str(), 1);
+        d.detail.push_back("use a smaller osd_crush_scaling_factor before adding more OSDs");
+      }
+    }
+  }
 }
 
 void PGMap::print_summary(ceph::Formatter *f, ostream *out) const
