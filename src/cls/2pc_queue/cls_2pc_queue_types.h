@@ -42,12 +42,14 @@ struct cls_2pc_reservation
     f->dump_stream("timestamp") << timestamp;
   }
 
-  static void generate_test_instances(std::list<cls_2pc_reservation*>& ls) {
-    ls.push_back(new cls_2pc_reservation);
-    ls.back()->size = 0;
-    ls.push_back(new cls_2pc_reservation);
-    ls.back()->size = 123;
-    ls.back()->timestamp = ceph::coarse_real_clock::zero();
+  static std::list<cls_2pc_reservation> generate_test_instances() {
+    std::list<cls_2pc_reservation> ls;
+    ls.push_back(cls_2pc_reservation{});
+    ls.back().size = 0;
+    ls.push_back(cls_2pc_reservation{});
+    ls.back().size = 123;
+    ls.back().timestamp = ceph::coarse_real_clock::zero();
+    return ls;
   }
 };
 WRITE_CLASS_ENCODER(cls_2pc_reservation)
@@ -98,13 +100,15 @@ struct cls_2pc_urgent_data
     f->dump_bool("has_xattrs", has_xattrs);
   }
 
-  static void generate_test_instances(std::list<cls_2pc_urgent_data*>& ls) {
-    ls.push_back(new cls_2pc_urgent_data);
-    ls.push_back(new cls_2pc_urgent_data);
-    ls.back()->reserved_size = 123;
-    ls.back()->last_id = 456;
-    ls.back()->reservations.emplace(789, cls_2pc_reservation(1, ceph::coarse_real_clock::zero(), 2));
-    ls.back()->has_xattrs = true;
+  static std::list<cls_2pc_urgent_data> generate_test_instances() {
+    std::list<cls_2pc_urgent_data> ls;
+    ls.push_back(cls_2pc_urgent_data{});
+    ls.push_back(cls_2pc_urgent_data{});
+    ls.back().reserved_size = 123;
+    ls.back().last_id = 456;
+    ls.back().reservations.emplace(789, cls_2pc_reservation(1, ceph::coarse_real_clock::zero(), 2));
+    ls.back().has_xattrs = true;
+    return ls;
   }
 };
 WRITE_CLASS_ENCODER(cls_2pc_urgent_data)

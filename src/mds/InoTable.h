@@ -66,7 +66,7 @@ class InoTable : public MDSTable {
     decode_state(bl);
   }
   void dump(Formatter *f) const;
-  static void generate_test_instances(std::list<InoTable*>& ls);
+  static std::list<InoTable> generate_test_instances();
 
   void skip_inos(inodeno_t i);
 

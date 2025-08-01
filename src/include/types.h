@@ -414,10 +414,12 @@ struct client_t {
   void dump(ceph::Formatter *f) const {
     f->dump_int("id", v);
   }
-  static void generate_test_instances(std::list<client_t*>& ls) {
-    ls.push_back(new client_t);
-    ls.push_back(new client_t(1));
-    ls.push_back(new client_t(123));
+  static std::list<client_t> generate_test_instances() {
+    std::list<client_t> ls;
+    ls.push_back(client_t{});
+    ls.push_back(client_t(1));
+    ls.push_back(client_t(123));
+    return ls;
   }
 };
 WRITE_CLASS_ENCODER(client_t)
@@ -575,9 +577,11 @@ struct shard_id_t {
   void dump(ceph::Formatter *f) const {
     f->dump_int("id", id);
   }
-  static void generate_test_instances(std::list<shard_id_t*>& ls) {
-    ls.push_back(new shard_id_t(1));
-    ls.push_back(new shard_id_t(2));
+  static std::list<shard_id_t> generate_test_instances() {
+    std::list<shard_id_t> ls;
+    ls.push_back(shard_id_t(1));
+    ls.push_back(shard_id_t(2));
+    return ls;
   }
   shard_id_t& operator++() { ++id; return *this; }
   friend constexpr std::strong_ordering operator<=>(const shard_id_t &lhs,
@@ -653,9 +657,11 @@ struct errorcode32_t {
   void dump(ceph::Formatter *f) const {
     f->dump_int("code", code);
   }
-  static void generate_test_instances(std::list<errorcode32_t*>& ls) {
-    ls.push_back(new errorcode32_t(1));
-    ls.push_back(new errorcode32_t(2));
+  static std::list<errorcode32_t> generate_test_instances() {
+    std::list<errorcode32_t> ls;
+    ls.push_back(errorcode32_t(1));
+    ls.push_back(errorcode32_t(2));
+    return ls;
   }
 };
 WRITE_CLASS_ENCODER(errorcode32_t)
@@ -701,12 +707,14 @@ struct sha_digest_t {
   void dump(ceph::Formatter *f) const {
     f->dump_string("sha1", to_str());
   }
-  static void generate_test_instances(std::list<sha_digest_t*>& ls) {
-    ls.push_back(new sha_digest_t);
-    ls.push_back(new sha_digest_t);
-    ls.back()->v[0] = 1;
-    ls.push_back(new sha_digest_t);
-    ls.back()->v[0] = 2;
+  static std::list<sha_digest_t> generate_test_instances() {
+    std::list<sha_digest_t> ls;
+    ls.push_back(sha_digest_t{});
+    ls.push_back(sha_digest_t{});
+    ls.back().v[0] = 1;
+    ls.push_back(sha_digest_t{});
+    ls.back().v[0] = 2;
+    return ls;
   }
 };
 
