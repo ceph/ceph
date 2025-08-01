@@ -29,7 +29,7 @@ options:
   flags:
   - no_mon_update
   - startup
-- name: public_addr
+- name: public_addr123
   type: addr
   level: basic
   desc: public-facing address to bind to
@@ -42,7 +42,7 @@ options:
   - mgr
   flags:
   - startup
-  with_legacy: true
+  with_legacy: false
 - name: public_addrv
   type: addrvec
   level: basic
