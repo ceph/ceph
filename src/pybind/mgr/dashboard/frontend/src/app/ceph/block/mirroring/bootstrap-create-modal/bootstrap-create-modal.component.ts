@@ -32,7 +32,7 @@ export class BootstrapCreateModalComponent
   token: string;
 
   subs: Subscription;
-
+  generateBtnDisable = false;
   createBootstrapForm: CdFormGroup;
 
   constructor(
@@ -76,7 +76,8 @@ export class BootstrapCreateModalComponent
       this.pools = pools.reduce((acc: any[], pool: Pool) => {
         acc.push({
           name: pool['name'],
-          mirror_mode: pool['mirror_mode']
+          mirror_mode: pool['mirror_mode'],
+          peer_uuids: pool['peer_uuids']
         });
         return acc;
       }, []);
@@ -86,18 +87,24 @@ export class BootstrapCreateModalComponent
         const poolName = pool['name'];
         const mirroring_disabled = pool['mirror_mode'] === 'disabled';
         const control = poolsControl.controls[poolName];
-        if (control) {
-          if (mirroring_disabled && control.disabled) {
-            control.enable();
-          } else if (!mirroring_disabled && control.enabled) {
+        if (mirroring_disabled || pool.peer_uuids.length > 0) {
+          if (control) {
             control.disable();
-            control.setValue(true);
+          } else {
+            poolsControl.addControl(
+              poolName,
+              new UntypedFormControl({ value: false, disabled: true })
+            );
           }
         } else {
-          poolsControl.addControl(
-            poolName,
-            new UntypedFormControl({ value: !mirroring_disabled, disabled: !mirroring_disabled })
-          );
+          if (control) {
+            control.enable();
+          } else {
+            poolsControl.addControl(
+              poolName,
+              new UntypedFormControl({ value: false, disabled: false })
+            );
+          }
         }
       });
     });
@@ -117,18 +124,16 @@ export class BootstrapCreateModalComponent
           ++checkedCount;
         }
       });
-
+      this.generateBtnDisable = poolsControl.status == 'DISABLED';
       if (checkedCount > 0) {
         return null;
       }
-
       return { requirePool: true };
     };
   }
 
   generate() {
     this.createBootstrapForm.get('token').setValue('');
-
     let bootstrapPoolName = '';
     const poolNames: string[] = [];
     const poolsControl = this.createBootstrapForm.get('pools') as UntypedFormGroup;
