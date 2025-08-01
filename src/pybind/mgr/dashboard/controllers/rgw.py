@@ -628,7 +628,7 @@ class RgwBucket(RgwRESTController):
             self._set_policy(bucket_name, bucket_policy, daemon_name, uid)
         if canned_acl:
             self._set_acl(bucket_name, canned_acl, uid, daemon_name)
-        if replication:
+        if replication is not None:
             self._set_replication(bucket_name, replication, uid, daemon_name)
         if lifecycle and not lifecycle == '{}':
             self._set_lifecycle(bucket_name, lifecycle, daemon_name, uid)
