@@ -80,7 +80,7 @@
             [invalid]="storageClassForm.showError('placement_target', formDir, 'required')"
             [invalidText]="placementError"
           >
-            <option [value]=""
+            <option [value]="''"
                     i18n>--Select--</option>
             <option
               *ngFor="let placementTarget of placementTargets"
@@ -346,7 +346,7 @@
               [helperText]="helpTextLabels.restoreStorageClassText"
               i18n-label
             >
-              <option value=""
+              <option [value]="''"
                       i18n>-- Select the glacier restore storage class --</option>
               <option [ngValue]="standard"
                       i18n>Standard</option>
@@ -424,7 +424,8 @@
           </div>
         </div>
       </div>
-      } @if( isTierMatch( TIER_TYPE.CLOUD_TIER, TIER_TYPE.GLACIER )){
+      }
+      @if( isTierMatch( TIER_TYPE.CLOUD_TIER, TIER_TYPE.GLACIER )){
       <fieldset>
         <div>
           <ng-template #title>
@@ -474,6 +475,89 @@
                     </cds-text-label>
                   </div>
                 </div>
+                <!-- ACLs -->
+                    <div>
+        <legend class="cd-header"
+                i18n>ACLs Mapping</legend>
+        <ng-container formArrayName="acls"
+                      *ngFor="let acl of acls.controls; index as i">
+          <ng-container [formGroupName]="i">
+            <div class="form-item form-item-append"
+                     cdsRow>
+                  <div cdsCol>
+                    <cds-text-label
+                      labelInputID="dest_id"
+                      i18n
+                      [helperText]="helpTextLabels.multipartSyncThresholdText"
+                      cdOptionalField="Destination Id"
+                      >Destination Id
+                      <input
+                        cdsText
+                        type="text"
+                        id="dest_id"
+                        formControlName="dest_id"
+                      />
+                    </cds-text-label>
+                  </div>
+                  <div cdsCol>
+                    <cds-text-label
+                      labelInputID="source_id"
+                      i18n
+                      [helperText]="helpTextLabels.multipartMinPartText"
+                      cdOptionalField="Source Id"
+                      >Source Id
+                      <input
+                        cdsText
+                        type="text"
+                        id="source_id"
+                        formControlName="source_id"
+                      />
+                    </cds-text-label>
+                  </div>
+                </div>
+            <div cdsRow
+                 class="form-item form-item-append">
+              <div cdsCol
+                   [columnNumbers]="{lg: 7}">
+                <cds-select id="type"
+                            name="type"
+                            formControlName="type"
+                            label="Type">
+                  <option [value]=""
+                    i18n>--Select--</option>
+                  <option *ngFor="let type of typeOptions"
+                          [value]="type.value"
+                          i18n>{{type.label }}</option>
+
+                </cds-select>
+              </div>
+              <div cdsCol
+                   [columnNumbers]="{lg: 1}"
+                   class="item-action-btn">
+                <cds-icon-button kind="danger"
+                                 size="sm"
+                                 (click)="removeAcl(i)">
+                  <svg cdsIcon="trash-can"
+                       size="32"
+                       class="cds--btn__icon"></svg>
+                </cds-icon-button>
+              </div>
+            </div>
+          </ng-container>
+        </ng-container>
+         <div class="form-item">
+          <button cdsButton="tertiary"
+                  type="button"
+                  (click)="addAcl()"
+                  i18n>
+            Add ACL
+            <svg cdsIcon="add"
+                 size="32"
+                 class="cds--btn__icon"
+                 icon></svg>
+          </button>
+        </div>
+        </div>
               </cds-accordion-item>
             </cds-accordion>
           </fieldset>

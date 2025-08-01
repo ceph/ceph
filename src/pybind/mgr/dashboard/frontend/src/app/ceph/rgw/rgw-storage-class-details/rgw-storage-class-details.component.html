@@ -234,6 +234,11 @@
             <td>{{ selection?.multipart_sync_threshold | dimlessBinary }}</td>
           </tr>
         }
+          <tr>
+                <td i18n
+                    class="bold w-25">ACLS</td>
+                <td><pre>{{ selection.acl_mappings | json}}</pre></td>
+          </tr>
         </tbody>
       </table>
     </cds-tab>
