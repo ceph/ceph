@@ -52,15 +52,17 @@ struct SnapRealmInfoNew {
   SnapRealmInfo info;
   utime_t last_modified;
   uint64_t change_attr;
+  bool is_snapdir_visible;
 
   SnapRealmInfoNew() {
   }
 
-  SnapRealmInfoNew(const SnapRealmInfo &info_, utime_t last_modified_, uint64_t change_attr_) {
+  SnapRealmInfoNew(const SnapRealmInfo &info_, utime_t last_modified_, uint64_t change_attr_, bool is_snapdir_visible_) {
     // FIPS zeroization audit 20191115: this memset is not security related.
     info = info_;
     last_modified = last_modified_;
     change_attr = change_attr_;
+    is_snapdir_visible = is_snapdir_visible_;
   }
 
   inodeno_t ino() const { return inodeno_t(info.h.ino); }
