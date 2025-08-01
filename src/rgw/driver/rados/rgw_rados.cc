@@ -3087,6 +3087,7 @@ int RGWRados::swift_versioning_copy(RGWObjectCtx& obj_ctx,
                NULL, /* string *petag */
                NULL, /* void (*progress_cb)(off_t, void *) */
                NULL, /* void *progress_data */
+               nullptr, /* rgw::sal::ObjectFilter *read_filter */
                dpp,
                y,
                no_trace);
@@ -3187,6 +3188,7 @@ int RGWRados::swift_versioning_restore(RGWObjectCtx& obj_ctx,
                        nullptr,       /* string *petag */
                        nullptr,       /* void (*progress_cb)(off_t, void *) */
                        nullptr,       /* void *progress_data */
+                       nullptr,       /* rgw::sal::ObjectFilter *read_filter */
                        dpp,
                        y,
                        no_trace);
@@ -3369,7 +3371,7 @@ int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_si
     op.setxattr(RGW_ATTR_SOURCE_ZONE, bl);
   }
 
-  if (!storage_class.empty()) {
+  if (!storage_class.empty() && storage_class != RGW_STORAGE_CLASS_STANDARD) {
     bufferlist bl;
     bl.append(storage_class);
     op.setxattr(RGW_ATTR_STORAGE_CLASS, bl);
@@ -3898,7 +3900,7 @@ int RGWRados::rewrite_obj(RGWBucketInfo& dest_bucket_info, const rgw_obj& obj, c
   return copy_obj_data(octx, owner, dest_bucket_info,
                        dest_bucket_info.placement_rule,
                        read_op, obj_size - 1, obj, NULL, mtime,
-                       attrset, 0, real_time(), NULL, dpp, y);
+                       attrset, 0, real_time(), NULL, nullptr, dpp, y);
 }
 
 
@@ -4927,6 +4929,7 @@ int RGWRados::copy_obj(RGWObjectCtx& src_obj_ctx,
                string *petag,
                void (*progress_cb)(off_t, void *),
                void *progress_data,
+               rgw::sal::ObjectFilter *read_filter,
                const DoutPrefixProvider *dpp,
                optional_yield y,
                jspan_context& trace)
@@ -4990,16 +4993,10 @@ int RGWRados::copy_obj(RGWObjectCtx& src_obj_ctx,
   if (ret < 0) {
     return ret;
   }
-  if (src_attrs.count(RGW_ATTR_CRYPT_MODE)) {
-    // Current implementation does not follow S3 spec and even
-    // may result in data corruption silently when copying
-    // multipart objects across pools. So reject COPY operations
-    //on encrypted objects before it is fully functional.
-    ldpp_dout(dpp, 0) << "ERROR: copy op for encrypted object " << src_obj
-                  << " has not been implemented." << dendl;
-    return -ERR_NOT_IMPLEMENTED;
-  }
 
+  if (read_filter) {
+    read_filter->set_src_attrs(src_attrs);
+  }
   src_attrs[RGW_ATTR_ACL] = attrs[RGW_ATTR_ACL];
   src_attrs.erase(RGW_ATTR_DELETE_AT);
 
@@ -5086,6 +5083,10 @@ int RGWRados::copy_obj(RGWObjectCtx& src_obj_ctx,
     (*src_rule != dest_placement) ||
     (src_pool != dest_pool);
 
+  if (!copy_data && read_filter && read_filter->need_copy_data()) {
+    copy_data = true;
+  }
+
   bool copy_first = false;
   if (amanifest) {
     if (!amanifest->has_tail()) {
@@ -5113,7 +5114,8 @@ int RGWRados::copy_obj(RGWObjectCtx& src_obj_ctx,
   if (copy_data) { /* refcounting tail wouldn't work here, just copy the data */
     attrs.erase(RGW_ATTR_TAIL_TAG);
     return copy_obj_data(dest_obj_ctx, owner, dest_bucket_info, dest_placement, read_op, obj_size - 1, dest_obj,
-                         mtime, real_time(), attrs, olh_epoch, delete_at, petag, dpp, y);
+                         mtime, real_time(), attrs, olh_epoch, delete_at,
+                         petag, read_filter, dpp, y);
   }
 
   /* This has been in for 2 years, so we can safely assume amanifest is not NULL */
@@ -5281,6 +5283,7 @@ int RGWRados::copy_obj_data(RGWObjectCtx& obj_ctx,
                uint64_t olh_epoch,
 	       real_time delete_at,
                string *petag,
+               rgw::sal::ObjectFilter *read_filter,
                const DoutPrefixProvider *dpp,
                optional_yield y,
                bool log_op)
@@ -5291,10 +5294,26 @@ int RGWRados::copy_obj_data(RGWObjectCtx& obj_ctx,
   auto aio = rgw::make_throttle(cct->_conf->rgw_put_obj_min_window_size, y);
   using namespace rgw::putobj;
   jspan_context no_trace{false, false};
-  AtomicObjectProcessor processor(aio.get(), this, dest_bucket_info,
-                                  &dest_placement, owner,
-                                  obj_ctx, dest_obj, olh_epoch, tag, dpp, y, no_trace);
-  int ret = processor.prepare(y);
+  struct PostPipe : public rgw::sal::DataProcessor {
+    const DoutPrefixProvider *dpp;	// in case of debugging
+    rgw::sal::DataProcessor *next;
+    explicit PostPipe(const DoutPrefixProvider *_dpp) : dpp(_dpp), next(nullptr) {} 
+    int process(bufferlist && data, uint64_t off) override {
+        auto ret = next->process(std::move(data), off);
+	return ret;
+    }
+  } pproc { dpp };
+  rgw::sal::DataProcessor &processor { read_filter ? read_filter->get_filter(pproc, y)
+    : static_cast< rgw::sal::DataProcessor&>(pproc)};
+  AtomicObjectProcessor aoproc(aio.get(), this, dest_bucket_info,
+                               &dest_placement, owner,
+                               obj_ctx, dest_obj, olh_epoch, tag, dpp, y, no_trace);
+  pproc.next = read_filter ? read_filter->get_output(aoproc, obj_ctx, dest_placement, y)
+    : static_cast< rgw::sal::DataProcessor* >(&aoproc);
+  if (!pproc.next) {
+    return read_filter->get_error();
+  }
+  int ret = aoproc.prepare(y);
   if (ret < 0)
     return ret;
 
@@ -5322,6 +5341,13 @@ int RGWRados::copy_obj_data(RGWObjectCtx& obj_ctx,
   if (ret < 0) {
     return ret;
   }
+  if (read_filter) {
+    ret = read_filter->set_compression_attribute();
+    if (ret < 0) {
+      ldpp_dout(dpp, 0) << "ERROR: failed to set compression attributes" << dendl;
+      return ret;
+    }
+  }
 
   string etag;
   auto iter = attrs.find(RGW_ATTR_ETAG);
@@ -5347,10 +5373,39 @@ int RGWRados::copy_obj_data(RGWObjectCtx& obj_ctx,
   }
 
   const req_context rctx{dpp, y, nullptr};
-  return processor.complete(accounted_size, etag, mtime, set_mtime, attrs,
+  return aoproc.complete(accounted_size, etag, mtime, set_mtime, attrs,
 			    rgw::cksum::no_cksum, delete_at,
                             nullptr, nullptr, nullptr, nullptr, nullptr, rctx,
                             log_op ? rgw::sal::FLAG_LOG_OP : 0);
+}
+
+int fixup_manifest_to_parts_len(const DoutPrefixProvider *dpp, std::map<std::string, ceph::buffer::list> &src_attrs) {
+  auto iter = src_attrs.find(RGW_ATTR_MANIFEST);
+  if (iter == src_attrs.end()) {
+    return 0;
+  }
+  bufferlist &manifest_bl { iter->second };
+//        manifest_bl = std::copy(iter->second);
+//        src_attrs.erase(iter);
+
+  // if the source object was encrypted, preserve the part lengths from
+  // the original object's manifest in RGW_ATTR_CRYPT_PARTS. if the object
+  // already replicated and has the RGW_ATTR_CRYPT_PARTS attr, preserve it
+  if (src_attrs.count(RGW_ATTR_CRYPT_MODE) &&
+      !src_attrs.count(RGW_ATTR_CRYPT_PARTS)) {
+    std::vector<size_t> parts_len;
+    int r = RGWGetObj_BlockDecrypt::read_manifest_parts(dpp, manifest_bl,
+							parts_len);
+    if (r < 0) {
+      ldpp_dout(dpp, 4) << "failed to read part lengths from the manifest" << dendl;
+      return r;
+    }
+    // store the encoded part lenghts in RGW_ATTR_CRYPT_PARTS
+    bufferlist parts_bl;
+    encode(parts_len, parts_bl);
+    src_attrs[RGW_ATTR_CRYPT_PARTS] = std::move(parts_bl);
+  }
+  return 0;
 }
 
 int RGWRados::transition_obj(RGWObjectCtx& obj_ctx,
@@ -5376,6 +5431,10 @@ int RGWRados::transition_obj(RGWObjectCtx& obj_ctx,
   read_op.params.obj_size = &obj_size;
 
   int ret = read_op.prepare(y, dpp);
+  if (ret < 0) {
+    return ret;
+  }
+  ret = fixup_manifest_to_parts_len(dpp, attrs);
   if (ret < 0) {
     return ret;
   }
@@ -5412,6 +5471,7 @@ int RGWRados::transition_obj(RGWObjectCtx& obj_ctx,
                       olh_epoch,
                       real_time(),
                       nullptr /* petag */,
+                      nullptr,
                       dpp,
                       y,
                       log_op);
