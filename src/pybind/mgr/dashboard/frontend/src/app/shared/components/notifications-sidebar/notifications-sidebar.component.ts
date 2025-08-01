@@ -3,7 +3,6 @@ import {
   ChangeDetectorRef,
   Component,
   HostBinding,
-  NgZone,
   OnDestroy,
   OnInit
 } from '@angular/core';
@@ -11,7 +10,7 @@ import {
 import { Mutex } from 'async-mutex';
 import _ from 'lodash';
 import moment from 'moment';
-import { Subscription } from 'rxjs';
+import { interval, Subscription } from 'rxjs';
 
 import { PrometheusService } from '~/app/shared/api/prometheus.service';
 import { SucceededActionLabelsI18n } from '~/app/shared/constants/app.constants';
@@ -31,6 +30,8 @@ import { PrometheusNotificationService } from '~/app/shared/services/prometheus-
 import { SummaryService } from '~/app/shared/services/summary.service';
 import { TaskMessageService } from '~/app/shared/services/task-message.service';
 
+const POLLING_INTERVAL = 5000; // milliseconds
+
 @Component({
   selector: 'cd-notifications-sidebar',
   templateUrl: './notifications-sidebar.component.html',
@@ -41,12 +42,12 @@ export class NotificationsSidebarComponent implements OnInit, OnDestroy {
   @HostBinding('class.active') isSidebarOpened = false;
 
   notifications: CdNotification[];
-  private interval: number;
   private timeout: number;
 
   executingTasks: ExecutingTask[] = [];
 
   private subs = new Subscription();
+  pollingSubscription: Subscription;
 
   icons = Icons;
 
@@ -67,14 +68,13 @@ export class NotificationsSidebarComponent implements OnInit, OnDestroy {
     private authStorageService: AuthStorageService,
     private prometheusAlertService: PrometheusAlertService,
     private prometheusService: PrometheusService,
-    private ngZone: NgZone,
     private cdRef: ChangeDetectorRef
   ) {
     this.notifications = [];
   }
 
   ngOnDestroy() {
-    window.clearInterval(this.interval);
+    this.stopPolling();
     window.clearTimeout(this.timeout);
     this.subs.unsubscribe();
   }
@@ -83,15 +83,8 @@ export class NotificationsSidebarComponent implements OnInit, OnDestroy {
     this.last_task = window.localStorage.getItem('last_task');
 
     const permissions = this.authStorageService.getPermissions();
-    if (permissions.prometheus.read && permissions.configOpt.read) {
-      this.triggerPrometheusAlerts();
-      this.ngZone.runOutsideAngular(() => {
-        this.interval = window.setInterval(() => {
-          this.ngZone.run(() => {
-            this.triggerPrometheusAlerts();
-          });
-        }, 5000);
-      });
+    if (this.isSidebarOpened && permissions.prometheus.read && permissions.configOpt.read) {
+      this.startPolling();
     }
 
     this.subs.add(
@@ -105,8 +98,10 @@ export class NotificationsSidebarComponent implements OnInit, OnDestroy {
       this.notificationService.sidebarSubject.subscribe((forceClose) => {
         if (forceClose) {
           this.isSidebarOpened = false;
+          this.stopPolling();
         } else {
           this.isSidebarOpened = !this.isSidebarOpened;
+          this.isSidebarOpened ? this.startPolling() : this.stopPolling();
         }
 
         window.clearTimeout(this.timeout);
@@ -146,6 +141,20 @@ export class NotificationsSidebarComponent implements OnInit, OnDestroy {
     );
   }
 
+  startPolling() {
+    this.triggerPrometheusAlerts();
+    this.pollingSubscription = interval(POLLING_INTERVAL).subscribe(() => {
+      this.triggerPrometheusAlerts();
+    });
+  }
+
+  stopPolling() {
+    if (this.pollingSubscription) {
+      this.pollingSubscription.unsubscribe();
+      this.pollingSubscription = undefined;
+    }
+  }
+
   _handleTasks(executingTasks: ExecutingTask[]) {
     for (const executingTask of executingTasks) {
       executingTask.description = this.taskMessageService.getRunningTitle(executingTask);
@@ -154,7 +163,7 @@ export class NotificationsSidebarComponent implements OnInit, OnDestroy {
   }
 
   private triggerPrometheusAlerts() {
-    this.prometheusAlertService.refresh(true);
+    this.prometheusAlertService.getAlerts(true);
     this.prometheusNotificationService.refresh();
   }
 
@@ -168,6 +177,7 @@ export class NotificationsSidebarComponent implements OnInit, OnDestroy {
 
   closeSidebar() {
     this.isSidebarOpened = false;
+    this.stopPolling();
   }
 
   trackByFn(index: number) {
