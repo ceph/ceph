@@ -325,6 +325,12 @@ export class TaskMessageService {
     'rgw/bucket/delete': this.newTaskMessage(this.commonOperations.delete, (metadata) => {
       return $localize`${metadata.bucket_names[0]}`;
     }),
+    'rgw/bucket/notification/delete': this.newTaskMessage(
+      this.commonOperations.delete,
+      (metadata) => {
+        return $localize`${metadata.notification_id[0]}`;
+      }
+    ),
     'rgw/accounts': this.newTaskMessage(this.commonOperations.delete, (metadata) => {
       return $localize`${`account '${metadata.account_names[0]}'`}`;
     }),
@@ -620,6 +626,9 @@ export class TaskMessageService {
 
   topic(metadata: any) {
     return $localize`Topic  '${metadata.name}'`;
+  }
+  notification(metadata: any) {
+    return $localize`Notification  '${metadata.name}'`;
   }
   service(metadata: any) {
     return $localize`service '${metadata.service_name}'`;

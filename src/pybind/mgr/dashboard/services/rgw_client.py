@@ -2,6 +2,7 @@
 # pylint: disable=C0302
 # pylint: disable=too-many-branches
 # pylint: disable=too-many-lines
+
 import ipaddress
 import json
 import logging
@@ -14,11 +15,12 @@ from collections import defaultdict
 from enum import Enum
 from subprocess import SubprocessError
 from urllib.parse import urlparse, urlunparse
+from xml.sax.saxutils import escape
 
 import requests
 
 try:
-    import xmltodict
+    import xmltodict  # type: ignore
 except ModuleNotFoundError:
     logging.error("Module 'xmltodict' is not installed.")
 
@@ -770,25 +772,53 @@ class RgwClient(RestClient):
             except json.JSONDecodeError:
                 raise DashboardException('Could not load json string')
 
+        def process_event(value):
+            events = value if isinstance(value, list) else [value]
+            return ''.join(f'<Event>{escape(str(event))}</Event>\n' for event in events)
+
+        def process_filter(value):
+            xml = '<Filter>\n'
+            for filter_key in ['S3Key', 'S3Metadata', 'S3Tags']:
+                rules = value.get(filter_key, {}).get('FilterRules', [])
+                if rules:
+                    xml += f'<{filter_key}>\n'
+                    for rule in rules:
+                        xml += (
+                            '<FilterRule>\n'
+                            f'<Name>{escape(str(rule["Name"]))}</Name>\n'
+                            f'<Value>{escape(str(rule["Value"]))}</Value>\n'
+                            '</FilterRule>\n'
+                        )
+                    xml += f'</{filter_key}>\n'
+            xml += '</Filter>\n'
+            return xml
+
         def transform(data):
-            xml: str = ''
+            xml = ''
             if isinstance(data, dict):
                 for key, value in data.items():
+                    if key == 'Event':
+                        xml += process_event(value)
+                        continue
+                    if key == 'Filter':
+                        xml += process_filter(value)
+                        continue
+
+                    tag = 'Rule' if key == 'Rules' else key
+
                     if isinstance(value, list):
                         for item in value:
-                            if key == 'Rules':
-                                key = 'Rule'
-                            xml += f'<{key}>\n{transform(item)}</{key}>\n'
+                            xml += f'<{tag}>\n{transform(item)}</{tag}>\n'
                     elif isinstance(value, dict):
-                        xml += f'<{key}>\n{transform(value)}</{key}>\n'
+                        xml += f'<{tag}>\n{transform(value)}</{tag}>\n'
                     else:
-                        xml += f'<{key}>{str(value)}</{key}>\n'
+                        xml += f'<{tag}>{escape(str(value))}</{tag}>\n'
 
             elif isinstance(data, list):
                 for item in data:
                     xml += transform(item)
             else:
-                xml += f'{data}'
+                xml += escape(str(data))
 
             return xml
 
@@ -1179,6 +1209,74 @@ class RgwClient(RestClient):
                 )
         try:
             result = request(params=params)
+        except RequestException as e:
+            raise DashboardException(msg=str(e), component='rgw')
+        return result
+
+    @RestClient.api_put('/{bucket_name}?notification')
+    def set_notification(self, bucket_name, notification, request=None):
+        # pylint: disable=unused-argument
+
+        notification = notification.strip()
+
+        if notification.startswith('{'):
+            notification = self.dict_to_xml(notification)
+
+        if not notification.startswith('<NotificationConfiguration'):
+            notification = (
+                f'<NotificationConfiguration>{notification}</NotificationConfiguration>'
+            )
+
+        try:
+            result = request(data=notification)  # type: ignore
+        except RequestException as e:
+            raise DashboardException(msg=str(e), component='rgw')
+
+        return result
+
+    @RestClient.api_get('/{bucket_name}?notification')
+    def get_notification(self, bucket_name, request=None):
+        # pylint: disable=unused-argument
+        try:
+            result = request(
+                raw_content=True,
+                headers={'Accept': 'text/xml'}
+            ).decode()  # type: ignore
+        except RequestException as e:
+            raise DashboardException(msg=str(e), component='rgw')
+
+        notification_config_dict = xmltodict.parse(result)
+        notification_configuration = notification_config_dict.get(
+            'NotificationConfiguration'
+        ) or {}
+        topic_configuration = notification_configuration.get('TopicConfiguration')
+        if not topic_configuration:
+            return []
+
+        if isinstance(topic_configuration, dict):
+            topic_configuration = [topic_configuration]
+
+        def normalize_filter_rules(filter_dict):
+            if not isinstance(filter_dict, dict):
+                return
+            for key in ['S3Key', 'S3Metadata', 'S3Tags']:
+                if key in filter_dict:
+                    rules = filter_dict[key].get('FilterRule')
+                    if rules and isinstance(rules, dict):
+                        filter_dict[key]['FilterRule'] = [rules]
+
+        for topic in topic_configuration:
+            topic_filter = topic.get('Filter')
+            if topic_filter:
+                normalize_filter_rules(topic_filter)
+
+        return topic_configuration
+
+    @RestClient.api_delete('/{bucket_name}?notification={notification_id}')
+    def delete_notification(self, bucket_name, notification_id, request=None):
+        # pylint: disable=unused-argument
+        try:
+            result = request()
         except RequestException as e:
             raise DashboardException(msg=str(e), component='rgw')
         return result
