@@ -242,6 +242,12 @@ def admin(args, cluster='noname', **kwargs):
     cmd = [test_path + 'test-rgw-call.sh', 'call_rgw_admin', cluster] + args
     return bash(cmd, **kwargs)
 
+def ceph_admin(args, cluster='noname', **kwargs):
+    """ ceph command """
+    cmd = [test_path + 'test-rgw-call.sh', 'call_ceph', cluster] + args
+    print(' '.join(cmd))
+    return bash(cmd, **kwargs)
+
 def delete_all_topics(conn, tenant, cluster):
     """ delete all topics """
     if tenant == '':
@@ -257,3 +263,7 @@ def delete_all_topics(conn, tenant, cluster):
             rm_result = admin(['topic', 'rm', '--tenant', tenant, '--topic', topic['name']], cluster)
             print(rm_result)
 
+def set_rgw_config_option(client, option, value, cluster='noname'):
+    """ change a config option """
+    print(f'Setting {option} to {value} for {client} in cluster {cluster}')
+    return ceph_admin(['config', 'set', client, option, str(value)], cluster)
