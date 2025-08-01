@@ -38,7 +38,8 @@ from .api import PSTopicS3, \
     delete_all_objects, \
     delete_all_topics, \
     put_object_tagging, \
-    admin
+    admin, \
+    change_rgw_config_option
 
 from nose import SkipTest
 from nose.tools import assert_not_equal, assert_equal, assert_in, assert_not_in, assert_true
@@ -5929,3 +5930,25 @@ def test_topic_migration_to_an_account():
             get_config_cluster(),
         )
         admin(["account", "rm", "--account-id", account_id], get_config_cluster())
+
+def test_persistent_notification_shard_config_change(conn): 
+    """ test persistent notification shard config change """
+    """ test to check if notifications work when config value for determining num_shards is changed..."""
+    default_config_value = 11
+    config_values = [0, 1, 3, 97, 111]
+    for config_value in config_values:
+        change_rgw_config_option(get_config_port(), 'rgw_bucket_persistent_notif_num_shards', config_value)
+        if conn == 'http':
+            test_notification_push_http()
+        elif conn == 'kafka':
+            test_notification_push_kafka()
+    ## changing to default value for other tests
+    change_rgw_config_option(get_config_port(), 'rgw_bucket_persistent_notif_num_shards', default_config_value)
+
+@attr('http_test')
+def test_persistent_notification_shard_config_change_http(): 
+    test_persistent_notification_shard_config_change('http')
+
+@attr('kafka_test')
+def test_persistent_notification_shard_config_change_kafka(): 
+    test_persistent_notification_shard_config_change('kafka')
