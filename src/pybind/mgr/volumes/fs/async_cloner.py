@@ -107,13 +107,31 @@ def sync_attrs(fs_handle, target_path, source_statx):
         log.warning("error synchronizing attrs for {0} ({1})".format(target_path, e))
         raise e
 
-def bulk_copy(fs_handle, source_path, dst_path, should_cancel):
+def bulk_copy(fs_handle, source_path, dst_path, should_cancel, uid, gid):
     """
     bulk copy data from source to destination -- only directories, symlinks
     and regular files are synced.
     """
     log.info("copying data from {0} to {1}".format(source_path, dst_path))
-    def cptree(src_root_path, dst_root_path):
+
+    def apply_uid_gid(d_full_dst, uid, gid):
+        if uid == -1 and gid == -1:
+            return
+
+        if uid == -1:
+            # XXX: Unlike libcephfs, cephfs.pyx chown() can't implicitly convert
+            # -1 to an unsigned value and assign it to uid_t variable.
+            # Therefore, it needs to be converted here explicitly.
+            uid = -1 & ((1 << 32) - 1)
+        if gid == -1:
+            # XXX: Unlike libcephfs, cephfs.pyx chown() can't implicitly convert
+            # -1 to an unsigned value and assign it to uid_t variable.
+            # Therefore, it needs to be converted here explicitly.
+            gid = -1 & ((1 << 32) - 1)
+
+        fs_handle.chown(d_full_dst, uid, gid, follow_symlink=False)
+
+    def cptree(src_root_path, dst_root_path, uid, gid):
         log.debug("cptree: {0} -> {1}".format(src_root_path, dst_root_path))
         try:
             with fs_handle.opendir(src_root_path) as dir_handle:
@@ -139,7 +157,7 @@ def bulk_copy(fs_handle, source_path, dst_path, should_cancel):
                             except cephfs.Error as e:
                                 if not e.args[0] == errno.EEXIST:
                                     raise
-                            cptree(d_full_src, d_full_dst)
+                            cptree(d_full_src, d_full_dst, uid, gid)
                         elif stat.S_ISLNK(stx["mode"]):
                             log.debug("cptree: (SYMLINK) {0}".format(d_full_src))
                             try:
@@ -153,8 +171,11 @@ def bulk_copy(fs_handle, source_path, dst_path, should_cancel):
                         else:
                             handled = False
                             log.warning("cptree: (IGNORE) {0}".format(d_full_src))
+
                         if handled:
                             sync_attrs(fs_handle, d_full_dst, stx)
+                            apply_uid_gid(d_full_dst, uid, gid)
+
                     d = fs_handle.readdir(dir_handle)
                 stx_root = fs_handle.statx(src_root_path, cephfs.CEPH_STATX_ATIME |
                                                           cephfs.CEPH_STATX_MTIME,
@@ -164,7 +185,8 @@ def bulk_copy(fs_handle, source_path, dst_path, should_cancel):
         except cephfs.Error as e:
             if not e.args[0] == errno.ENOENT:
                 raise VolumeException(-e.args[0], e.args[1])
-    cptree(source_path, dst_path)
+
+    cptree(source_path, dst_path, uid, gid)
     if should_cancel():
         raise VolumeException(-errno.EINTR, "user interrupted clone operation")
 
@@ -222,9 +244,14 @@ def do_clone(fs_client, volspec, volname, groupname, subvolname, should_cancel):
                 (subvol0, subvol1, subvol2):
             src_path = subvol1.snapshot_data_path(subvol2)
             dst_path = subvol0.path
+
+            # if user has passed UID/GID to clone command, it will be in the
+            # meta file, fetch and apply it.
+            uid, gid = subvol0.get_uid_gid()
+
             # XXX: this is where cloning (of subvolume's snapshots) actually
             # happens.
-            bulk_copy(fs_handle, src_path, dst_path, should_cancel)
+            bulk_copy(fs_handle, src_path, dst_path, should_cancel, uid, gid)
             set_quota_on_clone(fs_handle, (subvol0, subvol1, subvol2))
 
 def update_clone_failure_status(fs_client, volspec, volname, groupname, subvolname, ve):
