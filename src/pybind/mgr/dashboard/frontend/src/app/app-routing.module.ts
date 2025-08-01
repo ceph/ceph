@@ -557,7 +557,7 @@ const routes: Routes = [
             canActivate: [NoSsoGuardService],
             data: { breadcrumbs: ActionLabels.EDIT }
           }
-        ]
+      ]
       }
     ]
   },

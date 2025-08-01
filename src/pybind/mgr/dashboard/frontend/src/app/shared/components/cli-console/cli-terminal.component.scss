@@ -1,0 +1,159 @@
+.cli-terminal-backdrop {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.75);
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  
+  .cli-terminal-modal {
+    background: #161616;
+    border-radius: 0.5rem;
+    width: 80vw;
+    max-height: 80vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 0 10px rgba(255, 255, 255, 0.1);
+  }
+  
+  .cli-terminal-header {
+    background: #262626;
+    color: white;
+    padding: 0.75rem 1rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  
+  .btn-close {
+    background: transparent;
+    border: none;
+    font-size: 1.25rem;
+    color: #fff;
+    cursor: pointer;
+  }
+.cli-terminal-container {
+    background: #161616;
+    color: #f4f4f4;
+    padding: 1rem;
+    border-radius: 0.5rem;
+    height: 80vh;
+    display: flex;
+    flex-direction: column;
+    font-family: monospace;
+    overflow: hidden;
+    /* Autocomplete suggestions dropdown */
+    .autocomplete-suggestions {
+      margin-left: 20px;
+      width: 85%;
+      background-color: #333;
+      border: 1px solid #555;
+      border-radius: 4px;
+      max-height: 150px;
+      overflow-y: auto;
+      z-index: 10;
+
+      ul {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+      }
+
+      li {
+        padding: 10px;
+        color: #fff;
+        cursor: pointer;
+        font-family: "IBM Plex Mono", monospace;
+        font-size: 14px;
+      }
+
+      li:hover {
+        background-color: #444;
+      }
+    }
+  }
+  
+  .cli-terminal-input-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    margin-bottom: 1rem;
+  }
+  
+  .cli-terminal-prompt {
+    color: #42be65;
+    font-weight: bold;
+  }
+  
+  .cli-terminal-input {
+    flex: 1;
+    background: transparent;
+    border: 1px solid #525252;
+    padding: 0.5rem;
+    color: #fff;
+  }
+  
+  .cli-terminal-input:focus {
+    outline: none;
+    border-color: #78a9ff;
+  }
+  
+  .cli-terminal-watch {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    color: #f4f4f4;
+  }
+  
+  .cli-terminal-output {
+    flex: 1;
+    overflow-y: auto;
+    padding: 0.5rem;
+    border: 1px solid #393939;
+    background-color: #0e0e0e;
+    border-radius: 0.25rem;
+  }
+  
+  .cli-terminal-cmd {
+    color: #42be65;
+    margin-bottom: 0.25rem;
+  }
+  
+  pre {
+    white-space: pre-wrap;
+    word-break: break-word;
+    margin: 0;
+  }
+  
+  pre.error {
+    color: #fa4d56;
+  }
+  
+  .btn {
+    padding: 0.4rem 0.75rem;
+    border-radius: 4px;
+    font-size: 0.875rem;
+    cursor: pointer;
+    border: none;
+    transition: background-color 0.2s;
+  }
+  
+  .btn-primary {
+    background-color: #0f62fe;
+    color: white;
+  }
+  
+  .btn-outline {
+    background: transparent;
+    color: #f4f4f4;
+    border: 1px solid #8d8d8d;
+  }
+
+  
