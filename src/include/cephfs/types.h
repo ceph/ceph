@@ -12,38 +12,31 @@
  */
 #ifndef CEPH_CEPHFS_TYPES_H
 #define CEPH_CEPHFS_TYPES_H
-#include "include/int_types.h"
 
-#include <ostream>
-#include <set>
+#include <algorithm> // for std::find_if()
+#include <cstdint>
+#include <list>
 #include <map>
+#include <ostream>
+#include <string>
 #include <string_view>
+#include <vector>
 
-#include "common/config.h"
-#include "common/Clock.h"
-#include "common/DecayCounter.h"
-#include "common/StackStringStream.h"
-#include "common/entity_name.h"
-
-#include "include/compat.h"
-#include "include/Context.h"
-#include "include/frag.h"
-#include "include/xlist.h"
-#include "include/interval_set.h"
 #include "include/compact_set.h"
+#include "include/encoding.h"
 #include "include/fs_types.h"
 #include "include/ceph_fs.h"
+#include "include/types.h" // for version_t
+#include "include/utime.h"
 
-#include "mds/inode_backtrace.h"
-
-#include <boost/spirit/include/qi.hpp>
-#include <boost/pool/pool.hpp>
 #include "include/ceph_assert.h"
 #include <boost/serialization/strong_typedef.hpp>
-#include "common/ceph_json.h"
 
 #define CEPH_FS_ONDISK_MAGIC "ceph fs volume v011"
 #define MAX_MDS                   0x100
+
+namespace ceph { class Formatter; }
+class JSONObj;
 
 BOOST_STRONG_TYPEDEF(uint64_t, mds_gid_t)
 extern const mds_gid_t MDS_GID_NONE;
@@ -218,10 +211,7 @@ struct vinodeno_t {
     decode(ino, p);
     decode(snapid, p);
   }
-  void dump(ceph::Formatter *f) const {
-    f->dump_unsigned("ino", ino);
-    f->dump_unsigned("snapid", snapid);
-  }
+  void dump(ceph::Formatter *f) const;
   static void generate_test_instances(std::list<vinodeno_t*>& ls) {
     ls.push_back(new vinodeno_t);
     ls.push_back(new vinodeno_t(1, 2));
@@ -305,11 +295,7 @@ public:
     return casesensitive;
   }
 
-  void dump(ceph::Formatter* f) const {
-    f->dump_bool("casesensitive", casesensitive);
-    f->dump_string("normalization", normalization);
-    f->dump_string("encoding", encoding);
-  }
+  void dump(ceph::Formatter* f) const;
 
   constexpr std::string_view get_default_normalization() const {
     return DEFAULT_NORMALIZATION;
@@ -487,9 +473,7 @@ public:
   void print(std::ostream& os) const {
     os << "unknown_md_t(len=" << payload.size() << ")";
   }
-  void dump(ceph::Formatter* f) const {
-    f->dump_bool("length", payload.size());
-  }
+  void dump(ceph::Formatter* f) const;
 
 private:
   std::vector<uint8_t,Allocator<uint8_t>> payload;
@@ -564,12 +548,7 @@ struct optmetadata_singleton {
     std::visit([&os](auto& o) { o.print(os); }, optmetadata);
     os << ")";
   }
-  void dump(ceph::Formatter* f) const {
-    f->dump_int("kind", u64kind);
-    f->open_object_section("metadata");
-    std::visit([f](auto& o) { o.dump(f); }, optmetadata);
-    f->close_section();
-  }
+  void dump(ceph::Formatter* f) const;
 
   void encode(ceph::buffer::list& bl, uint64_t features) const {
     // no versioning, use optmetadata
@@ -615,14 +594,7 @@ struct optmetadata_multiton {
   void print(std::ostream& os) const {
     os << "optm(len=" << opts.size() << " " << opts << ")";
   }
-  void dump(ceph::Formatter* f) const {
-    f->dump_bool("length", opts.size());
-    f->open_array_section("opts");
-      for (auto& opt : opts) {
-        f->dump_object("opt", opt);
-      }
-    f->close_section();
-  }
+  void dump(ceph::Formatter* f) const;
 
   bool has_opt(optkind_t kind) const {
     auto f = [kind](auto& o) {
@@ -1157,152 +1129,6 @@ void inode_t<Allocator>::decode(ceph::buffer::list::const_iterator &p)
 }
 
 template<template<typename> class Allocator>
-void inode_t<Allocator>::dump(ceph::Formatter *f) const
-{
-  f->dump_unsigned("ino", ino);
-  f->dump_unsigned("rdev", rdev);
-  f->dump_stream("ctime") << ctime;
-  f->dump_stream("btime") << btime;
-  f->dump_unsigned("mode", mode);
-  f->dump_unsigned("uid", uid);
-  f->dump_unsigned("gid", gid);
-  f->dump_unsigned("nlink", nlink);
-
-  f->open_object_section("dir_layout");
-  ::dump(dir_layout, f);
-  f->close_section();
-
-  f->dump_object("layout", layout);
-
-  f->open_array_section("old_pools");
-  for (const auto &p : old_pools) {
-    f->dump_int("pool", p);
-  }
-  f->close_section();
-
-  f->dump_unsigned("size", size);
-  f->dump_unsigned("truncate_seq", truncate_seq);
-  f->dump_unsigned("truncate_size", truncate_size);
-  f->dump_unsigned("truncate_from", truncate_from);
-  f->dump_unsigned("truncate_pending", truncate_pending);
-  f->dump_stream("mtime") << mtime;
-  f->dump_stream("atime") << atime;
-  f->dump_unsigned("time_warp_seq", time_warp_seq);
-  f->dump_unsigned("change_attr", change_attr);
-  f->dump_int("export_pin", export_pin);
-  f->dump_float("export_ephemeral_random_pin", export_ephemeral_random_pin);
-  f->dump_bool("export_ephemeral_distributed_pin", get_ephemeral_distributed_pin());
-  f->dump_bool("quiesce_block", get_quiesce_block());
-
-  f->open_array_section("client_ranges");
-  for (const auto &p : client_ranges) {
-    f->open_object_section("client");
-    f->dump_unsigned("client", p.first.v);
-    p.second.dump(f);
-    f->close_section();
-  }
-  f->close_section();
-
-  f->open_object_section("dirstat");
-  dirstat.dump(f);
-  f->close_section();
-
-  f->open_object_section("rstat");
-  rstat.dump(f);
-  f->close_section();
-
-  f->open_object_section("accounted_rstat");
-  accounted_rstat.dump(f);
-  f->close_section();
-
-  f->dump_unsigned("version", version);
-  f->dump_unsigned("file_data_version", file_data_version);
-  f->dump_unsigned("xattr_version", xattr_version);
-  f->dump_unsigned("backtrace_version", backtrace_version);
-  f->dump_unsigned("inline_data_version", inline_data.version);
-  f->dump_unsigned("inline_data_length", inline_data.length());
-
-  f->dump_string("stray_prior_path", stray_prior_path);
-  f->dump_unsigned("max_size_ever", max_size_ever);
-
-  f->open_object_section("quota");
-  quota.dump(f);
-  f->close_section();
-
-  f->dump_object("optmetadata", optmetadata);
-
-  f->dump_stream("last_scrub_stamp") << last_scrub_stamp;
-  f->dump_unsigned("last_scrub_version", last_scrub_version);
-  f->dump_unsigned("remote_ino", remote_ino);
-  f->open_array_section("referent_inodes");
-  for (const auto &ri : referent_inodes) {
-    f->dump_unsigned("referent_inode", ri);
-  }
-  f->close_section();
-}
-
-template<template<typename> class Allocator>
-void inode_t<Allocator>::client_ranges_cb(typename inode_t<Allocator>::client_range_map& c, JSONObj *obj){
-
-  int64_t client;
-  JSONDecoder::decode_json("client", client, obj, true);
-  client_writeable_range_t client_range_tmp;
-  JSONDecoder::decode_json("byte range", client_range_tmp.range, obj, true);
-  JSONDecoder::decode_json("follows", client_range_tmp.follows.val, obj, true);
-  c[client] = client_range_tmp;
-}
-
-template<template<typename> class Allocator>
-void inode_t<Allocator>::old_pools_cb(compact_set<int64_t, std::less<int64_t>, Allocator<int64_t> >& c, JSONObj *obj){
-
-  int64_t tmp;
-  decode_json_obj(tmp, obj);
-  c.insert(tmp);
-}
-
-template<template<typename> class Allocator>
-void inode_t<Allocator>::decode_json(JSONObj *obj)
-{
-
-  JSONDecoder::decode_json("ino", ino.val, obj, true);
-  JSONDecoder::decode_json("rdev", rdev, obj, true);
-  //JSONDecoder::decode_json("ctime", ctime, obj, true);
-  //JSONDecoder::decode_json("btime", btime, obj, true);
-  JSONDecoder::decode_json("mode", mode, obj, true);
-  JSONDecoder::decode_json("uid", uid, obj, true);
-  JSONDecoder::decode_json("gid", gid, obj, true);
-  JSONDecoder::decode_json("nlink", nlink, obj, true);
-  JSONDecoder::decode_json("dir_layout", dir_layout, obj, true);
-  JSONDecoder::decode_json("layout", layout, obj, true);
-  JSONDecoder::decode_json("old_pools", old_pools, inode_t<Allocator>::old_pools_cb, obj, true);
-  JSONDecoder::decode_json("size", size, obj, true);
-  JSONDecoder::decode_json("truncate_seq", truncate_seq, obj, true);
-  JSONDecoder::decode_json("truncate_size", truncate_size, obj, true);
-  JSONDecoder::decode_json("truncate_from", truncate_from, obj, true);
-  JSONDecoder::decode_json("truncate_pending", truncate_pending, obj, true);
-  //JSONDecoder::decode_json("mtime", mtime, obj, true);
-  //JSONDecoder::decode_json("atime", atime, obj, true);
-  JSONDecoder::decode_json("time_warp_seq", time_warp_seq, obj, true);
-  JSONDecoder::decode_json("change_attr", change_attr, obj, true);
-  JSONDecoder::decode_json("export_pin", export_pin, obj, true);
-  JSONDecoder::decode_json("client_ranges", client_ranges, inode_t<Allocator>::client_ranges_cb, obj, true);
-  JSONDecoder::decode_json("dirstat", dirstat, obj, true);
-  JSONDecoder::decode_json("rstat", rstat, obj, true);
-  JSONDecoder::decode_json("accounted_rstat", accounted_rstat, obj, true);
-  JSONDecoder::decode_json("version", version, obj, true);
-  JSONDecoder::decode_json("file_data_version", file_data_version, obj, true);
-  JSONDecoder::decode_json("xattr_version", xattr_version, obj, true);
-  JSONDecoder::decode_json("backtrace_version", backtrace_version, obj, true);
-  JSONDecoder::decode_json("stray_prior_path", stray_prior_path, obj, true);
-  JSONDecoder::decode_json("max_size_ever", max_size_ever, obj, true);
-  JSONDecoder::decode_json("quota", quota, obj, true);
-  JSONDecoder::decode_json("last_scrub_stamp", last_scrub_stamp, obj, true);
-  JSONDecoder::decode_json("last_scrub_version", last_scrub_version, obj, true);
-  JSONDecoder::decode_json("remote_ino", remote_ino.val, obj, true);
-  JSONDecoder::decode_json("referent_inodes", referent_inodes, obj, true);
-}
-
-template<template<typename> class Allocator>
 void inode_t<Allocator>::generate_test_instances(std::list<inode_t*>& ls)
 {
   ls.push_back(new inode_t<Allocator>);
@@ -1391,25 +1217,5 @@ inline void decode(inode_t<Allocator> &c, ::ceph::buffer::list::const_iterator &
 {
   c.decode(p);
 }
-
-// parse a map of keys/values.
-namespace qi = boost::spirit::qi;
-
-template <typename Iterator>
-struct keys_and_values
-  : qi::grammar<Iterator, std::map<std::string, std::string>()>
-{
-    keys_and_values()
-      : keys_and_values::base_type(query)
-    {
-      query =  pair >> *(qi::lit(' ') >> pair);
-      pair  =  key >> '=' >> value;
-      key   =  qi::char_("a-zA-Z_") >> *qi::char_("a-zA-Z_0-9");
-      value = +qi::char_("a-zA-Z0-9-_.");
-    }
-  qi::rule<Iterator, std::map<std::string, std::string>()> query;
-  qi::rule<Iterator, std::pair<std::string, std::string>()> pair;
-  qi::rule<Iterator, std::string()> key, value;
-};
 
 #endif
