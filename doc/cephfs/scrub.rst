@@ -150,6 +150,8 @@ These above named MDS damages can be repaired by using the following command::
 If scrub is able to repair the damage, the corresponding entry is automatically
 removed from the damage table.
 
+Note: Scrub with repair flag can idetify the hard link damage but can not repair it.
+
 
 Evaluate strays using recursive scrub
 =====================================
