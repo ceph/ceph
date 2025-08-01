@@ -45,10 +45,18 @@
                i18n>No Limit</ng-template>
 </ng-template>
 
-<ng-template #accountTmpl
+<ng-template #usernameTpl
              let-row="data.row">
-  <cds-tooltip [description]="row.account?.name ? (row.type === 'root' ? 'Account root user' :'') : ''"
-               [align]="'top'"
-               i18n-description
-               i18n>{{row.account?.name}}</cds-tooltip>
+  <div cdsRow>
+    <span i18n>{{ row.uid }}</span>
+    @if (row.type === 'root') {
+    <cds-tooltip [description]="'Account root user'"
+                 [align]="'top'"
+                 i18n-description>
+      <svg [cdsIcon]="icons.userAccessLocked"
+           [size]="icons.size16"
+           class="account-root-icon"></svg>
+    </cds-tooltip>
+    }
+  </div>
 </ng-template>
