@@ -99,7 +99,7 @@ std::ostream &operator<<(std::ostream &out, const laddr_t &laddr) {
 }
 
 std::ostream &operator<<(std::ostream &out, const laddr_offset_t &laddr_offset) {
-  return out << laddr_offset.get_aligned_laddr()
+  return out << laddr_offset.get_laddr()
 	     << "+0x" << std::hex << laddr_offset.get_offset() << std::dec;
 }
 

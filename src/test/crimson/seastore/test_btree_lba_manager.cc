@@ -602,10 +602,10 @@ struct btree_lba_manager_test : btree_test_base {
 	  t,
 	  target->first
 	).si_then([this, &t, target](auto result) {
-	  EXPECT_EQ(result.refcount, target->second.refcount);
-	  if (result.refcount == 0) {
+	  EXPECT_EQ(result.result.refcount, target->second.refcount);
+	  if (result.result.refcount == 0) {
 	    return cache->retire_extent_addr(
-	      t, result.addr.get_paddr(), result.length);
+	      t, result.result.addr.get_paddr(), result.result.length);
 	  }
 	  return Cache::retire_extent_iertr::now();
 	});
