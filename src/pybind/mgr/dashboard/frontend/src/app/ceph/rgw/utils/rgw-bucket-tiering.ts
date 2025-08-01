@@ -45,6 +45,7 @@ export class BucketTieringUtils {
       allow_read_through: val.allow_read_through,
       restore_storage_class: val.restore_storage_class,
       read_through_restore_days: val.read_through_restore_days,
+      acls: val.s3.acl_mappings,
       ...val.s3
     };
 

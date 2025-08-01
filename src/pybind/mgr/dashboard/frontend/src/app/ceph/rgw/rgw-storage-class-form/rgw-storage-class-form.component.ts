@@ -1,5 +1,11 @@
-import { Component, OnInit } from '@angular/core';
-import { AbstractControl, FormControl, Validators } from '@angular/forms';
+import { ChangeDetectorRef, Component, OnInit } from '@angular/core';
+import {
+  AbstractControl,
+  FormArray,
+  FormControl,
+  ValidationErrors,
+  Validators
+} from '@angular/forms';
 import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
 import { CdForm } from '~/app/shared/forms/cd-form';
 import { CdFormBuilder } from '~/app/shared/forms/cd-form-builder';
@@ -8,6 +14,7 @@ import _ from 'lodash';
 import { ActivatedRoute, Router } from '@angular/router';
 import { RgwStorageClassService } from '~/app/shared/api/rgw-storage-class.service';
 import { RgwZonegroupService } from '~/app/shared/api/rgw-zonegroup.service';
+
 import {
   ALLOW_READ_THROUGH_TEXT,
   DEFAULT_PLACEMENT,
@@ -37,19 +44,30 @@ import {
   RESTORE_STORAGE_CLASS_TEXT,
   TIER_TYPE_DISPLAY,
   S3Glacier,
-  StorageClassOption,
+  TypeOption,
   STORAGE_CLASS_CONSTANTS,
   STANDARD_TIER_TYPE_TEXT,
   EXPEDITED_TIER_TYPE_TEXT,
   TextLabels,
   CLOUD_TIER_REQUIRED_FIELDS,
   GLACIER_REQUIRED_FIELDS,
-  GLACIER_TARGET_STORAGE_CLASS
+  GLACIER_TARGET_STORAGE_CLASS,
+  AclHelperText,
+  AclTypeLabel,
+  AclFieldType,
+  TierConfigRm,
+  ACL,
+  AclTypeOptions,
+  AclTypeConst,
+  ACLVal,
+  AclLabel,
+  AclType
 } from '../models/rgw-storage-class.model';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { CdValidators } from '~/app/shared/forms/cd-validators';
 import { FormatterService } from '~/app/shared/services/formatter.service';
+import validator from 'validator';
 
 @Component({
   selector: 'cd-rgw-storage-class-form',
@@ -74,9 +92,17 @@ export class RgwStorageClassFormComponent extends CdForm implements OnInit {
   allowReadThrough: boolean = false;
   TIER_TYPE = TIER_TYPE;
   TIER_TYPE_DISPLAY = TIER_TYPE_DISPLAY;
-  storageClassOptions: StorageClassOption[];
+  storageClassOptions: TypeOption[];
   helpTextLabels: TextLabels;
-
+  typeOptions: TypeOption[];
+  aclTypeLabel = AclTypeLabel;
+  aclHelperText = AclHelperText;
+  aclList: ACL[] = [];
+  removedAclSourceIds: string[] = [];
+  urlValidator = (control: AbstractControl): ValidationErrors | null => {
+    const value = control.value;
+    return !value || validator.isURL(value) ? null : { invalidUrl: true };
+  };
   constructor(
     public actionLabels: ActionLabelsI18n,
     private formBuilder: CdFormBuilder,
@@ -85,7 +111,8 @@ export class RgwStorageClassFormComponent extends CdForm implements OnInit {
     private rgwZoneGroupService: RgwZonegroupService,
     private router: Router,
     private route: ActivatedRoute,
-    public formatter: FormatterService
+    public formatter: FormatterService,
+    private cdRef: ChangeDetectorRef
   ) {
     super();
     this.resource = $localize`Tiering Storage Class`;
@@ -117,6 +144,7 @@ export class RgwStorageClassFormComponent extends CdForm implements OnInit {
       { value: TIER_TYPE.CLOUD_TIER, label: TIER_TYPE_DISPLAY.CLOUD_TIER },
       { value: TIER_TYPE.GLACIER, label: TIER_TYPE_DISPLAY.GLACIER }
     ];
+    this.typeOptions = [...AclTypeOptions];
     this.createForm();
     this.storageClassTypeText();
     this.updateTierTypeHelpText();
@@ -134,6 +162,7 @@ export class RgwStorageClassFormComponent extends CdForm implements OnInit {
             this.storageClassInfo.storage_class
           );
           let response = this.tierTargetInfo?.val?.s3;
+          const aclMappings = this.tierTargetInfo?.val?.s3?.acl_mappings || [];
           this.storageClassForm.get('zonegroup').disable();
           this.storageClassForm.get('placement_target').disable();
           this.storageClassForm.get('storage_class').disable();
@@ -143,6 +172,7 @@ export class RgwStorageClassFormComponent extends CdForm implements OnInit {
           ) {
             this.storageClassForm.get('storageClassType').disable();
           }
+          this.aclList = this.tierTargetInfo?.val?.s3?.acl_mappings || [];
           this.storageClassForm.patchValue({
             zonegroup: this.storageClassInfo?.zonegroup_name,
             region: response?.region,
@@ -158,8 +188,23 @@ export class RgwStorageClassFormComponent extends CdForm implements OnInit {
             multipart_min_part_size: response?.multipart_min_part_size || '',
             allow_read_through: this.tierTargetInfo?.val?.allow_read_through || false,
             restore_storage_class: this.tierTargetInfo?.val?.restore_storage_class,
-            read_through_restore_days: this.tierTargetInfo?.val?.read_through_restore_days
+            read_through_restore_days: this.tierTargetInfo?.val?.read_through_restore_days,
+            acl_mappings: this.tierTargetInfo?.val?.s3?.acl_mappings || []
           });
+          this.acls?.clear();
+          if (aclMappings.length > 0) {
+            aclMappings.forEach((acl) => {
+              this.acls?.push(
+                this.formBuilder.group({
+                  source_id: [acl.val?.source_id || ''],
+                  dest_id: [acl.val?.dest_id || ''],
+                  type: [acl.val?.type || AclTypeConst.ID, Validators.required]
+                })
+              );
+            });
+          } else {
+            this.addAcls();
+          }
           if (this.tierTargetInfo?.val?.tier_type == TIER_TYPE.GLACIER) {
             let glacierResponse = this.tierTargetInfo?.val['s3-glacier'];
             this.storageClassForm.patchValue({
@@ -175,6 +220,126 @@ export class RgwStorageClassFormComponent extends CdForm implements OnInit {
     this.storageClassForm.get('allow_read_through').valueChanges.subscribe((value) => {
       this.onAllowReadThroughChange(value);
     });
+  }
+
+  createForm() {
+    const self = this;
+
+    const lockDaysValidator = CdValidators.custom('lockDays', () => {
+      if (!self.storageClassForm || !self.storageClassForm.getRawValue()) {
+        return false;
+      }
+
+      const lockDays = Number(self.storageClassForm.getValue('read_through_restore_days'));
+      return !Number.isInteger(lockDays) || lockDays === 0;
+    });
+    this.storageClassForm = this.formBuilder.group({
+      storage_class: new FormControl('', {
+        validators: [Validators.required]
+      }),
+      zonegroup: new FormControl(this.selectedZoneGroup, {
+        validators: [Validators.required]
+      }),
+      region: new FormControl('', [
+        CdValidators.composeIf({ storageClassType: TIER_TYPE.CLOUD_TIER }, [Validators.required])
+      ]),
+      placement_target: new FormControl('', {
+        validators: [Validators.required]
+      }),
+      access_key: new FormControl(null, [
+        CdValidators.composeIf({ storageClassType: TIER_TYPE.CLOUD_TIER }, [Validators.required])
+      ]),
+      secret_key: new FormControl(null, [
+        CdValidators.composeIf({ storageClassType: TIER_TYPE.CLOUD_TIER }, [Validators.required])
+      ]),
+      target_path: new FormControl('', [
+        CdValidators.composeIf({ storageClassType: TIER_TYPE.CLOUD_TIER }, [Validators.required])
+      ]),
+      retain_head_object: new FormControl(true),
+      glacier_restore_tier_type: new FormControl(STORAGE_CLASS_CONSTANTS.DEFAULT_STORAGE_CLASS, [
+        CdValidators.composeIf({ storageClassType: TIER_TYPE.GLACIER }, [Validators.required])
+      ]),
+      target_endpoint: new FormControl('', [Validators.required, this.urlValidator]),
+      glacier_restore_days: new FormControl(STORAGE_CLASS_CONSTANTS.DEFAULT_GLACIER_RESTORE_DAYS, [
+        CdValidators.composeIf({ storageClassType: TIER_TYPE.GLACIER || TIER_TYPE.CLOUD_TIER }, [
+          CdValidators.number(false),
+          lockDaysValidator
+        ])
+      ]),
+      restore_storage_class: new FormControl(STORAGE_CLASS_CONSTANTS.DEFAULT_STORAGE_CLASS),
+      read_through_restore_days: new FormControl(
+        {
+          value: STORAGE_CLASS_CONSTANTS.DEFAULT_READTHROUGH_RESTORE_DAYS,
+          disabled: true
+        },
+        CdValidators.composeIf(
+          (form: AbstractControl) => {
+            const type = form.get('storageClassType')?.value;
+            return type === TIER_TYPE.GLACIER || type === TIER_TYPE.CLOUD_TIER;
+          },
+          [CdValidators.number(false), lockDaysValidator]
+        )
+      ),
+      multipart_sync_threshold: new FormControl(
+        STORAGE_CLASS_CONSTANTS.DEFAULT_MULTIPART_SYNC_THRESHOLD
+      ),
+      multipart_min_part_size: new FormControl(
+        STORAGE_CLASS_CONSTANTS.DEFAULT_MULTIPART_MIN_PART_SIZE
+      ),
+      allow_read_through: new FormControl(false),
+      storageClassType: new FormControl(TIER_TYPE.LOCAL, Validators.required),
+      acls: new FormArray([this.createAcls()])
+    });
+  }
+
+  public createAcls(): CdFormGroup {
+    const group = this.formBuilder.group({
+      type: new FormControl(AclTypeConst.ID, Validators.required),
+      source_id: new FormControl(''),
+      dest_id: new FormControl('')
+    });
+
+    const sourceId = group.get('source_id');
+    const destId = group.get('dest_id');
+
+    const validators = this.getValidatorsType(AclTypeConst.ID);
+
+    sourceId.setValidators(validators);
+    destId.setValidators(validators);
+
+    sourceId.updateValueAndValidity();
+    destId.updateValueAndValidity();
+
+    group.get('type')?.valueChanges.subscribe((newType: AclType) => {
+      const sourceId = group.get('source_id');
+      const destId = group.get('dest_id');
+
+      const validators = this.getValidatorsType(newType);
+
+      sourceId.setValidators(validators);
+      destId.setValidators(validators);
+
+      sourceId.updateValueAndValidity();
+      destId.updateValueAndValidity();
+    });
+
+    return group;
+  }
+
+  private getValidatorsType(type: AclType) {
+    switch (type) {
+      case AclTypeConst.EMAIL:
+        return [Validators.email];
+      case AclTypeConst.URI:
+        return [this.urlValidator];
+      case AclTypeConst.ID:
+      default:
+        return [Validators.required];
+    }
+  }
+
+  get acls(): FormArray {
+    return this.storageClassForm.get('acls') as FormArray;
   }
 
   private updateValidatorsBasedOnStorageClass(value: string) {
@@ -206,6 +371,40 @@ export class RgwStorageClassFormComponent extends CdForm implements OnInit {
     }
   }
 
+  addAcls() {
+    this.acls.push(this.createAcls());
+  }
+
+  removeAcl(index: number) {
+    if (this.acls.length > 1) {
+      this.acls.removeAt(index);
+    } else {
+      const removedAcl = this.acls.at(0).value;
+
+      if (removedAcl?.source_id) {
+        this.removedAclSourceIds.push(removedAcl.source_id);
+      }
+      const newGroup = this.createAcls();
+      this.acls.setControl(0, newGroup);
+    }
+
+    this.cdRef.detectChanges();
+  }
+
+  getAclLabel(field: AclFieldType, type?: string): string {
+    if (!type) {
+      return field === AclFieldType.Source ? AclLabel.source : AclLabel.destination;
+    }
+    return (
+      this.aclTypeLabel[type]?.[field] ||
+      (field === AclFieldType.Source ? AclLabel.source : AclLabel.destination)
+    );
+  }
+
+  getAclHelperText(type: string, field: AclFieldType): string {
+    return this.aclHelperText[type]?.[field] || '';
+  }
+
   storageClassTypeText() {
     this.storageClassForm?.get('storageClassType')?.valueChanges.subscribe((value) => {
       if (value === TIER_TYPE.LOCAL) {
@@ -225,77 +424,6 @@ export class RgwStorageClassFormComponent extends CdForm implements OnInit {
       } else {
         this.helpTextLabels.tiertypeText = EXPEDITED_TIER_TYPE_TEXT;
       }
-    });
-  }
-
-  createForm() {
-    const self = this;
-
-    const lockDaysValidator = CdValidators.custom('lockDays', () => {
-      if (!self.storageClassForm || !self.storageClassForm.getRawValue()) {
-        return false;
-      }
-
-      const lockDays = Number(self.storageClassForm.getValue('read_through_restore_days'));
-      return !Number.isInteger(lockDays) || lockDays === 0;
-    });
-    this.storageClassForm = this.formBuilder.group({
-      storage_class: new FormControl('', {
-        validators: [Validators.required]
-      }),
-      zonegroup: new FormControl(this.selectedZoneGroup, {
-        validators: [Validators.required]
-      }),
-      region: new FormControl('', [
-        CdValidators.composeIf({ storageClassType: TIER_TYPE.CLOUD_TIER }, [Validators.required])
-      ]),
-      placement_target: new FormControl('', {
-        validators: [Validators.required]
-      }),
-      target_endpoint: new FormControl(null, {
-        validators: [CdValidators.url, Validators.required]
-      }),
-      access_key: new FormControl(null, [
-        CdValidators.composeIf({ storageClassType: TIER_TYPE.CLOUD_TIER }, [Validators.required])
-      ]),
-      secret_key: new FormControl(null, [
-        CdValidators.composeIf({ storageClassType: TIER_TYPE.CLOUD_TIER }, [Validators.required])
-      ]),
-      target_path: new FormControl('', [
-        CdValidators.composeIf({ storageClassType: TIER_TYPE.CLOUD_TIER }, [Validators.required])
-      ]),
-      retain_head_object: new FormControl(true),
-      glacier_restore_tier_type: new FormControl(STORAGE_CLASS_CONSTANTS.DEFAULT_STORAGE_CLASS, [
-        CdValidators.composeIf({ storageClassType: TIER_TYPE.GLACIER }, [Validators.required])
-      ]),
-      glacier_restore_days: new FormControl(STORAGE_CLASS_CONSTANTS.DEFAULT_GLACIER_RESTORE_DAYS, [
-        CdValidators.composeIf({ storageClassType: TIER_TYPE.GLACIER || TIER_TYPE.CLOUD_TIER }, [
-          CdValidators.number(false),
-          lockDaysValidator
-        ])
-      ]),
-      restore_storage_class: new FormControl(STORAGE_CLASS_CONSTANTS.DEFAULT_STORAGE_CLASS),
-      read_through_restore_days: new FormControl(
-        {
-          value: STORAGE_CLASS_CONSTANTS.DEFAULT_READTHROUGH_RESTORE_DAYS,
-          disabled: true
-        },
-        CdValidators.composeIf(
-          (form: AbstractControl) => {
-            const type = form.get('storageClassType')?.value;
-            return type === TIER_TYPE.GLACIER || type === TIER_TYPE.CLOUD_TIER;
-          },
-          [CdValidators.number(false), lockDaysValidator]
-        )
-      ),
-      multipart_sync_threshold: new FormControl(
-        STORAGE_CLASS_CONSTANTS.DEFAULT_MULTIPART_SYNC_THRESHOLD
-      ),
-      multipart_min_part_size: new FormControl(
-        STORAGE_CLASS_CONSTANTS.DEFAULT_MULTIPART_MIN_PART_SIZE
-      ),
-      allow_read_through: new FormControl(false),
-      storageClassType: new FormControl(TIER_TYPE.LOCAL, Validators.required)
     });
   }
 
@@ -426,6 +554,23 @@ export class RgwStorageClassFormComponent extends CdForm implements OnInit {
     const multipart_sync_threshold = this.formatter.toBytes(
       this.storageClassForm.get('multipart_sync_threshold').value
     );
+
+    const removeAclList: ACLVal[] = rawFormValue.acls || [];
+    const tier_config_rm: TierConfigRm = {};
+    this.removedAclSourceIds.forEach((sourceId: string, index: number) => {
+      tier_config_rm[`acls[${index}].source_id`] = sourceId;
+    });
+    if (this.aclList.length > rawFormValue.acls.length) {
+      this.aclList.forEach((acl: ACL, index: number) => {
+        const sourceId = acl?.val?.source_id;
+        const ifExist = removeAclList.find((acl: ACLVal) => acl?.source_id === sourceId);
+
+        if (!ifExist) {
+          tier_config_rm[`acls[${index}].source_id`] = sourceId;
+        }
+      });
+    }
+
     return this.buildPlacementTargets(
       storageClassType,
       zoneGroup,
@@ -434,7 +579,8 @@ export class RgwStorageClassFormComponent extends CdForm implements OnInit {
       retain_head_object,
       rawFormValue,
       multipart_sync_threshold,
-      multipart_min_part_size
+      multipart_min_part_size,
+      tier_config_rm
     );
   }
 
@@ -446,11 +592,13 @@ export class RgwStorageClassFormComponent extends CdForm implements OnInit {
     retain_head_object: boolean,
     rawFormValue: any,
     multipart_sync_threshold: number,
-    multipart_min_part_size: number
+    multipart_min_part_size: number,
+    tier_config_rm: TierConfigRm
   ): RequestModel {
     const baseTarget = {
       placement_id: placementId,
-      storage_class: storageClass
+      storage_class: storageClass,
+      tier_config_rm: tier_config_rm
     };
 
     if (storageClassType === TIER_TYPE.LOCAL) {
@@ -460,6 +608,19 @@ export class RgwStorageClassFormComponent extends CdForm implements OnInit {
       };
     }
 
+    const aclConfig: { [key: string]: string } = {};
+
+    rawFormValue.acls.forEach((acl: ACLVal, index: number) => {
+      const sourceId = acl?.source_id?.trim();
+      if (!sourceId) return;
+
+      const destId = acl?.dest_id?.trim() || '';
+      const type = acl?.type?.trim() || AclTypeConst.ID;
+
+      aclConfig[`acls[${index}].source_id`] = sourceId;
+      aclConfig[`acls[${index}].dest_id`] = destId;
+      aclConfig[`acls[${index}].type`] = type as AclType;
+    });
     const tierConfig = {
       endpoint: rawFormValue.target_endpoint,
       access_key: rawFormValue.access_key,
@@ -468,12 +629,13 @@ export class RgwStorageClassFormComponent extends CdForm implements OnInit {
       retain_head_object,
       allow_read_through: rawFormValue.allow_read_through,
       region: rawFormValue.region,
-      multipart_sync_threshold: multipart_sync_threshold,
-      multipart_min_part_size: multipart_min_part_size,
+      multipart_sync_threshold,
+      multipart_min_part_size,
       restore_storage_class: rawFormValue.restore_storage_class,
       ...(rawFormValue.allow_read_through
         ? { read_through_restore_days: rawFormValue.read_through_restore_days }
-        : {})
+        : {}),
+      ...aclConfig
     };
 
     if (storageClassType === TIER_TYPE.CLOUD_TIER) {
@@ -483,6 +645,7 @@ export class RgwStorageClassFormComponent extends CdForm implements OnInit {
           {
             ...baseTarget,
             tier_type: TIER_TYPE.CLOUD_TIER,
+            tier_config_rm: tier_config_rm,
             tier_config: {
               ...tierConfig
             }
@@ -498,6 +661,7 @@ export class RgwStorageClassFormComponent extends CdForm implements OnInit {
           {
             ...baseTarget,
             tier_type: TIER_TYPE.GLACIER,
+            tier_config_rm: tier_config_rm,
             tier_config: {
               ...tierConfig,
               glacier_restore_days: rawFormValue.glacier_restore_days,
@@ -508,6 +672,8 @@ export class RgwStorageClassFormComponent extends CdForm implements OnInit {
         ]
       };
     }
+
+    this.removedAclSourceIds = [];
     return {
       zone_group: zoneGroup,
       placement_targets: [baseTarget]
