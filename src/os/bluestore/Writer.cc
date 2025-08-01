@@ -1432,10 +1432,23 @@ void BlueStore::Writer::do_write(
   if (ref_end < onode->onode.size) {
     ref_end = std::min<uint32_t>(data_end, onode->onode.size);
   }
-  do_write_with_blobs(location, data_end, ref_end, bd);
+  _do_write_with_blobs(location, data_end, ref_end, bd);
 }
 
 void BlueStore::Writer::do_write_with_blobs(
+  uint32_t location,
+  uint32_t data_end,
+  uint32_t ref_end,
+  blob_vec& bd)
+{
+  _align_to_disk_block(location, data_end, bd);
+  if (ref_end < onode->onode.size) {
+    ref_end = std::min<uint32_t>(data_end, onode->onode.size);
+  }
+  _do_write_with_blobs(location, data_end, ref_end, bd);
+}
+
+void BlueStore::Writer::_do_write_with_blobs(
   uint32_t location,
   uint32_t data_end,
   uint32_t ref_end,
