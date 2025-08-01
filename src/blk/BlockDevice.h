@@ -245,7 +245,7 @@ public:
   bool is_discard_supported() const { return support_discard; }
 
   /// hook to provide utilization of thinly-provisioned device
-  virtual int get_ebd_state(ExtBlkDevState &state) const {
+  virtual int get_ebd_statfs(store_statfs_t &statfs) const {
     return -ENOENT;
   }
 
