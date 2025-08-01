@@ -8466,6 +8466,10 @@ class TestSubvolumeSnapshotClones(TestVolumesHelper):
                                                f'{CLONE_UUID} | ' + "awk '{print $3}'")
         self.assertIn(UID, output)
 
+        output = self.mount_a.get_shell_stdout(f'ls -l {clone_path} | ' +
+                                                "awk '{print $3}'")
+        self.assertIn(f'{UID}\n{UID}\n{UID}', output)
+
     def test_subvolume_snapshot_create_with_gid(self):
         GID = '1234'
         subvol = 'sv1'
@@ -8490,6 +8494,10 @@ class TestSubvolumeSnapshotClones(TestVolumesHelper):
         output = self.mount_a.get_shell_stdout(f'ls -l {CLONE_BASE_PATH} | grep '
                                                f'{CLONE_UUID} | ' + "awk '{print $4}'")
         self.assertIn(GID, output)
+
+        output = self.mount_a.get_shell_stdout(f'ls -l {clone_path} | ' +
+                                                "awk '{print $4}'")
+        self.assertIn(f'{GID}\n{GID}\n{GID}', output)
 
     def test_subvolume_snapshot_create_with_uid_and_gid(self):
         UID = '1234'
@@ -8516,9 +8524,18 @@ class TestSubvolumeSnapshotClones(TestVolumesHelper):
         output = self.mount_a.get_shell_stdout(f'ls -l {CLONE_BASE_PATH} | grep '
                                                f'{CLONE_UUID} | ' + "awk '{print $3}'")
         self.assertIn(UID, output)
+
         output = self.mount_a.get_shell_stdout(f'ls -l {CLONE_BASE_PATH} | grep '
                                                f'{CLONE_UUID} | ' + "awk '{print $4}'")
         self.assertIn(GID, output)
+
+        output = self.mount_a.get_shell_stdout(f'ls -l {clone_path} | ' +
+                                                "awk '{print $3}'")
+        self.assertIn(f'{UID}\n{UID}\n{UID}', output)
+
+        output = self.mount_a.get_shell_stdout(f'ls -l {clone_path} | ' +
+                                                "awk '{print $4}'")
+        self.assertIn(f'{GID}\n{GID}\n{GID}', output)
 
     def test_subvolume_snapshot_clone_with_upgrade(self):
         """
