@@ -1023,7 +1023,7 @@ options:
   desc: Do not store full-object checksums if the backend (bluestore) does its own
     checksums.  Only usable with all BlueStore OSDs.
   default: false
-# Weighted Priority Queue (wpq), mClock Scheduler (mclock_scheduler: default)
+# Weighted Priority Queue (wpq: default), mClock Scheduler (mclock_scheduler)
 # or debug_random. "mclock_scheduler" is based on the mClock/dmClock
 # algorithm (Gulati, et al. 2010). "mclock_scheduler" prioritizes based on
 # the class the operation belongs to. "wpq" dequeues ops based on their
@@ -1045,7 +1045,7 @@ options:
     (``mclock_scheduler``) prioritizes operations based on which class
     they belong to (recovery, scrub, snaptrim, client op, osd subop).
     See `QoS Based on mClock`_. Requires a restart.
-  default: mclock_scheduler
+  default: wpq
   see_also:
   - osd_op_queue_cut_off
   enum_values:
