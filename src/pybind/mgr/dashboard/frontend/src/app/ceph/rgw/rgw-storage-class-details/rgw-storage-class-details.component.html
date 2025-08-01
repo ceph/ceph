@@ -234,6 +234,28 @@
             <td>{{ selection?.multipart_sync_threshold | dimlessBinary }}</td>
           </tr>
         }
+          <tr>
+            <td class="bold w-25"
+                i18n>ACLS</td>
+            <td>
+              <div *ngFor="let item of selection.acl_mappings">
+                <div [cdsStack]="'horizontal'">
+                  <cds-tag size="sm"
+                           class="tags-background-gray">
+                    Type: {{ item.val.type | titlecase}}
+                  </cds-tag>
+                  <cds-tag size="sm"
+                           class="tags-background-gray">
+                    {{ AclTypeLabel[item?.val?.type]?.source }}: {{ item?.val?.source_id }}
+                  </cds-tag>
+                  <cds-tag size="sm"
+                           class="tags-background-gray">
+                    {{ AclTypeLabel[item?.val?.type]?.destination }}: {{ item?.val?.dest_id }}
+                  </cds-tag>
+                </div>
+              </div>
+            </td>
+          </tr>
         </tbody>
       </table>
     </cds-tab>

@@ -17,7 +17,8 @@ import {
   RESTORE_DAYS_TEXT,
   READTHROUGH_RESTORE_DAYS_TEXT,
   RESTORE_STORAGE_CLASS_TEXT,
-  ZONEGROUP_TEXT
+  ZONEGROUP_TEXT,
+  AclTypeLabel
 } from '../models/rgw-storage-class.model';
 @Component({
   selector: 'cd-rgw-storage-class-details',
@@ -45,6 +46,7 @@ export class RgwStorageClassDetailsComponent implements OnChanges {
   readthroughrestoreDaysText = READTHROUGH_RESTORE_DAYS_TEXT;
   restoreStorageClassText = RESTORE_STORAGE_CLASS_TEXT;
   zoneGroupText = ZONEGROUP_TEXT;
+  AclTypeLabel = AclTypeLabel;
 
   ngOnChanges() {
     if (this.selection) {
