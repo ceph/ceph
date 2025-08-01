@@ -33,6 +33,7 @@ extern "C" {
 #include "common/errno.h"
 #include "common/safe_io.h"
 #include "common/fault_injector.h"
+#include "common/keyring.h"
 
 #include "common/async/blocked_completion.h"
 
@@ -78,6 +79,7 @@ extern "C" {
 #include "rgw_account.h"
 #include "rgw_bucket_logging.h"
 #include "rgw_dedup_cluster.h"
+#include "rgw_kms.h"
 #include "services/svc_sync_modules.h"
 #include "services/svc_cls.h"
 #include "services/svc_bilog_rados.h"
@@ -1275,6 +1277,7 @@ public:
     : driver(_s), pool(pool) {}
   ~StoreDestructor() {
     driver->shutdown();
+    rgw_kms_cleanup(g_ceph_context);
     pool->finish();
     DriverManager::close_storage(driver);
     rgw_http_client_cleanup();
@@ -3572,6 +3575,7 @@ int main(int argc, const char **argv)
 
   auto cct = rgw_global_init(&defaults, args, CEPH_ENTITY_TYPE_CLIENT,
 			     CODE_ENVIRONMENT_UTILITY, 0);
+  LinuxKeyringSecret::initialize_process_keyring();
   ceph::async::io_context_pool context_pool(cct->_conf->rgw_thread_pool_size);
 
   // for region -> zonegroup conversion (must happen before common_init_finish())
