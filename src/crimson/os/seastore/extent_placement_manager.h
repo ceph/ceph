@@ -368,7 +368,7 @@ public:
 #else
     if (gen == INLINE_GENERATION) {
 #endif
-      addr = make_record_relative_paddr(0);
+      addr = make_delayed_temp_paddr(0);
     } else {
       assert(category == data_category_t::METADATA);
       addr = get_writer(hint, category, gen)->alloc_paddr(length);
@@ -638,8 +638,12 @@ private:
    * return true indicates inline otherwise ool
    */
   bool dispatch_delayed_extent(CachedExtentRef& extent) {
-    // TODO: all delayed extents are ool currently
-    boost::ignore_unused(extent);
+    // for the segmented main backend, we put lba/backref nodes
+    // in journal
+    if (get_main_backend_type() == backend_type_t::SEGMENTED &&
+        is_lba_backref_node(extent->get_type())) {
+      return true;
+    }
     return false;
   }
 
