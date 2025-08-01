@@ -48,12 +48,22 @@ export interface StorageClassDetails {
   read_through_restore_days?: number;
   restore_storage_class?: string;
   retain_head_object?: boolean;
+  acls?: Acls[];
 }
 
 export interface ZoneGroup {
   name: string;
   id: string;
   placement_targets?: Target[];
+}
+
+export interface Acls {
+  key: string;
+  val: {
+    type: string;
+    source_id: string;
+    dest_id: string;
+  };
 }
 
 export interface S3Details {
@@ -69,6 +79,7 @@ export interface S3Details {
   host_style: boolean;
   retain_head_object?: boolean;
   allow_read_through?: boolean;
+  acl_mappings?: Acls[];
 }
 export interface S3Glacier {
   glacier_restore_days: number;
@@ -98,13 +109,14 @@ export interface PlacementTarget {
     glacier_restore_tier_type?: string;
     restore_storage_class?: string;
     read_through_restore_days?: number;
+    acls?: Acls[];
   };
   storage_class?: string;
   name?: string;
   tier_targets?: TierTarget[];
 }
 
-export interface StorageClassOption {
+export interface TypeOption {
   value: string;
   label: string;
 }
