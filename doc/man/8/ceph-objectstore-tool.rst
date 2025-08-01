@@ -488,4 +488,4 @@ Error Codes
 Availability
 ============
 
-**ceph-objectstore-tool** is part of Ceph, a massively scalable, open-source, distributed storage system. **ceph-objectstore-tool** is provided by the package `ceph-osd`. Refer to the Ceph documentation at http://ceph.com/docs for more information.
+**ceph-objectstore-tool** is part of Ceph, a massively scalable, open-source, distributed storage system. **ceph-objectstore-tool** is provided by the package `ceph-osd`. Refer to the Ceph documentation at https://docs.ceph.com/ for more information.
