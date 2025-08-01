@@ -8957,6 +8957,10 @@ class TestSubvolumeSnapshotClones(TestVolumesHelper):
             output = self.mount_a.get_shell_stdout(f'ls -l {CLONE_BASE_PATH} | grep '
                                                    f'{CLONE_UUID} | ' + "awk '{print $3}'")
             self.assertIn(username, output)
+
+            output = self.mount_a.get_shell_stdout(f'ls -l {clone_path} | ' +
+                                                    "awk '{print $3}'")
+            self.assertIn(f'{username}\n{username}\n{username}', output)
         except:
             raise
         # cleanup
@@ -9001,6 +9005,10 @@ class TestSubvolumeSnapshotClones(TestVolumesHelper):
             output = self.mount_a.get_shell_stdout(f'ls -l {CLONE_BASE_PATH} | grep '
                                                    f'{CLONE_UUID} | ' + "awk '{print $4}'")
             self.assertIn(username, output)
+
+            output = self.mount_a.get_shell_stdout(f'ls -l {clone_path} | ' +
+                                                    "awk '{print $4}'")
+            self.assertIn(f'{username}\n{username}\n{username}', output)
         except:
             raise
         # cleanup
@@ -9049,9 +9057,18 @@ class TestSubvolumeSnapshotClones(TestVolumesHelper):
             output = self.mount_a.get_shell_stdout(f'ls -l {CLONE_BASE_PATH} | grep '
                                                    f'{CLONE_UUID} | ' + "awk '{print $3}'")
             self.assertIn(username, output)
+
             output = self.mount_a.get_shell_stdout(f'ls -l {CLONE_BASE_PATH} | grep '
                                                    f'{CLONE_UUID} | ' + "awk '{print $4}'")
             self.assertIn(username, output)
+
+            output = self.mount_a.get_shell_stdout(f'ls -l {clone_path} | ' +
+                                                    "awk '{print $3}'")
+            self.assertIn(f'{username}\n{username}\n{username}', output)
+
+            output = self.mount_a.get_shell_stdout(f'ls -l {clone_path} | ' +
+                                                    "awk '{print $4}'")
+            self.assertIn(f'{username}\n{username}\n{username}', output)
         except:
             raise
         # cleanup
