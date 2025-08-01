@@ -805,7 +805,7 @@ protected:
 	auto& copy_source = *it;
 	auto end_pos = copy_source->get_size();
 	if (copy_source->is_in_range(me.get_end())) {
-	  end_pos = copy_source->upper_bound(me.get_end()).get_offset();
+	  end_pos = copy_source->lower_bound(me.get_end()).get_offset();
 	}
 	auto local_start_iter = me.iter_idx(local_next_pos);
 	auto foreign_start_iter = copy_source->iter_idx(start_pos);
