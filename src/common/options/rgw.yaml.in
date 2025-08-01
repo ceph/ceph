@@ -709,40 +709,6 @@ options:
   services:
   - rgw
   with_legacy: true
-- name: rgw_keystone_admin_token
-  type: str
-  level: advanced
-  desc: 'DEPRECATED: The admin token (shared secret) that is used for the Keystone
-    requests.'
-  fmt_desc: The Keystone admin token (shared secret). In Ceph RGW
-    authentication with the admin token has priority over
-    authentication with the admin credentials
-    (``rgw_keystone_admin_user``, ``rgw_keystone_admin_password``,
-    ``rgw_keystone_admin_tenant``, ``rgw_keystone_admin_project``,
-    ``rgw_keystone_admin_domain``). The Keystone admin token
-    has been deprecated, but can be used to integrate with
-    older environments.  It is preferred to instead configure
-    ``rgw_keystone_admin_token_path`` to avoid exposing the token.
-  services:
-  - rgw
-  with_legacy: true
-- name: rgw_keystone_admin_token_path
-  type: str
-  level: advanced
-  desc: Path to a file containing the admin token (shared secret) that is used for
-    the Keystone requests.
-  fmt_desc: Path to a file containing the Keystone admin token
-    (shared secret).  In Ceph RadosGW authentication with
-    the admin token has priority over authentication with
-    the admin credentials
-    (``rgw_keystone_admin_user``, ``rgw_keystone_admin_password``,
-    ``rgw_keystone_admin_tenant``, ``rgw_keystone_admin_project``,
-    ``rgw_keystone_admin_domain``).
-    The Keystone admin token has been deprecated, but can be
-    used to integrate with older environments.
-  services:
-  - rgw
-  with_legacy: true
 - name: rgw_keystone_admin_user
   type: str
   level: advanced
