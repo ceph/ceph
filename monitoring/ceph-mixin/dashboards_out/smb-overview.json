@@ -624,6 +624,7 @@
       },
       {
          "datasource": "${datasource}",
+         "description": "",
          "fieldConfig": {
             "defaults": {
                "color": {
@@ -692,6 +693,7 @@
             }
          },
          "pluginVersion": "9.1.3",
+         "seriesOverrides": [ ],
          "targets": [
             {
                "datasource": "${datasource}",
@@ -720,6 +722,7 @@
       },
       {
          "datasource": "${datasource}",
+         "description": "",
          "fieldConfig": {
             "defaults": {
                "color": {
@@ -788,6 +791,7 @@
             }
          },
          "pluginVersion": "9.1.3",
+         "seriesOverrides": [ ],
          "targets": [
             {
                "datasource": "${datasource}",
@@ -805,6 +809,7 @@
       },
       {
          "datasource": "${datasource}",
+         "description": "",
          "fieldConfig": {
             "defaults": {
                "color": {
@@ -873,6 +878,7 @@
             }
          },
          "pluginVersion": "9.1.3",
+         "seriesOverrides": [ ],
          "targets": [
             {
                "datasource": "${datasource}",
