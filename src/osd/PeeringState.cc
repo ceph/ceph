@@ -1615,6 +1615,7 @@ void PeeringState::reject_reservation()
 void PeeringState::calculate_maxles_and_minlua( const map<pg_shard_t, pg_info_t> &infos,
 						epoch_t& max_last_epoch_started,
 						eversion_t& min_last_update_acceptable,
+						bool exclude_nonprimary_shards,
 						bool *history_les_bound) const
 {
   /* See doc/dev/osd_internals/last_epoch_started.rst before attempting
@@ -1622,6 +1623,9 @@ void PeeringState::calculate_maxles_and_minlua( const map<pg_shard_t, pg_info_t>
    * when you find bugs! */
   max_last_epoch_started = 0;
   for (auto i = infos.begin(); i != infos.end(); ++i) {
+    if (exclude_nonprimary_shards &&
+	pool.info.is_nonprimary_shard(shard_id_t(i->first.shard)))
+      continue;
     if (!cct->_conf->osd_find_best_info_ignore_history_les &&
 	max_last_epoch_started < i->second.history.last_epoch_started) {
       if (history_les_bound) {
@@ -1665,6 +1669,7 @@ map<pg_shard_t, pg_info_t>::const_iterator PeeringState::find_best_info(
   calculate_maxles_and_minlua( infos,
 			       max_last_epoch_started,
 			       min_last_update_acceptable,
+			       exclude_nonprimary_shards,
 			       history_les_bound);
 
   if (min_last_update_acceptable == eversion_t::max())
