@@ -140,9 +140,13 @@ public:
       existing_block_stats.dec(ref);
       ref->set_invalid(*this);
       write_set.erase(*ref);
+      assert(fresh_backref_extents > 0);
+      fresh_backref_extents--;
     } else if (ref->is_initial_pending()) {
       ref->set_invalid(*this);
       write_set.erase(*ref);
+      assert(fresh_backref_extents > 0);
+      fresh_backref_extents--;
     } else if (ref->is_mutation_pending()) {
       ref->set_invalid(*this);
       write_set.erase(*ref);
