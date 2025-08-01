@@ -410,27 +410,21 @@ void PeeringState::update_peer_info(const pg_shard_t &from,
       }
     }
     if (updated) {
-      psdout(10) << "pwlc=" << info.partial_writes_last_complete << dendl;
+      // Update last updated epoch
+      info.partial_writes_last_complete_epoch = std::max(
+	    info.partial_writes_last_complete_epoch,
+	    oinfo.partial_writes_last_complete_epoch);
+
+      psdout(10) << "pwlc=e" << info.partial_writes_last_complete_epoch
+		 << ":" << info.partial_writes_last_complete << dendl;
     }
-    // Update last updated epoch
-    info.partial_writes_last_complete_epoch = std::max(
-	 info.partial_writes_last_complete_epoch,
-	 oinfo.partial_writes_last_complete_epoch);
   }
-  // 3 cases:
-  // 1. This is the primary, from is the shard that sent the oinfo which may
-  // have more up to date pwlc. There may be multiple peer_info's for the
-  // shard id that can be updated by applying pwlc
-  // 2. This is a replica/stray - from is the primary (which never has pwlc
-  // information), there is nothing to update
-  // 3. This is a merge - from is pg_whoami, there is nothing to update
-  if ((from != pg_whoami) &&
-      info.partial_writes_last_complete.contains(from.shard)) {
+  // Primary shards might need to apply pwlc to non-primary peer_info's
+  if (is_primary()) {
     for (auto & [shard, peer] : peer_info) {
-      if (shard.shard != from.shard) {
-	continue;
+      if (info.partial_writes_last_complete.contains(shard.shard)) {
+	apply_pwlc(info.partial_writes_last_complete[shard.shard], shard, peer);
       }
-      apply_pwlc(info.partial_writes_last_complete[from.shard], shard, peer);
     }
   }
   // Non-primary shards might need to apply pwlc to update info
