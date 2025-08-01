@@ -51,14 +51,13 @@ as needed`_. You can also `create other CephFS volumes`_.
 
 Finally, to mount CephFS on your client nodes, see `Mount CephFS:
 Prerequisites`_ page. Additionally, a command-line shell utility is available
-for interactive access or scripting via the `cephfs-shell`_.
+for interactive access or scripting via the :ref:`cephfs-shell <cephfs-shell>`.
 
 .. _Orchestrator: ../mgr/orchestrator
 .. _deploy MDS manually as needed: add-remove-mds
 .. _create other CephFS volumes: fs-volumes
 .. _Orchestrator deployment table: ../mgr/orchestrator/#current-implementation-status
 .. _Mount CephFS\: Prerequisites: mount-prerequisites
-.. _cephfs-shell: ../man/8/cephfs-shell
 
 
 .. raw:: html
@@ -72,7 +71,7 @@ Administration
 
    --->
 
-.. toctree:: 
+.. toctree::
    :maxdepth: 1
    :hidden:
 
@@ -106,7 +105,7 @@ Mounting CephFS
 
    --->
 
-.. toctree:: 
+.. toctree::
    :maxdepth: 1
    :hidden:
 
@@ -134,7 +133,7 @@ CephFS Concepts
 
    --->
 
-.. toctree:: 
+.. toctree::
    :maxdepth: 1
    :hidden:
 
@@ -163,7 +162,7 @@ Troubleshooting and Disaster Recovery
 
    --->
 
-.. toctree:: 
+.. toctree::
    :hidden:
 
     Client eviction <eviction>
@@ -187,7 +186,7 @@ Developer Guides
 
    --->
 
-.. toctree:: 
+.. toctree::
    :maxdepth: 1
    :hidden:
 
