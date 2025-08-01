@@ -2503,6 +2503,7 @@ bool PeeringState::choose_acting(pg_shard_t &auth_log_shard_id,
 
   auto auth_log_shard = find_best_info(all_info, restrict_to_up_acting,
 				       false, history_les_bound);
+  auto get_log_shard = auth_log_shard;
 
   if ((repeat_getlog != nullptr) &&
       auth_log_shard != all_info.end() &&
@@ -2516,16 +2517,16 @@ bool PeeringState::choose_acting(pg_shard_t &auth_log_shard_id,
     // has to be rolled backwards
     psdout(10) << "auth_log_shard " << auth_log_shard->first
 	       << " is ahead but is a non_primary shard" << dendl;
-    auth_log_shard = find_best_info(all_info, restrict_to_up_acting,
+    get_log_shard = find_best_info(all_info, restrict_to_up_acting,
 				    true, history_les_bound);
-    if (auth_log_shard != all_info.end()) {
+    if (get_log_shard != all_info.end()) {
       psdout(10) << "auth_log_shard " << auth_log_shard->first
 		 << " selected instead" << dendl;
       *repeat_getlog = true;
     }
   }
 
-  if (auth_log_shard == all_info.end()) {
+  if (get_log_shard == all_info.end()) {
     if (up != acting) {
       psdout(10) << "no suitable info found (incomplete backfills?),"
 		 << " reverting to up" << dendl;
@@ -2540,7 +2541,7 @@ bool PeeringState::choose_acting(pg_shard_t &auth_log_shard_id,
   }
 
   ceph_assert(!auth_log_shard->second.is_incomplete());
-  auth_log_shard_id = auth_log_shard->first;
+  auth_log_shard_id = get_log_shard->first;
 
   set<pg_shard_t> want_backfill, want_acting_backfill;
   vector<int> want;
