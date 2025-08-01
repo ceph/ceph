@@ -7,7 +7,7 @@
 #include <fstream>
 #include <iostream>
 #include <sstream>
-
+#include <regex>
 #include "common/debug.h"
 
 #define dout_context g_ceph_context
@@ -59,4 +59,17 @@ void promethize(std::string &name) {
   boost::replace_all(name, "+", "_plus");
 
   name = "ceph_" + name;
+}
+
+std::vector<std::string> split_string_on_delimeter(std::string s, char delimiter) {
+  std::vector<std::string> tokens;
+  size_t start = 0, end;
+
+  while ((end = s.find(delimiter, start)) != std::string::npos) {
+      tokens.push_back(s.substr(start, end - start));
+      start = end + 1;
+  }
+  tokens.push_back(s.substr(start));  // Last token
+
+  return tokens;
 }
