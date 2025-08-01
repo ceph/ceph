@@ -2052,6 +2052,7 @@ void Objecter::maybe_request_map()
 
 void Objecter::_maybe_request_map()
 {
+  last_osdmap_request_time = ceph::coarse_mono_clock::now();
   // rwlock is locked
   int flag = 0;
   if (_osdmap_full_flag()
@@ -2238,8 +2239,20 @@ void Objecter::tick()
     if (found)
       toping.insert(s);
   }
+
   if (num_homeless_ops || !toping.empty()) {
     _maybe_request_map();
+  } else if (last_osdmap_request_time != ceph::coarse_mono_clock::time_point()) {
+    auto now = ceph::coarse_mono_clock::now();
+    auto elapsed = now - last_osdmap_request_time;
+    auto stale_window = ceph::make_timespan(cct->_conf->objecter_tick_interval) * 2;
+    if (elapsed > stale_window) {
+      double elapsed_s = std::chrono::duration<double>(elapsed).count();
+      double thresh_s  = std::chrono::duration<double>(stale_window).count();
+      ldout(cct, 10) << __func__ << ": osdmap stale: " << elapsed_s 
+        << "s > " << thresh_s << "s, maybe requesting map" << dendl;
+      _maybe_request_map();
+    }
   }
 
   logger->set(l_osdc_op_laggy, laggy_ops);
