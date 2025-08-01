@@ -512,27 +512,8 @@ int shard_extent_map_t::_encode(const ErasureCodeInterfaceRef &ec_impl) {
 /* Encode parity chunks, using the encode_chunks interface into the
  * erasure coding. This generates all parity using full stripe writes.
  */
-int shard_extent_map_t::encode(const ErasureCodeInterfaceRef &ec_impl,
-                               const HashInfoRef &hinfo,
-                               uint64_t before_ro_size) {
-  int r = _encode(ec_impl);
-
-  if (!r && hinfo && ro_start >= before_ro_size) {
-    /* NEEDS REVIEW:  The following calculates the new hinfo CRCs. This is
-     *                 currently considering ALL the buffers, including the
-     *                 parity buffers.  Is this really right?
-     *                 Also, does this really belong here? Its convenient
-     *                 because have just built the buffer list...
-     */
-    shard_id_set full_set;
-    full_set.insert_range(shard_id_t(0), sinfo->get_k_plus_m());
-    for (auto iter = begin_slice_iterator(full_set); !iter.is_end(); ++iter) {
-      ceph_assert(ro_start == before_ro_size);
-      hinfo->append(iter.get_offset(), iter.get_in_bufferptrs());
-    }
-  }
-
-  return r;
+int shard_extent_map_t::encode(const ErasureCodeInterfaceRef &ec_impl) {
+  return _encode(ec_impl);
 }
 
 /* Encode parity chunks, using the parity delta write interfaces on plugins
@@ -1089,57 +1070,8 @@ void shard_extent_set_t::insert(const shard_extent_set_t &other) {
 }
 }
 
-void ECUtil::HashInfo::append(uint64_t old_size,
-                              shard_id_map<bufferptr> &to_append) {
-  ceph_assert(old_size == total_chunk_size);
-  uint64_t size_to_append = to_append.begin()->second.length();
-  if (has_chunk_hash()) {
-    ceph_assert(to_append.size() == cumulative_shard_hashes.size());
-    for (auto &&[shard, ptr] : to_append) {
-      ceph_assert(size_to_append == ptr.length());
-      ceph_assert(shard < static_cast<int>(cumulative_shard_hashes.size()));
-      cumulative_shard_hashes[int(shard)] =
-          ceph_crc32c(cumulative_shard_hashes[int(shard)],
-                      (unsigned char*)ptr.c_str(), ptr.length());
-    }
-  }
-  total_chunk_size += size_to_append;
-}
-
-void ECUtil::HashInfo::encode(bufferlist &bl) const {
-  ENCODE_START(1, 1, bl);
-  encode(total_chunk_size, bl);
-  encode(cumulative_shard_hashes, bl);
-  ENCODE_FINISH(bl);
-}
-
-void ECUtil::HashInfo::decode(bufferlist::const_iterator &bl) {
-  DECODE_START(1, bl);
-  decode(total_chunk_size, bl);
-  decode(cumulative_shard_hashes, bl);
-  DECODE_FINISH(bl);
-}
-
-void ECUtil::HashInfo::dump(Formatter *f) const {
-  f->dump_unsigned("total_chunk_size", total_chunk_size);
-  f->open_array_section("cumulative_shard_hashes");
-  for (unsigned i = 0; i != cumulative_shard_hashes.size(); ++i) {
-    f->open_object_section("hash");
-    f->dump_unsigned("shard", i);
-    f->dump_unsigned("hash", cumulative_shard_hashes[i]);
-    f->close_section();
-  }
-  f->close_section();
-}
 
 namespace ECUtil {
-std::ostream &operator<<(std::ostream &out, const HashInfo &hi) {
-  ostringstream hashes;
-  for (auto hash : hi.cumulative_shard_hashes) {
-    hashes << " " << hex << hash;
-  }
-  return out << "tcs=" << hi.total_chunk_size << hashes.str();
-}
 
 std::ostream &operator<<(std::ostream &out, const shard_extent_map_t &rhs) {
   // sinfo not thought to be needed for debug, as it is constant.
@@ -1172,34 +1104,16 @@ std::ostream &operator<<(std::ostream &out, const log_entry_t &rhs) {
   }
   return out << "[" << rhs.shard << "]->" << rhs.io << "\n";
 }
-}
 
-void ECUtil::HashInfo::generate_test_instances(list<HashInfo*> &o) {
-  o.push_back(new HashInfo(3));
-  {
-    bufferlist bl;
-    bl.append_zero(20);
-
-    bufferptr bp = bl.begin().get_current_ptr();
-
-    // We don't have the k+m here, but this is not critical performance, so
-    // create an oversized map.
-    shard_id_map<bufferptr> buffers(128);
-    buffers[shard_id_t(0)] = bp;
-    buffers[shard_id_t(1)] = bp;
-    buffers[shard_id_t(2)] = bp;
-    o.back()->append(0, buffers);
-    o.back()->append(20, buffers);
-  }
-  o.push_back(new HashInfo(4));
-}
-
+// Upgraded pools can still have keys, so there are a few functions that still
+// require these keys.
 const string HINFO_KEY = "hinfo_key";
 
-bool ECUtil::is_hinfo_key_string(const string &key) {
+bool is_hinfo_key_string(const string &key) {
   return key == HINFO_KEY;
 }
 
-const string &ECUtil::get_hinfo_key() {
+const string &get_hinfo_key() {
   return HINFO_KEY;
+}
 }
