@@ -213,6 +213,10 @@ ECTransaction::WritePlanObj::WritePlanObj(
 
         if (pdw_write_mode != 0) {
           do_parity_delta_write = (pdw_write_mode == 2);
+        } else if (pdw_read_shards.size() >= sinfo.get_k()) {
+          // Even if recovery required for a convention RMW, PDW is not more
+          // efficient.
+          do_parity_delta_write = false;
         } else if (!shard_id_set::difference(pdw_read_shards, readable_shards).empty()) {
           // Some kind of reconstruct would be needed for PDW, so don't bother.
           do_parity_delta_write = false;
