@@ -4549,8 +4549,16 @@ bool PeeringState::append_log_entries_update_missing(
 
   psdout(20) << "trim_to bool = " << bool(trim_to)
 	     << " trim_to = " << (trim_to ? *trim_to : eversion_t()) << dendl;
-  if (trim_to)
-    pg_log.trim(*trim_to, info);
+  if (trim_to) {
+    eversion_t trim = *trim_to;
+    if (pool.info.allows_ecoptimizations() &&
+	(trim > pg_log.get_can_rollback_to())) {
+      // An exceptionally long sequence of partial writes followed by a full
+      // write can result in trim_to being ahead of crt
+      trim = pg_log.get_can_rollback_to();
+    }
+    pg_log.trim(trim, info);
+  }
   dirty_info = true;
   write_if_dirty(t);
   return invalidate_stats;
@@ -4722,6 +4730,12 @@ void PeeringState::append_log(
   if (!transaction_applied || async)
     psdout(10) << pg_whoami
 	       << " is async_recovery or backfill target" << dendl;
+  if (pool.info.allows_ecoptimizations() &&
+      (trim_to > pg_log.get_can_rollback_to())) {
+    // An exceptionally long sequence of partial writes followed by a full
+    // write can result in trim_to being ahead of crt
+    trim_to = pg_log.get_can_rollback_to();
+  }
   pg_log.trim(trim_to, info, transaction_applied, async);
 
   // update the local pg, pg log
@@ -7004,6 +7018,13 @@ boost::statechart::result PeeringState::ReplicaActive::react(const MTrim& trim)
 {
   DECLARE_LOCALS;
   // primary is instructing us to trim
+  eversion_t trim_to = trim.trim_to;
+  if (ps->pool.info.allows_ecoptimizations() &&
+      (trim_to > ps->pg_log.get_can_rollback_to())) {
+    // An exceptionally long sequence of partial writes followed by a full
+    // write can result in trim_to being ahead of crt
+    trim_to = ps->pg_log.get_can_rollback_to();
+  }
   ps->pg_log.trim(trim.trim_to, ps->info);
   ps->dirty_info = true;
   return discard_event();
