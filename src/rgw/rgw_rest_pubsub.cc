@@ -931,7 +931,7 @@ void RGWPSSetTopicAttributesOp::execute(optional_yield y) {
       }
       dest.num_shards = 0; // set to 0 to indicate no sharding
     }
-    ldpp_dout(this, 20) << "Successfully removed " << result.dest.num_shards << " shards for topic: " + topic_name << dendl;
+    ldpp_dout(this, 20) << "Successfully removed " << result.dest.num_shards << " shards for topic: " << topic_name << dendl;
   }
   const RGWPubSub ps(driver, topic_arn.account, *s->penv.site);
   op_ret = ps.create_topic(this, topic_name, dest, topic_arn.to_string(),
