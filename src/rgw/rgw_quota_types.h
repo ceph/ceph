@@ -73,7 +73,7 @@ struct RGWQuotaInfo {
   }
 
   void dump(Formatter *f) const;
-  static void generate_test_instances(std::list<RGWQuotaInfo*>& o);
+  static std::list<RGWQuotaInfo> generate_test_instances();
   void decode_json(JSONObj *obj);
 
 };

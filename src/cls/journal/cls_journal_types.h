@@ -52,7 +52,7 @@ struct ObjectPosition {
     return entry_tid < rhs.entry_tid;
   }
 
-  static void generate_test_instances(std::list<ObjectPosition *> &o);
+  static std::list<ObjectPosition> generate_test_instances();
 };
 
 typedef std::list<ObjectPosition> ObjectPositions;
@@ -73,7 +73,7 @@ struct ObjectSetPosition {
     return (object_positions == rhs.object_positions);
   }
 
-  static void generate_test_instances(std::list<ObjectSetPosition *> &o);
+  static std::list<ObjectSetPosition> generate_test_instances();
 };
 
 enum ClientState {
@@ -107,7 +107,7 @@ struct Client {
   void decode(ceph::buffer::list::const_iterator& iter);
   void dump(ceph::Formatter *f) const;
 
-  static void generate_test_instances(std::list<Client *> &o);
+  static std::list<Client> generate_test_instances();
 };
 
 struct Tag {
@@ -134,7 +134,7 @@ struct Tag {
   void decode(ceph::buffer::list::const_iterator& iter);
   void dump(ceph::Formatter *f) const;
 
-  static void generate_test_instances(std::list<Tag *> &o);
+  static std::list<Tag> generate_test_instances();
 };
 
 WRITE_CLASS_ENCODER(ObjectPosition);

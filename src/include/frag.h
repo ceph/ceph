@@ -166,10 +166,12 @@ public:
     f->dump_unsigned("value", value());
     f->dump_unsigned("bits", bits());
   }
-  static void generate_test_instances(std::list<frag_t*>& ls) {
-    ls.push_back(new frag_t);
-    ls.push_back(new frag_t(10, 2));
-    ls.push_back(new frag_t(11, 3));
+  static std::list<frag_t> generate_test_instances() {
+    std::list<frag_t> ls;
+    ls.push_back(frag_t{});
+    ls.push_back(frag_t(10, 2));
+    ls.push_back(frag_t(11, 3));
+    return ls;
   }
   bool operator<(const frag_t& b) const
   {
@@ -538,9 +540,11 @@ public:
     f->close_section(); // splits
   }
 
-  static void generate_test_instances(std::list<fragtree_t*>& ls) {
-    ls.push_back(new fragtree_t);
-    ls.push_back(new fragtree_t);
+  static std::list<fragtree_t> generate_test_instances() {
+    std::list<fragtree_t> ls;
+    ls.push_back(fragtree_t{});
+    ls.push_back(fragtree_t{});
+    return ls;
   }
 };
 WRITE_CLASS_ENCODER(fragtree_t)

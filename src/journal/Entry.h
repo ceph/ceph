@@ -45,7 +45,7 @@ public:
   bool operator==(const Entry& rhs) const;
 
   static bool is_readable(bufferlist::const_iterator iter, uint32_t *bytes_needed);
-  static void generate_test_instances(std::list<Entry *> &o);
+  static std::list<Entry> generate_test_instances();
 
 private:
   static const uint64_t preamble = 0x3141592653589793;
