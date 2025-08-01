@@ -73,6 +73,21 @@ class SeaStore final : public FuturizedStore {
 public:
   using base_ertr = TransactionManager::base_ertr;
   using base_iertr = TransactionManager::base_iertr;
+  using mkfs_iertr = TransactionManager::alloc_extent_iertr;
+
+  // we already have a mkfs_ertr, this is temporary until
+  // *all* ertr in Seastore would be reorganized.
+  using seastore_mkfs_ertr = crimson::errorator<
+    crimson::ct_error::input_output_error,
+    crimson::ct_error::enospc
+  >;
+
+  // lamndas used with coroutines must name the return type.
+  // This errorator is used soley for this reason.
+  // See: repeat_eagain for how eagain is handled.
+  using seastore_mkfs_ertr_again = seastore_mkfs_ertr::extend<
+    crimson::ct_error::eagain
+  >;
 
   class MDStore {
   public:
@@ -188,7 +203,7 @@ public:
 
   // only exposed to SeaStore
   public:
-    seastar::future<> umount();
+    base_ertr::future<> umount();
     // init managers and mount transaction_manager
     seastar::future<> mount_managers();
 
@@ -207,7 +222,7 @@ public:
 
     uuid_d get_fsid() const;
 
-    seastar::future<> mkfs_managers();
+    seastore_mkfs_ertr::future<> mkfs_managers();
 
     void init_managers();
 
