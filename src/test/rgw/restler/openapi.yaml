@@ -51,6 +51,19 @@ paths:
             text/xml:
               schema:
                 $ref: '#/components/schemas/CreateBucketOutput'
+          links:
+            ListObjects:
+              operationId: ListObjects
+              parameters:
+                Bucket: $request.path.Bucket
+            HeadBucket:
+              operationId: HeadBucket
+              parameters:
+                Bucket: $request.path.Bucket
+            DeleteBucket:
+              operationId: DeleteBucket
+              parameters:
+                Bucket: $request.path.Bucket
         '480':
           description: BucketAlreadyExists
           content:
