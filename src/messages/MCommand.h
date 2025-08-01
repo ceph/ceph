@@ -15,9 +15,11 @@
 #ifndef CEPH_MCOMMAND_H
 #define CEPH_MCOMMAND_H
 
+#include <string>
 #include <vector>
 
 #include "msg/Message.h"
+#include "include/encoding_vector.h"
 
 class MCommand final : public Message {
 public:

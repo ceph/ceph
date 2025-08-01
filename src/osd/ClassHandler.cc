@@ -7,6 +7,9 @@
 #include "common/ceph_context.h"
 #include "include/dlfcn_compat.h"
 
+#include <sys/types.h>
+#include <dirent.h>
+
 #include <map>
 
 #if defined(__FreeBSD__)

@@ -3,6 +3,8 @@
 
 #include "mds/flock.h"
 #include "common/debug.h"
+#include "include/container_ios.h"
+#include "include/encoding_map.h"
 #include "mdstypes.h"
 
 #include <iostream>

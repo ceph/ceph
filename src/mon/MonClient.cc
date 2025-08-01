@@ -17,6 +17,7 @@
 #include <random>
 
 #include <boost/asio/post.hpp>
+#include <boost/asio/steady_timer.hpp>
 #include <boost/range/adaptor/map.hpp>
 #include <boost/range/adaptor/filtered.hpp>
 #include <boost/range/algorithm/copy.hpp>
@@ -65,6 +66,29 @@
 namespace bs = boost::system;
 using std::string;
 using namespace std::literals;
+
+struct MonClient::MonCommand {
+  // for tell only
+  std::string target_name;
+  std::string sent_name;
+  int target_rank = -1;
+  ConnectionRef target_con;
+  std::unique_ptr<MonConnection> target_session;
+  unsigned send_attempts = 0;  ///< attempt count for legacy mons
+  utime_t last_send_attempt;
+  uint64_t tid;
+  std::vector<std::string> cmd;
+  ceph::buffer::list inbl;
+  std::unique_ptr<CommandCompletion> onfinish;
+  std::optional<boost::asio::steady_timer> cancel_timer;
+
+  MonCommand(MonClient& monc, uint64_t t, std::unique_ptr<CommandCompletion> onfinish);
+  ~MonCommand() noexcept;
+
+  bool is_tell() const {
+    return target_name.size() || target_rank >= 0;
+  }
+};
 
 MonClient::MonClient(CephContext *cct_, boost::asio::io_context& service) :
   Dispatcher(cct_),
@@ -1163,6 +1187,24 @@ int MonClient::wait_auth_rotating(double timeout)
 
 // ---------
 
+MonClient::MonCommand::MonCommand(MonClient& monc, uint64_t t, std::unique_ptr<CommandCompletion> onfinish)
+  : tid(t), onfinish(std::move(onfinish)) {
+  auto timeout =
+      monc.cct->_conf.get_val<std::chrono::seconds>("rados_mon_op_timeout");
+  if (timeout.count() > 0) {
+	cancel_timer.emplace(monc.service, timeout);
+	cancel_timer->async_wait(
+      [this, &monc](boost::system::error_code ec) {
+	    if (ec)
+	      return;
+	    std::scoped_lock l(monc.monc_lock);
+	    monc._cancel_mon_command(tid);
+	  });
+  }
+}
+
+MonClient::MonCommand::~MonCommand() noexcept = default;
+
 void MonClient::_send_command(MonCommand *r)
 {
   if (r->is_tell()) {
@@ -1363,6 +1405,93 @@ void MonClient::handle_command_reply(MCommandReply *reply)
   _finish_command(r, ec, reply->rs, std::move(reply->get_data()));
   reply->put();
 }
+
+void MonClient::start_mon_command(int mon_rank, const std::vector<std::string>& cmd,
+				  const ceph::buffer::list& inbl, std::unique_ptr<CommandCompletion> onfinish)
+{
+  std::scoped_lock l(monc_lock);
+  if (!initialized || stopping) {
+    ceph::async::post(std::move(onfinish), monc_errc::shutting_down, std::string{},
+		      bufferlist{});
+  } else {
+    auto r = new MonCommand(*this, ++last_mon_command_tid, std::move(onfinish));
+    r->cmd = cmd;
+    r->inbl = inbl;
+    mon_commands.emplace(r->tid, r);
+    _send_command(r);
+  }
+}
+
+void MonClient::start_mon_command(const std::string& mon_name, const std::vector<std::string>& cmd,
+				  const ceph::buffer::list& inbl, std::unique_ptr<CommandCompletion> onfinish)
+{
+  std::scoped_lock l(monc_lock);
+  if (!initialized || stopping) {
+    ceph::async::post(std::move(onfinish), monc_errc::shutting_down, std::string{},
+		      bufferlist{});
+  } else {
+    auto r = new MonCommand(*this, ++last_mon_command_tid, std::move(onfinish));
+    // detect/tolerate mon *rank* passed as a string
+    std::string err;
+    int rank = strict_strtoll(mon_name.c_str(), 10, &err);
+    if (err.size() == 0 && rank >= 0) {
+      ldout(cct,10) << __func__ << " interpreting name '" << mon_name
+		    << "' as rank " << rank << dendl;
+      r->target_rank = rank;
+    } else {
+      r->target_name = mon_name;
+    }
+    r->cmd = cmd;
+    r->inbl = inbl;
+    mon_commands.emplace(r->tid, r);
+    _send_command(r);
+  }
+}
+
+class MonClient::ContextVerter {
+  std::string* outs;
+  ceph::bufferlist* outbl;
+  Context* onfinish;
+
+public:
+  ContextVerter(std::string* outs, ceph::bufferlist* outbl, Context* onfinish)
+    : outs(outs), outbl(outbl), onfinish(onfinish) {}
+  ~ContextVerter() = default;
+  ContextVerter(const ContextVerter&) = default;
+  ContextVerter& operator =(const ContextVerter&) = default;
+  ContextVerter(ContextVerter&&) = default;
+  ContextVerter& operator =(ContextVerter&&) = default;
+
+  void operator()(boost::system::error_code e,
+		  std::string s,
+		  ceph::bufferlist bl) {
+    if (outs)
+      *outs = std::move(s);
+    if (outbl)
+      *outbl = std::move(bl);
+    if (onfinish)
+      onfinish->complete(ceph::from_error_code(e));
+  }
+};
+
+void MonClient::start_mon_command(const std::vector<std::string>& cmd, const bufferlist& inbl,
+				  bufferlist *outbl, std::string *outs,
+				  Context *onfinish) {
+  start_mon_command(cmd, inbl, ContextVerter(outs, outbl, onfinish));
+}
+void MonClient::start_mon_command(int mon_rank,
+				  const std::vector<std::string>& cmd, const bufferlist& inbl,
+				  bufferlist *outbl, std::string *outs,
+				  Context *onfinish) {
+  start_mon_command(mon_rank, cmd, inbl, ContextVerter(outs, outbl, onfinish));
+}
+void MonClient::start_mon_command(const std::string &mon_name,  ///< mon name, with mon. prefix
+				  const std::vector<std::string>& cmd, const bufferlist& inbl,
+				  bufferlist *outbl, std::string *outs,
+				  Context *onfinish) {
+  start_mon_command(mon_name, cmd, inbl, ContextVerter(outs, outbl, onfinish));
+}
+
 
 int MonClient::_cancel_mon_command(uint64_t tid)
 {

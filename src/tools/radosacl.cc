@@ -18,6 +18,7 @@
 
 #include <iostream> // for std::cerr
 
+#include "include/encoding_map.h"
 #include "include/types.h"
 #include "include/rados/librados.hpp"
 
