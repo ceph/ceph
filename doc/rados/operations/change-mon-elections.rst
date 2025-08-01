@@ -17,6 +17,8 @@ election default strategy`` option. This option takes an integer value:
 After your cluster has started running, you can change strategies by running a
 command of the following form:
 
+.. prompt:: bash $
+
   $ ceph mon set election_strategy {classic|disallow|connectivity}
 
 Choosing a mode
