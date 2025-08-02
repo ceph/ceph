@@ -97,6 +97,11 @@
 #define tracepoint(...)
 #endif
 
+#ifdef WITH_RADOSGW_D4N
+#include "driver/d4n/d4n_directory.h"
+#include "driver/d4n/rgw_sal_d4n.h"
+#endif
+
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
@@ -2712,6 +2717,92 @@ int RGWGetObj::init_common()
 
   return 0;
 }
+
+#ifdef WITH_RADOSGW_D4N
+int RGWGetObj::get_cache_obj(optional_yield y) { // TODO: handle ranged requests?
+  std::string version;
+  bufferlist bl;
+  RGWGetObj_CB cb(this);
+  rgw::sal::D4NFilterObject obj = dynamic_cast<rgw::sal::D4NFilterObject&>(*(s->object));
+  obj.load_obj_state(this, y);
+  obj.calculate_version(this, y, version, attrs);
+  std::string head_oid_in_cache = rgw::sal::get_cache_block_prefix(s->object.get(), version);
+  rgw::d4n::CacheBlock block;
+  rgw::sal::D4NFilterDriver* d4n_driver = dynamic_cast<rgw::sal::D4NFilterDriver*>(driver);
+
+  if (!obj.check_head_exists_in_cache_get_oid(this, head_oid_in_cache, attrs, block, y) && !block.deleteMarker) {
+    return -ENOENT;
+  } else {
+
+    if (!get_data) {
+      // TODO: return attrs for head object 
+      if (op_ret < 0) {
+	ldpp_dout(this, 0) << __func__ << "(): Failed to get head object in cache, ret=" << op_ret << dendl;
+	return op_ret;
+      }   
+      return 0;
+    }
+
+    auto read_op = obj.get_read_op();
+    const uint64_t window_size = g_conf()->rgw_get_obj_window_size;
+    std::unique_ptr<rgw::Aio> aio = rgw::make_throttle(window_size, y);
+    off_t lst = obj.get_size();
+    off_t fst = 0;
+
+    do {
+      if (fst >= lst) {
+	break;
+      }
+
+      block.cacheObj.objName = obj.get_oid();
+      off_t cur_size = std::min<off_t>(fst + this->get_cct()->_conf->rgw_max_chunk_size, lst);
+      off_t cur_len = cur_size - fst;
+      block.blockID = static_cast<uint64_t>(fst);
+      block.size = static_cast<uint64_t>(cur_len);
+
+      if ((op_ret = d4n_driver->get_block_dir()->get(this, &block, y)) < 0) {
+	if (op_ret == -ENOENT) {
+	  ldpp_dout(this, 10) << __func__ << "(): Directory entry for: " << obj.get_oid() << " blockid: " << fst << " block size: " << cur_len << " does not exist; continuing" << dendl;
+	  fst += cur_len;
+	  if (fst >= lst) {
+	    break;
+	  }
+	  continue;
+	} else {
+	  ldpp_dout(this, 10) << __func__ << "(): Failed to retrieve directory entry for: " << obj.get_oid() << " blockid: " << fst << " block size: " << cur_len << ", ret=" << op_ret << dendl;
+	  return op_ret;
+	}
+      }
+
+      // TODO: do we want get_async here?
+      std::string prefix = get_cache_block_prefix(&obj, block.version);
+      std::string oid_in_cache = rgw::sal::get_key_in_cache(prefix, std::to_string(block.blockID), std::to_string(cur_len));
+      op_ret = d4n_driver->get_cache_driver()->get(this, oid_in_cache, ofs, cur_len, bl, attrs, y); // TODO: double check ofs and size values for correctness
+      if (op_ret < 0) {
+	ldpp_dout(this, 0) << __func__ << "(): Failed to get entry, ret=" << op_ret << dendl;
+	return op_ret;
+      }   
+
+      op_ret = cb.handle_data(bl, 0, bl.length());
+      if (op_ret < 0) {
+	ldpp_dout(this, 0) << __func__ << "(): Failed to handle data, ret=" << op_ret << dendl;
+	return op_ret;
+      }   
+
+      fst += cur_len;
+    } while (fst < lst);
+  }
+
+  op_ret = send_response_data(bl, 0, 0);
+  if (op_ret < 0) {
+    goto done_err;
+  }
+  return 0;
+
+done_err:
+  send_response_data_error(y);
+}
+#endif
 
 int RGWListBuckets::verify_permission(optional_yield y)
 {
