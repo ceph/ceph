@@ -742,7 +742,9 @@ void Cache::add_extent(CachedExtentRef ref)
   assert(ref->rewrite_generation == NULL_GENERATION);
   assert(ref->get_paddr().is_absolute() ||
          ref->get_paddr().is_root());
-  extents_index.insert(*ref);
+  if (booting) {
+    extents_index.insert(*ref);
+  }
 }
 
 void Cache::mark_dirty(CachedExtentRef ref)
@@ -884,7 +886,9 @@ void Cache::remove_extent(
     assert(ref->get_paddr().is_absolute());
     pinboard->remove(*ref);
   }
-  extents_index.erase(*ref);
+  if (ref->is_linked_to_index()) {
+    extents_index.erase(*ref);
+  }
 }
 
 void Cache::commit_retire_extent(
@@ -906,7 +910,9 @@ void Cache::commit_replace_extent(
   assert(next->get_paddr() == prev->get_paddr());
   assert(next->get_paddr().is_absolute() || next->get_paddr().is_root());
   assert(next->version == prev->version + 1);
-  extents_index.replace(*next, *prev);
+  if (booting) {
+    extents_index.replace(*next, *prev);
+  }
 
   const auto t_src = t.get_src();
   if (is_root_type(prev->get_type())) {
