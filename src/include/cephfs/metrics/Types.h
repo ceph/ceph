@@ -569,14 +569,14 @@ struct SimpleIOMetric {
     uint64_t packed_data;
 
     // is_write flag (1 bit) - MSB
-    static constexpr uint64_t IS_WRITE_BITS = 1;
-    static constexpr uint64_t IS_WRITE_SHIFT = 64 - IS_WRITE_BITS; // 63
-    static constexpr uint64_t IS_WRITE_MASK = 1ULL << IS_WRITE_SHIFT; // 0x8000000000000000ULL
+    static constexpr uint64_t OP_TYPE_BITS = 1;
+    static constexpr uint64_t OP_TYPE_SHIFT = 64 - OP_TYPE_BITS; // 63
+    static constexpr uint64_t OP_TYPE_MASK = 1ULL << OP_TYPE_SHIFT; // 0x8000000000000000ULL
 
     // latency in microseconds (32 bits)
     // directly after is_write bit
     static constexpr uint64_t LATENCY_BITS = 32;
-    static constexpr uint64_t LATENCY_SHIFT = IS_WRITE_SHIFT - LATENCY_BITS; // 63 - 32 = 31
+    static constexpr uint64_t LATENCY_SHIFT = OP_TYPE_SHIFT - LATENCY_BITS; // 63 - 32 = 31
     static constexpr uint64_t LATENCY_MASK = ((1ULL << LATENCY_BITS) - 1) << LATENCY_SHIFT;
 
     // payload size (31 bits)
@@ -590,7 +590,7 @@ struct SimpleIOMetric {
 
     SimpleIOMetric(bool is_write, utime_t latency, uint32_t payload_size) : packed_data(0) {
       if (is_write) {
-        packed_data |= IS_WRITE_MASK;
+        packed_data |= OP_TYPE_MASK;
       }
 
       uint64_t current_latency_usec = latency.usec();
@@ -617,7 +617,7 @@ struct SimpleIOMetric {
     SimpleIOMetric() : packed_data(0) {}
 
     bool is_write() const {
-      return (packed_data & IS_WRITE_MASK) != 0;
+      return (packed_data & OP_TYPE_MASK) != 0;
     }
 
     uint32_t get_latency_us() const {
