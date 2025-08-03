@@ -517,7 +517,9 @@ public:
     CachedExtentRef extent) final
   {
     assert(extent);
-    return extent->get_transactional_view(t);
+    auto ext = extent->maybe_get_transactional_view(t);
+    ceph_assert(ext);
+    return ext;
   }
 
   get_extent_iertr::future<> maybe_wait_accessible(
@@ -611,7 +613,8 @@ public:
     bool needs_step_2 = false;
     bool needs_touch = false;
     if (extent->is_stable()) {
-      p_extent = extent->get_transactional_view(t);
+      p_extent = extent->maybe_get_transactional_view(t);
+      ceph_assert(p_extent);
       if (p_extent != extent.get()) {
         assert(!extent->is_pending_io());
         assert(p_extent->is_pending_in_trans(t.get_trans_id()));

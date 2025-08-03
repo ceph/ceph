@@ -74,17 +74,32 @@ CachedExtent::~CachedExtent()
     parent_index->erase(*this);
   }
 }
-CachedExtent* CachedExtent::get_transactional_view(Transaction &t) {
-  return get_transactional_view(t.get_trans_id());
-}
-
-CachedExtent* CachedExtent::get_transactional_view(transaction_id_t tid) {
-  auto it = mutation_pending_extents.find(tid, trans_spec_view_t::cmp_t());
-  if (it != mutation_pending_extents.end()) {
-    return (CachedExtent*)&(*it);
-  } else {
+CachedExtent* CachedExtent::maybe_get_transactional_view(Transaction &t) {
+  if (t.is_weak()) {
     return this;
   }
+
+  auto tid = t.get_trans_id();
+  if (is_pending()) {
+    ceph_assert(is_pending_in_trans(tid));
+    return this;
+  }
+
+  if (!mutation_pending_extents.empty()) {
+    auto it = mutation_pending_extents.find(tid, trans_spec_view_t::cmp_t());
+    if (it != mutation_pending_extents.end()) {
+      return (CachedExtent*)&(*it);
+    }
+  }
+
+  if (!retired_transactions.empty()) {
+    auto it = retired_transactions.find(tid, trans_spec_view_t::cmp_t());
+    if (it != retired_transactions.end()) {
+      return nullptr;
+    }
+  }
+
+  return this;
 }
 
 std::ostream &LogicalCachedExtent::print_detail(std::ostream &out) const
