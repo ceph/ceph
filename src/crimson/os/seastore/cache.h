@@ -1462,15 +1462,10 @@ public:
 	return extent;
       }
     } else {
-      auto result = t.get_extent(extent->get_paddr(), &extent);
-      if (result == Transaction::get_extent_ret::RETIRED) {
-	return CachedExtentRef();
-      } else {
-	if (result == Transaction::get_extent_ret::ABSENT) {
-	  t.add_to_read_set(extent);
-	}
-	return extent;
+      if (extent->is_stable()) {
+	std::ignore = t.maybe_add_to_read_set(extent);
       }
+      return extent->maybe_get_transactional_view(t);
     }
   }
 
