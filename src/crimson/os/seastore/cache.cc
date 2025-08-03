@@ -2221,28 +2221,18 @@ Cache::get_next_dirty_extents_ret Cache::get_next_dirty_extents(
 	      return;
 	    }
 
-	    CachedExtentRef on_transaction;
-	    auto result = t.get_extent(ext->get_paddr(), &on_transaction);
-	    if (result == Transaction::get_extent_ret::ABSENT) {
-	      DEBUGT("extent is absent on t -- {}", t, *ext);
-	      t.add_to_read_set(ext);
-	      if (is_root_type(ext->get_type())) {
-		if (t.root) {
-		  assert(&*t.root == &*ext);
-		  ceph_assert(0 == "t.root would have to already be in the read set");
-		} else {
-		  assert(&*ext == &*root);
-		  t.root = root;
-		}
+	    DEBUGT("adding dirty extent {}", t, *ext);
+	    t.add_to_read_set(ext);
+	    if (is_root_type(ext->get_type())) {
+	      if (t.root) {
+		assert(&*t.root == &*ext);
+		ceph_assert(0 == "t.root would have to already be in the read set");
+	      } else {
+		assert(&*ext == &*root);
+		t.root = root;
 	      }
-	      ret.push_back(ext);
-	    } else if (result == Transaction::get_extent_ret::PRESENT) {
-	      DEBUGT("extent is present on t -- {}, on t {}", t, *ext, *on_transaction);
-	      ret.push_back(on_transaction);
-	    } else {
-	      assert(result == Transaction::get_extent_ret::RETIRED);
-	      DEBUGT("extent is retired on t -- {}", t, *ext);
 	    }
+	    ret.push_back(ext);
 	  });
 	}).then_interruptible([&ret] {
 	  return std::move(ret);
