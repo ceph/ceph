@@ -939,8 +939,7 @@ private:
     }
   }
 
-  CachedExtent* get_transactional_view(Transaction &t);
-  CachedExtent* get_transactional_view(transaction_id_t tid);
+  CachedExtent* maybe_get_transactional_view(Transaction &t);
 
   read_trans_set_t<Transaction> read_transactions;
 
