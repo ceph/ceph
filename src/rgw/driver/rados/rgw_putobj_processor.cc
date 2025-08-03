@@ -552,6 +552,72 @@ int MultipartObjectProcessor::complete(
   op_target.set_versioning_disabled(true);
   op_target.set_meta_placement_rule(&tail_placement_rule);
 
+  if (if_match || if_nomatch) {
+    RGWObjState *state = nullptr;
+    RGWObjManifest *cur_manifest = nullptr;
+    bool follow_olh = false;
+    r = store->get_obj_state(dpp, &obj_ctx, bucket_info, head_obj,
+                                 &state, &cur_manifest, follow_olh, rctx.y);
+    if (r < 0)
+      return r;
+    RGWObjState* current_state = state;
+    if (!op_target.get_obj().key.instance.empty()) {
+      // objects in versioning-enabled buckets don't get overwritten.
+      // preconditions refer to the current version instead
+      follow_olh = true;
+      r = store->get_obj_state(dpp, &obj_ctx, bucket_info, head_obj,
+                               &current_state, &cur_manifest, follow_olh, rctx.y);
+      if (r == -ENOENT) {
+        current_state = state;
+      } else if (r < 0) {
+        return r;
+      }
+    }
+
+    using namespace std::string_literals;
+    if (if_match) {
+      if (if_match == "*"sv) {
+        // test the object is existing
+        if (!current_state->exists) {
+          return -ENOENT;
+        }
+      } else {
+        bufferlist bl;
+        if (current_state->get_attr(RGW_ATTR_ETAG, bl)) {
+          string if_match_str = rgw_string_unquote(if_match);
+          string etag = string(bl.c_str(), bl.length());
+          ldpp_dout(dpp, 10) << "MultipartObjectProcessor::complete checking preconditions if_match: " << if_match_str << ", etag: " << etag
+                             << dendl;
+          if (if_match_str.compare(0, etag.length(), etag.c_str(), etag.length()) != 0) {
+            return -ERR_PRECONDITION_FAILED;
+          }
+        } else {
+          ldpp_dout(dpp, 10) << "MultipartObjectProcessor::complete checking preconditions if_match object has no etag" << dendl;
+          return (!current_state->exists) ? -ENOENT : -ERR_PRECONDITION_FAILED;
+        }
+      }
+    }
+
+    if (if_nomatch) {
+      if (if_nomatch == "*"sv) {
+        // test the object is NOT existing
+        if (current_state->exists) {
+          return -ERR_PRECONDITION_FAILED;
+        }
+      } else {
+        bufferlist bl;
+        if (current_state->get_attr(RGW_ATTR_ETAG, bl)) {
+          string if_nomatch_str = rgw_string_unquote(if_nomatch);
+          string etag = string(bl.c_str(), bl.length());
+          ldpp_dout(dpp, 10) << "MultipartObjectProcessor::complete checking preconditions if_match: " << if_nomatch_str << ", etag: " << etag << dendl;
+          if (if_nomatch_str.compare(0, etag.length(), etag.c_str(), etag.length()) == 0) {
+            return -ERR_PRECONDITION_FAILED;
+          }
+        }
+      }
+    }
+  }
+
   RGWRados::Object::Write obj_op(&op_target);
   obj_op.meta.set_mtime = set_mtime;
   obj_op.meta.mtime = mtime;
