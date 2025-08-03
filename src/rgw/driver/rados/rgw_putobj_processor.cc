@@ -560,6 +560,8 @@ int MultipartObjectProcessor::complete(
   obj_op.meta.delete_at = delete_at;
   obj_op.meta.zones_trace = zones_trace;
   obj_op.meta.modify_tail = true;
+  obj_op.meta.if_match = if_match;
+  obj_op.meta.if_nomatch = if_nomatch;
 
   r = obj_op.write_meta(actual_size, accounted_size, attrs, rctx,
                         writer.get_trace(), flags & rgw::sal::FLAG_LOG_OP);
@@ -791,6 +793,8 @@ int AppendObjectProcessor::complete(
   obj_op.meta.modify_tail = true;
   obj_op.meta.keep_tail = keep_tail;
   obj_op.meta.appendable = true;
+  obj_op.meta.if_match = if_match;
+  obj_op.meta.if_nomatch = if_nomatch;
   //Add the append part number
   bufferlist cur_part_num_bl;
   using ceph::encode;
