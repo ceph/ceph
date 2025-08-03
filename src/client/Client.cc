@@ -2268,7 +2268,7 @@ int Client::make_request(MetaRequest *request,
     *pdirbl = reply->get_extra_bl();
 
   // -- log times --
-  utime_t lat = ceph_clock_now();
+  utime_t lat = mono_clock_now();
   lat -= request->sent_stamp;
   ldout(cct, 20) << "lat " << lat << dendl;
 
@@ -10967,7 +10967,7 @@ void Client::C_Read_Finisher::finish_io(int r)
       f->pos = offset + r;
     }
     
-    lat = ceph_clock_now();
+    lat = mono_clock_now();
     lat -= start;
     clnt->subvolume_tracker->add_metric(in->ino, SimpleIOMetric{false, lat, static_cast<uint32_t>(r)});
     ++clnt->nr_read_request;
@@ -11056,7 +11056,7 @@ void Client::C_Read_Sync_NonBlocking::finish(int r)
 success:
 
   r = read;
-  clnt->subvolume_tracker->add_metric(in->ino, SimpleIOMetric(false, ceph_clock_now() - start_time, r));
+  clnt->subvolume_tracker->add_metric(in->ino, SimpleIOMetric(false, mono_clock_now() - start_time, r));
 error:
 
   onfinish->complete(r);
@@ -11078,7 +11078,7 @@ int64_t Client::_read(Fh *f, int64_t offset, uint64_t size, bufferlist *bl,
   const auto& conf = cct->_conf;
   Inode *in = f->inode.get();
   utime_t lat;
-  utime_t start = ceph_clock_now(); 
+  utime_t start = mono_clock_now();
   CRF_iofinish *crf_iofinish = nullptr;
 
   if ((f->mode & CEPH_FILE_MODE_RD) == 0)
@@ -11149,7 +11149,7 @@ retry:
                          conf->client_oc &&
                          (have & (CEPH_CAP_FILE_CACHE |
                                   CEPH_CAP_FILE_LAZYIO)),
-                       have, movepos, start, f, in, f->pos, offset, size));
+                       have, movepos, f, in, f->pos, offset, size));
 
     crf_iofinish->CRF = crf.get();
   }
@@ -11215,7 +11215,7 @@ retry:
 
     C_Read_Sync_NonBlocking *crsa =
       new C_Read_Sync_NonBlocking(this, iofinish.release(), f, in, f->pos,
-                                  offset, size, bl, filer.get(), have, ceph_clock_now());
+                                  offset, size, bl, filer.get(), have);
       crf.release();
 
       // Now make first attempt at performing _read_sync
@@ -11263,7 +11263,7 @@ success:
     f->pos = start_pos + rc;
   }
   
-  lat = ceph_clock_now();
+  lat = mono_clock_now();
   lat -= start;
   subvolume_tracker->add_metric(in->ino, SimpleIOMetric{false, lat, bl->length()});
   ++nr_read_request;
@@ -11280,8 +11280,8 @@ done:
   return rc;
 }
 
-Client::C_Readahead::C_Readahead(Client *c, Fh *f, utime_t start) :
-    client(c), f(f), start_time(start){
+Client::C_Readahead::C_Readahead(Client *c, Fh *f) :
+    client(c), f(f), start_time(mono_clock_now()) {
   f->get();
   f->readahead.inc_pending();
 }
@@ -11296,18 +11296,18 @@ void Client::C_Readahead::finish(int r) {
   client->put_cap_ref(f->inode.get(), CEPH_CAP_FILE_RD | CEPH_CAP_FILE_CACHE);
   if (r > 0) {
     client->update_read_io_size(r);
-    client->subvolume_tracker->add_metric(f->inode->ino, SimpleIOMetric(false, ceph_clock_now()-start_time, r));
+    client->subvolume_tracker->add_metric(f->inode->ino, SimpleIOMetric(false, mono_clock_now()-start_time, r));
   }
 }
 
-void Client::do_readahead(Fh *f, Inode *in, uint64_t off, uint64_t len, utime_t start_time)
+void Client::do_readahead(Fh *f, Inode *in, uint64_t off, uint64_t len)
 {
   if(f->readahead.get_min_readahead_size() > 0) {
     pair<uint64_t, uint64_t> readahead_extent = f->readahead.update(off, len, in->size);
     if (readahead_extent.second > 0) {
       ldout(cct, 20) << "readahead " << readahead_extent.first << "~" << readahead_extent.second
 		     << " (caller wants " << off << "~" << len << ")" << dendl;
-      Context *onfinish2 = new C_Readahead(this, f, start_time);
+      Context *onfinish2 = new C_Readahead(this, f);
       int r2 = objectcacher->file_read(&in->oset, &in->layout, in->snapid,
 				       readahead_extent.first, readahead_extent.second,
 				       NULL, 0, onfinish2);
@@ -11326,7 +11326,7 @@ void Client::C_Read_Async_Finisher::finish(int r)
 {
   // Do read ahead as long as we aren't completing with 0 bytes
   if (r != 0)
-    clnt->do_readahead(f, in, off, len, start_time);
+    clnt->do_readahead(f, in, off, len);
 
   onfinish->complete(r);
 }
@@ -11348,7 +11348,7 @@ int Client::_read_async(Fh *f, uint64_t off, uint64_t len, bufferlist *bl,
 
   if (onfinish != nullptr) {
     io_finish.reset(new C_Read_Async_Finisher(this, onfinish, f, in,
-                                              f->pos, off, len, ceph_clock_now()));
+                                              f->pos, off, len));
   }
 
   // trim read based on file size?
@@ -11389,7 +11389,7 @@ int Client::_read_async(Fh *f, uint64_t off, uint64_t len, bufferlist *bl,
     io_finish.reset(io_finish_cond);
   }
 
-  auto start_time = ceph_clock_now();
+  auto start_time = mono_clock_now();
   r = objectcacher->file_read(&in->oset, &in->layout, in->snapid,
 			      off, len, bl, 0, io_finish.get());
 
@@ -11415,12 +11415,12 @@ int Client::_read_async(Fh *f, uint64_t off, uint64_t len, bufferlist *bl,
     client_lock.lock();
     put_cap_ref(in, CEPH_CAP_FILE_CACHE);
     update_read_io_size(bl->length());
-    subvolume_tracker->add_metric(in->ino, SimpleIOMetric{false, ceph_clock_now() - start_time, bl->length()});
+    subvolume_tracker->add_metric(in->ino, SimpleIOMetric{false, mono_clock_now() - start_time, bl->length()});
   } else {
     put_cap_ref(in, CEPH_CAP_FILE_CACHE);
   }
 
-  do_readahead(f, in, off, len, ceph_clock_now());
+  do_readahead(f, in, off, len);
 
   return r;
 }
@@ -11625,7 +11625,7 @@ int64_t Client::_write_success(Fh *f, utime_t start, uint64_t fpos,
 
   update_write_io_size(size);
   // time
-  lat = ceph_clock_now();
+  lat = mono_clock_now();
   lat -= start;
 
   subvolume_tracker->add_metric(in->ino, SimpleIOMetric{true, lat, static_cast<uint32_t>(size)});
@@ -11825,7 +11825,7 @@ int64_t Client::_write(Fh *f, int64_t offset, uint64_t size, bufferlist bl,
   ldout(cct, 10) << "cur file size is " << in->size << dendl;
 
   // time it.
-  utime_t start = ceph_clock_now();
+  utime_t start = mono_clock_now();
 
   if (in->inline_version == 0) {
     int r = _getattr(in, CEPH_STAT_CAP_INLINE_DATA, f->actor_perms, true);
@@ -11898,7 +11898,7 @@ int64_t Client::_write(Fh *f, int64_t offset, uint64_t size, bufferlist bl,
                         cct->_conf->client_oc &&
                           (have & (CEPH_CAP_FILE_BUFFER |
                                  CEPH_CAP_FILE_LAZYIO)),
-                        start, f, in, fpos, offset, size,
+                        f, in, fpos, offset, size,
                         do_fsync, syncdataonly));
 
     cwf_iofinish->CWF = cwf.get();
@@ -12287,7 +12287,7 @@ void Client::C_nonblocking_fsync_state::advance()
 
   utime_t lat;
 
-  lat = ceph_clock_now();
+  lat = mono_clock_now();
   lat -= start;
   clnt->logger->tinc(l_c_fsync, lat);
 
@@ -12341,7 +12341,7 @@ int Client::_fsync(Inode *in, bool syncdataonly)
   ceph_tid_t flush_tid = 0;
   InodeRef tmp_ref;
   utime_t lat;
-  utime_t start = ceph_clock_now(); 
+  utime_t start = mono_clock_now();
 
   ldout(cct, 8) << "_fsync on " << *in << " " << (syncdataonly ? "(dataonly)":"(data+metadata)") << dendl;
   
@@ -12394,7 +12394,7 @@ int Client::_fsync(Inode *in, bool syncdataonly)
 		  << cpp_strerror(-r) << dendl;
   }
    
-  lat = ceph_clock_now();
+  lat = mono_clock_now();
   lat -= start;
   logger->tinc(l_c_fsync, lat);
 

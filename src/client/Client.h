@@ -1391,11 +1391,11 @@ private:
 
     C_Read_Finisher(Client *clnt, Context *onfinish, Context *iofinish,
                     bool is_read_async, int have_caps, bool movepos,
-                    utime_t start, Fh *f, Inode *in, uint64_t fpos,
+                    Fh *f, Inode *in, uint64_t fpos,
                     int64_t offset, uint64_t size)
       : clnt(clnt), onfinish(onfinish), iofinish(iofinish),
         is_read_async(is_read_async), have_caps(have_caps), f(f), in(in),
-        start(start), fpos(fpos), offset(offset), size(size), movepos(movepos) {
+        start(mono_clock_now()), fpos(fpos), offset(offset), size(size), movepos(movepos) {
       iofinished = false;
     }
 
@@ -1442,9 +1442,9 @@ private:
   public:
     C_Read_Sync_NonBlocking(Client *clnt, Context *onfinish, Fh *f, Inode *in,
                             uint64_t fpos, uint64_t off, uint64_t len,
-                            bufferlist *bl, Filer *filer, int have_caps, utime_t start)
+                            bufferlist *bl, Filer *filer, int have_caps)
       : clnt(clnt), onfinish(onfinish), f(f), in(in), off(off), len(len), bl(bl),
-        filer(filer), have_caps(have_caps), start_time(start)
+        filer(filer), have_caps(have_caps), start_time(mono_clock_now())
     {
       left = len;
       wanted = len;
@@ -1486,8 +1486,8 @@ private:
   class C_Read_Async_Finisher : public Context {
   public:
     C_Read_Async_Finisher(Client *clnt, Context *onfinish, Fh *f, Inode *in,
-                          uint64_t fpos, uint64_t off, uint64_t len, utime_t start)
-      : clnt(clnt), onfinish(onfinish), f(f), in(in), off(off), len(len), start_time(start) {}
+                          uint64_t fpos, uint64_t off, uint64_t len)
+      : clnt(clnt), onfinish(onfinish), f(f), in(in), off(off), len(len), start_time(mono_clock_now()) {}
 
   private:
     Client *clnt;
@@ -1523,11 +1523,11 @@ private:
     void finish_fsync(int r);
 
     C_Write_Finisher(Client *clnt, Context *onfinish, bool dont_need_uninline,
-                     bool is_file_write, utime_t start, Fh *f, Inode *in,
+                     bool is_file_write, Fh *f, Inode *in,
                      uint64_t fpos, int64_t offset, uint64_t size,
                      bool do_fsync, bool syncdataonly)
       : clnt(clnt), onfinish(onfinish),
-        is_file_write(is_file_write), start(start), f(f), in(in), fpos(fpos),
+        is_file_write(is_file_write), start(mono_clock_now()), f(f), in(in), fpos(fpos),
         offset(offset), size(size), syncdataonly(syncdataonly) {
       iofinished_r = 0;
       onuninlinefinished_r = 0;
@@ -1607,7 +1607,7 @@ private:
     C_nonblocking_fsync_state(Client *clnt, Inode *in, bool syncdataonly, Context *onfinish)
       : clnt(clnt), in(in), syncdataonly(syncdataonly), onfinish(onfinish) {
       flush_tid = 0;
-      start = ceph_clock_now();
+      start = mono_clock_now();
       progress = 0;
       flush_wait = false;
       flush_completed = false;
@@ -1646,7 +1646,7 @@ private:
   };
 
   struct C_Readahead : public Context {
-    C_Readahead(Client *c, Fh *f, utime_t start);
+    C_Readahead(Client *c, Fh *f);
     ~C_Readahead() override;
     void finish(int r) override;
 
@@ -1796,7 +1796,7 @@ private:
   loff_t _lseek(Fh *fh, loff_t offset, int whence);
   int64_t _read(Fh *fh, int64_t offset, uint64_t size, bufferlist *bl,
   		Context *onfinish = nullptr);
-  void do_readahead(Fh *f, Inode *in, uint64_t off, uint64_t len, utime_t start_time);
+  void do_readahead(Fh *f, Inode *in, uint64_t off, uint64_t len);
   int64_t _write_success(Fh *fh, utime_t start, uint64_t fpos,
           int64_t offset, uint64_t size, Inode *in);
   int64_t _write(Fh *fh, int64_t offset, uint64_t size, bufferlist bl,
