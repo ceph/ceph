@@ -784,6 +784,7 @@ h2. Update Payload
         new_tag = "upkeep-failed"
         if new_tag in current_tags:
             issue_update.logger.warning(f"'upkeep-failed' tag is already present")
+            return
         else:
             current_tags.append(new_tag)
             issue_update.logger.info(f"Adding '{new_tag}' tag.")
