@@ -1,4 +1,6 @@
 overrides:
   s3tests:
-     force-branch: ceph-master
+     force-repo: https://github.com/soumyakoduri/s3-tests.git
+     git_remote: https://github.com/soumyakoduri/
+     force-branch: wip-skoduri-exp-date
      # git_remote: https://github.com/ceph/
