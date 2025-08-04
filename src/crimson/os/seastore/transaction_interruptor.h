@@ -11,10 +11,9 @@
 #include "crimson/common/errorator.h"
 #include "crimson/os/seastore/seastore_types.h"
 #include "crimson/common/interruptible_future.h"
+#include "crimson/os/seastore/transaction.h"
 
 namespace crimson::os::seastore {
-
-class Transaction;
 
 struct TransactionConflictCondition {
   class transaction_conflict final : public std::exception {
