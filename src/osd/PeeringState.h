@@ -1766,7 +1766,7 @@ private:
     const OSDMapRef osdmap) const;
 
   bool recoverable(const std::vector<int> &want) const;
-  bool choose_acting(pg_shard_t &auth_log_shard,
+  bool choose_acting(pg_shard_t &get_log_shard,
 		     bool restrict_to_up_acting,
 		     bool request_pg_temp_change_only = false,
 		     bool *history_les_bound = nullptr,

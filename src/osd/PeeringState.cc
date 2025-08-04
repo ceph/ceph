@@ -2490,7 +2490,7 @@ void PeeringState::choose_async_recovery_replicated(
  *  3) remove the assertion in PG::PeeringState::Active::react(const AdvMap)
  * TODO!
  */
-bool PeeringState::choose_acting(pg_shard_t &auth_log_shard_id,
+bool PeeringState::choose_acting(pg_shard_t &get_log_shard_id,
 				 bool restrict_to_up_acting,
 				 bool request_pg_temp_change_only,
 				 bool *history_les_bound,
@@ -2507,31 +2507,32 @@ bool PeeringState::choose_acting(pg_shard_t &auth_log_shard_id,
   }
 
   auto auth_log_shard = find_best_info(all_info, restrict_to_up_acting,
-				       false, history_les_bound);
-  auto get_log_shard = auth_log_shard;
+				       true, history_les_bound);
+  auto get_log_shard = find_best_info(all_info, restrict_to_up_acting,
+				    false, history_les_bound);
 
   if ((repeat_getlog != nullptr) &&
-      auth_log_shard != all_info.end() &&
-      (info.last_update < auth_log_shard->second.last_update) &&
-      pool.info.is_nonprimary_shard(auth_log_shard->first.shard)) {
+      get_log_shard != all_info.end() &&
+      (info.last_update < get_log_shard->second.last_update) &&
+      pool.info.is_nonprimary_shard(get_log_shard->first.shard)) {
     // Only EC pools with ec_optimizations enabled:
-    // Our log is behind that of the auth_log_shard which is a
+    // Our log is behind that of the get_log_shard which is a
     // non-primary shard and hence may have a sparse log,
-    // get a complete log from a primary shard first then
+    // get a complete log from the auth_log_shard first then
     // repeat this step in the state machine to work out what
     // has to be rolled backwards
-    psdout(10) << "auth_log_shard " << auth_log_shard->first
+    psdout(10) << "get_log_shard " << get_log_shard->first
 	       << " is ahead but is a non_primary shard" << dendl;
-    get_log_shard = find_best_info(all_info, restrict_to_up_acting,
-				    true, history_les_bound);
-    if (get_log_shard != all_info.end()) {
+    if (auth_log_shard != all_info.end()) {
       psdout(10) << "auth_log_shard " << auth_log_shard->first
 		 << " selected instead" << dendl;
+      get_log_shard = auth_log_shard;
       *repeat_getlog = true;
     }
   }
 
-  if (get_log_shard == all_info.end()) {
+  if ((auth_log_shard == all_info.end()) ||
+      (get_log_shard == all_info.end())) {
     if (up != acting) {
       psdout(10) << "no suitable info found (incomplete backfills?),"
 		 << " reverting to up" << dendl;
@@ -2546,7 +2547,7 @@ bool PeeringState::choose_acting(pg_shard_t &auth_log_shard_id,
   }
 
   ceph_assert(!auth_log_shard->second.is_incomplete());
-  auth_log_shard_id = get_log_shard->first;
+  get_log_shard_id = get_log_shard->first;
 
   set<pg_shard_t> want_backfill, want_acting_backfill;
   vector<int> want;
@@ -6310,9 +6311,9 @@ PeeringState::Recovering::react(const RequestBackfill &evt)
   // so pg won't have to stay undersized for long
   // as backfill might take a long time to complete..
   if (!ps->async_recovery_targets.empty()) {
-    pg_shard_t auth_log_shard;
+    pg_shard_t get_log_shard;
     // FIXME: Uh-oh we have to check this return value; choose_acting can fail!
-    ps->choose_acting(auth_log_shard, true);
+    ps->choose_acting(get_log_shard, true);
   }
   return transit<WaitLocalBackfillReserved>();
 }
@@ -6367,7 +6368,7 @@ PeeringState::Recovered::Recovered(my_context ctx)
   : my_base(ctx),
     NamedState(context< PeeringMachine >().state_history, "Started/Primary/Active/Recovered")
 {
-  pg_shard_t auth_log_shard;
+  pg_shard_t get_log_shard;
 
   context< PeeringMachine >().log_enter(state_name);
 
@@ -6386,11 +6387,11 @@ PeeringState::Recovered::Recovered(my_context ctx)
 
   // adjust acting set?  (e.g. because backfill completed...)
   if (ps->acting != ps->up &&
-      !ps->choose_acting(auth_log_shard, true)) {
+      !ps->choose_acting(get_log_shard, true)) {
     ceph_assert(ps->want_acting.size());
   } else if (!ps->async_recovery_targets.empty()) {
     // FIXME: Uh-oh we have to check this return value; choose_acting can fail!
-    ps->choose_acting(auth_log_shard, true);
+    ps->choose_acting(get_log_shard, true);
   }
 
   if (context< Active >().all_replicas_activated  &&
@@ -6535,9 +6536,9 @@ boost::statechart::result PeeringState::Active::react(const AdvMap& advmap)
     // call choose_acting again to clear them out.
     // note that we leave restrict_to_up_acting to false in order to
     // not overkill any chosen stray that is still alive.
-    pg_shard_t auth_log_shard;
+    pg_shard_t get_log_shard;
     ps->remove_down_peer_info(advmap.osdmap);
-    ps->choose_acting(auth_log_shard, false, true);
+    ps->choose_acting(get_log_shard, false, true);
   }
 
   /* Check for changes in pool size (if the acting set changed as a result,
@@ -6615,9 +6616,9 @@ boost::statechart::result PeeringState::Active::react(const MNotifyRec& notevt)
     }
     // check if it is a previous down acting member that's coming back.
     // if so, request pg_temp change to trigger a new interval transition
-    pg_shard_t auth_log_shard;
+    pg_shard_t get_log_shard;
     // FIXME: Uh-oh we have to check this return value; choose_acting can fail!
-    ps->choose_acting(auth_log_shard, false, true);
+    ps->choose_acting(get_log_shard, false, true);
     if (!ps->want_acting.empty() && ps->want_acting != ps->acting) {
       psdout(10) << "Active: got notify from previous acting member "
                  << notevt.from << ", requesting pg_temp change"
@@ -7539,6 +7540,7 @@ PeeringState::GetLog::GetLog(my_context ctx)
   // am i broken?
   if (ps->info.last_update < best.log_tail) {
     psdout(10) << " not contiguous with osd." << auth_log_shard << ", down" << dendl;
+    repeat_getlog = false;
     post_event(IsIncomplete());
     return;
   }
