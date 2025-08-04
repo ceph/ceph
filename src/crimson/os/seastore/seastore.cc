@@ -1102,7 +1102,7 @@ SeaStore::Shard::list_collections()
   });
 }
 
-SeaStore::base_iertr::future<ceph::bufferlist>
+base_iertr::future<ceph::bufferlist>
 SeaStore::Shard::_read(
   Transaction& t,
   Onode& onode,
@@ -1279,7 +1279,7 @@ SeaStore::Shard::get_attr(
   });
 }
 
-SeaStore::base_iertr::future<SeaStore::Shard::attrs_t>
+base_iertr::future<SeaStore::Shard::attrs_t>
 SeaStore::Shard::_get_attrs(
   Transaction& t,
   Onode& onode)
@@ -1459,7 +1459,7 @@ SeaStore::Shard::omap_iterate(
   });
 }
 
-SeaStore::base_iertr::future<SeaStore::Shard::fiemap_ret_t>
+base_iertr::future<SeaStore::Shard::fiemap_ret_t>
 SeaStore::Shard::_fiemap(
   Transaction &t,
   Onode &onode,
@@ -2543,7 +2543,7 @@ SeaStore::Shard::omaptree_get_value(
   });
 }
 
-SeaStore::base_iertr::future<SeaStore::Shard::omap_values_t>
+base_iertr::future<SeaStore::Shard::omap_values_t>
 SeaStore::Shard::omaptree_get_values(
   Transaction& t,
   omap_root_t&& root,
@@ -2634,7 +2634,7 @@ SeaStore::Shard::omaptree_list(
   });
 }
 
-SeaStore::base_iertr::future<SeaStore::Shard::omap_values_paged_t>
+base_iertr::future<SeaStore::Shard::omap_values_paged_t>
 SeaStore::Shard::omaptree_get_values(
   Transaction& t,
   omap_root_t&& root,
@@ -2654,7 +2654,7 @@ SeaStore::Shard::omaptree_get_values(
   });
 }
 
-SeaStore::base_iertr::future<omap_root_t>
+base_iertr::future<omap_root_t>
 SeaStore::Shard::omaptree_do_clear(
   Transaction& t,
   omap_root_t&& root)
@@ -2673,7 +2673,7 @@ SeaStore::Shard::omaptree_do_clear(
   });
 }
 
-SeaStore::base_iertr::future<>
+base_iertr::future<>
 SeaStore::Shard::omaptree_clear_no_onode(
   Transaction& t,
   omap_root_t&& root)
@@ -2707,7 +2707,7 @@ void omaptree_update_root(
   }
 }
 
-SeaStore::base_iertr::future<>
+base_iertr::future<>
 SeaStore::Shard::omaptree_clear(
   Transaction& t,
   omap_root_t&& root,
@@ -2728,7 +2728,7 @@ SeaStore::Shard::omaptree_clear(
   });
 }
 
-SeaStore::base_iertr::future<>
+base_iertr::future<>
 SeaStore::Shard::omaptree_clone(
   Transaction& t,
   omap_type_t type,
@@ -2819,7 +2819,7 @@ SeaStore::Shard::omaptree_set_keys(
   });
 }
 
-SeaStore::base_iertr::future<>
+base_iertr::future<>
 SeaStore::Shard::omaptree_rm_keys(
   Transaction& t,
   omap_root_t&& root,
@@ -2855,7 +2855,7 @@ SeaStore::Shard::omaptree_rm_keys(
   });
 }
 
-SeaStore::base_iertr::future<>
+base_iertr::future<>
 SeaStore::Shard::omaptree_rm_keyrange(
   Transaction& t,
   omap_root_t&& root,
@@ -2896,7 +2896,7 @@ SeaStore::Shard::omaptree_rm_keyrange(
   });
 }
 
-SeaStore::base_iertr::future<>
+base_iertr::future<>
 SeaStore::Shard::omaptree_rm_key(
   Transaction& t,
   omap_root_t&& root,

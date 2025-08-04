@@ -39,7 +39,7 @@ std::ostream &OMapInnerNode::print_detail_l(std::ostream &out) const
   return out;
 }
 
-using dec_ref_iertr = OMapInnerNode::base_iertr;
+using dec_ref_iertr = base_iertr;
 using dec_ref_ret = dec_ref_iertr::future<>;
 template <typename T>
 dec_ref_ret dec_ref(omap_context_t oc, T&& addr) {

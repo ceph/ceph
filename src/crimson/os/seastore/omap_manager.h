@@ -50,8 +50,6 @@ class OMapManager {
   * until these functions future resolved.
   */
 public:
-  using base_iertr = TransactionManager::base_iertr;
-
   /**
    * allocate omap tree root node
    *
