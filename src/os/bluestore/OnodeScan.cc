@@ -11,6 +11,7 @@
  * Foundation.  See file COPYING.
  */
 #include "BlueStore.h"
+#include "BlueStore_objects.h"
 #include "common/pretty_binary.h"
 #include "simple_bitmap.h"
 #include "common/debug.h"
