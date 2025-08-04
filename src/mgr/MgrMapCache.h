@@ -27,8 +27,16 @@ protected:
   std::atomic<bool> enabled;
   mutable std::shared_mutex cache_mutex;
 
-  void mark_miss() { misses++; perfcounter->inc(l_mgr_cache_miss); }
-  void mark_hit() { hits++; perfcounter->inc(l_mgr_cache_hit); }
+  void mark_miss() {
+    misses++;
+    if (perfcounter)
+      perfcounter->inc(l_mgr_cache_miss);
+  }
+  void mark_hit() {
+    hits++;
+    if (perfcounter)
+      perfcounter->inc(l_mgr_cache_hit);
+  }
 
   void throw_key_not_found(Key key) {
     mark_miss();
@@ -79,8 +87,9 @@ public:
     
     std::shared_lock<std::shared_mutex> l(cache_mutex);
     auto it = cache_data.find(key);
-    if (it == cache_data.end())
+    if (it == cache_data.end()) {
       throw_key_not_found(key);
+    }
 
     if (count_hit) {
       it->second.hits++;
