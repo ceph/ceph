@@ -15,6 +15,7 @@
 #include <cstdint>
 #include <ostream>
 #include "BlueStore.h"
+#include "BlueStore_objects.h"
 
 static const std::string transition_table[26] = {
 "bcdfghjklmnprstuvxyz", //a
@@ -83,134 +84,137 @@ std::ostream &operator<<(std::ostream &out, const maybe_K &k) {
 // cheap, not very reliable but portable detector where heap starts
 static std::unique_ptr<char> heap_begin(new char);
 std::ostream& operator<<(std::ostream& out, const BlueStore::Buffer& b);
-std::ostream& operator<<(std::ostream& out, const BlueStore::Blob::printer &p)
-{
-  using P = BlueStore::printer;
-  out << "Blob(";
-  if (p.mode & P::PTR) {
-    out << &p.blob;
-  }
-  if (p.mode & P::NICK) {
-    uint64_t v = uint64_t(&p.blob);
-    //Assume allocated Blobs will be 16 bytes aligned.
-    v = (v - (uintptr_t)heap_begin.get()) / 16;
-    out << int_to_fancy_name(v);
-  }
-  const bluestore_blob_t& bblob = p.blob.get_blob();
-  if (p.mode & P::DISK) {
-    //use default printer for std::vector * bluestore_pextent_t
-    out << " disk=" << bblob.get_extents();
-  }
-  if (p.mode & P::SDISK) {
-    const PExtentVector& ev = bblob.get_extents();
-    uint64_t bits = 0;
-    for (auto i : ev) {
-      if (i.is_valid()) bits |= i.offset;
-      bits |= i.length;
+
+namespace bluestore {
+  std::ostream& operator<<(std::ostream& out, const bluestore::Blob::printer &p)
+  {
+    using P = BlueStore::printer;
+    out << "Blob(";
+    if (p.mode & P::PTR) {
+      out << &p.blob;
     }
-    uint32_t zeros = 0; //zeros to apply to all values
-    while ((bits & 0xf) == 0) {
-      bits = bits >> 4;
-      ++zeros;
+    if (p.mode & P::NICK) {
+      uint64_t v = uint64_t(&p.blob);
+      //Assume allocated Blobs will be 16 bytes aligned.
+      v = (v - (uintptr_t)heap_begin.get()) / 16;
+      out << int_to_fancy_name(v);
     }
-    out << " disk=0x[" << std::hex;
-    for (size_t i = 0; i < ev.size(); ++i) {
-      if (i != 0) {
-        out << ",";
+    const bluestore_blob_t& bblob = p.blob.get_blob();
+    if (p.mode & P::DISK) {
+      //use default printer for std::vector * bluestore_pextent_t
+      out << " disk=" << bblob.get_extents();
+    }
+    if (p.mode & P::SDISK) {
+      const PExtentVector& ev = bblob.get_extents();
+      uint64_t bits = 0;
+      for (auto i : ev) {
+        if (i.is_valid()) bits |= i.offset;
+        bits |= i.length;
       }
-      if (ev[i].is_valid()) {
-        out << (ev[i].offset >> zeros * 4) << "~";
+      uint32_t zeros = 0; //zeros to apply to all values
+      while ((bits & 0xf) == 0) {
+        bits = bits >> 4;
+        ++zeros;
+      }
+      out << " disk=0x[" << std::hex;
+      for (size_t i = 0; i < ev.size(); ++i) {
+        if (i != 0) {
+          out << ",";
+        }
+        if (ev[i].is_valid()) {
+          out << (ev[i].offset >> zeros * 4) << "~";
+        } else {
+          out << "!";
+        }
+        out << (ev[i].length >> zeros * 4);
+      }
+      out << "]" << std::dec;
+      while (zeros > 0) {
+        out << "0";
+        --zeros;
+      }
+    }
+    //always print lengths, if not printing use tracker
+    if ((!(p.mode & (P::USE | P::SUSE)) || bblob.is_compressed())
+      && !(p.mode & P::JUSTID)) {
+      // Need to print blob logical length, no tracker printing
+      // + there is no real tracker for compressed blobs
+      if (bblob.is_compressed()) {
+        out << " len=" << std::hex << bblob.get_logical_length() << "->"
+            << bblob.get_compressed_payload_length() << std::dec;
       } else {
-        out << "!";
+        out << " len=" << std::hex << bblob.get_logical_length() << std::dec;
       }
-      out << (ev[i].length >> zeros * 4);
     }
-    out << "]" << std::dec;
-    while (zeros > 0) {
-      out << "0";
-      --zeros;
+    if ((p.mode & P::USE) && !bblob.is_compressed()) {
+      out << " " << p.blob.get_blob_use_tracker();
     }
-  }
-  //always print lengths, if not printing use tracker
-  if ((!(p.mode & (P::USE | P::SUSE)) || bblob.is_compressed())
-    && !(p.mode & P::JUSTID)) {
-    // Need to print blob logical length, no tracker printing
-    // + there is no real tracker for compressed blobs
-    if (bblob.is_compressed()) {
-      out << " len=" << std::hex << bblob.get_logical_length() << "->"
-          << bblob.get_compressed_payload_length() << std::dec;
-    } else {
-      out << " len=" << std::hex << bblob.get_logical_length() << std::dec;
-    }
-  }
-  if ((p.mode & P::USE) && !bblob.is_compressed()) {
-    out << " " << p.blob.get_blob_use_tracker();
-  }
-  if (p.mode & P::SUSE) {
-    auto& tracker = p.blob.get_blob_use_tracker();
-    if (bblob.is_compressed()) {
-      out << " [" << std::hex << tracker.get_referenced_bytes() << std::dec << "]";
-    } else {
-      const uint32_t* au_array = tracker.get_au_array();
-      uint16_t zeros = 0;
-      uint16_t full = 0;
-      uint16_t num_au = tracker.get_num_au();
-      uint32_t au_size = tracker.au_size;
-      uint32_t def = std::numeric_limits<uint32_t>::max();
-      out << " track=" << tracker.get_num_au() << "*" << maybe_K(tracker.au_size);
-      for (size_t i = 0; i < num_au; i++) {
-        if (au_array[i] == 0) ++zeros;
-        if (au_array[i] == au_size) ++full;
-      }
-      if (zeros >= num_au - 3 && num_au > 6) def = 0;
-      if (full >= num_au - 3 && num_au > 6) def = au_size;
-      if (def != std::numeric_limits<uint32_t>::max()) {
-        out << " {" << maybe_K(def) << "}[";
+    if (p.mode & P::SUSE) {
+      auto& tracker = p.blob.get_blob_use_tracker();
+      if (bblob.is_compressed()) {
+        out << " [" << std::hex << tracker.get_referenced_bytes() << std::dec << "]";
+      } else {
+        const uint32_t* au_array = tracker.get_au_array();
+        uint16_t zeros = 0;
+        uint16_t full = 0;
+        uint16_t num_au = tracker.get_num_au();
+        uint32_t au_size = tracker.au_size;
+        uint32_t def = std::numeric_limits<uint32_t>::max();
+        out << " track=" << tracker.get_num_au() << "*" << maybe_K(tracker.au_size);
         for (size_t i = 0; i < num_au; i++) {
-          if (au_array[i] != def) {
-            out << i << "=" << maybe_K(au_array[i]);
-            ++i;
-            for (; i < num_au; i++) {
-              if (au_array[i] != def) {
-                out << "," << i << "=" << maybe_K(au_array[i]);
+          if (au_array[i] == 0) ++zeros;
+          if (au_array[i] == au_size) ++full;
+        }
+        if (zeros >= num_au - 3 && num_au > 6) def = 0;
+        if (full >= num_au - 3 && num_au > 6) def = au_size;
+        if (def != std::numeric_limits<uint32_t>::max()) {
+          out << " {" << maybe_K(def) << "}[";
+          for (size_t i = 0; i < num_au; i++) {
+            if (au_array[i] != def) {
+              out << i << "=" << maybe_K(au_array[i]);
+              ++i;
+              for (; i < num_au; i++) {
+                if (au_array[i] != def) {
+                  out << "," << i << "=" << maybe_K(au_array[i]);
+                }
               }
             }
           }
+          out << "]";
+        } else {
+          out << " [";
+          for (size_t i = 0; i < num_au; i++) {
+            if (i != 0) out << ",";
+            out << maybe_K(au_array[i]);
+          }
+          out << "]";
         }
-        out << "]";
-      } else {
-        out << " [";
-        for (size_t i = 0; i < num_au; i++) {
-          if (i != 0) out << ",";
-          out << maybe_K(au_array[i]);
-        }
-        out << "]";
       }
     }
-  }
-  if (bblob.has_csum()) {
-    if (p.mode & (P::SCHK | P::CHK)) {
-      out << " " << Checksummer::get_csum_type_string(bblob.csum_type) << "/"
-          << (int)bblob.csum_chunk_order << "/" << bblob.csum_data.length();
+    if (bblob.has_csum()) {
+      if (p.mode & (P::SCHK | P::CHK)) {
+        out << " " << Checksummer::get_csum_type_string(bblob.csum_type) << "/"
+            << (int)bblob.csum_chunk_order << "/" << bblob.csum_data.length();
+      }
+      if (p.mode & P::CHK) {
+        std::vector<uint64_t> v;
+        unsigned n = bblob.get_csum_count();
+        for (unsigned i = 0; i < n; ++i)
+          v.push_back(bblob.get_csum_item(i));
+        out << " " << std::hex << v << std::dec;
+      }
     }
-    if (p.mode & P::CHK) {
-      std::vector<uint64_t> v;
-      unsigned n = bblob.get_csum_count();
-      for (unsigned i = 0; i < n; ++i)
-        v.push_back(bblob.get_csum_item(i));
-      out << " " << std::hex << v << std::dec;
+    if (!(p.mode & P::JUSTID) && p.blob.is_spanning()) {
+      out << " spanning.id=" << p.blob.id;
     }
+    if (!(p.mode & P::JUSTID) &&
+      p.blob.get_shared_blob() &&
+      (p.blob.get_shared_blob()->get_sbid() != 0)) {
+      out << " " << *p.blob.get_shared_blob();
+    }
+    out << ")";
+    return out;
   }
-  if (!(p.mode & P::JUSTID) && p.blob.is_spanning()) {
-    out << " spanning.id=" << p.blob.id;
-  }
-  if (!(p.mode & P::JUSTID) &&
-    p.blob.shared_blob &&
-    (p.blob.shared_blob->get_sbid() != 0)) {
-    out << " " << *p.blob.shared_blob;
-  }
-  out << ")";
-  return out;
 }
 
 std::ostream& operator<<(std::ostream& out, const BlueStore::Extent::printer &p)
