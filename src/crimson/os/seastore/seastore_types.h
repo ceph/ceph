@@ -22,7 +22,12 @@
 #include "include/uuid.h"
 #include "include/rados.h"
 
+#include "crimson/common/errorator.h"
+
 namespace crimson::os::seastore {
+
+using base_ertr = crimson::errorator<
+  crimson::ct_error::input_output_error>;
 
 class cache_hint_t {
   enum hint_t {
