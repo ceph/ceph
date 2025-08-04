@@ -71,9 +71,6 @@ struct col_obj_ranges_t {
 
 class SeaStore final : public FuturizedStore {
 public:
-  using base_ertr = TransactionManager::base_ertr;
-  using base_iertr = TransactionManager::base_iertr;
-
   class MDStore {
   public:
     using write_meta_ertr = base_ertr;

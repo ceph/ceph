@@ -251,11 +251,11 @@ struct object_data_handler_test_t:
         trans, std::move(opin), std::array{
           remap_entry_t(new_offset, new_len)}
       ).si_then([](auto ret) {
-        return TransactionManager::base_iertr::make_ready_future<
+        return base_iertr::make_ready_future<
 	  std::optional<LBAMapping>>(std::move(ret[0]));
       });
     }).handle_error(crimson::ct_error::eagain::handle([] {
-      return TransactionManager::base_iertr::make_ready_future<
+      return base_iertr::make_ready_future<
 	std::optional<LBAMapping>>();
     }), crimson::ct_error::pass_further_all{}).unsafe_get();
     EXPECT_TRUE(pin);
