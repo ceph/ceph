@@ -345,6 +345,9 @@ class RedmineUpkeep:
     MAX_UPKEEP_FAILURES = 5
 
     class Filter:
+        PRIORITY = 1000
+        NAME = "undefined"
+
         @staticmethod
         def get_filters():
             raise NotImplementedError("NI")
