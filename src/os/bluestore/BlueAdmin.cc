@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 sts=2 expandtab
 
 #include "BlueAdmin.h"
+#include "BlueStore_objects.h"
 #include "Compression.h"
 #include "common/pretty_binary.h"
 #include "common/debug.h"
