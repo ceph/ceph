@@ -94,8 +94,7 @@ public:
     return direct_cursor->get_refcount() > 1;
   }
   bool is_zero_reserved() const {
-    assert(is_linked_direct());
-    return get_val().is_zero();
+    return !is_indirect() && get_val().is_zero();
   }
 
   extent_len_t get_length() const {
