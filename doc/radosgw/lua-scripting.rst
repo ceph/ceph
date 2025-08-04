@@ -511,7 +511,7 @@ Tracing is disabled by default, so we should enable tracing for this specific bu
   end
 
 
-If `tracing is enabled <https://docs.ceph.com/en/latest/jaegertracing/#how-to-enable-tracing-in-ceph/>`_ on the RGW, the value of Request.Trace.Enable is true, so we should disable tracing for all other requests that do not match the bucket name.
+If :ref:`tracing is enabled <jaegertracing-enable>` on the RGW, the value of Request.Trace.Enable is true, so we should disable tracing for all other requests that do not match the bucket name.
 In the ``prerequest`` context:
 
 .. code-block:: lua
