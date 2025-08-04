@@ -7,6 +7,7 @@
 #include "include/stringify.h"
 #include "common/ceph_time.h"
 #include "os/bluestore/BlueStore.h"
+#include "os/bluestore/BlueStore_objects.h"
 #include "os/bluestore/simple_bitmap.h"
 #include "os/bluestore/AvlAllocator.h"
 #include "common/ceph_argparse.h"
