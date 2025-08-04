@@ -2337,7 +2337,7 @@ void Objecter::ECRead::finish(int r, std::pair<uint64_t, uint64_t> &extent, buff
   // do callbacks
   if (count == 0 && rc >= 0) {
     auto extent = read_emap.begin();
-    ldout(cct, 0) << __func__
+    ldout(cct, 20) << __func__
     << " this=" << this
     << " off=" << extent.get_off()
     << " oflen=" << extent.get_len()
@@ -2352,7 +2352,7 @@ void Objecter::ECRead::finish(int r, std::pair<uint64_t, uint64_t> &extent, buff
   }
 }
 Objecter::ECRead::~ECRead() {
-  ldout(cct, 0) << __func__ << this << dendl;
+  ldout(cct, 20) << __func__ << this << dendl;
 
   ceph_assert(count == 0);
   ceph_assert(orig_op);
@@ -3227,7 +3227,7 @@ int Objecter::_calc_target(op_target_t *t, const Op *op, bool any_change)
             ec_direct = true;
           }
         }
-        ldout(cct, 0) << __func__ << " direct_read=" << ec_direct
+        ldout(cct, 20) << __func__ << " direct_read=" << ec_direct
                       << " offset=" << offset
                       << " length=" << length
                       << " data_chunk_count=" << data_chunk_count

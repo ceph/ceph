@@ -5903,7 +5903,7 @@ int PrimaryLogPG::do_read(OpContext *ctx, OSDOp& osd_op) {
       ctx->op_finishers[ctx->current_osd_subop_num].reset(
         new ReadFinisher(osd_op));
     } else {
-      dout(0) << " EC sync read for " << soid << dendl;
+      dout(20) << " EC sync read for " << soid << dendl;
 
       result = r;
     }
