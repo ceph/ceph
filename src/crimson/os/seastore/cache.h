@@ -18,6 +18,7 @@
 #include "crimson/os/seastore/seastore_types.h"
 #include "crimson/os/seastore/segment_manager.h"
 #include "crimson/os/seastore/transaction.h"
+#include "crimson/os/seastore/transaction_interruptor.h"
 #include "crimson/os/seastore/linked_tree_node.h"
 #include "crimson/os/seastore/extent_pinboard.h"
 
@@ -104,10 +105,6 @@ class SegmentProvider;
  */
 class Cache : public ExtentTransViewRetriever {
 public:
-  using base_ertr = crimson::errorator<
-    crimson::ct_error::input_output_error>;
-  using base_iertr = trans_iertr<base_ertr>;
-
   Cache(ExtentPlacementManager &epm);
   ~Cache();
 
