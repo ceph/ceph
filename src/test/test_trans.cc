@@ -17,6 +17,7 @@
 #include "common/ceph_argparse.h"
 #include "common/debug.h"
 #include "os/bluestore/BlueStore.h"
+#include "os/bluestore/BlueStore_objects.h"
 #include "global/global_init.h"
 #include "include/ceph_assert.h"
 
