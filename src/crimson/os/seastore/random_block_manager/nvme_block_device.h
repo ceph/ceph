@@ -267,10 +267,6 @@ public:
 	{
 	  return file.size().then([this, stat, &file](auto size) mutable {
 	    stat.size = size;
-	    return stat_device_ret(
-	      read_ertr::ready_future_marker{},
-	      stat
-	    );
 	    return identify_namespace(file
 	    ).safe_then([stat] (auto id_namespace_data) mutable {
 	      // LBA format provides LBA size which is power of 2. LBA is the
@@ -284,7 +280,10 @@ public:
 		stat
 	      );
 	    }).handle_error(crimson::ct_error::input_output_error::handle(
-	      [stat]{
+	      [stat]() mutable {
+	      if (stat.block_size < RBM_SUPERBLOCK_SIZE) {
+                stat.block_size = RBM_SUPERBLOCK_SIZE;
+              }
 	      return stat_device_ret(
 		read_ertr::ready_future_marker{},
 		stat
