@@ -66,9 +66,11 @@ struct object_t {
     f->dump_string("name", name);
   }
 
-  static void generate_test_instances(std::list<object_t*>& o) {
-    o.push_back(new object_t);
-    o.push_back(new object_t("myobject"));
+  static std::list<object_t> generate_test_instances() {
+    std::list<object_t> o;
+    o.push_back(object_t{});
+    o.push_back(object_t("myobject"));
+    return o;
   }
 };
 WRITE_CLASS_ENCODER(object_t)
@@ -205,9 +207,11 @@ struct sobject_t {
     f->dump_stream("oid") << oid;
     f->dump_stream("snap") << snap;
   }
-  static void generate_test_instances(std::list<sobject_t*>& o) {
-    o.push_back(new sobject_t);
-    o.push_back(new sobject_t(object_t("myobject"), 123));
+  static std::list<sobject_t> generate_test_instances() {
+    std::list<sobject_t> o;
+    o.push_back(sobject_t{});
+    o.push_back(sobject_t(object_t("myobject"), 123));
+    return o;
   }
 };
 WRITE_CLASS_ENCODER(sobject_t)
