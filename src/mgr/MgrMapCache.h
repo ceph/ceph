@@ -8,92 +8,8 @@
 
 #include "PyUtil.h"
 #include "common/config_obs.h"
-
-template <class Key, class Value> 
-class Cache {
-private:
-  std::atomic<uint64_t> hits{0}, misses{0};
-  std::shared_mutex cache_mutex;
-protected:
-  size_t capacity;
-  std::atomic<bool> enabled;
-  std::unordered_map<Key, Value> cache_data;
-  std::unordered_set<std::string> allowed_keys = {"osd_map", "pg_dump", "pg_stats",
-    "health", "mon_map", "mon_status", "mgr_map", "devices", "osd_metadata",
-    "mds_metadata", "config"};
-
-  void mark_miss() { misses++; }
-  void mark_hit() { hits++; }
-
-  void throw_key_not_found(Key key) {
-    mark_miss();
-    std::stringstream ss;
-    ss << "Key " << key << " couldn't be found\n";
-    throw std::out_of_range(ss.str());
-  }
-
-public:
-  Cache(unsigned int size = UINT16_MAX) : capacity{size} {}
-
-  virtual ~Cache() = default;
-
-  void set_enabled(bool e) {
-    enabled.store(e);
-    if (!e) {
-      clear();
-    }
-  }
-
-  bool is_enabled() const noexcept {
-    return enabled.load();
-  }
-
-  void insert(Key key, Value value) {
-    if (!is_cacheable(key) || !is_enabled()) { return; }
-    if (exists(key)) return;
-    std::unique_lock<std::shared_mutex> l(cache_mutex);
-    mark_miss();
-    if (cache_data.size() < capacity) {
-      cache_data.insert({key, value});
-    }
-  }
-
-  Value get(Key key, bool count_hit = true) {
-    if (!is_cacheable(key) || !is_enabled()) {
-      return Value();
-    }
-    std::shared_lock<std::shared_mutex> l(cache_mutex);
-    auto it = cache_data.find(key);
-    if (it == cache_data.end())
-      throw_key_not_found(key);
-
-    if (count_hit) { hits++; }
-
-    return it->second;
-  }
-
-  void erase(Key key) {
-    if (!is_cacheable(key) || !is_enabled()) { return; }
-    std::unique_lock<std::shared_mutex> l(cache_mutex);
-    cache_data.erase(key); 
-  }
-  void clear() { 
-    std::unique_lock<std::shared_mutex> l(cache_mutex);
-    cache_data.clear();
-    hits.store(0);
-    misses.store(0);
-  }
-  bool exists(Key key) {
-    std::shared_lock<std::shared_mutex> l(cache_mutex);
-    return cache_data.find(key) != cache_data.end();
-  }
-  int size() { return cache_data.size(); }
-  bool is_cacheable(Key key) { return allowed_keys.count(key) > 0; }
-
-  std::pair<uint64_t, uint64_t> get_hit_miss_ratio() {
-    return std::make_pair(hits.load(), misses.load());
-  }
-};
+#include "common/perf_counters.h"
+#include "mgr/mgr_perf_counters.h"
 
 template<class Key, class Value>
 class LFUCache {
@@ -107,7 +23,7 @@ class LFUCache {
     "mds_metadata", "config", "foo"};
 protected:
   std::unordered_map<Key, Entry> cache_data;
-  size_t capacity;
+  const size_t capacity;
   std::atomic<bool> enabled;
   mutable std::shared_mutex cache_mutex;
 
@@ -121,7 +37,8 @@ protected:
     throw std::out_of_range(ss.str());
   }
 public:
-  LFUCache(size_t cap = UINT16_MAX) : capacity(cap) {}
+  LFUCache(size_t cap = UINT16_MAX, const bool ena = true)
+    : capacity{cap}, enabled{ena} {}
   ~LFUCache() = default;
   void set_enabled(bool e) {
     enabled.store(e);
@@ -133,8 +50,9 @@ public:
     return enabled.load();
   }
   void insert(const Key& key, Value value) {
-    if (!is_cacheable(key) || !is_enabled()) { return; }
-    
+    if (!can_write_cache(key)) {
+      return;
+    }
     std::unique_lock<std::shared_mutex> l(cache_mutex);
     auto it = cache_data.find(key);
     if (it != cache_data.end()) {
@@ -155,7 +73,7 @@ public:
   }
 
   Value get(const Key& key, bool count_hit = true) {
-    if (!is_cacheable(key) || !is_enabled()) {
+    if (!this->is_enabled() && !this->is_cacheable(key)) {
       return Value();
     }
     
@@ -166,14 +84,16 @@ public:
 
     if (count_hit) {
       it->second.hits++;
-      hits++;
+      mark_hit();
     }
 
     return it->second.val;
   }
 
   void erase(Key key) {
-    if (!is_cacheable(key) || !is_enabled()) { return; }
+    if (!can_read_cache(key)) {
+      return;
+    }
     std::unique_lock<std::shared_mutex> l(cache_mutex);
     cache_data.erase(key); 
   }
@@ -183,16 +103,22 @@ public:
     hits.store(0);
     misses.store(0);
   }
-  bool exists(Key key) {
+  bool exists(Key key) const noexcept {
     std::shared_lock<std::shared_mutex> l(cache_mutex);
     return cache_data.find(key) != cache_data.end();
   }
   int size() { return cache_data.size(); }
-  bool is_cacheable(Key key) { return allowed_keys.count(key) > 0; }
+  bool is_cacheable(Key key) const noexcept { return allowed_keys.count(key) > 0; }
 
-  std::pair<uint64_t, uint64_t> get_hit_miss_ratio() {
-    return std::make_pair(hits.load(), misses.load());
+  bool can_read_cache(const Key &key) const noexcept {
+    return is_enabled() && is_cacheable(key) && exists(key);
   }
+
+  bool can_write_cache(const Key &key) const noexcept {
+    return is_enabled() && is_cacheable(key);
+  }
+  uint64_t get_hits() const { return hits.load(); }
+  uint64_t get_misses() const { return misses.load(); }
 };
 
 template <class Key, class Value>
@@ -206,10 +132,10 @@ private:
 public:
   MgrMapCache(uint16_t size = UINT16_MAX);
   ~MgrMapCache();
-  Value get(Key key, bool count_hit = true);
-  void erase(Key key);
+  Value get(const Key &key, bool count_hit = true);
+  void erase(const Key &key);
   void clear();
-  void insert(Key key, Value value);
+  void insert(const Key &key, Value value);
 };
 
 // Full template specialization for PyObject*.
@@ -220,8 +146,8 @@ class MgrMapCache<Key, PyObject*> : public LFUCache<Key, PyObject*>,
 public:
   MgrMapCache(uint16_t size = UINT16_MAX);
   ~MgrMapCache();
-  PyObject* get(Key key);
-  void erase(Key key);
+  PyObject* get(const Key &key);
+  void erase(const Key &key);
   void clear();
   void insert(const Key &key, PyObject* value);
   void invalidate(const Key &key) {
@@ -229,7 +155,6 @@ public:
   }
 private:
   std::mutex lock;
-  bool cache_enabled;
   std::vector<std::string> get_tracked_keys() const noexcept override;
   void handle_conf_change(const ConfigProxy& conf,
                           const std::set<std::string> &changed) override;
