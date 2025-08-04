@@ -181,12 +181,10 @@ PyObject *ActivePyModules::get_daemon_status_python(
   return f.get();
 }
 
-void ActivePyModules::update_cache_metrics() {
-    auto hit_miss_ratio = api_cache.get_hit_miss_ratio();
-    dout(10) << __func__ << ": api cache hit/miss ratio: " << hit_miss_ratio.first
-             << "/" << hit_miss_ratio.second << dendl;
-    perfcounter->set(l_mgr_cache_hit, hit_miss_ratio.first);
-    perfcounter->set(l_mgr_cache_miss, hit_miss_ratio.second);
+void ActivePyModules::ceph_cache_map_erase(const std::string &what)
+{
+  dout(10) << __func__ << " what: " << what << dendl;
+  api_cache.erase(what);
 }
 
 PyObject *ActivePyModules::cacheable_get_python(const std::string &what)
@@ -194,29 +192,34 @@ PyObject *ActivePyModules::cacheable_get_python(const std::string &what)
   if(api_cache.is_enabled() && api_cache.is_cacheable(what)) {
     try{
       PyObject* cached = api_cache.get(what);
-      dout(20) << __func__ << ": api cache hit for " << what << dendl;
-      update_cache_metrics();
+      dout(20) << __func__ << ": api cache hit for " << what << " hit/miss "
+               << api_cache.get_hits() << "/" << api_cache.get_misses()
+               << dendl;
       return cached;
-    } catch (std::out_of_range& e) {}
+    } catch (std::out_of_range& e) {
+      dout(20) << __func__ << ": api cache miss for " << what << dendl;
+    }
   }
 
   PyObject *obj = get_python(what);
-  api_cache.insert(what, obj);
-  dout(20) << __func__ << ": api cache miss for " << what << ", inserting into cache" << dendl;
 
-  update_cache_metrics();
+  if (api_cache.is_enabled() && api_cache.is_cacheable(what)) {
+    api_cache.insert(what, obj);
+    Py_INCREF(obj); // cache takes ownership
+  } else {
+    dout(20) << __func__ << ": api cache disabled or not cacheable for " << what << dendl;
+  }
+
   return obj;
 }
 
 PyObject *ActivePyModules::get_python(const std::string &what)
 {
-  PyFormatter pf;
-  PyJSONFormatter jf;
-
-  // Use PyJSONFormatter if api cache is enabled and key is cacheable.
-  // Otherwise, use PyFormatter.
+  PyFormatter py_formatter;
+  //PyFormatter py_formatter_ro;
+  PyFormatterRO py_formatter_ro;
   Formatter &f = (api_cache.is_enabled() && api_cache.is_cacheable(what)) 
-    ? (Formatter&)jf : (Formatter&)pf;
+    ? (Formatter&)py_formatter_ro : (Formatter&)py_formatter;
 
   if (what == "fs_map") {
     without_gil_t no_gil;
@@ -521,10 +524,11 @@ PyObject *ActivePyModules::get_python(const std::string &what)
     derr << "Python module requested unknown data '" << what << "'" << dendl;
     Py_RETURN_NONE;
   }
-  if(api_cache.is_enabled() && api_cache.is_cacheable(what)) {
-    return jf.get();
+
+  if (api_cache.is_enabled() && api_cache.is_cacheable(what)) {
+    return py_formatter_ro.get();
   } else {
-    return pf.get();
+    return py_formatter.get();
   }
 }
 

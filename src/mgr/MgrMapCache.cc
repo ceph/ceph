@@ -10,8 +10,7 @@
 template <class Key, class Value>
 MgrMapCache<Key, Value>::MgrMapCache(uint16_t size)
     : CacheImp(size, g_conf().get_val<bool>("mgr_map_cache_enabled")) {
-  dout(20) << __func__ << ": creating cache with size " << size << dendl;
-  LFUCache::set_enabled(g_conf().get_val<bool>("mgr_map_cache_enabled"));
+  dout(20) << ": creating cache with size " << size << dendl;
   g_conf().add_observer(this);
 }
 
@@ -26,26 +25,26 @@ Value MgrMapCache<Key, Value>::get(const Key &key, bool count_hit) {
 }
 
 template <class Key, class Value>
-void MgrMapCache<Key, Value>::erase(Key key) {
-  dout(25) << __func__ << ": erasing key: " << key << dendl;
+void MgrMapCache<Key, Value>::erase(const Key &key) {
+  dout(25) << ": erasing key: " << key << dendl;
   CacheImp::erase(std::move(key));
 }
 
 template <class Key, class Value>
 void MgrMapCache<Key, Value>::clear() {
-  dout(10) << __func__ << ": clearing cache" << dendl;
+  dout(10) << ": clearing cache" << dendl;
   CacheImp::clear();
 }
 
 template <class Key, class Value>
-void MgrMapCache<Key, Value>::insert(Key key, Value value) {
-  dout(10) << __func__ << ": inserting key: " << key << dendl;
+void MgrMapCache<Key, Value>::insert(const Key &key, Value value) {
+  dout(10) << ": inserting key: " << key << dendl;
   CacheImp::insert(std::move(key), std::move(value));
 }
 
 template <class Key, class Value>
 std::vector<std::string> MgrMapCache<Key, Value>::get_tracked_keys() const noexcept {
-  dout(10) << __func__ << ": returning tracked keys" << dendl;
+  dout(10) << ": returning tracked keys" << dendl;
   return {
     "mgr_map_cache_enabled",
   };
@@ -56,7 +55,7 @@ void MgrMapCache<Key, Value>::handle_conf_change(
   const ConfigProxy& conf,
   const std::set<std::string> &changed) {
   if (changed.count("mgr_map_cache_enabled")) {
-    dout(10) << __func__ << ": mgr_map_cache_enabled changed" << dendl;
+    dout(10) << ": mgr_map_cache_enabled changed" << dendl;
     CacheImp::set_enabled(conf.get_val<bool>("mgr_map_cache_enabled"));
   }
 }
@@ -64,8 +63,7 @@ void MgrMapCache<Key, Value>::handle_conf_change(
 template <class Key>
 MgrMapCache<Key, PyObject*>::MgrMapCache(uint16_t size)
     : CacheImp(size, g_conf().get_val<bool>("mgr_map_cache_enabled")) {
-    dout(20) << __func__ << ": creating cache with size " << size << dendl;
-    LFUCache::set_enabled(g_conf().get_val<bool>("mgr_map_cache_enabled"));
+    dout(20) << ": creating cache with size " << size << dendl;
     g_conf().add_observer(this);
 }
 
@@ -75,8 +73,8 @@ MgrMapCache<Key, PyObject*>::~MgrMapCache() {
 }
 
 template <class Key>
-PyObject* MgrMapCache<Key, PyObject*>::get(Key key) {
-  if (!this->is_cacheable(key) || !this->is_enabled()) {
+PyObject* MgrMapCache<Key, PyObject*>::get(const Key &key) {
+  if (!this->is_enabled() && !this->is_cacheable(key)) {
     return nullptr;
   }
   
@@ -91,8 +89,8 @@ PyObject* MgrMapCache<Key, PyObject*>::get(Key key) {
 }
 
 template <class Key>
-void MgrMapCache<Key, PyObject*>::erase(Key key) {
-  if (!this->is_cacheable(key) || !this->is_enabled()) {
+void MgrMapCache<Key, PyObject*>::erase(const Key &key) {
+  if ((!this->can_read_cache(key))) {
     return;
   }
   try {
@@ -121,10 +119,12 @@ void MgrMapCache<Key, PyObject*>::clear() {
 }
 
 template <class Key>
-void MgrMapCache<Key, PyObject*>::insert(Key key, PyObject* value) {
-  if (!this->is_cacheable(key) || !this->is_enabled()) return;
+void MgrMapCache<Key, PyObject*>::insert(const Key &key, PyObject* value) {
+  if (!this->can_write_cache(key)) {
+    return;
+  }
 
-  dout(10) << __func__ << ": inserting key: " << key << dendl;
+  dout(10) << ": inserting key: " << key << dendl;
   CacheImp::insert(std::move(key), value);
   PyGILState_STATE gstate = PyGILState_Ensure();
   Py_INCREF(value);
@@ -135,16 +135,16 @@ template <class Key>
 void MgrMapCache<Key, PyObject*>::handle_conf_change(
   const ConfigProxy& conf,
   const std::set<std::string> &changed) {
-  dout(10) << __func__ << ": handling config change" << dendl;
+  dout(10) << ": handling config change" << dendl;
   if (changed.count("mgr_map_cache_enabled")) {
-    dout(10) << __func__ << ": mgr_map_cache_enabled changed" << dendl;
+    dout(10) << ": mgr_map_cache_enabled changed" << dendl;
     CacheImp::set_enabled(g_conf().get_val<bool>("mgr_map_cache_enabled"));
   }
 }
 
 template <class Key>
 std::vector<std::string> MgrMapCache<Key, PyObject*>::get_tracked_keys() const noexcept {
-  dout(10) << __func__ << ": returning tracked keys" << dendl;
+  dout(10) << ": returning tracked keys" << dendl;
   return {
     "mgr_map_cache_enabled",
   };

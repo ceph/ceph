@@ -114,7 +114,7 @@ public:
       ceph_abort();
   }
 
-  PyObject *get()
+  virtual PyObject *get()
   {
     finish_pending_streams();
 
@@ -124,12 +124,12 @@ public:
 
   void finish_pending_streams();
 
-private:
+protected:
   PyObject *root;
   PyObject *cursor;
   std::stack<PyObject *> stack;
-
-  void dump_pyobject(std::string_view name, PyObject *p);
+private:
+  virtual void dump_pyobject(std::string_view name, PyObject *p);
 
   class PendingStream {
     public:
@@ -142,22 +142,81 @@ private:
 
 };
 
-class PyJSONFormatter : public JSONFormatter {
+class PyFormatterRO : public PyFormatter {
 public:
-  PyObject *get();
-  PyJSONFormatter (const PyJSONFormatter&) = default;
-  PyJSONFormatter(bool pretty=false, bool is_array=false) : JSONFormatter(pretty) {
-    if(is_array) {
-      open_array_section("");
+  using PyFormatter::PyFormatter;
+
+  /// Insert a leaf or complex object under 'name', freezing it immediately
+  void dump_pyobject(std::string_view name, PyObject* p) override {
+    PyObject* frozen = to_readonly(p);
+    if (PyDict_Check(cursor)) {
+      PyObject* key = PyUnicode_DecodeUTF8(name.data(), name.size(), nullptr);
+      PyDict_SetItem(cursor, key, frozen);
+      Py_DECREF(key);
+    } else if (PyList_Check(cursor)) {
+      PyList_Append(cursor, frozen);
     } else {
-      open_object_section("");
+      ceph_abort();
     }
-}
+    Py_DECREF(frozen);
+  }
+
+  /// Open a new object section for subsequent dump calls
+  void open_object_section(std::string_view name) override {
+    section_names_.push(std::string(name));
+    stack.push(cursor);
+    cursor = PyDict_New();
+  }
+
+  /// Open a new array section for subsequent dump calls
+  void open_array_section(std::string_view name) override {
+    section_names_.push(std::string(name));
+    stack.push(cursor);
+    cursor = PyList_New(0);
+  }
+
+  /// Close the current section, freezing it and inserting into parent
+  void close_section() override;
+
+  /// Return the immutable root directly (no additional work)
+  PyObject* get() override {
+    finish_pending_streams();
+    PyObject* frozen_root = to_readonly(root);
+    Py_INCREF(frozen_root);
+    return frozen_root;
+  }
 
 private:
-  using json_formatter = JSONFormatter;
-  template <class T> void add_value(std::string_view name, T val);
-  void add_value(std::string_view name, std::string_view val, bool quoted);
+  /// Convert any object to its read-only form
+  PyObject* to_readonly(PyObject* obj) {
+    if      (PyDict_Check(obj))      return proxy_dict(obj);
+    else if (PyList_Check(obj))      return to_tuple(obj);
+    else if (PyTuple_Check(obj))     return readonly_primitive(obj);
+    else if (PySet_Check(obj))       return to_frozenset(obj);
+    else                              return readonly_primitive(obj);
+  }
+
+  /// Primitives and tuples: return as-is (with new reference)
+  PyObject* readonly_primitive(PyObject* obj) {
+    Py_INCREF(obj);
+    return obj;
+  }
+
+  /// Wrap a dict in a mapping proxy to make it read-only
+  PyObject* proxy_dict(PyObject* dict) {
+    return PyDictProxy_New(dict);
+  }
+
+  /// Convert list to tuple
+  PyObject* to_tuple(PyObject* list) {
+    return PySequence_Tuple(list);
+  }
+
+  /// Convert set to frozenset
+  PyObject* to_frozenset(PyObject* set) {
+    return PyFrozenSet_New(set);
+  }
+  std::stack<std::string> section_names_;
 };
 
 #endif

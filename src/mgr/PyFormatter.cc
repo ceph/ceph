@@ -131,15 +131,24 @@ void PyFormatter::finish_pending_streams()
   pending_streams.clear();
 }
 
-PyObject* PyJSONFormatter::get()
-{
-  if(json_formatter::stack_size()) {
-    close_section();
+void PyFormatterRO::close_section() {
+  ceph_assert(!stack.empty());
+  ceph_assert(!section_names_.empty());
+  PyObject* built = cursor;
+  PyObject* frozen = to_readonly(built);
+  cursor = stack.top();
+  stack.pop();
+  std::string name = section_names_.top();
+  section_names_.pop();
+  if (PyDict_Check(cursor)) {
+    PyObject* key = PyUnicode_DecodeUTF8(name.data(), name.size(), nullptr);
+    PyDict_SetItem(cursor, key, frozen);
+    Py_DECREF(key);
+  } else if (PyList_Check(cursor)) {
+    PyList_Append(cursor, frozen);
+  } else {
+    ceph_abort();
   }
-  ceph_assert(!json_formatter::stack_size());
-  std::ostringstream ss;
-  flush(ss);
-  std::string s = ss.str();
-  PyObject* obj = PyBytes_FromStringAndSize(std::move(s.c_str()), s.size());
-  return obj;
+  Py_DECREF(built);
+  Py_DECREF(frozen);
 }
