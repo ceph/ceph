@@ -8,38 +8,35 @@ Tracing Services
 Jaeger Tracing
 ==============
 
-Ceph uses Jaeger as the tracing backend. in order to use tracing, we need to deploy those services.
+Ceph uses Jaeger as its tracing backend. In order to use tracing, we need to
+deploy those services.
 
-Further details on tracing in ceph:
-
-`Ceph Tracing documentation <https://docs.ceph.com/en/latest/jaegertracing/#jaeger-distributed-tracing/>`_
+For further details on tracing in Ceph, see
+:ref:`Ceph tracing documentation <jaegertracing>`.
 
 Deployment
 ==========
 
-Jaeger services consist of 3 services:
+Jaeger tracing consists of 3 services:
 
-1. Jaeger Agent
+#. Jaeger Agent
+#. Jaeger Collector
+#. Jaeger Query
 
-2. Jaeger Collector
+Jaeger requires a database for the traces. We use ElasticSearch (version 6)
+by default.
 
-3. Jaeger Query
+To deploy Jaeger services when not using your own ElasticSearch (deploys
+all 3 services with a new ElasticSearch container):
 
-Jaeger requires a database for the traces. we use ElasticSearch (version 6) by default.
+.. prompt:: bash #
 
+   ceph orch apply jaeger
 
-To deploy jaeger tracing service, when not using your own ElasticSearch:
+To deploy Jaeger services with an existing ElasticSearch cluster and
+an existing Jaeger query (deploys agents and collectors only):
 
-#. Deploy jaeger services, with a new elasticsearch container:
+.. prompt:: bash #
 
-    .. prompt:: bash #
-
-        ceph orch apply jaeger
-
-
-#. Deploy jaeger services, with existing elasticsearch cluster and existing jaeger query (deploy agents and collectors):
-
-     .. prompt:: bash #
-
-        ceph orch apply jaeger --without-query --es_nodes=ip:port,..
+   ceph orch apply jaeger --without-query --es_nodes=ip:port,..
 
