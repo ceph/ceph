@@ -86,6 +86,18 @@ new pool is created, all objects from the wrongly configured pool must be moved
 to the newly created pool. There is no way to alter the profile of a pool after
 the pool has been created.
 
+However, you can change the *crush-failure-domain* without creating a new pool,
+by changing the CRUSH rule of the pool using
+``ceph osd pool set <pool-name> crush_rule <rule-name>``
+as shown in :ref:`device_classes`
+(you should ensure that the new CRUSH rule is identical to the old rule
+in every way except the failure domain!).
+Once you do that, ``ceph osd pool ls detail`` will still show as ``erasure``
+profile the profile that you used for initial creation (which refers to the
+old *crush-failure-domain*), but the CRUSH rule in effect will be the new
+one, as the *crush-failure-domain* in the profile is only used during
+initial creation of the pool.
+
 The most important parameters of the profile are *K*, *M*, and
 *crush-failure-domain* because they define the storage overhead and
 the data durability. For example, if the desired architecture must
