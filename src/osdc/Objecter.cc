@@ -2320,7 +2320,7 @@ void Objecter::resend_mon_ops()
 #undef dout_prefix
 #define dout_prefix *_dout << " ECRead::"
 
-void Objecter::ECRead::finish(int r, Op *op, bufferlist &bl) {
+void Objecter::ECRead::finish(int r, std::pair<uint64_t, uint64_t> &extent, bufferlist &bl) {
 
   // FIXME: WHy is this needed?  There should be a completion mutex around
   // the complete?
@@ -2329,8 +2329,7 @@ void Objecter::ECRead::finish(int r, Op *op, bufferlist &bl) {
 
   if (rc >= 0 && r >= 0) {
     rc += r;
-    auto &extent = op->ops[0].op.extent;
-    read_emap.insert(extent.offset, extent.length, bl);
+    read_emap.insert(extent.first, extent.second, bl);
   } else if (rc == 0) {
     rc = r;
   } // else ignore subsequent errors.
@@ -2414,8 +2413,8 @@ std::shared_ptr<Objecter::ECRead> Objecter::ECRead::create(Op *op, Objecter &obj
     length -= len;
     ceph_assert(len < 0x7FFFFFFFFFFFFFFF);
     check_len += len;
-    auto fin = new SubRead(ec_read); // Self-destructs when called.
-    ops_to_send[i] = fin->op = objecter.prepare_read_op(t.base_oid,
+    auto fin = new SubRead(ec_read, off, len); // Self-destructs when called.
+    ops_to_send[i] = objecter.prepare_read_op(t.base_oid,
       t.base_oloc, off, len, op->snapid, &fin->bl, osd_op.flags, fin);
   }
 

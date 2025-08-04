@@ -2151,18 +2151,16 @@ public:
 
   using ec_extent_map = interval_map<uint64_t, ceph::buffer::list, bl_split_merge>;
   struct ECRead {
-    void finish(int r, Op *op, bufferlist &bl);
+    void finish(int r, std::pair<uint64_t, uint64_t> &extent, bufferlist &bl);
 
     struct SubRead : Context {
       std::shared_ptr<ECRead> ec_read;
       bufferlist bl;
-      Op *op = nullptr;
+      std::pair<uint64_t, uint64_t> extent;
 
-      SubRead(std::shared_ptr<ECRead> ec_read) : ec_read(ec_read) {}
-      ~SubRead() {
-      }
+      SubRead(std::shared_ptr<ECRead> ec_read, uint64_t off, uint64_t len) : ec_read(ec_read), extent(off, len) {}
       void finish(int r) override {
-        ec_read->finish(r, op, bl);
+        ec_read->finish(r, extent, bl);
       }
     };
 
