@@ -963,7 +963,7 @@ h2. Update Payload
             "project_id": self.project_id,
             "sort": f'cf_{REDMINE_CUSTOM_FIELD_ID_UPKEEP_TIMESTAMP}',
             "status_id": "*",
-            f"cf_{REDMINE_CUSTOM_FIELD_ID_TAGS}": "!upkeep-failed",
+            f"cf_{REDMINE_CUSTOM_FIELD_ID_TAGS}": "!~upkeep-failed",
         }
         #f"cf_{REDMINE_CUSTOM_FIELD_ID_UPKEEP_TIMESTAMP}": f"<={cutoff_date}", # Not updated recently
 
