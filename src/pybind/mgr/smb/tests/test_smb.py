@@ -929,3 +929,104 @@ def test_tls_credential_yaml_show(tmodule):
     assert res == 0
     body = body.strip()
     assert 'value: |' in body
+
+
+def test_cmd_share_update_qos(tmodule):
+    cluster = _cluster(
+        cluster_id='qoscluster',
+        auth_mode=smb.enums.AuthMode.USER,
+        user_group_settings=[
+            smb.resources.UserGroupSource(
+                source_type=smb.resources.UserGroupSourceType.EMPTY,
+            ),
+        ],
+    )
+    share = smb.resources.Share(
+        cluster_id='qoscluster',
+        share_id='qostest',
+        name='QoS Test Share',
+        cephfs=smb.resources.CephFSStorage(
+            volume='cephfs',
+            path='/',
+        ),
+    )
+    rg = tmodule._handler.apply([cluster, share])
+    assert rg.success, rg.to_simplified()
+
+    # Test updating with positive values
+    res, body, status = tmodule.share_update_qos.command(
+        cluster_id='qoscluster',
+        share_id='qostest',
+        read_iops_limit=100,
+        write_iops_limit=200,
+        read_bw_limit=1048576,
+        write_bw_limit=2097152,
+        read_delay_max=20,
+        write_delay_max=30,
+    )
+    assert res == 0
+    bdata = json.loads(body)
+    assert bdata['success']
+    assert bdata['state'] == 'updated'
+
+    # Verify the QoS settings were updated
+    updated_shares = tmodule._handler.matching_resources(
+        ['ceph.smb.share.qoscluster.qostest']
+    )
+    assert len(updated_shares) == 1
+    updated_share = updated_shares[0]
+    assert updated_share.cephfs.qos is not None
+    assert updated_share.cephfs.qos.read_iops_limit == 100
+    assert updated_share.cephfs.qos.write_iops_limit == 200
+    assert updated_share.cephfs.qos.read_bw_limit == 1048576
+    assert updated_share.cephfs.qos.write_bw_limit == 2097152
+    assert updated_share.cephfs.qos.read_delay_max == 20
+    assert updated_share.cephfs.qos.write_delay_max == 30
+
+    # Test updating with None values (should remove QoS)
+    res, body, status = tmodule.share_update_qos.command(
+        cluster_id='qoscluster',
+        share_id='qostest',
+        read_iops_limit=0,
+        write_iops_limit=0,
+        read_bw_limit=0,
+        write_bw_limit=0,
+        read_delay_max=0,
+        write_delay_max=0,
+    )
+    assert res == 0
+    bdata = json.loads(body)
+    assert bdata['success']
+    assert bdata['state'] == 'updated'
+
+    # Verify QoS was removed
+    updated_shares = tmodule._handler.matching_resources(
+        ['ceph.smb.share.qoscluster.qostest']
+    )
+    updated_share = updated_shares[0]
+    assert updated_share.cephfs.qos is None
+
+    # Test updating with some values and keeping others
+    res, body, status = tmodule.share_update_qos.command(
+        cluster_id='qoscluster',
+        share_id='qostest',
+        read_iops_limit=500,
+        write_bw_limit=524288,
+    )
+    assert res == 0
+    bdata = json.loads(body)
+    assert bdata['success']
+    assert bdata['state'] == 'updated'
+
+    # Verify partial update
+    updated_shares = tmodule._handler.matching_resources(
+        ['ceph.smb.share.qoscluster.qostest']
+    )
+    updated_share = updated_shares[0]
+    assert updated_share.cephfs.qos is not None
+    assert updated_share.cephfs.qos.read_iops_limit == 500
+    assert updated_share.cephfs.qos.write_iops_limit is None
+    assert updated_share.cephfs.qos.read_bw_limit is None
+    assert updated_share.cephfs.qos.write_bw_limit == 524288
+    assert updated_share.cephfs.qos.read_delay_max == 30
+    assert updated_share.cephfs.qos.write_delay_max == 30
