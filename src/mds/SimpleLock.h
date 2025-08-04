@@ -579,7 +579,7 @@ public:
    * to formatter, or nothing if is_sync_and_unlocked.
    */
   void dump(ceph::Formatter *f) const;
-  static void generate_test_instances(std::list<SimpleLock*>& ls);
+  static std::list<SimpleLock> generate_test_instances();
 
   virtual void print(std::ostream& out) const {
     out << "(";

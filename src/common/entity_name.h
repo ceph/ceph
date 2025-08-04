@@ -42,7 +42,7 @@ struct EntityName
     set(type_, id_);
   }
   void dump(ceph::Formatter *f) const;
-  static void generate_test_instances(std::list<EntityName*>& ls);
+  static std::list<EntityName> generate_test_instances();
   const std::string& to_str() const;
   const char *to_cstr() const;
   bool from_str(std::string_view s);
