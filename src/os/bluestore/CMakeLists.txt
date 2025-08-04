@@ -9,6 +9,7 @@ add_library(bluestore OBJECT
   BlueStore_debug.cc
   simple_bitmap.cc
   bluestore_types.cc
+  BlueStore_objects.cc
   fastbmap_allocator_impl.cc
   FreelistManager.cc
   StupidAllocator.cc
