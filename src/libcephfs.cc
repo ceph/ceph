@@ -31,6 +31,7 @@
 #include "include/str_list.h"
 #include "include/stringify.h"
 #include "include/object.h"
+#include "log/Log.h"
 #include "messages/MMonMap.h"
 #include "msg/Messenger.h"
 #include "include/ceph_assert.h"

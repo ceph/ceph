@@ -114,6 +114,7 @@ using namespace std::literals::string_view_literals;
 #include "posix_acl.h"
 
 #include "include/ceph_assert.h"
+#include "include/cephfs/keys_and_values.h"
 #include "include/stat.h"
 
 #include "include/cephfs/ceph_ll_client.h"
