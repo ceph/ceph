@@ -2317,27 +2317,52 @@ void Objecter::resend_mon_ops()
 
 // read | write ---------------------------
 
-void Objecter::OpSplit::finish(int r) {
+#undef dout_prefix
+#define dout_prefix *_dout << " ECRead::"
+
+void Objecter::ECRead::finish(int r, Op *op, bufferlist &bl) {
+
+  // FIXME: WHy is this needed?  There should be a completion mutex around
+  // the complete?
+  std::lock_guard<std::mutex> lock(mutex);
   count--;
 
   if (rc >= 0 && r >= 0) {
     rc += r;
-  } else {
-    rc = -EAGAIN;
-  }
+    auto &extent = op->ops[0].op.extent;
+    read_emap.insert(extent.offset, extent.length, bl);
+  } else if (rc == 0) {
+    rc = r;
+  } // else ignore subsequent errors.
 
   // do callbacks
   if (count == 0 && rc >= 0) {
-    orig_op->out_bl[0]->append(bls[0]);
-    orig_op->out_bl[0]->append(bls[1]);
+    auto extent = read_emap.begin();
+    ldout(cct, 0) << __func__
+    << " this=" << this
+    << " off=" << extent.get_off()
+    << " oflen=" << extent.get_len()
+    << " exgtent_off=" << orig_op->ops[0].op.extent.offset
+    << " off=" << orig_op->ops[0].op.extent.length
+    << dendl;
+
+    ceph_assert(extent.get_off() == orig_op->ops[0].op.extent.offset);
+    ceph_assert(extent.get_len() == orig_op->ops[0].op.extent.length);
+    orig_op->out_bl[0]->append(extent.get_val());
     Op::complete(std::move(orig_op->onfinish), osdcode(rc), rc, objecter.service.get_executor());
   }
 }
+Objecter::ECRead::~ECRead() {
+  ldout(cct, 0) << __func__ << this << dendl;
 
-Objecter::OpSplit::~OpSplit() {
   ceph_assert(count == 0);
   ceph_assert(orig_op);
   if (rc >= 0 || count != 0) {
+    // Either successful or read was cancelled, in which case, we treat it like
+    // read was simply dropped.
+    if (count != 0) {
+      rc = 0;
+    }
     objecter._finish_op(orig_op, rc);
   } else {
     shunique_lock rl(objecter.rwlock, ceph::acquire_shared);
@@ -2346,61 +2371,66 @@ Objecter::OpSplit::~OpSplit() {
   }
 }
 
-Objecter::OpSplit::OpSplit(Op *op, Objecter &objecter, int count) : orig_op(op), objecter(objecter), count(count) {
-  for (int i = 0; i < count; i++) {
-    bls.emplace_back();
-  }
-}
-
-std::shared_ptr<Objecter::OpSplit> Objecter::OpSplit::create(Op *op, Objecter &objecter) {
+static std::shared_ptr<Objecter::ECRead> null_ec_read;
+std::shared_ptr<Objecter::ECRead> Objecter::ECRead::create(Op *op, Objecter &objecter,
+  shunique_lock<ceph::shared_mutex>& sul, ceph_tid_t *ptid, int *ctx_budget, CephContext *cct) {
   if (op->ops.size() != 1) {
-    return std::shared_ptr<Objecter::OpSplit>();
+    return null_ec_read;
   }
 
   auto t = op->target;
   const pg_pool_t *pi = objecter.osdmap->get_pg_pool(t.base_oloc.pool);
 
-  if (!pi->allows_ecoptimizations() ||
-      !pi->has_flag(pg_pool_t::FLAG_EC_DIRECT_READS) ||
+  if (!pi->has_flag(pg_pool_t::FLAG_EC_DIRECT_READS) ||
       (t.flags & CEPH_OSD_FLAG_BALANCE_READS) == 0) {
-    return std::shared_ptr<Objecter::OpSplit>();
+    return null_ec_read;
   }
 
   ceph_osd_op &osd_op = op->ops[0].op;
 
-  uint64_t off[2];
-  uint64_t len[2];
-
-  off[0] = osd_op.extent.offset;
+  uint64_t offset = osd_op.extent.offset;
+  uint64_t length = osd_op.extent.length;
   unsigned int data_chunk_count = pi->nonprimary_shards.size() + 1;
   uint32_t chunk_size = pi->get_stripe_width() / data_chunk_count;
-  uint64_t start_chunk = off[0] / chunk_size;
+  uint64_t start_chunk = offset / chunk_size;
   // This calculation is wrong for length = 0, but it doesn't matter if these reads get sent to the primary
-  uint64_t end_chunk = (off[0] + osd_op.extent.length - 1) / chunk_size;
+  uint64_t end_chunk = (offset + osd_op.extent.length - 1) / chunk_size;
 
-  if (start_chunk + 1 != end_chunk) {
-    return std::shared_ptr<OpSplit>();
+  if (start_chunk == end_chunk ||
+      start_chunk + data_chunk_count - 1 <= end_chunk) {
+    return null_ec_read;
   }
 
-  off[1] = (start_chunk + 1) * chunk_size;
-  len[0] = off[1] - off[0];
-  len[1] = osd_op.extent.length - len[0];
+  int count = end_chunk - start_chunk + 1;
 
-  ceph_assert(len[0] + len[1] == osd_op.extent.length);
-  ceph_assert(len[0] < 0x7FFFFFFFFFFFFFFF);
-  ceph_assert(len[1] < 0x7FFFFFFFFFFFFFFF);
+  vector<Op*> ops_to_send(count);
 
-
-  auto ops = std::make_shared<OpSplit>(op, objecter, 2);
-
-  for (int i = 0; i < ops->count; i++) {
-    auto fin = new OpSplitFinisher(ops); // Self-destructs when called.
-    ops->ops.push_back(objecter.prepare_read_op(t.base_oid,
-      t.base_oloc, off[i], len[i], op->snapid, &ops->bls[i], osd_op.flags, fin));
+  uint64_t check_len = 0;
+  auto ec_read = std::make_shared<ECRead>(op, objecter, count, cct);
+  for (int i = 0; i < count; i++) {
+    uint64_t off = offset;
+    offset = (start_chunk + i + 1) * chunk_size;
+    uint64_t len = std::min(length, offset - off);
+    length -= len;
+    ceph_assert(len < 0x7FFFFFFFFFFFFFFF);
+    check_len += len;
+    auto fin = new SubRead(ec_read); // Self-destructs when called.
+    ops_to_send[i] = fin->op = objecter.prepare_read_op(t.base_oid,
+      t.base_oloc, off, len, op->snapid, &fin->bl, osd_op.flags, fin);
   }
 
-  return ops;
+  ceph_assert(length == 0);
+  ceph_assert(check_len == osd_op.extent.length);
+  for (auto && op_to_send : ops_to_send) {
+    objecter._op_submit_with_budget(op_to_send, sul, ptid, ctx_budget);
+  }
+
+  return ec_read;
 }
+
+
+#undef dout_prefix
+#define dout_prefix *_dout << messenger->get_myname() << ".objecter "
 
 void Objecter::op_submit(Op *op, ceph_tid_t *ptid, int *ctx_budget)
 {
@@ -2410,13 +2440,9 @@ void Objecter::op_submit(Op *op, ceph_tid_t *ptid, int *ctx_budget)
     ptid = &tid;
   op->trace.event("op submit");
 
-  std::shared_ptr<OpSplit> ops = OpSplit::create(op, *this);
+  std::shared_ptr<ECRead> ec_read = ECRead::create(op, *this, rl, ptid, ctx_budget, cct);
 
-  if (ops) {
-    for (auto &op_i : ops->ops) {
-      _op_submit_with_budget(op_i, rl, ptid, ctx_budget);
-    }
-  } else {
+  if (!ec_read) {
     _op_submit_with_budget(op, rl, ptid, ctx_budget);
   }
 }
@@ -3202,8 +3228,7 @@ int Objecter::_calc_target(op_target_t *t, const Op *op, bool any_change)
             ec_direct = true;
           }
         }
-        ldout(cct, 20) << __func__ << " direct"
-                      << "_read=" << ec_direct
+        ldout(cct, 0) << __func__ << " direct_read=" << ec_direct
                       << " offset=" << offset
                       << " length=" << length
                       << " data_chunk_count=" << data_chunk_count

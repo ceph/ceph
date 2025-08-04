@@ -56,6 +56,7 @@
 #include "common/tracer.h"
 #include "common/Throttle.h"
 #include "crush/crush.h" // for CRUSH_ITEM_NONE
+#include "common/interval_map.h"
 
 #include "mon/MonClient.h"
 
@@ -2124,34 +2125,60 @@ public:
     }
   };
 
-  struct OpSplit;
+  /// If someone wants these types, but not ExtentCache, move to another file
+  struct bl_split_merge {
+    ceph::buffer::list split(
+        uint64_t offset,
+        uint64_t length,
+        ceph::buffer::list &bl) const {
+      ceph::buffer::list out;
+      out.substr_of(bl, offset, length);
+      return out;
+    }
 
-  struct OpSplitFinisher : Context {
-    std::shared_ptr<OpSplit> ops;
-    bool done = false;
-    OpSplitFinisher(std::shared_ptr<OpSplit> ops) : ops(ops) {}
-    ~OpSplitFinisher() {
-      ceph_assert(done);
+    bool can_merge(const ceph::buffer::list &left, const ceph::buffer::list &right) const {
+      return true;
     }
-    void finish(int r) override {
-      ops->finish(r);
-      done = true;
+
+    ceph::buffer::list merge(ceph::buffer::list &&left, ceph::buffer::list &&right) const {
+      ceph::buffer::list bl{std::move(left)};
+      bl.claim_append(right);
+      return bl;
     }
+
+    uint64_t length(const ceph::buffer::list &b) const { return b.length(); }
   };
 
-  struct OpSplit {
-    void finish(int r);
+  using ec_extent_map = interval_map<uint64_t, ceph::buffer::list, bl_split_merge>;
+  struct ECRead {
+    void finish(int r, Op *op, bufferlist &bl);
+
+    struct SubRead : Context {
+      std::shared_ptr<ECRead> ec_read;
+      bufferlist bl;
+      Op *op = nullptr;
+
+      SubRead(std::shared_ptr<ECRead> ec_read) : ec_read(ec_read) {}
+      ~SubRead() {
+      }
+      void finish(int r) override {
+        ec_read->finish(r, op, bl);
+      }
+    };
+
     Op *orig_op;
     Objecter &objecter;
     int count = 0;
     int rc = 0;
-    std::vector<Op*> ops;
-    std::vector<bufferlist> bls;
+    ec_extent_map read_emap;
+    CephContext *cct;
+    mutable std::mutex mutex;
 
-    OpSplit(Op *op, Objecter &objecter, int count);
-    ~OpSplit();
+    ECRead(Op *op, Objecter &objecter, int count, CephContext *cct) : orig_op(op), objecter(objecter), count(count), cct(cct) {}
+    ~ECRead();
 
-    static std::shared_ptr<OpSplit> create(Op *op, Objecter &objecter);
+    static std::shared_ptr<ECRead> create(Op *op, Objecter &objecter,
+      shunique_lock<ceph::shared_mutex>& sul, ceph_tid_t *ptid, int *ctx_budget, CephContext *cct);
   };
 
   struct CB_Op_Map_Latest {
