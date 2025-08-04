@@ -21,6 +21,7 @@
 
 #include "os/bluestore/BlueFS.h"
 #include "os/bluestore/BlueStore.h"
+#include "os/bluestore/BlueStore_objects.h"
 #include "common/admin_socket.h"
 #include "kv/RocksDBStore.h"
 
