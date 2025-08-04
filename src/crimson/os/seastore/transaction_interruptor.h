@@ -9,6 +9,7 @@
 #include <utility>
 
 #include "crimson/common/errorator.h"
+#include "crimson/os/seastore/seastore_types.h"
 #include "crimson/common/interruptible_future.h"
 
 namespace crimson::os::seastore {
@@ -61,6 +62,8 @@ using trans_iertr =
     TransactionConflictCondition,
     E
   >;
+
+using base_iertr = trans_iertr<base_ertr>;
 
 template <typename F, typename... Args>
 auto with_trans_intr(Transaction &t, F &&f, Args&&... args) {
