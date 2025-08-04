@@ -173,8 +173,8 @@ drives:
 
 For more
 information on how to effectively use a mix of fast drives and slow drives in
-your Ceph cluster, see the `block and block.db`_ section of the Bluestore
-Configuration Reference.
+your Ceph cluster, see the :ref:`block and block.db <bluestore-mixed-device-config>`
+section of the Bluestore Configuration Reference.
 
 Hard Disk Drives
 ----------------
@@ -613,7 +613,6 @@ found above and elsewhere within this documentation.
 
 
 
-.. _block and block.db: https://docs.ceph.com/en/latest/rados/configuration/bluestore-config-ref/#block-and-block-db
 .. _Ceph blog: https://ceph.com/community/blog/
 .. _Ceph Write Throughput 1: http://ceph.com/community/ceph-performance-part-1-disk-controller-write-throughput/
 .. _Ceph Write Throughput 2: http://ceph.com/community/ceph-performance-part-2-write-throughput-without-ssd-journals/
