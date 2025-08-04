@@ -750,9 +750,9 @@ class RedmineUpkeep:
         comment = f"""
 h1. Redmine Upkeep failure
 
-The "redmine-upkeep.py script":https://github.com/ceph/ceph/blob/main/src/script/redmine-upkeep.py failed to update this issue.
+The "redmine-upkeep.py script":https://github.com/ceph/ceph/blob/main/src/script/redmine-upkeep.py failed to update this issue. I have added the tag "upkeep-failed" to avoid looking at this issue again.
 
-Please manually fix the issue and remove "upkeep-failed" tag to allow future upkeep operations.
+**Please manually fix the issue and remove "upkeep-failed" tag to allow future upkeep operations.**
 
 h2. Transformation
 
