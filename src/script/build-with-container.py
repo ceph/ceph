@@ -70,13 +70,17 @@ import argparse
 import contextlib
 import enum
 import glob
+import hashlib
+import json
 import logging
 import os
 import pathlib
+import re
 import shlex
 import shutil
 import subprocess
 import sys
+import time
 
 log = logging.getLogger()
 
@@ -90,17 +94,32 @@ except ImportError:
             return self.value
 
 
+try:
+    from functools import cache as ftcache
+except ImportError:
+    ftcache = lambda f: f
+
+
 class DistroKind(StrEnum):
     CENTOS10 = "centos10"
     CENTOS8 = "centos8"
     CENTOS9 = "centos9"
     FEDORA41 = "fedora41"
+    ROCKY9 = "rocky9"
+    ROCKY10 = "rocky10"
     UBUNTU2204 = "ubuntu22.04"
     UBUNTU2404 = "ubuntu24.04"
 
     @classmethod
     def uses_dnf(cls):
-        return {cls.CENTOS8, cls.CENTOS9, cls.CENTOS10, cls.FEDORA41}
+        return {
+            cls.CENTOS10,
+            cls.CENTOS8,
+            cls.CENTOS9,
+            cls.FEDORA41,
+            cls.ROCKY9,
+            cls.ROCKY10,
+        }
 
     @classmethod
     def uses_rpmbuild(cls):
@@ -118,6 +137,10 @@ class DistroKind(StrEnum):
             "centos9stream": cls.CENTOS9,
             str(cls.FEDORA41): cls.FEDORA41,
             "fc41": cls.FEDORA41,
+            str(cls.ROCKY9): cls.ROCKY9,
+            'rockylinux9': cls.ROCKY9,
+            str(cls.ROCKY10): cls.ROCKY10,
+            'rockylinux10': cls.ROCKY10,
             str(cls.UBUNTU2204): cls.UBUNTU2204,
             "ubuntu-jammy": cls.UBUNTU2204,
             "jammy": cls.UBUNTU2204,
@@ -136,6 +159,8 @@ class DefaultImage(StrEnum):
     CENTOS8 = "quay.io/centos/centos:stream8"
     CENTOS9 = "quay.io/centos/centos:stream9"
     FEDORA41 = "registry.fedoraproject.org/fedora:41"
+    ROCKY9 = "docker.io/rockylinux/rockylinux:9"
+    ROCKY10 = "docker.io/rockylinux/rockylinux:10"
     UBUNTU2204 = "docker.io/ubuntu:22.04"
     UBUNTU2404 = "docker.io/ubuntu:24.04"
 
@@ -146,6 +171,18 @@ class CommandFailed(Exception):
 
 class DidNotExecute(Exception):
     pass
+
+
+_CONTAINER_SOURCES = [
+    "Dockerfile.build",
+    "src/script/lib-build.sh",
+    "src/script/run-make.sh",
+    "ceph.spec.in",
+    "do_cmake.sh",
+    "install-deps.sh",
+    "run-make-check.sh",
+    "src/script/buildcontainer-setup.sh",
+]
 
 
 def _cmdstr(cmd):
@@ -179,6 +216,8 @@ def _container_cmd(ctx, args, *, workdir=None, interactive=False):
         cmd.append("--pids-limit=-1")
     if ctx.map_user:
         cmd.append("--user=0")
+    if ctx.cli.env_file:
+        cmd.append(f"--env-file={ctx.cli.env_file.absolute()}")
     if workdir:
         cmd.append(f"--workdir={workdir}")
     cwd = pathlib.Path(".").absolute()
@@ -215,6 +254,9 @@ def _git_command(ctx, args):
     return cmd
 
 
+# Assume that the git version will not be changing after the 1st time
+# the command is run.
+@ftcache
 def _git_current_branch(ctx):
     cmd = _git_command(ctx, ["rev-parse", "--abbrev-ref", "HEAD"])
     res = _run(cmd, check=True, capture_output=True)
@@ -229,6 +271,20 @@ def _git_current_sha(ctx, short=True):
     cmd = _git_command(ctx, args)
     res = _run(cmd, check=True, capture_output=True)
     return res.stdout.decode("utf8").strip()
+
+
+@ftcache
+def _hash_sources(bsize=4096):
+    hh = hashlib.sha256()
+    buf = bytearray(bsize)
+    for path in sorted(_CONTAINER_SOURCES):
+        with open(path, "rb") as fh:
+            while True:
+                rlen = fh.readinto(buf)
+                hh.update(buf[:rlen])
+                if rlen < len(buf):
+                    break
+    return f"sha256:{hh.hexdigest()}"
 
 
 class Steps(StrEnum):
@@ -393,6 +449,7 @@ class Builder:
 
     def __init__(self):
         self._did_steps = set()
+        self._reported_failed = False
 
     def wants(self, step, ctx, *, force=False, top=False):
         log.info("want to execute build step: %s", step)
@@ -404,12 +461,34 @@ class Builder:
             return
         if not self._did_steps:
             prepare_env_once(ctx)
-        self._steps[step](ctx)
-        self._did_steps.add(step)
-        log.info("step done: %s", step)
+        with self._timer(step):
+            self._steps[step](ctx)
+            self._did_steps.add(step)
 
     def available_steps(self):
         return [str(k) for k in self._steps]
+
+    @contextlib.contextmanager
+    def _timer(self, step):
+        ns = argparse.Namespace(start=time.monotonic())
+        status = "not-started"
+        try:
+            yield ns
+            status = "completed"
+        except Exception:
+            status = "failed"
+            raise
+        finally:
+            ns.end = time.monotonic()
+            ns.duration = int(ns.end - ns.start)
+            hrs, _rest = map(int, divmod(ns.duration, 3600))
+            mins, secs = map(int, divmod(_rest, 60))
+            ns.duration_hms = f"{hrs:02}:{mins:02}:{secs:02}"
+            if not self._reported_failed:
+                log.info(
+                    "step done: %s %s in %s", step, status, ns.duration_hms
+                )
+            self._reported_failed = status == "failed"
 
     @classmethod
     def set(self, step):
@@ -456,10 +535,10 @@ def build_container(ctx):
     cmd = [
         ctx.container_engine,
         "build",
-        "--pull=always",
+        "--pull",
         "-t",
         ctx.image_name,
-        f"--build-arg=JENKINS_HOME={ctx.cli.homedir}",
+        f"--label=io.ceph.build-with-container.src={_hash_sources()}",
         f"--build-arg=CEPH_BASE_BRANCH={ctx.base_branch()}",
     ]
     if ctx.cli.distro:
@@ -474,20 +553,46 @@ def build_container(ctx):
             f"--volume={ctx.dnf_cache_dir}:/var/cache/dnf:Z",
             "--build-arg=CLEAN_DNF=no",
         ]
+    if ctx.cli.build_args:
+        cmd.extend([f"--build-arg={v}" for v in ctx.cli.build_args])
     cmd += ["-f", ctx.cli.containerfile, ctx.cli.containerdir]
     with ctx.user_command():
         _run(cmd, check=True, ctx=ctx)
 
 
-@Builder.set(Steps.CONTAINER)
-def get_container(ctx):
-    """Build or fetch a container image that we will build in."""
+def _check_cached_image(ctx):
     inspect_cmd = [
         ctx.container_engine,
         "image",
         "inspect",
         ctx.image_name,
     ]
+    res = _run(inspect_cmd, check=False, capture_output=True)
+    if res.returncode != 0:
+        log.info("Container image %s not present", ctx.image_name)
+        return False, False
+
+    log.info("Container image %s present", ctx.image_name)
+    ctr_info = json.loads(res.stdout)[0]
+    labels = {}
+    if "Labels" in ctr_info:
+        labels = ctr_info["Labels"]
+    elif "Labels" in ctr_info.get("ContainerConfig", {}):
+        labels = ctr_info["ContainerConfig"]["Labels"]
+    elif "Labels" in ctr_info.get("Config", {}):
+        labels = ctr_info["Config"]["Labels"]
+    saved_hash = labels.get("io.ceph.build-with-container.src", "")
+    curr_hash = _hash_sources()
+    if saved_hash == curr_hash:
+        log.info("Container passes source check")
+        return True, True
+    log.info("Container sources do not match: %s", curr_hash)
+    return True, False
+
+
+@Builder.set(Steps.CONTAINER)
+def get_container(ctx):
+    """Build or fetch a container image that we will build in."""
     pull_cmd = [
         ctx.container_engine,
         "pull",
@@ -495,16 +600,18 @@ def get_container(ctx):
     ]
     allowed = ctx.cli.image_sources or ImageSource
     if ImageSource.CACHE in allowed:
-        res = _run(inspect_cmd, check=False, capture_output=True)
-        if res.returncode == 0:
-            log.info("Container image %s present", ctx.image_name)
+        log.info("Checking for cached image")
+        present, hash_ok = _check_cached_image(ctx)
+        if present and hash_ok or len(allowed) == 1:
             return
-        log.info("Container image %s not present", ctx.image_name)
     if ImageSource.PULL in allowed:
+        log.info("Checking for image in remote repository")
         res = _run(pull_cmd, check=False, capture_output=True)
         if res.returncode == 0:
             log.info("Container image %s pulled successfully", ctx.image_name)
-            return
+            present, hash_ok = _check_cached_image(ctx)
+            if present and hash_ok:
+                return
     log.info("Container image %s needed", ctx.image_name)
     if ImageSource.BUILD in allowed:
         ctx.build.wants(Steps.BUILD_CONTAINER, ctx)
@@ -580,16 +687,37 @@ def bc_run_tests(ctx):
 def bc_make_source_rpm(ctx):
     """Build SPRMs."""
     ctx.build.wants(Steps.CONTAINER, ctx)
+    make_srpm_cmd = f"cd {ctx.cli.homedir} && ./make-srpm.sh"
+    if ctx.cli.ceph_version:
+        make_srpm_cmd = f"{make_srpm_cmd} {ctx.cli.ceph_version}"
     cmd = _container_cmd(
         ctx,
         [
             "bash",
             "-c",
-            f"cd {ctx.cli.homedir} && ./make-srpm.sh",
+            make_srpm_cmd,
         ],
     )
     with ctx.user_command():
         _run(cmd, check=True, ctx=ctx)
+
+
+def _glob_search(ctx, pattern):
+    overlay = ctx.overlay()
+    try:
+        return glob.glob(pattern, root_dir=overlay.upper if overlay else None)
+    except TypeError:
+        log.info("glob with root_dir failed... falling back to chdir")
+    try:
+        prev_dir = os.getcwd()
+        if overlay:
+            os.chdir(overlay.upper)
+            log.debug("chdir %s -> %s", prev_dir, overlay.upper)
+        result = glob.glob(pattern)
+    finally:
+        if overlay:
+            os.chdir(prev_dir)
+    return result
 
 
 @Builder.set(Steps.RPM)
@@ -597,9 +725,22 @@ def bc_build_rpm(ctx):
     """Build RPMs from SRPM."""
     srpm_glob = "ceph*.src.rpm"
     if ctx.cli.rpm_match_sha:
-        head_sha = _git_current_sha(ctx)
-        srpm_glob = f"ceph*.g{head_sha}.*.src.rpm"
-    paths = glob.glob(srpm_glob)
+        if not ctx.cli.ceph_version:
+            head_sha = _git_current_sha(ctx)
+            srpm_glob = f"ceph*.g{head_sha}.*.src.rpm"
+        else:
+            # Given a tarball with a name like
+            #   ceph-19.3.0-7462-g565e5c65.tar.bz2
+            # The SRPM name would be:
+            #   ceph-19.3.0-7462.g565e5c65.el9.src.rpm
+            # This regex replaces the second '-' with a '.'
+            srpm_version = re.sub(
+                r"(\d+\.\d+\.\d+-\d+)-(.*)",
+                r"\1.\2",
+                ctx.cli.ceph_version
+            )
+            srpm_glob = f"ceph-{srpm_version}.*.src.rpm"
+    paths = _glob_search(ctx, srpm_glob)
     if len(paths) > 1:
         raise RuntimeError(
             "too many matching source rpms"
@@ -609,20 +750,29 @@ def bc_build_rpm(ctx):
     if not paths:
         # no matches. build a new srpm
         ctx.build.wants(Steps.SOURCE_RPM, ctx)
-        paths = glob.glob(srpm_glob)
-        assert paths
+        paths = _glob_search(ctx, srpm_glob)
+        if not paths:
+            raise RuntimeError(
+                f"unable to find source rpm(s) matching {srpm_glob}"
+            )
     srpm_path = pathlib.Path(ctx.cli.homedir) / paths[0]
     topdir = pathlib.Path(ctx.cli.homedir) / "rpmbuild"
     if ctx.cli.build_dir:
         topdir = (
             pathlib.Path(ctx.cli.homedir) / ctx.cli.build_dir / "rpmbuild"
         )
+    rpmbuild_args = [
+        'rpmbuild',
+        '--rebuild',
+        f'-D_topdir {topdir}',
+    ] + list(ctx.cli.rpmbuild_arg or []) + [str(srpm_path)]
+    rpmbuild_cmd = ' '.join(shlex.quote(cmd) for cmd in rpmbuild_args)
     cmd = _container_cmd(
         ctx,
         [
             "bash",
             "-c",
-            f"set -x; mkdir -p {topdir} && rpmbuild --rebuild -D'_topdir {topdir}' {srpm_path}",
+            f"set -x; mkdir -p {topdir} && {rpmbuild_cmd}",
         ],
     )
     with ctx.user_command():
@@ -636,12 +786,15 @@ def bc_make_debs(ctx):
     basedir = pathlib.Path(ctx.cli.homedir) / "debs"
     if ctx.cli.build_dir:
         basedir = pathlib.Path(ctx.cli.homedir) / ctx.cli.build_dir
+    make_debs_cmd = f"./make-debs.sh {basedir}"
+    if ctx.cli.ceph_version:
+        make_debs_cmd = f"{make_debs_cmd} {ctx.cli.ceph_version} {ctx.cli.distro}"
     cmd = _container_cmd(
         ctx,
         [
             "bash",
             "-c",
-            f"mkdir -p {basedir} && cd {ctx.cli.homedir} && ./make-debs.sh {basedir}",
+            f"mkdir -p {basedir} && cd {ctx.cli.homedir} && {make_debs_cmd}",
         ],
     )
     with ctx.user_command():
@@ -785,6 +938,15 @@ def parse_cli(build_step_names):
         ),
     )
     parser.add_argument(
+        "--build-arg",
+        dest="build_args",
+        action="append",
+        help=(
+            "Extra argument to pass to container image build."
+            " Can be used to override default build image behavior."
+        ),
+    )
+    parser.add_argument(
         "--overlay-dir",
         "-l",
         help=(
@@ -837,12 +999,27 @@ def parse_cli(build_step_names):
         ),
     )
     parser.add_argument(
+        "--rpmbuild-arg",
+        '-R',
+        action="append",
+        help="Pass this extra argument to rpmbuild",
+    )
+    parser.add_argument(
+        "--ceph-version",
+        help="Rather than infer the Ceph version, use this value",
+    )
+    parser.add_argument(
         "--execute",
         "-e",
         dest="steps",
         action="append",
         choices=build_step_names,
         help="Execute the target build step(s)",
+    )
+    parser.add_argument(
+        "--env-file",
+        type=pathlib.Path,
+        help="Use this environment file when building",
     )
     parser.add_argument(
         "--dry-run",

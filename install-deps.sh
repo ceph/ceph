@@ -279,6 +279,20 @@ EOF
     fi
 }
 
+function setup_lab_extras_repo() {
+    # NOTE This repo should be temporary while we work to get the
+    # needed deps into EPEL, etc.
+    local baseurlprefix="http://apt-mirror.front.sepia.ceph.com/lab-extras"
+    local path="/etc/yum.repos.d/ceph-lab-extras.repo"
+    $SUDO tee "${path}" <<EOF
+[ceph-lab-extras]
+name=ceph-lab-extras-\$releasever
+baseurl=${baseurlprefix}/\$releasever
+enabled=1
+gpgcheck=0
+EOF
+}
+
 function populate_wheelhouse() {
     ci_debug "Running populate_wheelhouse() in install-deps.sh"
     local install=$1
@@ -525,8 +539,11 @@ else
                     $SUDO dnf config-manager --add-repo http://apt-mirror.front.sepia.ceph.com/lab-extras/8/
                     $SUDO dnf config-manager --setopt=apt-mirror.front.sepia.ceph.com_lab-extras_8_.gpgcheck=0 --save
                     $SUDO dnf -y module enable javapackages-tools
-                elif test $ID = centos -a $MAJOR_VERSION = 9 ; then
+                elif { [ "$ID" = centos ] || [ "$ID" = rocky ]; } && [ "$MAJOR_VERSION" -ge 9 ]; then
                     $SUDO dnf config-manager --set-enabled crb
+                    if [ "$MAJOR_VERSION" -eq 10 ]; then
+                        setup_lab_extras_repo
+                    fi
                 elif test $ID = rhel -a $MAJOR_VERSION = 8 ; then
                     dts_ver=11
                     $SUDO dnf config-manager --set-enabled "codeready-builder-for-rhel-8-${ARCH}-rpms"
