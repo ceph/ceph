@@ -713,7 +713,7 @@ static bool is_lba_node(const CachedExtent &e)
   return is_lba_node(e.get_type());
 }
 
-BtreeLBAManager::base_iertr::template future<>
+base_iertr::template future<>
 _init_cached_extent(
   op_context_t c,
   const CachedExtentRef &e,
