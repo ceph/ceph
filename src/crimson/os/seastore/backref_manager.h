@@ -6,6 +6,7 @@
 #include "crimson/os/seastore/cache.h"
 #include "crimson/os/seastore/cached_extent.h"
 #include "crimson/os/seastore/transaction.h"
+#include "crimson/os/seastore/transaction_interruptor.h"
 #include "crimson/os/seastore/backref_mapping.h"
 
 namespace crimson::os::seastore {
@@ -15,10 +16,6 @@ namespace crimson::os::seastore {
  */
 class BackrefManager {
 public:
-  using base_ertr = crimson::errorator<
-    crimson::ct_error::input_output_error>;
-  using base_iertr = trans_iertr<base_ertr>;
-
   using mkfs_iertr = base_iertr;
   using mkfs_ret = mkfs_iertr::future<>;
   virtual mkfs_ret mkfs(
