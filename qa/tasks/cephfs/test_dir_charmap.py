@@ -320,6 +320,20 @@ class TestCharMapVxattr(CephFSTestCase, CharMapMixin):
             else:
                 self.fail("should fail")
 
+    def test_charmap_to_stray(self):
+        """
+        That internal renames for reintegration works with charmap.
+        """
+
+        self.mount_a.run_shell_payload("mkdir foo/")
+        self.mount_a.setfattr("foo/", "ceph.dir.casesensitive", "0")
+        self.check_cs("foo", casesensitive=False)
+
+        self.mount_a.run_shell_payload("touch foo/a; ln foo/a foo/b; rm foo/a; sync foo")
+        self.fs.flush()
+
+        self.mount_a.run_shell_payload("stat foo/b")
+
 
 class TestCharMapRecovery(CephFSTestCase, CharMapMixin):
     CLIENTS_REQUIRED = 1
