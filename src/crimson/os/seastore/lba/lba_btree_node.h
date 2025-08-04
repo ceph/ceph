@@ -26,7 +26,6 @@ class LogicalChildNode;
 
 namespace crimson::os::seastore::lba {
 
-using base_iertr = Cache::base_iertr;
 using LBANode = FixedKVNode<laddr_t>;
 
 class BtreeLBAMapping;
