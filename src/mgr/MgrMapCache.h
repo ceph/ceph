@@ -23,8 +23,16 @@ protected:
   std::atomic<bool> enabled{true};
   mutable std::shared_mutex m;
 
-  void mark_miss() { misses++; perfcounter->inc(l_mgr_cache_miss); }
-  void mark_hit() { hits++; perfcounter->inc(l_mgr_cache_hit); }
+  void mark_miss() {
+    misses++;
+    if (perfcounter)
+      perfcounter->inc(l_mgr_cache_miss);
+  }
+  void mark_hit() {
+    hits++;
+    if (perfcounter)
+      perfcounter->inc(l_mgr_cache_hit);
+  }
 
 public:
   explicit LFUCache(size_t cap = UINT16_MAX, const bool ena = true) : capacity{cap}, enabled{ena} {}
