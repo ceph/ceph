@@ -14,7 +14,6 @@
 #include "crimson/os/seastore/ordering_handle.h"
 #include "crimson/os/seastore/root_block.h"
 #include "crimson/os/seastore/seastore_types.h"
-#include "crimson/os/seastore/transaction_interruptor.h"
 
 namespace crimson::os::seastore {
 
