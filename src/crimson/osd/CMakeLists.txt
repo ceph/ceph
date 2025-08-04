@@ -72,7 +72,7 @@ target_link_libraries(crimson-osd
   crimson
   ${FMT_LIB}
   Boost::MPL
-  dmclock::dmclock)
+  dmclock::crimson)
 set_target_properties(crimson-osd PROPERTIES
   POSITION_INDEPENDENT_CODE ${EXE_LINKER_USE_PIE})
 install(TARGETS crimson-osd DESTINATION bin)

@@ -19,6 +19,40 @@
 // can define ADD_MOVE_SEMANTICS, although not fully debugged and tested
 
 
+
+#ifdef WITH_CRIMSON
+crimson::RunEvery::RunEvery(std::chrono::milliseconds _wait_period,
+                   std::function<void()> _body)
+  : wait_period(_wait_period), body(std::move(_body))
+{
+  timer.set_callback([this] {
+    on_timer();
+  });
+}
+
+void crimson::RunEvery::start()
+{
+  arm_timer();
+}
+
+crimson::RunEvery::~RunEvery() {
+  timer.cancel();
+}
+
+void crimson::RunEvery::try_update(std::chrono::milliseconds _wait_period) {
+  wait_period = _wait_period;
+}
+
+void crimson::RunEvery::arm_timer() {
+  timer.arm(wait_period);
+}
+
+void crimson::RunEvery::on_timer() {
+  body();
+  arm_timer();  // reschedule again
+}
+
+#else
 namespace chrono = std::chrono;
 
 
@@ -92,3 +126,5 @@ void crimson::RunEvery::run() {
     }
   }
 }
+
+#endif

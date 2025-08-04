@@ -697,6 +697,12 @@ namespace crimson {
 #endif
       } // display_queues
 
+      void cleanup_start() {
+        #ifdef WITH_CRIMSON
+          if (cleaning_job)
+            cleaning_job->start();
+        #endif
+      }
 
     protected:
 
@@ -863,12 +869,19 @@ namespace crimson {
 	assert(_check_time < _idle_age);
 	// AtLimit::Reject depends on ImmediateTagCalc
 	assert(at_limit != AtLimit::Reject || !IsDelayed);
-	cleaning_job =
-	  std::unique_ptr<RunEvery>(
-	    new RunEvery(check_time,
-			 std::bind(&PriorityQueueBase::do_clean, this)));
+#ifndef WITH_CRIMSON
+        cleaning_job =
+          std::unique_ptr<RunEvery>(
+            new RunEvery(check_time,
+                         std::bind(&PriorityQueueBase::do_clean, this)));
+#else
+        cleaning_job = std::make_unique<crimson::RunEvery>(
+        std::chrono::duration_cast<std::chrono::milliseconds>(check_time),
+          [this]() {
+               this->do_clean();  // Sync version
+          });
+#endif
       }
-
 
       ~PriorityQueueBase() {
 	finishing = true;
