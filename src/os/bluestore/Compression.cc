@@ -13,6 +13,7 @@
 
 #include "Compression.h"
 #include "BlueStore.h"
+#include "BlueStore_objects.h"
 #include "include/intarith.h"
 #include <limits>
 
