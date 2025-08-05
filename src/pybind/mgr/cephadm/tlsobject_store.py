@@ -114,7 +114,7 @@ class TLSObjectStore():
         else:
             logger.error(f'Trying to save entity {entity} with a not-supported/unknown TLSObjectScope scope {scope.value}')
 
-    def rm_tlsobject(self, entity: str, service_name: Optional[str] = None, host: Optional[str] = None) -> None:
+    def rm_tlsobject(self, entity: str, service_name: Optional[str] = None, host: Optional[str] = None) -> bool:
         """Remove a tlsobjectificate for a specific entity, service, or host."""
         self._validate_tlsobject_entity(entity, service_name, host)
         scope, target = self.get_tlsobject_scope_and_target(entity, service_name, host)
@@ -127,12 +127,15 @@ class TLSObjectStore():
                     for key in self.known_entities[entity]
                 }
                 self.mgr.set_store(self.store_prefix + entity, json.dumps(j))
+                return True
         elif scope == TLSObjectScope.GLOBAL:
             self.known_entities[entity] = self.tlsobject_class()
             j = self.tlsobject_class.to_json(self.known_entities[entity])
             self.mgr.set_store(self.store_prefix + entity, json.dumps(j))
+            return True
         else:
             raise TLSObjectException(f'Attempted to remove {self.tlsobject_class.__name__.lower()} for unknown entity {entity}')
+        return False
 
     def _validate_tlsobject_entity(self, entity: str, service_name: Optional[str] = None, host: Optional[str] = None) -> None:
         cred_type = self.tlsobject_class.__name__.lower()

@@ -298,11 +298,11 @@ class CertMgr:
         self.cert_store.save_tlsobject(ss_cert_name, cert, host=host, user_made=False)
         self.key_store.save_tlsobject(ss_key_name, key, host=host, user_made=False)
 
-    def rm_cert(self, cert_name: str, service_name: Optional[str] = None, host: Optional[str] = None) -> None:
-        self.cert_store.rm_tlsobject(cert_name, service_name, host)
+    def rm_cert(self, cert_name: str, service_name: Optional[str] = None, host: Optional[str] = None) -> bool:
+        return self.cert_store.rm_tlsobject(cert_name, service_name, host)
 
-    def rm_key(self, key_name: str, service_name: Optional[str] = None, host: Optional[str] = None) -> None:
-        self.key_store.rm_tlsobject(key_name, service_name, host)
+    def rm_key(self, key_name: str, service_name: Optional[str] = None, host: Optional[str] = None) -> bool:
+        return self.key_store.rm_tlsobject(key_name, service_name, host)
 
     def rm_self_signed_cert_key_pair(self, service_name: str, host: str, label: Optional[str] = None) -> None:
         self.rm_cert(self.self_signed_cert(service_name, label), service_name, host)

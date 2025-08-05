@@ -335,7 +335,7 @@ class CephadmService(metaclass=ABCMeta):
         if cert_source == CertificateSource.INLINE.value:
             return self._get_certificates_from_spec(svc_spec, daemon_spec)
         elif cert_source == CertificateSource.REFERENCE.value:
-            return self._get_certificates_from_certmgr_store(svc_spec)
+            return self._get_certificates_from_certmgr_store(svc_spec, ips)
         elif cert_source == CertificateSource.CEPHADM_SIGNED.value:
             return self._get_cephadm_signed_certificates(svc_spec, daemon_spec, ips, fqdns, custom_sans)
         else:
@@ -367,14 +367,14 @@ class CephadmService(metaclass=ABCMeta):
         )
         return '', ''
 
-    def _get_certificates_from_certmgr_store(self, svc_spec: ServiceSpec) -> Tuple[str, str]:
-
-        cert = self.mgr.cert_mgr.get_cert(self.cert_name, svc_spec.service_name())
-        key = self.mgr.cert_mgr.get_key(self.key_name, svc_spec.service_name())
+    def _get_certificates_from_certmgr_store(self, svc_spec: ServiceSpec, ips: List[str]) -> Tuple[str, str]:
+        host = ips[0] if ips else None
+        cert = self.mgr.cert_mgr.get_cert(self.cert_name, svc_spec.service_name(), host)
+        key = self.mgr.cert_mgr.get_key(self.key_name, svc_spec.service_name(), host)
         if cert and key:
             return cert, key
         else:
-            logger.error(f'redo: Failed to get cert/key {self.cert_name} for service {svc_spec.service_name()} from the certmgr store.')
+            logger.error(f'redo: Failed to get cert/key {self.cert_name} for service {svc_spec.service_name()} host: {host} from the certmgr store.')
             return '', ''
 
     def _get_cephadm_signed_certificates(self,
