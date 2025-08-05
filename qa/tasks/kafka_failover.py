@@ -25,6 +25,71 @@ def get_kafka_dir(ctx, config):
     current_version = kafka_prefix + kafka_version
     return '{tdir}/{ver}'.format(tdir=teuthology.get_testdir(ctx),ver=current_version)
 
+def zookeeper_conf(ctx, client, _id, kafka_dir):
+    conf = """
+    # zookeeper{_id}.properties
+    dataDir={tdir}/data/zookeeper{_id}
+    clientPort=218{_id}
+    maxClientCnxns=0
+    admin.enableServer=false
+    tickTime=2000
+    initLimit=10
+    syncLimit=5
+    server.1=localhost:2888:3888
+    server.2=localhost:2889:3889
+    """.format(tdir=kafka_dir, _id=_id)
+    file_name = 'zookeeper{_id}.properties'.format(_id=_id)
+    log.info("zookeeper conf file: %s", file_name)
+    log.info(conf)
+    return ctx.cluster.only(client).run(
+            args=[
+                'cd', kafka_dir, run.Raw('&&'),
+                'mkdir', '-p', 'config', run.Raw('&&'),
+                'mkdir', '-p', 'data/zookeeper{_id}'.format(_id=_id), run.Raw('&&'),
+                'echo', conf, run.Raw('>'), 'config/{file_name}'.format(file_name=file_name), run.Raw('&&'),
+                'echo', str(_id), run.Raw('>'), 'data/zookeeper{_id}/myid'.format(_id=_id)
+                ],
+            )
+
+
+def broker_conf(ctx, client, _id, kafka_dir):
+    (remote,) = ctx.cluster.only(client).remotes.keys()
+    conf = """
+    # kafka{_id}.properties
+	broker.id={_id}
+    listeners=PLAINTEXT://0.0.0.0:909{_id}
+    advertised.listeners=PLAINTEXT://{ip}:909{_id}
+    log.dirs={tdir}/data/kafka-logs-{_id}
+    num.network.threads=3
+    num.io.threads=8
+    socket.send.buffer.bytes=102400
+    socket.receive.buffer.bytes=102400
+    socket.request.max.bytes=369295617
+    num.partitions=1
+    num.recovery.threads.per.data.dir=1
+    offsets.topic.replication.factor=2
+    transaction.state.log.replication.factor=2
+    transaction.state.log.min.isr=2
+    log.retention.hours=168
+    log.segment.bytes=1073741824
+    log.retention.check.interval.ms=300000
+    zookeeper.connect=localhost:2181,localhost:2182
+    zookeeper.connection.timeout.ms=18000
+    group.initial.rebalance.delay.ms=0
+    metadata.max.age.ms=3000
+    """.format(tdir=kafka_dir, _id=_id, ip=remote.ip_address)
+    file_name = 'kafka{_id}.properties'.format(_id=_id)
+    log.info("kafka conf file: %s", file_name)
+    log.info(conf)
+    return ctx.cluster.only(client).run(
+            args=[
+                'cd', kafka_dir, run.Raw('&&'),
+                'mkdir', '-p', 'config', run.Raw('&&'),
+                'mkdir', '-p', 'data', run.Raw('&&'),
+                'echo', conf, run.Raw('>'), 'config/{file_name}'.format(file_name=file_name)
+                ],
+            )
+
 
 @contextlib.contextmanager
 def install_kafka(ctx, config):
@@ -59,45 +124,21 @@ def install_kafka(ctx, config):
         )
 
         kafka_dir = get_kafka_dir(ctx, config)
-        # create config for second broker
-        second_broker_config_name = "server2.properties"
-        second_broker_data = "{tdir}/data/broker02".format(tdir=kafka_dir)
-        second_broker_data_logs_escaped = "{}/logs".format(second_broker_data).replace("/", "\/")
-
-        ctx.cluster.only(client).run(
-            args=['cd', '{tdir}'.format(tdir=kafka_dir), run.Raw('&&'), 
-             'cp', '{tdir}/config/server.properties'.format(tdir=kafka_dir), '{tdir}/config/{second_broker_config_name}'.format(tdir=kafka_dir, second_broker_config_name=second_broker_config_name), run.Raw('&&'), 
-             'mkdir', '-p', '{tdir}/data'.format(tdir=kafka_dir)
-            ],
-        )
-
-        # edit config
-        ctx.cluster.only(client).run(
-            args=['sed', '-i', 's/broker.id=0/broker.id=1/g', '{tdir}/config/{second_broker_config_name}'.format(tdir=kafka_dir, second_broker_config_name=second_broker_config_name), run.Raw('&&'),
-                  'sed', '-i', 's/#listeners=PLAINTEXT:\/\/:9092/listeners=PLAINTEXT:\/\/localhost:19092/g', '{tdir}/config/{second_broker_config_name}'.format(tdir=kafka_dir, second_broker_config_name=second_broker_config_name), run.Raw('&&'),
-                  'sed', '-i', 's/#advertised.listeners=PLAINTEXT:\/\/your.host.name:9092/advertised.listeners=PLAINTEXT:\/\/localhost:19092/g', '{tdir}/config/{second_broker_config_name}'.format(tdir=kafka_dir, second_broker_config_name=second_broker_config_name), run.Raw('&&'),
-                  'sed', '-i', 's/log.dirs=\/tmp\/kafka-logs/log.dirs={}/g'.format(second_broker_data_logs_escaped), '{tdir}/config/{second_broker_config_name}'.format(tdir=kafka_dir, second_broker_config_name=second_broker_config_name), run.Raw('&&'),
-                  'cat', '{tdir}/config/{second_broker_config_name}'.format(tdir=kafka_dir, second_broker_config_name=second_broker_config_name)
-            ]
-        )
+        # create config for 2 zookeepers
+        zookeeper_conf(ctx, client, 1, kafka_dir)
+        zookeeper_conf(ctx, client, 2, kafka_dir)
+        # create config for 2 brokers
+        broker_conf(ctx, client, 1, kafka_dir)
+        broker_conf(ctx, client, 2, kafka_dir)
 
     try:
         yield
     finally:
         log.info('Removing packaged dependencies of Kafka...')
-        test_dir=get_kafka_dir(ctx, config)
-        current_version = get_kafka_version(config)
+        kafka_dir=get_kafka_dir(ctx, config)
         for (client,_) in config.items():
             ctx.cluster.only(client).run(
-                args=['rm', '-rf', '{tdir}/logs'.format(tdir=test_dir)],
-            )
-
-            ctx.cluster.only(client).run(
-                args=['rm', '-rf', test_dir],
-            )
-
-            ctx.cluster.only(client).run(
-                args=['rm', '-rf', '{tdir}/{doc}'.format(tdir=teuthology.get_testdir(ctx),doc=kafka_file)],
+                args=['rm', '-rf', '{tdir}'.format(tdir=kafka_dir)],
             )
 
 
@@ -114,32 +155,48 @@ def run_kafka(ctx,config):
         (remote,) = ctx.cluster.only(client).remotes.keys()
         kafka_dir = get_kafka_dir(ctx, config)
 
-        second_broker_data = "{tdir}/data/broker02".format(tdir=kafka_dir)
-        second_broker_java_log_dir = "{}/java_logs".format(second_broker_data)
+        ctx.cluster.only(client).run(
+            args=['cd', '{tdir}/bin'.format(tdir=kafka_dir), run.Raw('&&'),
+             './zookeeper-server-start.sh', '-daemon',
+             '{tdir}/config/zookeeper1.properties'.format(tdir=kafka_dir)
+            ],
+        )
+        ctx.cluster.only(client).run(
+            args=['cd', '{tdir}/bin'.format(tdir=kafka_dir), run.Raw('&&'),
+             './zookeeper-server-start.sh', '-daemon',
+             '{tdir}/config/zookeeper2.properties'.format(tdir=kafka_dir)
+            ],
+        )
+        # wait for zookeepers to start
+        time.sleep(5)
+        for zk_id in [1, 2]:
+            ctx.cluster.only(client).run(
+                args=['cd', '{tdir}/bin'.format(tdir=kafka_dir), run.Raw('&&'),
+                 './zookeeper-shell.sh', 'localhost:218{_id}'.format(_id=zk_id), 'ls', '/'],
+            )
+            zk_started = False
+            while not zk_started:
+                result = ctx.cluster.only(client).run(
+                        args=['cd', '{tdir}/bin'.format(tdir=kafka_dir), run.Raw('&&'),
+                        './zookeeper-shell.sh', 'localhost:218{_id}'.format(_id=zk_id), 'ls', '/'],
+                        )
+                log.info("Checking if Zookeeper %d is started. Result: %s", zk_id, str(result))
+                zk_started = True
 
         ctx.cluster.only(client).run(
             args=['cd', '{tdir}/bin'.format(tdir=kafka_dir), run.Raw('&&'),
-             './zookeeper-server-start.sh',
-             '{tir}/config/zookeeper.properties'.format(tir=kafka_dir),
-             run.Raw('&'), 'exit'
+             './kafka-server-start.sh', '-daemon',
+             '{tdir}/config/kafka1.properties'.format(tdir=get_kafka_dir(ctx, config))
             ],
         )
-
         ctx.cluster.only(client).run(
             args=['cd', '{tdir}/bin'.format(tdir=kafka_dir), run.Raw('&&'),
-             './kafka-server-start.sh',
-             '{tir}/config/server.properties'.format(tir=get_kafka_dir(ctx, config)),
-             run.Raw('&'), 'exit'
+             './kafka-server-start.sh', '-daemon',
+             '{tdir}/config/kafka2.properties'.format(tdir=get_kafka_dir(ctx, config))
             ],
         )
-        
-        ctx.cluster.only(client).run(
-            args=['cd', '{tdir}/bin'.format(tdir=kafka_dir), run.Raw('&&'),
-             run.Raw('LOG_DIR={second_broker_java_log_dir}'.format(second_broker_java_log_dir=second_broker_java_log_dir)), 
-             './kafka-server-start.sh', '{tdir}/config/server2.properties'.format(tdir=kafka_dir),
-             run.Raw('&'), 'exit'
-            ],
-        )
+        # wait for kafka to start
+        time.sleep(5)
 
     try:
         yield
@@ -151,27 +208,41 @@ def run_kafka(ctx,config):
 
             ctx.cluster.only(client).run(
                 args=['cd', '{tdir}/bin'.format(tdir=get_kafka_dir(ctx, config)), run.Raw('&&'),
-                 './kafka-server-stop.sh',  
-                 '{tir}/config/kafka.properties'.format(tir=get_kafka_dir(ctx, config)),
+                 './kafka-server-stop.sh',
+                 '{tdir}/config/kafka1.properties'.format(tdir=get_kafka_dir(ctx, config)),
                 ],
             )
 
+            ctx.cluster.only(client).run(
+                args=['cd', '{tdir}/bin'.format(tdir=get_kafka_dir(ctx, config)), run.Raw('&&'),
+                 './kafka-server-stop.sh',
+                 '{tdir}/config/kafka2.properties'.format(tdir=get_kafka_dir(ctx, config)),
+                ],
+            )
+
+            # wait for kafka to stop
             time.sleep(5)
 
             ctx.cluster.only(client).run(
-                args=['cd', '{tdir}/bin'.format(tdir=get_kafka_dir(ctx, config)), run.Raw('&&'), 
+                args=['cd', '{tdir}/bin'.format(tdir=get_kafka_dir(ctx, config)), run.Raw('&&'),
                  './zookeeper-server-stop.sh',
-                 '{tir}/config/zookeeper.properties'.format(tir=get_kafka_dir(ctx, config)),
+                 '{tir}/config/zookeeper1.properties'.format(tir=get_kafka_dir(ctx, config)),
+                ],
+            )
+            ctx.cluster.only(client).run(
+                args=['cd', '{tdir}/bin'.format(tdir=get_kafka_dir(ctx, config)), run.Raw('&&'),
+                 './zookeeper-server-stop.sh',
+                 '{tir}/config/zookeeper2.properties'.format(tir=get_kafka_dir(ctx, config)),
                 ],
             )
 
+            # wait for zookeeper to stop
             time.sleep(5)
-
             ctx.cluster.only(client).run(args=['killall', '-9', 'java'])
 
 
 @contextlib.contextmanager
-def run_admin_cmds(ctx,config):
+def run_admin_cmds(ctx, config):
     """
     Running Kafka Admin commands in order to check the working of producer anf consumer and creation of topic.
     """
@@ -182,9 +253,9 @@ def run_admin_cmds(ctx,config):
 
         ctx.cluster.only(client).run(
             args=[
-                'cd', '{tdir}/bin'.format(tdir=get_kafka_dir(ctx, config)), run.Raw('&&'), 
+                'cd', '{tdir}/bin'.format(tdir=get_kafka_dir(ctx, config)), run.Raw('&&'),
                 './kafka-topics.sh', '--create', '--topic', 'quickstart-events',
-                '--bootstrap-server', 'localhost:9092'
+                '--bootstrap-server', 'localhost:9091,localhost:9092',
             ],
         )
 
@@ -193,7 +264,7 @@ def run_admin_cmds(ctx,config):
                 'cd', '{tdir}/bin'.format(tdir=get_kafka_dir(ctx, config)), run.Raw('&&'),
                 'echo', "First", run.Raw('|'),
                 './kafka-console-producer.sh', '--topic', 'quickstart-events',
-                '--bootstrap-server', 'localhost:9092'
+                '--bootstrap-server', 'localhost:9091,localhost:9092',
             ],
         )
 
@@ -202,8 +273,7 @@ def run_admin_cmds(ctx,config):
                 'cd', '{tdir}/bin'.format(tdir=get_kafka_dir(ctx, config)), run.Raw('&&'),
                 './kafka-console-consumer.sh', '--topic', 'quickstart-events',
                 '--from-beginning',
-                '--bootstrap-server', 'localhost:9092',
-                run.Raw('&'), 'exit'
+                '--bootstrap-server', 'localhost:9091,localhost:9092', '--max-messages', '1',
             ],
         )
 
