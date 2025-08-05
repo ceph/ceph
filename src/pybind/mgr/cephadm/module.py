@@ -508,7 +508,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         Option(
             'upgrade_unset_mon_flags',
             type='str',
-            default='',
+            default='enable_availability_tracking',
             desc='Comma separated list of mon flags to unset when --unset-mon-flags '
             'is passed to the upgrade command'
         ),
