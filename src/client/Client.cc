@@ -12521,13 +12521,14 @@ int Client::getcwd(string& dir, const UserPerm& perms)
   return _getcwd(dir, perms);
 }
 
-int Client::statfs(const char *path, struct statvfs *stbuf,
+int Client::_statfs(Inode *in, struct statvfs *stbuf,
 		   const UserPerm& perms)
 {
   RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
   if (!mref_reader.is_state_satisfied())
     return -ENOTCONN;
 
+  ldout(cct, 10) << __func__ << dendl;
   tout(cct) << __func__ << std::endl;
   unsigned long int total_files_on_fs;
 
@@ -12968,7 +12969,21 @@ int Client::ll_statfs(Inode *in, struct statvfs *stbuf, const UserPerm& perms)
   /* Since the only thing this does is wrap a call to statfs, and
      statfs takes a lock, it doesn't seem we have a need to split it
      out. */
-  return statfs(0, stbuf, perms);
+  return _statfs(in, stbuf, perms);
+}
+
+int Client::statfs(const char *path, struct statvfs *stbuf, const UserPerm& perms)
+{
+  walk_dentry_result wdr;
+  {
+    std::scoped_lock l(client_lock);
+    if (int rc = path_walk(cwd, filepath(path), &wdr, perms, {}); rc < 0) {
+      return rc;
+    }
+  }
+
+  auto in = wdr.target.get();
+  return _statfs(in, stbuf, perms);
 }
 
 void Client::_ll_register_callbacks(struct ceph_client_callback_args *args)
