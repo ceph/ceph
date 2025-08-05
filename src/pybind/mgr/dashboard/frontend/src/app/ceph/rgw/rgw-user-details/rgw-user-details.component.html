@@ -64,6 +64,13 @@
               class="bold">Maximum buckets</td>
           <td>{{ user.max_buckets | map: maxBucketsMap }}</td>
         </tr>
+        @if (user.type === 'rgw' && selection.account?.id){
+        <tr>
+          <td i18n
+              class="bold">Managed policies</td>
+          <td i18n>{{ extractPolicyNamesFromArns(user.managed_user_policies) }}</td>
+        </tr>
+        }
         <tr *ngIf="user.subusers && user.subusers.length">
           <td i18n
               class="bold">Subusers</td>
