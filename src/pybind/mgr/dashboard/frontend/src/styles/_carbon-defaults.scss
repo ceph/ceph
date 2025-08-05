@@ -168,10 +168,22 @@ Tooltip
 /******************************************
 Carbon Popover
 ******************************************/
+.cds--popover {
+  .cds--popover-caret {
+    background-color: theme.$background;
+  }
+}
+
 .cds--popover-content {
-  background-color: theme.$layer-02;
+  background-color: theme.$background;
+}
+
+// inner container class for overflow
+.cds--popover-scroll-container {
   max-height: layout.$spacing-13;
-  overflow: auto;
+  overflow-y: auto;
+  margin-right: -1rem;
+  padding-right: 1rem;
 }
 
 /******************************************

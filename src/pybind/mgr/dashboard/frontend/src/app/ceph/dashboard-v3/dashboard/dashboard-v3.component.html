@@ -167,9 +167,11 @@
               </div>
               <div cdsToggletipContent
                    #healthCheck>
-                <cd-health-checks *ngIf="healthData?.health?.checks"
-                                  [healthData]="healthData.health.checks">
-                </cd-health-checks>
+                <div class="cds--popover-scroll-container">
+                  <cd-health-checks *ngIf="healthData?.health?.checks"
+                                    [healthData]="healthData.health.checks">
+                  </cd-health-checks>
+                </div>
               </div>
             </cds-toggletip>
           </div>
