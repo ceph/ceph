@@ -148,9 +148,10 @@ struct CacheBlock {
 };
 
 class D4NTransaction {
-  //purpose: to provide a transactional interface to Redis
-  //this object should be shared among all the directories (object, block, bucket)
-  //assumption: all the directories are in the same RGW context and share the same Redis connection
+  //purpose: to provide a transactional interface per Redis operations, i.e. to allow multiple Redis operations to be executed atomically.
+  //this object instance is created per each request, and it is used to manage multiple Redis operations as a single transaction.
+  //this object is shared among all the directories objects (object, block, bucket)
+  //assumption: all the directories objects belong to the same s3-request context.
 public:
 
     enum class redis_operation_type {
@@ -178,9 +179,9 @@ public:
     std::string m_evalsha_clone_key;
     std::string m_evalsha_end_trx;
 
-    std::set<std::string> m_temp_read_keys;//temporary key for use in transactions
-    std::set<std::string> m_temp_write_keys;//temporary key for use in transactions
-    std::set<std::string> m_temp_test_write_keys;//temporary key for use in transactions
+    std::set<std::string> m_temp_read_keys;//unique temporary keys that are used in transactions(read operations)
+    std::set<std::string> m_temp_write_keys;//unique temporary keys for use in transactions(write operations)
+    std::set<std::string> m_temp_test_write_keys;// each key that is used for write, is clone for later test, to ensure that the key is not changed by other transactions (test write operation)
     std::string m_original_key;//original key, used to restore the key from Redis
     std::string m_temp_key_read;//temporary key for use in transactions
     std::string m_temp_key_write;//temporary key for use in transactions
@@ -195,7 +196,11 @@ class Directory {
     }
     Directory() {}
     D4NTransaction* m_d4n_trx{nullptr};
+   
+    //m_d4n_trx is used to manage the transaction state and operations and it is shared among all the Directory objects.
+    D4NTransaction* m_d4n_trx{nullptr};//TODO: private
     void set_d4n_trx(D4NTransaction* d4n_trx) {m_d4n_trx = d4n_trx;}
+    D4NTransaction* get_d4n_trx() const { return m_d4n_trx; }
 };
 
 class Pipeline {
@@ -229,7 +234,7 @@ class BucketDirectory: public Directory {
 
 class ObjectDirectory: public Directory {
   public:
-    ObjectDirectory(std::shared_ptr<connection>& conn) : conn(conn) {}
+    ObjectDirectory(std::shared_ptr<connection> conn) : conn(conn) {}
 
     //get a connection
     std::shared_ptr<connection> get_connection() { return conn; } 
@@ -258,7 +263,7 @@ class ObjectDirectory: public Directory {
 
 class BlockDirectory: public Directory {
   public:
-    BlockDirectory(std::shared_ptr<connection>& conn) : conn(conn) {}
+    BlockDirectory(std::shared_ptr<connection> conn) : conn(conn) {}
     
     int exist_key(const DoutPrefixProvider* dpp, CacheBlock* block, optional_yield y);
 

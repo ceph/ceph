@@ -976,7 +976,8 @@ void LFUDAPolicy::cleaning(const DoutPrefixProvider* dpp)
 	erase_dirty_object(dpp, e->key, null_yield);
 
 	auto end_trx_status = objDir->m_d4n_trx->end_trx(dpp,objDir->get_connection(), y); //end transaction
-	//TODO: handle end_trx_status (success or failure)
+	ldpp_dout(dpp, 20) << __func__ << "(): end_trx_status=" << end_trx_status << dendl;
+	//TODO: handle end_trx_status (success or failure), retry if needed
       }
     } else if (diff < interval) { //end-if std::difftime(time(NULL), e->creationTime) > interval
       {

@@ -325,6 +325,7 @@ int BucketDirectory::zrank(const DoutPrefixProvider* dpp, const std::string& buc
 
 void D4NTransaction::create_rw_temp_keys(std::string key)
 {
+	//TODO get_trx_id( ) could be called here, upon transaction start
   if(trxState == TrxState::STARTED) {
     m_original_key = key;
     // in case the content of m_original_key was changed(by other transaction),the temp keys are deleted on end-transaction phase.
