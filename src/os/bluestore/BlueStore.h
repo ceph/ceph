@@ -30,6 +30,7 @@
 #include <shared_mutex> // for std::shared_lock
 #include <unordered_map>
 #include <condition_variable>
+#include <string>
 
 #include <boost/intrusive/list.hpp>
 #include <boost/intrusive/unordered_set.hpp>
@@ -72,6 +73,7 @@ class SimpleBitmap;
 
 namespace bluestore {
   struct Blob;
+  struct Onode;
 }
 
 //#define DEBUG_CACHE
@@ -80,6 +82,22 @@ namespace bluestore {
 // constants for Buffer::optimize()
 #define MAX_BUFFER_SLOP_RATIO_DEN  8  // so actually 1/N
 #define CEPH_BLUESTORE_TOOL_RESTORE_ALLOCATION
+
+// kv store prefixes
+const std::string PREFIX_SUPER = "S";       // field -> value
+const std::string PREFIX_STAT = "T";        // field -> value(int64 array)
+const std::string PREFIX_COLL = "C";        // collection name -> cnode_t
+const std::string PREFIX_OBJ = "O";         // object name -> onode_t
+const std::string PREFIX_OMAP = "M";        // u64 + keyname -> value
+const std::string PREFIX_PGMETA_OMAP = "P"; // u64 + keyname -> value(for meta coll)
+const std::string PREFIX_PERPOOL_OMAP = "m"; // s64 + u64 + keyname -> value
+const std::string PREFIX_PERPG_OMAP = "p";   // u64(pool) + u32(hash) + u64(id) + keyname -> value
+const std::string PREFIX_DEFERRED = "L";    // id -> deferred_transaction_t
+const std::string PREFIX_ALLOC = "B";       // u64 offset -> u64 length (freelist)
+const std::string PREFIX_ALLOC_BITMAP = "b";// (see BitmapFreelistManager)
+const std::string PREFIX_SHARED_BLOB = "X"; // u64 SB id -> shared_blob_t
+
+const std::string BLUESTORE_GLOBAL_STATFS_KEY = "bluestore_statfs";
 
 enum {
   l_bluestore_first = 732430,
@@ -277,7 +295,8 @@ public:
 
   struct BufferSpace;
   struct Collection;
-  struct Onode;
+  using Onode = bluestore::Onode;
+  friend struct bluestore::Onode;
   class Scanner;
   class Estimator;
   Estimator* create_estimator();
@@ -1139,145 +1158,7 @@ public:
 
   struct OnodeSpace;
   struct OnodeCacheShard;
-  /// an in-memory object
-  struct Onode {
-    MEMPOOL_CLASS_HELPERS();
-
-    std::atomic_int nref = 0;      ///< reference count
-    std::atomic_int pin_nref = 0;  ///< reference count replica to track pinning
-    Collection *c;
-    ghobject_t oid;
-
-    /// key under PREFIX_OBJ where we are stored
-    mempool::bluestore_cache_meta::string key;
-
-    boost::intrusive::list_member_hook<> lru_item;
-
-    bluestore_onode_t onode;  ///< metadata stored as value in kv store
-    bool exists;              ///< true if object logically exists
-    bool cached;              ///< Onode is logically in the cache
-                              /// (it can be pinned and hence physically out
-                              /// of it at the moment though)
-    uint16_t prev_spanning_cnt = 0; /// spanning blobs count
-    ExtentMap extent_map;
-    BufferSpace bc;             ///< buffer cache
-
-    // track txc's that have not been committed to kv store (and whose
-    // effects cannot be read via the kvdb read methods)
-    std::atomic<int> flushing_count = {0};
-    std::atomic<int> waiting_count = {0};
-    /// protect flush_txns
-    ceph::mutex flush_lock = ceph::make_mutex("BlueStore::Onode::flush_lock");
-    ceph::condition_variable flush_cond;   ///< wait here for uncommitted txns
-    std::shared_ptr<int64_t> cache_age_bin;  ///< cache age bin
-
-    Onode(Collection *c, const ghobject_t& o,
-	  const mempool::bluestore_cache_meta::string& k)
-      : c(c),
-	oid(o),
-	key(k),
-	exists(false),
-        cached(false),
-	extent_map(this,
-	  c->store->cct->_conf->
-	    bluestore_extent_map_inline_shard_prealloc_size),
-	bc(*this) {
-    }
-    Onode(CephContext* cct)
-      : c(nullptr),
-        exists(false),
-        cached(false),
-        extent_map(this,
-	  cct->_conf->
-	    bluestore_extent_map_inline_shard_prealloc_size),
-	bc(*this) {
-    }
-
-    ~Onode() {
-      if (c) {
-        std::lock_guard l(c->cache->lock);
-        bc._clear(c->cache);
-        if (prev_spanning_cnt > 0) {
-          c->store->logger->dec(l_bluestore_spanning_blobs, prev_spanning_cnt);
-        }
-      }
-    }
-
-    static void decode_raw(
-      BlueStore::Onode* on,
-      const bufferlist& v,
-      ExtentMap::ExtentDecoder& dencoder,
-      bool use_onode_segmentation);
-
-    static Onode* create_decode(
-      CollectionRef c,
-      const ghobject_t& oid,
-      const std::string& key,
-      const ceph::buffer::list& v,
-      bool allow_empty,
-      bool use_onode_segmentation);
-
-    void dump(ceph::Formatter* f) const;
-
-    void flush();
-    void get();
-    void put();
-
-    inline bool is_cached() const {
-      return cached;
-    }
-    inline void set_cached() {
-      ceph_assert(!cached);
-      cached = true;
-    }
-    inline void clear_cached() {
-      ceph_assert(cached);
-      cached = false;
-    }
-
-    static const std::string& calc_omap_prefix(uint8_t flags);
-    static void calc_omap_header(uint8_t flags, const Onode* o,
-      std::string* out);
-    static void calc_omap_key(uint8_t flags, const Onode* o,
-      const std::string& key, std::string* out);
-    static void calc_omap_tail(uint8_t flags, const Onode* o,
-      std::string* out);
-
-    const std::string& get_omap_prefix() {
-      return calc_omap_prefix(onode.flags);
-    }
-    void get_omap_header(std::string* out) {
-      calc_omap_header(onode.flags, this, out);
-    }
-    void get_omap_key(const std::string& key, std::string* out) {
-      calc_omap_key(onode.flags, this, key, out);
-    }
-    void get_omap_tail(std::string* out) {
-      calc_omap_tail(onode.flags, this, out);
-    }
-
-    void rewrite_omap_key(const std::string& old, std::string *out);
-    size_t calc_userkey_offset_in_omap_key() const;
-    void decode_omap_key(const std::string& key, std::string *user_key);
-
-    void finish_write(TransContext* txc, uint32_t offset, uint32_t length);
-
-    struct printer : public BlueStore::printer {
-      const Onode &onode;
-      uint16_t mode;
-      uint32_t from = 0;
-      uint32_t end = OBJECT_MAX_SIZE;
-      printer(const Onode &onode, uint16_t mode) : onode(onode), mode(mode) {}
-      printer(const Onode &onode, uint16_t mode, uint32_t from, uint32_t end)
-          : onode(onode), mode(mode), from(from), end(end) {}
-    };
-    friend std::ostream &operator<<(std::ostream &out, const printer &p);
-    printer print(uint16_t mode) const { return printer(*this, mode); }
-    printer print(uint16_t mode, uint32_t from, uint32_t end) const {
-      return printer(*this, mode, from, end);
-    }
-  };
-
+  
   /// A generic Cache Shard
   struct CacheShard {
     CephContext *cct;
@@ -1437,7 +1318,7 @@ public:
     mempool::bluestore_cache_meta::unordered_map<ghobject_t,OnodeRef> onode_map;
 
     friend struct Collection; // for split_cache()
-    friend struct Onode; // for put()
+    friend struct bluestore::Onode; // for put()
     friend struct LruOnodeCacheShard;
     void _remove(const ghobject_t& oid);
   public:
@@ -2809,22 +2690,14 @@ private:
     OnodeRef onode,
     uint32_t offset,
     ceph::buffer::list&& bl,
-    unsigned flags) {
-    onode->bc.write(onode->c->cache,
-                    txc, offset, std::move(bl),
-		    flags);
-  }
+    unsigned flags);
 
   void _buffer_cache_write(
     TransContext *txc,
     OnodeRef onode,
     uint32_t offset,
     ceph::buffer::list& bl,
-    unsigned flags) {
-    onode->bc.write(onode->c->cache,
-                    txc, offset, bl,
-		    flags);
-  }
+    unsigned flags);
 
   int _collection_list(
     Collection *c, const ghobject_t& start, const ghobject_t& end,
@@ -3330,12 +3203,7 @@ public:
     CollectionRef& c,
     OnodeRef& o,
     uint32_t off,
-    uint32_t len) {
-    BlueStore::TransContext txc(cct, c.get(), nullptr, nullptr);
-    BlueStore::WriteContext wctx;
-    o->extent_map.punch_hole(c, off, len, &wctx.old_extents);
-    _wctx_finish(&txc, c, o, &wctx, nullptr);
-  }
+    uint32_t len);
 
   static int debug_write_bdev_label(
     CephContext* cct, BlockDevice* bdev, const std::string &path,
@@ -3981,13 +3849,6 @@ inline std::ostream& operator<<(std::ostream& out, const BlueStore::volatile_sta
       << s.values[BlueStore::volatile_statfs::STATFS_COMPRESSED_ORIGINAL]
     << " compressed_alloc:"
       << s.values[BlueStore::volatile_statfs::STATFS_COMPRESSED_ALLOCATED];
-}
-
-static inline void intrusive_ptr_add_ref(BlueStore::Onode *o) {
-  o->get();
-}
-static inline void intrusive_ptr_release(BlueStore::Onode *o) {
-  o->put();
 }
 
 static inline void intrusive_ptr_add_ref(BlueStore::OpSequencer *o) {
