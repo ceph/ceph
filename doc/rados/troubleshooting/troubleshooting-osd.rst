@@ -11,7 +11,7 @@ is a monitor quorum.
 
 If the monitors don't have a quorum or if there are errors with the monitor
 status, address the monitor issues before proceeding by consulting the material
-in `Troubleshooting Monitors <../troubleshooting-mon>`_.
+in :ref:`rados-troubleshooting-mon`.
 
 Next, check your networks to make sure that they are running properly. Networks
 can have a significant impact on OSD operation and performance. Look for
@@ -421,7 +421,7 @@ the full OSD.
    copy of your data on at least one OSD. Deleting placement group directories
    is a rare and extreme intervention. It is not to be undertaken lightly.
 
-See `Monitor Config Reference`_ for more information.
+See :ref:`monitor-config-reference` for more information.
 
 
 OSDs are Slow/Unresponsive
@@ -812,11 +812,8 @@ being marked ``out`` (regardless of the current value of
 
 
 .. _iostat: https://en.wikipedia.org/wiki/Iostat
-.. _Ceph Logging and Debugging: ../../configuration/ceph-conf#ceph-logging-and-debugging
 .. _Logging and Debugging: ../log-and-debug
-.. _Debugging and Logging: ../debug
 .. _Monitor/OSD Interaction: ../../configuration/mon-osd-interaction
-.. _Monitor Config Reference: ../../configuration/mon-config-ref
 .. _monitoring your OSDs: ../../operations/monitoring-osd-pg
 
 .. _monitoring OSDs: ../../operations/monitoring-osd-pg/#monitoring-osds
