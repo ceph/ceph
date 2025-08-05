@@ -64,6 +64,8 @@ uint64_t bluestore::Blob::get_sbid() const {
 
 #undef dout_prefix
 #define dout_prefix *_dout << "bluestore.blob(" << this << ") "
+#undef dout_context
+#define dout_context collection->store->cct
 
 bluestore::Blob::~Blob()
 {
