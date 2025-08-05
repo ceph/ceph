@@ -189,6 +189,127 @@ namespace bluestore {
       bool include_ref_map,
       BlueStore::Collection *coll);
   };
+
+  /// an in-memory object
+  struct Onode {
+    MEMPOOL_CLASS_HELPERS();
+
+    std::atomic_int nref = 0;      ///< reference count
+    std::atomic_int pin_nref = 0;  ///< reference count replica to track pinning
+    BlueStore::Collection *c;
+    ghobject_t oid;
+
+    /// key under PREFIX_OBJ where we are stored
+    mempool::bluestore_cache_meta::string key;
+
+    boost::intrusive::list_member_hook<> lru_item;
+
+    bluestore_onode_t onode;  ///< metadata stored as value in kv store
+    bool exists;              ///< true if object logically exists
+    bool cached;              ///< Onode is logically in the cache
+                              /// (it can be pinned and hence physically out
+                              /// of it at the moment though)
+    uint16_t prev_spanning_cnt = 0; /// spanning blobs count
+    BlueStore::ExtentMap extent_map;
+    BlueStore::BufferSpace bc;             ///< buffer cache
+
+    // track txc's that have not been committed to kv store (and whose
+    // effects cannot be read via the kvdb read methods)
+    std::atomic<int> flushing_count = {0};
+    std::atomic<int> waiting_count = {0};
+    /// protect flush_txns
+    ceph::mutex flush_lock = ceph::make_mutex("BlueStore::Onode::flush_lock");
+    ceph::condition_variable flush_cond;   ///< wait here for uncommitted txns
+    std::shared_ptr<int64_t> cache_age_bin;  ///< cache age bin
+
+    Onode(BlueStore::Collection *c, const ghobject_t& o,
+	  const mempool::bluestore_cache_meta::string& k);
+    Onode(CephContext* cct);
+
+    ~Onode();
+
+    static void decode_raw(
+      BlueStore::Onode* on,
+      const bufferlist& v,
+      BlueStore::ExtentMap::ExtentDecoder& dencoder,
+      bool use_onode_segmentation);
+
+    static Onode* create_decode(
+      BlueStore::CollectionRef c,
+      const ghobject_t& oid,
+      const std::string& key,
+      const ceph::buffer::list& v,
+      bool allow_empty,
+      bool use_onode_segmentation);
+
+    void dump(ceph::Formatter* f) const;
+
+    void flush();
+    void get();
+    void put();
+
+    inline bool is_cached() const {
+      return cached;
+    }
+    inline void set_cached() {
+      ceph_assert(!cached);
+      cached = true;
+    }
+    inline void clear_cached() {
+      ceph_assert(cached);
+      cached = false;
+    }
+
+    static const std::string& calc_omap_prefix(uint8_t flags);
+    static void calc_omap_header(uint8_t flags, const Onode* o,
+      std::string* out);
+    static void calc_omap_key(uint8_t flags, const Onode* o,
+      const std::string& key, std::string* out);
+    static void calc_omap_tail(uint8_t flags, const Onode* o,
+      std::string* out);
+
+    const std::string& get_omap_prefix() {
+      return calc_omap_prefix(onode.flags);
+    }
+    void get_omap_header(std::string* out) {
+      calc_omap_header(onode.flags, this, out);
+    }
+    void get_omap_key(const std::string& key, std::string* out) {
+      calc_omap_key(onode.flags, this, key, out);
+    }
+    void get_omap_tail(std::string* out) {
+      calc_omap_tail(onode.flags, this, out);
+    }
+
+    void rewrite_omap_key(const std::string& old, std::string *out);
+    size_t calc_userkey_offset_in_omap_key() const;
+    void decode_omap_key(const std::string& key, std::string *user_key);
+
+    void finish_write(BlueStore::TransContext* txc, uint32_t offset, uint32_t length);
+
+    struct printer : public BlueStore::printer {
+      const Onode &onode;
+      uint16_t mode;
+      uint32_t from = 0;
+      uint32_t end = BlueStore::OBJECT_MAX_SIZE;
+      printer(const Onode &onode, uint16_t mode) : onode(onode), mode(mode) {}
+      printer(const Onode &onode, uint16_t mode, uint32_t from, uint32_t end)
+          : onode(onode), mode(mode), from(from), end(end) {}
+    };
+    friend std::ostream &operator<<(std::ostream &out, const printer &p);
+    printer print(uint16_t mode) const { return printer(*this, mode); }
+    printer print(uint16_t mode, uint32_t from, uint32_t end) const {
+      return printer(*this, mode, from, end);
+    }
+  };
+
+  static inline void intrusive_ptr_add_ref(bluestore::Onode *o) {
+    o->get();
+  }
+  static inline void intrusive_ptr_release(bluestore::Onode *o) {
+    o->put();
+  }  
+
 }
 
 #endif
