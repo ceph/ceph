@@ -515,6 +515,11 @@ int D4NFilterBucket::list(const DoutPrefixProvider* dpp, ListParams& params, int
     }
   } //d4n_write_cache_enabled = true
 
+  if (cache_request) {
+    results = std::move(cache_results);
+    return 0;
+  }
+
   //Get objects from backend store
   auto ret = next->list(dpp, params, max, store_results, y);
   if (ret < 0) {
@@ -1691,6 +1696,10 @@ int D4NFilterObject::D4NFilterReadOp::prepare(optional_yield y, const DoutPrefix
     ldpp_dout(dpp, 10) << "D4NFilterObject::D4NFilterReadOp::" << __func__ << "(): object " << source->get_name() << " does not exist." << dendl;
     return -ENOENT;
   } else if (!ret) {
+    if (cache_request) {
+      return 0;
+    }
+
     if(perfcounter) {
       perfcounter->inc(l_rgw_d4n_cache_misses);
     }
@@ -1741,6 +1750,11 @@ int D4NFilterObject::D4NFilterReadOp::prepare(optional_yield y, const DoutPrefix
       2. When part_num is 0 and source is multipart
       In both the cases the head is fetched from the backend store.
     */
+
+    if (cache_request) {
+      return 0; // Let iterate method handle cache request logic
+    }
+
     if (params.part_num || (!params.part_num && source->is_multipart())) {
       ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): source->is_multipart()= " << source->is_multipart() << dendl;
       if (params.part_num) { 
@@ -1925,7 +1939,7 @@ int D4NFilterObject::D4NFilterReadOp::iterate(const DoutPrefixProvider* dpp, int
   if (source->get_size() == 0) {
     return 0;
   }
-
+  
   const uint64_t window_size = g_conf()->rgw_get_obj_window_size;
   std::string version = source->get_object_version();
   std::string prefix = get_cache_block_prefix(source, version);
@@ -2051,6 +2065,7 @@ int D4NFilterObject::D4NFilterReadOp::iterate(const DoutPrefixProvider* dpp, int
             ldpp_dout(dpp, 10) << "D4NFilterObject::iterate:: " << __func__ << "(): Error: failed to drain, ret=" << r << dendl;
             return r;
           }
+
           break;
         }
       } //end - else
@@ -2065,13 +2080,17 @@ int D4NFilterObject::D4NFilterReadOp::iterate(const DoutPrefixProvider* dpp, int
       adjusted_len -= max_chunk_size;
     } while (start_part_num < num_parts);
   }
-  ldpp_dout(dpp, 20) << "D4NFilterObject::iterate:: " << __func__ << "(): Fetching object from backend store" << dendl;
-
   Attrs obj_attrs;
   if (source->has_attrs()) {
     obj_attrs = source->get_attrs();
   }
 
+  if (cache_request) {
+    ldpp_dout(dpp, 20) << "Sam" << dendl;
+    return -ENOENT;
+  }
+
+  ldpp_dout(dpp, 20) << "D4NFilterObject::iterate:: " << __func__ << "(): Fetching object from backend store" << dendl;
   this->cb->set_start_ofs(start_diff_ofs);
   this->cb->set_len(len);
   this->cb->set_adjusted_start_ofs(adjusted_start_ofs);
