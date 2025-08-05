@@ -128,22 +128,6 @@ using ceph::timespan_str;
 
 using namespace std::literals;
 
-// kv store prefixes
-const string PREFIX_SUPER = "S";       // field -> value
-const string PREFIX_STAT = "T";        // field -> value(int64 array)
-const string PREFIX_COLL = "C";        // collection name -> cnode_t
-const string PREFIX_OBJ = "O";         // object name -> onode_t
-const string PREFIX_OMAP = "M";        // u64 + keyname -> value
-const string PREFIX_PGMETA_OMAP = "P"; // u64 + keyname -> value(for meta coll)
-const string PREFIX_PERPOOL_OMAP = "m"; // s64 + u64 + keyname -> value
-const string PREFIX_PERPG_OMAP = "p";   // u64(pool) + u32(hash) + u64(id) + keyname -> value
-const string PREFIX_DEFERRED = "L";    // id -> deferred_transaction_t
-const string PREFIX_ALLOC = "B";       // u64 offset -> u64 length (freelist)
-const string PREFIX_ALLOC_BITMAP = "b";// (see BitmapFreelistManager)
-const string PREFIX_SHARED_BLOB = "X"; // u64 SB id -> shared_blob_t
-
-const string BLUESTORE_GLOBAL_STATFS_KEY = "bluestore_statfs";
-
 // Label offsets where they might be replicated. It is possible on previous versions where these offsets
 // were already used so labels won't exist there.
 static constexpr uint64_t _1G = uint64_t(1024)*1024*1024;
@@ -4099,279 +4083,6 @@ std::ostream& operator<<(std::ostream& out, const BlueStore::ExtentMap::debug_au
   }
   out << "]" << std::dec;
   return out;
-}
-
-// Onode
-//
-// Mapping blobs over Onode's logical offsets.
-//
-// Blob is always continous. Blobs may overlap.
-// Non-mapped regions are "0" when read.
-//                 1               2               3
-// 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
-// <blob.a.blob.a><blob.b.blo>        <blob.c.blob.c.blob.c.blob>
-//       <blob.d.blob.d.b>                      <blob.e.blob.e>
-// blob.a starts at 0x0 length 0xe
-// blob.b starts at 0xf length 0xb
-// blob.c starts at 0x23 length 0x1b
-// blob.d starts at 0x06 length 0x12
-// blob.e starts at 0x2d length 0xf
-//
-// Blobs can have non-encoded parts:
-//                 1               2               3
-// 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
-// aaaaaa......aaabbbbb...bbbb        ccccccccccccccc..........cc
-//       dddddd........ddd                      .....eeeeeeeeee
-// "." - non-encoded parts of blob (holes)
-//
-// Mapping logical to blob:
-// extent_map maps {Onode's logical offset, length}=>{Blob, in-blob offset}
-// {0x0, 0x6}=>{blob.a, 0x0}
-// {0x6, 0x6}=>{blob.d, 0x0}
-// {0xc, 0x3}=>{blob.a, 0xc}
-// {0xf, 0x5}=>{blob.b, 0x0}
-// {0x14, 0x3}=>{blob.d, 0xe}
-// {0x17, 0x4}=>{blob.b, 0x8}
-// a hole here
-// {0x23, 0xe}=>{blob.c, 0x0}
-// and so on...
-//
-// Compressed blobs do not have non-encoded parts.
-// Same example as above but all blobs are compressed:
-//                 1               2               3
-// 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
-// aaaaaaAAAAAAaaabbbbbBBBbbbb        cccccccccccccccCCCCCCCCCCcc
-//       ddddddDDDDDDDDddd                      EEEEEeeeeeeeeee
-// A-E: parts of blobs that are never used.
-// This can happen when a compressed blob is overwritten partially.
-// The target ranges are no longer used, but are left there because they are necessary
-// for successful decompression.
-//
-// In compressed blobs PExtentVector and csum refer to actually occupied disk space.
-// Blob's logical length is larger then occupied disk space.
-// Mapping from extent_map always uses offsets of decompressed data.
-
-#undef dout_prefix
-#define dout_prefix *_dout << "bluestore.onode(" << this << ")." << __func__ << " "
-
-const std::string& BlueStore::Onode::calc_omap_prefix(uint8_t flags)
-{
-  if (bluestore_onode_t::is_pgmeta_omap(flags)) {
-    return PREFIX_PGMETA_OMAP;
-  }
-  if (bluestore_onode_t::is_perpg_omap(flags)) {
-    return PREFIX_PERPG_OMAP;
-  }
-  if (bluestore_onode_t::is_perpool_omap(flags)) {
-    return PREFIX_PERPOOL_OMAP;
-  }
-  return PREFIX_OMAP;
-}
-
-// '-' < '.' < '~'
-void BlueStore::Onode::calc_omap_header(
-  uint8_t flags,
-  const Onode* o,
-  std::string* out)
-{
-  if (!bluestore_onode_t::is_pgmeta_omap(flags)) {
-    if (bluestore_onode_t::is_perpg_omap(flags)) {
-      _key_encode_u64(o->c->pool(), out);
-      _key_encode_u32(o->oid.hobj.get_bitwise_key_u32(), out);
-    } else if (bluestore_onode_t::is_perpool_omap(flags)) {
-      _key_encode_u64(o->c->pool(), out);
-    }
-  }
-  _key_encode_u64(o->onode.nid, out);
-  out->push_back('-');
-}
-
-void BlueStore::Onode::calc_omap_key(uint8_t flags,
-				    const Onode* o,
-				    const std::string& key,
-				    std::string* out)
-{
-  if (!bluestore_onode_t::is_pgmeta_omap(flags)) {
-    if (bluestore_onode_t::is_perpg_omap(flags)) {
-      _key_encode_u64(o->c->pool(), out);
-      _key_encode_u32(o->oid.hobj.get_bitwise_key_u32(), out);
-    } else if (bluestore_onode_t::is_perpool_omap(flags)) {
-      _key_encode_u64(o->c->pool(), out);
-    }
-  }
-  _key_encode_u64(o->onode.nid, out);
-  out->push_back('.');
-  out->append(key);
-}
-
-void BlueStore::Onode::calc_omap_tail(
-  uint8_t flags,
-  const Onode* o,
-  std::string* out)
-{
-  if (!bluestore_onode_t::is_pgmeta_omap(flags)) {
-    if (bluestore_onode_t::is_perpg_omap(flags)) {
-      _key_encode_u64(o->c->pool(), out);
-      _key_encode_u32(o->oid.hobj.get_bitwise_key_u32(), out);
-    } else if (bluestore_onode_t::is_perpool_omap(flags)) {
-      _key_encode_u64(o->c->pool(), out);
-    }
-  }
-  _key_encode_u64(o->onode.nid, out);
-  out->push_back('~');
-}
-
-void BlueStore::Onode::get()
-{
-  ++nref;
-  ++pin_nref;
-}
-void BlueStore::Onode::put()
-{
-  if (--pin_nref == 1) {
-    c->get_onode_cache()->maybe_unpin(this);
-  }
-  if (--nref == 0) {
-    delete this;
-  }
-}
-
-void BlueStore::Onode::decode_raw(
-  BlueStore::Onode* on,
-  const bufferlist& v,
-  BlueStore::ExtentMap::ExtentDecoder& edecoder,
-  bool use_onode_segmentation)
-{
-  on->exists = true;
-  auto p = v.front().begin_deep();
-  on->onode.decode(p, use_onode_segmentation ? 0 : bluestore_onode_t::FLAG_DEBUG_FORCE_V2);
-
-  // initialize extent_map
-  edecoder.decode_spanning_blobs(p, on->c);
-  ceph_assert(on->prev_spanning_cnt == 0);
-  if (on->c) {
-    on->prev_spanning_cnt = on->extent_map.spanning_blob_map.size();
-    if (on->prev_spanning_cnt != 0) {
-      on->c->store->logger->inc(l_bluestore_spanning_blobs, on->prev_spanning_cnt);
-    }
-  }
-  if (on->onode.extent_map_shards.empty()) {
-    denc(on->extent_map.inline_bl, p);
-    edecoder.decode_some(on->extent_map.inline_bl, on->c);
-  }
-}
-
-BlueStore::Onode* BlueStore::Onode::create_decode(
-  CollectionRef c,
-  const ghobject_t& oid,
-  const string& key,
-  const bufferlist& v,
-  bool allow_empty,
-  bool use_onode_segmentation)
-{
-  ceph_assert(v.length() || allow_empty);
-  Onode* on = new Onode(c.get(), oid, (const mempool::bluestore_cache_meta::string)(key));
-
-  if (v.length()) {
-    ExtentMap::ExtentDecoderFull edecoder(on->extent_map);
-    decode_raw(on, v, edecoder, use_onode_segmentation);
-
-    for (auto& i : on->onode.attrs) {
-      i.second.reassign_to_mempool(mempool::mempool_bluestore_cache_meta);
-    }
-
-    // initialize extent_map
-    if (on->onode.extent_map_shards.empty()) {
-      on->extent_map.inline_bl.reassign_to_mempool(
-        mempool::mempool_bluestore_cache_data);
-    } else {
-      on->extent_map.init_shards(false, false);
-    }
-  } else {
-    // init segment_size
-    uint32_t segment_size = c->store->segment_size.load();
-    if (segment_size != 0 &&
-        c->comp_max_blob_size.has_value() &&
-        segment_size < c->comp_max_blob_size.value()) {
-      segment_size = c->comp_max_blob_size.value(); // compression larger than global segment_size, use it
-    }
-    on->onode.segment_size = segment_size;
-  }
-  return on;
-}
-
-void BlueStore::Onode::flush()
-{
-  if (flushing_count.load()) {
-    ldout(c->store->cct, 20) << __func__ << " cnt:" << flushing_count << dendl;
-    waiting_count++;
-    std::unique_lock l(flush_lock);
-    while (flushing_count.load()) {
-      flush_cond.wait(l);
-    }
-    waiting_count--;
-  }
-  ldout(c->store->cct, 20) << __func__ << " done" << dendl;
-}
-
-void BlueStore::Onode::dump(Formatter* f) const
-{
-  onode.dump(f);
-  extent_map.dump(f);
-}
-
-void BlueStore::Onode::rewrite_omap_key(const string& old, string *out)
-{
-  if (!onode.is_pgmeta_omap()) {
-    if (onode.is_perpg_omap()) {
-      _key_encode_u64(c->pool(), out);
-      _key_encode_u32(oid.hobj.get_bitwise_key_u32(), out);
-    } else if (onode.is_perpool_omap()) {
-      _key_encode_u64(c->pool(), out);
-    }
-  }
-  _key_encode_u64(onode.nid, out);
-  out->append(old.c_str() + out->length(), old.size() - out->length());
-}
-
-size_t BlueStore::Onode::calc_userkey_offset_in_omap_key() const
-{
-  size_t pos = sizeof(uint64_t) + 1;
-  if (!onode.is_pgmeta_omap()) {
-    if (onode.is_perpg_omap()) {
-      pos += sizeof(uint64_t) + sizeof(uint32_t);
-    } else if (onode.is_perpool_omap()) {
-      pos += sizeof(uint64_t);
-    }
-  }
-  return pos;
-}
-
-void BlueStore::Onode::decode_omap_key(const string& key, string *user_key)
-{
-  *user_key = key.substr(calc_userkey_offset_in_omap_key());
-}
-
-
-void BlueStore::Onode::finish_write(TransContext* txc, uint32_t offset, uint32_t length)
-{
-  while (true) {
-    BufferCacheShard *cache = c->cache;
-    std::lock_guard l(cache->lock);
-    if (cache != c->cache) {
-      ldout(cache->cct, 20) << __func__
-	       << " raced with sb cache update, was " << cache
-	       << ", now " << c->cache << ", retrying"
-	       << dendl;
-      continue;
-    }
-    ldout(c->store->cct, 10) << __func__ << " txc " << txc << std::hex
-                             << " 0x" << offset << "~" << length << std::dec
-                             << dendl;
-    bc._finish_write(cache, txc, offset, length);
-    break;
-  }
-  ldout(c->store->cct, 10) << __func__ << " done " << txc << dendl;
 }
 
 // =======================================================
@@ -19903,6 +19614,41 @@ void BlueStore::ExtentDecoderPartial::reset(const ghobject_t _oid,
   std::swap(blobs, empty);
   std::swap(spanning_blobs, empty2);
 }
+
+void BlueStore::_buffer_cache_write(
+  TransContext *txc,
+  OnodeRef onode,
+  uint32_t offset,
+  ceph::buffer::list&& bl,
+  unsigned flags) {
+  onode->bc.write(onode->c->cache,
+                  txc, offset, std::move(bl),
+      flags);
+}
+
+void BlueStore::_buffer_cache_write(
+  TransContext *txc,
+  OnodeRef onode,
+  uint32_t offset,
+  ceph::buffer::list& bl,
+  unsigned flags) {
+  onode->bc.write(onode->c->cache,
+                  txc, offset, bl,
+      flags);
+}
+
+void BlueStore::debug_punch_hole(
+  CollectionRef& c,
+  OnodeRef& o,
+  uint32_t off,
+  uint32_t len) {
+  BlueStore::TransContext txc(cct, c.get(), nullptr, nullptr);
+  BlueStore::WriteContext wctx;
+  o->extent_map.punch_hole(c, off, len, &wctx.old_extents);
+  _wctx_finish(&txc, c, o, &wctx, nullptr);
+}
+
+
 
 int BlueStore::read_allocation_from_onodes(SimpleBitmap *sbmap, read_alloc_stats_t& stats)
 {
