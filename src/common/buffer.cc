@@ -131,9 +131,16 @@ static ceph::spinlock debug_lock;
 	new (ptr + datalen) raw_combined(ptr, len, mempool));
     }
 
-    static void operator delete(void *ptr) {
-      raw_combined *raw = (raw_combined *)ptr;
-      aligned_free((void *)raw->data);
+    // Custom delete operator that properly handles cleanup of a combined allocation
+    // where the object is placed after its data buffer. The operator must:
+    // 1. Save the data pointer before the object is destroyed
+    // 2. Explicitly call the destructor to clean up the object's members
+    // 3. Free the entire combined allocation through the data pointer
+    // Uses std::destroying_delete_t to prevent automatic destructor call after delete
+    static void operator delete(raw_combined *raw, std::destroying_delete_t) {
+      char * dataptr = raw->data;
+      raw->~raw_combined();
+      aligned_free(dataptr);
     }
   };
 
