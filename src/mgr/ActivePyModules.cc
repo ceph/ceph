@@ -181,10 +181,18 @@ PyObject *ActivePyModules::get_daemon_status_python(
   return f.get();
 }
 
-void ActivePyModules::ceph_cache_map_erase(const std::string &what)
+int ActivePyModules::ceph_cache_map_erase(const std::string &what)
 {
+  if (!api_cache.exists(what)) {
+    dout(10) << __func__ << " what: " << what << " not in cache" << dendl;
+    return -ENOENT;
+  } else if (!api_cache.is_cacheable(what)) {
+    dout(10) << __func__ << " what: " << what << " not cacheable" << dendl;
+    return -EINVAL;
+  }
   dout(10) << __func__ << " what: " << what << dendl;
   api_cache.erase(what);
+  return 0;
 }
 
 PyObject *ActivePyModules::cacheable_get_python(const std::string &what)

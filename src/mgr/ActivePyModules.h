@@ -85,6 +85,7 @@ public:
   Objecter  &get_objecter() {return objecter;}
   PyObject *cacheable_get_python(const std::string &what);
   PyObject *get_python(const std::string &what);
+  int ceph_cache_map_erase(const std::string &what);
   PyObject *get_server_python(const std::string &hostname);
   PyObject *list_servers_python();
   PyObject *get_metadata_python(
