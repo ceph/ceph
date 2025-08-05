@@ -89,6 +89,10 @@ public:
   bool is_stable() const;
   bool is_data_stable() const;
   bool is_clone() const {
+    assert(!is_null());
+    if (is_indirect()) {
+      return false;
+    }
     assert(is_linked_direct());
     assert(!direct_cursor->is_end());
     return direct_cursor->get_refcount() > 1;
