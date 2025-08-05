@@ -4,7 +4,7 @@
  Erasure code
 ==============
 
-By default, Ceph `pools <../pools>`_ are created with the type "replicated". In
+By default, Ceph :ref:`rados_pools` are created with the type "replicated". In
 replicated-type pools, every object is copied to multiple disks. This
 multiple copying is the method of data protection known as "replication".
 
@@ -169,8 +169,8 @@ no two *chunks* are stored in the same rack.
                                  +------+
 
  
-More information can be found in the `erasure-code profiles
-<../erasure-code-profile>`_ documentation.
+More information can be found in the :ref:`erasure-code-profiles`
+documentation.
 
 
 Erasure Coding with Overwrites
@@ -204,7 +204,7 @@ erasure-coded pool as the ``--data-pool`` during image creation:
     rbd create --size 1G --data-pool ec_pool replicated_pool/image_name
 
 For CephFS, an erasure-coded pool can be set as the default data pool during
-file system creation or via `file layouts <../../../cephfs/file-layouts>`_.
+file system creation or via :ref:`file-layouts`.
 
 Erasure-coded pool overhead
 ---------------------------
