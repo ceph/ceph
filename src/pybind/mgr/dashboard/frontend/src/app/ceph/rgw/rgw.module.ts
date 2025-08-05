@@ -97,6 +97,7 @@ import ArrowDownIcon from '@carbon/icons/es/arrow--down/16';
 import ProgressBarRoundIcon from '@carbon/icons/es/progress-bar--round/32';
 import ToolsIcon from '@carbon/icons/es/tools/32';
 import ParentChild from '@carbon/icons/es/parent-child/20';
+import UserAccessLocked from '@carbon/icons/es/user--access-locked/16';
 
 import { CephSharedModule } from '../shared/ceph-shared.module';
 import { RgwUserAccountsComponent } from './rgw-user-accounts/rgw-user-accounts.component';
@@ -234,7 +235,8 @@ export class RgwModule {
       ArrowDownIcon,
       ProgressBarRoundIcon,
       ToolsIcon,
-      ParentChild
+      ParentChild,
+      UserAccessLocked
     ]);
   }
 }
@@ -332,7 +334,7 @@ const routes: Routes = [
         data: { breadcrumbs: ActionLabels.CREATE }
       },
       {
-        path: `${URLVerbs.EDIT}/:bid`,
+        path: `${URLVerbs.EDIT}/:bid/:owner`,
         component: RgwBucketFormComponent,
         data: { breadcrumbs: ActionLabels.EDIT }
       }
