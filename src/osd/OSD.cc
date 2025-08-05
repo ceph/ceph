@@ -6512,20 +6512,7 @@ void OSD::tick_without_osd_lock()
     service.get_scrub_services().initiate_scrub(service.is_recovery_active());
     service.promote_throttle_recalibrate();
     resume_creating_pg();
-    bool need_send_beacon = false;
-    const auto now = ceph::coarse_mono_clock::now();
-    {
-      // borrow lec lock to pretect last_sent_beacon from changing
-      std::lock_guard l{min_last_epoch_clean_lock};
-      const auto elapsed = now - last_sent_beacon;
-      if (std::chrono::duration_cast<std::chrono::seconds>(elapsed).count() >
-        cct->_conf->osd_beacon_report_interval) {
-        need_send_beacon = true;
-      }
-    }
-    if (need_send_beacon) {
-      send_beacon(now);
-    }
+    maybe_send_beacon();
   }
 
   mgrc.update_daemon_health(get_health_metrics());
@@ -7423,6 +7410,26 @@ void OSD::send_beacon(const ceph::coarse_mono_clock::time_point& now)
   }
 }
 
+void OSD::maybe_send_beacon()
+{
+  bool need_send_beacon = false;
+  const auto now = ceph::coarse_mono_clock::now();
+  {
+    // borrow lec lock to protect last_sent_beacon from changing
+    std::lock_guard l{min_last_epoch_clean_lock};
+    const auto elapsed = now - last_sent_beacon;
+    if (std::chrono::duration_cast<std::chrono::seconds>(elapsed).count() >
+      cct->_conf->osd_beacon_report_interval) {
+      need_send_beacon = true;
+    }
+  }
+  if (need_send_beacon) {
+    send_beacon(now);
+  } else {
+    dout(20) << __func__ << " beacon would be too frequent; skipping" << dendl;
+  }
+}
+
 void OSD::handle_command(MCommand *m)
 {
   ConnectionRef con = m->get_connection();
@@ -7509,7 +7516,7 @@ void OSD::scrub_purged_snaps()
   int tr = store->queue_transaction(service.meta_ch, std::move(t), nullptr);
   ceph_assert(tr == 0);
   if (is_active()) {
-    send_beacon(ceph::coarse_mono_clock::now());
+    maybe_send_beacon();
   }
   dout(10) << __func__ << " done" << dendl;
 }
