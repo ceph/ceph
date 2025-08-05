@@ -1933,6 +1933,7 @@ int D4NFilterObject::D4NFilterReadOp::iterate(const DoutPrefixProvider* dpp, int
   uint64_t num_parts = (len%max_chunk_size) == 0 ? len/max_chunk_size : (len/max_chunk_size) + 1; //calculate num parts based on adjusted offset
   //len_to_read is the actual length read from a part/ chunk in cache, while part_len is the length of the chunk/ part in cache 
   uint64_t cost = 0, len_to_read = 0, part_len = 0;
+  int ret;
 
   ldpp_dout(dpp, 20) << "D4NFilterObject::iterate:: " << " adjusted_start_offset: " << adjusted_start_ofs << " len: " << len << dendl;
 
@@ -1973,7 +1974,6 @@ int D4NFilterObject::D4NFilterReadOp::iterate(const DoutPrefixProvider* dpp, int
       ldpp_dout(dpp, 20) << "D4NFilterObject::iterate:: " << __func__ << "(): READ FROM CACHE: oid=" << oid_in_cache << " length to read is: " << len_to_read << " part num: " << start_part_num << 
       " read_ofs: " << read_ofs << " part len: " << part_len << dendl;
 
-      int ret;
       if ((ret = source->driver->get_block_dir()->get(dpp, &block, y)) == 0) {
         auto it = block.cacheObj.hostsList.find(dpp->get_cct()->_conf->rgw_d4n_l1_datacache_address);
 
@@ -2030,6 +2030,10 @@ int D4NFilterObject::D4NFilterReadOp::iterate(const DoutPrefixProvider* dpp, int
           // Policy decision: should we cache remote blocks locally?
         }
       } else if (ret == -ENOENT) { // end - if ((ret = source->driver->get_block_dir()->get
+        if (cache_request) {
+          return -ENOENT;
+        }
+
         block.blockID = adjusted_start_ofs;
         uint64_t obj_size = source->get_size(), chunk_size = 0;
         if (obj_size < max_chunk_size) {
@@ -2189,13 +2193,16 @@ int D4NFilterObject::D4NFilterReadOp::iterate(const DoutPrefixProvider* dpp, int
       len -= max_chunk_size;
     } while (start_part_num < num_parts);
   }
-  ldpp_dout(dpp, 20) << "D4NFilterObject::iterate:: " << __func__ << "(): Fetching object from backend store" << dendl;
-
   Attrs obj_attrs;
   if (source->has_attrs()) {
     obj_attrs = source->get_attrs();
   }
 
+  if (cache_request) {
+    return ret;
+  }
+
+  ldpp_dout(dpp, 20) << "D4NFilterObject::iterate:: " << __func__ << "(): Fetching object from backend store" << dendl;
   this->cb->set_ofs(diff_ofs);
   this->cb->set_adjusted_start_ofs(adjusted_start_ofs);
   this->cb->set_part_num(start_part_num);

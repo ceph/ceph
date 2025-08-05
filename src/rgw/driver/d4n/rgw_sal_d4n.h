@@ -185,6 +185,7 @@ class D4NFilterObject : public FilterObject {
 			     RGWGetDataCB* cb, optional_yield y) override;
 	virtual int get_attr(const DoutPrefixProvider* dpp, const char* name,
 			      bufferlist& dest, optional_yield y) override;
+	void set_cache_request() { cache_request = true; }
 
       private:
 	RGWGetDataCB* client_cb;
@@ -193,6 +194,7 @@ class D4NFilterObject : public FilterObject {
 	uint64_t offset = 0; // next offset to write to client
         rgw::AioResultList completed; // completed read results, sorted by offset
 	std::unordered_map<uint64_t, std::pair<uint64_t,uint64_t>> blocks_info;
+	bool cache_request;
 
 	int flush(const DoutPrefixProvider* dpp, rgw::AioResultList&& results, optional_yield y);
 	void cancel();

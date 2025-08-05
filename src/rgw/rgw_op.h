@@ -222,6 +222,9 @@ protected:
   int op_ret;
   int do_aws4_auth_completion();
   bool init_called = false;
+#ifdef WITH_RADOSGW_D4N
+  bool cache_request = false;
+#endif
 
   virtual int init_quota();
 
