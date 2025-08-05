@@ -12553,7 +12553,9 @@ int Client::_statfs(Inode *in, struct statvfs *stbuf,
   lock.lock();
 
   ceph_assert(root);
-  total_files_on_fs = root->rstat.rfiles + root->rstat.rsubdirs;
+  InodeRef quota_root = root->quota.is_enabled(QUOTA_MAX_BYTES) ? root : get_quota_root(in, perms);
+
+  total_files_on_fs = quota_root->rstat.rfiles + quota_root->rstat.rsubdirs;
 
   if (rval < 0) {
     ldout(cct, 1) << "underlying call to statfs returned error: "
@@ -12585,7 +12587,6 @@ int Client::_statfs(Inode *in, struct statvfs *stbuf,
   // quota but we can see a parent of it that does have a quota, we'll
   // respect that one instead.
   ceph_assert(root != nullptr);
-  InodeRef quota_root = root->quota.is_enabled(QUOTA_MAX_BYTES) ? root : get_quota_root(root.get(), perms, QUOTA_MAX_BYTES);
 
   // get_quota_root should always give us something if client quotas are
   // enabled
