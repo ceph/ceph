@@ -578,10 +578,6 @@ ENOSPC errors.  We do not recommend ``ext4`` for Filestore OSDs because
 ``xattr`` limitations break support for long object names, which are needed for
 RGW.
 
-For more information, see `Filesystem Recommendations`_.
-
-.. _Filesystem Recommendations: ../configuration/filesystem-recommendations
-
 Insufficient RAM
 ----------------
 
