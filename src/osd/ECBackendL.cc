@@ -1447,7 +1447,8 @@ struct ECClassicalOp : ECCommonL::RMWPipeline::Op {
       pg_t pgid,
       const ECUtilL::stripe_info_t &sinfo,
       std::map<hobject_t,extent_map> *written,
-      std::map<shard_id_t, ObjectStore::Transaction> *transactions,
+      std::map<shard_id_t,
+               std::pair<ObjectStore::Transaction, uint64_t> > *transactions,
       DoutPrefixProvider *dpp,
       const ceph_release_t require_osd_release) final
   {
