@@ -137,5 +137,11 @@ You may use Erasure Coded pools as CephFS data pools as long as they have overwr
     
 Note that EC overwrites are only supported when using OSDs with the BlueStore backend.
 
+If you are storing lots of small files or are frequently modifying files you can improve performance by enabling EC optimizations, which is done as follows:
+
+.. code:: bash
+
+    ceph osd pool set my_ec_pool allow_ec_optimizations true
+
 You may not use Erasure Coded pools as CephFS metadata pools, because CephFS metadata is stored using RADOS *OMAP* data structures, which EC pools cannot store.
 
