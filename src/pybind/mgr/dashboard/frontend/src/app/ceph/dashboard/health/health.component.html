@@ -28,7 +28,9 @@
             </span>
           </div>
           <div cdsToggletipContent>
-            <cd-health-checks [healthData]="healthData"></cd-health-checks>
+            <div class="cds--popover-scroll-container">
+              <cd-health-checks [healthData]="healthData"></cd-health-checks>
+            </div>
           </div>
         </cds-toggletip>
       </ng-container>
@@ -161,12 +163,14 @@
         </cd-health-pie>
         </div>
         <cds-popover-content>
-        <ng-container *ngTemplateOutlet="logsLink"></ng-container>
-          <ul>
-            <li *ngFor="let pgStatesText of healthData.pg_info.statuses | keyvalue">
-             {{ pgStatesText.key }}: {{ pgStatesText.value }}
-            </li>
-          </ul>
+          <div class="cds--popover-scroll-container">
+            <ng-container *ngTemplateOutlet="logsLink"></ng-container>
+            <ul>
+              <li *ngFor="let pgStatesText of healthData.pg_info.statuses | keyvalue">
+              {{ pgStatesText.key }}: {{ pgStatesText.value }}
+              </li>
+            </ul>
+          </div>
         </cds-popover-content>
       </div>
     </cd-info-card>
