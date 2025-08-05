@@ -63,6 +63,8 @@ uint64_t bluestore::Blob::get_sbid() const {
 
 #undef dout_prefix
 #define dout_prefix *_dout << "bluestore.blob(" << this << ") "
+#undef dout_context
+#define dout_context collection->store->cct
 
 bluestore::Blob::~Blob()
 {
@@ -115,7 +117,6 @@ void bluestore::Blob::get_ref(
   // references.  Otherwise one is neither unable to determine required
   // amount of counters in case of per-au tracking nor obtain min_release_size
   // for single counter mode.
-  CephContext* cct = coll->store->cct;
   ceph_assert(get_blob().get_logical_length() != 0);
   dout(20) << __func__ << " 0x" << std::hex << offset << "~" << length
            << std::dec << " " << *this << dendl;
@@ -139,7 +140,6 @@ bool bluestore::Blob::put_ref(
   uint32_t length,
   PExtentVector *r)
 {
-  CephContext* cct = coll->store->cct;
   PExtentVector logical;
 
   dout(20) << __func__ << " 0x" << std::hex << offset << "~" << length
