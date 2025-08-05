@@ -900,7 +900,14 @@ bool ECCommonL::RMWPipeline::try_reads_to_commit()
     ceph_assert(op->pending_read.empty());
   }
 
-  map<shard_id_t, ObjectStore::Transaction> trans;
+  /**
+   * Map to hold the shard specific transactions. The second member
+   * of the pair is used to store the cost of each shard transaction.
+   * This is used later below when creating the subOpWrites messages.
+   * The cost is used to make scheduling decisions by the mClock
+   * scheduler on the target OSD.
+   */
+  map<shard_id_t, pair<ObjectStore::Transaction, uint64_t> > trans;
   for (set<pg_shard_t>::const_iterator i =
 	 get_parent()->get_acting_recovery_backfill_shards().begin();
        i != get_parent()->get_acting_recovery_backfill_shards().end();
@@ -962,7 +969,7 @@ bool ECCommonL::RMWPipeline::try_reads_to_commit()
        ++i) {
     op->pending_apply.insert(*i);
     op->pending_commit.insert(*i);
-    map<shard_id_t, ObjectStore::Transaction>::iterator iter =
+    map<shard_id_t, pair<ObjectStore::Transaction, uint64_t> >::iterator iter =
       trans.find(i->shard);
     ceph_assert(iter != trans.end());
     bool should_send = get_parent()->should_send_op(*i, op->hoid);
@@ -977,7 +984,7 @@ bool ECCommonL::RMWPipeline::try_reads_to_commit()
       op->reqid,
       op->hoid,
       stats,
-      should_send ? iter->second : empty,
+      should_send ? iter->second.first : empty,
       op->version,
       op->trim_to,
       op->pg_committed_to,
@@ -1007,6 +1014,7 @@ bool ECCommonL::RMWPipeline::try_reads_to_commit()
       r->pgid = spg_t(get_parent()->primary_spg_t().pgid, i->shard);
       r->map_epoch = get_osdmap_epoch();
       r->min_epoch = get_parent()->get_interval_start_epoch();
+      r->set_cost(cct, iter->second.second);
       r->trace = trace;
       messages.push_back(std::make_pair(i->osd, r));
     }
@@ -1039,7 +1047,8 @@ struct ECDummyOp : ECCommonL::RMWPipeline::Op {
       pg_t pgid,
       const ECUtilL::stripe_info_t &sinfo,
       std::map<hobject_t,extent_map> *written,
-      std::map<shard_id_t, ObjectStore::Transaction> *transactions,
+      std::map<shard_id_t,
+               std::pair<ObjectStore::Transaction, uint64_t> > *transactions,
       DoutPrefixProvider *dpp,
       const ceph_release_t require_osd_release) final
   {

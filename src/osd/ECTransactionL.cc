@@ -46,7 +46,7 @@ static void encode_and_write(
   uint32_t flags,
   ECUtilL::HashInfoRef hinfo,
   extent_map &written,
-  map<shard_id_t, ObjectStore::Transaction> *transactions,
+  map<shard_id_t, pair<ObjectStore::Transaction, uint64_t> > *transactions,
   DoutPrefixProvider *dpp)
 {
   const uint64_t before_size = hinfo->get_total_logical_size(sinfo);
@@ -76,15 +76,17 @@ static void encode_and_write(
   for (auto &&i : *transactions) {
     ceph_assert(buffers.count(static_cast<int>(i.first)));
     bufferlist &enc_bl = buffers[static_cast<int>(i.first)];
+    auto &txn = i.second.first;
+    auto &txn_cost = i.second.second;
     if (offset >= before_size) {
-      i.second.set_alloc_hint(
+      txn.set_alloc_hint(
 	coll_t(spg_t(pgid, i.first)),
 	ghobject_t(oid, ghobject_t::NO_GEN, i.first),
 	0, 0,
 	CEPH_OSD_ALLOC_HINT_FLAG_SEQUENTIAL_WRITE |
 	CEPH_OSD_ALLOC_HINT_FLAG_APPEND_ONLY);
     }
-    i.second.write(
+    txn.write(
       coll_t(spg_t(pgid, i.first)),
       ghobject_t(oid, ghobject_t::NO_GEN, i.first),
       sinfo.logical_to_prev_chunk_offset(
@@ -92,6 +94,7 @@ static void encode_and_write(
       enc_bl.length(),
       enc_bl,
       flags);
+    txn_cost = std::max<uint64_t>(1, enc_bl.length());
   }
 }
 
@@ -104,7 +107,7 @@ void ECTransactionL::generate_transactions(
   const map<hobject_t,extent_map> &partial_extents,
   vector<pg_log_entry_t> &entries,
   map<hobject_t,extent_map> *written_map,
-  map<shard_id_t, ObjectStore::Transaction> *transactions,
+  map<shard_id_t, pair<ObjectStore::Transaction, uint64_t> > *transactions,
   set<hobject_t> *temp_added,
   set<hobject_t> *temp_removed,
   DoutPrefixProvider *dpp,
@@ -239,7 +242,7 @@ void ECTransactionL::generate_transactions(
 	if (entry) {
 	  entry->mod_desc.rmobject(entry->version.version);
 	  for (auto &&st: *transactions) {
-	    st.second.collection_move_rename(
+	    st.second.first.collection_move_rename(
 	      coll_t(spg_t(pgid, st.first)),
 	      ghobject_t(oid, ghobject_t::NO_GEN, st.first),
 	      coll_t(spg_t(pgid, st.first)),
@@ -247,7 +250,7 @@ void ECTransactionL::generate_transactions(
 	  }
 	} else {
 	  for (auto &&st: *transactions) {
-	    st.second.remove(
+	    st.second.first.remove(
 	      coll_t(spg_t(pgid, st.first)),
 	      ghobject_t(oid, ghobject_t::NO_GEN, st.first));
 	  }
@@ -265,11 +268,11 @@ void ECTransactionL::generate_transactions(
 	[&](const PGTransaction::ObjectOperation::Init::Create &op) {
 	  for (auto &&st: *transactions) {
 	    if (require_osd_release >= ceph_release_t::octopus) {
-	      st.second.create(
+	      st.second.first.create(
 		coll_t(spg_t(pgid, st.first)),
 		ghobject_t(oid, ghobject_t::NO_GEN, st.first));
 	    } else {
-	      st.second.touch(
+	      st.second.first.touch(
 		coll_t(spg_t(pgid, st.first)),
 		ghobject_t(oid, ghobject_t::NO_GEN, st.first));
 	    }
@@ -277,7 +280,7 @@ void ECTransactionL::generate_transactions(
 	},
 	[&](const PGTransaction::ObjectOperation::Init::Clone &op) {
 	  for (auto &&st: *transactions) {
-	    st.second.clone(
+	    st.second.first.clone(
 	      coll_t(spg_t(pgid, st.first)),
 	      ghobject_t(op.source, ghobject_t::NO_GEN, st.first),
 	      ghobject_t(oid, ghobject_t::NO_GEN, st.first));
@@ -296,7 +299,7 @@ void ECTransactionL::generate_transactions(
 	[&](const PGTransaction::ObjectOperation::Init::Rename &op) {
 	  ceph_assert(op.source.is_temp());
 	  for (auto &&st: *transactions) {
-	    st.second.collection_move_rename(
+	    st.second.first.collection_move_rename(
 	      coll_t(spg_t(pgid, st.first)),
 	      ghobject_t(op.source, ghobject_t::NO_GEN, st.first),
 	      coll_t(spg_t(pgid, st.first)),
@@ -324,7 +327,7 @@ void ECTransactionL::generate_transactions(
 	    to_set[j.first] = *(j.second);
 	  } else {
 	    for (auto &&st : *transactions) {
-	      st.second.rmattr(
+	      st.second.first.rmattr(
 		coll_t(spg_t(pgid, st.first)),
 		ghobject_t(oid, ghobject_t::NO_GEN, st.first),
 		j.first);
@@ -357,7 +360,7 @@ void ECTransactionL::generate_transactions(
 	  }
 	}
 	for (auto &&st : *transactions) {
-	  st.second.setattrs(
+	  st.second.first.setattrs(
 	    coll_t(spg_t(pgid, st.first)),
 	    ghobject_t(oid, ghobject_t::NO_GEN, st.first),
 	    to_set);
@@ -381,7 +384,7 @@ void ECTransactionL::generate_transactions(
 	  op.alloc_hint->expected_write_size);
 
 	for (auto &&st : *transactions) {
-	  st.second.set_alloc_hint(
+	  st.second.first.set_alloc_hint(
 	    coll_t(spg_t(pgid, st.first)),
 	    ghobject_t(oid, ghobject_t::NO_GEN, st.first),
 	    object_size,
@@ -442,10 +445,10 @@ void ECTransactionL::generate_transactions(
 	  rollback_extents.emplace_back(
 	    make_pair(restore_from, restore_len));
 	  for (auto &&st : *transactions) {
-	    st.second.touch(
+	    st.second.first.touch(
 	      coll_t(spg_t(pgid, st.first)),
 	      ghobject_t(oid, entry->version.version, st.first));
-	    st.second.clone_range(
+	    st.second.first.clone_range(
 	      coll_t(spg_t(pgid, st.first)),
 	      ghobject_t(oid, ghobject_t::NO_GEN, st.first),
 	      ghobject_t(oid, entry->version.version, st.first),
@@ -459,7 +462,7 @@ void ECTransactionL::generate_transactions(
                                 ", fresh object" << dendl;
 	}
 	for (auto &&st : *transactions) {
-	  st.second.truncate(
+	  st.second.first.truncate(
 	    coll_t(spg_t(pgid, st.first)),
 	    ghobject_t(oid, ghobject_t::NO_GEN, st.first),
 	    sinfo.aligned_logical_offset_to_chunk_offset(new_size));
@@ -560,14 +563,14 @@ void ECTransactionL::generate_transactions(
 			     << dendl;
 	  if (rollback_extents.empty()) {
 	    for (auto &&st : *transactions) {
-	      st.second.touch(
+	      st.second.first.touch(
 		coll_t(spg_t(pgid, st.first)),
 		ghobject_t(oid, entry->version.version, st.first));
 	    }
 	  }
 	  rollback_extents.emplace_back(make_pair(restore_from, restore_len));
 	  for (auto &&st : *transactions) {
-	    st.second.clone_range(
+	    st.second.first.clone_range(
 	      coll_t(spg_t(pgid, st.first)),
 	      ghobject_t(oid, ghobject_t::NO_GEN, st.first),
 	      ghobject_t(oid, entry->version.version, st.first),
@@ -648,7 +651,7 @@ void ECTransactionL::generate_transactions(
 	bufferlist hbuf;
 	encode(*hinfo, hbuf);
 	for (auto &&i : *transactions) {
-	  i.second.setattr(
+	  i.second.first.setattr(
 	    coll_t(spg_t(pgid, i.first)),
 	    ghobject_t(oid, ghobject_t::NO_GEN, i.first),
 	    ECUtilL::get_hinfo_key(),

@@ -439,7 +439,8 @@ struct ECCommonL {
         pg_t pgid,
         const ECUtilL::stripe_info_t &sinfo,
         std::map<hobject_t,extent_map> *written,
-        std::map<shard_id_t, ceph::os::Transaction> *transactions,
+        std::map<shard_id_t,
+                 std::pair<ceph::os::Transaction, uint64_t> > *transactions,
         DoutPrefixProvider *dpp,
         const ceph_release_t require_osd_release = ceph_release_t::unknown) = 0;
     };
