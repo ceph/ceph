@@ -271,6 +271,23 @@ bool OpTracker::dump_ops_in_flight(Formatter *f, bool print_only_blocked, set<st
     f->close_section(); // list of TrackedOps
   }
 
+  f->open_array_section("optracker_shard_ops_count"); // shard of TrackedOps
+  uint64_t total_num_ops = 0
+  for (uint32_t i = 0; i < num_optracker_shards; i++) {
+    ShardedTrackingData* sdata = sharded_in_flight_list[i];
+    ceph_assert(NULL != sdata);
+    std::lock_guard locker(sdata->ops_in_flight_lock_sharded);
+    for (auto& op : sdata->ops_in_flight_sharded) {
+      uint64_t optracker_shards_op_count = sdata->ops_in_flight_sharded.size();
+      total_num_ops += optracker_shards_op_count;
+      char shard_queue_name[32] = {0};
+      snprintf(shard_queue_name, sizeof(shard_queue_name), "%s%" PRIu32, "optracker-shard-", i);
+      f->dump_int(shard_queue_name, optracker_shards_op_count);
+    }
+  }
+  f->close_section(); // shard of TrackedOps
+  f->dump_int("total_num_ops", total_ops_in_flight);
+
   if (print_only_blocked) {
     f->dump_float("complaint_time", complaint_time);
     f->dump_int("num_blocked_ops", total_ops_in_flight);
