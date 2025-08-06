@@ -24,6 +24,11 @@ def process_call(command, **kw):
         result = [], [], 0
     return result
 
+@pytest.fixture()
+def prevent_exclude_invalid_devices():
+    with patch('ceph_volume.devices.raw.list.List.exclude_invalid_devices') as mock:
+        mock.side_effect = lambda x: x
+        yield
 
 class TestZap:
     def test_invalid_osd_id_passed(self) -> None:
@@ -126,6 +131,7 @@ class TestZap:
         mock_zap.assert_called_once()
 
     # @patch('ceph_volume.devices.lvm.zap.disk.has_bluestore_label', Mock(return_value=True))
+    @pytest.mark.usefixtures("prevent_exclude_invalid_devices")
     @patch('ceph_volume.devices.lvm.zap.Zap.zap')
     @patch('ceph_volume.devices.raw.list.List.filter_lvm_osd_devices', Mock(return_value='/dev/sdb'))
     @patch('ceph_volume.process.call', Mock(side_effect=process_call))
@@ -154,6 +160,7 @@ class TestZap:
         assert z.args.devices[0].path == '/dev/VolGroup/lv'
         mock_zap.assert_called_once
 
+    @pytest.mark.usefixtures("prevent_exclude_invalid_devices")
     @patch('ceph_volume.devices.lvm.zap.Zap.zap')
     @patch('ceph_volume.devices.raw.list.List.filter_lvm_osd_devices', Mock(return_value='/dev/sdb'))
     @patch('ceph_volume.process.call', Mock(side_effect=process_call))
@@ -184,6 +191,7 @@ class TestZap:
         assert z.args.devices[0].path == '/dev/VolGroup/lv'
         mock_zap.assert_called_once
 
+    @pytest.mark.usefixtures("prevent_exclude_invalid_devices")
     @patch('ceph_volume.devices.lvm.zap.Zap.zap')
     @patch('ceph_volume.devices.raw.list.List.filter_lvm_osd_devices', Mock(return_value='/dev/sdb'))
     @patch('ceph_volume.process.call', Mock(side_effect=process_call))
@@ -197,6 +205,7 @@ class TestZap:
         assert z.args.devices[0].path == '/dev/sdb'
         mock_zap.assert_called_once
 
+    @pytest.mark.usefixtures("prevent_exclude_invalid_devices")
     @patch('ceph_volume.devices.lvm.zap.Zap.zap')
     @patch('ceph_volume.devices.raw.list.List.filter_lvm_osd_devices', Mock(side_effect=['/dev/vdx', '/dev/vdy', '/dev/vdz', None]))
     @patch('ceph_volume.process.call', Mock(side_effect=process_call))
