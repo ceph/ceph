@@ -76,90 +76,102 @@ the progression of the read position to compute the expected time to complete.
 Avoiding recovery roadblocks
 ----------------------------
 
-When trying to urgently restore your file system during an outage, here are some
-things to do:
+Do the following when restoring your file system: 
 
-* **Deny all reconnect to clients.** This effectively blocklists all existing
-  CephFS sessions so all mounts will hang or become unavailable.
+* **Deny all reconnection to clients.** Blocklist all existing CephFS sessions,
+  causing all mounts to hang or become unavailable:
 
-  .. code:: bash
+  .. prompt:: bash #
 
      ceph config set mds mds_deny_all_reconnect true
 
   Remember to undo this after the MDS becomes active.
 
-  .. note:: This does not prevent new sessions from connecting. For that, see the ``refuse_client_session`` file system setting.
+  .. note:: This does not prevent new sessions from connecting. Use the
+     ``refuse_client_session`` file-system setting to prevent new sessions from
+     connecting to the CephFS.
 
-* **Extend the MDS heartbeat grace period**. This avoids replacing an MDS that appears
-  "stuck" doing some operation. Sometimes recovery of an MDS may involve an
-  operation that may take longer than expected (from the programmer's
-  perspective). This is more likely when recovery is already taking a longer than
-  normal amount of time to complete (indicated by your reading this document).
-  Avoid unnecessary replacement loops by extending the heartbeat graceperiod:
+* **Extend the MDS heartbeat grace period.** This avoids replacing an MDS that
+  appears "stuck" during some operation. Sometimes recovery of an MDS may
+  involve an operation that takes longer than expected (from the programmer's
+  perspective). This is more likely when recovery is already taking longer than
+  normal to complete (indicated by your reading this document). Avoid
+  unnecessary replacement loops by running the following command and extending
+  the heartbeat grace period:
 
-  .. code:: bash
+   .. prompt:: bash #
 
-     ceph config set mds mds_heartbeat_grace 3600
+      ceph config set mds mds_heartbeat_grace 3600
 
-  .. note:: This has the effect of having the MDS continue to send beacons to the monitors
-            even when its internal "heartbeat" mechanism has not been reset (beat) in one
-            hour. The previous mechanism for achieving this was via the
-            `mds_beacon_grace` monitor setting.
+  .. note:: This causes the MDS to continue to send beacons to the monitors
+     even when its internal "heartbeat" mechanism has not been reset (it has
+     not beaten) in one hour. In the past, this was achieved with the
+     ``mds_beacon_grace`` monitor setting.
 
-* **Disable open file table prefetch.** Normally, the MDS will prefetch
-  directory contents during recovery to heat up its cache. During long
-  recovery, the cache is probably already hot **and large**. So this behavior
-  can be undesirable. Disable using:
+* **Disable open-file-table prefetch.** Under normal circumstances, the MDS
+  prefetches directory contents during recovery as a way of heating up its
+  cache. During a long recovery, the cache is probably already hot **and
+  large**. So this behavior is unnecessary and can be undesirable. Disable
+  open-file-table prefetching by running the following command:
 
-  .. code:: bash
+  .. prompt:: bash #
 
      ceph config set mds mds_oft_prefetch_dirfrags false
 
-* **Turn off clients.** Clients reconnecting to the newly ``up:active`` MDS may
-  cause new load on the file system when it's just getting back on its feet.
-  There will likely be some general maintenance to do before workloads should be
-  resumed. For example, expediting journal trim may be advisable if the recovery
-  took a long time because replay was reading a overly large journal.
+* **Turn off clients.** Clients that reconnect to the newly ``up:active`` MDS
+  can create new load on the file system just as it is becoming operational.
+  Maintenance is often necessary before allowing clients to connect to the file
+  system and resuming a regular workload. For example, expediting the trimming
+  of journals may be advisable if the recovery took a long time because replay
+  was reading a very large journal.
 
-  You can do this manually or use the new file system tunable:
+  Client sessions can be refused manually, or by using the
+  ``refuse_client_session`` tunable as in the following command: 
 
-  .. code:: bash
+  .. prompt:: bash #
 
      ceph fs set <fs_name> refuse_client_session true
 
-  That prevents any clients from establishing new sessions with the MDS.
+  This command has the effect of preventing clients from establishing new
+  sessions with the MDS.
 
-* **Dont tweak max_mds** Modifying the FS setting variable ``max_mds`` is
-  sometimes perceived as a good step during troubleshooting or recovery effort.
-  Instead, doing so might further destabilize the cluster. If ``max_mds`` must
-  be changed in such circumstances, run the command to change ``max_mds`` with
-  the confirmation flag (``--yes-i-really-mean-it``)
+* **Do not tweak max_mds.** Modifying the file system setting variable
+  ``max_mds`` is sometimes thought to be good step during troubleshooting or
+  recovery. But modifying ``max_mds`` might have the effect of further
+  destabilizing the cluster. If ``max_mds`` must be changed in such
+  circumstances, run the command to change ``max_mds`` with the confirmation
+  flag (``--yes-i-really-mean-it``).
 
 .. _pause-purge-threads:
 
-* **Turn off async purge threads** The volumes plugin spawns threads for
-  asynchronously purging trashed/deleted subvolumes. To help troubleshooting or
-  recovery effort, these purge threads can be disabled using:
+* **Turn off async purge threads.** The volumes plugin spawns threads that
+  asynchronously purge trashed or deleted subvolumes. During troubleshooting or
+  recovery, these purge threads can be disabled by running the following
+  command:
 
-  .. code:: bash
+  .. prompt:: bash #
 
      ceph config set mgr mgr/volumes/pause_purging true
 
-  To resume purging run::
+  To resume purging, run the following command:
+  
+  .. prompt:: bash #
 
      ceph config set mgr mgr/volumes/pause_purging false
 
 .. _pause-clone-threads:
 
-* **Turn off async cloner threads** The volumes plugin spawns threads for
-  asynchronously cloning subvolume snapshots. To help troubleshooting or
-  recovery effort, these cloner threads can be disabled using:
+* **Turn off async cloner threads.** The volumes plugin spawns threads that
+  asynchronously clone subvolume snapshots. During troubleshooting or recovery,
+  these cloner threads can be disabled by running the following command:
 
-  .. code:: bash
+  .. prompt:: bash #
 
      ceph config set mgr mgr/volumes/pause_cloning true
 
-  To resume cloning run::
+  To resume cloning, run the following command:
+
+  .. prompt:: bash #
 
      ceph config set mgr mgr/volumes/pause_cloning false
 
