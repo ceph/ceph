@@ -15,6 +15,8 @@
 #ifndef CEPH_ASYNC_FORWARD_HANDLER_H
 #define CEPH_ASYNC_FORWARD_HANDLER_H
 
+#include <utility>
+
 #include <boost/asio/associator.hpp>
 
 namespace ceph::async {

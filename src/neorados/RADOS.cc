@@ -1016,7 +1016,8 @@ void RADOS::lookup_pool_(std::string name, LookupPoolComp c)
 	    return osdmap.lookup_pg_pool_name(name);
 	  });
 	if (ret < 0)
-	  asio::dispatch(asio::append(std::move(c), osdc_errc::pool_dne,
+	  asio::dispatch(asio::append(std::move(c),
+				      make_error_code(osdc_errc::pool_dne),
 				      std::int64_t(0)));
 	else
 	  asio::dispatch(asio::append(std::move(c), bs::error_code{}, ret));
@@ -1120,7 +1121,7 @@ bool RADOS::get_self_managed_snaps_mode(std::int64_t pool) const {
   return impl->objecter->with_osdmap([pool](const OSDMap& osdmap) {
     const auto pgpool = osdmap.get_pg_pool(pool);
     if (!pgpool) {
-      throw bs::system_error(bs::error_code(errc::pool_dne));
+      throw bs::system_error(errc::pool_dne);
     }
     return pgpool->is_unmanaged_snaps_mode();
   });
@@ -1130,11 +1131,11 @@ bool RADOS::get_self_managed_snaps_mode(std::string_view pool) const {
   return impl->objecter->with_osdmap([pool](const OSDMap& osdmap) {
     int64_t poolid = osdmap.lookup_pg_pool_name(pool);
     if (poolid < 0) {
-      throw bs::system_error(bs::error_code(errc::pool_dne));
+      throw bs::system_error(errc::pool_dne);
     }
     const auto pgpool = osdmap.get_pg_pool(poolid);
     if (!pgpool) {
-      throw bs::system_error(bs::error_code(errc::pool_dne));
+      throw bs::system_error(errc::pool_dne);
     }
     return pgpool->is_unmanaged_snaps_mode();
   });
@@ -1158,11 +1159,11 @@ std::vector<std::uint64_t> RADOS::list_snaps(std::string_view pool) const {
   return impl->objecter->with_osdmap([pool](const OSDMap& osdmap) {
     int64_t poolid = osdmap.lookup_pg_pool_name(pool);
     if (poolid < 0) {
-      throw bs::system_error(bs::error_code(errc::pool_dne));
+      throw bs::system_error(errc::pool_dne);
     }
     const auto pgpool = osdmap.get_pg_pool(poolid);
     if (!pgpool) {
-      throw bs::system_error(bs::error_code(errc::pool_dne));
+      throw bs::system_error(errc::pool_dne);
     }
     std::vector<std::uint64_t> snaps;
     for (const auto& [snapid, snapinfo] : pgpool->snaps) {
@@ -1176,12 +1177,12 @@ std::uint64_t RADOS::lookup_snap(std::int64_t pool, std::string_view snap) const
   return impl->objecter->with_osdmap([pool, snap](const OSDMap& osdmap) {
     const auto pgpool = osdmap.get_pg_pool(pool);
     if (!pgpool) {
-      throw bs::system_error(bs::error_code(errc::pool_dne));
+      throw bs::system_error(errc::pool_dne);
     }
     for (const auto& [id, snapinfo] : pgpool->snaps) {
       if (snapinfo.name == snap) return id;
     }
-    throw bs::system_error(bs::error_code(errc::snap_dne));
+    throw bs::system_error(errc::snap_dne);
   });
 }
 
@@ -1189,16 +1190,16 @@ std::uint64_t RADOS::lookup_snap(std::string_view pool, std::string_view snap) c
   return impl->objecter->with_osdmap([pool, snap](const OSDMap& osdmap) {
     int64_t poolid = osdmap.lookup_pg_pool_name(pool);
     if (poolid < 0) {
-      throw bs::system_error(bs::error_code(errc::pool_dne));
+      throw bs::system_error(errc::pool_dne);
     }
     const auto pgpool = osdmap.get_pg_pool(poolid);
     if (!pgpool) {
-      throw bs::system_error(bs::error_code(errc::pool_dne));
+      throw bs::system_error(errc::pool_dne);
     }
     for (const auto& [id, snapinfo] : pgpool->snaps) {
       if (snapinfo.name == snap) return id;
     }
-    throw bs::system_error(bs::error_code(errc::snap_dne));
+    throw bs::system_error(errc::snap_dne);
   });
 }
 
@@ -1206,10 +1207,10 @@ std::string RADOS::get_snap_name(std::int64_t pool, std::uint64_t snap) const {
   return impl->objecter->with_osdmap([pool, snap](const OSDMap& osdmap) {
     const auto pgpool = osdmap.get_pg_pool(pool);
     if (!pgpool) {
-      throw bs::system_error(bs::error_code(errc::pool_dne));
+      throw bs::system_error(errc::pool_dne);
     }
     if (auto i = pgpool->snaps.find(snap); i == pgpool->snaps.cend()) {
-      throw bs::system_error(bs::error_code(errc::snap_dne));
+      throw bs::system_error(errc::snap_dne);
     } else {
       return i->second.name;
     }
@@ -1220,14 +1221,14 @@ std::string RADOS::get_snap_name(std::string_view pool,
   return impl->objecter->with_osdmap([pool, snap](const OSDMap& osdmap) {
     int64_t poolid = osdmap.lookup_pg_pool_name(pool);
     if (poolid < 0) {
-      throw bs::system_error(bs::error_code(errc::pool_dne));
+      throw bs::system_error(errc::pool_dne);
     }
     const auto pgpool = osdmap.get_pg_pool(poolid);
     if (!pgpool) {
       throw bs::system_error(bs::error_code(errc::pool_dne));
     }
     if (auto i = pgpool->snaps.find(snap); i == pgpool->snaps.cend()) {
-      throw bs::system_error(bs::error_code(errc::snap_dne));
+      throw bs::system_error(errc::snap_dne);
     } else {
       return i->second.name;
     }
@@ -1239,10 +1240,10 @@ ceph::real_time RADOS::get_snap_timestamp(std::int64_t pool,
   return impl->objecter->with_osdmap([pool, snap](const OSDMap& osdmap) {
     const auto pgpool = osdmap.get_pg_pool(pool);
     if (!pgpool) {
-      throw bs::system_error(bs::error_code(errc::pool_dne));
+      throw bs::system_error(errc::pool_dne);
     }
     if (auto i = pgpool->snaps.find(snap); i == pgpool->snaps.cend()) {
-      throw bs::system_error(bs::error_code(errc::snap_dne));
+      throw bs::system_error(errc::snap_dne);
     } else {
       return i->second.stamp.to_real_time();
     }
@@ -1253,14 +1254,14 @@ ceph::real_time RADOS::get_snap_timestamp(std::string_view pool,
   return impl->objecter->with_osdmap([pool, snap](const OSDMap& osdmap) {
     int64_t poolid = osdmap.lookup_pg_pool_name(pool);
     if (poolid < 0) {
-      throw bs::system_error(bs::error_code(errc::pool_dne));
+      throw bs::system_error(errc::pool_dne);
     }
     const auto pgpool = osdmap.get_pg_pool(poolid);
     if (!pgpool) {
-      throw bs::system_error(bs::error_code(errc::pool_dne));
+      throw bs::system_error(errc::pool_dne);
     }
     if (auto i = pgpool->snaps.find(snap); i == pgpool->snaps.cend()) {
-      throw bs::system_error(bs::error_code(errc::snap_dne));
+      throw bs::system_error(errc::snap_dne);
     } else {
       return i->second.stamp.to_real_time();
     }
@@ -1587,7 +1588,7 @@ void RADOS::next_notification_(uint64_t cookie, NextNotificationComp c) {
       n->add_handler(id, std::move(c));
     } catch (const std::bad_any_cast&) {
       dispatch(asio::append(std::move(c),
-			    bs::error_code(errc::polled_callback_watch),
+			    make_error_code(errc::polled_callback_watch),
 			    Notification{}));
     }
 }

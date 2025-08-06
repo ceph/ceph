@@ -3532,13 +3532,9 @@ void init_realm_param(CephContext *cct, string& var, std::optional<string>& opt_
 int run_coro(asio::awaitable<void> coro, std::string_view name) {
   try {
     // Blocking in startup code, not ideal, but won't hurt anything.
-    std::exception_ptr eptr
-      = asio::co_spawn(static_cast<rgw::sal::RadosStore*>(driver)->get_io_context(),
-		       std::move(coro),
-		       async::use_blocked);
-    if (eptr) {
-      std::rethrow_exception(eptr);
-    }
+    asio::co_spawn(static_cast<rgw::sal::RadosStore*>(driver)->get_io_context(),
+		   std::move(coro),
+		   async::use_blocked);
   } catch (boost::system::system_error& e) {
     ldpp_dout(dpp(), -1) << name << ": failed: " << e.what() << dendl;
     return ceph::from_error_code(e.code());
