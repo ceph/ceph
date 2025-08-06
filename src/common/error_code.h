@@ -94,7 +94,7 @@ inline boost::system::error_condition make_error_condition(errc e) noexcept {
 #pragma GCC diagnostic pop
 #pragma clang diagnostic pop
 
-inline int from_exception(std::exception_ptr eptr) {
+[[nodiscard]] inline int from_exception(std::exception_ptr eptr) {
   if (!eptr) [[likely]] {
     return 0;
   }
