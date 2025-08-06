@@ -93,13 +93,14 @@ describe('PrometheusAlertService', () => {
     );
 
     service.getRules();
-
-    expect(service.rules as any).toEqual([
-      { name: 'nearly_full', type: 'alerting', group: 'group1' },
-      { name: 'load_0', type: 'alerting', group: 'test' },
-      { name: 'load_1', type: 'alerting', group: 'test' },
-      { name: 'load_2', type: 'alerting', group: 'test' }
-    ]);
+    service.rules$.subscribe((rules) => {
+      expect(rules).toEqual([
+        { name: 'nearly_full', type: 'alerting', group: 'group1' },
+        { name: 'load_0', type: 'alerting', group: 'test' },
+        { name: 'load_1', type: 'alerting', group: 'test' },
+        { name: 'load_2', type: 'alerting', group: 'test' }
+      ]);
+    });
   });
 
   describe('refresh', () => {
