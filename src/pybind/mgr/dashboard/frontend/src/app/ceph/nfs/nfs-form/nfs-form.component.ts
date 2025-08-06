@@ -188,6 +188,9 @@ export class NfsFormComponent extends CdForm implements OnInit {
   async getSubVol() {
     const fs_name = this.nfsForm.getValue('fsal').fs_name;
     const subvolgrp = this.nfsForm.getValue('subvolume_group');
+    if (this.isEdit) {
+      this.nfsForm.get('subvolume').setValue('');
+    }
     await this.setSubVolGrpPath();
 
     (subvolgrp === this.defaultSubVolGroup
@@ -401,6 +404,49 @@ export class NfsFormComponent extends CdForm implements OnInit {
     this.nfsForm.patchValue(res);
     this.setPathValidation();
     this.clients = res.clients;
+
+    if (this.isEdit) {
+      this.setUpVolumeValidation();
+
+      if (res.fsal.name === SUPPORTED_FSAL.CEPH && res.path) {
+        this.resolveCephfsPath(res.path, res.fsal.fs_name);
+      } else {
+        this.resolveCephfsPath('', res.fsal.fs_name);
+      }
+    }
+  }
+
+
+  // Setting up Subvolumegroup and Subvolume for CephFS paths on Edit.
+  resolveCephfsPath(path: string, fsName: string) {
+    this.getSubVolGrp(fsName);
+    if (!path?.startsWith('/volumes/')) return;
+
+    const splitPath = path.split('/');
+    const subvolume_group = splitPath[2];
+    const subvolume = splitPath[3];
+
+    this.getSubVolGrp(fsName);
+
+    const subvolGroup = subvolume_group === this.defaultSubVolGroup ? '' : subvolume_group;
+    this.subvolService.get(fsName, subvolGroup).subscribe((subvols: any[]) => {
+      this.allsubvols = subvols;
+
+      const selectedSubvolume = subvols.find((s) => s.name === subvolume);
+      if (selectedSubvolume) {
+        this.nfsForm.patchValue({ subvolume });
+      }
+
+      this.setUpVolumeValidation();
+    });
+
+    this.nfsForm.patchValue({
+      fsal: {
+        ...this.nfsForm.get('fsal').value,
+        fs_name: fsName
+      },
+      subvolume_group
+    });
   }
 
   resolveClusters(clusters: string[]) {
