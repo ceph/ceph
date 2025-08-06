@@ -97,7 +97,7 @@ export class RgwOverviewDashboardComponent implements OnInit, OnDestroy {
       });
     });
     this.realmSub = this.rgwRealmService.list().subscribe((data: any) => {
-      this.rgwRealmCount = data['realms'].length;
+      this.rgwRealmCount = data['realms'].length || 0;
     });
     this.ZonegroupSub = this.rgwZonegroupService.list().subscribe((data: any) => {
       this.rgwZonegroupCount = data['zonegroups'].length;
