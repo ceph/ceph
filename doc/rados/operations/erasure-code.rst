@@ -192,7 +192,65 @@ erasure-coded pool as the ``--data-pool`` during image creation:
     rbd create --size 1G --data-pool ec_pool replicated_pool/image_name
 
 For CephFS, an erasure-coded pool can be set as the default data pool during
-file system creation or via `file layouts <../../../cephfs/file-layouts>`_.
+file system creation or via :ref:`file-layouts`.
+
+.. _rados_ops_erasure_coding_optimizations:
+
+Erasure Coding Optimizations
+----------------------------
+
+Since Tentacle, an erasure-coded pool may have optimizations enabled
+with a per-pool setting. This improves performance for smaller I/Os and
+eliminates padding which can save capacity:
+
+.. prompt:: bash $
+
+    ceph osd pool set ec_pool allow_ec_optimizations true
+
+The optimizations will make an erasure code pool more suitable for use
+with RBD or CephFS. For RGW workloads that have large objects that are read and
+written sequentially there will be little benefit from these optimizations; but
+RGW workloads with lots of very small objects or small random access reads will
+see performance and capacity benefits.
+
+This flag may be enabled for existing pools, and can be configured
+to default for new pools using the central configuration option
+:confval:`osd_pool_default_flag_ec_optimizations`. Once the flag has been
+enabled for a pool it cannot be disabled because it changes how new data is
+stored.
+
+The flag cannot be set unless all the Monitors and OSDs have been
+upgraded to Tentacle or later. Optimizations can be enabled and used without
+upgrading gateways and clients.
+
+Optimizations are currently only supported with the Jerasure and ISA-L plugins
+when using the ``reed_sol_van`` technique (these are the old and current
+defaults and are the most widely used plugins and technique). Attempting to
+set the flag for a pool using an unsupported combination of plugin and
+technique is blocked with an error message.
+
+The default stripe unit is 4K which works well for standard EC pools.
+For the majority of I/O workloads it is recommended to increase the stripe
+unit to at least 16K when using optimizations. Performance testing
+shows that 16K is the best choice for general purpose I/O workloads. Increasing
+this value will significantly improve small read performance but will slightly
+reduce the performance of small sequential writes. For I/O workloads that are
+predominately reads, larger values up to 256KB will further improve read
+performance but will further reduce the performance of small sequential writes.
+Values larger than 256KB are unlikely to have any performance benefit. The
+stripe unit is a pool create-time option that can be set in the erasure code
+profile or by setting the central configuration option
+:confval:`osd_pool_erasure_code_stripe_unit`. The stripe unit cannot be changed
+after the pool has been created, so if enabling optimizations for an existing
+pool you will not get the full benefit of the optimizations.
+
+Without optimizations enabled, the choice of ``k+m`` in the erasure code profile
+affects performance. The higher the values of ``k`` and ``m`` the lower the
+performance will be. With optimizations enabled there is only a very slight
+reduction in performance as ``k`` increases so this makes using a higher value
+of ``k`` more viable. Increasing ``m`` still impacts write performance,
+especially for small writes, so for block and file workloads a value of ``m``
+no larger than 3 is recommended.
 
 Erasure-coded pool overhead
 ---------------------------
