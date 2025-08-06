@@ -1828,10 +1828,17 @@ void PgScrubber::scrub_finish()
   // if the repair request comes from auto-repair and there is a large
   // number of objects known to be damaged, we cancel the auto-repair
   if (m_is_repair && m_flags.auto_repair &&
+      ScrubJob::is_repairs_count_limited(m_active_target->urgency()) &&
       m_be->authoritative_peers_count() >
-	static_cast<int>(m_pg->cct->_conf->osd_scrub_auto_repair_num_errors)) {
+	  static_cast<int>(
+	      m_pg->cct->_conf->osd_scrub_auto_repair_num_errors)) {
 
-    dout(10) << __func__ << " undoing the repair" << dendl;
+    dout(5) << fmt::format(
+		   "{}: undoing the repair. Damaged objects count ({}) is "
+		   "above configured limit ({})",
+		   __func__, m_be->authoritative_peers_count(),
+		   m_pg->cct->_conf->osd_scrub_auto_repair_num_errors)
+	    << dendl;
     state_clear(PG_STATE_REPAIR);  // not expected to be set, anyway
     m_is_repair = false;
     update_op_mode_text();
