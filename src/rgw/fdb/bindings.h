@@ -48,7 +48,8 @@ inline std::pair<std::string, std::string> to_string_pair(const FDBKeyValue kv)
         };
 }
 
-// The alternatives were "spanlike" or even "Span-ish", but that was a little /too/ cute:
+// The alternatives were "spanlike" or even "Span-ish", but that was a little /too/ cute; thanks
+// to Adam Emerson for the coinage:
 auto ptr_and_sz(const auto& spanoid)
 {
  return std::tuple { spanoid.data(), spanoid.size() };
@@ -68,7 +69,7 @@ void reify_value(const uint8_t *buffer, const size_t buffer_size, auto& target)
 
 namespace ceph::libfdb::detail {
 
-inline bool get_single_value_from_transaction(transaction_handle& txn, std::string_view key, auto& out_value);
+inline bool get_single_value_from_transaction(transaction_handle& txn, std::span<const std::uint8_t> key, auto& out_value);
 
 /* Equivalence with FDBStreamingMode:
  *
@@ -107,7 +108,7 @@ enum struct streaming_mode_t : int {
  large		= FDB_STREAMING_MODE_LARGE,
  serial		= FDB_STREAMING_MODE_SERIAL,
  all		= FDB_STREAMING_MODE_WANT_ALL,
- exact		= FDB_STREAMING_MODE_EXACT
+3F exact		= FDB_STREAMING_MODE_EXACT
 };
 
 ...these are not defined in terms of int or enum as far as I can tell, needs more exploring.
@@ -220,7 +221,7 @@ namespace ceph::libfdb {
 template <typename K, typename V>
 inline void set(transaction_handle h, K k, V v, const commit_after_op commit_after)
 {
- h->set(k, ceph::libfdb::to::convert(v));
+ h->set(ceph::libfdb::to::convert(k), ceph::libfdb::to::convert(v));
  
  if(commit_after_op::no_commit == commit_after) {
   return;
@@ -233,7 +234,7 @@ template <std::input_iterator PairIter>
 inline void set(transaction_handle h, PairIter b, PairIter e, const commit_after_op commit_after)
 {
  std::for_each(b, e, [&h](const auto& kv) {
-  h->set(kv.first, kv.second); 
+  h->set(ceph::libfdb::to::convert(kv.first), ceph::libfdb::to::convert(kv.second)); 
  });
 
  if(commit_after_op::no_commit == commit_after) {
@@ -247,9 +248,8 @@ inline void set(transaction_handle h, PairIter b, PairIter e, const commit_after
 template <typename K>
 inline void erase(transaction_handle h, K k, const commit_after_op commit_after)
 {
- h->erase(k);
+ h->erase(ceph::libfdb::to::convert(k));
 
- // JFW: TODO
  if(commit_after_op::no_commit == commit_after) {
   return;
  }
@@ -285,20 +285,14 @@ more a statement of what interfaces we always and explicitly support.
 simple and frankly focus on stability and getting the core mechanics right while being useful for MOST stuff-- so, string_view and string it is!.
 */
 
-inline bool get(ceph::libfdb::transaction_handle txn, std::string_view key, std::int64_t& out_value)
+inline bool get(ceph::libfdb::transaction_handle txn, auto key, std::int64_t& out_value)
 {
- return ceph::libfdb::detail::get_single_value_from_transaction(txn, key, out_value);
+ return ceph::libfdb::detail::get_single_value_from_transaction(txn, ceph::libfdb::to::convert(key), out_value);
 }
 
-inline bool get(ceph::libfdb::transaction_handle txn, std::string_view key, std::string& out_value)
+inline bool get(ceph::libfdb::transaction_handle txn, auto key, auto& out_value)
 {
- return ceph::libfdb::detail::get_single_value_from_transaction(txn, key, out_value);
-}
-
-// Container or iterator-- try a conversion:
-inline bool get(ceph::libfdb::transaction_handle txn, std::string_view key, auto& out_value)
-{
- return ceph::libfdb::detail::get_single_value_from_transaction(txn, key, out_value);
+ return ceph::libfdb::detail::get_single_value_from_transaction(txn, ceph::libfdb::to::convert(key), out_value);
 }
 
 inline bool get(ceph::libfdb::transaction_handle txn, const ceph::libfdb::concepts::selector auto& key_range, auto out_iter)
@@ -317,8 +311,7 @@ namespace ceph::libfdb::detail {
 // JFW: This probably needs to go back into base.h;
 // JFW: I think there's a simpler and also-"approved" way to do this-- I'll look at it later, getting rid
 // of the strangeness and complexity here would be good:
-inline bool get_single_value_from_transaction(transaction_handle& txn, std::string_view key, auto& out_value)
-//JFW: inline bool get_single_value_from_transaction(transaction_handle& txn, std::string_view key, std::string& out_value)
+inline bool get_single_value_from_transaction(transaction_handle& txn, std::span<const std::uint8_t> key, auto& out_value)
 {
  // Try to get the FUTURE from the TRANSACTION:
  const fdb_bool_t is_snapshot = false;
@@ -343,6 +336,7 @@ inline bool get_single_value_from_transaction(transaction_handle& txn, std::stri
     if fdb int64, double, key_array, key string_array, keyvalue_array
       ...use specialized FDB functions... 
 */
+
   // fdb_future_get_value() is used below:
   if(fdb_error_t r = fdb_future_get_value(fv.raw_handle(), &key_was_found, &out_buffer, &out_len); 0 != r) {
 
@@ -377,7 +371,8 @@ inline bool get_single_value_from_transaction(transaction_handle& txn, std::stri
    return false;
 
   // Copy the future-owned contents into our self-owned value:
-  ceph::libfdb::detail::reify_from_buffer(std::span { (const std::uint8_t *)out_buffer, (size_t)out_len }, out_value);
+  std::span<const std::uint8_t> in_view { (const std::uint8_t *)out_buffer, (size_t)out_len };
+  ceph::libfdb::from::convert(in_view, out_value);
 
   return true;
  }

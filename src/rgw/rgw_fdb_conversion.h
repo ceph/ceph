@@ -22,7 +22,7 @@ between FDB's types! If you have a user type to add, this is the place!
  
 #include "include/buffer.h"
 
-#include "fdb/base.h"
+#include "fdb/fdb.h"
 
 #include <span>
 #include <cstdint>
@@ -34,15 +34,16 @@ namespace ceph::libfdb::to {
 // for this reason, the parameter cannot itself be const (it's entirely fine to do that
 // computation earlier and pass a span or string_view yourself if you don't want the 
 // buffer::list to potentially mutate itself):
-inline void convert(ceph::buffer::list& bl, std::span<const std::uint8_t>& out) {
- out = std::span<const std::uint8_t>((const std::uint8_t *)bl.c_str(), bl.length());
+inline auto convert(ceph::buffer::list bl) -> std::span<const std::uint8_t> {
+// JFW: avoid making copy of bl in param
+ return { (const std::uint8_t *)bl.c_str(), bl.length() };
 }
 
 } // namespace ceph::libfdb::to
 
 namespace ceph::libfdb::from {
 
-inline void convert(std::span<const std::uint8_t>&& in, ceph::buffer::list& out) {
+inline void convert(std::span<const std::uint8_t> in, ceph::buffer::list& out) {
  out.clear();
  out.append((char *)in.data(), in.size());
 }
