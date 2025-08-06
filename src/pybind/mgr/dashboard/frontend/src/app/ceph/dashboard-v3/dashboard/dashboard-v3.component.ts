@@ -1,8 +1,8 @@
 import { Component, OnDestroy, OnInit } from '@angular/core';
 
 import _ from 'lodash';
-import { BehaviorSubject, Observable, Subscription, of } from 'rxjs';
-import { switchMap, take } from 'rxjs/operators';
+import { BehaviorSubject, EMPTY, Observable, Subject, Subscription, of } from 'rxjs';
+import { catchError, exhaustMap, switchMap, take, takeUntil } from 'rxjs/operators';
 
 import { HealthService } from '~/app/shared/api/health.service';
 import { OsdService } from '~/app/shared/api/osd.service';
@@ -27,6 +27,14 @@ import { AlertClass } from '~/app/shared/enum/health-icon.enum';
 import { HardwareService } from '~/app/shared/api/hardware.service';
 import { SettingsService } from '~/app/shared/api/settings.service';
 import { OsdSettings } from '~/app/shared/models/osd-settings';
+import {
+  IscsiMap,
+  MdsMap,
+  MgrMap,
+  MonMap,
+  OsdMap,
+  PgStatus
+} from '~/app/shared/models/health.interface';
 
 @Component({
   selector: 'cd-dashboard-v3',
@@ -37,7 +45,6 @@ export class DashboardV3Component extends PrometheusListHelper implements OnInit
   detailsCardData: DashboardDetails = {};
   osdSettingsService: any;
   osdSettings = new OsdSettings();
-  interval = new Subscription();
   permissions: Permissions;
   enabledFeature$: FeatureTogglesMap$;
   color: string;
@@ -80,6 +87,17 @@ export class DashboardV3Component extends PrometheusListHelper implements OnInit
   hardwareSubject = new BehaviorSubject<any>([]);
   managedByConfig$: Observable<any>;
   private subs = new Subscription();
+  private destroy$ = new Subject<void>();
+
+  hostsCount: number = null;
+  monMap: MonMap = null;
+  mgrMap: MgrMap = null;
+  osdMap: OsdMap = null;
+  poolStatus: Record<string, any>[] = null;
+  pgStatus: PgStatus = null;
+  rgwCount: number = null;
+  mdsMap: MdsMap = null;
+  iscsiMap: IscsiMap = null;
 
   constructor(
     private summaryService: SummaryService,
@@ -103,6 +121,7 @@ export class DashboardV3Component extends PrometheusListHelper implements OnInit
   ngOnInit() {
     super.ngOnInit();
     if (this.permissions.configOpt.read) {
+      this.getOsdSettings();
       this.isHardwareEnabled$ = this.getHardwareConfig();
       this.hardwareSummary$ = this.hardwareSubject.pipe(
         switchMap(() =>
@@ -116,12 +135,23 @@ export class DashboardV3Component extends PrometheusListHelper implements OnInit
       );
       this.managedByConfig$ = this.settingsService.getValues('MANAGED_BY_CLUSTERS');
     }
-    this.interval = this.refreshIntervalService.intervalData$.subscribe(() => {
-      this.getHealth();
-      this.getCapacity();
-      if (this.permissions.configOpt.read) this.getOsdSettings();
-      if (this.hardwareEnabled) this.hardwareSubject.next([]);
+
+    // fetch basic health to show the cluster status in Status card
+    this.refreshIntervalObs(() => this.healthService.getBasicHealth()).subscribe({
+      next: (healthData: any) => {
+        this.healthData = healthData;
+        if (this.hardwareEnabled) this.hardwareSubject.next([]);
+      }
     });
+
+    // fetch capacity to load the capacity chart
+    this.refreshIntervalObs(() => this.healthService.getClusterCapacity()).subscribe({
+      next: (capacity: any) => {
+        this.capacity = capacity;
+      }
+    });
+
+    this.loadInventories();
     this.getPrometheusData(this.prometheusService.lastHourDateObject);
     this.getDetailsCardData();
     this.getTelemetryReport();
@@ -136,15 +166,10 @@ export class DashboardV3Component extends PrometheusListHelper implements OnInit
        Telemetry configration.';
   }
   ngOnDestroy() {
-    this.interval.unsubscribe();
     this.prometheusService.unsubscribe();
     this.subs?.unsubscribe();
-  }
-
-  getHealth() {
-    this.healthService.getMinimalHealth().subscribe((data: any) => {
-      this.healthData = data;
-    });
+    this.destroy$.next();
+    this.destroy$.complete();
   }
 
   toggleAlertsWindow(type: AlertClass) {
@@ -165,12 +190,6 @@ export class DashboardV3Component extends PrometheusListHelper implements OnInit
           version[0] + ' ' + version.slice(2, version.length).join(' ');
       })
     );
-  }
-
-  private getCapacity() {
-    this.capacityService = this.healthService.getClusterCapacity().subscribe((data: any) => {
-      this.capacity = data;
-    });
   }
 
   private getOsdSettings() {
@@ -207,5 +226,42 @@ export class DashboardV3Component extends PrometheusListHelper implements OnInit
         return of(resp?.hw_monitoring);
       })
     );
+  }
+
+  refreshIntervalObs(fn: Function) {
+    return this.refreshIntervalService.intervalData$.pipe(
+      exhaustMap(() => fn().pipe(catchError(() => EMPTY))),
+      takeUntil(this.destroy$)
+    );
+  }
+
+  loadInventories() {
+    /*
+     * getFunction is the service call that returns the info of that resource.
+     * assignTo is the variable where the info needs to be stored.
+     */
+    const inventories: {
+      getFunction: () => Observable<any>;
+      assignTo: string;
+    }[] = [
+      { getFunction: () => this.healthService.getHostsCount(), assignTo: 'hostsCount' },
+      { getFunction: () => this.healthService.getMonMap(), assignTo: 'monMap' },
+      { getFunction: () => this.healthService.getOsdMap(), assignTo: 'osdMap' },
+      { getFunction: () => this.healthService.getMgrMap(), assignTo: 'mgrMap' },
+      { getFunction: () => this.healthService.getPoolStatus(), assignTo: 'poolStatus' },
+      { getFunction: () => this.healthService.getPgInfo(), assignTo: 'pgStatus' },
+      { getFunction: () => this.healthService.getRgwStatus(), assignTo: 'rgwStatus' },
+      { getFunction: () => this.healthService.getMdsMap(), assignTo: 'mdsMap' },
+      { getFunction: () => this.healthService.getIscsiMap(), assignTo: 'iscsiMap' }
+    ];
+
+    inventories.forEach(({ getFunction, assignTo }) => {
+      this.subs.add(
+        this.refreshIntervalObs(getFunction).subscribe({
+          next: (result: any) => ((this as any)[assignTo] = result),
+          error: (error: Event) => error.preventDefault()
+        })
+      );
+    });
   }
 }

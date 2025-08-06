@@ -305,3 +305,52 @@ class Health(BaseController):
     @Endpoint()
     def get_telemetry_status(self):
         return mgr.get_module_option_ex('telemetry', 'enabled', False)
+
+
+@APIRouter('/health/status')
+@APIDoc("Get the health status of each resource", "Health status")
+class HealthStatus(BaseController):
+    def __init__(self):
+        super().__init__()
+        self.health_full = HealthData(self._has_permissions, minimal=False)
+        self.health_minimal = HealthData(self._has_permissions, minimal=True)
+
+    @Endpoint()
+    def hosts(self):
+        return HealthData(self._has_permissions, minimal=True).host_count()
+
+    @Endpoint()
+    def mon(self):
+        return HealthData(self._has_permissions, minimal=True).mon_status()
+
+    @Endpoint()
+    def mgr(self):
+        return HealthData(self._has_permissions, minimal=True).mgr_map()
+
+    @Endpoint()
+    def osd(self):
+        return HealthData(self._has_permissions, minimal=True).osd_map()
+
+    @Endpoint()
+    def pool(self):
+        return HealthData(self._has_permissions, minimal=True).pools()
+
+    @Endpoint()
+    def pg(self):
+        return HealthData(self._has_permissions, minimal=True).pg_info()
+
+    @Endpoint()
+    def rgw(self):
+        return HealthData(self._has_permissions, minimal=True).rgw_count()
+
+    @Endpoint()
+    def mds(self):
+        return HealthData(self._has_permissions, minimal=True).fs_map()
+
+    @Endpoint()
+    def iscsi(self):
+        return HealthData(self._has_permissions, minimal=True).iscsi_daemons()
+
+    @Endpoint()
+    def basic(self):
+        return HealthData(self._has_permissions, minimal=True).basic_health()

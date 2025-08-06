@@ -2,15 +2,21 @@
 <li class="list-group-item">
   <div class="d-flex pl-1 pb-2 pt-2 position-relative">
     <div class="ms-4 me-auto">
+    @if (link && data !== null || total !== null) {
+    <a [routerLink]="link"
+       *ngIf="link && total > 0; else noLinkTitle"
+       [ngPlural]="total"
+      i18n>
+        {{ total }}
+      <ng-template ngPluralCase="=0">{{ title }}</ng-template>
+      <ng-template ngPluralCase="=1">{{ title }}</ng-template>
+      <ng-template ngPluralCase="other">{{ title }}s</ng-template>
+    </a>
+    } @else {
       <a [routerLink]="link"
-         *ngIf="link && total > 0; else noLinkTitle"
-         [ngPlural]="total"
-        i18n>
-          {{ total }}
-        <ng-template ngPluralCase="=0">{{ title }}</ng-template>
-        <ng-template ngPluralCase="=1">{{ title }}</ng-template>
-        <ng-template ngPluralCase="other">{{ title }}s</ng-template>
+         *ngIf="link; else noLinkTitle">{{title}}
       </a>
+    }
     </div>
     <span class="me-4">
       <ng-container [ngSwitch]="summaryType">
@@ -45,7 +51,10 @@
 </div>
 
 <ng-template #defaultSummary>
-  <span *ngIf="data.success || data.categoryPgAmount?.clean || (data.success === 0 && data.total === 0)">
+  @if (data === null) {
+  <ng-container *ngTemplateOutlet="loadingTpl"></ng-container>
+  } @else {
+    <span *ngIf="data.success || data.categoryPgAmount?.clean || (data.success === 0 && data.total === 0)">
     <span *ngIf="data.success || (data.success === 0 && data.total === 0)">
       {{ data.success }}
     </span>
@@ -98,9 +107,13 @@
        [ngClass]="[icons.spinner, icons.spin]">
     </i>
   </span>
+  }
 </ng-template>
 
 <ng-template #osdSummary>
+  @if (data === null) {
+  <ng-container *ngTemplateOutlet="loadingTpl"></ng-container>
+  } @else {
   <span *ngIf="data.up === data.in">
     {{ data.up }}
     <cd-icon
@@ -146,31 +159,41 @@
       full
     </span>
   </span>
+  }
 </ng-template>
 
 <ng-template #iscsiSummary>
+  @if (data === null || total === null) {
+  <ng-container *ngTemplateOutlet="loadingTpl"></ng-container>
+  } @else {
   <span>
-    {{ data.up }}
+    {{ data?.up }}
     <cd-icon
-       *ngIf="data.up || data.up === 0"
+       *ngIf="data?.up || data?.up === 0"
        type="success">
     </cd-icon >
   </span>
-  <span *ngIf="data.down"
+  <span *ngIf="data?.down"
         class="ms-2">
-        {{ data.down }}
+        {{ data?.down }}
     <cd-icon
        type="danger">
     </cd-icon >
   </span>
+
+  }
 </ng-template>
 
 <ng-template #simplifiedSummary>
+  @if (data === 0 || data) {
   <span *ngIf="!dropdownTotalError else showErrorNum">
     {{ data }}
     <cd-icon
-       type="success"></cd-icon >
+      type="success"></cd-icon >
   </span>
+  } @else {
+    <ng-container *ngTemplateOutlet="loadingTpl"></ng-container>
+  }
   <ng-template #showErrorNum>
     <span *ngIf="data - dropdownTotalError  > 0">
       {{ data - dropdownTotalError  }}
@@ -185,14 +208,22 @@
   </ng-template>
 </ng-template>
 
+<ng-template #loadingTpl>
+  <cds-inline-loading></cds-inline-loading>
+</ng-template>
+
 <ng-template #noLinkTitle>
-  <span *ngIf="total || total === 0"
-        [ngPlural]="total">
-    {{ total }}
-    <ng-template ngPluralCase="=0">{{ title }}</ng-template>
-    <ng-template ngPluralCase="=1">{{ title }}</ng-template>
-    <ng-template ngPluralCase="other">{{ title }}s</ng-template>
-  </span>
+@if (data !== null || total) {
+<span *ngIf="total || total === 0"
+      [ngPlural]="total">
+  {{ total }}
+  <ng-template ngPluralCase="=0">{{ title }}</ng-template>
+  <ng-template ngPluralCase="=1">{{ title }}</ng-template>
+  <ng-template ngPluralCase="other">{{ title }}s</ng-template>
+</span>
+} @else {
+  <span>{{ title }}</span>
+}
 </ng-template>
 
 <ng-template #dropdownTemplate>

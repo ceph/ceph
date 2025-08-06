@@ -1,5 +1,5 @@
 <div class="container-fluid p-4"
-     *ngIf="healthData && enabledFeature$ | async as enabledFeature">
+     *ngIf="enabledFeature$ | async as enabledFeature">
 
   <div class="row d-flex flex-row ps-3">
 
@@ -67,63 +67,57 @@
                class="pt-4"
                aria-label="Inventory card">
         <!-- Hosts -->
-        <cd-card-row [data]="healthData.hosts"
+        <cd-card-row [data]="hostsCount"
                      link="/hosts"
                      title="Host"
                      summaryType="simplified"
-                     *ngIf="healthData.hosts != null"
                      [dropdownData]="(isHardwareEnabled$ | async) && (hardwareSummary$ | async)">
         </cd-card-row>
         <!-- Monitors -->
-        <cd-card-row [data]="healthData.mon_status.monmap.mons.length"
+        <cd-card-row [data]="monMap?.monmap.mons.length"
                      link="/monitor"
                      title="Monitor"
-                     summaryType="simplified"
-                     *ngIf="healthData.mon_status"></cd-card-row>
+                     summaryType="simplified"></cd-card-row>
         <!-- Managers -->
-        <cd-card-row [data]="healthData.mgr_map | mgrSummary"
-                     title="Manager"
-                     *ngIf="healthData.mgr_map"></cd-card-row>
+        <cd-card-row [data]="mgrMap | mgrSummary"
+                     title="Manager"></cd-card-row>
 
         <!-- OSDs -->
-        <cd-card-row [data]="healthData.osd_map | osdSummary"
+        <cd-card-row [data]="osdMap | osdSummary"
                      link="/osd"
                      title="OSD"
-                     summaryType="osd"
-                     *ngIf="healthData.osd_map"></cd-card-row>
+                     summaryType="osd"></cd-card-row>
 
         <!-- Pools -->
-        <cd-card-row [data]="healthData.pools.length"
+        <cd-card-row [data]="poolStatus?.length"
                      link="/pool"
                      title="Pool"
-                     summaryType="simplified"
-                     *ngIf="healthData.pools"></cd-card-row>
+                     summaryType="simplified"></cd-card-row>
 
         <!-- PG Info -->
-        <cd-card-row [data]="healthData.pg_info | pgSummary"
-                     title="PG"
-                     *ngIf="healthData.pg_info"></cd-card-row>
+        <cd-card-row [data]="pgStatus | pgSummary"
+                     title="PG"></cd-card-row>
 
         <!-- Object gateways -->
-        <cd-card-row [data]="healthData.rgw"
+        <cd-card-row [data]="rgwStatus"
                      link="/rgw/daemon"
                      title="Object Gateway"
                      summaryType="simplified"
                      id="rgw-item"
-                     *ngIf="enabledFeature.rgw && healthData.rgw || healthData.rgw === 0 "></cd-card-row>
+                     *ngIf="enabledFeature.rgw"></cd-card-row>
 
         <!-- Metadata Servers -->
-        <cd-card-row [data]="healthData.fs_map | mdsSummary"
+        <cd-card-row [data]="mdsMap | mdsSummary"
                      title="Metadata Server"
                      id="mds-item"
-                     *ngIf="enabledFeature.cephfs && healthData.fs_map"></cd-card-row>
+                     *ngIf="enabledFeature.cephfs"></cd-card-row>
         <!-- iSCSI Gateways -->
-        <cd-card-row [data]="healthData.iscsi_daemons"
+        <cd-card-row [data]="iscsiMap"
                      link="/iscsi/daemon"
                      title="iSCSI Gateway"
                      summaryType="iscsi"
                      id="iscsi-item"
-                     *ngIf="enabledFeature.iscsi && healthData.iscsi_daemons"></cd-card-row>
+                     *ngIf="enabledFeature.iscsi"></cd-card-row>
       </cd-card>
     </div>
 
@@ -148,27 +142,27 @@
             </div>
             <div class="d-flex flex-column ms-4 me-4 mt-4 mb-4">
               <div class="d-flex flex-row col-md-3 ms-4">
-                <i  *ngIf="healthData.health?.status"
-                    [ngClass]="[healthData.health.status | healthIcon, icons.large2x]"
-                    [ngStyle]="healthData.health.status | healthColor"
-                    [title]="healthData.health.status">
+                <i  *ngIf="healthData?.status else loadingTpl"
+                    [ngClass]="[healthData.status | healthIcon, icons.large2x]"
+                    [ngStyle]="healthData.status | healthColor"
+                    [title]="healthData.status">
                 </i>
               <span class="ms-2 mt-n1 lead"
-                    *ngIf="!healthData.health?.checks?.length"
+                    *ngIf="!healthData?.checks?.length"
                     i18n>Cluster</span>
               <cds-toggletip  [dropShadow]="true"
                               [autoAlign]="true">
               <div cdsToggletipButton>
                 <a class="ms-2 mt-n1 lead text-primary"
                    popoverClass="info-card-popover-cluster-status"
-                   *ngIf="healthData.health?.checks?.length"
+                   *ngIf="healthData?.checks?.length"
                    i18n>Cluster
                 </a>
               </div>
               <div cdsToggletipContent
                    #healthCheck>
-                <cd-health-checks *ngIf="healthData?.health?.checks"
-                                  [healthData]="healthData.health.checks">
+                <cd-health-checks *ngIf="healthData?.checks"
+                                  [healthData]="healthData.checks">
                 </cd-health-checks>
               </div>
             </cds-toggletip>
@@ -327,4 +321,8 @@
     <p class="logs-link"
        i18n><i [ngClass]="[icons.infoCircle]"></i> See <a routerLink="/logs">Logs</a> for more details.</p>
   </ng-container>
+</ng-template>
+
+<ng-template #loadingTpl>
+  <cds-inline-loading></cds-inline-loading>
 </ng-template>
