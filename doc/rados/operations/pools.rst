@@ -454,7 +454,7 @@ You may set values for the following keys:
 
 .. describe:: allow_ec_optimizations
    
-   :Description: Enables performance and capacity optimizations for an erasure-coded pool. These optimizations were designed for CephFS and RBD workloads; RGW workloads with signficant numbers of small objects or with small random access reads of objects will also benefit. RGW workloads with large sequential read and writes will see little benefit. For more details, see `Erasure Coding Optimizations`_.
+   :Description: Enables performance and capacity optimizations for an erasure-coded pool. These optimizations were designed for CephFS and RBD workloads; RGW workloads with signficant numbers of small objects or with small random access reads of objects will also benefit. RGW workloads with large sequential read and writes will see little benefit. For more details, see :ref:`rados_ops_erasure_coding_optimizations`:
    :Type: Boolean
 
    .. versionadded:: 20.2.0
@@ -907,7 +907,6 @@ Here are the break downs of the argument:
 
 .. _Bloom Filter: https://en.wikipedia.org/wiki/Bloom_filter
 .. _Erasure Coding with Overwrites: ../erasure-code#erasure-coding-with-overwrites
-.. _Erasure Coding Optimizations: ../erasure-code#erasure-coding-optimizations
 .. _Block Device Commands: ../../../rbd/rados-rbd-cmds/#create-a-block-device-pool
 .. _pgcalc: ../pgcalc
 
