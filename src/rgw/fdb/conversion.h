@@ -28,7 +28,7 @@ namespace ceph::libfdb::detail {
 
 // Utility function for dealing with buffers/stringlikes:
 template <typename OutT>
-inline void reify_from_buffer(std::span<const std::uint8_t>&& in, OutT& out)
+inline void reify_from_buffer(std::span<const std::uint8_t> in, OutT& out)
 {
 #ifdef __cpp_lib_string_resize_and_overwrite
  if constexpr (requires { out.resize_and_overwrite(in.size(), [](char *, typename OutT::size_type sz) noexcept { return sz; }); }) {
@@ -113,20 +113,20 @@ libfdb output type requirements:
 */
 
 // identity:
-inline void convert(const std::int64_t in, std::int64_t& out)
+inline auto convert(const std::int64_t in) 
 {
- out = in;
-}
-
-inline void convert(const std::string_view in, std::span<const std::uint8_t>& out)
-{
- out = std::span<const std::uint8_t>((const std::uint8_t *)in.data(), in.length());
+ return in;
 }
 
 // identity:
-inline auto convert(const std::span<const std::uint8_t> in, std::span<const std::uint8_t>& out)
+inline auto convert(const std::span<const std::uint8_t> in)
 {
- out = in;
+ return in;
+}
+
+inline auto convert(const std::string_view in) -> std::span<const std::uint8_t>
+{
+ return { (const std::uint8_t *)in.data(), in.length() };
 }
 
 } // namespace ceph::libfdb::to
@@ -142,15 +142,21 @@ inline void convert(std::int64_t in, std::int64_t& out)
  out = in;
 }
 
-inline void convert(std::span<const std::uint8_t>&& in, std::string& out) 
+/* JFW: we might try allowing this, after all...
+inline void convert(std::span<const std::uint8_t> in, std::span<const std::uint8_t> out)
 {
- detail::reify_from_buffer(std::move(in), out);
+ out = in;
+}*/
+
+inline void convert(std::span<const std::uint8_t> in, std::string& out) 
+{
+ detail::reify_from_buffer(in, out);
 }
 
-inline void convert(std::span<const std::uint8_t>&& in, std::vector<std::uint8_t>& out)
+inline void convert(std::span<const std::uint8_t> in, std::vector<std::uint8_t>& out)
 {
  out.reserve(in.size());
- detail::reify_from_buffer(std::move(in), out);
+ detail::reify_from_buffer(in, out);
 }
 
 } // namespace ceph::libfdb::from

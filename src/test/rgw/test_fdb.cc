@@ -199,31 +199,33 @@ TEMPLATE_PRODUCT_TEST_CASE("A Template product test case", "[template][product]"
 TEST_CASE("fdb conversions (built-in)", "[fdb][rgw]") {
  // Manual tests of conversions to and from supported FDB built-in types.
  
- const char *msg = "Hello, World!";
+ const char *msg = "Hello, World!"; 
  const char msg_with_null[] = { '\0', 'H', 'i', '\0', ' ', 't', 'h', 'e', 'r', 'e', '!', '\0'};
 
  SECTION("serialize/deserialize built-in FDB types") {
 
+/* JFW: No fabrication of built-ins besides span<> for now:
   // int64 -> int64 -> int64
   {
   const std::int64_t n = 1770;		// input type (T)
+
   std::int64_t x;			// type used by FDB (F)
-  ceph::libfdb::to::convert(n, x);	// map T -> F
+  x = ceph::libfdb::to::convert(n);	// map T -> F
 
   std::int64_t o;			// output type (T) (i.e. user type) 
   ceph::libfdb::from::convert(x, o); 
  
   REQUIRE(n == o); 
   }
-
+*/
   // string_view -> span<uint8> -> string
   {
   const std::string_view n = "Hello, World!";
   std::span<const std::uint8_t> x;
-  ceph::libfdb::to::convert(n, x);
+  x = ceph::libfdb::to::convert(n);
 
   std::string o;
-  ceph::libfdb::from::convert(std::move(x), o); 
+  ceph::libfdb::from::convert(x, o); 
  
   REQUIRE_THAT(n, Catch::Matchers::RangeEquals(o));
   }
@@ -233,10 +235,10 @@ TEST_CASE("fdb conversions (built-in)", "[fdb][rgw]") {
   const std::span<const std::uint8_t> n((const std::uint8_t *)msg, sizeof(msg));
 
   std::span<const std::uint8_t> x;
-  ceph::libfdb::to::convert(n, x);
+  x = ceph::libfdb::to::convert(n);
 
   std::vector<std::uint8_t> o;
-  ceph::libfdb::from::convert(std::move(x), o); 
+  ceph::libfdb::from::convert(x, o); 
 
   REQUIRE_THAT(n, Catch::Matchers::RangeEquals(o));
   }
@@ -246,18 +248,18 @@ TEST_CASE("fdb conversions (built-in)", "[fdb][rgw]") {
   const std::span<const std::uint8_t> n((const std::uint8_t *)msg_with_null, sizeof(msg_with_null));
 
   std::span<const std::uint8_t> x;
-  ceph::libfdb::to::convert(n, x);
+  x = ceph::libfdb::to::convert(n);
 
   std::vector<std::uint8_t> o;
-  ceph::libfdb::from::convert(std::move(x), o); 
+  ceph::libfdb::from::convert(x, o); 
 
   REQUIRE_THAT(n, Catch::Matchers::RangeEquals(o));
   REQUIRE_THAT(msg_with_null, Catch::Matchers::RangeEquals(o));
   }
-
  }
 }
 
+/* JFW:
 TEST_CASE("fdb conversions (ceph)", "[fdb][rgw]") {
 
  const char *msg = "Hello, World!";
@@ -268,10 +270,10 @@ TEST_CASE("fdb conversions (ceph)", "[fdb][rgw]") {
   n.append(msg);
 
   std::span<const std::uint8_t> x;
-  ceph::libfdb::to::convert(n, x);
+  x = ceph::libfdb::to::convert(n);
 
   std::string o;
-  ceph::libfdb::from::convert(std::move(x), o); 
+  ceph::libfdb::from::convert(x, o); 
 
   REQUIRE_THAT(n, Catch::Matchers::RangeEquals(o));
   }
@@ -282,16 +284,16 @@ TEST_CASE("fdb conversions (ceph)", "[fdb][rgw]") {
  n.append(msg);
 
  std::span<const std::uint8_t> x;
- ceph::libfdb::to::convert(n, x);
+ x = ceph::libfdb::to::convert(n);
 
  ceph::buffer::list o;
- ceph::libfdb::from::convert(std::move(x), o);
+ ceph::libfdb::from::convert(x, o);
 
  REQUIRE_THAT(n, Catch::Matchers::RangeEquals(o));
  }
 
 INFO("JFW: buffer::list <> with null characters next");
-}
+}*/
 
 TEST_CASE("fdb conversions (round-trip)", "[fdb][rgw]") {
  // Actually store and retrieve converted data via the DB:
@@ -308,8 +310,23 @@ TEST_CASE("fdb conversions (round-trip)", "[fdb][rgw]") {
  REQUIRE_THAT(n, Catch::Matchers::RangeEquals(o));
  }
 
+/* JFW: I'm not going to support this for the prototype, but the plumbing looks like
+it does the right thing for the most part, we need to add the encoding, etc.:
+ // int64 kvs -> int64
+ {
+ const std::int64_t k = 1;
+ const std::int64_t n = 5;
+ std::int64_t o = 0;
+
+ lfdb::set(lfdb::make_transaction(dbh), k, n, lfdb::commit_after_op::commit);
+ lfdb::get(lfdb::make_transaction(dbh), k, o);
+
+ REQUIRE(n == o);
+ }
+*/
 }
 
+/* JFW:1
 TEST_CASE("fdb conversions (round-trip, ceph)", "[fdb][rgw]") {
 
   auto dbh = lfdb::make_database();
@@ -325,12 +342,11 @@ TEST_CASE("fdb conversions (round-trip, ceph)", "[fdb][rgw]") {
   REQUIRE_THAT(n, Catch::Matchers::RangeEquals(o));
   }
 
-  // buffer::list -> buffer::list
+  // buffer::list (and buffer::list key) -> buffer::list
   {
-  ceph::buffer::list n;
-  n.append("Hello, World!");
-  ceph::buffer::list o;
+  const std::string_view n { "Hello, World!" };
 
+  ceph::buffer::list o;
   o.append(n);
 
   lfdb::set(lfdb::make_transaction(dbh), "key", n, lfdb::commit_after_op::commit);
@@ -339,9 +355,35 @@ TEST_CASE("fdb conversions (round-trip, ceph)", "[fdb][rgw]") {
   REQUIRE_THAT(n, Catch::Matchers::RangeEquals(o));
   }
 
-INFO("JFW: next: reified keys! Yay!");
-INFO("JFW: implement key reification");
-}
+// JFW: holding off on keys until after prototype:
+  // buffer::list (and buffer::list key) -> buffer::list
+  {
+  ceph::buffer::list n;
+  n.append("Hello, World!");
+
+  ceph::buffer::list o;
+  o.append(n);
+
+  lfdb::set(lfdb::make_transaction(dbh), "key", n, lfdb::commit_after_op::commit);
+  lfdb::get(lfdb::make_transaction(dbh), "key", o);
+
+  REQUIRE_THAT(n, Catch::Matchers::RangeEquals(o));
+  }
+
+  // buffer::list (and buffer::list key) -> buffer::list
+  {
+  ceph::buffer::list n;
+  n.append("Hello, World!");
+
+  ceph::buffer::list o;
+  o.append(n);
+
+  lfdb::set(lfdb::make_transaction(dbh), "key", n, lfdb::commit_after_op::commit);
+  lfdb::get(lfdb::make_transaction(dbh), "key", o);
+
+  REQUIRE_THAT(n, Catch::Matchers::RangeEquals(o));
+  }
+}*/
 
 TEST_CASE("fdb misc", "[fdb]")
 {

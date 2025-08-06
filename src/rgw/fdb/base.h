@@ -212,15 +212,25 @@ class transaction final
 
  private:
  void commit();
+ 
+/* We need to figure out a good way to handle the combinatorics in here...
+ void set(const std::int64_t k, std::int64_t& v) {
+  // ...note that if the /call/ made it to here, that's good-- the serialization layer pointed to the right place.
+  static_assert("non-sequence keys aren't yet supported");
+ }
 
-//JFW: void set(std::string_view k, std::string_view v) {
- void set(std::string_view k, std::span<std::uint8_t> v) {
+ void set(const std::int64_t k, std::span<const std::uint8_t> v) {
+  // ...note that if the /call/ made it to here, that's good-- the serialization layer pointed to the right place.
+  static_assert("non-sequence keys aren't yet supported");
+ }*/
+
+ void set(std::span<const std::uint8_t> k, std::span<const std::uint8_t> v) {
     fdb_transaction_set(raw_handle(),
                         (const uint8_t*)k.data(), k.size(),
                         (const uint8_t*)v.data(), v.size());
  }
 
- void erase(std::string_view k) {
+ void erase(std::span<const std::uint8_t> k) {
     fdb_transaction_clear(raw_handle(),
 			  (const std::uint8_t *)k.data(), k.size());
  }
