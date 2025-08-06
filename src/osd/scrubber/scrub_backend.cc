@@ -1019,18 +1019,15 @@ void ScrubBackend::inconsistents(const hobject_t& ho,
                                  auth_and_obj_errs_t&& auth_n_errs,
                                  stringstream& errstream)
 {
-  auto& object_errors = auth_n_errs.object_errors;
-  auto& auth_list = auth_n_errs.auth_list;
-
-  m_current_obj.cur_inconsistent.insert(object_errors.begin(),
-                                      object_errors.end());  // merge?
+  m_current_obj.cur_inconsistent.insert(auth_n_errs.object_errors.begin(),
+                                        auth_n_errs.object_errors.end());
 
   dout(15) << fmt::format(
                 "{}: object errors #: {}  auth list #: {}  cur_missing #: {}  "
                 "cur_incon #: {}",
                 __func__,
-                object_errors.size(),
-                auth_list.size(),
+                auth_n_errs.object_errors.size(),
+                auth_n_errs.auth_list.size(),
                 m_current_obj.cur_missing.size(),
                 m_current_obj.cur_inconsistent.size())
            << dendl;
@@ -1058,8 +1055,7 @@ void ScrubBackend::inconsistents(const hobject_t& ho,
 
   if (!m_current_obj.cur_inconsistent.empty() ||
       !m_current_obj.cur_missing.empty()) {
-
-    this_chunk->authoritative[ho] = auth_list;
+    this_chunk->authoritative[ho] = std::move(auth_n_errs.auth_list);
 
   } else if (!m_current_obj.fix_digest && m_is_replicated) {
 
