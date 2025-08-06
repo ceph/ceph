@@ -1019,6 +1019,104 @@ TEST(LibCephFS, FlagO_PATH) {
 }
 #endif /* __linux */
 
+TEST(LibCephFS, StatfsQuota) {
+
+  struct ceph_mount_info *cmount;
+  ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+  ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
+  ASSERT_EQ(ceph_mount(cmount, NULL), 0);
+
+  const char* quota_dir = "quota_dir";
+
+  ASSERT_EQ(0, ceph_mkdir(cmount, quota_dir, 0777));
+  EXPECT_EQ(0, ceph_setxattr(cmount, quota_dir, "ceph.quota.max_files", "10000", 05, 0));
+
+  const int num_quota_files = 1;
+  char quota_file[256];
+  sprintf(quota_file, "%s/test_statfs_quota_%d", quota_dir, getpid());
+
+  int fd = ceph_open(cmount, quota_file, O_CREAT|O_RDWR, 0666);
+  ASSERT_GT(fd, 0);
+
+  ceph_close(cmount, fd);
+
+  const int num_reg_files = 5;
+  char regular_file[256];
+  for (int i = 0; i < num_reg_files; i++) {
+    sprintf(regular_file, "test_statfs_regular_%d", i);
+    fd = ceph_open(cmount, regular_file, O_CREAT|O_RDWR, 0666);
+    ceph_close(cmount, fd);
+  }
+
+  ASSERT_EQ(0, ceph_unmount(cmount));
+  ASSERT_EQ(0, ceph_mount(cmount, NULL));
+
+  struct statvfs quota_stvbuf;
+  ASSERT_EQ(0, ceph_statfs(cmount, quota_file, &quota_stvbuf));
+  ASSERT_EQ(num_quota_files+1, quota_stvbuf.f_files); // +1 for dirent dir1
+
+  struct statvfs reg_stvbuf;
+  ASSERT_EQ(0, ceph_statfs(cmount, "test_statfs_regular_1", &reg_stvbuf));
+  ASSERT_EQ(num_reg_files+num_quota_files+1+1, reg_stvbuf.f_files); // +1 for dirent dir1 and +1 root inode
+
+  for (int i = 0; i < num_reg_files; i++) {
+    sprintf(regular_file, "test_statfs_regular_%d", i);
+    ASSERT_EQ(0, ceph_unlink(cmount, regular_file));
+  }
+
+  ASSERT_EQ(0, ceph_unlink(cmount, quota_file));
+  ASSERT_EQ(0, ceph_rmdir(cmount, quota_dir));
+
+  ceph_shutdown(cmount);
+}
+
+TEST(LibCephFS, StatfsFsid) {
+
+  struct ceph_mount_info *cmount;
+  ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+  ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
+  ASSERT_EQ(ceph_mount(cmount, NULL), 0);
+
+  const char* subvol_dir = "subvol_dir";
+
+  ASSERT_EQ(0, ceph_mkdir(cmount, subvol_dir, 0777));
+  EXPECT_EQ(0, ceph_setxattr(cmount, subvol_dir, "ceph.dir.subvolume", "1", 1, 0));
+
+  char subvol_file[256];
+  sprintf(subvol_file, "%s/test_statfs_subvol_%d", subvol_dir, getpid());
+
+  int fd = ceph_open(cmount, subvol_file, O_CREAT|O_RDWR, 0666);
+  ASSERT_GT(fd, 0);
+
+  ceph_close(cmount, fd);
+
+  const char* reg_file = "test_statfs_regular";
+  fd = ceph_open(cmount, reg_file, O_CREAT|O_RDWR, 0666);
+  ASSERT_GT(fd, 0);
+
+  ceph_close(cmount, fd);
+
+  struct stat st;
+  ASSERT_EQ(0, ceph_stat(cmount, subvol_dir, &st));
+  ino_t subvol_root_ino = st.st_ino;
+
+  struct statvfs subvol_stvbuf;
+  ASSERT_EQ(0, ceph_statfs(cmount, subvol_file, &subvol_stvbuf));
+  ASSERT_EQ(subvol_root_ino, subvol_stvbuf.f_fsid);
+
+  struct statvfs reg_stvbuf;
+  ASSERT_EQ(0, ceph_statfs(cmount, reg_file, &reg_stvbuf));
+  ASSERT_EQ(1, reg_stvbuf.f_fsid);
+
+  ASSERT_EQ(0, ceph_unlink(cmount, reg_file));
+  ASSERT_EQ(0, ceph_unlink(cmount, subvol_file));
+  ASSERT_EQ(0, ceph_rmdir(cmount, subvol_dir));
+
+  ceph_shutdown(cmount);
+}
+
 TEST(LibCephFS, Symlinks) {
   struct ceph_mount_info *cmount;
   ASSERT_EQ(ceph_create(&cmount, NULL), 0);
