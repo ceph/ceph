@@ -1601,18 +1601,28 @@ def created_pool(ctx, config):
                 new_pool, 'pg_num')
 
 
-def perf_counter_check(ctx, config):
+def map_counter_check(ctx, config):
     """
     check threshold for map counters.
     """
-    ceph_manager=ctx.managers['ceph']
+    ceph_manager = ctx.managers['ceph']
     for osd_id in ceph_manager.get_osd_status()['live']:
-        full,inc=ceph_manager.do_dump_perf_counter(osd_id)
-        if full==None and inc==None:
+        perf_counters_for_osd = ceph_manager.do_dump_perf_counter(osd_id)
+        full=perf_counters_for_osd['osd']['full_map_received']
+        inc = perf_counters_for_osd['osd']['inc_map_received']
+        
+        if full == None or inc==None:
             ceph_manager.log("could not get map data for this osd, look at the log files for do_dump_perf_counter, maybe osd is down")
             continue 
-        ceph_manager.log(f"shreya output full map {full}")
-        ceph_manager.log(f"shreya output inc map {inc}")
+        default_threshold = config.get('incremental_to_full_map_ratio_threshhold',0.1)
+        map_threshold = full/(inc+full)
+        ceph_manager.log(f"Full maps received:{full}")
+        ceph_manager.log(f"incremental maps received:{inc}")
+        ceph_manager.log(f"Calculated proportion of full maps:{map_threshold}")   
+        if map_threshold > default_threshold:
+            ceph_manager.log(f"output the proportion of full maps recieved was higher than 0.1")
+            assert False
+    ceph_manager.log(f"succesfully passed test") 
 
 @contextlib.contextmanager
 def suppress_mon_health_to_clog(ctx, config):
@@ -2011,11 +2021,10 @@ def task(ctx, config):
             if config.get('wait-for-healthy', True):
                 healthy(ctx=ctx, config=dict(cluster=config['cluster']))
 
-            yield
-           
+            yield          
         finally:
-            if config.get("perf_counter_check", True):
-                perf_counter_check(ctx, config)
+            if config.get("map_counter_check", True):
+                map_counter_check(ctx, config)
             # set pg_num_targets back to actual pg_num, so we don't have to
             # wait for pending merges (which can take a while!)
             if not config.get('skip_stop_pg_num_changes', True):

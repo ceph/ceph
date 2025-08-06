@@ -1,3 +1,4 @@
+map_counter_check: false
 overrides:
   ceph:
     log-ignorelist:
