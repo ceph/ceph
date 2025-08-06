@@ -610,4 +610,8 @@ template<>
 struct fmt::formatter<rados::cls::fifo::info> : fmt::ostream_formatter {};
 template<>
 struct fmt::formatter<rados::cls::fifo::part_header> : fmt::ostream_formatter {};
+template<>
+struct fmt::formatter<rados::cls::fifo::journal_entry> : fmt::ostream_formatter {};
+template<>
+struct fmt::formatter<rados::cls::fifo::update> : fmt::ostream_formatter {};
 #endif

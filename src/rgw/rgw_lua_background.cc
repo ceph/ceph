@@ -56,7 +56,7 @@ int RGWTable::increment_by(lua_State* L) {
   return 0;
 }
 
-Background::Background(rgw::sal::Driver* _driver,
+Background::Background(
     CephContext* _cct,
     rgw::sal::LuaManager* _lua_manager,
     int _execute_interval) :
@@ -93,7 +93,7 @@ void Background::pause() {
   cond.notify_all();
 }
 
-void Background::resume(rgw::sal::Driver* driver) {
+void Background::resume(rgw::sal::Driver*) {
   paused = false;
   cond.notify_all();
 }

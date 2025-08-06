@@ -2009,4 +2009,9 @@ public:
 
 };
 
+#ifdef WITH_RADOSGW_RADOS
+std::optional<neorados::RADOS>
+make_neorados(CephContext* cct, boost::asio::io_context& io_context);
+#endif
+
 /** @} */
