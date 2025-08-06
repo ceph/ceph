@@ -11,6 +11,8 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+INTERNAL_CERT_LABEL = 'internal'
+
 
 @register_cephadm_service
 class MgmtGatewayService(CephadmService):
@@ -23,7 +25,7 @@ class MgmtGatewayService(CephadmService):
     def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
         assert self.TYPE == daemon_spec.daemon_type
         super().register_for_certificates(daemon_spec)
-        self.mgr.cert_mgr.register_self_signed_cert_key_pair(MgmtGatewayService.TYPE, 'internal')
+        self.mgr.cert_mgr.register_self_signed_cert_key_pair(MgmtGatewayService.TYPE, INTERNAL_CERT_LABEL)
         daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
         return daemon_spec
 
@@ -52,16 +54,6 @@ class MgmtGatewayService(CephadmService):
         # we adjust the standby behaviour so rev-proxy can pick correctly the active instance
         self.mgr.set_module_option_ex('dashboard', 'standby_error_status_code', '503')
         self.mgr.set_module_option_ex('dashboard', 'standby_behaviour', 'error')
-
-    def get_internal_certificates(self, svc_spec: MgmtGatewaySpec, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[str, str]:
-        ip = self.get_mgmt_gw_ip(svc_spec, daemon_spec)
-        host_fqdn = self.mgr.get_fqdn(daemon_spec.host)
-        cert, key = self.mgr.cert_mgr.get_self_signed_cert_key_pair(MgmtGatewayService.TYPE, host_fqdn, 'internal')
-        if not (cert and key):
-            cert, key = self.mgr.cert_mgr.generate_cert(host_fqdn, self.mgr.get_mgr_ip())
-            if cert and key:
-                self.mgr.cert_mgr.save_self_signed_cert_key_pair(MgmtGatewayService.TYPE, cert, key, host=host_fqdn, label='internal')
-        return cert, key
 
     def get_service_discovery_endpoints(self) -> List[str]:
         sd_endpoints = []
@@ -128,7 +120,7 @@ class MgmtGatewayService(CephadmService):
             'enable_oauth2_proxy': bool(oauth2_proxy_endpoints),
         }
 
-        internal_cert, internal_pkey = self.get_internal_certificates(svc_spec, daemon_spec)
+        internal_cert, internal_pkey = self.get_self_signed_certificates_with_label(svc_spec, daemon_spec, INTERNAL_CERT_LABEL)
         daemon_config = {
             "files": {
                 "nginx.conf": self.mgr.template.render(self.SVC_TEMPLATE_PATH, main_context),
@@ -153,8 +145,8 @@ class MgmtGatewayService(CephadmService):
         Called before mgmt-gateway daemon is removed.
         """
         # reset the standby dashboard redirection behaviour
-        assert daemon.hostname # for mypy
+        assert daemon.hostname  # for mypy
         super().post_remove(daemon, is_failed_deploy=is_failed_deploy)
-        self.mgr.cert_mgr.rm_self_signed_cert_key_pair(MgmtGatewayService.TYPE, daemon.hostname, label='internal')
+        self.mgr.cert_mgr.rm_self_signed_cert_key_pair(MgmtGatewayService.TYPE, daemon.hostname, label=INTERNAL_CERT_LABEL)
         self.mgr.set_module_option_ex('dashboard', 'standby_error_status_code', '500')
         self.mgr.set_module_option_ex('dashboard', 'standby_behaviour', 'redirect')
