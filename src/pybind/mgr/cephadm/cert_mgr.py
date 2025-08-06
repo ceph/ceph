@@ -144,7 +144,6 @@ class CertMgr:
         else:
             return f'{self.CEPHADM_SIGNED}_{service_name}_cert'
 
-
     def self_signed_key(self, service_name: str, label: Optional[str] = None) -> str:
         if label:
             return f'{self.CEPHADM_SIGNED}_{service_name}{self.LABEL_SEPARATOR}{label}_key'

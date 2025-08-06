@@ -77,7 +77,7 @@ class AgentEndpoint:
         host = self.mgr.get_hostname()
         cert, key = self.mgr.cert_mgr.get_self_signed_cert_key_pair(CephadmAgent.TYPE, host)
         if not (cert and key):
-            cert, key = self.mgr.cert_mgr.generate_cert(host, self.mgr.get_mgr_ip(), duration_in_days = (365 * 5))
+            cert, key = self.mgr.cert_mgr.generate_cert(host, self.mgr.get_mgr_ip(), duration_in_days=(365 * 5))
             if cert and key:
                 self.mgr.cert_mgr.save_self_signed_cert_key_pair(CephadmAgent.TYPE, cert, key, host=host)
         return cert, key
@@ -791,7 +791,7 @@ class AgentMessageThread(threading.Thread):
             root_cert_tmp.flush()
             root_cert_fname = root_cert_tmp.name
 
-            cert, key = self.mgr.cert_mgr.generate_cert(self.mgr.get_hostname(), self.mgr.get_mgr_ip(), duration_in_days = (365 * 5))
+            cert, key = self.mgr.cert_mgr.generate_cert(self.mgr.get_hostname(), self.mgr.get_mgr_ip(), duration_in_days=(365 * 5))
 
             cert_tmp = tempfile.NamedTemporaryFile()
             cert_tmp.write(cert.encode('utf-8'))
