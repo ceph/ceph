@@ -206,6 +206,8 @@ erasure-coded pool as the ``--data-pool`` during image creation:
 For CephFS, an erasure-coded pool can be set as the default data pool during
 file system creation or via :ref:`file-layouts`.
 
+.. _rados_ops_erasure_coding_optimizations:
+
 Erasure Coding Optimizations
 ----------------------------
 
