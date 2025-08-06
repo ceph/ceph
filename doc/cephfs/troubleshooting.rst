@@ -27,25 +27,26 @@ Stuck during recovery
 Stuck in up:replay
 ------------------
 
-If your MDS is stuck in ``up:replay`` then it is likely that the journal is
-very long. Did you see ``MDS_HEALTH_TRIM`` cluster warnings saying the MDS is
-behind on trimming its journal? If the journal has grown very large, it can
-take hours to read the journal. There is no working around this but there
-are things you can do to speed things along:
+If your MDS is stuck in the ``up:replay`` state, then it is likely that the
+journal is very long. Did you see ``MDS_HEALTH_TRIM`` cluster warnings saying
+the MDS is behind on trimming its journal? Very large journals can take hours
+to read. There is no working around this but there are things you can do to
+speed things along:
 
-Reduce MDS debugging to 0. Even at the default settings, the MDS logs some
-messages to memory for dumping if a fatal error is encountered. You can avoid
-this:
+Reduce MDS debugging to 0. Even with the default settings, the MDS logs a few
+messages to memory for dumping in case a fatal error is encountered. You can
+turn off all logging by running the following commands:
 
-.. code:: bash
+.. prompt:: bash #
 
    ceph config set mds debug_mds 0
    ceph config set mds debug_ms 0
    ceph config set mds debug_monc 0
 
-Note if the MDS fails then there will be virtually no information to determine
-why. If you can calculate when ``up:replay`` will complete, you should restore
-these configs just prior to entering the next state:
+Remember that when you set ``debug_mds``, ``debug_ms``, and ``debug_monc`` to
+``0``, Note if the MDS fails then there will be no information to determine why
+fatal errors occurred. If you can calculate when ``up:replay`` will complete,
+you should restore these configs just prior to entering the next state:
 
 .. code:: bash
 
@@ -53,8 +54,8 @@ these configs just prior to entering the next state:
    ceph config rm mds debug_ms
    ceph config rm mds debug_monc
 
-Once you've got replay moving along faster, you can calculate when the MDS will
-complete. This is done by examining the journal replay status:
+After replay has been speeded up, calculate when the MDS will complete the
+replay. Examine the journal replay status:
 
 .. code:: bash
 
@@ -68,7 +69,7 @@ complete. This is done by examining the journal replay status:
    }
 
 Replay completes when the ``journal_read_pos`` reaches the
-``journal_write_pos``. The write position will not change during replay. Track
+``journal_write_pos``. The write position does not change during replay. Track
 the progression of the read position to compute the expected time to complete.
 
 
