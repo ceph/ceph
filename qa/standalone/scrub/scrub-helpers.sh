@@ -327,33 +327,37 @@ function build_pg_dicts {
   local saved_echo_flag=${-//[^x]/}
   set +x
 
+  # This jq filter extracts all required fields, creating a tab-separated output.
+  local jq_filter='.pg_stats[] | [.pgid, (.acting | @sh), .acting_primary, (.pgid | split(".")[0])] | @tsv'
+
   # if the infile name is '-', fetch the dump directly from the ceph cluster
   if [[ $infile == "-" ]]; then
-    local -r ceph_cmd="ceph pg dump pgs_brief -f=json-pretty"
-    local -r ceph_cmd_out=$(eval $ceph_cmd)
+    local json_data
+    json_data=$(ceph pg dump pgs_brief -f=json)
     local -r ceph_cmd_rc=$?
     if [[ $ceph_cmd_rc -ne 0 ]]; then
-      echo "Error: the command '$ceph_cmd' failed with return code $ceph_cmd_rc"
+      echo "Error: 'ceph pg dump' command failed with return code $ceph_cmd_rc"
     fi
-    (( extr_dbg >= 3 )) && echo "$ceph_cmd_out" > /tmp/e2
-    l0=`echo "$ceph_cmd_out" | jq '[.pg_stats | group_by(.pg_stats)[0] | map({pgid: .pgid, pool: (.pgid | split(".")[0]), acting: .acting, acting_primary: .acting_primary})] | .[]' `
+    (( extr_dbg >= 3 )) && echo "$json_data" > /tmp/e2
+
+    while IFS=$'\t' read -r pgid acting acting_primary pool; do
+      [[ -z "$pgid" ]] && continue
+      (( extr_dbg >= 1 )) && echo "PG: $pgid  acting: $acting  primary: $acting_primary  pool: $pool"
+      pg_primary_dict["$pgid"]=$acting_primary
+      pg_acting_dict["$pgid"]=$acting
+      pg_pool_dict["$pgid"]=$pool
+    done < <(echo "$json_data" | jq -r "$jq_filter")
+
   else
-    l0=`jq '[.pg_stats | group_by(.pg_stats)[0] | map({pgid: .pgid, pool: (.pgid | split(".")[0]), acting: .acting, acting_primary: .acting_primary})] | .[]' $infile `
+    # Process directly from file
+    while IFS=$'\t' read -r pgid acting acting_primary pool; do
+      [[ -z "$pgid" ]] && continue
+      (( extr_dbg >= 1 )) && echo "PG: $pgid  acting: $acting  primary: $acting_primary  pool: $pool"
+      pg_primary_dict["$pgid"]=$acting_primary
+      pg_acting_dict["$pgid"]=$acting
+      pg_pool_dict["$pgid"]=$pool
+    done < <(jq -r "$jq_filter" "$infile")
   fi
-  (( extr_dbg >= 2 )) && echo "L0: $l0"
-
-  mapfile -t l1 < <(echo "$l0" | jq -c '.[]')
-  (( extr_dbg >= 2 )) && echo "L1: ${#l1[@]}"
-
-  for item in "${l1[@]}"; do
-    pgid=$(echo "$item" | jq -r '.pgid')
-    acting=$(echo "$item" | jq -r '.acting | @sh')
-    pg_acting_dict["$pgid"]=$acting
-    acting_primary=$(echo "$item" | jq -r '.acting_primary')
-    pg_primary_dict["$pgid"]=$acting_primary
-    pool=$(echo "$item" | jq -r '.pool')
-    pg_pool_dict["$pgid"]=$pool
-  done
 
   if [[ -n "$saved_echo_flag" ]]; then set -x; fi
 }
