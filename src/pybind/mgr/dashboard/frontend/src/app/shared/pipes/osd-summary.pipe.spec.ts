@@ -19,7 +19,7 @@ describe('OsdSummaryPipe', () => {
   });
 
   it('transforms without value', () => {
-    expect(pipe.transform(undefined)).toBe('');
+    expect(pipe.transform(undefined)).toBe(null);
   });
 
   it('transforms having 3 osd with 3 up, 3 in, 0 down, 0 out', () => {
