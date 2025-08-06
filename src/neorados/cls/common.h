@@ -12,7 +12,6 @@
 #pragma once
 
 #include <concepts>
-#include <coroutine>
 #include <cstddef>
 #include <string>
 #include <type_traits>
@@ -34,6 +33,10 @@
 
 #include "include/buffer.h"
 #include "include/encoding.h"
+
+#if !defined(__clang__) && defined(__GNUC__) && (__GNUC__ < 13)
+#define BROKEN_CO_COMPOSED
+#endif
 
 /// \file neorados/cls/common.h
 ///
