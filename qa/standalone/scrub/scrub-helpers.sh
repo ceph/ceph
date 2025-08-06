@@ -268,7 +268,7 @@ function standard_scrub_cluster() {
     done
 
     if [[ "$poolname" != "nopool" ]]; then
-        create_pool $poolname $pg_num $pg_num
+        create_pool $poolname $pg_num $pg_num --autoscale_mode=off || return 1
         wait_for_clean || return 1
     fi
 
