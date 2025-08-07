@@ -591,7 +591,7 @@ public:
 
   Device::access_ertr::future<> _mount();
 
-  // FuturizedStore::mount_ertr only supports a stateful_ec
+  // FuturizedStore::mount_ertr/mkfs_ertr only supports a stateful_ec
   // to keep the interface intact, convert to stateful_ec.
   crimson::os::FuturizedStore::mount_ertr::future<> mount() final {
     return _mount().handle_error(
@@ -601,7 +601,15 @@ public:
   }
   seastar::future<> umount() final;
 
-  mkfs_ertr::future<> mkfs(uuid_d new_osd_fsid) final;
+  Device::access_ertr::future<> _mkfs(uuid_d new_osd_fsid);
+
+  crimson::os::FuturizedStore::mkfs_ertr::future<> mkfs(uuid_d new_osd_fsid) final {
+    return _mkfs(new_osd_fsid).handle_error(
+      Device::access_ertr::all_same_way([](auto& code) {
+        return crimson::stateful_ec{code};
+    }));
+  }
+
   seastar::future<store_statfs_t> stat() const final;
   seastar::future<store_statfs_t> pool_statfs(int64_t pool_id) const final;
 
