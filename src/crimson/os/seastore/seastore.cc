@@ -412,23 +412,20 @@ SeaStore::mkfs_ertr::future<> SeaStore::test_mkfs(uuid_d new_osd_fsid)
 
 seastar::future<> SeaStore::prepare_meta(uuid_d new_osd_fsid)
 {
+  LOG_PREFIX(SeaStore::prepare_meta);
   ceph_assert(seastar::this_shard_id() == primary_core);
-  return write_fsid(new_osd_fsid).then([this] {
-    return read_meta("type").then([this] (auto tuple) {
-      auto [ret, type] = tuple;
-      if (ret == 0 && type == "seastore") {
-	return seastar::now();
-      } else if (ret == 0 && type != "seastore") {
-	LOG_PREFIX(SeaStore::prepare_meta);
-	ERROR("expected seastore, but type is {}", type);
-	throw std::runtime_error("store type error");
-      } else {
-	return write_meta("type", "seastore");
-      }
-    });
-  }).then([this] {
-    return write_meta("mkfs_done", "yes");
-  });
+  co_await write_fsid(new_osd_fsid);
+  // todo: read_meta to return errorator
+  auto [ret, type] = co_await read_meta("type");
+  if (ret == 0 && type == "seastore") {
+    co_return;
+  } else if (ret == 0 && type != "seastore") {
+    ERROR("expected seastore, but type is {}", type);
+    throw std::runtime_error("store type error");
+  } else {
+    co_await write_meta("type", "seastore");
+  }
+  co_await write_meta("mkfs_done", "yes");
 }
 
 SeaStore::mkfs_ertr::future<> SeaStore::mkfs(uuid_d new_osd_fsid)
