@@ -323,7 +323,8 @@ public:
       remove_extent(list.front(), extent_pin_state_t::Fresh);
     }
     if (should_run_promote()) {
-      // TODO: wake promote background process
+      assert(listener);
+      listener->maybe_wake_promote();
     }
   }
 

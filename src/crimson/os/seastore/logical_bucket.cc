@@ -43,6 +43,10 @@ public:
     } else if (create_if_absent) {
       TRACE("create bucket: {}", laddr);
       index[laddr] = lru.emplace(lru.end(), laddr);
+      if (should_demote()) {
+	assert(listener);
+	listener->maybe_wake_background();
+      }
     } else {
       TRACE("prefix {} doesn't exist, skipping", laddr);
     }
