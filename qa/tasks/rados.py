@@ -165,17 +165,18 @@ def task(ctx, config):
         - print: "**** done rados ec-cache-agent (part 2)"
 
     """
-    log.info("Beginning rados...")
-    assert isinstance(config, dict), "please list clients to run on"
+    log.info('Beginning rados...')
+    assert isinstance(config, dict), \
+        "please list clients to run on"
 
     log.info("config is {config}".format(config=str(config)))
-    overrides = ctx.config.get("overrides", {})
+    overrides = ctx.config.get('overrides', {})
     log.info("overrides is {overrides}".format(overrides=str(overrides)))
-    teuthology.deep_merge(config, overrides.get("rados", {}))
+    teuthology.deep_merge(config, overrides.get('rados', {}))
     log.info("config is {config}".format(config=str(config)))
 
-    object_size = int(config.get("object_size", 4000000))
-    op_weights = config.get("op_weights", {})
+    object_size = int(config.get('object_size', 4000000))
+    op_weights = config.get('op_weights', {})
     testdir = teuthology.get_testdir(ctx)
     pct_update_delay = None
     args = [
@@ -223,9 +224,9 @@ def task(ctx, config):
         ])
 
     weights = {}
-    weights["read"] = 100
-    weights["write"] = 100
-    weights["delete"] = 10
+    weights['read'] = 100
+    weights['write'] = 100
+    weights['delete'] = 10
     # Parallel of the op_types in test/osd/TestRados.cc
     for field in [
         # read handled above
@@ -252,36 +253,38 @@ def task(ctx, config):
         "tier_promote",
         "tier_evict",
         "tier_promote",
-        "tier_flush",
+        "tier_flush"
     ]:
         if field in op_weights:
             weights[field] = op_weights[field]
 
-    if config.get("write_append_excl", True):
-        if "write" in weights:
-            weights["write"] = weights["write"] // 2
-            weights["write_excl"] = weights["write"]
+    if config.get('write_append_excl', True):
+        if 'write' in weights:
+            weights['write'] = weights['write'] // 2
+            weights['write_excl'] = weights['write']
 
-        if "append" in weights:
-            weights["append"] = weights["append"] // 2
-            weights["append_excl"] = weights["append"]
+        if 'append' in weights:
+            weights['append'] = weights['append'] // 2
+            weights['append_excl'] = weights['append']
 
     for op, weight in weights.items():
-        args.extend(["--op", op, str(weight)])
+        args.extend([
+            '--op', op, str(weight)
+        ])
 
     def thread():
         """Thread spawned by gevent"""
-        clients = ["client.{id}".format(id=id_) for id_ in teuthology.all_roles_of_type(ctx.cluster, "client")]
-        log.info("clients are %s" % clients)
-        manager = ctx.managers["ceph"]
-        if config.get("ec_pool", False):
-            profile = config.get("erasure_code_profile", {})
-            profile_name = profile.get("name", "teuthologyprofile")
+        clients = ['client.{id}'.format(id=id_) for id_ in teuthology.all_roles_of_type(ctx.cluster, 'client')]
+        log.info('clients are %s' % clients)
+        manager = ctx.managers['ceph']
+        if config.get('ec_pool', False):
+            profile = config.get('erasure_code_profile', {})
+            profile_name = profile.get('name', 'teuthologyprofile')
             manager.create_erasure_code_profile(profile_name, profile)
-            crush_prof = config.get("erasure_code_crush", {})
+            crush_prof = config.get('erasure_code_crush', {})
             crush_name = None
             if crush_prof:
-                crush_name = crush_prof.get("name", "teuthologycrush")
+                crush_name = crush_prof.get('name', 'teuthologycrush')
                 manager.create_erasure_code_crush_rule(crush_name, crush_prof)
 
         else:
@@ -301,30 +304,36 @@ def task(ctx, config):
                 assert role.startswith(PREFIX)
                 id_ = role[len(PREFIX):]
 
-                pool = config.get("pool", None)
+                pool = config.get('pool', None)
                 if not pool and existing_pools:
                     pool = existing_pools.pop()
                 else:
                     pool = manager.create_pool_with_unique_name(
                         erasure_code_profile_name=profile_name,
                         erasure_code_crush_rule_name=crush_name,
-                        erasure_code_use_overwrites=config.get("erasure_code_use_overwrites", False),
+                        erasure_code_use_overwrites=
+                            config.get('erasure_code_use_overwrites', False),
                     )
                     created_pools.append(pool)
-                    if config.get("fast_read", False):
-                        manager.raw_cluster_cmd("osd", "pool", "set", pool, "fast_read", "true")
+                    if config.get('fast_read', False):
+                        manager.raw_cluster_cmd(
+                            'osd', 'pool', 'set', pool, 'fast_read', 'true')
                     if pct_update_delay:
-                        manager.raw_cluster_cmd("osd", "pool", "set", pool, "pct_update_delay", str(pct_update_delay))
-                    min_size = config.get("min_size", None)
+                        manager.raw_cluster_cmd(
+                            'osd', 'pool', 'set', pool,
+                            'pct_update_delay', str(pct_update_delay))
+                    min_size = config.get('min_size', None)
                     if min_size is not None:
-                        manager.raw_cluster_cmd("osd", "pool", "set", pool, "min_size", str(min_size))
+                        manager.raw_cluster_cmd(
+                            'osd', 'pool', 'set', pool, 'min_size', str(min_size))
 
                 (remote,) = ctx.cluster.only(role).remotes.keys()
                 proc = remote.run(
-                    args=["CEPH_CLIENT_ID={id_}".format(id_=id_)] + args + ["--pool", pool],
+                    args=["CEPH_CLIENT_ID={id_}".format(id_=id_)] + args +
+                    ["--pool", pool],
                     logger=log.getChild("rados.{id}".format(id=id_)),
                     stdin=run.PIPE,
-                    wait=False,
+                    wait=False
                 )
                 tests[id_] = proc
 
@@ -356,5 +365,5 @@ def task(ctx, config):
     try:
         yield
     finally:
-        log.info("joining rados")
+        log.info('joining rados')
         running.get()
