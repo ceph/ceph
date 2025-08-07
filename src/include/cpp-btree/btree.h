@@ -57,6 +57,9 @@
 #include <type_traits>
 #include <utility>
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Warray-bounds"
+
 namespace btree::internal {
 
 template <typename Compare, typename T>
@@ -2569,3 +2572,5 @@ int btree<P>::internal_verify(
 }
 
 } // namespace btree::internal
+
+#pragma GCC diagnostic pop
