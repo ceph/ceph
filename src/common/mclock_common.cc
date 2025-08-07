@@ -187,64 +187,16 @@ void MclockConfig::set_config_defaults_from_profile()
     return;
   }
 
-  /**
-   * high_client_ops
-   *
-   * Client Allocation:
-   *   reservation: 60% | weight: 2 | limit: 0 (max) |
-   * Background Recovery Allocation:
-   *   reservation: 40% | weight: 1 | limit: 0 (max) |
-   * Background Best Effort Allocation:
-   *   reservation: 0 (min) | weight: 1 | limit: 70% |
-   */
-  static constexpr profile_t high_client_ops_profile{
-    { .6, 2,  0 },
-    { .4, 1,  0 },
-    {  0, 1, .7 }
-  };
-
-  /**
-   * high_recovery_ops
-   *
-   * Client Allocation:
-   *   reservation: 30% | weight: 1 | limit: 0 (max) |
-   * Background Recovery Allocation:
-   *   reservation: 70% | weight: 2 | limit: 0 (max) |
-   * Background Best Effort Allocation:
-   *   reservation: 0 (min) | weight: 1 | limit: 0 (max) |
-   */
-  static constexpr profile_t high_recovery_ops_profile{
-    { .3, 1, 0 },
-    { .7, 2, 0 },
-    {  0, 1, 0 }
-  };
-
-  /**
-   * balanced
-   *
-   * Client Allocation:
-   *   reservation: 50% | weight: 1 | limit: 0 (max) |
-   * Background Recovery Allocation:
-   *   reservation: 50% | weight: 1 | limit: 0 (max) |
-   * Background Best Effort Allocation:
-   *   reservation: 0 (min) | weight: 1 | limit: 90% |
-   */
-  static constexpr profile_t balanced_profile{
-    { .5, 1, 0 },
-    { .5, 1, 0 },
-    {  0, 1, .9 }
-  };
-
   const profile_t *profile = nullptr;
   auto mclock_profile = cct->_conf.get_val<std::string>("osd_mclock_profile");
   if (mclock_profile == "high_client_ops") {
-    profile = &high_client_ops_profile;
+    profile = &HIGH_CLIENT_OPS;
     dout(10) << "Setting high_client_ops profile " << *profile << dendl;
   } else if (mclock_profile == "high_recovery_ops") {
-    profile = &high_recovery_ops_profile;
+    profile = &HIGH_RECOVERY_OPS;
     dout(10) << "Setting high_recovery_ops profile " << *profile << dendl;
   } else if (mclock_profile == "balanced") {
-    profile = &balanced_profile;
+    profile = &BALANCED;
     dout(10) << "Setting balanced profile " << *profile << dendl;
   } else if (mclock_profile == "custom") {
     dout(10) << "Profile set to custom, not setting defaults" << dendl;
