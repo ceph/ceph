@@ -1224,8 +1224,8 @@
          "fill": 1,
          "fillGradient": 0,
          "gridPos": {
-            "h": 7,
-            "w": 24,
+            "h": 8,
+            "w": 12,
             "x": 0,
             "y": 28
          },
@@ -1257,7 +1257,7 @@
          "steppedLine": false,
          "targets": [
             {
-               "expr": "(\n ceph_rgw_topic_persistent_topic_len{topic=~\"$topic\"}\n)\n",
+               "expr": "(\n ceph_rgw_topic_persistent_topic_len\n)\n",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "{{topic}}",
@@ -1313,16 +1313,16 @@
                   "fillOpacity": 8,
                   "showPoints": "never"
                },
-               "unit": "bytes"
+               "unit": "deckbytes"
             }
          },
          "fill": 1,
          "fillGradient": 0,
          "gridPos": {
-            "h": 7,
-            "w": 24,
-            "x": 0,
-            "y": 35
+            "h": 8,
+            "w": 12,
+            "x": 12,
+            "y": 28
          },
          "id": 16,
          "legend": {
@@ -1352,7 +1352,7 @@
          "steppedLine": false,
          "targets": [
             {
-               "expr": "(\n ceph_rgw_topic_persistent_topic_size{topic=~\"$topic\"}\n)\n",
+               "expr": "(\n ceph_rgw_topic_persistent_topic_size\n)\n",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "{{topic}}",
@@ -1378,7 +1378,7 @@
          },
          "yaxes": [
             {
-               "format": "bytes",
+               "format": "deckbytes",
                "label": null,
                "logBase": 1,
                "max": null,
@@ -1511,26 +1511,6 @@
             "name": "ingress_service",
             "options": [ ],
             "query": "label_values(haproxy_server_status{job=~\"$job_haproxy\"}, instance)",
-            "refresh": 1,
-            "regex": "",
-            "sort": 1,
-            "tagValuesQuery": "",
-            "tags": [ ],
-            "tagsQuery": "",
-            "type": "query",
-            "useTags": false
-         },
-         {
-            "allValue": null,
-            "current": { },
-            "datasource": "$datasource",
-            "hide": 0,
-            "includeAll": true,
-            "label": "Topic",
-            "multi": false,
-            "name": "topic",
-            "options": [ ],
-            "query": "label_values(ceph_rgw_topic_persistent_topic_len,topic)",
             "refresh": 1,
             "regex": "",
             "sort": 1,
