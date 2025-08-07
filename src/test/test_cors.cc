@@ -339,12 +339,10 @@ void send_cors(set<string> o, set<string> h,
                unsigned max_age){
   if(g_test->get_key_type() == KEY_TYPE_S3){
     RGWCORSRule rule(o, h, e, flags, max_age);
-    RGWCORSConfiguration config;
-    config.stack_rule(rule);
     stringstream ss;
-    RGWCORSConfiguration_S3 *s3;
-    s3 = static_cast<RGWCORSConfiguration_S3 *>(&config);
-    s3->to_xml(ss);
+    RGWCORSConfiguration_S3 s3(nullptr);
+    s3.stack_rule(rule);
+    s3.to_xml(ss);
 
     g_test->send_request(string("PUT"), string("/" S3_BUCKET_NAME "?cors"), cors_read_xml, 
                          (void *)&ss, ss.str().length());
