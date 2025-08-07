@@ -384,9 +384,9 @@ def test_migrate_rgw_spec(cephadm_module: CephadmOrchestrator, rgw_spec_store_en
             assert dict(rgw_spec.to_json()) == {'service_type': 'rgw',
                                                 'service_id': 'foo',
                                                 'service_name': 'rgw.foo',
-                                                'certificate_source': 'cephadm-signed',
                                                 'placement': {'hosts': ['host1']},
                                                 'spec': {
+                                                    'certificate_source': 'cephadm-signed',
                                                     'rgw_frontend_extra_args': ['tcp_nodelay=1',
                                                                                 'request_timeout_ms=65000',
                                                                                 'rgw_thread_pool_size=512'],

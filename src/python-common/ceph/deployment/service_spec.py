@@ -1111,12 +1111,6 @@ class ServiceSpec(object):
         # type: () -> OrderedDict[str, Any]
         ret: OrderedDict[str, Any] = OrderedDict()
         ret['service_type'] = self.service_type
-        if hasattr(self, 'certificate_source') and self.certificate_source:
-            ret['certificate_source'] = self.certificate_source
-        if hasattr(self, 'custom_sans') and self.custom_sans:
-            ret['custom_sans'] = self.custom_sans
-        if hasattr(self, 'ssl') and self.ssl:
-            ret['ssl'] = self.ssl
         if self.service_id:
             ret['service_id'] = self.service_id
         ret['service_name'] = self.service_name()
@@ -1145,6 +1139,21 @@ class ServiceSpec(object):
                 val = val.to_json()
             if val:
                 c[key] = val
+
+        if self.service_type in self.REQUIRES_CERTIFICATES:
+            tls: Dict[str, Any] = {}
+            if self.ssl:
+                tls['ssl'] = self.ssl
+            if self.certificate_source:
+                tls['certificate_source'] = self.certificate_source
+            if self.ssl_cert and self.certificate_source == CertificateSource.INLINE.value:
+                tls['ssl_cert'] = self.ssl_cert
+            if self.ssl_key and self.certificate_source == CertificateSource.INLINE.value:
+                tls['ssl_key'] = self.ssl_key
+            if self.custom_sans:
+                tls['custom_sans'] = self.custom_sans
+            c.update(tls)
+
         if c:
             ret['spec'] = c
         return ret

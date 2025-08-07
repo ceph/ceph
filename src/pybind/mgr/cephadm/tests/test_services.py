@@ -4321,8 +4321,8 @@ class TestMgmtGateway:
     @patch("cephadm.services.mgmt_gateway.MgmtGatewayService.get_service_discovery_endpoints")
     @patch("cephadm.services.cephadmservice.CephadmService.get_certificates",
            lambda instance, dspec, ips=None: (ceph_generated_cert, ceph_generated_key))
-    @patch("cephadm.services.mgmt_gateway.MgmtGatewayService.get_internal_certificates",
-           lambda instance, svc_spec, dspec: (ceph_generated_cert, ceph_generated_key))
+    @patch("cephadm.services.mgmt_gateway.MgmtGatewayService.get_self_signed_certificates_with_label",
+           lambda instance, svc_spec, dspec, label: (ceph_generated_cert, ceph_generated_key))
     @patch("cephadm.module.CephadmOrchestrator.get_mgr_ip", lambda _: '::1')
     @patch('cephadm.cert_mgr.CertMgr.get_root_ca', lambda instance: cephadm_root_ca)
     @patch("cephadm.services.mgmt_gateway.get_dashboard_endpoints", lambda _: (["ceph-node-2:8443", "ceph-node-2:8443"], "https"))
@@ -4567,8 +4567,8 @@ class TestMgmtGateway:
     @patch("cephadm.services.mgmt_gateway.MgmtGatewayService.get_service_discovery_endpoints")
     @patch("cephadm.services.cephadmservice.CephadmService.get_certificates",
            lambda instance, dspec, ips=None: (ceph_generated_cert, ceph_generated_key))
-    @patch("cephadm.services.mgmt_gateway.MgmtGatewayService.get_internal_certificates",
-           lambda instance, svc_spec, dspec: (ceph_generated_cert, ceph_generated_key))
+    @patch("cephadm.services.mgmt_gateway.MgmtGatewayService.get_self_signed_certificates_with_label",
+           lambda instance, svc_spec, dspec, label: (ceph_generated_cert, ceph_generated_key))
     @patch("cephadm.module.CephadmOrchestrator.get_mgr_ip", lambda _: '::1')
     @patch('cephadm.cert_mgr.CertMgr.get_root_ca', lambda instance: cephadm_root_ca)
     @patch("cephadm.services.mgmt_gateway.get_dashboard_endpoints", lambda _: (["ceph-node-2:8443", "ceph-node-2:8443"], "https"))
@@ -4910,8 +4910,8 @@ class TestMgmtGateway:
     @patch("cephadm.services.mgmt_gateway.MgmtGatewayService.get_service_endpoints")
     @patch("cephadm.services.cephadmservice.CephadmService.get_certificates",
            lambda instance, dspec, ips=None: (ceph_generated_cert, ceph_generated_key))
-    @patch("cephadm.services.mgmt_gateway.MgmtGatewayService.get_internal_certificates",
-           lambda instance, svc_spec, dspec: (ceph_generated_cert, ceph_generated_key))
+    @patch("cephadm.services.mgmt_gateway.MgmtGatewayService.get_self_signed_certificates_with_label",
+           lambda instance, svc_spec, dspec, label: (ceph_generated_cert, ceph_generated_key))
     @patch("cephadm.module.CephadmOrchestrator.get_mgr_ip", lambda _: '::1')
     @patch('cephadm.cert_mgr.CertMgr.get_root_ca', lambda instance: cephadm_root_ca)
     @patch("cephadm.services.mgmt_gateway.get_dashboard_endpoints", lambda _: (["ceph-node-2:8443", "ceph-node-2:8443"], "https"))
@@ -4924,8 +4924,8 @@ class TestMgmtGateway:
            lambda instance, dspec, ips=None: (ceph_generated_cert, ceph_generated_key))
     @patch("cephadm.services.oauth2_proxy.OAuth2ProxyService.get_certificates",
            lambda instance, dspec, ips=None: (ceph_generated_cert, ceph_generated_key))
-    @patch("cephadm.services.mgmt_gateway.MgmtGatewayService.get_internal_certificates",
-           lambda instance, svc_spec, dspec: (ceph_generated_cert, ceph_generated_key))
+    @patch("cephadm.services.mgmt_gateway.MgmtGatewayService.get_self_signed_certificates_with_label",
+           lambda instance, svc_spec, dspec, label: (ceph_generated_cert, ceph_generated_key))
     @patch("cephadm.module.CephadmOrchestrator.get_mgr_ip", lambda _: '::1')
     @patch('cephadm.cert_mgr.CertMgr.get_root_ca', lambda instance: cephadm_root_ca)
     @patch("cephadm.services.mgmt_gateway.get_dashboard_endpoints", lambda _: (["ceph-node-2:8443", "ceph-node-2:8443"], "https"))

@@ -326,7 +326,6 @@ placement:
     pattern_type: regex
 ---
 service_type: rgw
-certificate_source: cephadm-signed
 service_id: default-rgw-realm.eu-central-1.1
 service_name: rgw.default-rgw-realm.eu-central-1.1
 placement:
@@ -336,6 +335,7 @@ networks:
 - 10.0.0.0/8
 - 192.168.0.0/16
 spec:
+  certificate_source: cephadm-signed
   rgw_exit_timeout_secs: 60
   rgw_frontend_type: civetweb
   rgw_realm: default-rgw-realm
@@ -357,36 +357,35 @@ spec:
     model: NVME-QQQQ-987
 ---
 service_type: alertmanager
-certificate_source: cephadm-signed
-ssl: true
 service_name: alertmanager
 spec:
+  certificate_source: cephadm-signed
   port: 1234
+  ssl: true
   user_data:
     default_webhook_urls:
     - foo
 ---
 service_type: grafana
-certificate_source: cephadm-signed
-ssl: true
 service_name: grafana
 spec:
   anonymous_access: true
+  certificate_source: cephadm-signed
   port: 1234
   protocol: https
+  ssl: true
 ---
 service_type: grafana
-certificate_source: cephadm-signed
-ssl: true
 service_name: grafana
 spec:
   anonymous_access: true
+  certificate_source: cephadm-signed
   initial_admin_password: secure
   port: 1234
   protocol: https
+  ssl: true
 ---
 service_type: ingress
-certificate_source: cephadm-signed
 service_id: rgw.foo
 service_name: ingress.rgw.foo
 placement:
@@ -396,6 +395,7 @@ placement:
   - host3
 spec:
   backend_service: rgw.foo
+  certificate_source: cephadm-signed
   first_virtual_router_id: 50
   frontend_port: 8080
   monitor_port: 8081
@@ -414,7 +414,6 @@ spec:
   port: 1234
 ---
 service_type: iscsi
-certificate_source: cephadm-signed
 service_id: iscsi
 service_name: iscsi.iscsi
 networks:
@@ -423,6 +422,7 @@ spec:
   api_password: admin
   api_port: 5000
   api_user: admin
+  certificate_source: cephadm-signed
   pool: pool
   trusted_ip_list:
   - ::1
@@ -500,15 +500,15 @@ spec:
   snmp_version: V3
 ---
 service_type: grafana
-certificate_source: cephadm-signed
-ssl: true
 service_name: grafana
 placement:
   count: 1
 spec:
   anonymous_access: false
+  certificate_source: cephadm-signed
   initial_admin_password: password
   protocol: https
+  ssl: true
 """.split('---\n'))
 def test_yaml(y):
     data = yaml.safe_load(y)
