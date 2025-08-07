@@ -4,8 +4,10 @@
 #include "tools/rbd/ArgumentTypes.h"
 #include "tools/rbd/Shell.h"
 #include "tools/rbd/Utils.h"
-#include "include/types.h"
+#include "include/rados.h" // for CEPH_NOSNAP
+#include "include/container_ios.h"
 #include "include/stringify.h"
+#include "include/types.h" // for byte_u_t
 #include "common/errno.h"
 #include "common/Formatter.h"
 #include "common/TextTable.h"

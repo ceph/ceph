@@ -2,13 +2,14 @@
 #define TEST_STRING_H
 
 #include "common/Formatter.h"
+#include "include/encoding_string.h"
 
 // wrapper for std::string that implements the dencoder interface
 class string_wrapper {
   std::string s;
   public:
    string_wrapper() = default;
-   string_wrapper(string s1)
+   string_wrapper(std::string s1)
     : s(s1)
    {}
 

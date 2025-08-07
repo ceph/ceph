@@ -16,6 +16,7 @@
 
 #include <sstream>
 
+#include "include/container_ios.h"
 #include "include/compat.h"
 #include "include/str_list.h"
 #include "common/BackTrace.h"

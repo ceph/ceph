@@ -7,6 +7,7 @@
 #include <stdexcept>
 #include <string>
 #include <typeindex>
+#include "include/encoding.h"
 #include <include/types.h>
 #include <boost/container/flat_map.hpp>
 #include <boost/container/flat_set.hpp>
@@ -16,7 +17,7 @@
 
 #include "json_spirit/json_spirit.h"
 
-#include "Formatter.h"
+#include "JSONFormatter.h"
 
 
 
@@ -826,31 +827,8 @@ public:
     }
   }
 
-  void encode(ceph::buffer::list& bl) const {
-    ENCODE_START(2, 1, bl);
-    encode((uint8_t)type, bl);
-    encode(value.str, bl);
-    encode(arr, bl);
-    encode(obj, bl);
-    encode(value.quoted, bl);
-    ENCODE_FINISH(bl);
-  }
-
-  void decode(ceph::buffer::list::const_iterator& bl) {
-    DECODE_START(2, bl);
-    uint8_t t;
-    decode(t, bl);
-    type = (Type)t;
-    decode(value.str, bl);
-    decode(arr, bl);
-    decode(obj, bl);
-    if (struct_v >= 2) {
-      decode(value.quoted, bl);
-    } else {
-      value.quoted = true;
-    }
-    DECODE_FINISH(bl);
-  }
+  void encode(ceph::buffer::list& bl) const;
+  void decode(ceph::buffer::list::const_iterator& bl);
 
   void dump(ceph::Formatter *f) const {
     switch (type) {

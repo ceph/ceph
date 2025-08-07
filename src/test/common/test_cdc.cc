@@ -6,8 +6,10 @@
 #include <iostream> // for std::cout
 #include <random>
 
+#include "include/intarith.h" // for cbits()
 #include "include/types.h"
 #include "include/buffer.h"
+#include "include/container_ios.h"
 
 #include "common/CDC.h"
 #include "gtest/gtest.h"

@@ -17,6 +17,7 @@
 
 #include <mutex>
 #include <iostream>
+#include <sstream>
 
 #include <pthread.h>
 
@@ -26,6 +27,7 @@
 #include <breakpad/client/linux/handler/exception_handler.h>
 #endif
 
+#include "include/ceph_fs.h" // for CEPH_CRYPTO_NONE
 #include "include/common_fwd.h"
 #include "include/mempool.h"
 #include "include/stringify.h"
@@ -54,6 +56,12 @@
 #include "include/spinlock.h"
 #ifndef WITH_CRIMSON
 #include "mon/MonMap.h"
+#endif
+
+#ifdef WITH_CRIMSON
+#include "crimson/common/perf_counters_collection.h"
+#else
+#include "common/perf_counters_collection.h"
 #endif
 
 // for CINIT_FLAGS

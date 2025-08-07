@@ -14,11 +14,14 @@
 #include "common/TextTable.h"
 #include "global/global_context.h"
 #include "include/ceph_features.h"
+#include "include/encoding_unordered_map.h"
 #include "include/health.h"
 #include "include/stringify.h"
 
 #include "osd/osd_types.h"
 #include "osd/OSDMap.h"
+
+#include "crush/CrushWrapper.h"
 
 #include <boost/algorithm/string.hpp>
 #include <boost/range/adaptor/reversed.hpp>
@@ -52,6 +55,9 @@ MEMPOOL_DEFINE_OBJECT_FACTORY(PGMap::Incremental, pgmap_inc, pgmap);
 
 // ---------------------
 // PGMapDigest
+
+PGMapDigest::PGMapDigest() noexcept = default;
+PGMapDigest::~PGMapDigest() noexcept = default;
 
 void PGMapDigest::encode(bufferlist& bl, uint64_t features) const
 {
@@ -1006,6 +1012,13 @@ int64_t PGMapDigest::get_pool_free_space(const OSDMap &osd_map,
 
   return avail / osd_map.pool_raw_used_rate(poolid);
 }
+
+PGMap::PGMap() noexcept
+  : version(0),
+    last_osdmap_epoch(0), last_pg_scan(0)
+{}
+
+PGMap::~PGMap() noexcept = default;
 
 int64_t PGMap::get_rule_avail(const OSDMap& osdmap, int ruleno) const
 {

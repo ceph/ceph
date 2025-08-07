@@ -13,6 +13,7 @@
  */
 
 #include "MDCache.h"
+#include "Mutation.h"
 #include "RetryMessage.h"
 #include "RetryRequest.h"
 
