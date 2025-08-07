@@ -93,6 +93,9 @@ private:
     struct HW_ctx ctx;
 };
 
+void cputrace_start();
+void cputrace_stop();
+void cputrace_reset();
 void cputrace_start(ceph::Formatter* f);
 void cputrace_stop(ceph::Formatter* f);
 void cputrace_reset(ceph::Formatter* f);

@@ -269,6 +269,16 @@ HW_profile::~HW_profile() {
     pthread_mutex_unlock(&g_profiler.global_lock);
 }
 
+void cputrace_start() {
+    pthread_mutex_lock(&g_profiler.global_lock);
+    if (g_profiler.profiling) {
+        pthread_mutex_unlock(&g_profiler.global_lock);
+        return;
+    }
+    g_profiler.profiling = true;
+    pthread_mutex_unlock(&g_profiler.global_lock);
+}
+
 void cputrace_start(ceph::Formatter* f) {
     pthread_mutex_lock(&g_profiler.global_lock);
     if (g_profiler.profiling) {
@@ -282,6 +292,16 @@ void cputrace_start(ceph::Formatter* f) {
     f->open_object_section("cputrace_start");
     f->dump_format("status", "Profiling started");
     f->close_section();
+    pthread_mutex_unlock(&g_profiler.global_lock);
+}
+
+void cputrace_stop() {
+    pthread_mutex_lock(&g_profiler.global_lock);
+    if (!g_profiler.profiling) {
+        pthread_mutex_unlock(&g_profiler.global_lock);
+        return;
+    }
+    g_profiler.profiling = false;
     pthread_mutex_unlock(&g_profiler.global_lock);
 }
 
@@ -299,6 +319,24 @@ void cputrace_stop(ceph::Formatter* f) {
     f->open_object_section("cputrace_stop");
     f->dump_format("status", "Profiling stopped");
     f->close_section();
+}
+
+void cputrace_reset() {
+    pthread_mutex_lock(&g_profiler.global_lock);
+    for (int i = 0; i < CPUTRACE_MAX_ANCHORS; ++i) {
+        if (!g_profiler.anchors[i].name) continue;
+        for (int j = 0; j < CPUTRACE_MAX_THREADS; ++j) {
+            pthread_mutex_lock(&g_profiler.anchors[i].mutex[j]);
+            arena_reset(g_profiler.anchors[i].thread_arena[j]);
+            active_contexts[i][j] = nullptr;
+            pthread_mutex_unlock(&g_profiler.anchors[i].mutex[j]);
+        }
+        g_profiler.anchors[i].call_count = 0;
+        for (int t = 0; t < CPUTRACE_RESULT_COUNT; ++t) {
+            g_profiler.anchors[i].global_sum[t] = 0;
+        }
+    }
+    pthread_mutex_unlock(&g_profiler.global_lock);
 }
 
 void cputrace_reset(ceph::Formatter* f) {
