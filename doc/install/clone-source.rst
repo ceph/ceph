@@ -119,11 +119,9 @@ will be on the ``main`` branch by default, which is the unstable
 development branch. You may choose other branches too.
 
 - ``main``: The unstable development branch.
-- ``stable-release-name``: The name of the stable, `Active Releases`_. e.g. ``Pacific``
+- ``stable-release-name``: The name of the stable, :ref:`active-releases`. e.g. ``Pacific``
 - ``next``: The release candidate branch.
 
 ::
 
 	git checkout main
-
-.. _Active Releases: https://docs.ceph.com/en/latest/releases/#active-releases
