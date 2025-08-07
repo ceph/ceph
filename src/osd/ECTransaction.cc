@@ -95,9 +95,10 @@ void ECTransaction::Generate::encode_and_write() {
     }
 
     if (transactions.contains(shard)) {
-      auto &t = transactions.at(shard);
+      auto &txn = transactions.at(shard).first;
+      auto &txn_cost = transactions.at(shard).second;
       if (to_write_eset.begin().get_start() >= plan.orig_size) {
-        t.set_alloc_hint(
+        txn.set_alloc_hint(
           coll_t(spg_t(pgid, shard)),
           ghobject_t(oid, ghobject_t::NO_GEN, shard),
           0, 0,
@@ -108,9 +109,11 @@ void ECTransaction::Generate::encode_and_write() {
       for (auto &&[offset, len]: to_write_eset) {
         buffer::list bl;
         to_write.get_buffer(shard, offset, len, bl);
-        t.write(coll_t(spg_t(pgid, shard)),
-                ghobject_t(oid, ghobject_t::NO_GEN, shard),
-                offset, bl.length(), bl, fadvise_flags);
+        txn.write(coll_t(spg_t(pgid, shard)),
+                  ghobject_t(oid, ghobject_t::NO_GEN, shard),
+                  offset, bl.length(), bl, fadvise_flags);
+        // Set cost (in Bytes) for the transaction
+        txn_cost += bl.length();
       }
     }
   }
@@ -359,7 +362,7 @@ void ECTransaction::Generate::delete_first() {
     entry->mod_desc.rmobject(entry->version.version);
     all_shards_written();
     for (auto &&[shard, t]: transactions) {
-      t.collection_move_rename(
+      t.first.collection_move_rename(
         coll_t(spg_t(pgid, shard)),
         ghobject_t(oid, ghobject_t::NO_GEN, shard),
         coll_t(spg_t(pgid, shard)),
@@ -367,7 +370,7 @@ void ECTransaction::Generate::delete_first() {
     }
   } else {
     for (auto &&[shard, t]: transactions) {
-      t.remove(
+      t.first.remove(
         coll_t(spg_t(pgid, shard)),
         ghobject_t(oid, ghobject_t::NO_GEN, shard));
     }
@@ -382,11 +385,11 @@ void ECTransaction::Generate::process_init() {
       all_shards_written();
       for (auto &&[shard, t]: transactions) {
         if (osdmap->require_osd_release >= ceph_release_t::octopus) {
-          t.create(
+          t.first.create(
             coll_t(spg_t(pgid, shard)),
             ghobject_t(oid, ghobject_t::NO_GEN, shard));
         } else {
-          t.touch(
+          t.first.touch(
             coll_t(spg_t(pgid, shard)),
             ghobject_t(oid, ghobject_t::NO_GEN, shard));
         }
@@ -395,7 +398,7 @@ void ECTransaction::Generate::process_init() {
     [&](const PGTransaction::ObjectOperation::Init::Clone &cop) {
       all_shards_written();
       for (auto &&[shard, t]: transactions) {
-        t.clone(
+        t.first.clone(
           coll_t(spg_t(pgid, shard)),
           ghobject_t(cop.source, ghobject_t::NO_GEN, shard),
           ghobject_t(oid, ghobject_t::NO_GEN, shard));
@@ -411,7 +414,7 @@ void ECTransaction::Generate::process_init() {
       ceph_assert(rop.source.is_temp());
       all_shards_written();
       for (auto &&[shard, t]: transactions) {
-        t.collection_move_rename(
+        t.first.collection_move_rename(
           coll_t(spg_t(pgid, shard)),
           ghobject_t(rop.source, ghobject_t::NO_GEN, shard),
           coll_t(spg_t(pgid, shard)),
@@ -427,7 +430,7 @@ void ECTransaction::Generate::process_init() {
 }
 
 void alloc_hint(PGTransaction::ObjectOperation& op,
-      shard_id_map<ObjectStore::Transaction> &transactions,
+      shard_id_map<std::pair<ObjectStore::Transaction, uint64_t> > &transactions,
       pg_t &pgid,
       const hobject_t &oid,
       const ECUtil::stripe_info_t &sinfo) {
@@ -443,7 +446,7 @@ void alloc_hint(PGTransaction::ObjectOperation& op,
     op.alloc_hint->expected_write_size);
 
   for (auto &&[shard, t]: transactions) {
-    t.set_alloc_hint(
+    t.first.set_alloc_hint(
       coll_t(spg_t(pgid, shard)),
       ghobject_t(oid, ghobject_t::NO_GEN, shard),
       object_size,
@@ -458,7 +461,7 @@ ECTransaction::Generate::Generate(PGTransaction &t,
     const ECUtil::stripe_info_t &sinfo,
     const std::map<hobject_t, ECUtil::shard_extent_map_t> &partial_extents,
     std::map<hobject_t, ECUtil::shard_extent_map_t> *written_map,
-    shard_id_map<ceph::os::Transaction> &transactions,
+    shard_id_map<std::pair<ceph::os::Transaction, uint64_t> > &transactions,
     const OSDMapRef &osdmap,
     const hobject_t &oid,
     PGTransaction::ObjectOperation &op,
@@ -482,7 +485,7 @@ ECTransaction::Generate::Generate(PGTransaction &t,
   vector<unsigned> old_transaction_counts(sinfo.get_k_plus_m());
 
   for (auto &&[shard, t] : transactions) {
-    old_transaction_counts[int(shard)] = t.get_num_ops();
+    old_transaction_counts[int(shard)] = t.first.get_num_ops();
   }
 
   auto obiter = t.obc_map.find(oid);
@@ -608,12 +611,12 @@ ECTransaction::Generate::Generate(PGTransaction &t,
    * not simply construct written shards here.
    */
   for (auto &&[shard, t] : transactions) {
-    if (std::cmp_greater(t.get_num_ops(), old_transaction_counts[int(shard)]) &&
+    if (std::cmp_greater(t.first.get_num_ops(), old_transaction_counts[int(shard)]) &&
         !entry->is_written_shard(shard)) {
       ldpp_dout(dpp, 20) << __func__ << " Transaction for shard " << shard << ": ";
       Formatter *f = Formatter::create("json");
       f->open_object_section("t");
-      t.dump(f);
+      t.first.dump(f);
       f->close_section();
       f->flush(*_dout);
       delete f;
@@ -668,7 +671,7 @@ void ECTransaction::Generate::truncate() {
         continue;
       }
 
-      auto &t = transactions.at(shard);
+      auto &t = transactions.at(shard).first;
       uint64_t start = eset.range_start();
       uint64_t start_align_next = ECUtil::align_next(start);
       uint64_t end = eset.range_end();
@@ -779,7 +782,7 @@ void ECTransaction::Generate::appends_and_clone_ranges() {
        * can actually truncate to a size larger than the object!
        */
       if (transactions.contains(shard)) {
-        auto &t = transactions.at(shard);
+        auto &t = transactions.at(shard).first;
         t.truncate(
           coll_t(spg_t(pgid, shard)),
           ghobject_t(oid, ghobject_t::NO_GEN, shard),
@@ -819,7 +822,7 @@ void ECTransaction::Generate::appends_and_clone_ranges() {
 
       // We need a clone...
       if (transactions.contains(shard)) {
-        auto &t = transactions.at(shard);
+        auto &t = transactions.at(shard).first;
 
         // Only touch once.
         if (!touched.contains(shard)) {
@@ -947,7 +950,7 @@ void ECTransaction::Generate::attr_updates() {
     } else {
       for (auto &&[shard, t]: transactions) {
         if (!sinfo.is_nonprimary_shard(shard)) {
-          t.rmattr(
+          t.first.rmattr(
             coll_t(spg_t(pgid, shard)),
             ghobject_t(oid, ghobject_t::NO_GEN, shard),
             attr);
@@ -983,13 +986,13 @@ void ECTransaction::Generate::attr_updates() {
   for (auto &&[shard, t]: transactions) {
     if (!sinfo.is_nonprimary_shard(shard)) {
       // Primary shard - Update all attributes
-      t.setattrs(
+      t.first.setattrs(
         coll_t(spg_t(pgid, shard)),
         ghobject_t(oid, ghobject_t::NO_GEN, shard),
         to_set);
     } else if (entry->is_written_shard(shard)) {
       // Written shard - Only update object_info attribute
-      t.setattr(
+      t.first.setattr(
         coll_t(spg_t(pgid, shard)),
         ghobject_t(oid, ghobject_t::NO_GEN, shard),
         OI_ATTR,
@@ -1008,7 +1011,7 @@ void ECTransaction::generate_transactions(
     const map<hobject_t, ECUtil::shard_extent_map_t> &partial_extents,
     vector<pg_log_entry_t> &entries,
     map<hobject_t, ECUtil::shard_extent_map_t> *written_map,
-    shard_id_map<ObjectStore::Transaction> *transactions,
+    shard_id_map<pair<ObjectStore::Transaction, uint64_t> > *transactions,
     set<hobject_t> *temp_added,
     set<hobject_t> *temp_removed,
     DoutPrefixProvider *dpp,
