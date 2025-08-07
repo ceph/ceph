@@ -135,6 +135,12 @@ class NFSService(CephService):
         # choose_next_action() ignores False/None in the symmetric diff, so
         # False <-> None transitions do not trigger reconfig or redeploy.
 
+        # BYOK related
+        if (nfs_spec.kmip_cert and nfs_spec.kmip_key and nfs_spec.kmip_ca_cert and nfs_spec.kmip_host_list):
+            deps.append(f'kmip_cert: {str(utils.md5_hash(nfs_spec.kmip_cert))}')
+            deps.append(f'kmip_key: {str(utils.md5_hash(nfs_spec.kmip_key))}')
+            deps.append(f'kmip_ca_cert: {str(utils.md5_hash(nfs_spec.kmip_ca_cert))}')
+            deps.append(f'kmip_host_list: {nfs_spec.kmip_host_list}')
         # RDMA related
         if nfs_spec.enable_rdma:
             deps.append(f'enable_rdma: {nfs_spec.enable_rdma}')
