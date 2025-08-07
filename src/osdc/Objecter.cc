@@ -2320,48 +2320,34 @@ void Objecter::resend_mon_ops()
 #undef dout_prefix
 #define dout_prefix *_dout << " ECRead::"
 
-void Objecter::ECRead::finish(int r, std::pair<uint64_t, uint64_t> &extent, bufferlist &bl) {
-
-  // FIXME: WHy is this needed?  There should be a completion mutex around
-  // the complete?
-  std::lock_guard<std::mutex> lock(mutex);
-  count--;
-
-  if (rc >= 0 && r >= 0) {
-    rc += r;
-    read_emap.insert(extent.first, extent.second, bl);
-  } else if (rc == 0) {
-    rc = r;
-  } // else ignore subsequent errors.
-
-  // do callbacks
-  if (count == 0 && rc >= 0) {
-    auto extent = read_emap.begin();
-    ldout(cct, 20) << __func__
-    << " this=" << this
-    << " off=" << extent.get_off()
-    << " oflen=" << extent.get_len()
-    << " exgtent_off=" << orig_op->ops[0].op.extent.offset
-    << " off=" << orig_op->ops[0].op.extent.length
-    << dendl;
-
-    ceph_assert(extent.get_off() == orig_op->ops[0].op.extent.offset);
-    ceph_assert(extent.get_len() == orig_op->ops[0].op.extent.length);
-    orig_op->out_bl[0]->append(extent.get_val());
-    Op::complete(std::move(orig_op->onfinish), osdcode(rc), rc, objecter.service.get_executor());
-  }
-}
 Objecter::ECRead::~ECRead() {
   ldout(cct, 20) << __func__ << this << dendl;
 
-  ceph_assert(count == 0);
+  auto bl = orig_op->out_bl[0];
+
+  // This should only happen on a single thread.
+  for (auto & s : sub_reads) {
+    if (rc >= 0 && s.rc >= 0) {
+      rc += s.rc;
+      bl->append(s.bl);
+    } else if (rc == 0) {
+      rc = s.rc;
+      bl->clear();
+    } // else ignore subsequent errors.
+  }
+
+  // do callbacks
+  if (rc >= 0) {
+    ldout(cct, 20) << __func__
+    << " this=" << this
+    << " extent_off=" << orig_op->ops[0].op.extent.offset
+    << " off=" << orig_op->ops[0].op.extent.length
+    << dendl;
+    Op::complete(std::move(orig_op->onfinish), osdcode(rc), rc, objecter.service.get_executor());
+  }
+
   ceph_assert(orig_op);
-  if (rc >= 0 || count != 0) {
-    // Either successful or read was cancelled, in which case, we treat it like
-    // read was simply dropped.
-    if (count != 0) {
-      rc = 0;
-    }
+  if (rc >= 0) {
     objecter._finish_op(orig_op, rc);
   } else {
     shunique_lock rl(objecter.rwlock, ceph::acquire_shared);
@@ -2405,7 +2391,8 @@ std::shared_ptr<Objecter::ECRead> Objecter::ECRead::create(Op *op, Objecter &obj
   vector<Op*> ops_to_send(count);
 
   uint64_t check_len = 0;
-  auto ec_read = std::make_shared<ECRead>(op, objecter, count, cct);
+  auto ec_read = std::make_shared<ECRead>(op, objecter, cct);
+  auto &sub_reads = ec_read->sub_reads;
   for (int i = 0; i < count; i++) {
     uint64_t off = offset;
     offset = (start_chunk + i + 1) * chunk_size;
@@ -2413,9 +2400,10 @@ std::shared_ptr<Objecter::ECRead> Objecter::ECRead::create(Op *op, Objecter &obj
     length -= len;
     ceph_assert(len < 0x7FFFFFFFFFFFFFFF);
     check_len += len;
-    auto fin = new SubRead(ec_read, off, len); // Self-destructs when called.
+    sub_reads.emplace_back();
+    auto fin = new Finisher(ec_read, &sub_reads[i]); // Self-destructs when called.
     ops_to_send[i] = objecter.prepare_read_op(t.base_oid,
-      t.base_oloc, off, len, op->snapid, &fin->bl, osd_op.flags, fin);
+      t.base_oloc, off, len, op->snapid, &sub_reads[i].bl, osd_op.flags, fin);
   }
 
   ceph_assert(length == 0);

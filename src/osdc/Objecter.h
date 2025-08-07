@@ -2151,30 +2151,36 @@ public:
 
   using ec_extent_map = interval_map<uint64_t, ceph::buffer::list, bl_split_merge>;
   struct ECRead {
-    void finish(int r, std::pair<uint64_t, uint64_t> &extent, bufferlist &bl);
-
-    struct SubRead : Context {
-      std::shared_ptr<ECRead> ec_read;
+   private:
+    struct SubRead {
       bufferlist bl;
-      std::pair<uint64_t, uint64_t> extent;
+      int rc = -EIO;
+    };
 
-      SubRead(std::shared_ptr<ECRead> ec_read, uint64_t off, uint64_t len) : ec_read(ec_read), extent(off, len) {}
+    // This structure self-destructs on each IO completions, using a legacy
+    // C++ pattern (no shared_ptr). We use the finish callback to record the
+    // RC, but otherwise rely on the shared_ptr destroying ec_read to deal with
+    // completion of the parent IO.
+    struct Finisher : Context {
+      std::shared_ptr<ECRead> ec_read;
+      SubRead *sub_read;
+
+      Finisher(std::shared_ptr<ECRead> ec_read, SubRead *sub_read) : ec_read(ec_read), sub_read(sub_read) {}
       void finish(int r) override {
-        ec_read->finish(r, extent, bl);
+        sub_read->rc = r;
       }
     };
 
     Op *orig_op;
     Objecter &objecter;
-    int count = 0;
+    std::vector<SubRead> sub_reads;
     int rc = 0;
-    ec_extent_map read_emap;
     CephContext *cct;
-    mutable std::mutex mutex;
 
-    ECRead(Op *op, Objecter &objecter, int count, CephContext *cct) : orig_op(op), objecter(objecter), count(count), cct(cct) {}
+
+   public:
+    ECRead(Op *op, Objecter &objecter, CephContext *cct) : orig_op(op), objecter(objecter), cct(cct) {}
     ~ECRead();
-
     static std::shared_ptr<ECRead> create(Op *op, Objecter &objecter,
       shunique_lock<ceph::shared_mutex>& sul, ceph_tid_t *ptid, int *ctx_budget, CephContext *cct);
   };
