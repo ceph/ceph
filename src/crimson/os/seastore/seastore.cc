@@ -398,24 +398,16 @@ SeaStore::mkfs_ertr::future<> SeaStore::test_mkfs(uuid_d new_osd_fsid)
   INFO("uuid={} ...", new_osd_fsid);
 
   ceph_assert(seastar::this_shard_id() == primary_core);
-  return read_meta("mkfs_done"
-  ).then([this, new_osd_fsid, FNAME](auto tuple) {
-    auto [done, value] = tuple;
-    if (done == 0) {
-      ERROR("failed");
-      return seastar::now();
-    } 
-    return shard_stores.local().mkfs_managers(
-    ).safe_then([this, new_osd_fsid] {
-      return prepare_meta(new_osd_fsid);
-    }).safe_then([FNAME] {
-      INFO("done");
-    }).handle_error(
-      crimson::ct_error::assert_all{
-        "Invalid error in SeaStore::mkfs"
-      }
-    );
-  });
+  // todo: read_meta to return errorator
+  auto [done, value] = co_await read_meta("mkfs_done");
+  if (done == 0) {
+    ERROR("failed");
+    co_return;
+  }
+  co_await shard_stores.local().mkfs_managers().handle_error(
+    crimson::ct_error::assert_all{"Invalid error in SeaStore::mkfs"});
+  co_await prepare_meta(new_osd_fsid);
+  INFO("done");
 }
 
 seastar::future<> SeaStore::prepare_meta(uuid_d new_osd_fsid)
