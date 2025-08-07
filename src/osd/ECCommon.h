@@ -546,7 +546,7 @@ struct ECCommon {
           pg_t pgid,
           const ECUtil::stripe_info_t &sinfo,
           std::map<hobject_t, ECUtil::shard_extent_map_t> *written,
-          shard_id_map<ceph::os::Transaction> *transactions,
+          shard_id_map<std::pair<ceph::os::Transaction, uint64_t> > *transactions,
           DoutPrefixProvider *dpp,
           const OSDMapRef &osdmap) = 0;
 
