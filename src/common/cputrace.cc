@@ -32,39 +32,6 @@ static long perf_event_open(struct perf_event_attr* hw_event, pid_t pid,
     return syscall(__NR_perf_event_open, hw_event, pid, cpu, group_fd, flags);
 }
 
-static Arena* arena_create(size_t size) {
-    void* start = mmap(nullptr, size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-    PROFILE_ASSERT(start != MAP_FAILED);
-    ArenaRegion* region = (ArenaRegion*)malloc(sizeof(ArenaRegion));
-    region->start = start;
-    region->end = (char*)start + size;
-    region->current = start;
-    region->next = nullptr;
-    Arena* a = (Arena*)malloc(sizeof(Arena));
-    a->region = region;
-    return a;
-}
-
-static void* arena_alloc(Arena* arena, size_t size) {
-    if ((char*)arena->region->current + size > (char*)arena->region->end) {
-        fprintf(stderr, "Arena allocation failed: insufficient space for %zu bytes\n", size);
-        return nullptr;
-    }
-    void* ptr = arena->region->current;
-    arena->region->current = (char*)arena->region->current + size;
-    return ptr;
-}
-
-static void arena_reset(Arena* arena) {
-    arena->region->current = arena->region->start;
-}
-
-static void arena_destroy(Arena* arena) {
-    munmap(arena->region->start, (char*)arena->region->end - (char*)arena->region->start);
-    free(arena->region);
-    free(arena);
-}
-
 static uint64_t get_thread_id() {
     if (!thread_id_initialized) {
         uint64_t tid = pthread_self();
@@ -109,32 +76,28 @@ static void close_perf_fd(int& fd) {
     }
 }
 
-static void HW_init(HW_ctx* ctx, HW_conf* conf) {
-    *ctx = { -1, -1, -1, -1, -1, -1, 0, 0, 0, 0, 0, *conf };
-}
-
-static void HW_start(HW_ctx* ctx) {
+void HW_init(HW_ctx* ctx, uint64_t flags) {
     struct perf_event_attr pe;
     int parent_fd = -1;
 
-    if (ctx->conf.capture_swi) {
+    if (flags & HW_PROFILE_SWI) {
         setup_perf_event(&pe, PERF_TYPE_SOFTWARE, PERF_COUNT_SW_CONTEXT_SWITCHES);
         open_perf_fd(ctx->fd_swi, ctx->id_swi, &pe, "SWI", -1);
         parent_fd = ctx->fd_swi;
     }
-    else if (ctx->conf.capture_cyc) {
+    else if (flags & HW_PROFILE_CYC) {
         setup_perf_event(&pe, PERF_TYPE_HARDWARE, PERF_COUNT_HW_CPU_CYCLES);
         open_perf_fd(ctx->fd_cyc, ctx->id_cyc, &pe, "CYC", -1);
         parent_fd = ctx->fd_cyc;
-    } else if (ctx->conf.capture_cmiss) {
+    } else if (flags & HW_PROFILE_CMISS) {
         setup_perf_event(&pe, PERF_TYPE_HARDWARE, PERF_COUNT_HW_CACHE_MISSES);
         open_perf_fd(ctx->fd_cmiss, ctx->id_cmiss, &pe, "CMISS", -1);
         parent_fd = ctx->fd_cmiss;
-    } else if (ctx->conf.capture_bmiss) {
+    } else if (flags & HW_PROFILE_BMISS) {
         setup_perf_event(&pe, PERF_TYPE_HARDWARE, PERF_COUNT_HW_BRANCH_MISSES);
         open_perf_fd(ctx->fd_bmiss, ctx->id_bmiss, &pe, "BMISS", -1);
         parent_fd = ctx->fd_bmiss;
-    } else if (ctx->conf.capture_ins) {
+    } else if (flags & HW_PROFILE_INS) {
         setup_perf_event(&pe, PERF_TYPE_HARDWARE, PERF_COUNT_HW_INSTRUCTIONS);
         open_perf_fd(ctx->fd_ins, ctx->id_ins, &pe, "INS", -1);
         parent_fd = ctx->fd_ins;
@@ -142,23 +105,23 @@ static void HW_start(HW_ctx* ctx) {
 
     ctx->parent_fd = parent_fd;
 
-    if (ctx->conf.capture_swi && ctx->fd_swi == -1 && parent_fd != -1) {
+    if (flags & HW_PROFILE_SWI && ctx->fd_swi == -1 && parent_fd != -1) {
         setup_perf_event(&pe, PERF_TYPE_SOFTWARE, PERF_COUNT_SW_CONTEXT_SWITCHES);
         open_perf_fd(ctx->fd_swi, ctx->id_swi, &pe, "SWI", parent_fd);
     }
-    if (ctx->conf.capture_cyc && ctx->fd_cyc == -1 && parent_fd != -1) {
+    if (flags & HW_PROFILE_CYC && ctx->fd_cyc == -1 && parent_fd != -1) {
         setup_perf_event(&pe, PERF_TYPE_HARDWARE, PERF_COUNT_HW_CPU_CYCLES);
         open_perf_fd(ctx->fd_cyc, ctx->id_cyc, &pe, "CYC", parent_fd);
     }
-    if (ctx->conf.capture_cmiss && ctx->fd_cmiss == -1 && parent_fd != -1) {
+    if (flags & HW_PROFILE_CMISS && ctx->fd_cmiss == -1 && parent_fd != -1) {
         setup_perf_event(&pe, PERF_TYPE_HARDWARE, PERF_COUNT_HW_CACHE_MISSES);
         open_perf_fd(ctx->fd_cmiss, ctx->id_cmiss, &pe, "CMISS", parent_fd);
     }
-    if (ctx->conf.capture_bmiss && ctx->fd_bmiss == -1 && parent_fd != -1) {
+    if (flags & HW_PROFILE_BMISS && ctx->fd_bmiss == -1 && parent_fd != -1) {
         setup_perf_event(&pe, PERF_TYPE_HARDWARE, PERF_COUNT_HW_BRANCH_MISSES);
         open_perf_fd(ctx->fd_bmiss, ctx->id_bmiss, &pe, "BMISS", parent_fd);
     }
-    if (ctx->conf.capture_ins && ctx->fd_ins == -1 && parent_fd != -1) {
+    if (flags & HW_PROFILE_INS && ctx->fd_ins == -1 && parent_fd != -1) {
         setup_perf_event(&pe, PERF_TYPE_HARDWARE, PERF_COUNT_HW_INSTRUCTIONS);
         open_perf_fd(ctx->fd_ins, ctx->id_ins, &pe, "INS", parent_fd);
     }
@@ -169,7 +132,7 @@ static void HW_start(HW_ctx* ctx) {
     }
 }
 
-static void HW_clean(HW_ctx* ctx) {
+void HW_clean(HW_ctx* ctx) {
     close_perf_fd(ctx->fd_swi);
     close_perf_fd(ctx->fd_cyc);
     close_perf_fd(ctx->fd_cmiss);
@@ -178,48 +141,54 @@ static void HW_clean(HW_ctx* ctx) {
     close_perf_fd(ctx->parent_fd);
 }
 
-static void read_perf_event(HW_ctx* ctx, cputrace_anchor* anchor, uint64_t tid) {
-    pthread_mutex_lock(&anchor->mutex[tid]);
-    Arena* arena = anchor->thread_arena[tid];
-    if (ctx->parent_fd != -1) {
-        char buf[256];
-        struct read_format* rf = (struct read_format*)buf;
-
-        if (read(ctx->parent_fd, buf, sizeof(buf)) > 0) {
-            for (uint64_t i = 0; i < rf->nr; i++) {
-                cputrace_result_type type;
-                if (rf->values[i].id == ctx->id_swi) type = CPUTRACE_RESULT_SWI;
-                else if (rf->values[i].id == ctx->id_cyc) type = CPUTRACE_RESULT_CYC;
-                else if (rf->values[i].id == ctx->id_cmiss) type = CPUTRACE_RESULT_CMISS;
-                else if (rf->values[i].id == ctx->id_bmiss) type = CPUTRACE_RESULT_BMISS;
-                else if (rf->values[i].id == ctx->id_ins) type = CPUTRACE_RESULT_INS;
-                else continue;
-                auto* r = (cputrace_anchor_result*)arena_alloc(arena, sizeof(cputrace_anchor_result));
-                r->type = type;
-                r->value = rf->values[i].value;
+void HW_read(HW_ctx* ctx, sample_t* measure) {
+    if (ctx->parent_fd == -1) {
+        return;
+    }
+    char buf[256];
+    struct read_format* rf = (struct read_format*)buf;
+    if (read(ctx->parent_fd, buf, sizeof(buf)) > 0) {
+        for (uint64_t i = 0; i < rf->nr; i++) {
+            if (rf->values[i].id == ctx->id_swi) {
+                measure->swi = rf->values[i].value;
+            } else if (rf->values[i].id == ctx->id_cyc) {
+                measure->cyc = rf->values[i].value;
+            } else if (rf->values[i].id == ctx->id_cmiss) {
+                measure->cmiss = rf->values[i].value;
+            } else if (rf->values[i].id == ctx->id_bmiss) {
+                measure->bmiss = rf->values[i].value;
+            } else if (rf->values[i].id == ctx->id_ins) {
+                measure->ins = rf->values[i].value;
             }
-            ioctl(ctx->parent_fd, PERF_EVENT_IOC_RESET, PERF_IOC_FLAG_GROUP);
-        } else {
-            fprintf(stderr, "Failed to read perf events: %s\n", strerror(errno));
         }
     }
-    pthread_mutex_unlock(&anchor->mutex[tid]);
 }
 
-static void aggregate_thread_results(cputrace_anchor* anchor, uint64_t tid) {
-    pthread_mutex_lock(&anchor->mutex[tid]);
-    auto* arena = anchor->thread_arena[tid];
-    auto* arr = (cputrace_anchor_result*)arena->region->start;
-    size_t count = ((char*)arena->region->current - (char*)arena->region->start) / sizeof(arr[0]);
-    for (size_t i = 0; i < count; ++i) {
-        if (arr[i].type == CPUTRACE_RESULT_CALL_COUNT && arr[i].value == 1) {
-            anchor->call_count += 1;
-        } else {
-            anchor->global_sum[arr[i].type] += arr[i].value;
+static void read_perf_event(HW_ctx* ctx, cputrace_anchor* anchor) {
+    pthread_mutex_lock(&anchor->lock);
+    if (ctx->parent_fd != -1) {
+        sample_t measure;
+        HW_read(ctx, &measure);
+        if (measure.swi) {
+            anchor->global_results.swi += measure.swi;
+        }
+        if (measure.cyc) {
+            anchor->global_results.cyc += measure.cyc;
+        }
+        if (measure.cmiss) {
+            anchor->global_results.cmiss += measure.cmiss;
+        }
+        if (measure.bmiss) {
+            anchor->global_results.bmiss += measure.bmiss;
+        }
+        if (measure.ins) {
+            anchor->global_results.ins += measure.ins;
+        }
+        if (ioctl(ctx->parent_fd, PERF_EVENT_IOC_RESET, PERF_IOC_FLAG_GROUP) != 0) {
+            fprintf(stderr, "Failed to reset perf counters: %s\n", strerror(errno));
         }
     }
-    arena_reset(arena);
-    pthread_mutex_unlock(&anchor->mutex[tid]);
+    pthread_mutex_unlock(&anchor->lock);
 }
 
 HW_profile::HW_profile(const char* function, uint64_t index, uint64_t flags)
@@ -227,29 +196,18 @@ HW_profile::HW_profile(const char* function, uint64_t index, uint64_t flags)
     if (index >= CPUTRACE_MAX_ANCHORS || !g_profiler.profiling)
         return;
 
+    uint64_t tid = get_thread_id();
+
     cputrace_anchor& anchor = g_profiler.anchors[index];
     anchor.name = function;
     anchor.flags = flags;
-    uint64_t tid = get_thread_id();
 
-    pthread_mutex_lock(&anchor.mutex[tid]);
-    auto* a = anchor.thread_arena[tid];
-    auto* r = (cputrace_anchor_result*)arena_alloc(a, sizeof(cputrace_anchor_result));
-    if (r) {
-        r->type = CPUTRACE_RESULT_CALL_COUNT;
-        r->value = 1;
-    }
-    pthread_mutex_unlock(&anchor.mutex[tid]);
+    pthread_mutex_lock(&anchor.lock);
+    anchor.global_results.call_count += 1;
+    pthread_mutex_unlock(&anchor.lock);
 
-    HW_conf conf = {0};
-    if (flags & HW_PROFILE_SWI) conf.capture_swi = true;
-    if (flags & HW_PROFILE_CYC) conf.capture_cyc = true;
-    if (flags & HW_PROFILE_CMISS) conf.capture_cmiss = true;
-    if (flags & HW_PROFILE_BMISS) conf.capture_bmiss = true;
-    if (flags & HW_PROFILE_INS) conf.capture_ins = true;
-
-    HW_init(&ctx, &conf);
-    HW_start(&ctx);
+    ctx = HW_ctx_empty;
+    HW_init(&ctx, flags);
 
     pthread_mutex_lock(&g_profiler.global_lock);
     active_contexts[index][tid] = &ctx;
@@ -262,10 +220,19 @@ HW_profile::~HW_profile() {
 
     uint64_t tid = get_thread_id();
     pthread_mutex_lock(&g_profiler.global_lock);
-    read_perf_event(&ctx, &g_profiler.anchors[index], tid);
-    aggregate_thread_results(&g_profiler.anchors[index], tid);
+    read_perf_event(&ctx, &g_profiler.anchors[index]);
     HW_clean(&ctx);
     active_contexts[index][tid] = nullptr;
+    pthread_mutex_unlock(&g_profiler.global_lock);
+}
+
+void cputrace_start() {
+    pthread_mutex_lock(&g_profiler.global_lock);
+    if (g_profiler.profiling) {
+        pthread_mutex_unlock(&g_profiler.global_lock);
+        return;
+    }
+    g_profiler.profiling = true;
     pthread_mutex_unlock(&g_profiler.global_lock);
 }
 
@@ -285,6 +252,16 @@ void cputrace_start(ceph::Formatter* f) {
     pthread_mutex_unlock(&g_profiler.global_lock);
 }
 
+void cputrace_stop() {
+    pthread_mutex_lock(&g_profiler.global_lock);
+    if (!g_profiler.profiling) {
+        pthread_mutex_unlock(&g_profiler.global_lock);
+        return;
+    }
+    g_profiler.profiling = false;
+    pthread_mutex_unlock(&g_profiler.global_lock);
+}
+
 void cputrace_stop(ceph::Formatter* f) {
     pthread_mutex_lock(&g_profiler.global_lock);
     if (!g_profiler.profiling) {
@@ -301,20 +278,24 @@ void cputrace_stop(ceph::Formatter* f) {
     f->close_section();
 }
 
+void cputrace_reset() {
+    pthread_mutex_lock(&g_profiler.global_lock);
+    for (int i = 0; i < CPUTRACE_MAX_ANCHORS; ++i) {
+        if (!g_profiler.anchors[i].name) continue;
+        pthread_mutex_lock(&g_profiler.anchors[i].lock);
+        g_profiler.anchors[i].global_results = results{};
+        pthread_mutex_unlock(&g_profiler.anchors[i].lock);
+    }
+    pthread_mutex_unlock(&g_profiler.global_lock);
+}
+
 void cputrace_reset(ceph::Formatter* f) {
     pthread_mutex_lock(&g_profiler.global_lock);
     for (int i = 0; i < CPUTRACE_MAX_ANCHORS; ++i) {
         if (!g_profiler.anchors[i].name) continue;
-        for (int j = 0; j < CPUTRACE_MAX_THREADS; ++j) {
-            pthread_mutex_lock(&g_profiler.anchors[i].mutex[j]);
-            arena_reset(g_profiler.anchors[i].thread_arena[j]);
-            active_contexts[i][j] = nullptr;
-            pthread_mutex_unlock(&g_profiler.anchors[i].mutex[j]);
-        }
-        g_profiler.anchors[i].call_count = 0;
-        for (int t = 0; t < CPUTRACE_RESULT_COUNT; ++t) {
-            g_profiler.anchors[i].global_sum[t] = 0;
-        }
+        pthread_mutex_lock(&g_profiler.anchors[i].lock);
+        g_profiler.anchors[i].global_results = results{};
+        pthread_mutex_unlock(&g_profiler.anchors[i].lock);
     }
     f->open_object_section("cputrace_reset");
     f->dump_format("status", "Counters reset");
@@ -335,38 +316,37 @@ void cputrace_dump(ceph::Formatter* f, const std::string& logger, const std::str
 
         for (int j = 0; j < CPUTRACE_MAX_THREADS; ++j) {
             if (active_contexts[i][j]) {
-                read_perf_event(active_contexts[i][j], &g_profiler.anchors[i], j);
+                read_perf_event(active_contexts[i][j], &g_profiler.anchors[i]);
             }
-            aggregate_thread_results(&g_profiler.anchors[i], j);
         }
 
         f->open_object_section(anchor.name);
-        f->dump_unsigned("call_count", anchor.call_count);
+        f->dump_unsigned("call_count", anchor.global_results.call_count);
 
         if (anchor.flags & HW_PROFILE_SWI && (counter.empty() || counter == "context_switches")) {
-            f->dump_unsigned("context_switches", anchor.global_sum[CPUTRACE_RESULT_SWI]);
-            if (anchor.call_count)
-                f->dump_float("avg_context_switches", (double)anchor.global_sum[CPUTRACE_RESULT_SWI] / anchor.call_count);
+            f->dump_unsigned("context_switches", anchor.global_results.swi);
+            if (anchor.global_results.call_count)
+                f->dump_float("avg_context_switches", (double)anchor.global_results.swi / anchor.global_results.call_count);
         }
         if (anchor.flags & HW_PROFILE_CYC && (counter.empty() || counter == "cpu_cycles")) {
-            f->dump_unsigned("cpu_cycles", anchor.global_sum[CPUTRACE_RESULT_CYC]);
-            if (anchor.call_count)
-                f->dump_float("avg_cpu_cycles", (double)anchor.global_sum[CPUTRACE_RESULT_CYC] / anchor.call_count);
+            f->dump_unsigned("cpu_cycles", anchor.global_results.cyc);
+            if (anchor.global_results.call_count)
+                f->dump_float("avg_cpu_cycles", (double)anchor.global_results.cyc / anchor.global_results.call_count);
         }
         if (anchor.flags & HW_PROFILE_CMISS && (counter.empty() || counter == "cache_misses")) {
-            f->dump_unsigned("cache_misses", anchor.global_sum[CPUTRACE_RESULT_CMISS]);
-            if (anchor.call_count)
-                f->dump_float("avg_cache_misses", (double)anchor.global_sum[CPUTRACE_RESULT_CMISS] / anchor.call_count);
+            f->dump_unsigned("cache_misses", anchor.global_results.cmiss);
+            if (anchor.global_results.call_count)
+                f->dump_float("avg_cache_misses", (double)anchor.global_results.cmiss / anchor.global_results.call_count);
         }
         if (anchor.flags & HW_PROFILE_BMISS && (counter.empty() || counter == "branch_misses")) {
-            f->dump_unsigned("branch_misses", anchor.global_sum[CPUTRACE_RESULT_BMISS]);
-            if (anchor.call_count)
-                f->dump_float("avg_branch_misses", (double)anchor.global_sum[CPUTRACE_RESULT_BMISS] / anchor.call_count);
+            f->dump_unsigned("branch_misses", anchor.global_results.bmiss);
+            if (anchor.global_results.call_count)
+                f->dump_float("avg_branch_misses", (double)anchor.global_results.bmiss / anchor.global_results.call_count);
         }
         if (anchor.flags & HW_PROFILE_INS && (counter.empty() || counter == "instructions")) {
-            f->dump_unsigned("instructions", anchor.global_sum[CPUTRACE_RESULT_INS]);
-            if (anchor.call_count)
-                f->dump_float("avg_instructions", (double)anchor.global_sum[CPUTRACE_RESULT_INS] / anchor.call_count);
+            f->dump_unsigned("instructions", anchor.global_results.ins);
+            if (anchor.global_results.call_count)
+                f->dump_float("avg_instructions", (double)anchor.global_results.ins / anchor.global_results.call_count);
         }
         f->close_section();
         dumped = true;
@@ -390,46 +370,45 @@ void cputrace_print_to_stringstream(std::stringstream& ss) {
 
         for (int j = 0; j < CPUTRACE_MAX_THREADS; ++j) {
             if (active_contexts[i][j]) {
-                read_perf_event(active_contexts[i][j], &g_profiler.anchors[i], j);
+                read_perf_event(active_contexts[i][j], &g_profiler.anchors[i]);
             }
-            aggregate_thread_results(&g_profiler.anchors[i], j);
         }
 
         ss << "  " << anchor.name << ":\n";
-        ss << "    call_count: " << anchor.call_count << "\n";
+        ss << "    call_count: " << anchor.global_results.call_count << "\n";
 
         if (anchor.flags & HW_PROFILE_SWI) {
-            ss << "    context_switches: " << anchor.global_sum[CPUTRACE_RESULT_SWI];
-            if (anchor.call_count) {
-                ss << "\n    avg_context_switches: " << (double)anchor.global_sum[CPUTRACE_RESULT_SWI] / anchor.call_count;
+            ss << "    context_switches: " << anchor.global_results.swi;
+            if (anchor.global_results.call_count) {
+                ss << "\n    avg_context_switches: " << (double)anchor.global_results.swi / anchor.global_results.call_count;
             }
             ss << "\n";
         }
         if (anchor.flags & HW_PROFILE_CYC) {
-            ss << "    cpu_cycles: " << anchor.global_sum[CPUTRACE_RESULT_CYC];
-            if (anchor.call_count) {
-                ss << "\n    avg_cpu_cycles: " << (double)anchor.global_sum[CPUTRACE_RESULT_CYC] / anchor.call_count;
+            ss << "    cpu_cycles: " << anchor.global_results.cyc;
+            if (anchor.global_results.call_count) {
+                ss << "\n    avg_cpu_cycles: " << (double)anchor.global_results.cyc / anchor.global_results.call_count;
             }
             ss << "\n";
         }
         if (anchor.flags & HW_PROFILE_CMISS) {
-            ss << "    cache_misses: " << anchor.global_sum[CPUTRACE_RESULT_CMISS];
-            if (anchor.call_count) {
-                ss << "\n    avg_cache_misses: " << (double)anchor.global_sum[CPUTRACE_RESULT_CMISS] / anchor.call_count;
+            ss << "    cache_misses: " << anchor.global_results.cmiss;
+            if (anchor.global_results.call_count) {
+                ss << "\n    avg_cache_misses: " << (double)anchor.global_results.cmiss / anchor.global_results.call_count;
             }
             ss << "\n";
         }
         if (anchor.flags & HW_PROFILE_BMISS) {
-            ss << "    branch_misses: " << anchor.global_sum[CPUTRACE_RESULT_BMISS];
-            if (anchor.call_count) {
-                ss << "\n    avg_branch_misses: " << (double)anchor.global_sum[CPUTRACE_RESULT_BMISS] / anchor.call_count;
+            ss << "    branch_misses: " << anchor.global_results.bmiss;
+            if (anchor.global_results.call_count) {
+                ss << "\n    avg_branch_misses: " << (double)anchor.global_results.bmiss / anchor.global_results.call_count;
             }
             ss << "\n";
         }
         if (anchor.flags & HW_PROFILE_INS) {
-            ss << "    instructions: " << anchor.global_sum[CPUTRACE_RESULT_INS];
-            if (anchor.call_count) {
-                ss << "\n    avg_instructions: " << (double)anchor.global_sum[CPUTRACE_RESULT_INS] / anchor.call_count;
+            ss << "    instructions: " << anchor.global_results.ins;
+            if (anchor.global_results.call_count) {
+                ss << "\n    avg_instructions: " << (double)anchor.global_results.ins / anchor.global_results.call_count;
             }
             ss << "\n";
         }
@@ -447,29 +426,26 @@ __attribute__((constructor)) static void cputrace_init() {
         exit(1);
     }
     for (int i = 0; i < CPUTRACE_MAX_ANCHORS; ++i) {
-        for (int j = 0; j < CPUTRACE_MAX_THREADS; ++j) {
-            if (pthread_mutex_init(&g_profiler.anchors[i].mutex[j], nullptr) != 0) {
-                fprintf(stderr, "Failed to initialize mutex for anchor %d, thread %d: %s\n", i, j, strerror(errno));
-            }
-            g_profiler.anchors[i].thread_arena[j] = arena_create(4 * 1024 * 1024);
+        if (pthread_mutex_init(&g_profiler.anchors[i].lock, nullptr) != 0) {
+            fprintf(stderr, "Failed to initialize mutex for anchor %d: %s\n", i, strerror(errno));
+            exit(1);
         }
     }
     if (pthread_mutex_init(&g_profiler.global_lock, nullptr) != 0) {
         fprintf(stderr, "Failed to initialize global mutex: %s\n", strerror(errno));
+        exit(1);
     }
 }
 
 __attribute__((destructor)) static void cputrace_fini() {
     for (int i = 0; i < CPUTRACE_MAX_ANCHORS; ++i) {
-        for (int j = 0; j < CPUTRACE_MAX_THREADS; ++j) {
-            if (pthread_mutex_destroy(&g_profiler.anchors[i].mutex[j]) != 0) {
-                fprintf(stderr, "Failed to destroy mutex for anchor %d, thread %d: %s\n", i, j, strerror(errno));
-            }
-            arena_destroy(g_profiler.anchors[i].thread_arena[j]);
+        if (pthread_mutex_destroy(&g_profiler.anchors[i].lock) != 0) {
+            fprintf(stderr, "Failed to destroy mutex for anchor %d: %s\n", i, strerror(errno));
         }
     }
     if (pthread_mutex_destroy(&g_profiler.global_lock) != 0) {
         fprintf(stderr, "Failed to destroy global mutex: %s\n", strerror(errno));
     }
     free(g_profiler.anchors);
+    g_profiler.anchors = nullptr;
 }
