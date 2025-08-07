@@ -428,105 +428,71 @@ seastar::future<> SeaStore::prepare_meta(uuid_d new_osd_fsid)
   co_await write_meta("mkfs_done", "yes");
 }
 
-SeaStore::mkfs_ertr::future<> SeaStore::mkfs(uuid_d new_osd_fsid)
+Device::access_ertr::future<> SeaStore::_mkfs(uuid_d new_osd_fsid)
 {
-  LOG_PREFIX(SeaStore::mkfs);
+  LOG_PREFIX(SeaStore::_mkfs);
   INFO("uuid={}, root={} ...", new_osd_fsid, root);
-
   ceph_assert(seastar::this_shard_id() == primary_core);
-  return read_meta("mkfs_done"
-  ).then([this, new_osd_fsid, FNAME](auto tuple) {
-    auto [done, value] = tuple;
-    if (done == 0) {
-      ERROR("failed");
-      return seastar::now();
-    } else {
-      return seastar::do_with(
-        secondary_device_set_t(),
-        [this, new_osd_fsid, FNAME](auto& sds) {
-        auto fut = seastar::now();
-        if (!root.empty()) {
-          fut = seastar::open_directory(root
-          ).then([this, &sds, new_osd_fsid, FNAME](seastar::file rdir) mutable {
-            std::unique_ptr<seastar::file> root_f =
-              std::make_unique<seastar::file>(std::move(rdir));
-            auto sub = root_f->list_directory(
-              [this, &sds, new_osd_fsid, FNAME](auto de) mutable -> seastar::future<>
-            {
-              DEBUG("found file: {}", de.name);
-              if (de.name.find("block.") == 0
-                  && de.name.length() > 6 /* 6 for "block." */) {
-                std::string entry_name = de.name;
-                auto dtype_end = entry_name.find_first_of('.', 6);
-                device_type_t dtype =
-                  string_to_device_type(
-                    entry_name.substr(6, dtype_end - 6));
-                if (dtype == device_type_t::NONE) {
-                  // invalid device type
-                  return seastar::now();
-                }
-                auto id = std::stoi(entry_name.substr(dtype_end + 1));
-                std::string path = fmt::format("{}/{}", root, entry_name);
-                return Device::make_device(path, dtype
-                ).then([this, &sds, id, dtype, new_osd_fsid](DeviceRef sec_dev) {
-                  auto p_sec_dev = sec_dev.get();
-                  secondaries.emplace_back(std::move(sec_dev));
-                  return p_sec_dev->start(
-                  ).then([&sds, id, dtype, new_osd_fsid, p_sec_dev]() {
-                    magic_t magic = (magic_t)std::rand();
-                    sds.emplace(
-                      (device_id_t)id,
-                      device_spec_t{magic, dtype, (device_id_t)id});
-                    return p_sec_dev->mkfs(device_config_t::create_secondary(
-                      new_osd_fsid, id, dtype, magic)
-                    ).handle_error(crimson::ct_error::assert_all{"not possible"});
-                  });
-                }).then([this] {
-                   return set_secondaries();
-                });
-              }
-              return seastar::now();
-            });
-            return sub.done().then([root_f=std::move(root_f)] {});
-          });
+  // todo: read_meta to return errorator
+  auto [done, value] = co_await read_meta("mkfs_done");
+  if (done == 0) {
+    ERROR("failed");
+    co_return;
+  }
+  secondary_device_set_t sds;
+  if (!root.empty()) {
+    seastar::file rdir = co_await seastar::open_directory(root);
+    // hmm?
+    auto lister = rdir.experimental_list_directory();
+    while (auto de = co_await lister()) {
+      DEBUG("found file: {}", de->name);
+      if (de->name.find("block.") == 0 && de->name.length() > 6 ) {
+      // 6 for "block."
+        std::string entry_name = de->name;
+        auto dtype_end = entry_name.find_first_of('.', 6);
+        device_type_t dtype =
+          string_to_device_type(
+            entry_name.substr(6, dtype_end - 6));
+        if (dtype == device_type_t::NONE) {
+          // invalid device type
+          co_return;
         }
-        return fut.then([this, &sds, new_osd_fsid] {
-          device_id_t id = 0;
-          device_type_t d_type = device->get_device_type();
-          assert(d_type == device_type_t::SSD ||
-            d_type == device_type_t::RANDOM_BLOCK_SSD);
-          if (d_type == device_type_t::RANDOM_BLOCK_SSD) {
-            id = static_cast<device_id_t>(DEVICE_ID_RANDOM_BLOCK_MIN);
-          }
-
-          return device->mkfs(
-            device_config_t::create_primary(new_osd_fsid, id, d_type, sds)
-          );
-        }).safe_then([this] {
-          return crimson::do_for_each(secondaries, [](auto& sec_dev) {
-            return sec_dev->mount();
-          });
-        });
-      }).safe_then([this] {
-        return device->mount();
-      }).safe_then([this] {
-        return shard_stores.invoke_on_all([] (auto &local_store) {
-          return local_store.mkfs_managers().handle_error(
-            crimson::ct_error::assert_all{"Invalid error in SeaStoreS::mkfs_managers"});
-        });
-      }).safe_then([this, new_osd_fsid] {
-        return prepare_meta(new_osd_fsid);
-      }).safe_then([this] {
-	return umount();
-      }).safe_then([FNAME] {
-        INFO("done");
-      }).handle_error(
-        crimson::ct_error::assert_all{
-          "Invalid error in SeaStore::mkfs"
-        }
-      );
+        auto id = std::stoi(entry_name.substr(dtype_end + 1));
+        std::string path = fmt::format("{}/{}", root, entry_name);
+        DeviceRef sec_dev = co_await Device::make_device(path, dtype);
+        auto p_sec_dev = sec_dev.get();
+        secondaries.emplace_back(std::move(sec_dev));
+        co_await p_sec_dev->start();
+        magic_t magic = (magic_t)std::rand();
+        sds.emplace((device_id_t)id, device_spec_t{magic, dtype, (device_id_t)id});
+        co_await p_sec_dev->mkfs(
+          device_config_t::create_secondary(new_osd_fsid, id, dtype, magic)
+          ).handle_error(crimson::ct_error::assert_all{"not possible"});
+        co_await set_secondaries();
+      }
     }
+    co_await rdir.close();
+  }
+
+  device_id_t id = 0;
+  device_type_t d_type = device->get_device_type();
+  assert(d_type == device_type_t::SSD ||
+      d_type == device_type_t::RANDOM_BLOCK_SSD);
+  if (d_type == device_type_t::RANDOM_BLOCK_SSD) {
+      id = static_cast<device_id_t>(DEVICE_ID_RANDOM_BLOCK_MIN);
+  }
+  co_await device->mkfs(device_config_t::create_primary(new_osd_fsid, id, d_type, sds));
+  for (auto& sec_dev : secondaries) {
+      co_await sec_dev->mount();
+  }
+  co_await device->mount();
+  co_await shard_stores.invoke_on_all([] (auto &local_store) {
+      return local_store.mkfs_managers().handle_error(
+      crimson::ct_error::assert_all{"Invalid error in SeaStoreS::mkfs_managers"});
   });
+  co_await prepare_meta(new_osd_fsid);
+  co_await umount();
+  INFO("done");
 }
 
 using coll_core_t = SeaStore::coll_core_t;
