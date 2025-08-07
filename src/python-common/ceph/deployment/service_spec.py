@@ -1379,16 +1379,14 @@ class NFSServiceSpec(ServiceSpec):
         self.kmip_key = kmip_key
         self.kmip_ca_cert = kmip_ca_cert
         self.kmip_host_list: list[Dict[str, Union[str, int]]] = []
-        if isinstance(kmip_host_list, list):
-            # convert kmip host list of str to list of dict
-            if len(kmip_host_list) and isinstance(kmip_host_list[0], str):
-                self.kmip_host_list = [
-                    {'addr': host}
-                    for host in kmip_host_list
-                    if isinstance(host, str)
-                ]
-            else:
-                self.kmip_host_list = [host for host in kmip_host_list if isinstance(host, dict)]
+        if kmip_host_list:
+            for host_obj in kmip_host_list:
+                if isinstance(host_obj, str):
+                    self.kmip_host_list.append({'addr': host_obj})
+                elif isinstance(host_obj, dict):
+                    self.kmip_host_list.append(host_obj)
+                else:
+                    raise SpecValidationError(f'kmip_host_list contains an invalid element: {host_obj}.')
 
         # TLS fields
         self.tls_ciphers = tls_ciphers

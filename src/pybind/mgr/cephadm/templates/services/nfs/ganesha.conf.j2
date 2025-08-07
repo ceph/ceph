@@ -50,10 +50,10 @@ RGW {
 %plugin ganesha/libkmip_fscrypt.so
 KMIP {
 {% for kmip_addr in kmip_addrs %}
-	HOST {
-		addr = "{{  kmip_addr.get('addr', '') }}";
+        HOST {
+                addr = "{{  kmip_addr.get('addr', '') }}";
 {% if kmip_addr.get('port') %}
-		port = {{  kmip_addr.get('port') }};
+                port = {{  kmip_addr.get('port') }};
 {% endif %}
 {% if 'servername' in kmip_addr %}
                 servername = "{{  kmip_addr.get('servername') }}";
@@ -61,11 +61,11 @@ KMIP {
 {% if 'verify_hostname' in kmip_addr %}
                 verify_hostname = "{{  kmip_addr.get('verify_hostname') }}";
 {% endif %}
-	}
+        }
 {% endfor %}
-	cert = /etc/ganesha/kmip/kmip_cert.pem;
-	key = /etc/ganesha/kmip/kmip_key.pem;
-	ca = /etc/ganesha/kmip/kmip_ca_cert.pem;
+        cert = /etc/ganesha/kmip/kmip_cert.pem;
+        key = /etc/ganesha/kmip/kmip_key.pem;
+        ca = /etc/ganesha/kmip/kmip_ca_cert.pem;
 }
 
 {% endif %}

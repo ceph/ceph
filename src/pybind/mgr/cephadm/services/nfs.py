@@ -74,27 +74,6 @@ class NFSService(CephService):
         assert self.TYPE == spec.service_type
         create_ganesha_pool(self.mgr)
 
-    @classmethod
-    def get_dependencies(
-        cls,
-        mgr: "CephadmOrchestrator",
-        spec: Optional[ServiceSpec] = None,
-        daemon_type: Optional[str] = None
-    ) -> List[str]:
-        assert spec
-        deps: List[str] = []
-        nfs_spec = cast(NFSServiceSpec, spec)
-        # add dependency of tls fields
-        if (spec.ssl and spec.ssl_cert and spec.ssl_key and spec.ssl_ca_cert):
-            deps.append(f'ssl_cert: {str(utils.md5_hash(spec.ssl_cert))}')
-            deps.append(f'ssl_key: {str(utils.md5_hash(spec.ssl_key))}')
-            deps.append(f'ssl_ca_cert: {str(utils.md5_hash(spec.ssl_ca_cert))}')
-        deps.append(f'tls_ktls: {nfs_spec.tls_ktls}')
-        deps.append(f'tls_debug: {nfs_spec.tls_debug}')
-        deps.append(f'tls_min_version: {nfs_spec.tls_min_version}')
-        deps.append(f'tls_ciphers: {nfs_spec.tls_ciphers}')
-        return sorted(deps)
-
     def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
         assert self.TYPE == daemon_spec.daemon_type
         daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
@@ -107,9 +86,8 @@ class NFSService(CephService):
         spec: Optional[ServiceSpec] = None,
         daemon_type: Optional[str] = None
     ) -> List[str]:
+        assert spec
         deps: List[str] = []
-        if not spec:
-            return deps
         nfs_spec = cast(NFSServiceSpec, spec)
         if (nfs_spec.kmip_cert and nfs_spec.kmip_key and nfs_spec.kmip_ca_cert and nfs_spec.kmip_host_list):
             # add dependency of kmip fields
@@ -117,6 +95,15 @@ class NFSService(CephService):
             deps.append(f'kmip_key: {str(utils.md5_hash(nfs_spec.kmip_key))}')
             deps.append(f'kmip_ca_cert: {str(utils.md5_hash(nfs_spec.kmip_ca_cert))}')
             deps.append(f'kmip_host_list: {nfs_spec.kmip_host_list}')
+        # add dependency of tls fields
+        if (spec.ssl and spec.ssl_cert and spec.ssl_key and spec.ssl_ca_cert):
+            deps.append(f'ssl_cert: {str(utils.md5_hash(spec.ssl_cert))}')
+            deps.append(f'ssl_key: {str(utils.md5_hash(spec.ssl_key))}')
+            deps.append(f'ssl_ca_cert: {str(utils.md5_hash(spec.ssl_ca_cert))}')
+        deps.append(f'tls_ktls: {nfs_spec.tls_ktls}')
+        deps.append(f'tls_debug: {nfs_spec.tls_debug}')
+        deps.append(f'tls_min_version: {nfs_spec.tls_min_version}')
+        deps.append(f'tls_ciphers: {nfs_spec.tls_ciphers}')
         return sorted(deps)
 
     def generate_config(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[Dict[str, Any], List[str]]:

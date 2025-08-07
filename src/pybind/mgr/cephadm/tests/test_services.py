@@ -4482,12 +4482,12 @@ class TestNFS:
                 ganesha_conf = nfs_generated_conf['files']['ganesha.conf']
                 expected_kmip_block = (
                     '{\n'
-                    '\tHOST {\n'
-                    '\t\taddr = test;\n'
-                    '\t}\n'
-                    '\tcert = /etc/ganesha/kmip/kmip_cert.pem;\n'
-                    '\tkey = /etc/ganesha/kmip/kmip_key.pem;\n'
-                    '\tca = /etc/ganesha/kmip/kmip_ca_cert.pem;\n'
+                    '        HOST {\n'
+                    '                addr = "test";\n'
+                    '        }\n'
+                    '        cert = /etc/ganesha/kmip/kmip_cert.pem;\n'
+                    '        key = /etc/ganesha/kmip/kmip_key.pem;\n'
+                    '        ca = /etc/ganesha/kmip/kmip_ca_cert.pem;\n'
                     '}'
                 )
                 assert expected_kmip_block in ganesha_conf
@@ -4505,13 +4505,39 @@ class TestNFS:
                 ganesha_conf = nfs_generated_conf['files']['ganesha.conf']
                 expected_kmip_block = (
                     '{\n'
-                    '\tHOST {\n'
-                    '\t\taddr = test;\n'
-                    '\t\tport = 443;\n'
-                    '\t}\n'
-                    '\tcert = /etc/ganesha/kmip/kmip_cert.pem;\n'
-                    '\tkey = /etc/ganesha/kmip/kmip_key.pem;\n'
-                    '\tca = /etc/ganesha/kmip/kmip_ca_cert.pem;\n'
+                    '        HOST {\n'
+                    '                addr = "test";\n'
+                    '                port = 443;\n'
+                    '        }\n'
+                    '        cert = /etc/ganesha/kmip/kmip_cert.pem;\n'
+                    '        key = /etc/ganesha/kmip/kmip_key.pem;\n'
+                    '        ca = /etc/ganesha/kmip/kmip_ca_cert.pem;\n'
+                    '}'
+                )
+                assert expected_kmip_block in ganesha_conf
+                assert nfs_generated_conf['files']['kmip_cert.pem'] == 'kmip_cert'
+                assert nfs_generated_conf['files']['kmip_key.pem'] == 'kmip_key'
+                assert nfs_generated_conf['files']['kmip_ca_cert.pem'] == 'kmip_ca_cert'
+
+            nfs_spec = NFSServiceSpec(service_id="foo", placement=PlacementSpec(hosts=['test']),
+                                      kmip_cert='kmip_cert', kmip_key='kmip_key',
+                                      kmip_ca_cert='kmip_ca_cert',
+                                      kmip_host_list=[{'addr': 'test', 'port': 443, 'servername': 'test', 'verify_hostname': 'test'}])
+            with with_service(cephadm_module, nfs_spec) as _:
+                nfs_generated_conf, _ = service_registry.get_service('nfs').generate_config(
+                    CephadmDaemonDeploySpec(host='test', daemon_id='foo.test.0.0', service_name=nfs_spec.service_name()))
+                ganesha_conf = nfs_generated_conf['files']['ganesha.conf']
+                expected_kmip_block = (
+                    '{\n'
+                    '        HOST {\n'
+                    '                addr = "test";\n'
+                    '                port = 443;\n'
+                    '                servername = "test";\n'
+                    '                verify_hostname = "test";\n'
+                    '        }\n'
+                    '        cert = /etc/ganesha/kmip/kmip_cert.pem;\n'
+                    '        key = /etc/ganesha/kmip/kmip_key.pem;\n'
+                    '        ca = /etc/ganesha/kmip/kmip_ca_cert.pem;\n'
                     '}'
                 )
                 assert expected_kmip_block in ganesha_conf
