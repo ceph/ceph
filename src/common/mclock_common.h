@@ -80,6 +80,61 @@ struct profile_t {
   client_config_t client;
   client_config_t background_recovery;
   client_config_t background_best_effort;
+
+  constexpr profile_t(
+    client_config_t client,
+    client_config_t background_recovery,
+    client_config_t background_best_effort
+  ) : client(client), background_recovery(background_recovery),
+      background_best_effort(background_best_effort) {}
+};
+
+/**
+ * high_client_ops
+ *
+ * Client Allocation:
+ *   reservation: 60% | weight: 2 | limit: 0 (max) |
+ * Background Recovery Allocation:
+ *   reservation: 40% | weight: 1 | limit: 0 (max) |
+ * Background Best Effort Allocation:
+ *   reservation: 0 (min) | weight: 1 | limit: 70% |
+ */
+constexpr profile_t HIGH_CLIENT_OPS{
+  { .6, 2,  0 },
+  { .4, 1,  0 },
+  {  0, 1, .7 }
+};
+
+/**
+ * high_recovery_ops
+ *
+ * Client Allocation:
+ *   reservation: 30% | weight: 1 | limit: 0 (max) |
+ * Background Recovery Allocation:
+ *   reservation: 70% | weight: 2 | limit: 0 (max) |
+ * Background Best Effort Allocation:
+ *   reservation: 0 (min) | weight: 1 | limit: 0 (max) |
+ */
+constexpr profile_t HIGH_RECOVERY_OPS{
+  { .3, 1, 0 },
+  { .7, 2, 0 },
+  {  0, 1, 0 }
+};
+
+/**
+ * balanced
+ *
+ * Client Allocation:
+ *   reservation: 50% | weight: 1 | limit: 0 (max) |
+ * Background Recovery Allocation:
+ *   reservation: 50% | weight: 1 | limit: 0 (max) |
+ * Background Best Effort Allocation:
+ *   reservation: 0 (min) | weight: 1 | limit: 90% |
+ */
+constexpr profile_t BALANCED{
+  { .5, 1, 0 },
+  { .5, 1, 0 },
+  {  0, 1, .9 }
 };
 
 struct client_profile_id_t {
