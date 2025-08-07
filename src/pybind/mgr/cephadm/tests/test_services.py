@@ -4458,8 +4458,6 @@ class TestNFS:
                 )
                 assert expected_tls_block in ganesha_conf
 
-
-class TestNFS:
     @patch("cephadm.serve.CephadmServe._run_cephadm")
     @patch("cephadm.services.nfs.NFSService.fence_old_ranks", MagicMock())
     @patch("cephadm.services.nfs.NFSService.run_grace_tool", MagicMock())
@@ -4483,14 +4481,38 @@ class TestNFS:
                     CephadmDaemonDeploySpec(host='test', daemon_id='foo.test.0.0', service_name=nfs_spec.service_name()))
                 ganesha_conf = nfs_generated_conf['files']['ganesha.conf']
                 expected_kmip_block = (
-                    'KMIP {\n'
-                    '            HOST {\n'
-                    '                     addr = test;\n'
-                    '            }\n'
-                    '            cert = /etc/ganesha/kmip/kmip_cert.pem;\n'
-                    '            key = /etc/ganesha/kmip/kmip_key.pem;\n'
-                    '            ca = /etc/ganesha/kmip/kmip_ca_cert.pem;\n'
-                    '}\n'
+                    '{\n'
+                    '\tHOST {\n'
+                    '\t\taddr = test;\n'
+                    '\t}\n'
+                    '\tcert = /etc/ganesha/kmip/kmip_cert.pem;\n'
+                    '\tkey = /etc/ganesha/kmip/kmip_key.pem;\n'
+                    '\tca = /etc/ganesha/kmip/kmip_ca_cert.pem;\n'
+                    '}'
+                )
+                assert expected_kmip_block in ganesha_conf
+                assert nfs_generated_conf['files']['kmip_cert.pem'] == 'kmip_cert'
+                assert nfs_generated_conf['files']['kmip_key.pem'] == 'kmip_key'
+                assert nfs_generated_conf['files']['kmip_ca_cert.pem'] == 'kmip_ca_cert'
+
+            nfs_spec = NFSServiceSpec(service_id="foo", placement=PlacementSpec(hosts=['test']),
+                                      kmip_cert='kmip_cert', kmip_key='kmip_key',
+                                      kmip_ca_cert='kmip_ca_cert',
+                                      kmip_host_list=[{'addr': 'test', 'port': 443}])
+            with with_service(cephadm_module, nfs_spec) as _:
+                nfs_generated_conf, _ = service_registry.get_service('nfs').generate_config(
+                    CephadmDaemonDeploySpec(host='test', daemon_id='foo.test.0.0', service_name=nfs_spec.service_name()))
+                ganesha_conf = nfs_generated_conf['files']['ganesha.conf']
+                expected_kmip_block = (
+                    '{\n'
+                    '\tHOST {\n'
+                    '\t\taddr = test;\n'
+                    '\t\tport = 443;\n'
+                    '\t}\n'
+                    '\tcert = /etc/ganesha/kmip/kmip_cert.pem;\n'
+                    '\tkey = /etc/ganesha/kmip/kmip_key.pem;\n'
+                    '\tca = /etc/ganesha/kmip/kmip_ca_cert.pem;\n'
+                    '}'
                 )
                 assert expected_kmip_block in ganesha_conf
                 assert nfs_generated_conf['files']['kmip_cert.pem'] == 'kmip_cert'

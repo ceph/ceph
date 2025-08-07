@@ -1340,7 +1340,7 @@ class NFSServiceSpec(ServiceSpec):
                  kmip_cert: Optional[str] = None,
                  kmip_key: Optional[str] = None,
                  kmip_ca_cert: Optional[str] = None,
-                 kmip_host_list: Optional[List[str]] = None,
+                 kmip_host_list: Optional[List[Union[str, Dict[str, Union[str, int]]]]] = None,
                  ssl: bool = False,
                  ssl_cert: Optional[str] = None,
                  ssl_key: Optional[str] = None,
@@ -1378,7 +1378,17 @@ class NFSServiceSpec(ServiceSpec):
         self.kmip_cert = kmip_cert
         self.kmip_key = kmip_key
         self.kmip_ca_cert = kmip_ca_cert
-        self.kmip_host_list = kmip_host_list
+        self.kmip_host_list: list[Dict[str, Union[str, int]]] = []
+        if isinstance(kmip_host_list, list):
+            # convert kmip host list of str to list of dict
+            if len(kmip_host_list) and isinstance(kmip_host_list[0], str):
+                self.kmip_host_list = [
+                    {'addr': host}
+                    for host in kmip_host_list
+                    if isinstance(host, str)
+                ]
+            else:
+                self.kmip_host_list = [host for host in kmip_host_list if isinstance(host, dict)]
 
         # TLS fields
         self.tls_ciphers = tls_ciphers
@@ -1412,6 +1422,16 @@ class NFSServiceSpec(ServiceSpec):
             raise SpecValidationError(
                 f'Either none or all of {kmip_field_names} attrbutes must be set'
             )
+        for kmip_host in self.kmip_host_list:
+            if 'addr' not in kmip_host:
+                raise SpecValidationError(
+                    "Each dictionary in kmip_host_list must include the 'addr' key."
+                    f"{kmip_host} is missing 'addr'."
+                )
+            if 'port' in kmip_host and not isinstance(kmip_host['port'], int):
+                raise SpecValidationError(
+                    f'Provided port is not valid for {kmip_host} in kmip_host_list.'
+                )
 
         # TLS certificate validation
         if self.ssl and not self.certificate_source:
