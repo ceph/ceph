@@ -1164,7 +1164,7 @@ krbd_resize(struct rbd_ctx *ctx, uint64_t size)
 {
 	int ret;
 	int count = 0;
-	uint64_t effective_size;
+	uint64_t effective_size{};
 
 	ceph_assert(size % truncbdy == 0);
 
