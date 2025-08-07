@@ -51,7 +51,10 @@ RGW {
 KMIP {
 {% for kmip_addr in kmip_addrs %}
 	HOST {
-		addr = {{ kmip_addr }};
+		addr = {{  kmip_addr.get('addr', '') }};
+{% if kmip_addr.get('port') %}
+		port = {{  kmip_addr.get('port') }};
+{% endif %}
 	}
 {% endfor %}
 	cert = /etc/ganesha/kmip/kmip_cert.pem;

@@ -68,7 +68,7 @@ class NFSCluster:
             kmip_cert: Optional[str] = None,
             kmip_key: Optional[str] = None,
             kmip_ca_cert: Optional[str] = None,
-            kmip_host_list: Optional[List[str]] = None,
+            kmip_host_list: Optional[List[Union[str, Dict[str, Union[str, int]]]]] = None,
     ) -> None:
         if not port:
             port = 2049   # default nfs port
@@ -154,7 +154,7 @@ class NFSCluster:
             kmip_cert: Optional[str] = None,
             kmip_key: Optional[str] = None,
             kmip_ca_cert: Optional[str] = None,
-            kmip_host_list: Optional[List[str]] = None,
+            kmip_host_list: Optional[List[Union[str, Dict[str, Union[str, int]]]]] = None,
     ) -> None:
         try:
             if virtual_ip:
