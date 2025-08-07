@@ -1,0 +1,16 @@
+overrides:
+  ceph:
+    log-ignorelist:
+    - but it is still running
+    - overall HEALTH_
+    - \(OSDMAP_FLAGS\)
+    - \(OSD_
+    - \(PG_
+    - \(OBJECT_
+    - for optimal performance
+tasks:
+- ceph_objectstore_tool:
+    crimson_objectstore_tool: true
+    objects: 5
+    pgnum: 8
+

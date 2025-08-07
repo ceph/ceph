@@ -2,6 +2,9 @@ usr/include/cephfs/ceph_ll_client.h
 usr/include/cephfs/libcephfs.h
 usr/include/cephfs/types.h
 usr/include/cephfs/metrics/Types.h
+usr/include/cephfs/dump.h
+usr/include/cephfs/json.h
+usr/include/cephfs/keys_and_values.h
 usr/lib/libcephfs.so
 usr/lib/libcephfs_proxy.so
 usr/lib/pkgconfig/cephfs.pc

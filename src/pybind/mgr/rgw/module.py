@@ -184,6 +184,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                                  placement: Optional[str] = None,
                                  zone_endpoints: Optional[str] = None,
                                  start_radosgw: Optional[bool] = True,
+                                 skip_realm_components: Optional[bool] = False,
                                  inbuf: Optional[str] = None) -> HandleCommandResult:
         """Bootstrap new rgw realm, zonegroup, and zone"""
 
@@ -207,7 +208,8 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         try:
             for spec in rgw_specs:
                 self.create_pools(spec)
-                RGWAM(self.env).realm_bootstrap(spec, start_radosgw)
+                RGWAM(self.env).realm_bootstrap(spec, start_radosgw, skip_realm_components)
+
         except RGWAMException as e:
             self.log.error('cmd run exception: (%d) %s' % (e.retcode, e.message))
             # The RGWAM code isn't always consistent about what goes into stdout
@@ -237,6 +239,11 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             elif e.stdout:
                 msg = e.stdout
             return HandleCommandResult(retval=e.retcode, stdout=msg, stderr=e.stderr)
+            e.stderr = (e.stderr or '') + (
+                "\nNote: Partial bootstrap detected - The following entries were already created during a previous bootstrap attempt. \n"
+                "To resume, run:\n ceph rgw realm bootstrap with --skip-realm-components\n"
+            )
+            return HandleCommandResult(retval=e.retcode, stdout=e.stdout, stderr=e.stderr)
         except PoolCreationError as e:
             self.log.error(f'Pool creation failure: {str(e)}')
             return HandleCommandResult(retval=-errno.EINVAL, stderr=str(e))

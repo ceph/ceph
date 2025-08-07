@@ -79,8 +79,8 @@ a number of things:
   a ``client.admin`` user. So you must generate the admin user and keyring,
   and you must also add the ``client.admin`` user to the monitor keyring.
 
-The foregoing requirements do not imply the creation of a Ceph Configuration
-file. However, as a best practice, we recommend creating a Ceph configuration
+The foregoing requirements do not imply the creation of a :ref:`Ceph Configuration
+file <configuring-ceph>`. However, as a best practice, we recommend creating a Ceph configuration
 file and populating it with the ``fsid``, the ``mon initial members`` and the
 ``mon host`` settings.
 
@@ -529,11 +529,10 @@ You should see output that looks something like this::
 	-3	1		host osd-node2
 	1	1			osd.1	up	1
 
-To add (or remove) additional monitors, see `Add/Remove Monitors`_.
+To add (or remove) additional monitors, see :ref:`adding-and-removing-monitors`.
 To add (or remove) additional Ceph OSD Daemons, see `Add/Remove OSDs`_.
 
 
-.. _Add/Remove Monitors: ../../rados/operations/add-or-rm-mons
 .. _Add/Remove OSDs: ../../rados/operations/add-or-rm-osds
 .. _Network Configuration Reference: ../../rados/configuration/network-config-ref
 .. _Monitor Config Reference - Data: ../../rados/configuration/mon-config-ref#data

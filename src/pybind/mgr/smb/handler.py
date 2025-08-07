@@ -887,6 +887,7 @@ def _generate_smb_service_spec(
         include_ceph_users=user_entities,
         cluster_public_addrs=cluster.service_spec_public_addrs(),
         custom_ports=cluster.custom_ports,
+        bind_addrs=cluster.service_spec_bind_addrs(),
     )
 
 

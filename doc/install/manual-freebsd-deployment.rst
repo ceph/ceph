@@ -107,7 +107,7 @@ a number of things:
   For example, when you run multiple clusters in a :ref:`multisite configuration <multisite>`,
   the cluster name (e.g., ``us-west``, ``us-east``) identifies the cluster for
   the current CLI session. **Note:** To identify the cluster name on the
-  command line interface, specify the a Ceph configuration file with the
+  command line interface, specify a :ref:`Ceph configuration file <configuring-ceph>` with the
   cluster name (e.g., ``ceph.conf``, ``us-west.conf``, ``us-east.conf``, etc.).
   Also see CLI usage (``ceph --cluster {cluster-name}``).
 
@@ -517,11 +517,10 @@ You should see output that looks something like this::
 	-3	1		host node2
 	1	1			osd.1	up	1
 
-To add (or remove) additional monitors, see `Add/Remove Monitors`_.
+To add (or remove) additional monitors, see :ref:`adding-and-removing-monitors`.
 To add (or remove) additional Ceph OSD Daemons, see `Add/Remove OSDs`_.
 
 
-.. _Add/Remove Monitors: ../../rados/operations/add-or-rm-mons
 .. _Add/Remove OSDs: ../../rados/operations/add-or-rm-osds
 .. _Network Configuration Reference: ../../rados/configuration/network-config-ref
 .. _Monitor Config Reference - Data: ../../rados/configuration/mon-config-ref#data

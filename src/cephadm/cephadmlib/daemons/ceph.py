@@ -94,6 +94,10 @@ class Ceph(ContainerDaemonForm):
             if 'rgw_exit_timeout_secs' in config_json:
                 stop_timeout = config_json['rgw_exit_timeout_secs']
                 ctr.args = ctr.args + [f'--stop-timeout={stop_timeout}']
+        if self.identity.daemon_type == 'osd' and config_json is not None:
+            if 'objectstore' in config_json:
+                objectstore = config_json['objectstore']
+                ctr.args = ctr.args + [f'--osd-objectstore={objectstore}']
         return ctr
 
     _uid_gid: Optional[Tuple[int, int]] = None

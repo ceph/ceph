@@ -230,9 +230,7 @@ describe('RgwUserFormComponent', () => {
         secret_key: '',
         suspended: false,
         system: false,
-        uid: null,
-        account_id: '',
-        account_root_user: false
+        uid: null
       });
       expect(spyRateLimit).toHaveBeenCalled();
     });
@@ -248,8 +246,7 @@ describe('RgwUserFormComponent', () => {
         email: null,
         max_buckets: -1,
         suspended: false,
-        system: false,
-        account_root_user: false
+        system: false
       });
       expect(spyRateLimit).toHaveBeenCalled();
     });
@@ -268,9 +265,7 @@ describe('RgwUserFormComponent', () => {
         secret_key: '',
         suspended: false,
         system: false,
-        uid: null,
-        account_id: '',
-        account_root_user: false
+        uid: null
       });
       expect(spyRateLimit).toHaveBeenCalled();
     });
@@ -286,8 +281,7 @@ describe('RgwUserFormComponent', () => {
         email: null,
         max_buckets: 0,
         suspended: false,
-        system: false,
-        account_root_user: false
+        system: false
       });
       expect(spyRateLimit).toHaveBeenCalled();
     });
@@ -308,9 +302,7 @@ describe('RgwUserFormComponent', () => {
         secret_key: '',
         suspended: false,
         system: false,
-        uid: null,
-        account_id: '',
-        account_root_user: false
+        uid: null
       });
       expect(spyRateLimit).toHaveBeenCalled();
     });
@@ -327,8 +319,7 @@ describe('RgwUserFormComponent', () => {
         email: null,
         max_buckets: 100,
         suspended: false,
-        system: false,
-        account_root_user: false
+        system: false
       });
       expect(spyRateLimit).toHaveBeenCalled();
     });
@@ -358,8 +349,7 @@ describe('RgwUserFormComponent', () => {
         email: '',
         max_buckets: 1000,
         suspended: false,
-        system: false,
-        account_root_user: false
+        system: false
       });
     });
 

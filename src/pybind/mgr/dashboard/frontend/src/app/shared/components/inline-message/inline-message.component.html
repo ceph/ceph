@@ -1,0 +1,46 @@
+@if (!isDismissed) {
+  <div class="inline-tip-container"
+       [cdsStack]="'horizontal'"
+       [gap]="4">
+    <div class="close-btn-position">
+      <cds-icon-button class="close-btn inline-tip-bg-color"
+                       type="button"
+                       kind="ghost"
+                       size="sm"
+                       description="Close"
+                       i18n-description
+                       (click)="close()">
+        <svg [size]="icons.size16"
+             [cdsIcon]="icons.destroy"></svg>
+      </cds-icon-button>
+    </div>
+
+    <div class="inline-tip-body"
+         [cdsStack]="'horizontal'"
+         [gap]="4">
+      <svg [cdsIcon]="icons.idea"
+           [size]="icons.size20"></svg>
+
+      <div [cdsStack]="'vertical'"
+           [gap]="1"
+           class="inline-tip-body-content">
+      @if (title) {
+        <h1 class="cds--type-heading-compact-01">{{ title }}</h1>
+      }
+
+        <div class="cds--type-body-compact-01"
+             [class.cds--text-truncate--end]="isTruncated">
+          <ng-content></ng-content>
+        </div>
+        @if (collapsible) {
+        <button class="inline-tip-bg-color btn-toggle"
+                cdsButton="ghost"
+                size="md"
+                (click)="toggleContent()">
+          <span i18n>{{ isTruncated ? 'Read more' : 'Read less' }}</span>
+        </button>
+      }
+      </div>
+    </div>
+  </div>
+}

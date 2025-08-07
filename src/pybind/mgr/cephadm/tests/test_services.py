@@ -433,6 +433,7 @@ protocol_log_level = WARNING
 conn_retries = 10
 transports = tcp
 transport_tcp_options = {{"in_capsule_data_size": 8192, "max_io_qpairs_per_ctrlr": 7}}
+enable_dsa_acceleration = True
 tgt_cmd_extra_args = {tgt_cmd_extra_args}
 qos_timeslice_in_usecs = 0
 notifications_interval = 60
@@ -472,7 +473,8 @@ timeout = 1.0\n"""
                             "config": "",
                             "keyring": "[client.nvmeof.testpool.mygroup.test.qwert]\nkey = None\n",
                             "files": {
-                                "ceph-nvmeof.conf": nvmeof_gateway_conf
+                                "ceph-nvmeof.conf": nvmeof_gateway_conf,
+                                "enable_dsa_acceleration": "True"
                             }
                         }
                     }),
@@ -4167,6 +4169,9 @@ class TestCustomContainer:
                 )
 
 
+_SAMBA_METRICS_IMAGE = 'quay.io/samba.org/samba-metrics:devbuilds-centos-amd64'
+
+
 class TestSMB:
     @patch("cephadm.module.CephadmOrchestrator.get_unique_name")
     @patch("cephadm.serve.CephadmServe._run_cephadm")
@@ -4206,7 +4211,7 @@ class TestSMB:
                 'config': '',
                 'keyring': '[client.smb.config.tango.briskly]\nkey = None\n',
                 'config_auth_entity': 'client.smb.config.tango.briskly',
-                'metrics_image': 'quay.io/samba.org/samba-metrics:latest',
+                'metrics_image': _SAMBA_METRICS_IMAGE,
                 'service_ports': {'smb': 445, 'smbmetrics': 9922, 'ctdb': 4379},
             },
         }
@@ -4281,7 +4286,7 @@ class TestSMB:
                     '[client.smb.fs.fs2.share3]\nkey = None\n'
                 ),
                 'config_auth_entity': 'client.smb.config.tango.briskly',
-                'metrics_image': 'quay.io/samba.org/samba-metrics:latest',
+                'metrics_image': _SAMBA_METRICS_IMAGE,
                 'service_ports': {'smb': 445, 'smbmetrics': 9922, 'ctdb': 4379},
             },
         }

@@ -20,6 +20,7 @@
 #include <boost/lexical_cast.hpp>
 #include "include/ceph_assert.h"  // lexical_cast includes system assert.h
 #include "include/cephfs/metrics/Types.h"
+#include "include/cephfs/keys_and_values.h"
 #include "include/random.h" // for ceph::util::generate_random_number()
 
 #include <boost/config/warning_disable.hpp>
@@ -426,14 +427,14 @@ class C_MDS_session_finish : public ServerLogContext {
   interval_set<inodeno_t> inos_to_free;
   version_t inotablev;
   interval_set<inodeno_t> inos_to_purge;
-  LogSegment *ls = nullptr;
+  LogSegmentRef ls = nullptr;
   Context *fin;
 public:
   C_MDS_session_finish(Server *srv, Session *se, uint64_t sseq, bool s, version_t mv, Context *fin_ = nullptr) :
     ServerLogContext(srv), session(se), state_seq(sseq), open(s), cmapv(mv), inotablev(0), fin(fin_) { }
   C_MDS_session_finish(Server *srv, Session *se, uint64_t sseq, bool s, version_t mv,
 		       const interval_set<inodeno_t>& to_free, version_t iv,
-		       const interval_set<inodeno_t>& to_purge, LogSegment *_ls, Context *fin_ = nullptr) :
+		       const interval_set<inodeno_t>& to_purge, LogSegmentRef const& _ls, Context *fin_ = nullptr) :
     ServerLogContext(srv), session(se), state_seq(sseq), open(s), cmapv(mv),
     inos_to_free(to_free), inotablev(iv), inos_to_purge(to_purge), ls(_ls), fin(fin_) {}
   void finish(int r) override {
@@ -912,7 +913,7 @@ void Server::finish_flush_session(Session *session, version_t seq)
 
 void Server::_session_logged(Session *session, uint64_t state_seq, bool open, version_t pv,
 			     const interval_set<inodeno_t>& inos_to_free, version_t piv,
-			     const interval_set<inodeno_t>& inos_to_purge, LogSegment *ls)
+			     const interval_set<inodeno_t>& inos_to_purge, LogSegmentRef const& ls)
 {
   dout(10) << "_session_logged " << session->info.inst
 	   << " state_seq " << state_seq
@@ -6430,7 +6431,7 @@ void Server::handle_client_setvxattr(const MDRequestRef& mdr, CInode *cur)
     try {
       if (is_rmxattr) {
         const auto srnode = cur->get_projected_srnode();
-	if (!srnode->is_subvolume()) {
+	if (srnode && !srnode->is_subvolume()) {
 	  respond_to_request(mdr, 0);
 	  return;
 	}
@@ -9245,7 +9246,9 @@ bool Server::_dir_has_snaps(const MDRequestRef& mdr, CInode *diri)
   ceph_assert(diri->snaplock.can_read(mdr->get_client()));
 
   SnapRealm *realm = diri->find_snaprealm();
-  return !realm->get_snaps().empty();
+  auto& snaps = realm->get_snaps();
+  auto it = snaps.lower_bound(diri->get_oldest_snap());
+  return it != snaps.end();
 }
 
 bool Server::_dir_is_nonempty(const MDRequestRef& mdr, CInode *in)

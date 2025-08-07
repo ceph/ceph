@@ -217,7 +217,7 @@
                 </span>
               </cd-helper>
             </td>
-            <td>{{ selection?.multipart_min_part_size }}</td>
+            <td>{{ selection?.multipart_min_part_size | dimlessBinary }}</td>
           </tr>
         }
         @if(isTierMatch( TIER_TYPE_DISPLAY.CLOUD_TIER, TIER_TYPE_DISPLAY.GLACIER)){
@@ -231,7 +231,7 @@
                 </span>
               </cd-helper>
             </td>
-            <td>{{ selection?.multipart_sync_threshold }}</td>
+            <td>{{ selection?.multipart_sync_threshold | dimlessBinary }}</td>
           </tr>
         }
         </tbody>

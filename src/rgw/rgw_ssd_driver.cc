@@ -116,59 +116,61 @@ int SSDDriver::initialize(const DoutPrefixProvider* dpp)
       partition_info.location += "/";
     }
 
-    try {
-        if (efs::exists(partition_info.location)) {
-            if (dpp->get_cct()->_conf->rgw_d4n_l1_evict_cache_on_start) {
-                ldpp_dout(dpp, 5) << "initialize: evicting the persistent storage directory on start" << dendl;
+    if (!admin) { // Only initialize or evict cache if radosgw-admin is not responsible for call 
+      try {
+	  if (efs::exists(partition_info.location)) {
+	      if (dpp->get_cct()->_conf->rgw_d4n_l1_evict_cache_on_start) {
+		  ldpp_dout(dpp, 5) << "initialize: evicting the persistent storage directory on start" << dendl;
 
-		uid_t uid = dpp->get_cct()->get_set_uid();
-		gid_t gid = dpp->get_cct()->get_set_gid();
+		  uid_t uid = dpp->get_cct()->get_set_uid();
+		  gid_t gid = dpp->get_cct()->get_set_gid();
 
-		ldpp_dout(dpp, 5) << "initialize:: uid is " << uid << " and gid is " << gid << dendl;
-		ldpp_dout(dpp, 5) << "initialize:: changing permissions for datacache directory." << dendl;
+		  ldpp_dout(dpp, 5) << "initialize:: uid is " << uid << " and gid is " << gid << dendl;
+		  ldpp_dout(dpp, 5) << "initialize:: changing permissions for datacache directory." << dendl;
 
-		if (uid) { 
-                  if (chown(partition_info.location.c_str(), uid, gid) == -1) {
-		    ldpp_dout(dpp, 5) << "initialize: chown return error: " << strerror(errno) << dendl;
-                  }
+		  if (uid) { 
+		    if (chown(partition_info.location.c_str(), uid, gid) == -1) {
+		      ldpp_dout(dpp, 5) << "initialize: chown return error: " << strerror(errno) << dendl;
+		    }
 
-                  if (chmod(partition_info.location.c_str(), S_IRWXU|S_IRWXG|S_IRWXO) == -1) {
-		    ldpp_dout(dpp, 5) << "initialize: chmod return error: " << strerror(errno) << dendl;
-                  }
-		}
+		    if (chmod(partition_info.location.c_str(), S_IRWXU|S_IRWXG|S_IRWXO) == -1) {
+		      ldpp_dout(dpp, 5) << "initialize: chmod return error: " << strerror(errno) << dendl;
+		    }
+		  }
 
-                for (auto& p : efs::directory_iterator(partition_info.location)) {
-                    efs::remove_all(p.path());
-                }
-            }
-        } else {
-            ldpp_dout(dpp, 5) << "initialize:: creating the persistent storage directory on start: " << partition_info.location << dendl;
-            std::error_code ec;
-            if (!efs::create_directories(partition_info.location, ec)) {
-                ldpp_dout(dpp, 0) << "initialize::: ERROR initializing the cache storage directory: '" << partition_info.location <<
-                                "' : " << ec.value() << dendl;
-            } else {
-		uid_t uid = dpp->get_cct()->get_set_uid();
-		gid_t gid = dpp->get_cct()->get_set_gid();
+		  for (auto& p : efs::directory_iterator(partition_info.location)) {
+		      efs::remove_all(p.path());
+		  }
+	      }
+	  } else {
+	      ldpp_dout(dpp, 5) << "initialize:: creating the persistent storage directory on start: " << partition_info.location << dendl;
+	      std::error_code ec;
+	      if (!efs::create_directories(partition_info.location, ec)) {
+		  ldpp_dout(dpp, 0) << "initialize::: ERROR initializing the cache storage directory: '" << partition_info.location <<
+				  "' : " << ec.value() << dendl;
+	      } else {
+		  uid_t uid = dpp->get_cct()->get_set_uid();
+		  gid_t gid = dpp->get_cct()->get_set_gid();
 
-		ldpp_dout(dpp, 5) << "initialize:: uid is " << uid << " and gid is " << gid << dendl;
-		ldpp_dout(dpp, 5) << "initialize:: changing permissions for datacache directory." << dendl;
-		
-		if (uid) { 
-                  if (chown(partition_info.location.c_str(), uid, gid) == -1) {
-		    ldpp_dout(dpp, 5) << "initialize: chown return error: " << strerror(errno) << dendl;
-                  }
+		  ldpp_dout(dpp, 5) << "initialize:: uid is " << uid << " and gid is " << gid << dendl;
+		  ldpp_dout(dpp, 5) << "initialize:: changing permissions for datacache directory." << dendl;
+		  
+		  if (uid) { 
+		    if (chown(partition_info.location.c_str(), uid, gid) == -1) {
+		      ldpp_dout(dpp, 5) << "initialize: chown return error: " << strerror(errno) << dendl;
+		    }
 
-                  if (chmod(partition_info.location.c_str(), S_IRWXU|S_IRWXG|S_IRWXO) == -1) {
-		    ldpp_dout(dpp, 5) << "initialize: chmod return error: " << strerror(errno) << dendl;
-                  }
-		}
-            }
-        }
-    } catch (const efs::filesystem_error& e) {
-        ldpp_dout(dpp, 0) << "initialize::: ERROR initializing the cache storage directory '" << partition_info.location <<
-                                "' : " << e.what() << dendl;
-        //return -EINVAL; Should return error from here?
+		    if (chmod(partition_info.location.c_str(), S_IRWXU|S_IRWXG|S_IRWXO) == -1) {
+		      ldpp_dout(dpp, 5) << "initialize: chmod return error: " << strerror(errno) << dendl;
+		    }
+		  }
+	      }
+	  }
+      } catch (const efs::filesystem_error& e) {
+	  ldpp_dout(dpp, 0) << "initialize::: ERROR initializing the cache storage directory '" << partition_info.location <<
+				  "' : " << e.what() << dendl;
+	  //return -EINVAL; Should return error from here?
+      }
     }
 
     #if defined(HAVE_LIBAIO) && defined(__GLIBC__)

@@ -1,3 +1,5 @@
+.. _jaegertracing:
+
 JAEGER- DISTRIBUTED TRACING
 ===========================
 
@@ -72,6 +74,7 @@ For single node testing Jaeger opentelemetry can be deployed using:
   to port the configured 6799. Use the option "--processor.jaeger-compact.server-host-port=6799" for manual Jaeger
   deployments.
 
+.. _jaegertracing-enable:
 
 HOW TO ENABLE TRACING IN CEPH
 -----------------------------

@@ -533,7 +533,9 @@ int BlueFS::add_block_device(unsigned id, const string& path, bool trim,
   if (trim) {
     interval_set<uint64_t> whole_device;
     whole_device.insert(0, b->get_size());
-    b->try_discard(whole_device, false);
+    dout(5) << __func__ << " trimming device:" << path << dendl;
+    b->try_discard(whole_device, false, true);
+    dout(5) << __func__ << " trimmed device:" << path << dendl;
   }
 
   dout(1) << __func__ << " bdev " << id << " path " << path
@@ -703,6 +705,7 @@ int BlueFS::mkfs(uuid_d osd_uuid, const bluefs_layout_t& layout)
         _get_block_device_size(BlueFS::BDEV_WAL) * 95 / 100,
         _get_block_device_size(BlueFS::BDEV_DB) * 95 / 100,
         _get_block_device_size(BlueFS::BDEV_SLOW) * 95 / 100));
+    vselector->update_from_config(cct);
   }
 
   _init_logger();
@@ -1070,6 +1073,7 @@ int BlueFS::mount()
         _get_block_device_size(BlueFS::BDEV_WAL) * 95 / 100,
         _get_block_device_size(BlueFS::BDEV_DB) * 95 / 100,
         _get_block_device_size(BlueFS::BDEV_SLOW) * 95 / 100));
+    vselector->update_from_config(cct);
   }
 
   _init_alloc();

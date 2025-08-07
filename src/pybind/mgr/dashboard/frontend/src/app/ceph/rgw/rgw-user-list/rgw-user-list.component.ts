@@ -38,8 +38,8 @@ export class RgwUserListComponent extends ListWithDetails implements OnInit {
   userSizeTpl: TemplateRef<any>;
   @ViewChild('userObjectTpl', { static: true })
   userObjectTpl: TemplateRef<any>;
-  @ViewChild('accountTmpl', { static: true })
-  public accountTmpl: TemplateRef<any>;
+  @ViewChild('usernameTpl', { static: true })
+  usernameTpl: TemplateRef<any>;
   permission: Permission;
   tableActions: CdTableAction[];
   columns: CdTableColumn[] = [];
@@ -48,6 +48,7 @@ export class RgwUserListComponent extends ListWithDetails implements OnInit {
   selection: CdTableSelection = new CdTableSelection();
   userDataSubject = new Subject();
   declare staleTimeout: number;
+  icons = Icons;
 
   constructor(
     private authStorageService: AuthStorageService,
@@ -67,7 +68,8 @@ export class RgwUserListComponent extends ListWithDetails implements OnInit {
       {
         name: $localize`Username`,
         prop: 'uid',
-        flexGrow: 1
+        flexGrow: 1,
+        cellTemplate: this.usernameTpl
       },
       {
         name: $localize`Tenant`,
@@ -77,8 +79,7 @@ export class RgwUserListComponent extends ListWithDetails implements OnInit {
       {
         name: $localize`Account name`,
         prop: 'account.name',
-        flexGrow: 1,
-        cellTemplate: this.accountTmpl
+        flexGrow: 1
       },
       {
         name: $localize`Full name`,

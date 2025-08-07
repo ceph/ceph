@@ -587,7 +587,9 @@ void RGWRESTGenerateHTTPHeaders::init(const string& _method, const string& host,
 
   /* merge params with extra args so that we can sign correctly */
   for (auto iter = params.begin(); iter != params.end(); ++iter) {
-    new_info->args.append(iter->first, iter->second);
+    constexpr bool encode_slash = false; // not for query params
+    new_info->args.append(url_encode(iter->first, encode_slash),
+                          url_encode(iter->second, encode_slash));
   }
 
   url = _url + resource + params_str;

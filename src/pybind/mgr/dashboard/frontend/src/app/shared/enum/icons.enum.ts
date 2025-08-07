@@ -83,6 +83,8 @@ export enum Icons {
   launch = 'launch',
   parentChild = 'parent-child',
   dataTable = 'data-table',
+  idea = 'idea',
+  userAccessLocked = 'user--access-locked', // User access locked
   /* Icons for special effect */
   size16 = '16',
   size20 = '20',

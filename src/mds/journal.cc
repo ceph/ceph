@@ -58,6 +58,7 @@
 #include "MDSTableServer.h"
 
 #include "Locker.h"
+#include "LogSegmentRef.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mds
@@ -71,6 +72,7 @@ using std::pair;
 using std::set;
 using std::string;
 using std::vector;
+
 
 // -----------------------
 // LogSegment
@@ -213,8 +215,8 @@ void LogSegment::try_to_expire(MDSRank *mds, MDSGatherBuilder &gather_bld, int o
   if (!open_files.empty()) {
     ceph_assert(!mds->mdlog->is_capped()); // hmm FIXME
     EOpen *le = 0;
-    LogSegment *ls = mds->mdlog->get_current_segment();
-    ceph_assert(ls != this);
+    auto&& ls = mds->mdlog->get_current_segment();
+    ceph_assert(ls.get() != this);
     elist<CInode*>::iterator p = open_files.begin(member_offset(CInode, item_open_file));
     while (!p.end()) {
       CInode *in = *p;
@@ -474,7 +476,7 @@ void EMetaBlob::add_dir_context(CDir *dir, int mode)
   }
 }
 
-void EMetaBlob::update_segment(LogSegment *ls)
+void EMetaBlob::update_segment(LogSegmentRef const &ls)
 {
   // dirty inode mtimes
   // -> handled directly by Server.cc, replay()
@@ -1260,7 +1262,7 @@ void EMetaBlob::generate_test_instances(std::list<EMetaBlob*>& ls)
   ls.push_back(new EMetaBlob());
 }
 
-void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, int type, MDPeerUpdate *peerup)
+void EMetaBlob::replay(MDSRank *mds, LogSegmentRef const& logseg, int type, MDPeerUpdate *peerup)
 {
   dout(10) << "EMetaBlob.replay " << lump_map.size() << " dirlumps by " << client_name << dendl;
 
@@ -1841,7 +1843,7 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, int type, MDPeerUpdate 
       mds->heartbeat_reset();
   }
   for (const auto& p : truncate_finish) {
-    LogSegment *ls = mds->mdlog->get_segment(p.second);
+    auto&& ls = mds->mdlog->get_segment(p.second);
     if (ls) {
       CInode *in = mds->mdcache->get_inode(p.first);
       ceph_assert(in);
@@ -1930,7 +1932,7 @@ void EPurged::update_segment()
 void EPurged::replay(MDSRank *mds)
 {
   if (inos.size()) {
-    LogSegment *ls = mds->mdlog->get_segment(seq);
+    auto&& ls = mds->mdlog->get_segment(seq);
     if (ls)
       ls->purging_inodes.subtract(inos);
 

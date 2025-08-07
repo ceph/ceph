@@ -98,6 +98,13 @@ public:
 
   virtual ~BlueFSVolumeSelector() {
   }
+
+  /**
+  *  Update config parameters from the config database.
+  *
+  */
+  virtual void update_from_config(CephContext* cct) = 0;
+
   /**
   *  Method to learn a hint (aka logic level discriminator)  specific for
   *  BlueFS log
@@ -863,10 +870,16 @@ public:
     vselector.reset(s);
   }
   void dump_volume_selector(std::ostream& sout) {
+    ceph_assert(vselector);
     vselector->dump(sout);
+  }
+  void update_volume_selector_from_config() {
+    ceph_assert(vselector);
+    vselector->update_from_config(cct);
   }
   void get_vselector_paths(const std::string& base,
                            BlueFSVolumeSelector::paths& res) const {
+    ceph_assert(vselector);
     return vselector->get_paths(base, res);
   }
 
@@ -953,6 +966,7 @@ public:
     uint64_t _slow_total)
     : wal_total(_wal_total), db_total(_db_total), slow_total(_slow_total) {}
 
+  void update_from_config(CephContext* cct) override {}
   void* get_hint_for_log() const override;
   void* get_hint_by_dir(std::string_view dirname) const override;
 

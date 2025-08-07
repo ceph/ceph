@@ -1248,7 +1248,7 @@ int RocksDBStore::do_open(ostream &out,
   ceph_assert(default_cf != nullptr);
   
   PerfCountersBuilder plb(cct, "rocksdb", l_rocksdb_first, l_rocksdb_last);
-  plb.add_time_avg(l_rocksdb_get_latency, "get_latency", "Get latency");
+  plb.add_time_avg(l_rocksdb_get_latency, "get_latency", "Get latency", nullptr, PerfCountersBuilder::PRIO_USEFUL);
   plb.add_time_avg(l_rocksdb_submit_latency, "submit_latency", "Submit Latency");
   plb.add_time_avg(l_rocksdb_submit_sync_latency, "submit_sync_latency", "Submit Sync Latency");
   plb.add_u64_counter(l_rocksdb_compact, "compact", "Compactions");

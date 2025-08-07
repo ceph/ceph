@@ -884,8 +884,7 @@ static void rgw_add_grant_to_iam_environment(rgw::IAM::Environment& e, req_state
   }
 }
 
-void rgw_build_iam_environment(rgw::sal::Driver* driver,
-	                              req_state* s)
+void rgw_build_iam_environment(req_state* s)
 {
   const auto& m = s->info.env->get_map();
   auto t = ceph::real_clock::now();
@@ -5664,10 +5663,13 @@ void RGWDeleteObj::execute(optional_yield y)
       del_op->params.bucket_owner = s->bucket_owner.id;
       del_op->params.versioning_status = s->bucket->get_info().versioning_status();
       del_op->params.unmod_since = unmod_since;
+      del_op->params.last_mod_time_match = last_mod_time_match;
       del_op->params.high_precision_time = s->system_request;
       del_op->params.olh_epoch = epoch;
       del_op->params.marker_version_id = version_id;
       del_op->params.null_verid = null_verid;
+      del_op->params.size_match = size_match;
+      del_op->params.if_match = if_match;
 
       op_ret = del_op->delete_obj(this, y, rgw::sal::FLAG_LOG_OP);
       if (op_ret >= 0) {
@@ -7526,8 +7528,11 @@ void RGWDeleteMultiObj::write_ops_log_entry(rgw_log_entry& entry) const {
   entry.delete_multi_obj_meta.objects = std::move(ops_log_entries);
 }
 
-void RGWDeleteMultiObj::handle_individual_object(const rgw_obj_key& o, optional_yield y)
+void RGWDeleteMultiObj::handle_individual_object(const RGWMultiDelObject& object, optional_yield y)
 {
+  const string& key = object.get_key();
+  const string& instance = object.get_version_id();
+  rgw_obj_key o(key, instance);
   // add the object key to the dout prefix so we can trace concurrent calls
   struct ObjectPrefix : public DoutPrefixPipe {
     const rgw_obj_key& o;
@@ -7610,6 +7615,9 @@ void RGWDeleteMultiObj::handle_individual_object(const rgw_obj_key& o, optional_
   del_op->params.obj_owner = s->owner;
   del_op->params.bucket_owner = s->bucket_owner.id;
   del_op->params.marker_version_id = version_id;
+  del_op->params.last_mod_time_match = object.get_last_mod_time();
+  del_op->params.if_match = object.get_if_match();
+  del_op->params.size_match = object.get_size_match();
 
   op_ret = del_op->delete_obj(dpp, y, rgw::sal::FLAG_LOG_OP);
   if (op_ret == -ENOENT) {
@@ -7631,6 +7639,22 @@ void RGWDeleteMultiObj::handle_individual_object(const rgw_obj_key& o, optional_
   }
   
   send_partial_response(o, del_op->result.delete_marker, del_op->result.version_id, op_ret);
+}
+
+void RGWDeleteMultiObj::handle_objects(const std::vector<RGWMultiDelObject>& objects,
+                                       uint32_t max_aio,
+                                       boost::asio::yield_context yield)
+{
+  auto group = ceph::async::spawn_throttle{yield, max_aio};
+
+  for (const auto& object : objects) {
+    group.spawn([this, &object] (boost::asio::yield_context yield) {
+                  handle_individual_object(object, yield);
+                });
+
+    rgw_flush_formatter(s, s->formatter);
+  }
+  group.wait();
 }
 
 void RGWDeleteMultiObj::execute(optional_yield y)
@@ -7683,8 +7707,9 @@ void RGWDeleteMultiObj::execute(optional_yield y)
 
   if (s->bucket->get_info().mfa_enabled()) {
     bool has_versioned = false;
-    for (auto i : multi_delete->objects) {
-      if (!i.instance.empty()) {
+    for (auto object : multi_delete->objects) {
+      const string& instance = object.get_version_id();
+      if (instance.empty()) {
         has_versioned = true;
         break;
       }
@@ -7700,16 +7725,25 @@ void RGWDeleteMultiObj::execute(optional_yield y)
 
   // process up to max_aio object deletes in parallel
   const uint32_t max_aio = std::max<uint32_t>(1, s->cct->_conf->rgw_multi_obj_del_max_aio);
-  auto group = ceph::async::spawn_throttle{y, max_aio};
 
-  for (const auto& key : multi_delete->objects) {
-    group.spawn([this, &key] (boost::asio::yield_context yield) {
-                  handle_individual_object(key, yield);
-                });
+  // if we're not already running in a coroutine, spawn one
+  if (!y) {
+    auto& objects = multi_delete->objects;
 
-    rgw_flush_formatter(s, s->formatter);
+    boost::asio::io_context context;
+    boost::asio::spawn(context,
+        [this, &objects, max_aio] (boost::asio::yield_context yield) {
+          handle_objects(objects, max_aio, yield);
+        },
+        [] (std::exception_ptr eptr) {
+          if (eptr) std::rethrow_exception(eptr);
+        });
+    context.run();
+  } else {
+    // use the existing coroutine's yield context
+    handle_objects(multi_delete->objects, max_aio,
+                   y.get_yield_context());
   }
-  group.wait();
 
   /*  set the return code to zero, errors at this point will be
   dumped to the response */
@@ -8620,7 +8654,7 @@ int RGWHandler::do_init_permissions(const DoutPrefixProvider *dpp, optional_yiel
     return ret==-ENODATA ? -EACCES : ret;
   }
 
-  rgw_build_iam_environment(driver, s);
+  rgw_build_iam_environment(s);
   return ret;
 }
 

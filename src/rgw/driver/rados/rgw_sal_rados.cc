@@ -2268,25 +2268,12 @@ int RadosStore::get_raw_chunk_size(const DoutPrefixProvider* dpp, const rgw_raw_
   return rados->get_max_chunk_size(obj.pool, chunk_size, dpp);
 }
 
-int RadosStore::init_neorados(const DoutPrefixProvider* dpp) {
-  if (!neorados) try {
-      neorados = neorados::RADOS::make_with_cct(dpp->get_cct(), io_context,
-						ceph::async::use_blocked);
-    } catch (const boost::system::system_error& e) {
-      ldpp_dout(dpp, 0) << "ERROR: creating neorados handle failed: "
-			<< e.what() << dendl;
-      return ceph::from_error_code(e.code());
-    }
-  return 0;
-}
-
 int RadosStore::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
 {
   std::unique_ptr<ZoneGroup> zg =
     std::make_unique<RadosZoneGroup>(this, svc()->zone->get_zonegroup());
   zone = make_unique<RadosZone>(this, std::move(zg));
-
-  return init_neorados(dpp);
+  return 0;
 }
 
 int RadosStore::log_usage(const DoutPrefixProvider *dpp, map<rgw_user_bucket, RGWUsageBatch>& usage_info, optional_yield y)
@@ -3589,7 +3576,10 @@ int RadosObject::RadosDeleteOp::delete_obj(const DoutPrefixProvider* dpp, option
   parent_op.params.remove_objs = params.remove_objs;
   parent_op.params.expiration_time = params.expiration_time;
   parent_op.params.unmod_since = params.unmod_since;
+  parent_op.params.last_mod_time_match = params.last_mod_time_match;
   parent_op.params.mtime = params.mtime;
+  parent_op.params.size_match = params.size_match;
+  parent_op.params.if_match = params.if_match;
   parent_op.params.high_precision_time = params.high_precision_time;
   parent_op.params.zones_trace = params.zones_trace;
   parent_op.params.abortmp = params.abortmp;
@@ -5480,10 +5470,16 @@ int RadosRole::delete_obj(const DoutPrefixProvider *dpp, optional_yield y)
 
 extern "C" {
 
-void* newRadosStore(void* io_context)
+void* newRadosStore(void* io_context_, CephContext* cct)
 {
-  rgw::sal::RadosStore* store = new rgw::sal::RadosStore(
-    *static_cast<boost::asio::io_context*>(io_context));
+  auto& io_context = *static_cast<boost::asio::io_context*>(io_context_);
+  ceph_assert(!io_context.stopped());
+  auto neorados = make_neorados(cct, io_context);
+  if (!neorados || !*neorados) {
+    return nullptr;
+  }
+  rgw::sal::RadosStore* store = nullptr;
+    store = new rgw::sal::RadosStore(*neorados);
   if (store) {
     RGWRados* rados = new RGWRados();
 
@@ -5497,5 +5493,4 @@ void* newRadosStore(void* io_context)
 
   return store;
 }
-
 }

@@ -1160,7 +1160,10 @@ class Object {
         std::list<rgw_obj_index_key>* remove_objs{nullptr};
         ceph::real_time expiration_time;
         ceph::real_time unmod_since;
+        ceph::real_time last_mod_time_match;
         ceph::real_time mtime;
+        std::optional<uint64_t> size_match;
+        const char *if_match{nullptr};
         bool high_precision_time{false};
         rgw_zone_set* zones_trace{nullptr};
 	bool abortmp{false};
@@ -1943,7 +1946,8 @@ public:
 				      optional_yield y,
               rgw::sal::ConfigStore* cfgstore,
 				      bool use_cache = true,
-				      bool use_gc = true) {
+				      bool use_gc = true,
+                                      bool admin = false) {
     rgw::sal::Driver* driver = init_storage_provider(dpp, cct, cfg, io_context,
 						   site_config,
 						   use_gc_thread,
@@ -1954,7 +1958,7 @@ public:
 						   run_reshard_thread,
                run_notification_thread,
 						   use_cache, use_gc,
-						   background_tasks, y, cfgstore);
+						   background_tasks, y, cfgstore, admin);
     return driver;
   }
   /** Get a stripped down driver by service name */
@@ -1984,7 +1988,7 @@ public:
             bool run_notification_thread,
 						bool use_metadata_cache,
 						bool use_gc, bool background_tasks,
-						optional_yield y, rgw::sal::ConfigStore* cfgstore);
+						optional_yield y, rgw::sal::ConfigStore* cfgstore, bool admin);
   /** Initialize a new raw Driver */
   static rgw::sal::Driver* init_raw_storage_provider(const DoutPrefixProvider* dpp,
 						    CephContext* cct,
@@ -2004,5 +2008,10 @@ public:
       -> std::unique_ptr<rgw::sal::ConfigStore>;
 
 };
+
+#ifdef WITH_RADOSGW_RADOS
+std::optional<neorados::RADOS>
+make_neorados(CephContext* cct, boost::asio::io_context& io_context);
+#endif
 
 /** @} */
