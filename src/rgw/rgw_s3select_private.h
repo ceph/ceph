@@ -35,6 +35,7 @@
 #pragma GCC diagnostic push
 #pragma clang diagnostic push
 #pragma GCC diagnostic ignored "-Wdeprecated"
+#pragma GCC diagnostic ignored "-Wstringop-truncation"
 #pragma clang diagnostic ignored "-Wdeprecated"
 #include <s3select/include/s3select.h>
 #pragma GCC diagnostic pop
