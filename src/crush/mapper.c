@@ -1651,6 +1651,7 @@ static unsigned crush_msr_choose(
 				continue;
 			}
 			// for collision detection
+		        __attribute__((__unused__))
 			int pushed = crush_msr_push_used(
 				workspace, current_stepno, stride_start, stride_end,
 				child_bucket_candidate);
