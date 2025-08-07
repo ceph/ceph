@@ -62,6 +62,7 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "monclient" << (_hunting() ? "(hunting)":"") << ": "
 
+namespace asio = boost::asio;
 namespace bs = boost::system;
 using std::string;
 using namespace std::literals;
@@ -534,8 +535,9 @@ void MonClient::shutdown()
   monc_lock.lock();
   stopping = true;
   while (!version_requests.empty()) {
-    ceph::async::post(std::move(version_requests.begin()->second),
-		      monc_errc::shutting_down, 0, 0);
+    asio::dispatch(
+      asio::append(std::move(version_requests.begin()->second),
+		   make_error_code(monc_errc::shutting_down), 0, 0));
     ldout(cct, 20) << __func__ << " canceling and discarding version request "
 		   << version_requests.begin()->first << dendl;
     version_requests.erase(version_requests.begin());
@@ -710,7 +712,7 @@ void MonClient::_finish_auth(int auth_err)
     ceph_assert(auth);
     _check_auth_tickets();
   } else if (auth_err == -EAGAIN && !active_con) {
-    ldout(cct,10) << __func__ 
+    ldout(cct,10) << __func__
                   << " auth returned EAGAIN, reopening the session to try again"
                   << dendl;
     _reopen_session();
@@ -767,8 +769,9 @@ void MonClient::_reopen_session(int rank)
 
   // throw out version check requests
   while (!version_requests.empty()) {
-    ceph::async::post(std::move(version_requests.begin()->second),
-		      monc_errc::session_reset, 0, 0);
+    asio::dispatch(asio::append(std::move(version_requests.begin()->second),
+				make_error_code(monc_errc::session_reset),
+				0, 0));
     version_requests.erase(version_requests.begin());
   }
 
@@ -1168,7 +1171,8 @@ void MonClient::_send_command(MonCommand *r)
   if (r->is_tell()) {
     ++r->send_attempts;
     if (r->send_attempts > cct->_conf->mon_client_directed_command_retry) {
-      _finish_command(r, monc_errc::mon_unavailable, "mon unavailable", {});
+      _finish_command(r, make_error_code(monc_errc::mon_unavailable),
+		      "mon unavailable", {});
       return;
     }
     // tell-style command
@@ -1180,7 +1184,8 @@ void MonClient::_send_command(MonCommand *r)
 	if (r->target_rank >= (int)monmap.size()) {
 	  ldout(cct, 10) << " target " << r->target_rank
 			 << " >= max mon " << monmap.size() << dendl;
-	  _finish_command(r, monc_errc::rank_dne, "mon rank dne"sv, {});
+	  _finish_command(r, make_error_code(monc_errc::rank_dne),
+			  "mon rank dne"sv, {});
 	  return;
 	}
 	r->target_con = messenger->connect_to_mon(
@@ -1189,7 +1194,8 @@ void MonClient::_send_command(MonCommand *r)
 	if (!monmap.contains(r->target_name)) {
 	  ldout(cct, 10) << " target " << r->target_name
 			 << " not present in monmap" << dendl;
-	  _finish_command(r, monc_errc::mon_dne, "mon dne"sv, {});
+	  _finish_command(r, make_error_code(monc_errc::mon_dne),
+			  "mon dne"sv, {});
 	  return;
 	}
 	r->target_con = messenger->connect_to_mon(
@@ -1224,7 +1230,8 @@ void MonClient::_send_command(MonCommand *r)
       if (r->target_rank >= (int)monmap.size()) {
 	ldout(cct, 10) << " target " << r->target_rank
 		       << " >= max mon " << monmap.size() << dendl;
-	_finish_command(r, monc_errc::rank_dne, "mon rank dne"sv, {});
+	_finish_command(r, make_error_code(monc_errc::rank_dne),
+			"mon rank dne"sv, {});
 	return;
       }
       _reopen_session(r->target_rank);
@@ -1239,7 +1246,8 @@ void MonClient::_send_command(MonCommand *r)
       if (!monmap.contains(r->target_name)) {
 	ldout(cct, 10) << " target " << r->target_name
 		       << " not present in monmap" << dendl;
-	_finish_command(r, monc_errc::mon_dne, "mon dne"sv, {});
+	_finish_command(r, make_error_code(monc_errc::mon_dne),
+			"mon dne"sv, {});
 	return;
       }
       _reopen_session(monmap.get_rank(r->target_name));
@@ -1377,7 +1385,8 @@ int MonClient::_cancel_mon_command(uint64_t tid)
   ldout(cct, 10) << __func__ << " tid " << tid << dendl;
 
   MonCommand *cmd = it->second;
-  _finish_command(cmd, monc_errc::timed_out, "timed out"sv, {});
+  _finish_command(cmd, make_error_code(monc_errc::timed_out),
+		  "timed out"sv, {});
   return 0;
 }
 
@@ -1386,8 +1395,9 @@ void MonClient::_finish_command(MonCommand *r, bs::error_code ret,
 {
   ldout(cct, 10) << __func__ << " " << r->tid << " = " << ret << " " << rs
 		 << dendl;
-  ceph::async::post(std::move(r->onfinish), ret, std::string(rs),
-		    std::move(bl));
+  asio::post(service.get_executor(),
+	     asio::append(std::move(r->onfinish), ret, std::string(rs),
+			  std::move(bl)));
   if (r->target_con) {
     r->target_con->mark_down();
   }
@@ -1409,8 +1419,9 @@ void MonClient::handle_get_version_reply(MMonGetVersionReply* m)
     ldout(cct, 10) << __func__ << " finishing " << iter->first << " version "
 		   << m->version << dendl;
     version_requests.erase(iter);
-    ceph::async::post(std::move(req), bs::error_code(),
-		      m->version, m->oldest_version);
+    asio::post(service.get_executor(),
+	       asio::append(std::move(req), bs::error_code(),
+			    m->version, m->oldest_version));
   }
   m->put();
 }

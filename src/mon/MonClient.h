@@ -22,9 +22,14 @@
 #include <string>
 #include <vector>
 
+#include <boost/asio/append.hpp>
+#include <boost/asio/consign.hpp>
 #include <boost/asio/io_context.hpp>
+#include <boost/asio/any_completion_handler.hpp>
 #include <boost/asio/steady_timer.hpp>
 #include <boost/asio/strand.hpp>
+#include <boost/asio/executor_work_guard.hpp>
+#include <boost/asio/post.hpp>
 
 #include "msg/Messenger.h"
 
@@ -32,7 +37,6 @@
 #include "MonSub.h"
 
 #include "common/admin_socket.h"
-#include "common/async/completion.h"
 #include "common/strtol.h" // for strict_strtoll()
 #include "common/Timer.h"
 #include "common/config.h"
@@ -281,11 +285,11 @@ class MonClient : public Dispatcher,
 public:
   // Error, Newest, Oldest
   using VersionSig = void(boost::system::error_code, version_t, version_t);
-  using VersionCompletion = ceph::async::Completion<VersionSig>;
+  using VersionCompletion = boost::asio::any_completion_handler<VersionSig>;
 
   using CommandSig = void(boost::system::error_code, std::string,
 			  ceph::buffer::list);
-  using CommandCompletion = ceph::async::Completion<CommandSig>;
+  using CommandCompletion = boost::asio::any_completion_handler<CommandSig>;
 
   MonMap monmap;
   std::map<std::string,std::string> config_mgr;
@@ -569,10 +573,10 @@ private:
     uint64_t tid;
     std::vector<std::string> cmd;
     ceph::buffer::list inbl;
-    std::unique_ptr<CommandCompletion> onfinish;
+    CommandCompletion onfinish;
     std::optional<boost::asio::steady_timer> cancel_timer;
 
-    MonCommand(MonClient& monc, uint64_t t, std::unique_ptr<CommandCompletion> onfinish)
+    MonCommand(MonClient& monc, uint64_t t, CommandCompletion onfinish)
       : tid(t), onfinish(std::move(onfinish)) {
       auto timeout =
           monc.cct->_conf.get_val<std::chrono::seconds>("rados_mon_op_timeout");
@@ -607,86 +611,109 @@ private:
 
 public:
   template<typename CompletionToken>
-  auto start_mon_command(const std::vector<std::string>& cmd,
-                         const ceph::buffer::list& inbl,
+  auto start_mon_command(std::vector<std::string> cmd,
+                         ceph::buffer::list inbl,
 			 CompletionToken&& token) {
+    namespace asio = boost::asio;
     ldout(cct,10) << __func__ << " cmd=" << cmd << dendl;
-    boost::asio::async_completion<CompletionToken, CommandSig> init(token);
-    {
-      std::scoped_lock l(monc_lock);
-      auto h = CommandCompletion::create(service.get_executor(),
-					 std::move(init.completion_handler));
-      if (!initialized || stopping) {
-	ceph::async::post(std::move(h), monc_errc::shutting_down, std::string{},
-			  bufferlist{});
-      } else {
-	auto r = new MonCommand(*this, ++last_mon_command_tid, std::move(h));
-	r->cmd = cmd;
-	r->inbl = inbl;
-	mon_commands.emplace(r->tid, r);
-	_send_command(r);
-      }
-    }
-    return init.result.get();
-  }
-
-  template<typename CompletionToken>
-  auto start_mon_command(int mon_rank, const std::vector<std::string>& cmd,
-			 const ceph::buffer::list& inbl, CompletionToken&& token) {
-    ldout(cct,10) << __func__ << " cmd=" << cmd << dendl;
-    boost::asio::async_completion<CompletionToken, CommandSig> init(token);
-    {
-      std::scoped_lock l(monc_lock);
-      auto h = CommandCompletion::create(service.get_executor(),
-					 std::move(init.completion_handler));
-      if (!initialized || stopping) {
-	ceph::async::post(std::move(h), monc_errc::shutting_down, std::string{},
-			  bufferlist{});
-      } else {
-	auto r = new MonCommand(*this, ++last_mon_command_tid, std::move(h));
-	r->target_rank = mon_rank;
-	r->cmd = cmd;
-	r->inbl = inbl;
-	mon_commands.emplace(r->tid, r);
-	_send_command(r);
-      }
-    }
-    return init.result.get();
-  }
-
-  template<typename CompletionToken>
-  auto start_mon_command(const std::string& mon_name,
-                         const std::vector<std::string>& cmd,
-			 const ceph::buffer::list& inbl,
-			 CompletionToken&& token) {
-    ldout(cct,10) << __func__ << " cmd=" << cmd << dendl;
-    boost::asio::async_completion<CompletionToken, CommandSig> init(token);
-    {
-      std::scoped_lock l(monc_lock);
-      auto h = CommandCompletion::create(service.get_executor(),
-					 std::move(init.completion_handler));
-      if (!initialized || stopping) {
-	ceph::async::post(std::move(h), monc_errc::shutting_down, std::string{},
-			  bufferlist{});
-      } else {
-	auto r = new MonCommand(*this, ++last_mon_command_tid, std::move(h));
-	// detect/tolerate mon *rank* passed as a string
-	std::string err;
-	int rank = strict_strtoll(mon_name.c_str(), 10, &err);
-	if (err.size() == 0 && rank >= 0) {
-	  ldout(cct,10) << __func__ << " interpreting name '" << mon_name
-			<< "' as rank " << rank << dendl;
-	  r->target_rank = rank;
+    auto consigned = asio::consign(
+      std::forward<CompletionToken>(token), asio::make_work_guard(
+	asio::get_associated_executor(token, service.get_executor())));
+    return asio::async_initiate<decltype(consigned), CommandSig>(
+      [this, cmd = std::move(cmd),
+       inbl = std::move(inbl)](auto handler) mutable {
+	std::scoped_lock l(monc_lock);
+	if (!initialized || stopping) {
+	  asio::dispatch(
+	    asio::get_associated_immediate_executor(handler,
+						    service.get_executor()),
+	    asio::append(std::move(handler),
+			 make_error_code(monc_errc::shutting_down),
+			 std::string{}, bufferlist{}));
 	} else {
-	  r->target_name = mon_name;
+	  auto r = new MonCommand(*this, ++last_mon_command_tid,
+				  std::move(handler));
+	  r->cmd = std::move(cmd);
+	  r->inbl = std::move(inbl);
+	  mon_commands.emplace(r->tid, r);
+	  _send_command(r);
 	}
-	r->cmd = cmd;
-	r->inbl = inbl;
-	mon_commands.emplace(r->tid, r);
-	_send_command(r);
-      }
-    }
-    return init.result.get();
+      }, consigned);
+  }
+
+  template<typename CompletionToken>
+  auto start_mon_command(int mon_rank, std::vector<std::string> cmd,
+			 ceph::buffer::list inbl,
+			 CompletionToken&& token) {
+    namespace asio = boost::asio;
+    namespace sys = boost::system;
+    ldout(cct,10) << __func__ << " cmd=" << cmd << dendl;
+    auto consigned = asio::consign(
+      std::forward<CompletionToken>(token), asio::make_work_guard(
+	asio::get_associated_executor(token, service.get_executor())));
+    return asio::async_initiate<decltype(consigned), CommandSig>(
+      [this, mon_rank, cmd = std::move(cmd),
+       inbl = std::move(inbl)](auto handler) mutable {
+	std::scoped_lock l(monc_lock);
+	if (!initialized || stopping) {
+	  asio::dispatch(
+	    asio::get_associated_immediate_executor(handler,
+						    service.get_executor()),
+	    asio::append(std::move(handler),
+			 make_error_code(monc_errc::shutting_down),
+			 std::string{}, bufferlist{}));
+	} else {
+	  auto r = new MonCommand(*this, ++last_mon_command_tid,
+				  std::move(handler));
+	  r->target_rank = mon_rank;
+	  r->cmd = std::move(cmd);
+	  r->inbl = std::move(inbl);
+	  mon_commands.emplace(r->tid, r);
+	  _send_command(r);
+	}
+      }, consigned);
+  }
+
+  template<typename CompletionToken>
+  auto start_mon_command(std::string mon_name,
+                         std::vector<std::string> cmd,
+			 ceph::buffer::list inbl,
+			 CompletionToken&& token) {
+    namespace asio = boost::asio;
+    ldout(cct,10) << __func__ << " cmd=" << cmd << dendl;
+    auto consigned = asio::consign(
+      std::forward<CompletionToken>(token), asio::make_work_guard(
+	asio::get_associated_executor(token, service.get_executor())));
+    return asio::async_initiate<decltype(consigned), CommandSig>(
+      [this, mon_name = std::move(mon_name), cmd = std::move(cmd),
+       inbl = std::move(inbl)](auto handler) mutable {
+	std::scoped_lock l(monc_lock);
+	if (!initialized || stopping) {
+	  asio::dispatch(
+	    asio::get_associated_immediate_executor(handler,
+						    service.get_executor()),
+	    asio::append(std::move(handler),
+			 make_error_code(monc_errc::shutting_down),
+			 std::string{}, bufferlist{}));
+	} else {
+	  auto r = new MonCommand(*this, ++last_mon_command_tid,
+				  std::move(handler));
+	  // detect/tolerate mon *rank* passed as a string
+	  std::string err;
+	  int rank = strict_strtoll(mon_name.c_str(), 10, &err);
+	  if (err.size() == 0 && rank >= 0) {
+	    ldout(cct,10) << __func__ << " interpreting name '" << mon_name
+			  << "' as rank " << rank << dendl;
+	    r->target_rank = rank;
+	  } else {
+	    r->target_name = std::move(mon_name);
+	  }
+	  r->cmd = std::move(cmd);
+	  r->inbl = std::move(inbl);
+	  mon_commands.emplace(r->tid, r);
+	  _send_command(r);
+	}
+      }, consigned);
   }
 
   class ContextVerter {
@@ -715,22 +742,24 @@ public:
     }
   };
 
-  void start_mon_command(const std::vector<std::string>& cmd, const bufferlist& inbl,
+  void start_mon_command(std::vector<std::string> cmd, bufferlist inbl,
 			 bufferlist *outbl, std::string *outs,
 			 Context *onfinish) {
-    start_mon_command(cmd, inbl, ContextVerter(outs, outbl, onfinish));
+    start_mon_command(std::move(cmd), std::move(inbl),
+		      ContextVerter(outs, outbl, onfinish));
   }
-  void start_mon_command(int mon_rank,
-			 const std::vector<std::string>& cmd, const bufferlist& inbl,
-			 bufferlist *outbl, std::string *outs,
+  void start_mon_command(int mon_rank, std::vector<std::string> cmd,
+			 bufferlist inbl, bufferlist *outbl, std::string *outs,
 			 Context *onfinish) {
-    start_mon_command(mon_rank, cmd, inbl, ContextVerter(outs, outbl, onfinish));
+    start_mon_command(mon_rank, std::move(cmd), std::move(inbl),
+		      ContextVerter(outs, outbl, onfinish));
   }
-  void start_mon_command(const std::string &mon_name,  ///< mon name, with mon. prefix
-			 const std::vector<std::string>& cmd, const bufferlist& inbl,
+  void start_mon_command(std::string mon_name,  ///< mon name, with mon. prefix
+			 std::vector<std::string> cmd, bufferlist inbl,
 			 bufferlist *outbl, std::string *outs,
 			 Context *onfinish) {
-    start_mon_command(mon_name, cmd, inbl, ContextVerter(outs, outbl, onfinish));
+    start_mon_command(std::move(mon_name), std::move(cmd), std::move(inbl),
+		      ContextVerter(outs, outbl, onfinish));
   }
 
 
@@ -747,19 +776,19 @@ public:
    */
   template<typename CompletionToken>
   auto get_version(std::string&& map, CompletionToken&& token) {
-    boost::asio::async_completion<CompletionToken, VersionSig> init(token);
-    {
-      std::scoped_lock l(monc_lock);
-      auto m = ceph::make_message<MMonGetVersion>();
-      m->what = std::move(map);
-      m->handle = ++version_req_id;
-      version_requests.emplace(m->handle,
-			       VersionCompletion::create(
-				 service.get_executor(),
-				 std::move(init.completion_handler)));
-      _send_mon_message(m);
-    }
-    return init.result.get();
+    namespace asio = boost::asio;
+    auto consigned = asio::consign(
+      std::forward<CompletionToken>(token), asio::make_work_guard(
+	asio::get_associated_executor(token, service.get_executor())));
+    return asio::async_initiate<decltype(consigned), VersionSig>(
+      [this, map = std::move(map)](auto handler) mutable {
+	std::scoped_lock l(monc_lock);
+	auto m = ceph::make_message<MMonGetVersion>();
+	m->what = std::move(map);
+	m->handle = ++version_req_id;
+	version_requests.emplace(m->handle, std::move(handler));
+	_send_mon_message(m);
+      }, consigned);
   }
 
   /**
@@ -781,7 +810,7 @@ public:
 
 private:
 
-  std::map<ceph_tid_t, std::unique_ptr<VersionCompletion>> version_requests;
+  std::map<ceph_tid_t, VersionCompletion> version_requests;
   ceph_tid_t version_req_id;
   void handle_get_version_reply(MMonGetVersionReply* m);
   md_config_t::config_callback config_cb;

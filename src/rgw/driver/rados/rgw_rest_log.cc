@@ -15,6 +15,7 @@
 
 #include "common/ceph_json.h"
 #include "common/strtol.h"
+#include "rgw/async_utils.h"
 #include "rgw_rest.h"
 #include "rgw_op.h"
 #include "rgw_rest_s3.h"
@@ -688,13 +689,22 @@ void RGWOp_DATALog_List::execute(optional_yield y) {
 
   // Note that last_marker is updated to be the marker of the last
   // entry listed
-  op_ret = static_cast<rgw::sal::RadosStore*>(driver)->svc()->
-    datalog_rados->list_entries(this, shard_id, max_entries, entries,
-				marker, &last_marker, &truncated, y);
+  auto store = static_cast<rgw::sal::RadosStore*>(driver);
+  op_ret = rgw::run_coro(
+    this,
+    store->get_io_context(),
+    store->svc()->datalog_rados->list_entries(this, shard_id,
+					      max_entries, marker),
+    std::tie(entries, last_marker, truncated),
+    "RGWDataChangesLog::list_entries", y);
+
 
   RGWDataChangesLogInfo info;
-  op_ret = static_cast<rgw::sal::RadosStore*>(driver)->svc()->
-    datalog_rados->get_info(this, shard_id, &info, y);
+  op_ret = rgw::run_coro(
+    this,
+    store->get_io_context(),
+    store->svc()->datalog_rados->get_info(this, shard_id),
+    info, "RGWDataChangesLog::get_info", y);
 
   last_update = info.last_update;
 }
@@ -756,8 +766,10 @@ void RGWOp_DATALog_ShardInfo::execute(optional_yield y) {
     return;
   }
 
-  op_ret = static_cast<rgw::sal::RadosStore*>(driver)->svc()->
-    datalog_rados->get_info(this, shard_id, &info, y);
+  auto store = static_cast<rgw::sal::RadosStore*>(driver);
+  op_ret = rgw::run_coro(this, store->get_io_context(),
+			 store->svc()->datalog_rados->get_info(this, shard_id),
+			 info, "RGWDataChangesLog::get_info", y);
 }
 
 void RGWOp_DATALog_ShardInfo::send_response() {
@@ -906,8 +918,11 @@ void RGWOp_DATALog_Delete::execute(optional_yield y) {
     return;
   }
 
-  op_ret = static_cast<rgw::sal::RadosStore*>(driver)->svc()->
-    datalog_rados->trim_entries(this, shard_id, marker, y);
+  auto store = static_cast<rgw::sal::RadosStore*>(driver);
+  op_ret = rgw::run_coro(
+    this, store->get_io_context(),
+    store->svc()->datalog_rados->trim_entries(this, shard_id, marker),
+    "RGWDataChangesLog::trim_entries", y);
 }
 
 // not in header to avoid pulling in rgw_sync.h

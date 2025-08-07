@@ -132,7 +132,7 @@ protected:
     RGWDataChangesLogMarker marker;
     do {
       std::vector<rgw_data_change_log_entry> entries;
-      std::tie(entries, marker) =
+      std::tie(entries, marker, std::ignore) =
 	co_await datalog->list_entries(dpp, 1'000,
 				       std::move(marker));
       for (const auto& entry : entries) {
