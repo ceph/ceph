@@ -194,6 +194,14 @@ erasure-coded pool as the ``--data-pool`` during image creation:
 For CephFS, an erasure-coded pool can be set as the default data pool during
 file system creation or via `file layouts <../../../cephfs/file-layouts>`_.
 
+.. 
+   In the Tentacle documentation, there is a section here called
+   "Erasure Coding Enhancements". This section does not exist in 
+   the Squid documentation or in other documentation prior to the
+   Tentacle documentation. The relevant section was introduced in
+   commit 185987afff561001423196e9bc1366e4b7079c20, in
+   https://github.com/ceph/ceph/pull/64809.
+
 Erasure-coded pool overhead
 ---------------------------
 
