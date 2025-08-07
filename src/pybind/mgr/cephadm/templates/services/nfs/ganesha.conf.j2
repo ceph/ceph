@@ -51,9 +51,15 @@ RGW {
 KMIP {
 {% for kmip_addr in kmip_addrs %}
 	HOST {
-		addr = {{  kmip_addr.get('addr', '') }};
+		addr = "{{  kmip_addr.get('addr', '') }}";
 {% if kmip_addr.get('port') %}
 		port = {{  kmip_addr.get('port') }};
+{% endif %}
+{% if 'servername' in kmip_addr %}
+                servername = "{{  kmip_addr.get('servername') }}";
+{% endif %}
+{% if 'verify_hostname' in kmip_addr %}
+                verify_hostname = "{{  kmip_addr.get('verify_hostname') }}";
 {% endif %}
 	}
 {% endfor %}
