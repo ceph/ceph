@@ -1806,7 +1806,8 @@ public:
     auto rbs = rb_group->get_rb_managers();
     size_t total = 0;
     for (auto p : rbs) {
-      total += p->get_device()->get_available_size();
+      total += p->get_size();
+      total += p->get_journal_size();
     }
     return total;
   }
