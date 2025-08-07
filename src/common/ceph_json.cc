@@ -120,9 +120,6 @@ bool JSONParser::parse(std::string_view json_string_view)
   if (json_string_view.empty())
    return false;
 
-  if(json_string_view.ends_with('\0')) 
-   json_string_view.remove_suffix(1);
-
   if (!parse_json(json_string_view, data))
    return false; 
 
