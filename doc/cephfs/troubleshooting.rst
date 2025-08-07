@@ -91,13 +91,14 @@ Do the following when restoring your file system:
      ``refuse_client_session`` file-system setting to prevent new sessions from
      connecting to the CephFS.
 
-* **Extend the MDS heartbeat grace period.** This avoids replacing an MDS that
-  appears "stuck" during some operation. Sometimes recovery of an MDS may
-  involve an operation that takes longer than expected (from the programmer's
-  perspective). This is more likely when recovery is already taking longer than
-  normal to complete (indicated by your reading this document). Avoid
-  unnecessary replacement loops by running the following command and extending
-  the heartbeat grace period:
+* **Extend the MDS heartbeat grace period.** Doing this causes the system to
+  avoid replacing an MDS that becomes "stuck" during an operation. Sometimes
+  recovery of an MDS may involve operations that take longer than expected
+  (from the programmer's perspective). This is more likely when recovery has 
+  already taken longer than normal to complete (which, if you're reading this
+  document, is likely the situation you find yourself in). Avoid unnecessary
+  replacement loops by running the following command and extending the
+  heartbeat grace period:
 
    .. prompt:: bash #
 
@@ -111,8 +112,9 @@ Do the following when restoring your file system:
 * **Disable open-file-table prefetch.** Under normal circumstances, the MDS
   prefetches directory contents during recovery as a way of heating up its
   cache. During a long recovery, the cache is probably already hot **and
-  large**. So this behavior is unnecessary and can be undesirable. Disable
-  open-file-table prefetching by running the following command:
+  large**. If the cache is already hot and large, this prefetching is
+  unnecessary and can be undesirable. Disable open-file-table prefetching by
+  running the following command:
 
   .. prompt:: bash #
 
@@ -120,10 +122,11 @@ Do the following when restoring your file system:
 
 * **Turn off clients.** Clients that reconnect to the newly ``up:active`` MDS
   can create new load on the file system just as it is becoming operational.
-  Maintenance is often necessary before allowing clients to connect to the file
-  system and resuming a regular workload. For example, expediting the trimming
-  of journals may be advisable if the recovery took a long time because replay
-  was reading a very large journal.
+  This is often undesirable. Maintenance is often necessary before allowing
+  clients to connect to the file system and before resuming a regular workload.
+  For example, expediting the trimming of journals may be advisable if the
+  recovery took a long time due to the amount of time replay spent in reading a
+  very large journal.
 
   Client sessions can be refused manually, or by using the
   ``refuse_client_session`` tunable as in the following command: 
@@ -135,9 +138,9 @@ Do the following when restoring your file system:
   This command has the effect of preventing clients from establishing new
   sessions with the MDS.
 
-* **Do not tweak max_mds.** Modifying the file system setting variable
-  ``max_mds`` is sometimes thought to be good step during troubleshooting or
-  recovery. But modifying ``max_mds`` might have the effect of further
+* **Do not tweak max_mds.** Modifying the file-system setting variable
+  ``max_mds`` may seem like a good idea during troubleshooting and recovery,
+  but it probably isn't. Modifying ``max_mds`` might have the effect of further
   destabilizing the cluster. If ``max_mds`` must be changed in such
   circumstances, run the command to change ``max_mds`` with the confirmation
   flag (``--yes-i-really-mean-it``).
