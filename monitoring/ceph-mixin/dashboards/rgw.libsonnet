@@ -310,18 +310,6 @@ local g = import 'grafonnet/grafana.libsonnet';
         ''
       )
     )
-    .addTemplate(
-      $.addTemplateSchema(
-        'topic',
-        '$datasource',
-        'label_values(ceph_rgw_topic_persistent_topic_len,topic)',
-        1,
-        true,
-        1,
-        'Topic',
-        ''
-      )
-    )
     .addPanels([
       $.addRowSchema(false,
                      true,
@@ -726,30 +714,30 @@ local g = import 'grafonnet/grafana.libsonnet';
         'short',
         |||
           (
-           ceph_rgw_topic_persistent_topic_len{topic=~"$topic"}
+           ceph_rgw_topic_persistent_topic_len
           )
         |||,
         '{{topic}}',
         0,
         28,
-        24,
-        7
+        12,
+        8
       ),
        RgwOverviewPanel(
         'Persistent Topic Size',
         '',
-        'bytes',
+        'deckbytes',
         'short',
         |||
           (
-           ceph_rgw_topic_persistent_topic_size{topic=~"$topic"}
+           ceph_rgw_topic_persistent_topic_size
           )
         |||,
         '{{topic}}',
-        0,
-        35,
-        24,
-        7
+        12,
+        28,
+        12,
+        8
       ),
     ]),
   'radosgw-detail.json':
