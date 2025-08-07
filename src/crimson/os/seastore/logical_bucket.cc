@@ -47,6 +47,10 @@ public:
     } else {
       TRACE("create bucket: {}", laddr);
       index[laddr] = lru.emplace(lru.end(), laddr);
+      if (should_demote()) {
+	assert(listener);
+	listener->maybe_wake_background();
+      }
     }
   }
 
