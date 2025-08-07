@@ -27,15 +27,16 @@ Stuck during recovery
 Stuck in up:replay
 ------------------
 
-If your MDS is stuck in the ``up:replay`` state, then it is likely that the
-journal is very long. Did you see ``MDS_HEALTH_TRIM`` cluster warnings saying
-the MDS is behind on trimming its journal? Very large journals can take hours
-to read. There is no working around this but there are things you can do to
-speed things along:
+If your MDS is stuck in the ``up:replay`` state, then the journal is probably
+very long. The presence of ``MDS_HEALTH_TRIM`` cluster warnings can indicate
+that the MDS has not yet caught up while trimming its journal. Very large
+journals can take hours to process. There is no working around this, but there
+are things you can do to speed up the process:
 
-Reduce MDS debugging to 0. Even with the default settings, the MDS logs a few
-messages to memory for dumping in case a fatal error is encountered. You can
-turn off all logging by running the following commands:
+Temporarily disable MDS debug logs by reducing MDS debugging to ``0``. Even
+with the default settings, the MDS logs a few messages to memory for dumping in
+case a fatal error is encountered. You can turn off all logging by running the
+following commands:
 
 .. prompt:: bash #
 
@@ -44,9 +45,10 @@ turn off all logging by running the following commands:
    ceph config set mds debug_monc 0
 
 Remember that when you set ``debug_mds``, ``debug_ms``, and ``debug_monc`` to
-``0``, Note if the MDS fails then there will be no information to determine why
-fatal errors occurred. If you can calculate when ``up:replay`` will complete,
-you should restore these configs just prior to entering the next state:
+``0``, if the MDS fails then there will be no debugging information that can be
+used to determine why fatal errors occurred. If you can calculate when
+``up:replay`` will complete, restore these configurations just prior to
+entering the next state:
 
 .. code:: bash
 
@@ -54,7 +56,7 @@ you should restore these configs just prior to entering the next state:
    ceph config rm mds debug_ms
    ceph config rm mds debug_monc
 
-After replay has been speeded up, calculate when the MDS will complete the
+After replay has been expedited, calculate when the MDS will complete the
 replay. Examine the journal replay status:
 
 .. code:: bash
