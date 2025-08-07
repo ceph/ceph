@@ -254,7 +254,7 @@ def task(ctx, config):
         "tier_evict",
         "tier_promote",
         "tier_flush"
-    ]:
+        ]:
         if field in op_weights:
             weights[field] = op_weights[field]
 
@@ -271,6 +271,7 @@ def task(ctx, config):
         args.extend([
             '--op', op, str(weight)
         ])
+        
 
     def thread():
         """Thread spawned by gevent"""
@@ -334,7 +335,7 @@ def task(ctx, config):
                     logger=log.getChild("rados.{id}".format(id=id_)),
                     stdin=run.PIPE,
                     wait=False
-                )
+                    )
                 tests[id_] = proc
 
             watched_process: CephTestRados = CephTestRados(ctx, config, cluster, tests)
