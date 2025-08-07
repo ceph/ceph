@@ -31,14 +31,31 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "NetHandler "
 
+#ifndef SMCPROTO_SMC
+  #define SMCPROTO_SMC           0       /* SMC protocol, IPv4 */
+  #define SMCPROTO_SMC6          1       /* SMC protocol, IPv6 */
+#endif
+
 namespace ceph{
 
 int NetHandler::create_socket(int domain, bool reuse_addr)
 {
   int s;
   int r = 0;
+  int protocol = IPPROTO_TCP;
 
-  if ((s = socket_cloexec(domain, SOCK_STREAM, 0)) == -1) {
+  if (this->try_smc) {
+    /* check if socket is eligible for AF_SMC */
+    if (domain == AF_INET || domain == AF_INET6) {
+      if (domain == AF_INET)
+        protocol = SMCPROTO_SMC;
+      else /* AF_INET6 */
+        protocol = SMCPROTO_SMC6;
+      domain = AF_SMC;
+    }
+  }
+
+  if ((s = socket_cloexec(domain, SOCK_STREAM, protocol)) == -1) {
     r = ceph_sock_errno();
     lderr(cct) << __func__ << " couldn't create socket " << cpp_strerror(r) << dendl;
     return -r;
