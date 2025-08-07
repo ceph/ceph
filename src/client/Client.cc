@@ -12579,7 +12579,13 @@ int Client::_statfs(Inode *in, struct statvfs *stbuf,
   stbuf->f_files = total_files_on_fs;
   stbuf->f_ffree = -1;
   stbuf->f_favail = -1;
-  stbuf->f_fsid = -1;       // ??
+  if (in->snaprealm) {
+    // this is subvolume root ino
+    stbuf->f_fsid = in->snaprealm->ino;
+  } else {
+    stbuf->f_fsid = -1;       // ??
+  }
+
   stbuf->f_flag = 0;        // ??
   stbuf->f_namemax = NAME_MAX;
 
