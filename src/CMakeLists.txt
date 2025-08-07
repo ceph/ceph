@@ -126,6 +126,7 @@ CHECK_CXX_COMPILER_FLAG("-Wredundant-move" COMPILER_SUPPORTS_REDUNDANT_MOVE)
 if(COMPILER_SUPPORTS_REDUNDANT_MOVE)
   add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-Wredundant-move>)
 endif()
+
 if(CMAKE_CXX_COMPILER_ID STREQUAL GNU)
   if(WIN32)
     if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS 10)
@@ -137,9 +138,6 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL GNU)
       message(FATAL_ERROR "crimson/seastar require minimum GCC version of 13 for C++20 and coroutine support")
     endif()
   else()
-    if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS 11)
-      message(FATAL_ERROR "C++20 support requires a minimum GCC version of 11.")
-    endif()
   endif()
   if(MINGW)
     # The MINGW headers are missing some "const" qualifiers.
@@ -157,6 +155,9 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL GNU)
       string(APPEND CMAKE_EXE_LINKER_FLAGS " -pie")
     endif()
   endif()
+  if(CMAKE_CXX_COMPILER_VERSION VERSION_G 11)
+    message(FATAL_ERROR "C++20 support requires a minimum GCC version of 11.")
+  endif()
 elseif(CMAKE_CXX_COMPILER_ID STREQUAL Clang)
   if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS 16)
     message(FATAL_ERROR "C++20 support requires a minimum Clang version of 16.")
@@ -168,6 +169,7 @@ elseif(CMAKE_CXX_COMPILER_ID STREQUAL Clang)
   add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-Wno-mismatched-tags>)
   add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-Wno-unused-private-field>)
   add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-Wno-address-of-packed-member>)
+  add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-Wno-unknown-warning-option>)
   add_compile_options(
     -Wno-unused-function
     -Wno-unused-local-typedef
@@ -189,6 +191,32 @@ elseif(CMAKE_CXX_COMPILER_ID STREQUAL Clang)
     string(APPEND CMAKE_SHARED_LINKER_FLAGS " -undefined dynamic_lookup")
   endif()
 endif(CMAKE_CXX_COMPILER_ID STREQUAL GNU)
+
+# Determine default for ENABLE_WARNINGS_AS_ERRORS based on compiler/version
+set(_werror_default OFF)
+
+foreach(_lang IN ITEMS C CXX)
+  if(DEFINED CMAKE_${_lang}_COMPILER_ID AND DEFINED CMAKE_${_lang}_COMPILER_VERSION)
+    if(CMAKE_${_lang}_COMPILER_ID STREQUAL "GNU"
+            AND CMAKE_${_lang}_COMPILER_VERSION VERSION_GREATER_EQUAL "14")
+      set(_werror_default ON)
+    elseif(CMAKE_${_lang}_COMPILER_ID STREQUAL "Clang"
+            AND CMAKE_${_lang}_COMPILER_VERSION VERSION_GREATER_EQUAL "18")
+      set(_werror_default ON)
+    endif()
+  endif()
+endforeach()
+
+option(ENABLE_WARNINGS_AS_ERRORS "Treat compiler warnings as errors" ${_werror_default})
+
+if(ENABLE_WARNINGS_AS_ERRORS)
+  if(MSVC)
+    add_compile_options(/WX)
+  else()
+    # Apply -Werror only for C/C++
+    add_compile_options($<$<COMPILE_LANGUAGE:C>:-Werror> $<$<COMPILE_LANGUAGE:CXX>:-Werror>)
+  endif()
+endif()
 
 if(WITH_CEPH_DEBUG_MUTEX)
   add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-DCEPH_DEBUG_MUTEX>)
