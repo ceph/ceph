@@ -23,6 +23,7 @@
 #include <cstdint>
 #include <iterator>
 #include <algorithm>
+#include <functional>
 
 namespace ceph::libfdb {
 
@@ -59,17 +60,41 @@ auto ptr_and_sz(const auto& spanoid)
 
 namespace ceph::libfdb::detail {
 
+// Used iternally to get values from futures:
+struct transaction_value_result
+{
+ fdb_bool_t key_was_found = false;
+ 
+ fdb_bool_t is_snapshot = false;
+
+ // Kept here to extend the future's (and data within it) lifetime:
+ future_value fv = nullptr;
+
+ // JFW: this can be a variant; the data lives only as long as the future_value lives:
+ // By the time we have an instance of transaction_value_result(), this must have already
+ // been provided by the appropriate FDB function:
+ std::span<const std::uint8_t> out_data;
+
+/*JFW:
+ public:
+ transaction_value_result(fdb_bool_t key_was_found_)
+  : key_was_found { key_was_found_ }
+ {}
+*/
+};
+
 // Core dispatch from internal DB value to external concrete value:
 void reify_value(const uint8_t *buffer, const size_t buffer_size, auto& target)
 {
  return ceph::libfdb::from::convert(std::span { buffer, buffer_size }, target);
 }
 
+// Grab a *future* and its related result from a request:
+inline transaction_value_result get_single_value_from_transaction(transaction_handle& txn, std::span<const std::uint8_t> key);
+
 } // namespace ceph::libfdb::detail
 
 namespace ceph::libfdb::detail {
-
-inline bool get_single_value_from_transaction(transaction_handle& txn, std::span<const std::uint8_t> key, auto& out_value);
 
 /* Equivalence with FDBStreamingMode:
  *
@@ -285,19 +310,74 @@ more a statement of what interfaces we always and explicitly support.
 simple and frankly focus on stability and getting the core mechanics right while being useful for MOST stuff-- so, string_view and string it is!.
 */
 
+// We will need to trigger two seperate things in order to get the right kind of reply from FDB:
+// 	- the kind of container/value/iterator/etc. we want to get the data back /to/ 
+// 	- some kind of mapping of how to do that from an FDB future, which I'm working hard to not expose to the outside
+// 	- for internal FDB types, we handle this internally: here, they are overloaded to get the correct dispatching
+// 	- for user types (and, indeed, most any time not directly provided by FDB, the lingua franca is a span<const uint8_t> TO the database
+// 	and span<const std::uint8_t> FROM the database which the user must copy into their concrete type.
+//
+
 inline bool get(ceph::libfdb::transaction_handle txn, auto key, std::int64_t& out_value)
 {
- return ceph::libfdb::detail::get_single_value_from_transaction(txn, ceph::libfdb::to::convert(key), out_value);
+ auto result = get_single_value_from_transaction(txn, ceph::libfdb::to::convert(key));
+
+ if(!result.key_was_found)
+  return false;
+
+ if(auto r = fdb_future_get_int64(result.fv, out_value); 0 != r)
+  throw fdb_exception(r);
+
+ return true;
 }
 
-inline bool get(ceph::libfdb::transaction_handle txn, auto key, auto& out_value)
+/*
+inline bool get(ceph::libfdb::transaction_handle txn, auto key, ceph::libfdb::concepts::appendable_container<char *> auto & out_value)
 {
  return ceph::libfdb::detail::get_single_value_from_transaction(txn, ceph::libfdb::to::convert(key), out_value);
 }
 
-inline bool get(ceph::libfdb::transaction_handle txn, const ceph::libfdb::concepts::selector auto& key_range, auto out_iter)
+inline bool get(ceph::libfdb::transaction_handle txn, auto key, std::input_iterator auto out_iter)
 {
- return ceph::libfdb::detail::get_value_range_from_transaction(txn, key_range.begin_key, key_range.end_key, out_iter);
+ return ceph::libfdb::detail::get_single_value_from_transaction(txn, ceph::libfdb::to::convert(key), out_iter);
+}
+*/
+
+inline bool get(ceph::libfdb::transaction_handle txn, auto key, auto &out_value)
+{
+ // Depending on what we want /out/ we need to handle the future differently:
+ // JFW: TODO: handle different dispatches
+
+ auto result = ceph::libfdb::detail::get_single_value_from_transaction(txn, ceph::libfdb::to::convert(key));
+
+ if(!result.key_was_found)
+  return false;
+
+ ceph::libfdb::from::convert(result.out_data, out_value);
+
+ return true;
+}
+
+// The user can provide an immediate conversion function:
+// (No function_ref() until C++26.)
+inline bool get(ceph::libfdb::transaction_handle txn, auto key, std::function<void(const char *, std::size_t)>)
+{
+ auto r = ceph::libfdb::detail::get_single_value_from_transaction(txn, key);
+
+ if(!r.key_was_found)
+  return false;
+
+ fn(r.out_data.data(), r.out_data.size());
+
+ return true;
+}
+
+// The user could get a range of values back:
+// JFW: right now, those values had best be strings...
+template <typename SelectorT> requires ceph::libfdb::concepts::selector<SelectorT>
+inline bool get(ceph::libfdb::transaction_handle txn, const SelectorT& key_range, std::output_iterator auto out_iter)
+{
+ return get_value_range_from_transaction(txn, key_range.begin_key, key_range.end_key, out_iter);
 }
 
 } // namespace ceph::libfdb
@@ -311,10 +391,16 @@ namespace ceph::libfdb::detail {
 // JFW: This probably needs to go back into base.h;
 // JFW: I think there's a simpler and also-"approved" way to do this-- I'll look at it later, getting rid
 // of the strangeness and complexity here would be good:
-inline bool get_single_value_from_transaction(transaction_handle& txn, std::span<const std::uint8_t> key, auto& out_value)
+//
+// JFW: TODO: consolidate these functions-- one idea is to use lambdas or templated helpers for the fdb_xxx_get() calls-- 
+// JFW: this will let us re-use the main loop and get it right. I do not want to see this released without that happening,
+// the debugging would be a nightmare (plus it's embarassing!).
+inline transaction_value_result get_single_value_from_transaction(transaction_handle& txn, std::span<const std::uint8_t> key) 
 {
  // Try to get the FUTURE from the TRANSACTION:
  const fdb_bool_t is_snapshot = false;
+
+ fdb_bool_t key_was_found = false;
 
  for(;;) {
 
@@ -327,7 +413,6 @@ inline bool get_single_value_from_transaction(transaction_handle& txn, std::span
   }
 
   // Try to get a VALUE from the FUTURE:
-  fdb_bool_t key_was_found = false;
   const uint8_t *out_buffer = nullptr;
   int out_len = 0;
 
@@ -366,18 +451,15 @@ inline bool get_single_value_from_transaction(transaction_handle& txn, std::span
   //    This being FDB, the documentation notes that SOMETIMES we may need to use the value before the future is
   //    destroyed. I guess we'd do that here, if that's what we needed...
 
-  // No errors, but no value was found:
+  // No errors, but no value was found; allow the future to be destroyed:
   if(0 == key_was_found)
-   return false;
+   return transaction_value_result { .key_was_found = false };
 
-  // Copy the future-owned contents into our self-owned value:
-  std::span<const std::uint8_t> in_view { (const std::uint8_t *)out_buffer, (size_t)out_len };
-  ceph::libfdb::from::convert(in_view, out_value);
-
-  return true;
+  return transaction_value_result( key_was_found, is_snapshot, std::move(fv), { out_buffer, static_cast<std::span<const std::uint8_t>::size_type>(out_len) });
  }
 
- return false;
+ // Allow the future to be destroyed:
+ return transaction_value_result(false);
 }
 
 } // namespace ceph::libfdb::detail 
