@@ -15,6 +15,7 @@
 #include "services/svc_zone.h"
 #include "services/svc_sys_obj.h"
 #include "rgw_zone.h"
+#include "common/ceph_json.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -45,6 +46,21 @@ int fetch_access_keys_from_master(const DoutPrefixProvider* dpp, req_state* s,
   keys = std::move(ui.access_keys);
   create_date = ui.create_date;
   return 0;
+}
+
+
+static void dump_access_keys(Formatter *f, std::vector<RGWAccessKey>& access_keys)
+{
+  f->open_array_section("keys");
+  for (auto& k : access_keys) {
+    f->open_object_section("key");
+    f->dump_string("access_key", k.id);
+    f->dump_string("secret_key", k.key);
+    f->dump_bool("active", k.active);
+    encode_json("create_date", k.create_date, f);
+    f->close_section();
+  }
+  f->close_section();
 }
 
 class RGWOp_User_List : public RGWRESTOp {
@@ -566,6 +582,7 @@ void RGWOp_Subuser_Create::execute(optional_yield y)
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
   }
+
   op_ret = RGWUserAdminOp_Subuser::create(s, driver, op_state, flusher, y);
 }
 
@@ -745,16 +762,20 @@ void RGWOp_Key_Create::execute(optional_yield y)
       return;
     }
 
-    RGWAccessKey key;
-    try {
-      key.decode_json(&jp);
-    } catch (const JSONDecoder::err& e) {
-      cout << "failed to decode JSON input: " << e.what() << std::endl;
-      ret = -EINVAL;
-      return;
-    }
-    op_state.op_master_key = std::move(key);
+    if (gen_key) { // if generate-key is false, we simply read the user input key and store them
+      RGWAccessKey key;
+      try {
+        key.decode_json(&jp);
+      } catch (const JSONDecoder::err& e) {
+        Formatter *formatter = flusher.get_formatter();
+        std::vector<RGWAccessKey> access_keys;
+        decode_json_obj(access_keys, &jp);
+        dump_access_keys(formatter, access_keys);
+        return;
+      }
 
+      op_state.op_master_key = std::move(key);
+    }
     // set_generate_key() is not set if keys have already been fetched from master zone
     gen_key = false;
   }
