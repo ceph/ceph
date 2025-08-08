@@ -3,7 +3,8 @@
 
 #pragma once
 
-#include "include/expected.hpp"
+#include <expected>
+
 #include "rgw_http_client.h"
 
 class RGWGetDataCB;
@@ -69,7 +70,7 @@ public:
 
   // return the http status of the response or an error code from the transport
   auto forward_request(const DoutPrefixProvider *dpp, const RGWAccessKey& key, const req_info& info, size_t max_response, bufferlist *inbl, bufferlist *outbl, optional_yield y, std::string service="")
-    -> tl::expected<int, int>;
+    -> std::expected<int, int>;
 };
 
 class RGWWriteDrainCB {
