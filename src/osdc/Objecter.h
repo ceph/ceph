@@ -15,6 +15,7 @@
 #ifndef CEPH_OBJECTER_H
 #define CEPH_OBJECTER_H
 
+#include <expected>
 #include <list>
 #include <map>
 #include <mutex>
@@ -39,7 +40,6 @@
 #include "include/ceph_assert.h"
 #include "include/ceph_fs.h"
 #include "include/common_fwd.h"
-#include "include/expected.hpp"
 #include "include/types.h"
 #include "include/rados/rados_types.hpp"
 #include "include/function2.hpp"
@@ -3248,7 +3248,7 @@ public:
 			 OpContextVert(onack, poutbl),
 			 objver);
   }
-  tl::expected<ceph::timespan,
+  std::expected<ceph::timespan,
 	       boost::system::error_code> linger_check(LingerOp *info);
   void linger_cancel(LingerOp *info);  // releases a reference
   void _linger_cancel(LingerOp *info);
