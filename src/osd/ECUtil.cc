@@ -988,20 +988,15 @@ bufferlist shard_extent_map_t::get_ro_buffer() const {
 }
 
 bool get_int_from_bufferlist(bufferlist bl, int offset, uint32_t *value) {
-  bufferlist bl2;
-  bl2.substr_of(bl, offset, sizeof(uint32_t));
-
   auto bl_iter = bl.begin();
   bl_iter += offset;
 
   *value = 0;
-  for (int b = 0; b < sizeof(uint32_t); ++b, ++bl_iter) {
-    if (bl_iter == bl.end()) {
-      return false;
-    }
+  int b = 0;
+  for (; b < sizeof(uint32_t) && bl_iter != bl.end(); ++b, ++bl_iter) {
     *value |= (((unsigned int)bl_iter.get_current_ptr().c_str()[0]) << b);
   }
-  return true;
+  return b == sizeof(uint32_t);
 }
 
 std::string shard_extent_map_t::debug_string(uint64_t interval, uint64_t offset) const {
@@ -1010,7 +1005,9 @@ std::string shard_extent_map_t::debug_string(uint64_t interval, uint64_t offset)
 
   bool s_comma = false;
   for (auto &&[shard, emap] : get_extent_maps()) {
-    if (s_comma) str << ", ";
+    if (s_comma) {
+      str << ", ";
+    }
     s_comma = true;
     str << shard << ": [";
 
