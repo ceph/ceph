@@ -42,14 +42,6 @@ uint32_t mClockScheduler::calc_scaled_cost(int item_cost)
   return mclock_conf.calc_scaled_cost(item_cost);
 }
 
-void mClockScheduler::update_configuration()
-{
-  // Apply configuration change. The expectation is that
-  // at least one of the tracked mclock config option keys
-  // is modified before calling this method.
-  cct->_conf.apply_changes(nullptr);
-}
-
 void mClockScheduler::dump(ceph::Formatter &f) const
 {
   // Display queue sizes
