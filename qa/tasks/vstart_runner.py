@@ -378,26 +378,6 @@ class LocalRemote(RemoteShell):
         except shutil.SameFileError:
             pass
 
-    def write_file(self, path, data, owner=None,
-                   mode='0644', mkdir=False, append=False, sudo=False):
-        dd = 'sudo dd' if sudo else 'dd'
-        args = dd + ' of=' + path
-        if append:
-            args += ' conv=notrunc oflag=append'
-        if mkdir:
-            mkdirp = 'sudo mkdir -p' if sudo else 'mkdir -p'
-            dirpath = os.path.dirname(path)
-            if dirpath:
-                args = mkdirp + ' ' + dirpath + '\n' + args
-        if mode:
-            chmod = 'sudo chmod' if sudo else 'chmod'
-            args += '\n' + chmod + ' ' + mode + ' ' + path
-        if owner:
-            chown = 'sudo chown' if sudo else 'chown'
-            args += '\n' + chown + ' ' + owner + ' ' + path
-        args = 'set -ex' + '\n' + args
-        self.run(args=args, stdin=data, quiet=True)
-
     def _expand_teuthology_tools(self, args):
         assert isinstance(args, list)
         for tool in self.rewrite_helper_tools:
