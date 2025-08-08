@@ -3021,7 +3021,10 @@ int Mirror<I>::group_disable(IoCtx& group_ioctx, const char *group_name,
     return r;
   }
 
-  if (promotion_state != mirror::PROMOTION_STATE_PRIMARY && !force) {
+  bool is_primary = (promotion_state == mirror::PROMOTION_STATE_PRIMARY ||
+                     promotion_state == mirror::PROMOTION_STATE_UNKNOWN);
+
+  if (!is_primary && !force) {
     lderr(cct) << "mirrored group " << group_name
                << " is not primary, add force option to disable mirroring"
                << dendl;
