@@ -162,6 +162,10 @@ TransactionManager::mount()
             assert(paddr.is_absolute());
             cache->update_tree_extents_num(type, 1);
             epm->mark_space_used(paddr, len);
+            if (support_logical_bucket() &&
+                !epm->is_cold_device(paddr.get_device_id())) {
+              logical_bucket->move_to_top(laddr.get_object_prefix());
+            }
           });
         } else {
           return backref_manager->scan_mapped_space(
@@ -188,6 +192,10 @@ TransactionManager::mount()
               assert(backref_key == P_ADDR_NULL);
               cache->update_tree_extents_num(type, 1);
               epm->mark_space_used(paddr, len);
+              if (support_logical_bucket() &&
+                !epm->is_cold_device(paddr.get_device_id())) {
+                logical_bucket->move_to_top(laddr.get_object_prefix());
+              }
             }
           });
         }
@@ -810,6 +818,11 @@ TransactionManager::do_submit_transaction(
     journal->get_trimmer().update_journal_tails(
       cache->get_oldest_dirty_from().value_or(start_seq),
       cache->get_oldest_backref_dirty_from().value_or(start_seq));
+    if (support_logical_bucket()) {
+      for (auto &prefix : tref.get_touched_laddr_prefix()) {
+	logical_bucket->move_to_top(prefix.get_object_prefix());
+      }
+    }
     }).handle_error(
       submit_transaction_iertr::pass_further{},
       crimson::ct_error::assert_all("Hit error submitting to journal")
@@ -1228,6 +1241,7 @@ TransactionManager::promote_extent(
         true,
         write_policy_t::WRITE_BACK
       });
+    t.touch_laddr_prefix(orig_ext->get_laddr().get_object_prefix());
 
     promoted_extents.reserve(promoted_raw_extents.size());
 
@@ -1278,6 +1292,7 @@ TransactionManager::promote_extent(
     lext->rewrite(t, *orig_ext, 0);
     assert(!extent->get_paddr().is_absolute() ||
            !cache->is_on_cold_tier(lext->get_paddr()));
+    t.touch_laddr_prefix(orig_ext->get_laddr().get_object_prefix());
     //TODO: this memory copy should be saved
     orig_ext->get_bptr().copy_out(
       0,
