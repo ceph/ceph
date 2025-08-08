@@ -141,9 +141,6 @@ public:
     ostream << ", cutoff=" << cutoff_priority;
   }
 
-  // Update data associated with the modified mclock config key(s)
-  void update_configuration() final;
-
   // Return the scheduler type
   op_queue_type_t get_type() const final {
     return op_queue_type_t::mClockScheduler;

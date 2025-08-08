@@ -1054,7 +1054,6 @@ struct OSDShard {
 		    std::set<std::pair<spg_t,epoch_t>> *merge_pgs);
   void register_and_wake_split_child(PG *pg);
   void unprime_split_children(spg_t parent, unsigned old_pg_num);
-  void update_scheduler_config();
   op_queue_type_t get_op_queue_type() const;
 
   OSDShard(
