@@ -7833,8 +7833,8 @@ int OSDMonitor::prepare_pool_stripe_width(const unsigned pool_type,
       uint32_t data_chunks = erasure_code->get_data_chunk_count();
       uint32_t stripe_unit = g_conf().get_val<Option::size_t>("osd_pool_erasure_code_stripe_unit");
 
-      //My added code 1
-      if ((erasure_code->get_supported_optimizations() & ErasureCodeInterface::FLAG_EC_PLUGIN_OPTIMIZED_SUPPORTED) != 0){ //if optimisation is supported
+      if ((erasure_code->get_supported_optimizations() & 
+      ErasureCodeInterface::FLAG_EC_PLUGIN_OPTIMIZED_SUPPORTED) != 0){ 
         if (stripe_unit == 0) {
           if (cct->_conf.get_val<bool>("osd_pool_default_flag_ec_optimizations")) {
             stripe_unit = 16 * 1024;
@@ -7846,7 +7846,6 @@ int OSDMonitor::prepare_pool_stripe_width(const unsigned pool_type,
         stripe_unit = 4 * 1024;
       }
     
-      //Calculate the stripe width
       auto it = profile.find("stripe_unit");
       if (it != profile.end()) {
 	string err_str;
