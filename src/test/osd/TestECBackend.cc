@@ -297,6 +297,9 @@ public:
 };
 
 class ECListenerStub : public ECListener {
+
+
+private:
   OSDMapRef osd_map_ref;
   pg_info_t pg_info;
   set<pg_shard_t> backfill_shards;
