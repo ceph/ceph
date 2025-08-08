@@ -1480,6 +1480,20 @@ ObjectDataHandler::read_ret ObjectDataHandler::read(
         // offset~len falls within reserved region and len > 0
         ceph_assert(_pins.size() >= 1);
         ceph_assert(_pins.front().get_key() <= l_start);
+	if (ctx.tm.support_logical_bucket()) {
+	  auto prefix = l_start.get_laddr().get_object_prefix();
+	  bool all_cold = true;
+	  for (auto &p : _pins) {
+	    paddr_t val = p.get_val();
+	    all_cold &= ctx.tm.is_cold_device(val.get_device_id());
+	    if (!all_cold) {
+	      break;
+	    }
+	  }
+	  if (!all_cold) {
+	    ctx.tm.update_logical_bucket_for_read(prefix);
+	  }
+	}
         return seastar::do_with(
           std::move(_pins),
           l_start,

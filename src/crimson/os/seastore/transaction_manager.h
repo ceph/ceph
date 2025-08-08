@@ -524,7 +524,12 @@ public:
 	    exts.begin(), exts.end()),
 	  EXTENT_DEFAULT_REF_COUNT);
       }
-      return fut.si_then([&exts, &t, FNAME](auto &&) mutable {
+      return fut.si_then([&exts, &t, FNAME, this](auto &&) mutable {
+	auto &front = exts.front();
+	if (front->get_write_policy() != write_policy_t::WRITE_THROUGH &&
+	    front->get_rewrite_generation() <= epm->get_max_hot_gen()) {
+	  t.touch_laddr_prefix(front->get_laddr().get_object_prefix());
+	}
 	for (auto &ext : exts) {
 	  SUBDEBUGT(seastore_tm, "allocated {}", t, *ext);
 	}
@@ -753,6 +758,16 @@ public:
                 <std::vector<TCachedExtentRef<T>>>(std::move(extents));
        });
      });
+  }
+
+  void update_logical_bucket_for_read(laddr_t prefix) {
+    if (logical_bucket) {
+      logical_bucket->move_to_top(prefix.get_object_prefix(), true);
+    }
+  }
+
+  bool is_cold_device(device_id_t id) const {
+    return epm->is_cold_device(id);
   }
 
   /**
@@ -1210,7 +1225,7 @@ public:
   }
 
   bool support_logical_bucket() const {
-    return logical_bucket != nullptr;
+    return epm->has_cold_tier() && logical_bucket != nullptr;
   }
 
   ~TransactionManager();
