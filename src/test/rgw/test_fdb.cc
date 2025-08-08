@@ -38,9 +38,8 @@
 
 #include "include/random.h"
 
-#include <set>
-#include <list>
 #include <chrono>
+#include <vector>
 
 using Catch::Matchers::AllMatch;
 
@@ -54,6 +53,8 @@ using std::string;
 using std::string_view;
 
 using std::to_string;
+
+using std::vector;
 
 using namespace std::literals::string_literals;
 
@@ -74,7 +75,9 @@ inline std::map<std::string, std::string> make_monotonic_kvs(const unsigned N)
  return kvs;
 }
 
-constexpr auto pearl_msg =
+constexpr const char * const msg = "Hello, World!"; 
+constexpr const char msg_with_null[] = { '\0', 'H', 'i', '\0', ' ', 't', 'h', 'e', 'r', 'e', '!', '\0'};
+constexpr const char * const pearl_msg =
 "Perle, plesaunte to prynces paye"
 "To clanly clos in golde so clere;"
 "Oute of oryent, I hardyly saye."
@@ -199,9 +202,6 @@ TEMPLATE_PRODUCT_TEST_CASE("A Template product test case", "[template][product]"
 TEST_CASE("fdb conversions (built-in)", "[fdb][rgw]") {
  // Manual tests of conversions to and from supported FDB built-in types.
  
- const char *msg = "Hello, World!"; 
- const char msg_with_null[] = { '\0', 'H', 'i', '\0', ' ', 't', 'h', 'e', 'r', 'e', '!', '\0'};
-
  SECTION("serialize/deserialize built-in FDB types") {
 
 /* JFW: No fabrication of built-ins besides span<> for now:
@@ -259,7 +259,6 @@ TEST_CASE("fdb conversions (built-in)", "[fdb][rgw]") {
  }
 }
 
-/* JFW:
 TEST_CASE("fdb conversions (ceph)", "[fdb][rgw]") {
 
  const char *msg = "Hello, World!";
@@ -276,7 +275,7 @@ TEST_CASE("fdb conversions (ceph)", "[fdb][rgw]") {
   ceph::libfdb::from::convert(x, o); 
 
   REQUIRE_THAT(n, Catch::Matchers::RangeEquals(o));
-  }
+ }
 
  // buffer::list -> span<uint8_t> -> buffer::list 
  {
@@ -293,8 +292,9 @@ TEST_CASE("fdb conversions (ceph)", "[fdb][rgw]") {
  }
 
 INFO("JFW: buffer::list <> with null characters next");
-}*/
+}
 
+/* JFW:
 TEST_CASE("fdb conversions (round-trip)", "[fdb][rgw]") {
  // Actually store and retrieve converted data via the DB:
  auto dbh = lfdb::make_database();
@@ -310,8 +310,8 @@ TEST_CASE("fdb conversions (round-trip)", "[fdb][rgw]") {
  REQUIRE_THAT(n, Catch::Matchers::RangeEquals(o));
  }
 
-/* JFW: I'm not going to support this for the prototype, but the plumbing looks like
-it does the right thing for the most part, we need to add the encoding, etc.:
+// JFW: I'm not going to support this for the prototype, but the plumbing looks like
+//it does the right thing for the most part, we need to add the encoding, etc.:
  // int64 kvs -> int64
  {
  const std::int64_t k = 1;
@@ -323,10 +323,10 @@ it does the right thing for the most part, we need to add the encoding, etc.:
 
  REQUIRE(n == o);
  }
-*/
 }
+*/
 
-/* JFW:1
+/*
 TEST_CASE("fdb conversions (round-trip, ceph)", "[fdb][rgw]") {
 
   auto dbh = lfdb::make_database();
@@ -355,7 +355,6 @@ TEST_CASE("fdb conversions (round-trip, ceph)", "[fdb][rgw]") {
   REQUIRE_THAT(n, Catch::Matchers::RangeEquals(o));
   }
 
-// JFW: holding off on keys until after prototype:
   // buffer::list (and buffer::list key) -> buffer::list
   {
   ceph::buffer::list n;
@@ -384,6 +383,24 @@ TEST_CASE("fdb conversions (round-trip, ceph)", "[fdb][rgw]") {
   REQUIRE_THAT(n, Catch::Matchers::RangeEquals(o));
   }
 }*/
+
+TEST_CASE("fdb conversions (functions)", "[fdb][rgw]")
+{
+ SECTION("convert with a lambda function")
+ {
+  std::string_view n { msg };
+  std::string o;
+
+  std::span<const std::uint8_t> x;
+  x = ceph::libfdb::to::convert(n);
+
+  auto fn = [&o](const char *data, std::size_t sz) { o.insert(0, data, sz); };
+
+  ceph::libfdb::from::convert(x, fn); 
+
+  REQUIRE_THAT(n, Catch::Matchers::RangeEquals(o));
+ }
+}
 
 TEST_CASE("fdb misc", "[fdb]")
 {
