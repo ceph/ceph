@@ -5,21 +5,33 @@
 Slow/stuck operations
 =====================
 
-If you are experiencing apparent hung operations, the first task is to identify
-where the problem is occurring: in the client, the MDS, or the network connecting
-them. Start by looking to see if either side has stuck operations
-(:ref:`slow_requests`, below), and narrow it down from there.
+Sometimes CephFS operations hang. The first step in troubleshooting them is to
+locate the problem causing the operations to hang. Problems present in three
+places:
 
-We can get hints about what's going on by dumping the MDS cache ::
+#. in the client
+#. in the MDS
+#. in the network that connects the client to the MDS
 
-  ceph daemon mds.<name> dump cache /tmp/dump.txt
+First, use the procedure in :ref:`slow_requests` to determine if the client has
+stuck operations or the MDS has stuck operations.
 
-.. note:: The file `dump.txt` is on the machine executing the MDS and for systemd
-	  controlled MDS services, this is in a tmpfs in the MDS container.
-	  Use `nsenter(1)` to locate `dump.txt` or specify another system-wide path.
+Dump the MDS cache. The contents of the MDS cache will be used to diagnose the
+nature of the problem. Run the following command to dump the MDS cache:
 
-If high logging levels are set on the MDS, that will almost certainly hold the
-information we need to diagnose and solve the issue.
+.. prompt:: bash #
+
+   ceph daemon mds.<name> dump cache /tmp/dump.txt
+
+.. note:: MDS services that are not controlled by systemd dump the file 
+   ``dump.txt`` to the machine that runs the MDS. MDS services that are
+   controlled by systemd dump the file ``dump.txt`` to a tmpfs in the MDS
+   container. Use `nsenter(1)` to locate ``dump.txt`` or specify another
+   system-wide path.
+
+If high logging levels have been set on the MDS, ``dump.txt`` can be expected
+to hold the information needed to diagnose and solve the issue causing the
+CephFS operations to hang.
 
 Stuck during recovery
 =====================
