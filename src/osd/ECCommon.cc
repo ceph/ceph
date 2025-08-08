@@ -620,7 +620,7 @@ struct ClientReadCompleter final : ECCommon::ReadCompleter {
     extent_map result;
     if (res.r == 0) {
       ceph_assert(res.errors.empty());
-      dout(20) << __func__ << ": before decode: "
+      dout(30) << __func__ << ": before decode: "
                << res.buffers_read.debug_string(2048, 0)
                << dendl;
       /* Decode any missing buffers */
@@ -630,7 +630,7 @@ struct ClientReadCompleter final : ECCommon::ReadCompleter {
                                   req.object_size,
                                   read_pipeline.get_parent()->get_dpp());
       ceph_assert( r == 0 );
-      dout(20) << __func__ << ": after decode: "
+      dout(30) << __func__ << ": after decode: "
                << res.buffers_read.debug_string(2048, 0)
                << dendl;
 
