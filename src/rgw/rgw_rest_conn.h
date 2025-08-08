@@ -10,6 +10,7 @@
 #include "rgw_sal_fwd.h"
 
 #include <atomic>
+#include <expected>
 
 class RGWSI_Zone;
 
@@ -133,13 +134,13 @@ public:
   auto forward(const DoutPrefixProvider *dpp, const rgw_owner& uid,
                const req_info& info, size_t max_response,
                bufferlist *inbl, bufferlist *outbl, optional_yield y)
-    -> tl::expected<int, int>;
+    -> std::expected<int, int>;
 
   /* sync request */
   auto forward_iam(const DoutPrefixProvider *dpp, const req_info& info,
                    size_t max_response, bufferlist *inbl,
                    bufferlist *outbl, optional_yield y)
-    -> tl::expected<int, int>;
+    -> std::expected<int, int>;
 
   /* async requests */
   int put_obj_send_init(const rgw_obj& obj, const rgw_http_param_pair *extra_params, RGWRESTStreamS3PutObj **req);
