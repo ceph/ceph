@@ -987,25 +987,47 @@ bufferlist shard_extent_map_t::get_ro_buffer() const {
   return get_ro_buffer(ro_start, ro_end - ro_start);
 }
 
+bool get_int_from_bufferlist(bufferlist bl, int offset, uint32_t *value) {
+  *value = 0;
+
+  if (bl.length() < offset + sizeof(uint32_t)) {
+    return false;
+  }
+
+  auto bl_iter = bl.begin();
+  bl_iter += offset;
+  unsigned b = 0;
+  for (; b < sizeof(uint32_t); ++b, ++bl_iter) {
+    ceph_assert(bl_iter != bl.end());
+    *value |= (((unsigned int)bl_iter.get_current_ptr().c_str()[0]) << b);
+  }
+  return true;
+}
+
 std::string shard_extent_map_t::debug_string(uint64_t interval, uint64_t offset) const {
   std::stringstream str;
   str << "shard_extent_map_t: " << *this << " bufs: [";
 
   bool s_comma = false;
   for (auto &&[shard, emap] : get_extent_maps()) {
-    if (s_comma) str << ", ";
+    if (s_comma) {
+      str << ", ";
+    }
     s_comma = true;
     str << shard << ": [";
 
     bool comma = false;
     for (auto &&extent : emap) {
       bufferlist bl = extent.get_val();
-      char *buf = bl.c_str();
-      for (uint64_t i = 0; i < extent.get_len(); i += interval) {
-        int *seed = (int*)&buf[i + offset];
-        if (comma) str << ", ";
-        str << (i + extent.get_off()) << ":" << std::to_string(*seed);
+      uint32_t seed;
+      int i = 0;
+      while (get_int_from_bufferlist(bl, i + offset, &seed)) {
+        if (comma) {
+          str << ", ";
+        }
+        str << (i + extent.get_off()) << ":" << seed;
         comma = true;
+        i += interval;
       }
     }
     str << "]";
