@@ -315,20 +315,26 @@ class D4NFilterObject : public FilterObject {
 };
 
 class D4NTransactionMng {
-    D4NFilterObject* obj;
+    D4NFilterObject* filter_obj=nullptr;
+    d4n::ObjectDirectory* obj_dir=nullptr; 
     const DoutPrefixProvider* dpp;//NOTE: this dpp can not be saved, it should be passed on stack
     int& result_code;
     bool dismissed = false;
   public:
-    //TODO add optional_yield y to the constructor
+
+    D4NTransactionMng(d4n::ObjectDirectory* o, const DoutPrefixProvider* d, int& rc):obj_dir(o), dpp(d), result_code(rc) {
+      if (obj_dir) obj_dir->m_d4n_trx->start_trx();
+    }
+
     D4NTransactionMng(D4NFilterObject* o, const DoutPrefixProvider* d, int& rc)
-      : obj(o), dpp(d), result_code(rc) {//NOTE the dpp can not be saved.
-        if (obj) obj->d4n_init_transaction(dpp);
+      : filter_obj(o), dpp(d), result_code(rc) {//NOTE the dpp can not be saved.
+        if (filter_obj) filter_obj->d4n_init_transaction(dpp);
       }
     void dismiss() { dismissed = true; }
     //TODO howto add optional_yield y to the destructor?
     ~D4NTransactionMng() {
-      if (!dismissed && obj) obj->finalize_transaction(dpp, result_code);//NOTE: dpp should be passed to the finalize_transaction method
+      if (filter_obj) filter_obj->finalize_transaction(dpp, result_code);
+      if (obj_dir) obj_dir->m_d4n_trx->end_trx(dpp, obj_dir->get_connection(),null_yield);
     }
 };
 
