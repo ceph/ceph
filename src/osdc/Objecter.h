@@ -2163,11 +2163,11 @@ public:
     // completion of the parent IO.
     struct Finisher : Context {
       std::shared_ptr<ECRead> ec_read;
-      SubRead *sub_read;
+      SubRead &sub_read;
 
-      Finisher(std::shared_ptr<ECRead> ec_read, SubRead *sub_read) : ec_read(ec_read), sub_read(sub_read) {}
+      Finisher(std::shared_ptr<ECRead> ec_read, SubRead &sub_read) : ec_read(ec_read), sub_read(sub_read) {}
       void finish(int r) override {
-        sub_read->rc = r;
+        sub_read.rc = r;
       }
     };
 
@@ -2179,7 +2179,7 @@ public:
 
 
    public:
-    ECRead(Op *op, Objecter &objecter, CephContext *cct) : orig_op(op), objecter(objecter), cct(cct) {}
+    ECRead(Op *op, Objecter &objecter, CephContext *cct, int count) : orig_op(op), objecter(objecter), sub_reads(count), cct(cct) {}
     ~ECRead();
     static std::shared_ptr<ECRead> create(Op *op, Objecter &objecter,
       shunique_lock<ceph::shared_mutex>& sul, ceph_tid_t *ptid, int *ctx_budget, CephContext *cct);
