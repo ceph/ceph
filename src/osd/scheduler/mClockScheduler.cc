@@ -197,38 +197,4 @@ std::string mClockScheduler::display_queues() const
   return out.str();
 }
 
-
-std::vector<std::string> mClockScheduler::get_tracked_keys() const noexcept
-{
-  return {
-    "osd_mclock_scheduler_client_res"s,
-    "osd_mclock_scheduler_client_wgt"s,
-    "osd_mclock_scheduler_client_lim"s,
-    "osd_mclock_scheduler_background_recovery_res"s,
-    "osd_mclock_scheduler_background_recovery_wgt"s,
-    "osd_mclock_scheduler_background_recovery_lim"s,
-    "osd_mclock_scheduler_background_best_effort_res"s,
-    "osd_mclock_scheduler_background_best_effort_wgt"s,
-    "osd_mclock_scheduler_background_best_effort_lim"s,
-    "osd_mclock_max_capacity_iops_hdd"s,
-    "osd_mclock_max_capacity_iops_ssd"s,
-    "osd_mclock_max_sequential_bandwidth_hdd"s,
-    "osd_mclock_max_sequential_bandwidth_ssd"s,
-    "osd_mclock_profile"s
-  };
-}
-
-
-void mClockScheduler::handle_conf_change(
-  const ConfigProxy& conf,
-  const std::set<std::string> &changed)
-{
-  mclock_conf.mclock_handle_conf_change(conf, changed);
-}
-
-mClockScheduler::~mClockScheduler()
-{
-  cct->_conf.remove_observer(this);
-}
-
 }

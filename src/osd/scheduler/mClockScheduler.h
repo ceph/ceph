@@ -38,7 +38,7 @@ namespace ceph::osd::scheduler {
  *
  * TODO: explain configs
  */
-class mClockScheduler : public OpScheduler, md_config_obs_t {
+class mClockScheduler : public OpScheduler {
 
   CephContext *cct;
   const unsigned cutoff_priority;
@@ -96,13 +96,7 @@ public:
 	crimson::dmclock::AtLimit::Wait,
 	cct->_conf.get_val<double>("osd_mclock_scheduler_anticipation_timeout"))
   {
-    cct->_conf.add_observer(this);
     ceph_assert(num_shards > 0);
-    mclock_conf.set_osd_capacity_params_from_config();
-    mclock_conf.set_config_defaults_from_profile();
-    client_registry.update_from_config(
-      cct->_conf, mclock_conf.get_capacity_per_shard());
-
     if (init_perfcounter) {
       mclock_conf.init_logger();
     }
@@ -118,7 +112,6 @@ public:
       crimson::dmclock::standard_erase_age,
       crimson::dmclock::standard_check_time,
       monc, init_perfcounter) {}
-  ~mClockScheduler() override;
 
   /// Calculate scaled cost per item
   uint32_t calc_scaled_cost(int cost);
@@ -155,10 +148,6 @@ public:
   op_queue_type_t get_type() const final {
     return op_queue_type_t::mClockScheduler;
   }
-
-  std::vector<std::string> get_tracked_keys() const noexcept final;
-  void handle_conf_change(const ConfigProxy& conf,
-			  const std::set<std::string> &changed) final;
 
   double get_cost_per_io() const {
     return mclock_conf.get_cost_per_io();

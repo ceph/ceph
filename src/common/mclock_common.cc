@@ -377,9 +377,8 @@ uint32_t MclockConfig::calc_scaled_cost(int item_cost)
   return std::max<uint32_t>(cost, cost_per_io);
 }
 
-void MclockConfig::mclock_handle_conf_change(const ConfigProxy& conf,
-                                             const std::set<std::string>
-					     &changed)
+void MclockConfig::handle_conf_change(const ConfigProxy& conf,
+				      const std::set<std::string> &changed)
 {
   if (changed.count("osd_mclock_max_capacity_iops_hdd") ||
       changed.count("osd_mclock_max_capacity_iops_ssd")) {
@@ -466,4 +465,5 @@ MclockConfig::~MclockConfig()
     delete logger;
     logger = nullptr;
   }
+  cct->_conf.remove_observer(this);
 }

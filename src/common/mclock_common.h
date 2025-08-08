@@ -186,7 +186,7 @@ class ClientRegistry {
       const scheduler_id_t &id) const;
 };
 
-class MclockConfig {
+class MclockConfig final : public md_config_obs_t {
 private:
   CephContext *cct;
   uint32_t num_shards;
@@ -211,7 +211,13 @@ public:
                            whoami(whoami), osd_bandwidth_cost_per_io(0.0),
 	                   osd_bandwidth_capacity_per_shard(0.0),
 	                   client_registry(creg)
-  {}
+  {
+    cct->_conf.add_observer(this);
+    set_osd_capacity_params_from_config();
+    set_config_defaults_from_profile();
+    client_registry.update_from_config(
+      cct->_conf, get_capacity_per_shard());
+  }
   #else
   MclockConfig(CephContext *cct, ClientRegistry& creg,
                MonClient *monc, uint32_t num_shards, bool is_rotational,
@@ -223,9 +229,15 @@ public:
 					 osd_bandwidth_cost_per_io(0.0),
 	                                 osd_bandwidth_capacity_per_shard(0.0),
 	                                 client_registry(creg), monc(monc)
-  {}
+  {
+    cct->_conf.add_observer(this);
+    set_osd_capacity_params_from_config();
+    set_config_defaults_from_profile();
+    client_registry.update_from_config(
+      cct->_conf, get_capacity_per_shard());
+  }
 #endif
-  ~MclockConfig();
+  ~MclockConfig() final;
   void set_config_defaults_from_profile();
   void set_osd_capacity_params_from_config();
   void init_logger();
@@ -233,7 +245,26 @@ public:
   void put_mclock_counter(scheduler_id_t id);
   double get_cost_per_io() const;
   double get_capacity_per_shard() const;
-  void mclock_handle_conf_change(const ConfigProxy& conf,
-                                 const std::set<std::string> &changed);
+  void handle_conf_change(const ConfigProxy& conf,
+			  const std::set<std::string> &changed) final;
+  std::vector<std::string> get_tracked_keys() const noexcept final {
+    using namespace std::literals;
+    return {
+      "osd_mclock_scheduler_client_res"s,
+      "osd_mclock_scheduler_client_wgt"s,
+      "osd_mclock_scheduler_client_lim"s,
+      "osd_mclock_scheduler_background_recovery_res"s,
+      "osd_mclock_scheduler_background_recovery_wgt"s,
+      "osd_mclock_scheduler_background_recovery_lim"s,
+      "osd_mclock_scheduler_background_best_effort_res"s,
+      "osd_mclock_scheduler_background_best_effort_wgt"s,
+      "osd_mclock_scheduler_background_best_effort_lim"s,
+      "osd_mclock_max_capacity_iops_hdd"s,
+      "osd_mclock_max_capacity_iops_ssd"s,
+      "osd_mclock_max_sequential_bandwidth_hdd"s,
+      "osd_mclock_max_sequential_bandwidth_ssd"s,
+      "osd_mclock_profile"s
+    };
+  }
   uint32_t calc_scaled_cost(int item_cost);
 };
