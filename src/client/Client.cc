@@ -17666,6 +17666,22 @@ int StandaloneClient::init()
     monclient->shutdown();
     return r;
   }
+
+  r = authenticate();
+  if (r < 0) {
+    // need to do cleanup because we're in an intermediate init state
+    {
+      std::scoped_lock l(timer_lock);
+      timer.shutdown();
+    }
+
+    client_lock.unlock();
+    objecter->shutdown();
+    objectcacher->stop();
+    monclient->shutdown();
+    return r;
+  }
+
   objecter->start();
 
   client_lock.unlock();
