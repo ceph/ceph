@@ -331,9 +331,35 @@ struct omap_manager_test_t :
     EXPECT_EQ(omap_root.get_location(), L_ADDR_NULL);
   }
 
-  void check_mappings(omap_root_t &omap_root, Transaction &t) {
+  bool check_mappings_fastpath(omap_root_t &omap_root, Transaction &t) {
+    auto config = OMapManager::omap_list_config_t()
+      .without_max()
+      .with_inclusive(true, true);
+
+    std::optional<std::string> null_key = std::nullopt;
+    auto [complete, omap_list] = with_trans_intr(t, [&, this](auto &t) {
+      return omap_manager->omap_list(
+        omap_root, t, null_key, null_key, config); /* from start to end */
+    }).unsafe_get();
+
+    if (omap_list.size() != test_omap_mappings.size()) { return false; }
+    return std::equal(test_omap_mappings.begin(),
+                      test_omap_mappings.end(),
+                      omap_list.begin(),
+                      [](const auto &a, const auto &b) {
+                        return a.first == b.first && a.second == b.second;
+    });
+  }
+
+  void check_mappings_slowpath(omap_root_t &omap_root, Transaction &t) {
     for (const auto &i: test_omap_mappings){
       get_value(omap_root, t, i.first);
+    }
+  }
+
+  void check_mappings(omap_root_t &omap_root, Transaction &t) {
+    if (!check_mappings_fastpath(omap_root, t)) {
+      check_mappings_slowpath(omap_root, t);
     }
   }
 
