@@ -1,53 +1,112 @@
 #!/bin/bash
 
-setup_cephadm() {
-    # This will create CEPHADM_STRAY_HOST warnings, but we just want to be able to run an orch command.
-    echo "Enabling cephadm module..."
-    ceph mgr module enable cephadm
-    ceph orch set backend cephadm
-}
+# This script tests how the mgr handles different module loading times post failover.
+# The motivation is this tracker ticket: https://tracker.ceph.com/issues/71631
 
-check_cluster_status() {
-    echo "Checking cluster status..."
-    ceph -s
-}
+# To run this script on a vstart cluter, use the following command:
+#   cd ceph/build
+#   ../qa/workunits/mgr/test_mgr_module_loading_time.sh --vstart
 
-set_balancer_delay() {
-    echo "Setting balancer module load delay..."
-    ceph config set mgr mgr_module_load_delay_name balancer
-    ceph config set mgr mgr_module_load_delay 10000
-}
+vstart=0
+if [ "$1" = "--vstart" ]; then
+    vstart=1
+fi
 
-test_loading_time() {
-    echo "Testing with module load delay of 10000 ms..."
-    ceph mgr fail
+ceph="ceph"
+if [ $vstart -eq 1 ]; then
+    ceph="./bin/ceph"
+fi
 
-    local orch_status_output
-    if ! orch_status_output=$(ceph orch status 2>&1); then
-        echo "FAIL: 'ceph orch status' failed to run:"
-        echo "$orch_status_output"
-        exit 1
-    fi
 
+# This will create CEPHADM_STRAY_HOST warnings, but we just want to be able to run an orch command.
+echo "Enabling cephadm module..."
+"$ceph" mgr module enable cephadm
+"$ceph" orch set backend cephadm
+
+echo "Checking cluster status..."
+"$ceph" -s
+
+# ------ Test 1 ------
+echo "Test 1: Test normal module loading behavior without any injected delays"
+
+"$ceph" mgr fail
+orch_status_output=$("$ceph" orch status 2>&1)
+
+echo "$orch_status_output"
+if [[ "$orch_status_output" == *"Backend: cephadm"* ]]; then
+    echo "PASS: orch command succeeded during normal behavior."
+elif [[ "$orch_status_output" == *"Error ENOTSUP: Module 'orchestrator' is not enabled/loaded"* ]]; then
+    echo "FAIL: orch command failed during normal behavior."
+    exit 1
+else
+    echo "FAIL: Unexpected error in orch command during normal behavior."
     echo "$orch_status_output"
+    exit 1
+fi
 
-    if [[ "$orch_status_output" == *"Backend: cephadm"* ]]; then
-        echo "PASS: Excess loading time was properly supported."
-    elif [[ "$orch_status_output" == *"Error ENOTSUP: Warning: due to ceph-mgr restart, some PG states may not be up to date"* ]]; then
-        echo "FAIL: Excess loading time was not properly supported."
-        exit 1
-    else
-        echo "FAIL: Unexpected error in 'ceph orch status':"
-        echo "$orch_status_output"
-        exit 1
-    fi
-}
+echo "Ensure health detail DOES NOT warn about any modules that failed initialization..."
+health=$("$ceph" health detail 2>&1)
+if [[ "$health" == *"Module failed to initialize"* ]]; then
+    echo "FAIL: One or more modules failed to initialize during small delay."
+    echo "$health"
+    exit 1
+fi
 
-main() {
-    setup_cephadm || return 1
-    check_cluster_status || return 1
-    set_balancer_delay || return 1
-    test_loading_time || return 1
-}
+# ------ Test 2 ------
+echo "Select balancer module to receive loading delays..."
+"$ceph" config set mgr mgr_module_load_delay_name balancer
 
-main "$@"
+echo "Test 2: Inject small delay (10000 ms) that should not exceed max loading retries"
+"$ceph" config set mgr mgr_module_load_delay 10000
+
+"$ceph" mgr fail
+orch_status_output=$("$ceph" orch status 2>&1)
+
+echo "$orch_status_output"
+if [[ "$orch_status_output" == *"Backend: cephadm"* ]]; then
+    echo "PASS: orch command succeeded during small delay."
+elif [[ "$orch_status_output" == *"Error ENOTSUP: Module 'orchestrator' is not enabled/loaded"* ]]; then
+    echo "FAIL: orch command failed during small delay."
+    exit 1
+else
+    echo "FAIL: Unexpected error in orch command during small delay."
+    echo "$orch_status_output"
+    exit 1
+fi
+
+echo "Ensure health detail DOES NOT warn about any modules that failed initialization..."
+health=$("$ceph" health detail 2>&1)
+if [[ "$health" == *"Module failed to initialize"* ]]; then
+    echo "FAIL: One or more modules failed to initialize during small delay."
+    echo "$health"
+    exit 1
+fi
+
+# ------ Test 3 ------
+echo "Test 3: Inject large delay (10000000000 ms) that exceeds max loading retries and emits cluster error"
+"$ceph" config set mgr mgr_module_load_delay 10000000000
+
+"$ceph" mgr fail
+orch_status_output=$("$ceph" orch status 2>&1)
+
+echo "$orch_status_output"
+if [[ "$orch_status_output" == *"Error ENOTSUP: Module 'orchestrator' is not enabled/loaded"* ]]; then
+    echo "PASS: orch command failed during large delay as expected."
+else
+    echo "FAIL: Unexpected error in orch command during large delay."
+    echo "$orch_status_output"
+    exit 1
+fi
+
+echo "Ensure health detail DOES warn about any modules that failed initialization..."
+health=$("$ceph" health detail 2>&1)
+if [[ "$health" == *"Module failed to initialize"* ]]; then
+    echo "PASS: Cluster properly issued error about modules that failed to initialize."
+    echo "$health"
+else
+    echo "FAIL: Cluster did not properly issue error about modules that failed to initialize."
+    echo "$health"
+    exit 1
+fi
+
+echo "All tests passed."
