@@ -806,11 +806,7 @@ namespace crimson {
       RejectThreshold  reject_threshold = 0;
 
       double           anticipation_timeout;
-#ifdef WITH_CRIMSON
-      bool finishing;
-#else
-      std::atomic_bool finishing;
-#endif
+
       // every request creates a tick
       Counter tick = 0;
 
@@ -853,7 +849,6 @@ namespace crimson {
 	at_limit(get_or_default(at_limit_param, AtLimit::Reject)),
 	reject_threshold(get_or_default(at_limit_param, RejectThreshold{0})),
 	anticipation_timeout(_anticipation_timeout),
-	finishing(false),
 	idle_age(std::chrono::duration_cast<Duration>(_idle_age)),
 	erase_age(std::chrono::duration_cast<Duration>(_erase_age)),
 	check_time(std::chrono::duration_cast<Duration>(_check_time)),
@@ -868,12 +863,6 @@ namespace crimson {
 	    new RunEvery(check_time,
 			 std::bind(&PriorityQueueBase::do_clean, this)));
       }
-
-
-      ~PriorityQueueBase() {
-	finishing = true;
-      }
-
 
       inline const ClientInfo* get_cli_info(ClientRec& client) const {
 	if (is_dynamic_cli_info_f) {
@@ -1534,6 +1523,7 @@ namespace crimson {
       CanHandleRequestFunc can_handle_f;
       HandleRequestFunc    handle_f;
       // for handling timed scheduling
+      bool finishing = false;
       std::mutex  sched_ahead_mtx;
       std::condition_variable sched_ahead_cv;
       Time sched_ahead_when = TimeZero;
@@ -1591,9 +1581,9 @@ namespace crimson {
 
 
       ~PushPriorityQueue() {
-	this->finishing = true;
 	{
 	  std::lock_guard<std::mutex> l(sched_ahead_mtx);
+	  finishing = true;
 	  sched_ahead_cv.notify_one();
 	}
 	sched_ahead_thd.join();
