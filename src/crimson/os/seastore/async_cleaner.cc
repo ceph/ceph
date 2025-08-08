@@ -1962,9 +1962,11 @@ RBMCleaner::RBMCleaner(
   RBMDeviceGroupRef&& rb_group,
   BackrefManager &backref_manager,
   LBAManager &lba_manager,
-  bool detailed)
+  bool detailed,
+  bool is_cold)
   : store_index(store_index),
     detailed(detailed),
+    is_cold(is_cold),
     rb_group(std::move(rb_group)),
     backref_manager(backref_manager),
     lba_manager(lba_manager)
@@ -2194,7 +2196,13 @@ void RBMCleaner::register_metrics()
 {
   namespace sm = seastar::metrics;
 
-  metrics.add_group("rbm_cleaner", {
+  std::string prefix;
+  if (is_cold) {
+    prefix.append("cold_");
+  }
+  prefix.append("rbm_cleaner");
+
+  metrics.add_group(prefix, {
     sm::make_counter("total_bytes",
 		     [this] { return get_total_bytes(); },
 		     sm::description("the size of the space"),

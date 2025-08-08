@@ -1783,17 +1783,19 @@ public:
     RBMDeviceGroupRef&& rb_group,
     BackrefManager &backref_manager,
     LBAManager &lba_manager,
-    bool detailed);
+    bool detailed,
+    bool is_cold);
 
   static RBMCleanerRef create(
       store_index_t store_index,
       RBMDeviceGroupRef&& rb_group,
       BackrefManager &backref_manager,
       LBAManager &lba_manager,
-      bool detailed) {
+      bool detailed,
+      bool is_cold) {
     return std::make_unique<RBMCleaner>(
       store_index,
-      std::move(rb_group), backref_manager, lba_manager, detailed);
+      std::move(rb_group), backref_manager, lba_manager, detailed, is_cold);
   }
 
   RBMDeviceGroup* get_rb_group() {
@@ -1939,6 +1941,7 @@ private:
 
   store_index_t store_index;
   const bool detailed;
+  const bool is_cold;
   RBMDeviceGroupRef rb_group;
   BackrefManager &backref_manager;
   LBAManager &lba_manager;
