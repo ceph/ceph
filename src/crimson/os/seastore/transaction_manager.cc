@@ -1380,7 +1380,8 @@ TransactionManagerRef make_transaction_manager(
     cold_cleaner = RBMCleaner::create(
       std::move(cold_rbs),
       *backref_manager,
-      cleaner_is_detailed);
+      cleaner_is_detailed,
+      true);
   }
 
   if (backend_type == backend_type_t::SEGMENTED) {
@@ -1404,7 +1405,8 @@ TransactionManagerRef make_transaction_manager(
     cleaner = RBMCleaner::create(
       std::move(rbs),
       *backref_manager,
-      cleaner_is_detailed);
+      cleaner_is_detailed,
+      false);
     journal = journal::make_circularbounded(
       *journal_trimmer,
       static_cast<random_block_device::RBMDevice*>(primary_device),

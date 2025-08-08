@@ -1727,14 +1727,16 @@ public:
   RBMCleaner(
     RBMDeviceGroupRef&& rb_group,
     BackrefManager &backref_manager,
-    bool detailed);
+    bool detailed,
+    bool is_cold);
 
   static RBMCleanerRef create(
       RBMDeviceGroupRef&& rb_group,
       BackrefManager &backref_manager,
-      bool detailed) {
+      bool detailed,
+      bool is_cold) {
     return std::make_unique<RBMCleaner>(
-      std::move(rb_group), backref_manager, detailed);
+      std::move(rb_group), backref_manager, detailed, is_cold);
   }
 
   RBMDeviceGroup* get_rb_group() {
@@ -1875,6 +1877,7 @@ private:
   bool equals(const RBMSpaceTracker &other) const;
 
   const bool detailed;
+  const bool is_cold;
   RBMDeviceGroupRef rb_group;
   BackrefManager &backref_manager;
 
