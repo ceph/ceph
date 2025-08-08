@@ -33,6 +33,7 @@
 #include "common/environment.h"
 #include "common/errno.h"
 #include "common/error_code.h"
+#include "common/ceph_atomic.h"
 #include "common/safe_io.h"
 #include "common/strtol.h"
 #include "common/likely.h"

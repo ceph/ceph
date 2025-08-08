@@ -22,8 +22,8 @@ FuturizedStore::create(const std::string& type,
     return crimson::os::seastore::make_seastore(
       data);
   } else {
-    using crimson::os::AlienStore;
 #ifdef WITH_BLUESTORE
+    using crimson::os::AlienStore;
     // use AlienStore as a fallback. It adapts e.g. BlueStore.
     return std::make_unique<AlienStore>(type, data, values);
 #else
