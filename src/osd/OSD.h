@@ -42,6 +42,7 @@
 #include "osd/scheduler/OpScheduler.h"
 
 #include <atomic>
+#include <expected>
 #include <map>
 #include <memory>
 #include <string>
@@ -2173,7 +2174,7 @@ private:
 		  int whoami,
 		  std::string osdspec_affinity);
 
-  static tl::expected<std::string, int>
+  static std::expected<std::string, int>
     run_osd_bench(CephContext *cct, ObjectStore *store);
 
   /* remove any non-user xattrs from a std::map of them */

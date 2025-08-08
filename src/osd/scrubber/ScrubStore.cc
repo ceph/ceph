@@ -463,10 +463,10 @@ std::vector<bufferlist> Store::get_errors(
 
     // keys not smaller than end_key are not interesting
     if (latest_sh.has_value() && latest_sh->last_key >= end_key) {
-      latest_sh = tl::unexpected(-EINVAL);
+      latest_sh = std::unexpected(-EINVAL);
     }
     if (latest_dp.has_value() && latest_dp->last_key >= end_key) {
-      latest_dp = tl::unexpected(-EINVAL);
+      latest_dp = std::unexpected(-EINVAL);
     }
 
     if (!latest_sh && !latest_dp) {

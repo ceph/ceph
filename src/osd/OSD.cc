@@ -18,6 +18,7 @@
 #include "acconfig.h"
 
 #include <cctype>
+#include <expected>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
@@ -2228,7 +2229,7 @@ int OSD::mkfs(CephContext *cct,
   return ret;
 }
 
-tl::expected<std::string, int>
+std::expected<std::string, int>
 OSD::run_osd_bench(CephContext *cct,
                    ObjectStore *store)
 {
@@ -2249,7 +2250,7 @@ OSD::run_osd_bench(CephContext *cct,
 
   int ret = osd_bench.run_test();
   if (ret != 0) {
-    return tl::unexpected(ret);
+    return std::unexpected(ret);
   }
 
   // Format the result in json format
@@ -2270,7 +2271,7 @@ OSD::run_osd_bench(CephContext *cct,
     f->flush(out);
     result = std::string(out.c_str(), out.length());
   } else {
-    return tl::unexpected(-1);
+    return std::unexpected(-1);
   }
 
   return result;
