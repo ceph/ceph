@@ -1202,6 +1202,7 @@ for _, key in ipairs(KEYS) do
 -- the transaction should be rolled back
 	      log_message("<KEY>_temp_read **NOT EQUAL** to " .. "baseKey: " .. baseKey .. " key: " .. key .. " trx_id: " .. trx_id)
 	      allComparisonsSuccessful = false
+	      log_message("allComparisonsSuccessful is false, breaking the loop" .. " baseKey: " .. baseKey .. " key: " .. key .. " trx_id: " .. trx_id)
         end
 
 	if allComparisonsSuccessful == true then
@@ -1240,6 +1241,7 @@ for _, key in ipairs(KEYS) do
 -- the transaction should be rolled back
 	      log_message("temp_write branch **NOT EQUAL** " .. "baseKey: " .. baseKey .. " testKey: " .. testKey .. " trx_id: " .. trx_id)
 	      allComparisonsSuccessful = false
+	      log_message("allComparisonsSuccessful is false, breaking the loop" .. " baseKey: " .. baseKey .. " testKey: " .. testKey .. " trx_id: " .. trx_id)
 	  end -- end of if values1 and values2 and compareTables(values1, values2)
 	end -- end of if redis.call('EXISTS', baseKey) == 0
     end -- end of if key:match("_temp_write$")

@@ -597,6 +597,8 @@ void LFUDAPolicy::cleaning(const DoutPrefixProvider* dpp)
     uint64_t len = 0;
     rgw::sal::Attrs obj_attrs;
     bool invalid = false;
+    // end_transaction_rc is used to indicate whether the transaction was successful or not.
+    int end_transaction_rc = 0;
   
     ldpp_dout(dpp, 20) << "LFUDAPolicy::" << __func__ << "" << __LINE__ << "(): Before acquiring cleaning-lock" << dendl;
     std::unique_lock<std::mutex> l(lfuda_cleaning_lock);
@@ -678,7 +680,8 @@ void LFUDAPolicy::cleaning(const DoutPrefixProvider* dpp)
 	  }
 	}
       } else {
-	      objDir->m_d4n_trx->start_trx();//upon invalid state(should write to backend), we need to start a transaction
+	//upon invalid state(should write to backend), we need to start a transaction
+	rgw::sal::D4NTransactionMng _scoped(objDir, dpp, end_transaction_rc);
 
 	rgw_user c_rgw_user = e->user; 
 	//writing data to the backend
@@ -975,9 +978,6 @@ void LFUDAPolicy::cleaning(const DoutPrefixProvider* dpp)
 	//remove entry from map and queue, erase_dirty_object locks correctly
 	erase_dirty_object(dpp, e->key, null_yield);
 
-	auto end_trx_status = objDir->m_d4n_trx->end_trx(dpp,objDir->get_connection(), y); //end transaction
-	ldpp_dout(dpp, 20) << __func__ << "(): end_trx_status=" << end_trx_status << dendl;
-	//TODO: handle end_trx_status (success or failure), retry if needed
       }
     } else if (diff < interval) { //end-if std::difftime(time(NULL), e->creationTime) > interval
       {
