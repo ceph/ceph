@@ -310,6 +310,27 @@ However, if you believe the error is transient, you may restart your manager
 daemon(s) or use ``ceph mgr fail`` on the active daemon in order to force
 failover to another daemon.
 
+**Module failed to initialize**
+
+If the ``ceph health detail`` looks something like this, it means that some
+modules took too long to initialize post a mgr failover, and are unable to process
+commands:
+
+.. code-block:: console
+
+   HEALTH_ERR 4 mgr modules have failed
+   [ERR] MGR_MODULE_ERROR: 14 mgr modules have failed
+       Module 'rbd_support' has failed: Module failed to initialize.
+       Module 'status' has failed: Module failed to initialize.
+       Module 'telemetry' has failed: Module failed to initialize.
+       Module 'volumes' has failed: Module failed to initialize.
+
+To troubleshoot, you may try running ``ceph mgr fail`` to reboot
+module initialization.
+
+If the modules are still failing to initialize, please file a bug
+report for further assistance.
+
 OSDs
 ----
 
