@@ -576,6 +576,7 @@ public:
     views.clear();
     copied_lba_keys.clear();
     update_copied_lba_key = nullptr;
+    touched_prefix.clear();
   }
 
   bool did_reset() const {
@@ -690,6 +691,14 @@ public:
 
   cache_hint_t get_cache_hint() const {
     return cache_hint;
+  }
+
+  void touch_laddr_prefix(laddr_t laddr) {
+    touched_prefix.insert(laddr.get_object_prefix());
+  }
+
+  std::unordered_set<laddr_t> &get_touched_laddr_prefix() {
+    return touched_prefix;
   }
 
   btree_cursor_stats_t cursor_stats;
@@ -917,6 +926,8 @@ private:
    * Set of extents retired by *this.
    */
   retired_extent_set_t retired_set;
+
+  std::unordered_set<laddr_t> touched_prefix;
 
   /// stats to collect when commit or invalidate
   tree_stats_t onode_tree_stats;
