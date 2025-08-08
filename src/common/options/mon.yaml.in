@@ -24,7 +24,7 @@ options:
     stripe unit`` bytes will be encoded/decoded
     individually. This option can is overridden by the
     ``stripe_unit`` setting in an erasure code profile.
-  default: 4_K
+  default: 0
   services:
   - mon
 - name: osd_pool_default_crimson
