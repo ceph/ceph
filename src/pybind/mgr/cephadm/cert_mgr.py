@@ -2,6 +2,7 @@ from typing import TYPE_CHECKING, Tuple, Union, List, Dict, Optional, cast, Any,
 import logging
 from fnmatch import fnmatch
 from enum import Enum
+from urllib.parse import urlparse
 
 from cephadm.ssl_cert_utils import SSLCerts, SSLConfigException
 from mgr_util import verify_tls, certificate_days_to_expire, ServerConfigException
@@ -115,6 +116,7 @@ class CertMgr:
     CEPHADM_CERTMGR_HEALTH_ERR = 'CEPHADM_CERT_ERROR'
     CEPHADM_SIGNED = 'cephadm-signed'
     LABEL_SEPARATOR = "__"
+    CERTMGR_REF_PREFIX = 'certmgr://'
 
     def __init__(self, mgr: "CephadmOrchestrator") -> None:
         self.mgr = mgr
@@ -134,6 +136,62 @@ class CertMgr:
             TLSObjectScope.HOST: {},
             TLSObjectScope.GLOBAL: {},
         }
+
+    def is_reference(self, value: str) -> bool:
+        return value.startswith(self.CERTMGR_REF_PREFIX)
+
+    def resolve_reference(self, ref: str, svc_name: Optional[str], host: Optional[str]) -> Optional[str]:
+        """
+        Resolve a certmgr://... reference and return the data (cert or key).
+
+        Example of reference(s):
+
+            ** With Service scope
+                ssl_cert: certmgr://service/rgw/certs/rgw_ssl_cert
+                ssl_key: certmgr://service/rgw/keys/rgw_ssl_key
+                client_cert: certmgr://service/nvmeof/certs/nvmeof_client_cert
+
+            ** With Host scope
+                ssl_cert: certmgr://host/grafana/certs/grafana_ssl_cert
+                ssl_key: certmgr://host/grafana/keys/grafana_ssl_key
+
+            ** With Global scope
+                ssl_cert: certmgr://global/mgmt-gateway/certs/mgmt_gateway_ssl_cert
+                ssl_key: certmgr://global/mgmt-gateway/keys/mgmt_gateway_ssl_key
+
+        """
+        logger.info(f'redo: resolving reference {ref}')
+        if not ref.startswith(self.CERTMGR_REF_PREFIX):
+            raise ValueError(f"Invalid reference URI: {ref}")
+
+        # The netloc is the scope (e.g. "service"), the rest is in the path
+        parsed = urlparse(ref)
+        scope_str = parsed.netloc
+        parts = parsed.path.strip("/").split("/")
+        if len(parts) != 3:
+            raise ValueError(f"Invalid certmgr URI format: {ref} (expected 4 parts)")
+
+        _, kind, name = parts
+        try:
+            scope = TLSObjectScope[scope_str.upper()]
+        except KeyError:
+            raise ValueError(f"Invalid TLSObjectScope in certmgr URI: {scope_str}")
+
+        if kind not in ('certs', 'keys'):
+            raise ValueError(f"Invalid type in certmgr URI: {kind}, expected 'certs' or 'keys'")
+
+        #svc_name = entity if scope == TLSObjectScope.SERVICE else None
+        #hostname = entity if scope == TLSObjectScope.HOST else None
+
+        if kind == "certs":
+            logger.info(f'redo: found in certs {parts}')
+            return self.get_cert(name, service_name=svc_name, host=host)
+        elif kind == "keys":
+            logger.info(f'redo: found in keys {parts}')
+            return self.get_key(name, service_name=svc_name, host=host)
+
+        logger.info(f'redo: not found !')
+        return None  # fallback in case of invalid category
 
     def is_cephadm_signed_entity(self, entity: str) -> bool:
         return entity.startswith(self.CEPHADM_SIGNED)

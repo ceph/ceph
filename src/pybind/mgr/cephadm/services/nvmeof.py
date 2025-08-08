@@ -70,7 +70,8 @@ class NvmeofService(CephService):
                 spec, daemon_spec, NVMEOF_CLIENT_CERT_LABEL
             )
             root_ca_cert = self.mgr.cert_mgr.get_root_ca()
-        else:
+
+        elif spec.certificate_source == CertificateSource.INLINE.value:
             if not spec.client_cert or not spec.client_key or not spec.root_ca_cert:
                 raise OrchestratorError("mTLS is enabled, but one or more of client_cert, client_key, or root_ca_cert is missing")
             client_cert = spec.client_cert
@@ -85,6 +86,14 @@ class NvmeofService(CephService):
                     self.mgr.cert_mgr.save_cert(name, value, spec.service_name(), daemon_spec.host, user_made=True)
                 elif 'key' in name:
                     self.mgr.cert_mgr.save_key(name, value, spec.service_name(), daemon_spec.host, user_made=True)
+
+        elif spec.certificate_source == CertificateSource.REFERENCE.value:
+            if not spec.client_cert or not spec.client_key or not spec.root_ca_cert:
+                raise OrchestratorError("mTLS is enabled, but one or more of client_cert, client_key, or root_ca_cert is missing")
+            client_cert = self.mgr.cert_mgr.resolve_reference(spec.client_cert, spec.service_name(), daemon_spec.host)
+            client_key = self.mgr.cert_mgr.resolve_reference(spec.client_key, spec.service_name(), daemon_spec.host)
+            root_ca_cert = self.mgr.cert_mgr.resolve_reference(spec.root_ca_cert, spec.service_name(), daemon_spec.host)
+
 
         daemon_spec.extra_files.update({
             'client_cert': client_cert,
@@ -292,7 +301,7 @@ class NvmeofService(CephService):
             self.mgr.log.error(f"Unable to send monitor command {cmd}, error {err}")
 
         self.mgr.cert_mgr.rm_self_signed_cert_key_pair(service_name, daemon.hostname, label=NVMEOF_CLIENT_CERT_LABEL)
-        if spec.enable_auth and spec.certificate_source != CertificateSource.CEPHADM_SIGNED.value:
+        if spec.enable_auth and spec.certificate_source == CertificateSource.INLINE.value:
             for entry in ['nvmeof_client_cert', 'nvmeof_client_key', 'nvmeof_root_ca_cert']:
                 if 'cert' in entry:
                     self.mgr.cert_mgr.rm_cert(entry, spec.service_name(), daemon.hostname)
