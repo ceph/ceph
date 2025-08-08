@@ -55,10 +55,42 @@ class select_view;
 
 namespace ceph::libfdb::concepts {
 
-// There's a high liklihood that we're going to get more sophisticated selectors, 
+// Capture things that model ContainerCompatibleRange. 
+
+/*JFW
+// Adapted from "https://en.cppreference.com/w/cpp/ranges/to.html#container_compatible_range":
+template< class Container >
+constexpr bool // reservable-container =
+    ranges::sized_range<Container> &&
+    requires (Container& c, ranges::range_size_t<Container> n)
+    {
+        c.reserve(n);
+        { c.capacity() } -> std::same_as<decltype(n)>;
+        { c.max_size() } -> std::same_as<decltype(n)>;
+    };
+*/
+
+// Adapted from "https://en.cppreference.com/w/cpp/ranges/to.html#container_compatible_range":
+template< class Container, class Reference >
+constexpr bool appendable_container  = requires (Container& c, Reference&& ref)
+{
+ requires
+ (
+  requires { c.emplace_back(std::forward<Reference>(ref)); }     ||
+  requires { c.push_back(std::forward<Reference>(ref)); }        ||
+  requires { c.emplace(c.end(), std::forward<Reference>(ref)); } ||
+  requires { c.insert(c.end(), std::forward<Reference>(ref)); }
+ );
+};
+
+} // namespace ceph::libfdb::concepts
+
+namespace ceph::libfdb::concepts {
+
+// There's a high likelihood that we're going to get more sophisticated selectors, 
 // so this is doing a more important job than it may appear to be:
 template <typename InputT>
-concept selector = ceph::libfdb::detail::is_any_of<InputT, ceph::libfdb::select, ceph::libfdb::select_view>();
+concept selector = requires { ceph::libfdb::detail::is_any_of<InputT, ceph::libfdb::select, ceph::libfdb::select_view>(); };
 
 } // namespace ceph::libfdb::concepts
 

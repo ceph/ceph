@@ -22,6 +22,7 @@
 #include <string>
 #include <vector>
 #include <cstdint>
+#include <functional>
 #include <string_view>
 
 namespace ceph::libfdb::detail {
@@ -157,6 +158,12 @@ inline void convert(std::span<const std::uint8_t> in, std::vector<std::uint8_t>&
 {
  out.reserve(in.size());
  detail::reify_from_buffer(in, out);
+}
+
+// std::function_reference() isn't available until C++26:
+inline void convert(std::span<const std::uint8_t> in, std::function<void(const char *, std::size_t)> fn)
+{
+ fn((const char *)in.data(), in.size()); 
 }
 
 } // namespace ceph::libfdb::from
