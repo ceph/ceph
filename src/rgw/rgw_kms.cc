@@ -929,6 +929,7 @@ static int request_key_from_barbican(const DoutPrefixProvider *dpp,
   }
   concat_url(secret_url, "/v1/secrets/");
   concat_url(secret_url, std::string(key_id));
+  concat_url(secret_url, "/payload");
 
   bufferlist secret_bl;
   RGWHTTPTransceiver secret_req(cct, "GET", secret_url, &secret_bl);
