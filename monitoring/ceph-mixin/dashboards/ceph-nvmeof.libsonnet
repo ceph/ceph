@@ -133,14 +133,14 @@ local g = import 'grafonnet/grafana.libsonnet';
       interval='1m',
       color={ mode: 'thresholds' },
       thresholdsMode='',
-      noValue=null,
+      noValue='0',
     ).addThresholds([
       { color: '#808080', value: null },
       { color: 'red', value: 1.0003 },
     ])
     .addTarget(
       $.addTargetSchema(
-        expr="count(ceph_nvmeof_gateway_info) + sum(ceph_health_detail{name='NVMEOF_GATEWAY_DOWN'})",
+        expr='count(ceph_nvmeof_gateway_status)',
         format='time_series',
         instant=true,
         legendFormat='Total',
@@ -150,9 +150,9 @@ local g = import 'grafonnet/grafana.libsonnet';
     )
     .addTarget(
       $.addTargetSchema(
-        expr='count(ceph_nvmeof_gateway_info)',
+        expr='count(ceph_nvmeof_gateway_status{status=~"1|2"})',
         format='time_series',
-        instant=false,
+        instant=true,
         legendFormat='Available',
         range=true,
         datasource='$datasource',
@@ -160,7 +160,7 @@ local g = import 'grafonnet/grafana.libsonnet';
     )
     .addTarget(
       $.addTargetSchema(
-        expr="(ceph_health_detail{name='NVMEOF_GATEWAY_DOWN'})",
+        expr="count(ceph_nvmeof_gateway_status{status=~'0|-1|-2'})",
         format='time_series',
         instant=true,
         legendFormat='Down',
@@ -208,8 +208,8 @@ local g = import 'grafonnet/grafana.libsonnet';
     ]),
 
     $.timeSeriesPanel(
-      title='Ceph Health NVMeoF WARNING',
-      description='Ceph healthchecks NVMeoF WARNINGs',
+      title='Gateway WARNING Health States',
+      description='Gateways in error states',
       gridPosition={ x: 8, y: 1, w: 7, h: 8 },
       lineInterpolation='linear',
       lineWidth=1,
@@ -224,47 +224,47 @@ local g = import 'grafonnet/grafana.libsonnet';
       showLegend=true,
       placement='bottom',
       tooltip={ mode: 'multi', sort: 'desc' },
-      stackingMode='normal',
+      stackingMode='none',
       spanNulls=false,
       decimals=0,
       thresholdsMode='absolute',
-      noValue='0',
+      noValue=0,
     ).addThresholds([
       { color: 'green', value: null },
     ])
     .addTarget(
       $.addTargetSchema(
-        expr="sum(ceph_health_detail{name='NVMEOF_GATEWAY_DOWN'})",
+        expr="count(ceph_nvmeof_gateway_status{status=~'0'})",
         format='',
         instant=false,
-        legendFormat='NVMEOF_GATEWAY_DOWN',
+        legendFormat='stopped',
         range=true,
         datasource='$datasource',
       )
     )
     .addTarget(
       $.addTargetSchema(
-        expr="sum(ceph_health_detail{name='NVMEOF_GATEWAY_DELETING'})",
+        expr="count(ceph_nvmeof_gateway_status{status=~'-1'})",
         format='',
         instant=false,
-        legendFormat='NVMEOF_GATEWAY_DELETING',
+        legendFormat='error',
         range=true,
         datasource='$datasource',
       )
     )
     .addTarget(
       $.addTargetSchema(
-        expr="sum(ceph_health_detail{name='NVMEOF_SINGLE_GATEWAY'})",
+        expr="count(ceph_nvmeof_gateway_status{status=~'-2'})",
         format='',
         instant=false,
-        legendFormat='NVMEOF_SINGLE_GATEWAY',
+        legendFormat='unknown_state',
         range=true,
         datasource='$datasource',
       )
     )
     .addOverrides([
       {
-        matcher: { id: 'byName', options: 'NVMEOF_GATEWAY_DOWN' },
+        matcher: { id: 'byName', options: 'error' },
         properties: [
           {
             id: 'color',
@@ -276,19 +276,19 @@ local g = import 'grafonnet/grafana.libsonnet';
         ],
       },
       {
-        matcher: { id: 'byName', options: 'NVMEOF_GATEWAY_DELETING' },
+        matcher: { id: 'byName', options: 'stopped' },
         properties: [
           {
             id: 'color',
             value: {
-              fixedColor: 'dark-purple',
+              fixedColor: 'black',
               mode: 'fixed',
             },
           },
         ],
       },
       {
-        matcher: { id: 'byName', options: 'NVMEOF_SINGLE_GATEWAY' },
+        matcher: { id: 'byName', options: 'unknown_state' },
         properties: [
           {
             id: 'custom.lineWidth',
@@ -297,8 +297,8 @@ local g = import 'grafonnet/grafana.libsonnet';
           {
             id: 'color',
             value: {
-              fixedColor: 'super-light-orange',
-              mode: 'shades',
+              fixedColor: 'yellow',
+              mode: 'fixed',
             },
           },
         ],

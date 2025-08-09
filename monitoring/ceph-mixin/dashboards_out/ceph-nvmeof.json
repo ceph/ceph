@@ -138,6 +138,7 @@
                "decimals": 0,
                "links": [ ],
                "mappings": [ ],
+               "noValue": "0",
                "thresholds": {
                   "mode": "",
                   "steps": [
@@ -228,7 +229,7 @@
          "targets": [
             {
                "datasource": "$datasource",
-               "expr": "count(ceph_nvmeof_gateway_info) + sum(ceph_health_detail{name='NVMEOF_GATEWAY_DOWN'})",
+               "expr": "count(ceph_nvmeof_gateway_status)",
                "format": "time_series",
                "instant": true,
                "intervalFactor": 1,
@@ -238,9 +239,9 @@
             },
             {
                "datasource": "$datasource",
-               "expr": "count(ceph_nvmeof_gateway_info)",
+               "expr": "count(ceph_nvmeof_gateway_status{status=~\"1|2\"})",
                "format": "time_series",
-               "instant": false,
+               "instant": true,
                "intervalFactor": 1,
                "legendFormat": "Available",
                "range": true,
@@ -248,7 +249,7 @@
             },
             {
                "datasource": "$datasource",
-               "expr": "(ceph_health_detail{name='NVMEOF_GATEWAY_DOWN'})",
+               "expr": "count(ceph_nvmeof_gateway_status{status=~'0|-1|-2'})",
                "format": "time_series",
                "instant": true,
                "intervalFactor": 1,
@@ -263,7 +264,7 @@
       },
       {
          "datasource": "$datasource",
-         "description": "Ceph healthchecks NVMeoF WARNINGs",
+         "description": "Gateways in error states",
          "fieldConfig": {
             "defaults": {
                "color": {
@@ -293,14 +294,14 @@
                   "spanNulls": false,
                   "stacking": {
                      "group": "A",
-                     "mode": "normal"
+                     "mode": "none"
                   },
                   "thresholdsStyle": {
                      "mode": "off"
                   }
                },
                "decimals": 0,
-               "noValue": "0",
+               "noValue": 0,
                "thresholds": {
                   "mode": "absolute",
                   "steps": [
@@ -316,7 +317,7 @@
                {
                   "matcher": {
                      "id": "byName",
-                     "options": "NVMEOF_GATEWAY_DOWN"
+                     "options": "error"
                   },
                   "properties": [
                      {
@@ -331,13 +332,13 @@
                {
                   "matcher": {
                      "id": "byName",
-                     "options": "NVMEOF_GATEWAY_DELETING"
+                     "options": "stopped"
                   },
                   "properties": [
                      {
                         "id": "color",
                         "value": {
-                           "fixedColor": "dark-purple",
+                           "fixedColor": "black",
                            "mode": "fixed"
                         }
                      }
@@ -346,7 +347,7 @@
                {
                   "matcher": {
                      "id": "byName",
-                     "options": "NVMEOF_SINGLE_GATEWAY"
+                     "options": "unknown_state"
                   },
                   "properties": [
                      {
@@ -356,8 +357,8 @@
                      {
                         "id": "color",
                         "value": {
-                           "fixedColor": "super-light-orange",
-                           "mode": "shades"
+                           "fixedColor": "yellow",
+                           "mode": "fixed"
                         }
                      }
                   ]
@@ -388,36 +389,36 @@
          "targets": [
             {
                "datasource": "$datasource",
-               "expr": "sum(ceph_health_detail{name='NVMEOF_GATEWAY_DOWN'})",
+               "expr": "count(ceph_nvmeof_gateway_status{status=~'0'})",
                "format": "",
                "instant": false,
                "intervalFactor": 1,
-               "legendFormat": "NVMEOF_GATEWAY_DOWN",
+               "legendFormat": "stopped",
                "range": true,
                "refId": "A"
             },
             {
                "datasource": "$datasource",
-               "expr": "sum(ceph_health_detail{name='NVMEOF_GATEWAY_DELETING'})",
+               "expr": "count(ceph_nvmeof_gateway_status{status=~'-1'})",
                "format": "",
                "instant": false,
                "intervalFactor": 1,
-               "legendFormat": "NVMEOF_GATEWAY_DELETING",
+               "legendFormat": "error",
                "range": true,
                "refId": "B"
             },
             {
                "datasource": "$datasource",
-               "expr": "sum(ceph_health_detail{name='NVMEOF_SINGLE_GATEWAY'})",
+               "expr": "count(ceph_nvmeof_gateway_status{status=~'-2'})",
                "format": "",
                "instant": false,
                "intervalFactor": 1,
-               "legendFormat": "NVMEOF_SINGLE_GATEWAY",
+               "legendFormat": "unknown_state",
                "range": true,
                "refId": "C"
             }
          ],
-         "title": "Ceph Health NVMeoF WARNING",
+         "title": "Gateway WARNING Health States",
          "type": "timeseries"
       },
       {
