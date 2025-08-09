@@ -454,7 +454,7 @@ BtreeBackrefManager::scan_mapped_space(
   });
 }
 
-BtreeBackrefManager::base_iertr::future<> _init_cached_extent(
+base_iertr::future<> _init_cached_extent(
   op_context_t c,
   const CachedExtentRef &e,
   BackrefBtree &btree,

@@ -33,8 +33,6 @@ enum class mutation_status_t : uint8_t {
 };
 
 struct OMapNode : LogicalChildNode {
-  using base_iertr = OMapManager::base_iertr;
-
   using OMapNodeRef = TCachedExtentRef<OMapNode>;
 
   struct mutation_result_t {
