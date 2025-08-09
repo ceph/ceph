@@ -33,6 +33,8 @@ If high logging levels have been set on the MDS, ``dump.txt`` can be expected
 to hold the information needed to diagnose and solve the issue causing the
 CephFS operations to hang.
 
+.. _cephfs_dr_stuck_during_recovery:
+
 Stuck during recovery
 =====================
 
@@ -85,6 +87,11 @@ replay. Examine the journal replay status:
 Replay completes when the ``journal_read_pos`` reaches the
 ``journal_write_pos``. The write position does not change during replay. Track
 the progression of the read position to compute the expected time to complete.
+The MDS emits an `MDS_ESTIMATED_REPLAY_TIME` warning when the act of replaying
+the journal takes more than 30 seconds. The warning message includes an
+estimated time to the completion of journal replay::
+
+  mds.a(mds.0): replay: 50.0446% complete - elapsed time: 582s, estimated time remaining: 581s
 
 
 Avoiding recovery roadblocks
