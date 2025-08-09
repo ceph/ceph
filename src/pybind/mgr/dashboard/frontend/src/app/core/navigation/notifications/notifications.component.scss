@@ -1,4 +1,7 @@
 @use './src/styles/vendor/variables' as vv;
+@use '@carbon/styles/scss/spacing';
+@use '@carbon/styles/scss/theme' as *;
+@use '@carbon/styles/scss/type';
 
 .running i {
   color: vv.$primary;
@@ -24,4 +27,29 @@ a {
     background-color: vv.$white;
     border-color: vv.$primary-500;
   }
+}
+
+.notification-icon-wrapper {
+  position: relative;
+  display: inline-flex;
+  padding: spacing.$spacing-04;
+  cursor: pointer;
+  border-radius: spacing.$spacing-01;
+  transition: background-color 0.2s ease;
+}
+
+.notification-count {
+  position: absolute;
+  top: spacing.$spacing-01;
+  right: spacing.$spacing-01;
+  min-width: spacing.$spacing-04;
+  height: spacing.$spacing-04;
+  padding: 0 spacing.$spacing-01;
+  border-radius: spacing.$spacing-02;
+  background-color: $support-error;
+  color: $text-on-color;
+  font-size: spacing.$spacing-04;
+  line-height: spacing.$spacing-04;
+  text-align: center;
+  font-weight: 500;
 }
