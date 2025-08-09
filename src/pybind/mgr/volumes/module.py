@@ -489,7 +489,12 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             'snapshot_clone_no_wait',
             type='bool',
             default=True,
-            desc='Reject subvolume clone request when cloner threads are busy')
+            desc='Reject subvolume clone request when cloner threads are busy'),
+        Option(
+            'periodic_async_work',
+            type='bool',
+            default=False,
+            desc='Periodically check for async work')
     ]
 
     def __init__(self, *args, **kwargs):
@@ -498,6 +503,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         self.max_concurrent_clones = None
         self.snapshot_clone_delay = None
         self.snapshot_clone_no_wait = None
+        self.periodic_async_work = False
         self.lock = threading.Lock()
         super(Module, self).__init__(*args, **kwargs)
         # Initialize config option members
@@ -530,6 +536,13 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                         self.vc.cloner.reconfigure_snapshot_clone_delay(self.snapshot_clone_delay)
                     elif opt['name'] == "snapshot_clone_no_wait":
                         self.vc.cloner.reconfigure_reject_clones(self.snapshot_clone_no_wait)
+                    elif opt['name'] == "periodic_async_work":
+                        if self.periodic_async_work:
+                            self.vc.cloner.set_wakeup_timeout()
+                            self.vc.purge_queue.set_wakeup_timeout()
+                        else:
+                            self.vc.cloner.unset_wakeup_timeout()
+                            self.vc.purge_queue.unset_wakeup_timeout()
 
     def handle_command(self, inbuf, cmd):
         handler_name = "_cmd_" + cmd['prefix'].replace(" ", "_")
