@@ -25,14 +25,12 @@ def teardown_module():
     cephfs.shutdown()
 
 def purge_dir(path, is_snap = False):
-    print(b"Purge " + path)
     d = cephfs.opendir(path)
     if (not path.endswith(b"/")):
         path = path + b"/"
     dent = cephfs.readdir(d)
     while dent:
         if (dent.d_name not in [b".", b".."]):
-            print(path + dent.d_name)
             if dent.is_dir():
                 if (not is_snap):
                     try:
@@ -44,7 +42,6 @@ def purge_dir(path, is_snap = False):
                     purge_dir(path + dent.d_name, False)
                     cephfs.rmdir(path + dent.d_name)
                 else:
-                    print("rmsnap on {} snap {}".format(path, dent.d_name))
                     cephfs.rmsnap(path, dent.d_name);
             else:
                 cephfs.unlink(path + dent.d_name)
@@ -57,7 +54,6 @@ def testdir():
 
     cephfs.chdir(b"/")
     _, ret_buf = cephfs.listxattr("/")
-    print(f'ret_buf={ret_buf}')
     xattrs = ret_buf.decode('utf-8').split('\x00')
     for xattr in xattrs[:-1]:
         cephfs.removexattr("/", xattr)
@@ -909,6 +905,31 @@ def test_snapdiff(testdir):
     # remove directory
     purge_dir(b"/snapdiff_test");
 
+def test_blockdiff(testdir):
+    """
+    Tests the incremental sync syncs only the changed portions of a huge file.
+    """
+    cephfs.mkdir("/blockdiff_test", 0o755)
+    fd = cephfs.open('/blockdiff_test/file-1', 'w', 0o755)
+    cephfs.write(fd, b"1234", 0)
+    cephfs.close(fd)
+    # take a snapshot
+    cephfs.mksnap("/blockdiff_test", "snap1", 0o755)
+    # make modifications to the file
+    fd = cephfs.open('/blockdiff_test/file-1', 'w', 0o755)
+    cephfs.write(fd, b"5678", 4)
+    cephfs.close(fd)
+    # take a snapshot
+    cephfs.mksnap("/blockdiff_test", "snap2", 0o755)
+    diff = cephfs.openblockdiff(b"/blockdiff_test", b"file-1", b"snap1", b"snap2")
+    num_blocks, offset, length = diff.readblock()
+    assert_equal(1, num_blocks)
+    assert_equal(0, offset)
+    assert_equal(8, length)
+    diff.closeblockdiff()
+    # remove directory
+    purge_dir(b"/blockdiff_test");
+
 def test_single_target_command():
     command = {'prefix': u'session ls', 'format': 'json'}
     mds_spec  = "a"
@@ -923,9 +944,7 @@ def test_multi_target_command():
     mds_get_command = {'prefix': 'status', 'format': 'json'}
     inbuf = b''
     ret, outbl, outs = cephfs.mds_command('*', json.dumps(mds_get_command), inbuf)
-    print(outbl)
     mds_status = json.loads(outbl)
-    print(mds_status)
 
     command = {'prefix': u'session ls', 'format': 'json'}
     mds_spec  = "*"
@@ -934,7 +953,6 @@ def test_multi_target_command():
     ret, outbl, outs = cephfs.mds_command(mds_spec, json.dumps(command), inbuf)
     # Standby MDSs will return -38
     assert(ret == 0 or ret == -38)
-    print(outbl)
     session_map = json.loads(outbl)
 
     if isinstance(mds_status, list): # if multi target command result
