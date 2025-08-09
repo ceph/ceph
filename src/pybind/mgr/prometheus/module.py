@@ -100,6 +100,8 @@ RGW_METADATA = ('ceph_daemon', 'hostname', 'ceph_version', 'instance_id')
 RBD_MIRROR_METADATA = ('ceph_daemon', 'id', 'instance_id', 'hostname',
                        'ceph_version')
 
+RBD_IMAGE_METADATA = ('pool_id', 'image_name')
+
 DISK_OCCUPATION = ('ceph_daemon', 'device', 'db_device',
                    'wal_device', 'instance', 'devices', 'device_ids')
 
@@ -743,6 +745,13 @@ class Module(MgrModule, OrchestratorClientMixin):
             RBD_MIRROR_METADATA
         )
 
+        metrics['rbd_image_metadata'] = Metric(
+            'untyped',
+            'rbd_image_metadata',
+            'RBD Image Metadata',
+            RBD_IMAGE_METADATA
+        )
+
         metrics['pg_total'] = Metric(
             'gauge',
             'pg_total',
@@ -1335,6 +1344,20 @@ class Module(MgrModule, OrchestratorClientMixin):
                 self.metrics['rbd_mirror_metadata'].set(
                     1, rbd_mirror_metadata
                 )
+        try:
+            rbd = RBD()
+            for pool in osd_map['pools']:
+                pool_id = pool['pool']
+                pool_name = pool['pool_name']
+                if 'rbd' in pool.get('application_metadata', {}):
+                    with self.rados.open_ioctx(pool_name) as ioctx:
+                        for image_meta in rbd.list2(ioctx):
+                            image_name = image_meta['name']
+                            self.metrics['rbd_image_metadata'].set(
+                                1, (str(pool_id), image_name)
+                            )
+        except Exception as e:
+            self.log.error(f"Failed to collect RBD image metadata: {e}")
 
     @profile_method()
     def get_num_objects(self) -> None:
