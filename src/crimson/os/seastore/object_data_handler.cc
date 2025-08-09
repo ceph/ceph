@@ -462,7 +462,7 @@ ObjectDataHandler::write_ret do_remappings(
 	  region.laddr_start,
 	  region.length
 	).handle_error_interruptible(
-	  TransactionManager::base_iertr::pass_further{},
+	  base_iertr::pass_further{},
 	  crimson::ct_error::assert_all{
 	    "ObjectDataHandler::do_remapping hit invalid error"
 	  }

@@ -14,7 +14,6 @@
 #include "crimson/os/seastore/ordering_handle.h"
 #include "crimson/os/seastore/root_block.h"
 #include "crimson/os/seastore/seastore_types.h"
-#include "crimson/os/seastore/transaction_interruptor.h"
 
 namespace crimson::os::seastore {
 
@@ -431,7 +430,6 @@ public:
     OrderingHandle &&handle,
     bool weak,
     src_t src,
-    journal_seq_t initiated_after,
     on_destruct_func_t&& f,
     transaction_id_t trans_id,
     cache_hint_t cache_hint
@@ -460,7 +458,7 @@ public:
   friend class crimson::os::seastore::SeaStore;
   friend class TransactionConflictCondition;
 
-  void reset_preserve_handle(journal_seq_t initiated_after) {
+  void reset_preserve_handle() {
     root.reset();
     offset = 0;
     delayed_temp_offset = 0;
@@ -840,7 +838,6 @@ inline TransactionRef make_test_transaction() {
     get_dummy_ordering_handle(),
     false,
     Transaction::src_t::MUTATE,
-    JOURNAL_SEQ_NULL,
     [](Transaction&) {},
     ++next_id,
     CACHE_HINT_TOUCH
