@@ -12527,13 +12527,14 @@ int Client::getcwd(string& dir, const UserPerm& perms)
   return _getcwd(dir, perms);
 }
 
-int Client::statfs(const char *path, struct statvfs *stbuf,
+int Client::_statfs(Inode *in, struct statvfs *stbuf,
 		   const UserPerm& perms)
 {
   RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
   if (!mref_reader.is_state_satisfied())
     return -ENOTCONN;
 
+  ldout(cct, 10) << __func__ << dendl;
   tout(cct) << __func__ << std::endl;
   unsigned long int total_files_on_fs;
 
@@ -12553,7 +12554,9 @@ int Client::statfs(const char *path, struct statvfs *stbuf,
   lock.lock();
 
   ceph_assert(root);
-  total_files_on_fs = root->rstat.rfiles + root->rstat.rsubdirs;
+  InodeRef quota_root = root->quota.is_enabled(QUOTA_MAX_BYTES) ? root : get_quota_root(in, perms);
+
+  total_files_on_fs = quota_root->rstat.rfiles + quota_root->rstat.rsubdirs;
 
   if (rval < 0) {
     ldout(cct, 1) << "underlying call to statfs returned error: "
@@ -12577,7 +12580,13 @@ int Client::statfs(const char *path, struct statvfs *stbuf,
   stbuf->f_files = total_files_on_fs;
   stbuf->f_ffree = -1;
   stbuf->f_favail = -1;
-  stbuf->f_fsid = -1;       // ??
+  if (in->snaprealm) {
+    // this is subvolume root ino
+    stbuf->f_fsid = in->snaprealm->ino;
+  } else {
+    stbuf->f_fsid = -1;       // ??
+  }
+
   stbuf->f_flag = 0;        // ??
   stbuf->f_namemax = NAME_MAX;
 
@@ -12585,7 +12594,6 @@ int Client::statfs(const char *path, struct statvfs *stbuf,
   // quota but we can see a parent of it that does have a quota, we'll
   // respect that one instead.
   ceph_assert(root != nullptr);
-  InodeRef quota_root = root->quota.is_enabled(QUOTA_MAX_BYTES) ? root : get_quota_root(root.get(), perms, QUOTA_MAX_BYTES);
 
   // get_quota_root should always give us something if client quotas are
   // enabled
@@ -12974,7 +12982,21 @@ int Client::ll_statfs(Inode *in, struct statvfs *stbuf, const UserPerm& perms)
   /* Since the only thing this does is wrap a call to statfs, and
      statfs takes a lock, it doesn't seem we have a need to split it
      out. */
-  return statfs(0, stbuf, perms);
+  return _statfs(in, stbuf, perms);
+}
+
+int Client::statfs(const char *path, struct statvfs *stbuf, const UserPerm& perms)
+{
+  walk_dentry_result wdr;
+  {
+    std::scoped_lock l(client_lock);
+    if (int rc = path_walk(cwd, filepath(path), &wdr, perms, {}); rc < 0) {
+      return rc;
+    }
+  }
+
+  auto in = wdr.target.get();
+  return _statfs(in, stbuf, perms);
 }
 
 void Client::_ll_register_callbacks(struct ceph_client_callback_args *args)
