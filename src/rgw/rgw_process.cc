@@ -247,6 +247,19 @@ int rgw_process_authenticated(RGWHandler_REST * const handler,
   ldpp_dout(op, 2) << "pre-executing" << dendl;
   op->pre_exec();
 
+  if ((strcmp("get_obj", op->name()) == 0) && (s->cct->_conf->d4n_writecache_enabled)) { // TODO: is it correct to place this here or should I move it earlier in the method?
+    if (s->op == OP_GET) {
+      ldpp_dout(op, 10) << "Calling get_cache_obj" << dendl;
+      int ret = static_cast<RGWGetObj*>(op)->get_cache_obj(y);
+      if (ret < 0) {
+	ldpp_dout(op, 0) << "ERROR: get_cache_obj failed, ret=" << ret << dendl;
+	return ret;
+      }
+      op->complete(); // TODO: is this call necessary?
+      return 0;
+    }
+  }
+
   ldpp_dout(op, 2) << "check rate limiting" << dendl;
   if (rate_limit(driver, s)) {
     return -ERR_RATE_LIMITED;
