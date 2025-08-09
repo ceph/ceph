@@ -450,8 +450,8 @@ custom_dns
 custom_ports
     Optional. A mapping of service names to port numbers that will override the
     default ports used for those services. The service names are:
-    ``smb``, ``smbmetrics``, and ``ctdb``. If a service name is not
-    present in the mapping the default port will be used.
+    ``smb``, ``smbmetrics``, ``ctdb``, and ``remote-control``. If a service
+    name is not present in the mapping the default port will be used.
     For example, ``{"smb": 4455, "smbmetrics": 9009}`` will change the
     ports used by smb for client access and the metrics exporter, but
     not change the port used by the CTDB clustering daemon.
@@ -506,6 +506,30 @@ public_addrs
         host. Run ``cephadm list-networks`` for an example of these mappings.
         If destination is not supplied the network is automatically determined
         using the address value supplied and taken as the destination.
+remote_control
+    Optional object. This object configures an smb cluster to deploy an extra
+    ``remote control`` service. This service provides a gRPC server that
+    can be used to enumerate connected clients and disconnect clients from
+    shares. This service uses mTLS for authentication. If the service is
+    enabled and any of the ``cert``, ``key``, or ``ca_cert`` fields are not
+    populated mTLS will be disabled and the service will operate in a read-only
+    mode. Running the service with mTLS disabled is not recommended.
+    Fields:
+
+    enabled
+        Optional boolean. If explicitly set to ``true`` or ``false`` this
+        field will enable or disable the remote control service. If left
+        unset the TLS fields will be checked - if the TLS fields are filled
+        automatically enable the service.
+    cert
+        Optional object. The fields are described in :ref:`tls source
+        fields<tls-source-fields>`
+    key
+        Optional object. The fields are described in :ref:`tls source
+        fields<tls-source-fields>`
+    ca_cert
+        Optional object. The fields are described in :ref:`tls source
+        fields<tls-source-fields>`
 custom_smb_global_options
     Optional mapping. Specify key-value pairs that will be directly added to
     the global ``smb.conf`` options (or equivalent) of a Samba server.  Do
@@ -560,6 +584,16 @@ source_type
 ref
     String. Required for ``source_type: resource``. Must refer to the ID of a
     ``ceph.smb.join.auth`` resource
+
+.. _tls-source-fields:
+
+A tls source object supports the following fields:
+
+source_type
+    Optional. Must be ``resource`` if specified.
+ref
+    String. Required for ``source_type: resource``. Must refer to the ID of a
+    ``ceph.smb.tls.resource`` resource
 
 .. note::
    The ``source_type`` ``empty`` is generally only for debugging and testing
@@ -802,6 +836,70 @@ Example:
         - name: steves
           password: F00Bar123
         groups: []
+
+
+TLS Credential Resource
+------------------------
+
+TLS credential resources store copies of TLS files such as Certificates, Keys,
+or CA Certificates.
+A TLS credential resource supports the following fields:
+
+resource_type
+    A literal string ``ceph.smb.tls.credential``
+tls_credential_id
+    A short string identifying the TLS credential resource
+intent
+    One of ``present`` or ``removed``. If not provided, ``present`` is assumed.
+    If ``removed`` all following fields are optional
+credential_type
+    Required string.  The value may be one of ``cert``, ``key``, or ``ca-cert``.
+    This value indicates what type of TLS credential the value field holds.
+value:
+    A string containing the TLS certificate or key value in PEM encoding.
+linked_to_cluster:
+    Optional. A string containing a cluster id. If set, the resource may only
+    be used with the linked cluster and will automatically be removed when the
+    linked cluster is removed.
+
+Example:
+
+.. code-block:: yaml
+
+    resource_type: ceph.smb.tls.credential
+    tls_credential_id: mycert1
+    credential_type: cert
+    value: |
+      -----BEGIN CERTIFICATE-----
+      MIIFDjCCA/agAwIBAgISBtFQfoXc4RmyVabbv28RClKdMA0GCSqGSIb3DQEBCwUA
+      MDMxCzAJBgNVBAYTAlVTMRYwFAYDVQQKEw1MZXQncyBFbmNyeXB0MQwwCgYDVQQD
+      EwNSMTAwHhcNMjUwNTE5MTAyNzUyWhcNMjUwODE3MTAyNzUxWjASMRAwDgYDVQQD
+      EwdjZXBoLmlvMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAx6fif6PQ
+      LOTdnO8d1JHcF7D+oB/mQlplFz4vwq/GB6Y4oWK3uCQ4PPz/qyvE4wyvc5EPhjfg
+      d8XNc4ajEBcSUoRj3UwWwiA4oht0SyoJIfwVGp/kF5jxHhVCLdoaaqAxv7nAghWM
+      xJ+jBhWyLAo7cEW7pjlKxQDTzCe3naPVTpVSCgrD8g7y1qPFjwzycQiJ/jGbCD48
+      bCP6IJR0Gg4xqa6oSIaCojYrocwQThTjb5Vlt4jn4BbbP7NtT0XY4E3V6SdNLv8K
+      /Tn5BPmDRHHsZBJ61veir0lgzA/46kxBG0FYY6+GkxKCyahWhEa9T2Nox/O6J28y
+      eyw9tqdKPqjDyQIDAQABo4ICOzCCAjcwDgYDVR0PAQH/BAQDAgWgMB0GA1UdJQQW
+      MBQGCCsGAQUFBwMBBggrBgEFBQcDAjAMBgNVHRMBAf8EAjAAMB0GA1UdDgQWBBQ+
+      7yTEkQNqw5sxDuG+NuV72aiUMzAfBgNVHSMEGDAWgBS7vMNHpeS8qcbDpHIMEI2i
+      NeHI6DAzBggrBgEFBQcBAQQnMCUwIwYIKwYBBQUHMAKGF2h0dHA6Ly9yMTAuaS5s
+      ZW5jci5vcmcvMDcGA1UdEQQwMC6CCGNlcGguY29tggdjZXBoLmlvggx3d3cuY2Vw
+      aC5jb22CC3d3dy5jZXBoLmlvMBMGA1UdIAQMMAowCAYGZ4EMAQIBMC4GA1UdHwQn
+      MCUwI6AhoB+GHWh0dHA6Ly9yMTAuYy5sZW5jci5vcmcvMzAuY3JsMIIBAwYKKwYB
+      BAHWeQIEAgSB9ASB8QDvAHYApELFBklgYVSPD9TqnPt6LSZFTYepfy/fRVn2J086
+      hFQAAAGW6Et7FAAABAMARzBFAiAWRTxiUFKKPd0L67O+aaVlcFk4eJpiumpC0QdA
+      p1SsjgIhAP57wTzRDTjnSVjEZ1phLTJLF5oq6M7+5WFlbWIsTIXtAHUAGgT/SdBU
+      HUCv9qDDv/HYxGcvTuzuI0BomGsXQC7ciX0AAAGW6Et7cwAABAMARjBEAiBcEtcL
+      P66yMkNpvHDd/dHGp66AEghGmWKvS2ukBroJkgIgcr8FMjVJhATge/rnccAm6bza
+      kK9ppF1p5JZF1UyYvjMwDQYJKoZIhvcNAQELBQADggEBAK5iBvCv4Zk6tQINQe7n
+      yS5/9EzSxOqb/0HsyyIDOgapj9EVyyovkVZNIHZOqNvspvDd2FGgbQr1btBJiI7W
+      v2Fcs48Oy4ciJnvmTaJbFWeBTx5pbUUbT0D0IRQmhRMPDxLXz6OXB0C+MB6TKOsh
+      bFpzIKKrF+NP5n7K2m8gVO1StCpr6VKxygyMfTvWUF4zyKzutY+1cy0R6SqkIrY1
+      M0QTI1unJ4V6yH5CPFu/zR1Q+3ZjXpriQcDVxvSR8o29WN2ifEIk/NQsQxN227pQ
+      HLRxXIAMoI1O/4+5FwpXbcZM/JmNuLUa4qPzBSQmmtwQwIkDDho02pCLzn3bOoUQ
+      6Dg=
+      -----END CERTIFICATE-----
 
 
 A Declarative Configuration Example
