@@ -1,8 +1,8 @@
 import { Component, OnDestroy, OnInit } from '@angular/core';
 
 import _ from 'lodash';
-import { BehaviorSubject, Observable, Subscription, of } from 'rxjs';
-import { switchMap, take } from 'rxjs/operators';
+import { BehaviorSubject, Observable, Subscription, forkJoin, of } from 'rxjs';
+import { catchError, exhaustMap, switchMap, take } from 'rxjs/operators';
 
 import { HealthService } from '~/app/shared/api/health.service';
 import { OsdService } from '~/app/shared/api/osd.service';
@@ -116,9 +116,21 @@ export class DashboardV3Component extends PrometheusListHelper implements OnInit
       );
       this.managedByConfig$ = this.settingsService.getValues('MANAGED_BY_CLUSTERS');
     }
-    this.interval = this.refreshIntervalService.intervalData$.subscribe(() => {
-      this.getHealth();
-      this.getCapacity();
+
+    this.interval = this.refreshIntervalService.intervalData$.pipe(
+      exhaustMap(() => {
+        const combinedReq$ = forkJoin([
+          this.healthService.getMinimalHealth(),
+          this.healthService.getClusterCapacity()
+        ]);
+
+        return combinedReq$.pipe(
+          catchError(() => of(null))
+        );
+      })
+    ).subscribe(([healthData, capacityData]) => {
+      this.healthData = healthData;
+      this.capacity = capacityData;
       if (this.permissions.configOpt.read) this.getOsdSettings();
       if (this.hardwareEnabled) this.hardwareSubject.next([]);
     });
@@ -141,12 +153,6 @@ export class DashboardV3Component extends PrometheusListHelper implements OnInit
     this.subs?.unsubscribe();
   }
 
-  getHealth() {
-    this.healthService.getMinimalHealth().subscribe((data: any) => {
-      this.healthData = data;
-    });
-  }
-
   toggleAlertsWindow(type: AlertClass) {
     this.alertType === type ? (this.alertType = null) : (this.alertType = type);
   }
@@ -165,12 +171,6 @@ export class DashboardV3Component extends PrometheusListHelper implements OnInit
           version[0] + ' ' + version.slice(2, version.length).join(' ');
       })
     );
-  }
-
-  private getCapacity() {
-    this.capacityService = this.healthService.getClusterCapacity().subscribe((data: any) => {
-      this.capacity = data;
-    });
   }
 
   private getOsdSettings() {
