@@ -1412,4 +1412,11 @@ options:
   - mon
   flags:
   - runtime
- 
+- name: mon_netsplit_grace_period
+  type: secs
+  level: advanced
+  desc: Time (in seconds) to wait before emitting a MON_NETSPLIT
+    health warning.
+  default: 9
+  services :
+  - mon
