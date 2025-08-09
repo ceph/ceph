@@ -1,3 +1,5 @@
+.. _cephfs-mount-using-fuse:
+
 ========================
  Mount CephFS using FUSE
 ========================
@@ -23,7 +25,7 @@ mounts, as listed on the `Mount CephFS: Prerequisites`_ page.
 
 Synopsis
 ========
-This is the general form of the command for mounting CephFS via FUSE: 
+This is the general form of the command for mounting CephFS via FUSE:
 
 .. prompt:: bash #
 
