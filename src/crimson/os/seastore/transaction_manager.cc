@@ -4,6 +4,7 @@
 #include "include/denc.h"
 #include "include/intarith.h"
 
+#include "crimson/common/coroutine.h"
 #include "crimson/os/seastore/logging.h"
 #include "crimson/os/seastore/transaction_manager.h"
 #include "crimson/os/seastore/journal.h"
@@ -207,12 +208,15 @@ TransactionManager::ref_ret TransactionManager::remove(
   DEBUGT("{} ...", t, *ref);
   return lba_manager->remove_mapping(t, ref->get_laddr()
   ).si_then([this, FNAME, &t, ref](auto result) {
-    if (result.refcount == 0) {
+    assert(!result.direct_result);
+    auto &primary_result = result.result;
+    if (primary_result.refcount == 0) {
       cache->retire_extent(t, ref);
     }
     DEBUGT("removed {}~0x{:x} refcount={} -- {}",
-           t, result.addr, result.length, result.refcount, *ref);
-    return result.refcount;
+           t, primary_result.addr, primary_result.length,
+           primary_result.refcount, *ref);
+    return primary_result.refcount;
   });
 }
 
@@ -225,17 +229,72 @@ TransactionManager::ref_ret TransactionManager::remove(
   return lba_manager->remove_mapping(t, offset
   ).si_then([this, FNAME, offset, &t](auto result) -> ref_ret {
     auto fut = ref_iertr::now();
-    if (result.refcount == 0) {
-      if (result.addr.is_paddr() &&
-          !result.addr.get_paddr().is_zero()) {
-        fut = cache->retire_extent_addr(
-          t, result.addr.get_paddr(), result.length);
-      }
+    auto &primary_result = result.result;
+    assert(primary_result.refcount == 0);
+    if (primary_result.need_to_remove_extent()) {
+      ceph_assert(!result.direct_result);
+      fut = cache->retire_extent_addr(
+        t, primary_result.addr.get_paddr(), primary_result.length);
+    } else if (auto &direct_result = result.direct_result;
+               direct_result.has_value() &&
+               direct_result->need_to_remove_extent()) {
+      fut = cache->retire_extent_addr(
+        t, direct_result->addr.get_paddr(), direct_result->length);
     }
     return fut.si_then([result=std::move(result), offset, &t, FNAME] {
       DEBUGT("removed {}~0x{:x} refcount={} -- offset={}",
-             t, result.addr, result.length, result.refcount, offset);
-      return result.refcount;
+             t, result.result.addr, result.result.length,
+             result.result.refcount, offset);
+      return result.result.refcount;
+    });
+  });
+}
+
+TransactionManager::ref_iertr::future<LBAMapping> TransactionManager::remove(
+  Transaction &t,
+  LBAMapping mapping)
+{
+  LOG_PREFIX(TransactionManager::remove);
+  return mapping.refresh().si_then([&t, this, FNAME](auto mapping) {
+    auto fut = base_iertr::make_ready_future<LogicalChildNodeRef>();
+    if (!mapping.is_indirect() && mapping.get_val().is_real_location()) {
+      auto ret = get_extent_if_linked<LogicalChildNode>(t, mapping);
+      if (ret.index() == 1) {
+        fut = std::move(std::get<1>(ret));
+      }
+    }
+    return fut.si_then([mapping=std::move(mapping),
+                        FNAME, this, &t](auto extent) mutable {
+      auto offset = mapping.get_key();
+      return lba_manager->remove_mapping(t, std::move(mapping)
+      ).si_then([FNAME, this, extent, &t, offset](auto result) {
+        auto fut = ref_iertr::now();
+        auto &primary_result = result.result;
+        assert(primary_result.refcount == 0);
+        if (primary_result.need_to_remove_extent()) {
+          ceph_assert(!result.direct_result);
+          if (extent) {
+            cache->retire_extent(t, extent);
+          } else {
+            fut = cache->retire_extent_addr(
+              t, primary_result.addr.get_paddr(), primary_result.length);
+          }
+        } else if (auto &direct_result = result.direct_result;
+                   direct_result.has_value() &&
+                   direct_result->need_to_remove_extent()) {
+          ceph_assert(!extent);
+          fut = cache->retire_extent_addr(
+            t, direct_result->addr.get_paddr(), direct_result->length);
+        } else {
+          ceph_assert(!extent);
+        }
+        return fut.si_then([result=std::move(result), &t, FNAME, offset]() mutable {
+          DEBUGT("removed {}~0x{:x} refcount={} -- offset={}",
+                 t, result.result.addr, result.result.length,
+                 result.result.refcount, offset);
+          return std::move(result.result.mapping);
+        });
+      });
     });
   });
 }
@@ -260,6 +319,97 @@ TransactionManager::refs_ret TransactionManager::remove(
       return ref_iertr::make_ready_future<std::vector<unsigned>>(std::move(refcnts));
     });
   });
+}
+
+TransactionManager::base_iertr::future<LogicalChildNodeRef>
+TransactionManager::relocate_logical_extent(
+  Transaction &t, LBAMapping mapping)
+{
+  LOG_PREFIX(TransactionManager::relocate_logical_extent);
+  SUBDEBUGT(seastore_tm, "relocate {}", t, mapping);
+  assert(!mapping.is_indirect());
+  assert(!mapping.is_zero_reserved());
+  assert(mapping.is_viewable());
+  auto v = mapping.get_logical_extent(t);
+  if (!v.has_child()) {
+    cache->retire_absent_extent_addr(
+      t, mapping.get_val(), mapping.get_length());
+  } else {
+    auto extent = co_await v.get_child_fut().si_then([](auto ext) {
+      return ext;
+    });
+    cache->retire_extent(t, extent);
+  }
+  co_return cache->alloc_remapped_extent_by_type(
+    t, mapping.get_extent_type(), mapping.get_key(),
+    mapping.get_val(), 0, mapping.get_length(), std::nullopt
+  )->cast<LogicalChildNode>();
+}
+
+TransactionManager::move_region_ret
+TransactionManager::move_region(
+  Transaction &t,
+  LBAMapping src,
+  LBAMapping dst,
+  laddr_t dst_prefix)
+{
+  auto src_prefix = src.get_key().get_clone_prefix();
+  auto calc_dst_key = [&src, dst_prefix] {
+    auto key = src.get_key();
+    auto offset = key.get_byte_distance<loffset_t>(key.get_clone_prefix());
+    return (dst_prefix + offset).checked_to_laddr();
+  };
+
+  // remove the reserved mapping at dst
+
+  assert(!dst.is_indirect());
+  assert(dst.is_zero_reserved());
+  auto remove_ret = co_await lba_manager->remove_mapping(
+    t, std::move(dst)
+  ).handle_error_interruptible(
+    move_region_iertr::pass_further(),
+    crimson::ct_error::assert_all("invalid error"));
+  dst = std::move(remove_ret.result.mapping);
+  src = co_await src.refresh();
+
+  assert(src.is_viewable());
+  assert(dst.is_viewable());
+  // move mapping from src to dst
+  while (src.get_key().get_clone_prefix() == src_prefix) {
+    if (src.is_indirect()) {
+      auto ret = co_await lba_manager->move_indirect_mapping(
+	t, src, calc_dst_key(), dst);
+      src = std::move(ret.src);
+      dst = std::move(ret.dest);
+    } else if (!src.is_zero_reserved()) {
+      auto extent = co_await relocate_logical_extent(t, src);
+      auto laddr = calc_dst_key();
+      extent->set_laddr(laddr);
+      auto ret = co_await lba_manager->move_direct_mapping(
+	t, src, laddr, dst, *extent);
+      src = std::move(ret.src);
+      dst = std::move(ret.dest);
+    } else { // src is direct mapping
+      auto len = src.get_length();
+      auto dst_key = calc_dst_key();
+      auto remove_ret = co_await lba_manager->remove_mapping(t, src
+      ).handle_error_interruptible(
+	move_region_iertr::pass_further(),
+	crimson::ct_error::assert_all("invalid error"));
+      src = std::move(remove_ret.result.mapping);
+      dst = co_await dst.refresh();
+      auto insert = co_await reserve_region(
+	t, std::move(dst), dst_key, len, src.get_extent_type()
+      ).handle_error_interruptible(
+	move_region_iertr::pass_further(),
+	crimson::ct_error::assert_all("invalid error"));
+      src = co_await src.refresh();
+      dst = co_await insert.next();
+    }
+    assert(src.is_viewable());
+    assert(dst.is_viewable());
+  }
+  co_return;
 }
 
 TransactionManager::submit_transaction_iertr::future<>
@@ -522,13 +672,19 @@ TransactionManager::rewrite_logical_extent(
      * extents since we're going to do it again once we either do the ool write
      * or allocate a relative inline addr.  TODO: refactor AsyncCleaner to
      * avoid this complication. */
-    return lba_manager->update_mapping(
-      t,
-      extent->get_laddr(),
-      extent->get_length(),
-      extent->get_paddr(),
-      *nextent
-    ).discard_result();
+    return lba_manager->get_mapping(t, *extent
+    ).si_then([this, &t, extent, nextent](auto mapping) {
+      return lba_manager->update_mapping(
+        t,
+        std::move(mapping),
+        extent->get_length(),
+        extent->get_paddr(),
+        *nextent
+      ).discard_result();
+    }).handle_error_interruptible(
+      rewrite_extent_iertr::pass_further{},
+      crimson::ct_error::assert_all{"unexpected enoent"}
+    );
   } else {
     assert(get_extent_category(extent->get_type()) == data_category_t::DATA);
     auto length = extent->get_length();
@@ -569,20 +725,28 @@ TransactionManager::rewrite_logical_extent(
           auto fut = base_iertr::now();
           if (first_extent) {
             assert(off == 0);
-            fut = lba_manager->update_mapping(
-              t,
-              extent->get_laddr(),
-              extent->get_length(),
-              extent->get_paddr(),
-              *nextent
-            ).si_then([&refcount](auto c) {
-              refcount = c;
-            });
+            fut = lba_manager->get_mapping(t, *extent
+            ).si_then([this, &t, extent, nextent,
+                      &refcount](auto mapping) {
+              return lba_manager->update_mapping(
+                t,
+                std::move(mapping),
+                extent->get_length(),
+                extent->get_paddr(),
+                *nextent
+              ).si_then([&refcount](auto c) {
+                refcount = c;
+              });
+            }).handle_error_interruptible(
+              rewrite_extent_iertr::pass_further{},
+              crimson::ct_error::assert_all{"unexpected enoent"}
+            );
           } else {
             ceph_assert(refcount != 0);
             fut = lba_manager->alloc_extent(
               t,
-              (extent->get_laddr() + off).checked_to_laddr(),
+              laddr_hint_t::create_as_fixed(
+                (extent->get_laddr() + off).checked_to_laddr()),
               *nextent,
               refcount
             ).si_then([extent, nextent, off](auto mapping) {

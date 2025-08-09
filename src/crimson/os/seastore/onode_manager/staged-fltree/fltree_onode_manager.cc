@@ -20,6 +20,10 @@ void FLTreeOnode::Recorder::apply_value_delta(
     ceph::decode(op, bliter);
     auto &mlayout = *reinterpret_cast<onode_layout_t*>(value.get_write());
     switch (op) {
+    case delta_op_t::UPDATE_SHARED_CLONE_ID:
+      DEBUG("update shared clone id");
+      bliter.copy(sizeof(mlayout.shared_clone_id), (char *)&mlayout.shared_clone_id);
+      break;
     case delta_op_t::UPDATE_ONODE_SIZE:
       DEBUG("update onode size");
       bliter.copy(sizeof(mlayout.size), (char *)&mlayout.size);
@@ -80,6 +84,12 @@ void FLTreeOnode::Recorder::encode_update(
   auto &encoded = get_encoded(payload_mut);
   ceph::encode(op, encoded);
   switch(op) {
+  case delta_op_t::UPDATE_SHARED_CLONE_ID:
+    DEBUG("update shared clone id");
+    encoded.append(
+      (const char *)&layout.shared_clone_id,
+      sizeof(layout.shared_clone_id));
+    break;
   case delta_op_t::UPDATE_ONODE_SIZE:
     DEBUG("update onode size");
     encoded.append(
@@ -158,15 +168,27 @@ FLTreeOnodeManager::get_onode_ret FLTreeOnodeManager::get_onode(
       DEBUGT("no entry for {}", trans, hoid);
       return crimson::ct_error::enoent::make();
     }
-    auto val = OnodeRef(new FLTreeOnode(
-	default_data_reservation,
-	default_metadata_range,
-	hoid.hobj,
-	cursor.value()));
+    auto val = OnodeRef(new FLTreeOnode(hoid.hobj, cursor.value()));
+    assert(val->get_clone_prefix());
     return get_onode_iertr::make_ready_future<OnodeRef>(
       val
     );
   });
+}
+
+namespace {
+struct ghobj_cmp_t {
+  bool same_object;
+  bool equal;
+};
+ghobj_cmp_t compare_ghobj(ghobject_t &identity, const ghobject_t &base) {
+  auto snap_bak = identity.hobj.snap;
+  identity.hobj.snap = base.hobj.snap;
+  bool same_object = (identity == base);
+  bool equal = same_object && (snap_bak == base.hobj.snap);
+  identity.hobj.snap = snap_bak;
+  return {same_object, equal};
+}
 }
 
 FLTreeOnodeManager::get_or_create_onode_ret
@@ -181,16 +203,67 @@ FLTreeOnodeManager::get_or_create_onode(
   ).si_then([this, &trans, &hoid, FNAME](auto p)
               -> get_or_create_onode_ret {
     auto [cursor, created] = std::move(p);
-    auto onode = new FLTreeOnode(
-	default_data_reservation,
-	default_metadata_range,
-	hoid.hobj,
-	cursor.value());
-    if (created) {
-      DEBUGT("created onode for entry for {}", trans, hoid);
-      onode->create_default_layout(trans);
+    auto flonode = new FLTreeOnode(hoid.hobj, cursor.value());
+    if (!created) {
+      DEBUGT("onode exists for {}", trans, hoid);
+      assert(flonode->get_clone_prefix());
+      return get_or_create_onode_iertr::make_ready_future<OnodeRef>(flonode);
     }
-    return get_or_create_onode_iertr::make_ready_future<OnodeRef>(onode);
+    assert(!cursor.is_end());
+    // new onode created
+    DEBUGT("created onode for entry for {}", trans, hoid);
+    flonode->create_default_layout(trans);
+
+    auto onode = OnodeRef(flonode);
+    // handle object id from sibling
+    return seastar::do_with(
+      hoid,
+      std::move(cursor),
+      [this, &trans, &hoid, onode](ghobject_t &hint, OnodeTree::Cursor &cursor)
+    {
+      return seastar::futurize_invoke([this, &trans, &hoid, &cursor, onode] {
+        if (hoid.hobj.is_head()) {
+          return get_or_create_onode_iertr::make_ready_future<bool>(true);
+        }
+        // cur onode is not head, move to next onode to check if it's
+        // the clone sibling under the same object.
+        return tree.get_next(trans, cursor
+        ).si_then([&hoid, onode](OnodeTree::Cursor next_cursor) {
+          if (!next_cursor.is_end()) {
+            auto nxt_oid = next_cursor.get_ghobj();
+            auto ret = compare_ghobj(nxt_oid, hoid);
+            assert(!ret.equal);
+            if (ret.same_object) {
+              auto nxt_onode = next_cursor.value();
+              auto prefix = nxt_onode.get_clone_prefix();
+              auto object_id = prefix->get_local_object_id();
+              onode->set_sibling_object_id(object_id);
+              return get_or_create_onode_iertr::make_ready_future<bool>(false);
+            }
+          }
+          return get_or_create_onode_iertr::make_ready_future<bool>(true);
+        });
+      }).si_then([this, &trans, &hoid, onode, &hint](bool search_prev) {
+        if (!search_prev) {
+          return get_or_create_onode_iertr::make_ready_future<OnodeRef>(onode);
+        }
+        hint.hobj.snap = 0;
+        return tree.lower_bound(trans, hint
+        ).si_then([&hoid, onode](OnodeTree::Cursor cursor) {
+          assert(!cursor.is_end());
+          auto prv_oid = cursor.get_ghobj();
+          auto ret = compare_ghobj(prv_oid, hoid);
+          if (!ret.equal && ret.same_object) {
+            // sibling clone onode exists
+            auto prv_onode = cursor.value();
+            auto prefix = prv_onode.get_clone_prefix();
+            auto object_id = prefix->get_local_object_id();
+            onode->set_sibling_object_id(object_id);
+          } // else sibling clone onode not found, hoid is the first clone
+          return get_or_create_onode_iertr::make_ready_future<OnodeRef>(onode);
+        });
+      });
+    });
   });
 }
 

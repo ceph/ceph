@@ -36,17 +36,13 @@ struct FLTreeOnode final : Onode, Value {
   FLTreeOnode& operator=(const FLTreeOnode&) = delete;
 
   template <typename... T>
-  FLTreeOnode(uint32_t ddr, uint32_t dmr, const hobject_t &hobj, T&&... args)
-    : Onode(ddr, dmr, hobj),
-      Value(std::forward<T>(args)...) {}
-
-  template <typename... T>
   FLTreeOnode(const hobject_t &hobj, T&&... args)
-    : Onode(0, 0, hobj),
+    : Onode(hobj),
       Value(std::forward<T>(args)...) {}
 
   struct Recorder : public ValueDeltaRecorder {
     enum class delta_op_t : uint8_t {
+      UPDATE_SHARED_CLONE_ID,
       UPDATE_ONODE_SIZE,
       UPDATE_OMAP_ROOT,
       UPDATE_LOG_ROOT,
@@ -102,6 +98,24 @@ struct FLTreeOnode final : Onode, Value {
 	  recorder->encode_update(
 	    payload_mut, Recorder::delta_op_t::CREATE_DEFAULT);
 	}
+    });
+  }
+
+  void update_shared_clone_id(Transaction &t, local_clone_id_t id) final {
+    ceph_assert(id != LOCAL_CLONE_ID_NULL);
+    with_mutable_layout(
+      t,
+      [id](NodeExtentMutable &payload_mut, Recorder *recorder)
+    {
+      auto &mlayout = *reinterpret_cast<onode_layout_t*>(
+        payload_mut.get_write());
+      ceph_assert(local_clone_id_t(mlayout.shared_clone_id)
+                  == LOCAL_CLONE_ID_NULL);
+      mlayout.shared_clone_id = id;
+      if (recorder) {
+        recorder->encode_update(
+          payload_mut, Recorder::delta_op_t::UPDATE_SHARED_CLONE_ID);
+      }
     });
   }
 
@@ -250,8 +264,16 @@ struct FLTreeOnode final : Onode, Value {
     status = status_t::DELETED;
   }
 
-  laddr_t get_hint() const final {
-    return Value::get_hint();
+  laddr_hint_t init_hint(
+    extent_len_t block_size,
+    bool is_metadata) const final {
+    return Value::init_hint(block_size, is_metadata);
+  }
+  laddr_hint_t generate_clone_hint(
+    local_object_id_t object_id,
+    extent_len_t block_size,
+    bool is_metadata) const final {
+    return Value::generate_clone_hint(object_id, block_size, is_metadata);
   }
   ~FLTreeOnode() final {}
 };
@@ -264,16 +286,11 @@ class FLTreeOnodeManager : public crimson::os::seastore::OnodeManager {
   OnodeTree tree;
 
   uint32_t default_data_reservation = 0;
-  uint32_t default_metadata_offset = 0;
-  uint32_t default_metadata_range = 0;
 public:
   FLTreeOnodeManager(TransactionManager &tm) :
     tree(NodeExtentManager::create_seastore(tm)),
     default_data_reservation(
-      get_conf<uint64_t>("seastore_default_max_object_size")),
-    default_metadata_offset(default_data_reservation),
-    default_metadata_range(
-      get_conf<uint64_t>("seastore_default_object_metadata_reservation"))
+      get_conf<uint64_t>("seastore_default_max_object_size"))
   {}
 
   mkfs_ret mkfs(Transaction &t) {

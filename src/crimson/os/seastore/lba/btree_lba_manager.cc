@@ -146,6 +146,7 @@ BtreeLBAManager::get_mappings(
           cursors,
           [FNAME, this, c, laddr, length, &btree, &ret](auto& cursor)
         {
+	  assert(!cursor->is_end());
           if (!cursor->is_indirect()) {
             ret.emplace_back(LBAMapping::create_direct(std::move(cursor)));
             TRACET("{}~0x{:x} got {}",
@@ -154,7 +155,7 @@ BtreeLBAManager::get_mappings(
           }
 	  assert(cursor->val->refcount == EXTENT_DEFAULT_REF_COUNT);
 	  assert(cursor->val->checksum == 0);
-          return resolve_indirect_cursor(c, btree, *cursor
+          return this->resolve_indirect_cursor(c, btree, *cursor
           ).si_then([FNAME, c, &ret, &cursor, laddr, length](auto direct) {
             ret.emplace_back(LBAMapping::create_indirect(
 		std::move(direct), std::move(cursor)));
@@ -233,17 +234,25 @@ BtreeLBAManager::resolve_indirect_cursor(
 BtreeLBAManager::get_mapping_ret
 BtreeLBAManager::get_mapping(
   Transaction &t,
-  laddr_t laddr)
+  laddr_t laddr,
+  bool search_containing)
 {
   LOG_PREFIX(BtreeLBAManager::get_mapping);
-  TRACET("{} ...", t, laddr);
+  TRACET("{} ... search_containing={}", t, laddr, search_containing);
   auto c = get_context(t);
   return with_btree<LBABtree>(
     cache, c,
-    [FNAME, this, c, laddr](auto& btree)
+    [FNAME, this, c, laddr, search_containing](auto& btree)
   {
-    return get_cursor(c, btree, laddr
-    ).si_then([FNAME, this, c, laddr, &btree](LBACursorRef cursor) {
+    auto fut = get_mapping_iertr::make_ready_future<LBACursorRef>();
+    if (search_containing) {
+      fut = get_containing_cursor(c, btree, laddr);
+    } else {
+      fut = get_cursor(c, btree, laddr);
+    }
+    return fut.si_then([FNAME, laddr, &btree, c, this,
+			search_containing](LBACursorRef cursor) {
+      assert(!cursor->is_end());
       if (!cursor->is_indirect()) {
         TRACET("{} got direct cursor {}",
                c.trans, laddr, *cursor);
@@ -251,7 +260,11 @@ BtreeLBAManager::get_mapping(
         return get_mapping_iertr::make_ready_future<
 	  LBAMapping>(std::move(mapping));
       }
-      assert(laddr == cursor->get_laddr());
+      if (search_containing) {
+	assert(cursor->contains(laddr));
+      } else {
+	assert(laddr == cursor->get_laddr());
+      }
       assert(cursor->val->refcount == EXTENT_DEFAULT_REF_COUNT);
       assert(cursor->val->checksum == 0);
       return resolve_indirect_cursor(c, btree, *cursor
@@ -266,6 +279,234 @@ BtreeLBAManager::get_mapping(
       });
     });
   });
+}
+
+BtreeLBAManager::get_mapping_ret
+BtreeLBAManager::get_mapping(
+  Transaction &t,
+  LogicalChildNode &extent)
+{
+  LOG_PREFIX(BtreeLBAManager::get_mapping);
+  TRACET("{}", t, extent);
+  assert(extent.peek_parent_node()->is_valid());
+  auto c = get_context(t);
+  return with_btree<LBABtree>(
+    cache,
+    c,
+    [c, &extent, FNAME](auto &btree) {
+    return extent.get_parent_node(c.trans, c.cache
+    ).si_then([&btree, c, &extent, FNAME](auto leaf) {
+      if (leaf->is_pending()) {
+	TRACET("find pending extent {} for {}",
+	       c.trans, (void*)leaf.get(), extent);
+      }
+#ifndef NDEBUG
+      auto it = leaf->lower_bound(extent.get_laddr());
+      assert(it != leaf->end() && it.get_key() == extent.get_laddr());
+#endif
+      return get_mapping_iertr::make_ready_future<
+	LBAMapping>(LBAMapping::create_direct(
+	  btree.get_cursor(c, leaf, extent.get_laddr())));
+    });
+  });
+}
+
+BtreeLBAManager::alloc_extent_ret
+BtreeLBAManager::reserve_region(
+  Transaction &t,
+  LBAMapping pos,
+  laddr_t addr,
+  extent_len_t len,
+  extent_types_t type)
+{
+  LOG_PREFIX(BtreeLBAManager::reserve_region);
+  DEBUGT("{} {}~{}", t, pos, addr, len);
+  assert(pos.is_viewable());
+  auto c = get_context(t);
+  return with_btree<LBABtree>(
+    cache,
+    c,
+    [pos=std::move(pos), c, addr, len, type](auto &btree) mutable {
+    auto &cursor = pos.get_effective_cursor();
+    auto iter = btree.make_partial_iter(c, cursor);
+    lba_map_val_t val{len, pladdr_t{P_ADDR_ZERO}, EXTENT_DEFAULT_REF_COUNT, 0, type};
+    return btree.insert(c, iter, addr, val
+    ).si_then([c](auto p) {
+      auto &[iter, inserted] = p;
+      ceph_assert(inserted);
+      auto &leaf_node = *iter.get_leaf_node();
+      leaf_node.insert_child_ptr(
+	iter.get_leaf_pos(),
+	get_reserved_ptr<LBALeafNode, laddr_t>(),
+	leaf_node.get_size() - 1 /*the size before the insert*/);
+      return LBAMapping::create_direct(iter.get_cursor(c));
+    });
+  });
+}
+
+BtreeLBAManager::alloc_extents_ret
+BtreeLBAManager::alloc_extents(
+  Transaction &t,
+  LBAMapping pos,
+  std::vector<LogicalChildNodeRef> extents)
+{
+  LOG_PREFIX(BtreeLBAManager::alloc_extents);
+  DEBUGT("{}", t, pos);
+  assert(pos.is_viewable());
+  auto c = get_context(t);
+  return with_btree<LBABtree>(
+    cache,
+    c,
+    [c, FNAME, pos=std::move(pos), this,
+    extents=std::move(extents)](auto &btree) mutable {
+    auto &cursor = pos.get_effective_cursor();
+    return cursor.refresh(
+    ).si_then(
+      [&cursor, &btree, extents=std::move(extents),
+      pos=std::move(pos), c, FNAME, this] {
+      return seastar::do_with(
+	std::move(extents),
+	btree.make_partial_iter(c, cursor),
+	std::vector<LBAMapping>(),
+	[c, &btree, FNAME, this]
+	(auto &extents, auto &iter, auto &ret) mutable {
+	return trans_intr::do_for_each(
+	  extents.rbegin(),
+	  extents.rend(),
+	  [&btree, FNAME, &iter, c, &ret, this](auto ext) {
+	  assert(ext->has_laddr());
+	  stats.num_alloc_extents += ext->get_length();
+	  assert(iter.is_end() ||
+	    (ext->get_laddr() + ext->get_length()
+	     ).checked_to_laddr() <= iter.get_key());
+	  DEBUGT("inserting {} at {}", c.trans, ext->get_laddr(), iter);
+	  return btree.insert(
+	    c,
+	    iter,
+	    ext->get_laddr(),
+	    lba_map_val_t{
+	      ext->get_length(),
+	      pladdr_t{ext->get_paddr()},
+	      EXTENT_DEFAULT_REF_COUNT,
+	      ext->get_last_committed_crc(),
+	      ext->get_type()
+	    }
+	  ).si_then([ext, c, FNAME, &iter, &ret](auto p) {
+	    auto &[it, inserted] = p;
+	    ceph_assert(inserted);
+	    auto &leaf_node = *it.get_leaf_node();
+	    leaf_node.insert_child_ptr(
+	      it.get_leaf_pos(),
+	      ext.get(),
+	      leaf_node.get_size() - 1 /*the size before the insert*/);
+	    TRACET("inserted {}", c.trans, *ext);
+	    ret.emplace(ret.begin(), LBAMapping::create_direct(it.get_cursor(c)));
+	    iter = it;
+	  });
+#ifndef NDEBUG
+	}).si_then([&iter, c] {
+	  if (iter.is_begin()) {
+	    return base_iertr::now();
+	  }
+	  auto key = iter.get_key();
+	  return iter.prev(c).si_then([key](auto it) {
+	    assert(key >= it.get_key() + it.get_val().len);
+	    return base_iertr::now();
+	  });
+#endif
+	}).si_then([&ret] { return std::move(ret); });
+      });
+    });
+  });
+}
+
+BtreeLBAManager::clone_mapping_ret
+BtreeLBAManager::clone_mapping(
+  Transaction &t,
+  LBAMapping pos,
+  LBAMapping mapping,
+  laddr_t laddr,
+  extent_len_t offset,
+  extent_len_t len)
+{
+  LOG_PREFIX(BtreeLBAManager::clone_mapping);
+  assert(pos.is_viewable());
+  assert(mapping.is_viewable());
+  DEBUGT("pos={}, mapping={}, laddr={}, {}~{}",
+    t, pos, mapping, laddr, offset, len);
+  assert(offset + len <= mapping.get_length());
+  struct state_t {
+    LBAMapping pos;
+    LBAMapping mapping;
+    laddr_t laddr;
+    extent_len_t offset;
+    extent_len_t len;
+  };
+  auto c = get_context(t);
+  return seastar::do_with(
+    std::move(mapping),
+    [this, c](auto &mapping) {
+    auto fut = update_refcount_iertr::make_ready_future<
+      LBACursorRef>(mapping.direct_cursor);
+    if (!mapping.direct_cursor) {
+      fut = resolve_indirect_cursor(c, *mapping.indirect_cursor);
+    }
+    return fut.si_then([this, c, &mapping](auto cursor) {
+      mapping.direct_cursor = cursor;
+      assert(mapping.direct_cursor->is_viewable());
+      return update_refcount(c.trans, cursor.get(), 1, false
+      ).si_then([&mapping](auto res) {
+	assert(!res.result.mapping.is_indirect());
+	mapping.direct_cursor = std::move(res.result.mapping.direct_cursor);
+	return std::move(mapping);
+      });
+    });
+  }).si_then([c, this, pos=std::move(pos), len,
+	      offset, laddr](auto mapping) mutable {
+    return seastar::do_with(
+      state_t{std::move(pos), std::move(mapping), laddr, offset, len},
+      [this, c](auto &state) {
+      return with_btree<LBABtree>(
+	cache,
+	c,
+	[c, &state](auto &btree) mutable {
+	auto &cursor = state.pos.get_effective_cursor();
+	return cursor.refresh(
+	).si_then([&state, c, &btree]() mutable {
+	  auto &cursor = state.pos.get_effective_cursor();
+	  assert(state.laddr + state.len <= cursor.key);
+          auto inter_key = state.mapping.is_indirect()
+            ? state.mapping.get_intermediate_key()
+            : state.mapping.get_key();
+          inter_key = (inter_key + state.offset).checked_to_laddr();
+	  return btree.insert(
+	    c,
+	    btree.make_partial_iter(c, cursor),
+	    state.laddr,
+            lba_map_val_t{
+	      state.len, pladdr_t{inter_key.get_local_clone_id()},
+	      EXTENT_DEFAULT_REF_COUNT, 0, extent_types_t::OBJECT_DATA_BLOCK});
+	}).si_then([c, &state](auto p) {
+	  auto &[iter, inserted] = p;
+	  auto &leaf_node = *iter.get_leaf_node();
+	  leaf_node.insert_child_ptr(
+	    iter.get_leaf_pos(),
+	    get_reserved_ptr<LBALeafNode, laddr_t>(),
+	    leaf_node.get_size() - 1 /*the size before the insert*/);
+	  auto cursor = iter.get_cursor(c);
+	  return state.mapping.refresh(
+	  ).si_then([cursor=std::move(cursor)](auto mapping) mutable {
+	    return clone_mapping_ret_t{
+	      LBAMapping(mapping.direct_cursor, std::move(cursor)),
+	      mapping};
+	  });
+	});
+      });
+    });
+  }).handle_error_interruptible(
+    clone_mapping_iertr::pass_further{},
+    crimson::ct_error::assert_all{"unexpected error"}
+  );
 }
 
 BtreeLBAManager::_get_cursor_ret
@@ -294,48 +535,124 @@ BtreeLBAManager::search_insert_position_ret
 BtreeLBAManager::search_insert_position(
   op_context_t c,
   LBABtree &btree,
-  laddr_t hint,
-  extent_len_t length,
-  alloc_policy_t policy)
+  laddr_hint_t hint,
+  extent_len_t length)
 {
   LOG_PREFIX(BtreeLBAManager::search_insert_position);
-  auto lookup_attempts = stats.num_alloc_extents_iter_nexts;
-  using OptIter = std::optional<LBABtree::iterator>;
+  assert(hint != LADDR_HINT_NULL);
+  assert(hint.addr != L_ADDR_NULL);
+
+  struct state_t {
+    state_t(laddr_hint_t hint, extent_len_t length)
+	: orig_hint(hint), hint(hint), length(length),
+	  loop_threshold(32), next_warn(1) {}
+
+    const laddr_hint_t orig_hint;
+    laddr_hint_t hint;
+    extent_len_t length;
+    std::optional<LBABtree::iterator> iter;
+    int lookup_attempts;
+    int loop_threshold;
+    int next_warn;
+
+    bool check_conflict() const {
+      assert(iter);
+      assert(!iter->is_end());
+      auto &hint_begin = hint.addr;
+      auto hint_end = hint_begin + length;
+      auto mapping_begin = iter->get_key();
+      auto mapping_end = iter->get_key() + iter->get_val().len;
+      return ((hint_begin < mapping_end) && (hint_end > mapping_begin))
+	  || hint.conflict_with(mapping_begin);
+    }
+  };
+
   return seastar::do_with(
-    hint, OptIter(std::nullopt),
-    [this, c, &btree, hint, length, lookup_attempts, policy, FNAME]
-    (laddr_t &last_end, OptIter &insert_iter)
+    state_t(hint, length), [c, &btree, FNAME, this](state_t &state)
   {
-    return LBABtree::iterate_repeat(
-      c,
-      btree.upper_bound_right(c, hint),
-      [this, c, hint, length, lookup_attempts, policy,
-       &last_end, &insert_iter, FNAME](auto &iter)
-    {
-      ++stats.num_alloc_extents_iter_nexts;
-      if (iter.is_end() ||
-	  iter.get_key() >= (last_end + length)) {
-	if (policy == alloc_policy_t::deterministic) {
-	  ceph_assert(hint == last_end);
+    TRACET("hint: {}~{}", c.trans, state.hint, state.length);
+    return btree.upper_bound_right(c, state.hint.lower_boundary()
+    ).si_then([c, &btree, &state, FNAME, this](auto iter) {
+      state.iter.emplace(std::move(iter));
+      return trans_intr::repeat([c, &btree, &state, FNAME, this] {
+	state.lookup_attempts++;
+	if (state.iter->is_end() || !state.check_conflict()) {
+	  DEBUGT("hint: {}~{}, allocated laddr: {}, insert position: {}"
+		 "done with {} attempts",
+		 c.trans, state.orig_hint, state.length,
+		 state.hint.addr, *state.iter, state.lookup_attempts);
+	  stats.num_alloc_extents_iter_nexts += state.lookup_attempts;
+	  return search_insert_position_iertr::make_ready_future<
+	    seastar::stop_iteration>(seastar::stop_iteration::yes);
 	}
-	DEBUGT("hint: {}~0x{:x}, allocated laddr: {}, insert position: {}, "
-	       "done with {} attempts",
-	       c.trans, hint, length, last_end, iter,
-	       stats.num_alloc_extents_iter_nexts - lookup_attempts);
-	insert_iter.emplace(iter);
-	return search_insert_position_iertr::make_ready_future<
-	  seastar::stop_iteration>(seastar::stop_iteration::yes);
-      }
-      ceph_assert(policy == alloc_policy_t::linear_search);
-      last_end = (iter.get_key() + iter.get_val().len).checked_to_laddr();
-      TRACET("hint: {}~0x{:x}, current iter: {}, repeat ...",
-	     c.trans, hint, length, iter);
-      return search_insert_position_iertr::make_ready_future<
-	seastar::stop_iteration>(seastar::stop_iteration::no);
-    }).si_then([&last_end, &insert_iter] {
-      ceph_assert(insert_iter);
-      return search_insert_position_iertr::make_ready_future<
-	insert_position_t>(last_end, *std::move(insert_iter));
+
+	ceph_assert(state.hint.condition !=
+		    laddr_conflict_condition_t::all_at_never);
+
+	TRACET("hint {}~{} conflict with {} {}",
+	       c.trans, state.hint, state.length,
+	       state.iter->get_key(), state.iter->get_val());
+
+	if (state.lookup_attempts / state.loop_threshold == state.next_warn) {
+	  state.next_warn++;
+	  WARNT("attempt searching LBABtree voer {} times -- "
+		"orig_hint: {}, cur_hint: {}, cur_iter: {}",
+		c.trans, state.lookup_attempts, state.orig_hint,
+		state.hint, *state.iter);
+	}
+
+	return seastar::futurize_invoke([c, &btree, &state, FNAME] {
+	  if (state.hint.policy == laddr_conflict_policy_t::gen_random) {
+	    state.hint.find_next_random();
+	    TRACET("re-search with random hint {}", c.trans, state.hint);
+	    return btree.upper_bound_right(c, state.hint.lower_boundary());
+	  }
+
+	  // linear search
+	  ceph_assert(
+	    state.hint.condition == laddr_conflict_condition_t::all_at_block_offset ||
+	    state.hint.condition == laddr_conflict_condition_t::all_at_object_content);
+	  state.hint.addr = (state.iter->get_key() + state.iter->get_val().len)
+	      .checked_to_laddr();
+	  bool loop_back = false;
+
+	  if (state.orig_hint.addr.is_global_address()) {
+	    if (state.orig_hint.addr.get_object_prefix() !=
+		state.hint.addr.get_object_prefix()) {
+	      state.hint.addr = L_ADDR_MIN;
+	      loop_back = true;
+	    }
+	  } else if (state.orig_hint.addr.is_onode_extent_address()) {
+	    if (state.hint.addr.get_local_object_id() != LOCAL_OBJECT_ID_ZERO) {
+	      state.hint.addr.set_local_object_id(LOCAL_OBJECT_ID_ZERO);
+	      state.hint.addr.set_object_content(0);
+	      loop_back = true;
+	    }
+	  } else {
+	    assert(state.orig_hint.addr.is_metadata());
+	    if (state.orig_hint.addr.get_clone_prefix() !=
+		state.hint.addr.get_clone_prefix()) {
+	      state.hint.addr = state.orig_hint.addr.with_offset_by_blocks(0);
+	      loop_back = true;
+	    }
+	  }
+
+	  TRACET("move to next hint: {} loop_back: {}",
+		 c.trans, state.hint, loop_back);
+
+	  if (loop_back) {
+	    return btree.lower_bound(c, state.hint.addr);
+	  } else {
+	    return state.iter->next(c);
+	  }
+	}).si_then([&state](LBABtree::iterator next_iter) {
+	  state.iter.emplace(std::move(next_iter));
+	  return search_insert_position_iertr::make_ready_future<
+	    seastar::stop_iteration>(seastar::stop_iteration::no);
+	});
+      });
+    }).si_then([&state] {
+      return insert_position_t{state.hint.addr, std::move(*state.iter)};
     });
   });
 }
@@ -343,11 +660,10 @@ BtreeLBAManager::search_insert_position(
 BtreeLBAManager::alloc_mappings_ret
 BtreeLBAManager::alloc_contiguous_mappings(
   Transaction &t,
-  laddr_t hint,
-  std::vector<alloc_mapping_info_t> &alloc_infos,
-  alloc_policy_t policy)
+  laddr_hint_t hint,
+  std::vector<alloc_mapping_info_t> &alloc_infos)
 {
-  ceph_assert(hint != L_ADDR_NULL);
+  ceph_assert(hint.addr != L_ADDR_NULL);
   extent_len_t total_len = 0;
   for (auto &info : alloc_infos) {
     assert(info.key == L_ADDR_NULL);
@@ -358,9 +674,9 @@ BtreeLBAManager::alloc_contiguous_mappings(
   return with_btree<LBABtree>(
     cache,
     c,
-    [this, c, hint, &alloc_infos, total_len, policy](auto &btree)
+    [this, c, hint, &alloc_infos, total_len](auto &btree)
   {
-    return search_insert_position(c, btree, hint, total_len, policy
+    return search_insert_position(c, btree, hint, total_len
     ).si_then([this, c, &alloc_infos, &btree](insert_position_t res) {
       extent_len_t offset = 0;
       for (auto &info : alloc_infos) {
@@ -376,11 +692,10 @@ BtreeLBAManager::alloc_contiguous_mappings(
 BtreeLBAManager::alloc_mappings_ret
 BtreeLBAManager::alloc_sparse_mappings(
   Transaction &t,
-  laddr_t hint,
-  std::vector<alloc_mapping_info_t> &alloc_infos,
-  alloc_policy_t policy)
+  laddr_hint_t hint,
+  std::vector<alloc_mapping_info_t> &alloc_infos)
 {
-  ceph_assert(hint != L_ADDR_NULL);
+  ceph_assert(hint.addr != L_ADDR_NULL);
 #ifndef NDEBUG
   assert(alloc_infos.front().key != L_ADDR_NULL);
   for (size_t i = 1; i < alloc_infos.size(); i++) {
@@ -390,19 +705,19 @@ BtreeLBAManager::alloc_sparse_mappings(
     assert(prev.key + prev.value.len <= cur.key);
   }
 #endif
-  auto total_len = hint.get_byte_distance<extent_len_t>(
+  auto total_len = hint.addr.get_byte_distance<extent_len_t>(
     alloc_infos.back().key + alloc_infos.back().value.len);
   auto c = get_context(t);
   return with_btree<LBABtree>(
     cache,
     c,
-    [this, c, hint, &alloc_infos, total_len, policy](auto &btree)
+    [this, c, hint, &alloc_infos, total_len](auto &btree)
   {
-    return search_insert_position(c, btree, hint, total_len, policy
-    ).si_then([this, c, hint, &alloc_infos, &btree, policy](auto res) {
-      if (policy != alloc_policy_t::deterministic) {
+    return search_insert_position(c, btree, hint, total_len
+    ).si_then([this, c, hint, &alloc_infos, &btree](auto res) {
+      if (hint.condition != laddr_conflict_condition_t::all_at_never) {
 	for (auto &info : alloc_infos) {
-	  auto offset = info.key.get_byte_distance<extent_len_t>(hint);
+	  auto offset = info.key.get_byte_distance<extent_len_t>(hint.addr);
 	  info.key = (res.laddr + offset).checked_to_laddr();
 	}
       } // deterministic guarantees hint == res.laddr
@@ -611,12 +926,13 @@ BtreeLBAManager::rewrite_extent(
 BtreeLBAManager::update_mapping_ret
 BtreeLBAManager::update_mapping(
   Transaction& t,
-  laddr_t laddr,
+  LBAMapping mapping,
   extent_len_t prev_len,
   paddr_t prev_addr,
   LogicalChildNode& nextent)
 {
   LOG_PREFIX(BtreeLBAManager::update_mapping);
+  auto laddr = mapping.get_key();
   auto addr = nextent.get_paddr();
   auto len = nextent.get_length();
   auto checksum = nextent.get_last_committed_crc();
@@ -624,34 +940,43 @@ BtreeLBAManager::update_mapping(
          t, laddr, prev_addr, prev_len, addr, len, checksum);
   assert(laddr == nextent.get_laddr());
   assert(!addr.is_null());
-  return _update_mapping(
-    t,
-    laddr,
-    [prev_addr, addr, prev_len, len, checksum]
-    (const lba_map_val_t &in) {
-      lba_map_val_t ret = in;
-      ceph_assert(in.pladdr.is_paddr());
-      ceph_assert(in.pladdr.get_paddr() == prev_addr);
-      ceph_assert(in.len == prev_len);
-      ret.pladdr = addr;
-      ret.len = len;
-      ret.checksum = checksum;
-      return ret;
-    },
-    &nextent
-  ).si_then([&t, laddr, prev_addr, prev_len, addr, len, checksum, FNAME](auto res) {
-      assert(res.is_alive_mapping());
-      DEBUGT("laddr={}, paddr {}~0x{:x} => {}~0x{:x}, crc=0x{:x} done -- {}",
-             t, laddr, prev_addr, prev_len, addr, len, checksum, res.get_cursor());
-      return update_mapping_iertr::make_ready_future<
-	extent_ref_count_t>(res.get_cursor().get_refcount());
-    },
-    update_mapping_iertr::pass_further{},
-    /* ENOENT in particular should be impossible */
-    crimson::ct_error::assert_all{
-      "Invalid error in BtreeLBAManager::update_mapping"
-    }
-  );
+  assert(mapping.is_viewable());
+  assert(!mapping.is_indirect());
+  return seastar::do_with(
+    std::move(mapping),
+    [&t, this, prev_len, prev_addr, len, FNAME,
+    laddr, addr, checksum, &nextent](auto &mapping) {
+    auto &cursor = mapping.get_effective_cursor();
+    return _update_mapping(
+      t,
+      cursor,
+      [prev_addr, addr, prev_len, len, checksum](
+	const lba_map_val_t &in) {
+	assert(!addr.is_null());
+	lba_map_val_t ret = in;
+	ceph_assert(in.pladdr.is_paddr());
+	ceph_assert(in.pladdr.get_paddr() == prev_addr);
+	ceph_assert(in.len == prev_len);
+	ret.pladdr = addr;
+	ret.len = len;
+	ret.checksum = checksum;
+	return ret;
+      },
+      &nextent
+    ).si_then([&t, laddr, prev_addr, prev_len, addr, len, checksum, FNAME](auto res) {
+	assert(res.is_alive_mapping());
+	DEBUGT("laddr={}, paddr {}~0x{:x} => {}~0x{:x}, crc=0x{:x} done -- {}",
+	       t, laddr, prev_addr, prev_len, addr, len, checksum, res.get_cursor());
+	return update_mapping_iertr::make_ready_future<
+	  extent_ref_count_t>(res.get_cursor().get_refcount());
+      },
+      update_mapping_iertr::pass_further{},
+      /* ENOENT in particular should be impossible */
+      crimson::ct_error::assert_all{
+	"Invalid error in BtreeLBAManager::update_mapping"
+      }
+    );
+  });
 }
 
 BtreeLBAManager::update_mappings_ret
@@ -659,42 +984,64 @@ BtreeLBAManager::update_mappings(
   Transaction& t,
   const std::list<LogicalChildNodeRef>& extents)
 {
-  return trans_intr::do_for_each(extents, [this, &t](auto &extent) {
-    LOG_PREFIX(BtreeLBAManager::update_mappings);
-    auto laddr = extent->get_laddr();
-    auto prev_addr = extent->get_prior_paddr_and_reset();
-    auto len = extent->get_length();
-    auto addr = extent->get_paddr();
-    auto checksum = extent->get_last_committed_crc();
-    TRACET("laddr={}, paddr {}~0x{:x} => {}, crc=0x{:x}",
-           t, laddr, prev_addr, len, addr, checksum);
-    assert(!addr.is_null());
-    return _update_mapping(
-      t,
-      laddr,
-      [prev_addr, addr, len, checksum](
-        const lba_map_val_t &in) {
-        lba_map_val_t ret = in;
-        ceph_assert(in.pladdr.is_paddr());
-        ceph_assert(in.pladdr.get_paddr() == prev_addr);
-        ceph_assert(in.len == len);
-        ret.pladdr = addr;
-        ret.checksum = checksum;
-        return ret;
-      },
-      nullptr   // all the extents should have already been
-                // added to the fixed_kv_btree
-    ).si_then([&t, laddr, prev_addr, len, addr, checksum, FNAME](auto res) {
-        DEBUGT("laddr={}, paddr {}~0x{:x} => {}, crc=0x{:x} done -- {}",
-               t, laddr, prev_addr, len, addr, checksum, res.get_cursor());
-        return update_mapping_iertr::make_ready_future();
-      },
-      update_mapping_iertr::pass_further{},
-      /* ENOENT in particular should be impossible */
-      crimson::ct_error::assert_all{
-        "Invalid error in BtreeLBAManager::update_mappings"
-      }
-    );
+  LOG_PREFIX(BtreeLBAManager::update_mappings);
+  auto c = get_context(t);
+  return with_btree<LBABtree>(
+    cache,
+    c,
+    [c, &extents, FNAME, this](auto &btree) {
+    return trans_intr::do_for_each(
+      extents,
+      [this, FNAME, c, &btree](auto &extent) {
+      return extent->get_parent_node(c.trans, c.cache
+      ).si_then([c, &extent, FNAME, &btree, this](auto leaf) {
+	if (leaf->is_pending()) {
+	  TRACET("find pending extent {} for {}",
+		 c.trans, (void*)leaf.get(), *extent);
+	}
+	return seastar::do_with(
+	  btree.get_cursor(c, leaf, extent->get_laddr()),
+	  [this, c, &extent, FNAME](auto &cursor) {
+	  assert(!cursor->is_end() &&
+	    cursor->get_laddr() == extent->get_laddr());
+	  auto prev_addr = extent->get_prior_paddr_and_reset();
+	  auto len = extent->get_length();
+	  auto addr = extent->get_paddr();
+	  auto checksum = extent->get_last_committed_crc();
+	  TRACET("cursor={}, paddr {}~0x{:x} => {}, crc=0x{:x}",
+		 c.trans, *cursor, prev_addr, len, addr, checksum);
+	  assert(!addr.is_null());
+	  return this->_update_mapping(
+	    c.trans,
+	    *cursor,
+	    [prev_addr, addr, len, checksum](
+	      const lba_map_val_t &in) {
+	      lba_map_val_t ret = in;
+	      ceph_assert(in.pladdr.is_paddr());
+	      ceph_assert(in.pladdr.get_paddr() == prev_addr);
+	      ceph_assert(in.len == len);
+	      ret.pladdr = addr;
+	      ret.checksum = checksum;
+	      return ret;
+	    },
+	    nullptr   // all the extents should have already been
+		      // added to the fixed_kv_btree
+	  ).si_then([c, &cursor, prev_addr, len, addr,
+		    checksum, FNAME](auto res) {
+	      DEBUGT("cursor={}, paddr {}~0x{:x} => {}, crc=0x{:x} done -- {}",
+		     c.trans, *cursor, prev_addr, len,
+		     addr, checksum, res.get_cursor());
+	      return update_mapping_iertr::make_ready_future();
+	    },
+	    update_mapping_iertr::pass_further{},
+	    /* ENOENT in particular should be impossible */
+	    crimson::ct_error::assert_all{
+	      "Invalid error in BtreeLBAManager::update_mappings"
+	    }
+	  );
+	});
+      });
+    });
   });
 }
 
@@ -725,12 +1072,15 @@ BtreeLBAManager::get_physical_extent_if_live(
     });
 }
 
-BtreeLBAManager::refresh_lba_mapping_ret
-BtreeLBAManager::refresh_lba_mapping(Transaction &t, LBAMapping mapping)
+BtreeLBAManager::complete_lba_mapping_ret
+BtreeLBAManager::complete_indirect_lba_mapping(
+  Transaction &t,
+  LBAMapping mapping)
 {
-  assert(mapping.is_linked_direct());
-  if (mapping.is_viewable()) {
-    return refresh_lba_mapping_iertr::make_ready_future<
+  assert(mapping.is_viewable());
+  assert(mapping.is_indirect());
+  if (mapping.is_complete_indirect()) {
+    return complete_lba_mapping_iertr::make_ready_future<
       LBAMapping>(std::move(mapping));
   }
   auto c = get_context(t);
@@ -738,82 +1088,12 @@ BtreeLBAManager::refresh_lba_mapping(Transaction &t, LBAMapping mapping)
     cache,
     c,
     std::move(mapping),
-    [c, this](LBABtree &btree, LBAMapping &mapping) mutable
-  {
-    return refresh_lba_cursor(c, btree, *mapping.direct_cursor
-    ).si_then([c, this, &btree, &mapping] {
-      if (mapping.indirect_cursor) {
-	return refresh_lba_cursor(c, btree, *mapping.indirect_cursor);
-      }
-      return refresh_lba_cursor_iertr::make_ready_future();
-#ifndef NDEBUG
-    }).si_then([&mapping] {
-      assert(mapping.is_viewable());
-#endif
+    [this, c](auto &btree, auto &mapping) {
+    return resolve_indirect_cursor(c, btree, *mapping.indirect_cursor
+    ).si_then([&mapping](auto cursor) {
+      mapping.direct_cursor = std::move(cursor);
     });
   });
-}
-
-BtreeLBAManager::refresh_lba_cursor_ret
-BtreeLBAManager::refresh_lba_cursor(
-  op_context_t c,
-  LBABtree &btree,
-  LBACursor &cursor)
-{
-  LOG_PREFIX(BtreeLBAManager::refresh_lba_cursor);
-  stats.num_refresh_parent_total++;
-
-  if (!cursor.parent->is_valid()) {
-    stats.num_refresh_invalid_parent++;
-    TRACET("cursor {} parent is invalid, re-search from scratch",
-	   c.trans, cursor);
-    return btree.lower_bound(c, cursor.get_laddr()
-    ).si_then([&cursor](LBABtree::iterator iter) {
-      auto leaf = iter.get_leaf_node();
-      cursor.parent = leaf;
-      cursor.modifications = leaf->modifications;
-      cursor.pos = iter.get_leaf_pos();
-      if (!cursor.is_end()) {
-	ceph_assert(!iter.is_end());
-	ceph_assert(iter.get_key() == cursor.get_laddr());
-	cursor.val = iter.get_val();
-	assert(cursor.is_viewable());
-      }
-    });
-  }
-
-  auto leaf = cursor.parent->cast<LBALeafNode>();
-  auto [viewable, l] = leaf->resolve_transaction(c.trans, cursor.key);
-  TRACET("cursor: {} viewable: {}", c.trans, cursor, viewable);
-  if (!viewable) {
-    leaf = l;
-    stats.num_refresh_unviewable_parent++;
-    cursor.parent = leaf;
-  }
-
-  if (!viewable ||
-      leaf->modified_since(cursor.modifications)) {
-    if (viewable) {
-      stats.num_refresh_modified_viewable_parent++;
-    }
-
-    cursor.modifications = leaf->modifications;
-    if (cursor.is_end()) {
-      cursor.pos = leaf->get_size();
-      assert(!cursor.val);
-    } else {
-      auto i = leaf->lower_bound(cursor.get_laddr());
-      cursor.pos = i.get_offset();
-      cursor.val = i.get_val();
-
-      auto iter = LBALeafNode::iterator(leaf.get(), cursor.pos);
-      ceph_assert(iter.get_key() == cursor.key);
-      ceph_assert(iter.get_val() == cursor.val);
-      assert(cursor.is_viewable());
-    }
-  }
-
-  return refresh_lba_cursor_iertr::make_ready_future();
 }
 
 void BtreeLBAManager::register_metrics()
@@ -834,26 +1114,6 @@ void BtreeLBAManager::register_metrics()
         "alloc_extents_iter_nexts",
         stats.num_alloc_extents_iter_nexts,
         sm::description("total number of iterator next operations during extent allocation")
-      ),
-      sm::make_counter(
-        "refresh_parent_total",
-        stats.num_refresh_parent_total,
-        sm::description("total number of refreshed cursors")
-      ),
-      sm::make_counter(
-        "refresh_invalid_parent",
-        stats.num_refresh_invalid_parent,
-        sm::description("total number of refreshed cursors with invalid parents")
-      ),
-      sm::make_counter(
-        "refresh_unviewable_parent",
-        stats.num_refresh_unviewable_parent,
-        sm::description("total number of refreshed cursors with unviewable parents")
-      ),
-      sm::make_counter(
-        "refresh_modified_viewable_parent",
-        stats.num_refresh_modified_viewable_parent,
-        sm::description("total number of refreshed cursors with viewable but modified parents")
       ),
     }
   );
@@ -888,9 +1148,9 @@ BtreeLBAManager::_decref_intermediate(
 
       if (val.refcount == 0) {
 	return btree.remove(c, iter
-	).si_then([key, val](auto) {
+	).si_then([key, val, c](auto iter) {
 	  return ref_iertr::make_ready_future<
-	    update_mapping_ret_bare_t>(key, val);
+	    update_mapping_ret_bare_t>(key, val, iter.get_cursor(c));
 	});
       } else {
 	return btree.update(c, iter, val
@@ -903,138 +1163,55 @@ BtreeLBAManager::_decref_intermediate(
   });
 }
 
-BtreeLBAManager::remap_ret
-BtreeLBAManager::remap_mappings(
-  Transaction &t,
-  LBAMapping orig_mapping,
-  std::vector<remap_entry_t> remaps,
-  std::vector<LogicalChildNodeRef> extents)
-{
-  LOG_PREFIX(BtreeLBAManager::remap_mappings);
-  struct state_t {
-    LBAMapping orig_mapping;
-    std::vector<remap_entry_t> remaps;
-    std::vector<LogicalChildNodeRef> extents;
-    std::vector<alloc_mapping_info_t> alloc_infos;
-    std::vector<LBAMapping> ret;
-  };
-  return seastar::do_with(
-    state_t(std::move(orig_mapping), std::move(remaps), std::move(extents), {}, {}),
-    [this, &t, FNAME](state_t &state)
-  {
-    return update_refcount(
-      t, state.orig_mapping.get_key(), -1, false
-    ).si_then([this, &t, &state, FNAME](auto ret) {
-      // Remapping the shared direct mapping is prohibited,
-      // the refcount of indirect mapping should always be 1.
-      ceph_assert(ret.is_removed_mapping());
-
-      auto orig_laddr = state.orig_mapping.get_key();
-      if (!state.orig_mapping.is_indirect()) {
-	auto &addr = ret.get_removed_mapping().map_value.pladdr;
-	ceph_assert(addr.is_paddr() && !addr.get_paddr().is_zero());
-	return alloc_extents(
-	  t,
-	  (state.remaps.front().offset + orig_laddr).checked_to_laddr(),
-	  std::move(state.extents),
-	  EXTENT_DEFAULT_REF_COUNT
-	).si_then([&state](auto ret) {
-	  state.ret = std::move(ret);
-	  return remap_iertr::make_ready_future();
-	});
-      }
-
-      extent_len_t orig_len = state.orig_mapping.get_length();
-      auto intermediate_key = state.orig_mapping.get_intermediate_key();
-      ceph_assert(intermediate_key != L_ADDR_NULL);
-      DEBUGT("remap indirect mapping {}", t, state.orig_mapping);
-      for (auto &remap : state.remaps) {
-	DEBUGT("remap 0x{:x}~0x{:x}", t, remap.offset, remap.len);
-	ceph_assert(remap.len != 0);
-	ceph_assert(remap.offset + remap.len <= orig_len);
-	auto remapped_laddr = (orig_laddr + remap.offset)
-	    .checked_to_laddr();
-	auto remapped_intermediate_key = (intermediate_key + remap.offset)
-	    .checked_to_laddr();
-	state.alloc_infos.emplace_back(
-	  alloc_mapping_info_t::create_indirect(
-	    remapped_laddr, remap.len, remapped_intermediate_key));
-      }
-
-      return alloc_sparse_mappings(
-	t, state.alloc_infos.front().key, state.alloc_infos,
-	alloc_policy_t::deterministic
-      ).si_then([&t, &state, this](std::list<LBACursorRef> cursors) {
-	return seastar::futurize_invoke([&t, &state, this] {
-	  if (state.remaps.size() > 1) {
-	    auto base = state.orig_mapping.get_intermediate_base();
-	    return update_refcount(
-	      t, base, state.remaps.size() - 1, false
-	    ).si_then([](update_mapping_ret_bare_t ret) {
-	      return ret.take_cursor();
-	    });
-	  } else {
-	    return remap_iertr::make_ready_future<
-	      LBACursorRef>(state.orig_mapping.direct_cursor->duplicate());
-	  }
-	}).si_then([&state, cursors=std::move(cursors)](auto direct) mutable {
-	  for (auto &cursor : cursors) {
-	    state.ret.emplace_back(LBAMapping::create_indirect(
-	      direct->duplicate(), std::move(cursor)));
-	  }
-	  return remap_iertr::make_ready_future();
-	});
-      });
-    }).si_then([&state] {
-      assert(state.ret.size() == state.remaps.size());
-#ifndef NDEBUG
-      auto mapping_it = state.ret.begin();
-      auto remap_it = state.remaps.begin();
-      for (;mapping_it != state.ret.end(); mapping_it++, remap_it++) {
-	auto &mapping = *mapping_it;
-	auto &remap = *remap_it;
-	assert(mapping.get_key() == state.orig_mapping.get_key() + remap.offset);
-	assert(mapping.get_length() == remap.len);
-      }
-#endif
-      return remap_iertr::make_ready_future<
-	std::vector<LBAMapping>>(std::move(state.ret));
-    });
-  });
-}
-
 BtreeLBAManager::update_refcount_ret
 BtreeLBAManager::update_refcount(
   Transaction &t,
-  laddr_t addr,
+  std::variant<laddr_t, LBACursor*> addr_or_cursor,
   int delta,
   bool cascade_remove)
 {
+  auto addr = addr_or_cursor.index() == 0
+    ? std::get<0>(addr_or_cursor)
+    : std::get<1>(addr_or_cursor)->key;
   LOG_PREFIX(BtreeLBAManager::update_refcount);
   TRACET("laddr={}, delta={}", t, addr, delta);
-  return _update_mapping(
-    t,
-    addr,
+  auto fut = _update_mapping_iertr::make_ready_future<
+    update_mapping_ret_bare_t>();
+  auto update_func =
     [delta](const lba_map_val_t &in) {
       lba_map_val_t out = in;
       ceph_assert((int)out.refcount + delta >= 0);
       out.refcount += delta;
       return out;
-    },
-    nullptr
-  ).si_then([&t, addr, delta, FNAME, this, cascade_remove](auto res) {
+    };
+  if (addr_or_cursor.index() == 0) {
+    fut = _update_mapping(t, addr, std::move(update_func), nullptr);
+  } else {
+    auto &cursor = std::get<1>(addr_or_cursor);
+    fut = _update_mapping(t, *cursor, std::move(update_func), nullptr);
+  }
+  return fut.si_then([delta, &t, addr, FNAME, this, cascade_remove](auto res) {
     DEBUGT("laddr={}, delta={} done -- {}",
 	   t, addr, delta,
 	   res.is_alive_mapping()
 	     ? res.get_cursor().val
 	     : res.get_removed_mapping().map_value);
+
     if (res.is_removed_mapping() && cascade_remove &&
 	res.get_removed_mapping().map_value.pladdr.is_laddr()) {
       auto &val = res.get_removed_mapping().map_value;
+      auto inter_key = val.pladdr.build_laddr(addr);
       TRACET("decref intermediate {} -> {}",
-	     t, addr, val.pladdr.get_laddr());
-      return _decref_intermediate(t, val.pladdr.get_laddr(), val.len
-      ).handle_error_interruptible(
+	     t, addr, inter_key);
+      return _decref_intermediate(t, inter_key, val.len
+      ).si_then([indirect_res=std::move(res), this](auto res) mutable {
+	return indirect_res.get_removed_mapping().next->refresh(
+	).si_then([this, res=std::move(res),
+		  ires=std::move(indirect_res)]() mutable {
+	  return update_mapping_iertr::make_ready_future<
+	    ref_update_result_t>(get_ref_update_result(ires, std::move(res)));
+	});
+      }).handle_error_interruptible(
 	update_mapping_iertr::pass_further{},
 	crimson::ct_error::assert_all{
 	  "unexpect ENOENT"
@@ -1042,7 +1219,53 @@ BtreeLBAManager::update_refcount(
       );
     }
     return update_mapping_iertr::make_ready_future<
-      update_mapping_ret_bare_t>(std::move(res));
+      ref_update_result_t>(get_ref_update_result(res, std::nullopt));
+  });
+}
+
+BtreeLBAManager::_update_mapping_ret
+BtreeLBAManager::_update_mapping(
+  Transaction &t,
+  LBACursor &cursor,
+  update_func_t &&f,
+  LogicalChildNode* nextent)
+{
+  assert(cursor.is_viewable());
+  auto c = get_context(t);
+  return with_btree<LBABtree>(
+    cache,
+    c,
+    [c, f=std::move(f), &cursor, nextent](auto &btree) {
+    auto iter = btree.make_partial_iter(c, cursor);
+    auto ret = f(iter.get_val());
+    if (ret.refcount == 0) {
+      return btree.remove(
+	c,
+	iter
+      ).si_then([ret, c, laddr=cursor.key](auto iter) {
+	return update_mapping_ret_bare_t{
+	  laddr, std::move(ret), iter.get_cursor(c)};
+      });
+    } else {
+      return btree.update(
+	c,
+	iter,
+	ret
+      ).si_then([c, nextent](auto iter) {
+	// child-ptr may already be correct,
+	// see LBAManager::update_mappings()
+	if (nextent && !nextent->has_parent_tracker()) {
+	  iter.get_leaf_node()->update_child_ptr(
+	    iter.get_leaf_pos(), nextent);
+	}
+	assert(!nextent ||
+	  (nextent->has_parent_tracker()
+	    && nextent->peek_parent_node().get() == iter.get_leaf_node().get()));
+	LBACursorRef cursor = iter.get_cursor(c);
+	assert(cursor->val);
+	return update_mapping_ret_bare_t{std::move(cursor)};
+      });
+    }
   });
 }
 
@@ -1074,8 +1297,8 @@ BtreeLBAManager::_update_mapping(
 	  return btree.remove(
 	    c,
 	    iter
-	  ).si_then([addr, ret](auto) {
-	    return update_mapping_ret_bare_t(addr, ret);
+	  ).si_then([addr, ret, c](auto iter) {
+	    return update_mapping_ret_bare_t(addr, ret, iter.get_cursor(c));
 	  });
 	} else {
 	  return btree.update(
@@ -1098,6 +1321,344 @@ BtreeLBAManager::_update_mapping(
 	}
       });
     });
+}
+
+BtreeLBAManager::_get_cursor_ret
+BtreeLBAManager::get_containing_cursor(
+  op_context_t c,
+  LBABtree &btree,
+  laddr_t laddr)
+{
+  LOG_PREFIX(BtreeLBAManager::get_containing_cursor);
+  TRACET("{}", c.trans, laddr);
+  return btree.upper_bound_right(c, laddr
+  ).si_then([c, laddr, FNAME](LBABtree::iterator iter)
+	    -> _get_cursor_ret {
+    if (iter.is_end() ||
+	iter.get_key() > laddr ||
+	iter.get_key() + iter.get_val().len <=laddr) {
+      ERRORT("laddr={} doesn't exist", c.trans, laddr);
+      return crimson::ct_error::enoent::make();
+    }
+    TRACET("{} got {}, {}",
+	   c.trans, laddr, iter.get_key(), iter.get_val());
+    return get_mapping_iertr::make_ready_future<
+      LBACursorRef>(iter.get_cursor(c));
+  });
+}
+
+#ifdef UNIT_TESTS_BUILT
+BtreeLBAManager::get_end_mapping_ret
+BtreeLBAManager::get_end_mapping(
+  Transaction &t)
+{
+  LOG_PREFIX(BtreeLBAManager::get_end_mapping);
+  DEBUGT("", t);
+  auto c = get_context(t);
+  return with_btree<LBABtree>(
+    cache,
+    c,
+    [c](auto &btree) {
+    return btree.end(c).si_then([c](auto iter) {
+      return LBAMapping::create_direct(iter.get_cursor(c));
+    });
+  });
+}
+#endif
+
+BtreeLBAManager::remap_ret
+BtreeLBAManager::remap_mappings(
+  Transaction &t,
+  LBAMapping mapping,
+  std::vector<remap_entry_t> remaps)
+{
+  LOG_PREFIX(BtreeLBAManager::remap_mappings);
+  DEBUGT("{}", t, mapping);
+  assert(mapping.is_viewable());
+  assert(mapping.is_indirect() == mapping.is_complete_indirect());
+  auto c = get_context(t);
+  return with_btree<LBABtree>(
+    cache,
+    c,
+    [mapping=std::move(mapping), c, this, FNAME,
+    remaps=std::move(remaps)](auto &btree) mutable {
+    auto &cursor = mapping.get_effective_cursor();
+    return seastar::do_with(
+      std::move(remaps),
+      std::move(mapping),
+      btree.make_partial_iter(c, cursor),
+      std::vector<LBAMapping>(),
+      [c, &btree, this, &cursor, FNAME]
+      (auto &remaps, auto &mapping, auto &iter, auto &ret) {
+      auto val = iter.get_val();
+      assert(val.refcount == EXTENT_DEFAULT_REF_COUNT);
+      assert(mapping.is_indirect() ||
+	(val.pladdr.is_paddr() &&
+	 val.pladdr.get_paddr().is_absolute()));
+      // remove the remapped mapping
+      return update_refcount(c.trans, &cursor, -1, false
+      ).si_then([&mapping, &btree, &iter, c, &ret, FNAME,
+		&remaps, pladdr=val.pladdr](auto r) {
+	assert(r.result.refcount == 0);
+	auto &cursor = r.result.mapping.get_effective_cursor();
+	iter = btree.make_partial_iter(c, cursor);
+	// insert new remap mapping
+	return trans_intr::do_for_each(
+	  remaps,
+	  [&mapping, &btree, FNAME, &iter, c, &ret, pladdr](auto &remap) {
+	  assert(remap.offset + remap.len <= mapping.get_length());
+	  assert((bool)remap.extent == !mapping.is_indirect());
+	  lba_map_val_t val;
+	  auto old_key = mapping.get_key();
+	  auto new_key = (old_key + remap.offset).checked_to_laddr();
+	  val.len = remap.len;
+	  if (pladdr.is_laddr()) {
+	    val.pladdr = pladdr;
+	  } else {
+	    auto paddr = pladdr.get_paddr();
+	    val.pladdr = paddr + remap.offset;
+	  }
+	  val.refcount = EXTENT_DEFAULT_REF_COUNT;
+	  val.checksum = 0; // the checksum should be updated later when
+			    // committing the transaction
+	  return btree.insert(c, iter, new_key, std::move(val)
+	  ).si_then([FNAME, c, &remap, &mapping, &ret, &iter](auto p) {
+	    auto &[it, inserted] = p;
+	    ceph_assert(inserted);
+	    auto &leaf_node = *it.get_leaf_node();
+	    if (mapping.is_indirect()) {
+	      DEBUGT("inserting reserved child ptr to pos {}, parent: {}",
+		c.trans, it.get_leaf_pos(), leaf_node);
+	      leaf_node.insert_child_ptr(
+		it.get_leaf_pos(),
+		get_reserved_ptr<LBALeafNode, laddr_t>(),
+		leaf_node.get_size() - 1 /*the size before the insert*/);
+	      ret.push_back(
+		LBAMapping::create_indirect(nullptr, it.get_cursor(c)));
+	    } else {
+	      DEBUGT("inserting child ptr to pos {}, {}, parent: {}",
+		c.trans, it.get_leaf_pos(), *remap.extent, leaf_node);
+	      leaf_node.insert_child_ptr(
+		it.get_leaf_pos(),
+		remap.extent,
+		leaf_node.get_size() - 1 /*the size before the insert*/);
+	      ret.push_back(
+		LBAMapping::create_direct(it.get_cursor(c)));
+	    }
+	    return it.next(c).si_then([&iter](auto it) {
+	      iter = std::move(it);
+	    });
+	  });
+	});
+      }).si_then([&mapping, &ret] {
+	if (mapping.is_indirect()) {
+	  auto &cursor = mapping.direct_cursor;
+	  return cursor->refresh(
+	  ).si_then([&ret, &mapping] {
+	    for (auto &m : ret) {
+	      m.direct_cursor = mapping.direct_cursor;
+	    }
+	  });
+	}
+	return base_iertr::now();
+      }).si_then([this, c, &mapping, &remaps] {
+	if (remaps.size() > 1 && mapping.is_indirect()) {
+	  // increase the refcount of the direct mapping if
+	  // the mapping is indirect and it's remapped into
+	  // more than 1 mappings
+	  auto &cursor = mapping.direct_cursor;
+	  assert(cursor->is_viewable());
+	  return update_refcount(
+	    c.trans, cursor.get(), 1, false).discard_result();
+	}
+	return update_refcount_iertr::now();
+      }).si_then([&ret] {
+	return trans_intr::parallel_for_each(
+	  ret,
+	  [](auto &remapped_mapping) {
+	  return remapped_mapping.refresh(
+	  ).si_then([&remapped_mapping](auto mapping) {
+	    remapped_mapping = std::move(mapping);
+	  });
+	});
+      }).si_then([&ret] {
+	return std::move(ret);
+      });
+    });
+  });
+}
+
+BtreeLBAManager::move_mapping_ret
+BtreeLBAManager::_copy_mapping(
+  op_context_t c,
+  LBABtree &btree,
+  LBAMapping src,
+  laddr_t dest_laddr,
+  LBAMapping dest,
+  LogicalChildNode *extent)
+{
+  LOG_PREFIX(BtreeLBAManager::_copy_mapping);
+  assert(dest.is_viewable());
+  assert(src.is_viewable());
+  assert(!src.is_end());
+  assert(src.direct_cursor->get_refcount() == EXTENT_DEFAULT_REF_COUNT);
+  assert(!src.is_indirect() == (bool)extent);
+  DEBUGT("src={} dest={}", c.trans, src, dest);
+  return seastar::do_with(
+    move_mapping_ret_t{std::move(src), std::move(dest)},
+    [c, extent, dest_laddr, &btree](auto &state) {
+    auto &cursor = state.dest.get_effective_cursor();
+    auto iter = btree.make_partial_iter(c, cursor);
+    if (!iter.is_end()) {
+      assert(iter.get_key() >= dest_laddr + state.src.get_length());
+    }
+    // insert the src mapping to dest
+    return btree.insert(
+      c,
+      std::move(iter),
+      dest_laddr,
+      lba_map_val_t{
+	state.src.get_length(),
+	state.src.is_indirect()
+	  ? pladdr_t(state.src.get_intermediate_key().get_local_clone_id())
+	  : pladdr_t(state.src.get_val()),
+	EXTENT_DEFAULT_REF_COUNT,
+	state.src.is_indirect() ? 0 : state.src.get_checksum(),
+	state.src.get_extent_type()
+      }
+    ).si_then([&state, extent, c](auto p) {
+      auto [iter, inserted] = std::move(p);
+      ceph_assert(inserted);
+      // attach extent to the new mapping if it exists
+      auto &leaf_node = *iter.get_leaf_node();
+      leaf_node.insert_child_ptr(
+	iter.get_leaf_pos(),
+	extent ? extent : get_reserved_ptr<LBALeafNode, laddr_t>(),
+	leaf_node.get_size() - 1 /*the size before the insert*/);
+      state.dest = LBAMapping::create_direct(iter.get_cursor(c));
+    }).si_then([&state] {
+      // refresh the src mapping since a modification may have
+      // renderred the src invalid
+      return state.src.refresh();
+    }).si_then([&state](auto m) {
+      state.src = std::move(m);
+      return std::move(state);
+    });
+  });
+}
+
+BtreeLBAManager::move_mapping_ret
+BtreeLBAManager::_move_mapping(
+  Transaction &t,
+  LBAMapping src,
+  laddr_t dest_laddr,
+  LBAMapping dest,
+  LogicalChildNode *extent) {
+  LOG_PREFIX(BtreeLBAManager::move_direct_mapping);
+  assert(dest.is_viewable());
+  assert(src.is_viewable());
+  assert(!src.is_indirect());
+  assert(!src.is_end());
+  assert(src.direct_cursor->get_refcount() == EXTENT_DEFAULT_REF_COUNT);
+  DEBUGT("src={} dest={}", t, src, dest);
+  auto c = get_context(t);
+  return with_btree_state<LBABtree, move_mapping_ret_t>(
+    cache,
+    c,
+    move_mapping_ret_t{std::move(src), std::move(dest)},
+    [c, extent, this, dest_laddr](auto &btree, auto &state) {
+    return _copy_mapping(
+      c,
+      btree,
+      std::move(state.src),
+      dest_laddr,
+      std::move(state.dest),
+      extent
+    ).si_then([this, c, &state](auto s) {
+      state = std::move(s);
+      auto &cursor = state.src.get_effective_cursor();
+      return update_refcount(c.trans, &cursor,-1, false
+      ).si_then([&state](auto res) {
+	ceph_assert(res.result.refcount == 0);
+	auto &cursor = res.result.mapping.get_effective_cursor();
+	if (cursor.is_indirect()) {
+	  state.src = LBAMapping::create_indirect(nullptr, &cursor);
+	} else {
+	  state.src = LBAMapping::create_direct(&cursor);
+	}
+	return state.dest.refresh();
+      }).si_then([](auto m) {
+	return m.next();
+      }).si_then([&state](auto m) {
+	state.dest = std::move(m);
+      });
+    });
+  }).handle_error_interruptible(
+    move_mapping_iertr::pass_further{},
+    crimson::ct_error::assert_all{"unexpected error"}
+  );
+}
+
+BtreeLBAManager::move_mapping_ret
+BtreeLBAManager::move_and_clone_direct_mapping(
+  Transaction &t,
+  LBAMapping src,
+  laddr_t dest_laddr,
+  LBAMapping dest,
+  LogicalChildNode &extent)
+{
+  LOG_PREFIX(BtreeLBAManager::move_and_clone_direct_mapping);
+  assert(dest.is_viewable());
+  assert(src.is_viewable());
+  assert(!src.is_indirect());
+  assert(!src.is_end());
+  assert(src.direct_cursor->get_refcount() == EXTENT_DEFAULT_REF_COUNT);
+  DEBUGT("src={} dest={}", t, src, dest);
+  auto c = get_context(t);
+  return with_btree_state<LBABtree, move_mapping_ret_t>(
+    cache,
+    c,
+    move_mapping_ret_t{std::move(src), std::move(dest)},
+    [c, FNAME, &extent, this, dest_laddr](auto &btree, auto &state) {
+    return _copy_mapping(
+      c,
+      btree,
+      std::move(state.src),
+      dest_laddr,
+      std::move(state.dest),
+      &extent
+    ).si_then([&state, c, this](auto s) {
+      state = std::move(s);
+      // turn the src mapping into an indirect one pointing to
+      // the previously inserted mapping
+      return this->_update_mapping(
+	c.trans,
+	*state.src.direct_cursor,
+	[&state](const auto &in) {
+	  lba_map_val_t val = in;
+	  val.pladdr = state.dest.get_key().get_local_clone_id();
+	  val.checksum = 0;
+	  return val;
+	},
+	nullptr);
+    }).si_then([c, &btree, &state, FNAME](auto ret) {
+      assert(ret.is_alive_mapping());
+      auto cursor = ret.take_cursor();
+      assert(cursor->is_indirect());
+      auto iter = btree.make_partial_iter(c, *cursor);
+      DEBUGT("resetting child ptr, leaf: {}, pos: {}",
+	c.trans, *iter.get_leaf_node(), iter.get_leaf_pos());
+      iter.get_leaf_node()->reset_child_ptr(iter.get_leaf_pos());
+      state.src = LBAMapping::create_indirect(nullptr, std::move(cursor));
+    }).si_then([&state] {
+      return state.dest.refresh();
+    }).si_then([&state](auto ndest) {
+      state.dest = std::move(ndest);
+    });
+  }).handle_error_interruptible(
+    move_mapping_iertr::pass_further{},
+    crimson::ct_error::assert_all{"unexpected error"}
+  );
 }
 
 }
