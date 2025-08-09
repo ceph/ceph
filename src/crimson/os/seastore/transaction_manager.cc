@@ -174,6 +174,7 @@ TransactionManager::mount()
     return epm->open_for_write();
   }).safe_then([FNAME, this] {
     epm->start_background();
+    cache->boot_done();
     INFO("done");
   }).handle_error(
     mount_ertr::pass_further{},
@@ -205,14 +206,19 @@ TransactionManager::ref_ret TransactionManager::remove(
 {
   LOG_PREFIX(TransactionManager::remove);
   DEBUGT("{} ...", t, *ref);
-  return lba_manager->remove_mapping(t, ref->get_laddr()
-  ).si_then([this, FNAME, &t, ref](auto result) {
-    if (result.refcount == 0) {
+  return lba_manager->get_mapping(t, *ref
+  ).si_then([ref, this, &t](auto mapping) {
+    return lba_manager->remove_mapping(t, std::move(mapping));
+  }).si_then([this, FNAME, &t, ref](auto result) {
+    assert(!result.direct_result);
+    auto &primary_result = result.result;
+    if (primary_result.refcount == 0) {
       cache->retire_extent(t, ref);
     }
     DEBUGT("removed {}~0x{:x} refcount={} -- {}",
-           t, result.addr, result.length, result.refcount, *ref);
-    return result.refcount;
+           t, primary_result.addr, primary_result.length,
+           primary_result.refcount, *ref);
+    return primary_result.refcount;
   });
 }
 
@@ -222,22 +228,183 @@ TransactionManager::ref_ret TransactionManager::remove(
 {
   LOG_PREFIX(TransactionManager::remove);
   DEBUGT("{} ...", t, offset);
-  return lba_manager->remove_mapping(t, offset
-  ).si_then([this, FNAME, offset, &t](auto result) -> ref_ret {
-    auto fut = ref_iertr::now();
-    if (result.refcount == 0) {
-      if (result.addr.is_paddr() &&
-          !result.addr.get_paddr().is_zero()) {
-        fut = cache->retire_extent_addr(
-          t, result.addr.get_paddr(), result.length);
+  return lba_manager->get_mapping(t, offset
+  ).si_then([&t, this](auto mapping) {
+    return _remove(t, std::move(mapping));
+  }).si_then([](auto result) {
+    return result.result.refcount;
+  });
+}
+
+TransactionManager::ref_iertr::future<LBAMapping>
+TransactionManager::remove(
+  Transaction &t,
+  LBAMapping mapping)
+{
+  return mapping.refresh().si_then([&t, this](auto mapping) {
+    return _remove(t, std::move(mapping));
+  }).si_then([](auto res) {
+    return std::move(res.result.mapping);
+  });
+}
+
+TransactionManager::ref_iertr::future<
+  TransactionManager::_remove_mapping_result_t>
+TransactionManager::_remove_indirect_mapping(
+  Transaction &t,
+  LBAMapping mapping)
+{
+  LOG_PREFIX(TransactionManager::_remove_indirect_mapping);
+  return seastar::do_with(
+    std::move(mapping),
+    [&t, this, FNAME](auto &mapping) {
+    return lba_manager->complete_indirect_lba_mapping(t, std::move(mapping)
+    ).si_then([FNAME, &mapping, &t, this](auto m) {
+      mapping = std::move(m);
+      auto ret = get_extent_if_linked<LogicalChildNode>(t, mapping);
+      if (ret.index() == 1) {
+        return std::move(std::get<1>(ret)
+        ).si_then([&t, mapping, this, FNAME](auto extent) {
+          return lba_manager->remove_mapping(t, std::move(mapping)
+          ).si_then([this, FNAME, &t, extent](auto result) {
+            ceph_assert(result.direct_result);
+            auto &primary_result = result.result;
+            ceph_assert(primary_result.refcount == 0);
+            auto &direct_result = *result.direct_result;
+            ceph_assert(direct_result.addr.is_paddr());
+            ceph_assert(!direct_result.addr.get_paddr().is_zero());
+            ceph_assert(extent);
+            if (direct_result.refcount == 0) {
+              cache->retire_extent(t, extent);
+            }
+            DEBUGT("removed indirect mapping {}~0x{:x} refcount={} offset={} "
+                   "with direct mapping {}~0x{:x} refcount={} offset={}",
+                   t, primary_result.addr,
+                   primary_result.length,
+                   primary_result.refcount,
+                   primary_result.key,
+                   direct_result.addr,
+                   direct_result.length,
+                   direct_result.refcount,
+                   direct_result.key);
+            return ref_iertr::make_ready_future<
+              _remove_mapping_result_t>(std::move(result));
+          });
+        });
+      } else {
+        auto unlinked_child = std::move(std::get<0>(ret));
+        return lba_manager->remove_mapping(t, std::move(mapping)
+        ).si_then([child_pos=unlinked_child.child_pos, &t,
+                  FNAME, this](auto result) mutable {
+          ceph_assert(result.direct_result);
+          auto &primary_result = result.result;
+          ceph_assert(primary_result.refcount == 0);
+          auto &direct_result = *result.direct_result;
+          ceph_assert(direct_result.addr.is_paddr());
+          ceph_assert(!direct_result.addr.get_paddr().is_zero());
+          if (direct_result.refcount == 0) {
+            auto retired_placeholder = cache->retire_absent_extent_addr(
+              t, direct_result.key,
+              direct_result.addr.get_paddr(),
+              direct_result.length
+            )->template cast<RetiredExtentPlaceholder>();
+            child_pos.link_child(retired_placeholder.get());
+          }
+            DEBUGT("removed indirect mapping {}~0x{:x} refcount={} offset={} "
+                   "with direct mapping {}~0x{:x} refcount={} offset={}",
+                   t, primary_result.addr,
+                   primary_result.length,
+                   primary_result.refcount,
+                   primary_result.key,
+                   direct_result.addr,
+                   direct_result.length,
+                   direct_result.refcount,
+                   direct_result.key);
+          return ref_iertr::make_ready_future<
+            _remove_mapping_result_t>(std::move(result));
+        });
       }
-    }
-    return fut.si_then([result=std::move(result), offset, &t, FNAME] {
-      DEBUGT("removed {}~0x{:x} refcount={} -- offset={}",
-             t, result.addr, result.length, result.refcount, offset);
-      return result.refcount;
     });
   });
+}
+
+TransactionManager::ref_iertr::future<
+  TransactionManager::_remove_mapping_result_t>
+TransactionManager::_remove_direct_mapping(
+  Transaction &t,
+  LBAMapping mapping)
+{
+  LOG_PREFIX(TransactionManager::_remove_direct_mapping);
+  auto ret = get_extent_if_linked<LogicalChildNode>(t, mapping);
+  if (ret.index() == 1) {
+    return std::move(std::get<1>(ret)
+    ).si_then([&t, mapping, this, FNAME](auto extent) {
+      return lba_manager->remove_mapping(t, std::move(mapping)
+      ).si_then([this, FNAME, &t, extent](auto result) {
+        auto &primary_result = result.result;
+        ceph_assert(primary_result.refcount == 0);
+        ceph_assert(primary_result.addr.is_paddr());
+        ceph_assert(!primary_result.addr.get_paddr().is_zero());
+        ceph_assert(extent);
+        cache->retire_extent(t, extent);
+        DEBUGT("removed {}~0x{:x} refcount={} -- offset={}",
+               t, primary_result.addr, primary_result.length,
+               primary_result.refcount, primary_result.key);
+        return ref_iertr::make_ready_future<
+          _remove_mapping_result_t>(std::move(result));
+      });
+    });
+  } else {
+    auto unlinked_child = std::move(std::get<0>(ret));
+    return lba_manager->remove_mapping(t, std::move(mapping)
+    ).si_then([child_pos=unlinked_child.child_pos, &t,
+              FNAME, this](auto result) mutable {
+      auto &primary_result = result.result;
+      ceph_assert(primary_result.refcount == 0);
+      ceph_assert(primary_result.addr.is_paddr());
+      ceph_assert(!primary_result.addr.get_paddr().is_zero());
+      auto retired_placeholder = cache->retire_absent_extent_addr(
+        t, primary_result.key,
+        primary_result.addr.get_paddr(),
+        primary_result.length
+      )->template cast<RetiredExtentPlaceholder>();
+      child_pos.link_child(retired_placeholder.get());
+      DEBUGT("removed {}~0x{:x} refcount={} -- offset={}",
+             t, primary_result.addr, primary_result.length,
+             primary_result.refcount, primary_result.key);
+      return ref_iertr::make_ready_future<
+        _remove_mapping_result_t>(std::move(result));
+    });
+  }
+}
+
+TransactionManager::ref_iertr::future<
+  TransactionManager::_remove_mapping_result_t>
+TransactionManager::_remove(
+  Transaction &t,
+  LBAMapping mapping)
+{
+  LOG_PREFIX(TransactionManager::_remove);
+  if (mapping.is_indirect()) {
+    return _remove_indirect_mapping(t, std::move(mapping));
+  } else if (mapping.get_val().is_real_location()) {
+    return _remove_direct_mapping(t, std::move(mapping));
+  } else {
+    return lba_manager->remove_mapping(t, std::move(mapping)
+    ).si_then([&t, FNAME](auto result) {
+      auto &primary_result = result.result;
+      ceph_assert(primary_result.refcount == 0);
+      ceph_assert(primary_result.addr.is_paddr());
+      ceph_assert(primary_result.addr.get_paddr().is_zero());
+      DEBUGT("removed {}~0x{:x} refcount={} -- offset={}",
+             t, primary_result.addr,
+             primary_result.length,
+             primary_result.refcount,
+             primary_result.key);
+      return ref_iertr::make_ready_future<
+        _remove_mapping_result_t>(std::move(result));
+    });
+  }
 }
 
 TransactionManager::refs_ret TransactionManager::remove(
@@ -522,13 +689,19 @@ TransactionManager::rewrite_logical_extent(
      * extents since we're going to do it again once we either do the ool write
      * or allocate a relative inline addr.  TODO: refactor AsyncCleaner to
      * avoid this complication. */
-    return lba_manager->update_mapping(
-      t,
-      extent->get_laddr(),
-      extent->get_length(),
-      extent->get_paddr(),
-      *nextent
-    ).discard_result();
+    return lba_manager->get_mapping(t, *extent
+    ).si_then([this, &t, extent, nextent](auto mapping) {
+      return lba_manager->update_mapping(
+        t,
+        std::move(mapping),
+        extent->get_length(),
+        extent->get_paddr(),
+        *nextent
+      ).discard_result();
+    }).handle_error_interruptible(
+      rewrite_extent_iertr::pass_further{},
+      crimson::ct_error::assert_all{"unexpected enoent"}
+    );
   } else {
     assert(get_extent_category(extent->get_type()) == data_category_t::DATA);
     auto length = extent->get_length();
@@ -569,15 +742,22 @@ TransactionManager::rewrite_logical_extent(
           auto fut = base_iertr::now();
           if (first_extent) {
             assert(off == 0);
-            fut = lba_manager->update_mapping(
-              t,
-              extent->get_laddr(),
-              extent->get_length(),
-              extent->get_paddr(),
-              *nextent
-            ).si_then([&refcount](auto c) {
-              refcount = c;
-            });
+            fut = lba_manager->get_mapping(t, *extent
+            ).si_then([this, &t, extent, nextent,
+                      &refcount](auto mapping) {
+              return lba_manager->update_mapping(
+                t,
+                std::move(mapping),
+                extent->get_length(),
+                extent->get_paddr(),
+                *nextent
+              ).si_then([&refcount](auto c) {
+                refcount = c;
+              });
+            }).handle_error_interruptible(
+              rewrite_extent_iertr::pass_further{},
+              crimson::ct_error::assert_all{"unexpected enoent"}
+            );
           } else {
             ceph_assert(refcount != 0);
             fut = lba_manager->alloc_extent(
