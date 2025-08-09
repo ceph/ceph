@@ -4,6 +4,7 @@ import logging
 import mgr_util
 import inspect
 import functools
+import fnmatch
 from typing import TYPE_CHECKING, Any, Callable, Optional, Tuple
 from urllib.parse import urlsplit, urlunsplit
 
@@ -149,10 +150,13 @@ class VolumeClient(CephfsClient["Module"]):
         self.connection_pool.del_connections(volname, wait=True)
         return delete_volume(self.mgr, volname, metadata_pool, data_pools)
 
-    def list_fs_volumes(self):
+    def list_fs_volumes(self, vol_filter):
         volnames = list_volumes(self.mgr)
         # since we report in json format, make a dict of volnames.
         volumes = [{'name': vn} for vn in volnames]
+        if vol_filter:
+            volumes = [subvol for subvol in volumes
+                       if fnmatch.fnmatch(subvol, f"*{vol_filter}*")]
         return 0, json.dumps(volumes, indent=4, sort_keys=True), ""
 
     def rename_fs_volume(self, volname, newvolname, sure):
@@ -635,14 +639,18 @@ class VolumeClient(CephfsClient["Module"]):
         return ret
 
     def list_subvolumes(self, **kwargs):
-        ret        = 0, "", ""
-        volname    = kwargs['vol_name']
-        groupname  = kwargs['group_name']
+        ret             = 0, "", ""
+        volname         = kwargs['vol_name']
+        groupname       = kwargs['group_name']
+        subvol_filter   = kwargs['subvol_filter']
 
         try:
             with open_volume(self, volname) as fs_handle:
                 with open_group(fs_handle, self.volspec, groupname) as group:
                     subvolumes = group.list_subvolumes()
+                    if subvol_filter:
+                        subvolumes = [subvol for subvol in subvolumes
+                                      if fnmatch.fnmatch(subvol, f"*{subvol_filter}*")]
                     ret = 0, name_to_json(subvolumes), ""
         except VolumeException as ve:
             ret = self.volume_exception_to_retval(ve)
@@ -891,12 +899,16 @@ class VolumeClient(CephfsClient["Module"]):
         volname    = kwargs['vol_name']
         subvolname = kwargs['sub_name']
         groupname  = kwargs['group_name']
+        snap_filter= kwargs['snap_filter']
 
         try:
             with open_volume(self, volname) as fs_handle:
                 with open_group(fs_handle, self.volspec, groupname) as group:
                     with open_subvol(self.mgr, fs_handle, self.volspec, group, subvolname, SubvolumeOpType.SNAP_LIST) as subvolume:
                         snapshots = subvolume.list_snapshots()
+                        if snap_filter:
+                            snapshots = [subvol for subvol in snapshots
+                                         if fnmatch.fnmatch(subvol, f"*{snap_filter}*")]
                         ret = 0, name_to_json(snapshots), ""
         except VolumeException as ve:
             ret = self.volume_exception_to_retval(ve)
@@ -1179,12 +1191,16 @@ class VolumeClient(CephfsClient["Module"]):
 
     def list_subvolume_groups(self, **kwargs):
         volname = kwargs['vol_name']
+        group_filter = kwargs['group_filter']
         ret     = 0, '[]', ""
         volume_exists = False
         try:
             with open_volume(self, volname) as fs_handle:
                 volume_exists = True
                 groups = listdir(fs_handle, self.volspec.base_dir, filter_entries=[dir.encode('utf-8') for dir in self.volspec.INTERNAL_DIRS])
+                if group_filter:
+                        groups = [subvol for subvol in groups
+                                      if fnmatch.fnmatch(subvol, f"*{group_filter}*")]
                 ret = 0, name_to_json(groups), ""
         except VolumeException as ve:
             if not ve.errno == -errno.ENOENT or not volume_exists:
@@ -1309,14 +1325,18 @@ class VolumeClient(CephfsClient["Module"]):
         return ret
 
     def list_subvolume_group_snapshots(self, **kwargs):
-        ret       = 0, "", ""
-        volname   = kwargs['vol_name']
-        groupname = kwargs['group_name']
+        ret         = 0, "", ""
+        volname     = kwargs['vol_name']
+        groupname   = kwargs['group_name']
+        snap_filter = kwargs['snap_filter']
 
         try:
             with open_volume(self, volname) as fs_handle:
                 with open_group(fs_handle, self.volspec, groupname) as group:
                     snapshots = group.list_snapshots()
+                    if snap_filter:
+                        snapshots = [subvol for subvol in snapshots
+                                     if fnmatch.fnmatch(subvol, f"*{snap_filter}*")]
                     ret = 0, name_to_json(snapshots), ""
         except VolumeException as ve:
             ret = self.volume_exception_to_retval(ve)
