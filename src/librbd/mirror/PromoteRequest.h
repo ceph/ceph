@@ -19,12 +19,21 @@ template <typename ImageCtxT = librbd::ImageCtx>
 class PromoteRequest {
 public:
   static PromoteRequest *create(ImageCtxT &image_ctx, bool force,
+                                const std::string &group_snap_id,
+                                uint64_t *snap_id, Context *on_finish) {
+    return new PromoteRequest(image_ctx, force, group_snap_id, snap_id,
+                              on_finish);
+  }
+  static PromoteRequest *create(ImageCtxT &image_ctx, bool force,
                                 Context *on_finish) {
-    return new PromoteRequest(image_ctx, force, on_finish);
+    return new PromoteRequest(image_ctx, force, {}, nullptr, on_finish);
   }
 
-  PromoteRequest(ImageCtxT &image_ctx, bool force, Context *on_finish)
-    : m_image_ctx(image_ctx), m_force(force), m_on_finish(on_finish) {
+  PromoteRequest(ImageCtxT &image_ctx, bool force,
+                 const std::string &group_snap_id, uint64_t *snap_id,
+                 Context *on_finish)
+    : m_image_ctx(image_ctx), m_force(force), m_group_snap_id(group_snap_id),
+      m_snap_id(snap_id), m_on_finish(on_finish) {
   }
 
   void send();
@@ -51,7 +60,9 @@ private:
    */
 
   ImageCtxT &m_image_ctx;
-  bool m_force;
+  const bool m_force;
+  const std::string m_group_snap_id;
+  uint64_t *m_snap_id;
   Context *m_on_finish;
 
   cls::rbd::MirrorImage m_mirror_image;
