@@ -1,0 +1,78 @@
+name: Trigger Jenkins Job on Comment
+
+on:
+  workflow_call:
+    inputs:
+      trigger_phrase:
+        required: true
+        type: string
+      jenkins_job:
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  trigger:
+    if: |
+      github.event.issue.pull_request != null &&
+      contains(github.event.comment.body, inputs.trigger_phrase)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check if comment author is a collaborator
+        id: check_user
+        run: |
+          comment_user="${{ github.event.comment.user.login }}"
+          repo="${{ github.repository }}"
+          status=$(curl --retry 3 --retry-connrefused --fail -s -o /dev/null -w "%{http_code}" \
+            -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            "https://api.github.com/repos/$repo/collaborators/$comment_user")
+          if [ "$status" -ne 204 ]; then
+            echo "$comment_user is not a collaborator. Exiting."
+            echo "authorized=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "authorized=true" >> "$GITHUB_OUTPUT"
+
+      - name: Exit if unauthorized
+        if: steps.check_user.outputs.authorized != 'true'
+        run: |
+          echo "Skipping: not authorized"
+
+      - name: Extract PR number
+        id: extract_pr
+        run: |
+          pr_url="${{ github.event.issue.pull_request.url }}"
+          pr_number="${pr_url##*/}"
+          echo "GH_PULL_REQUEST_ID=$pr_number" >> "$GITHUB_ENV"
+
+      - name: Get PR SHA
+        id: pr_sha
+        run: |
+          pr_sha=$(curl --retry 3 --retry-connrefused --fail -s \
+            -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            "${{ github.event.issue.pull_request.url }}" | jq -r .head.sha)
+          echo "pr_sha=$pr_sha" >> "$GITHUB_OUTPUT"
+
+      - name: Trigger Jenkins job with retries
+        run: |
+          for attempt in {1..5}; do
+            echo "Triggering Jenkins job '${{ inputs.jenkins_job }}' (attempt $attempt)..."
+            curl --fail --retry 4 --retry-delay 5 --retry-connrefused -s \
+              -X POST "https://jenkins.ceph.com/job/${{ inputs.jenkins_job }}/buildWithParameters" \
+              --user "${{ secrets.JENKINS_USER }}:${{ secrets.JENKINS_API_TOKEN }}" \
+              --data-urlencode "GH_PULL_REQUEST_ID=${{ env.GH_PULL_REQUEST_ID }}" \
+              --data-urlencode "GH_PULL_REQUEST_SHA=${{ steps.pr_sha.outputs.pr_sha }}" \
+              --data-urlencode "TRIGGER_METHOD=Comment by ${{ github.event.comment.user.login }} at https://github.com/${{ github.repository }}/pull/${{ github.event.issue.number }}#issuecomment-${{ github.event.comment.id }}" \
+              --data-urlencode "TRIGGERED_BY=https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+              && break
+
+            echo "Attempt $attempt failed. Retrying in 5s..."
+            sleep 5
+          done
+
+          echo "All attempts to trigger Jenkins job failed."
+          exit 1
