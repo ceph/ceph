@@ -655,7 +655,7 @@ protected:
     size_t l_size = left.get_size();
     size_t r_size = right.get_size();
 
-    ceph_assert(pivot_idx != l_size && pivot_idx != r_size);
+    ceph_assert(pivot_idx != l_size);
     replacement_left.maybe_expand_children(pivot_idx);
     replacement_right.maybe_expand_children(r_size + l_size - pivot_idx);
 
