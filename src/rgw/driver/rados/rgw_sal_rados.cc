@@ -88,6 +88,7 @@
 #include "topic.h"
 #include "topics.h"
 #include "users.h"
+#include "policy.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -1689,6 +1690,17 @@ int RadosStore::count_account_roles(const DoutPrefixProvider* dpp,
   return rgwrados::account::resource_count(dpp, y, rados, obj, count);
 }
 
+int RadosStore::count_account_policies(const DoutPrefixProvider* dpp,
+                                    optional_yield y,
+                                    std::string_view account_id,
+                                    uint32_t& count)
+{
+  librados::Rados& rados = *getRados()->get_rados_handle();
+  const RGWZoneParams& zone = svc()->zone->get_zone_params();
+  const rgw_raw_obj& obj = rgwrados::policy::get_policy_obj(zone, account_id);
+  return rgwrados::account::resource_count(dpp, y, rados, obj, count);
+}
+
 int RadosStore::list_account_roles(const DoutPrefixProvider* dpp,
                                    optional_yield y,
                                    std::string_view account_id,
@@ -2568,6 +2580,48 @@ int RadosStore::get_oidc_providers(const DoutPrefixProvider* dpp,
   return 0;
 }
 
+int RadosStore::store_customer_managed_policy(const DoutPrefixProvider* dpp,
+      optional_yield y, const rgw::IAM::ManagedPolicyInfo& info, bool exclusive)
+{
+ return rgwrados::policy::write_policy( dpp, y, *getRados()->get_rados_handle(), *svc()->sysobj, svc()->zone->get_zone_params(), info, exclusive);
+}
+
+int RadosStore::load_customer_managed_policy(const DoutPrefixProvider* dpp,
+                            optional_yield y,
+                            std::string_view account,
+                            std::string_view name,
+                            rgw::IAM::ManagedPolicyInfo& info) 
+{
+  return rgwrados::policy::get_policy(dpp, y, *svc()->sysobj, svc()->zone->get_zone_params(), account, name, info);
+}
+
+int RadosStore::delete_customer_managed_policy(const DoutPrefixProvider* dpp,
+                            optional_yield y,
+                            std::string_view account,
+                            std::string_view name) 
+{
+  return rgwrados::policy::delete_policy(dpp, y, *getRados()->get_rados_handle(), *svc()->sysobj, svc()->zone->get_zone_params(), account, name);
+}
+
+int RadosStore::list_customer_mananged_policies(const DoutPrefixProvider* dpp,
+                          optional_yield y,
+                          std::string_view account_id,
+                          rgw::IAM::Scope scope,
+                          bool only_attached,
+                          std::string_view path_prefix,
+                          rgw::IAM::PolicyUsageFilter policy_usage_filter,
+                          std::string_view marker,
+                          uint32_t max_items,
+                          rgw::IAM::PolicyList& listing)
+{
+  return rgwrados::policy::list_policies(dpp, y,
+                                         *getRados()->get_rados_handle(),
+                                         *svc()->sysobj,
+                                         svc()->zone->get_zone_params(),
+                                         account_id, scope, only_attached,
+                                         path_prefix, policy_usage_filter,
+                                         marker, max_items, listing);
+}
 std::unique_ptr<Writer> RadosStore::get_append_writer(const DoutPrefixProvider *dpp,
 				  optional_yield y,
 				  rgw::sal::Object* obj,
