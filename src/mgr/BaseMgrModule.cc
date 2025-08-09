@@ -381,11 +381,30 @@ static PyObject*
 ceph_state_get(BaseMgrModule *self, PyObject *args)
 {
   char *what = NULL;
+  dout(10) << __func__ << " called" << dendl;
   if (!PyArg_ParseTuple(args, "s:ceph_state_get", &what)) {
+    dout(0) << __func__ << " Invalid args!" << dendl;
     return NULL;
   }
-
+  dout(10) << __func__ << " what: " << what << dendl;
   return self->py_modules->cacheable_get_python(what);
+}
+
+static PyObject*
+ceph_cache_map_erase(BaseMgrModule *self, PyObject *args)
+{
+  char *what = NULL;
+  dout(10) << __func__ << " called" << dendl;
+  if (!PyArg_ParseTuple(args, "s:ceph_cache_map_erase", &what)) {
+    dout(0) << __func__ << " Invalid args!" << dendl;
+    Py_RETURN_FALSE;
+  }
+  dout(10) << __func__ << " what: " << what << dendl;
+  if (self->py_modules->ceph_cache_map_erase(what) < 0) {
+    dout(10) << __func__ << " failed to erase cache map entry: " << what << dendl;
+    Py_RETURN_FALSE;
+  }
+  Py_RETURN_TRUE;
 }
 
 
@@ -1484,7 +1503,10 @@ PyMethodDef BaseMgrModule_methods[] = {
   {"_ceph_get", (PyCFunction)ceph_state_get, METH_VARARGS,
    "Get a cluster object"},
 
-  {"_ceph_notify_all", (PyCFunction)ceph_notify_all, METH_VARARGS,
+   {"_ceph_erase", (PyCFunction)ceph_cache_map_erase, METH_VARARGS,
+   "Erase a cached python map"},
+
+   {"_ceph_notify_all", (PyCFunction)ceph_notify_all, METH_VARARGS,
    "notify all modules"},
 
   {"_ceph_get_server", (PyCFunction)ceph_get_server, METH_VARARGS,
