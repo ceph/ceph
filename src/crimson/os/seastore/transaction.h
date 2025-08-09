@@ -140,9 +140,17 @@ public:
       existing_block_stats.dec(ref);
       ref->set_invalid(*this);
       write_set.erase(*ref);
+      if (is_backref_node(ref->get_type())) {
+	assert(fresh_backref_extents > 0);
+	fresh_backref_extents--;
+      }
     } else if (ref->is_initial_pending()) {
       ref->set_invalid(*this);
       write_set.erase(*ref);
+      if (is_backref_node(ref->get_type())) {
+	assert(fresh_backref_extents > 0);
+	fresh_backref_extents--;
+      }
     } else if (ref->is_mutation_pending()) {
       ref->set_invalid(*this);
       write_set.erase(*ref);
@@ -208,7 +216,6 @@ public:
       existing_block_list.push_back(ref);
     } else if (ref->get_paddr().is_delayed()) {
       assert(ref->get_paddr() == make_delayed_temp_paddr(0));
-      assert(ref->is_logical());
       ref->set_paddr(make_delayed_temp_paddr(delayed_temp_offset));
       delayed_temp_offset += ref->get_length();
       delayed_alloc_list.emplace_back(ref);
