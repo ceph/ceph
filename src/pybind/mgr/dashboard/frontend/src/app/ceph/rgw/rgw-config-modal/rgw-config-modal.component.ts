@@ -26,6 +26,7 @@ import { KmipConfig, VaultConfig } from '~/app/shared/models/rgw-encryption-conf
 })
 export class RgwConfigModalComponent implements OnInit {
   readonly vaultAddress = /^((https?:\/\/)|(www.))(?:([a-zA-Z]+)|(\d+\.\d+.\d+.\d+)):\d{4}$/;
+  readonly kmipVaultAddress = /^((https?:\/\/|www\.)?)((\d{1,3}(\.\d{1,3}){3})|([a-zA-Z][\w.-]*)):\d{4}$/;
 
   kmsProviders: string[];
 
@@ -133,18 +134,7 @@ export class RgwConfigModalComponent implements OnInit {
 
   createForm() {
     this.configForm = this.formBuilder.group({
-      addr: [
-        null,
-        [
-          Validators.required,
-          CdValidators.custom('vaultPattern', (value: string) => {
-            if (_.isEmpty(value)) {
-              return false;
-            }
-            return !this.vaultAddress.test(value);
-          })
-        ]
-      ],
+      addr: [null],
       kms_provider: ['vault', Validators.required],
       encryptionType: ['kms', Validators.required],
       auth: [
@@ -179,6 +169,47 @@ export class RgwConfigModalComponent implements OnInit {
       s3_key_template: [null],
       username: [''],
       password: ['']
+    });
+    this.setupAddrValidator();
+  }
+
+  setupAddrValidator() {
+    const addrControl = this.configForm.get('addr');
+    const kmsProviderControl = this.configForm.get('kms_provider');
+
+    const updateAddrValidator = () => {
+      const kmsProvider = kmsProviderControl?.value;
+      if (kmsProvider === KMS_PROVIDER.VAULT) {
+        addrControl?.clearValidators();
+        addrControl?.setValidators([
+          Validators.required,
+          CdValidators.custom('vaultPattern', (value: string) => {
+            if (_.isEmpty(value)) {
+              return false;
+            }
+            return !this.vaultAddress.test(value);
+          })
+        ]);
+      } else if (kmsProvider === KMS_PROVIDER.KMIP) {
+        addrControl?.clearValidators();
+        addrControl?.setValidators([
+          Validators.required,
+          CdValidators.custom('kmipVaultPattern', (value: string) => {
+            if (_.isEmpty(value)) {
+              return false;
+            }
+            return !this.kmipVaultAddress.test(value);
+          })
+        ]);
+      }
+
+      addrControl?.updateValueAndValidity();
+    };
+
+    updateAddrValidator();
+
+    kmsProviderControl?.valueChanges.subscribe(() => {
+      updateAddrValidator();
     });
   }
 
