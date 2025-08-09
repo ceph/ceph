@@ -3514,6 +3514,15 @@ options:
   level: advanced
   default: binned_lru
   with_legacy: true
+- name: rocksdb_binned_lru_log
+  type: uint
+  level: advanced
+  default: 0
+  with_legacy: true
+  desc: Length of special binned lru log, in lines.
+  long_desc: The log is tracking operations of binned lru rocksdb cache.
+    The log contains last operations performed on the cache. The content is
+    retrievable by admin socket command "rocksdb log cache".
 - name: rocksdb_block_size
   type: size
   level: advanced

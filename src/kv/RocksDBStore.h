@@ -28,6 +28,7 @@
 #include "common/ceph_context.h"
 #include "common/PriorityCache.h"
 #include "common/pretty_binary.h"
+#include "common/admin_socket.h"
 
 enum {
   l_rocksdb_first = 34300,
@@ -89,6 +90,8 @@ class RocksDBStore : public KeyValueDB {
   std::shared_ptr<rocksdb::Statistics> dbstats;
   rocksdb::BlockBasedTableOptions bbt_opts;
   std::string options_str;
+  class SocketHook;
+  AdminSocketHook* asok = nullptr;
 
   uint64_t cache_size = 0;
   bool set_cache_flag = false;
@@ -164,7 +167,9 @@ private:
 		      std::vector<std::pair<size_t, RocksDBStore::ColumnFamily> >& existing_cfs_shard,
 		      std::vector<rocksdb::ColumnFamilyDescriptor>& missing_cfs,
 		      std::vector<std::pair<size_t, RocksDBStore::ColumnFamily> >& missing_cfs_shard);
-  std::shared_ptr<rocksdb::Cache> create_block_cache(const std::string& cache_type, size_t cache_size, double cache_prio_high = 0.0);
+  std::shared_ptr<rocksdb::Cache> create_block_cache(
+    const std::string& name,
+    const std::string& cache_type, size_t cache_size, double cache_prio_high = 0.0);
   int split_column_family_options(const std::string& opts_str,
 				  std::unordered_map<std::string, std::string>* column_opts_map,
 				  std::string* block_cache_opt);
@@ -237,21 +242,11 @@ public:
     compact_range_async(combine_strings(prefix, start), combine_strings(prefix, end));
   }
 
-  RocksDBStore(CephContext *c, const std::string &path, std::map<std::string,std::string> opt, void *p) :
-    cct(c),
-    logger(NULL),
-    path(path),
-    kv_options(opt),
-    priv(p),
-    db(NULL),
-    env(static_cast<rocksdb::Env*>(p)),
-    comparator(nullptr),
-    dbstats(NULL),
-    compact_queue_stop(false),
-    compact_thread(this),
-    compact_on_mount(false),
-    disableWAL(false)
-  {}
+  RocksDBStore(
+    CephContext *c,
+    const std::string &path,
+    std::map<std::string,std::string> opt,
+    void *p);
 
   ~RocksDBStore() override;
 
@@ -273,7 +268,11 @@ public:
   int repair(std::ostream &out) override;
   void split_stats(const std::string &s, char delim, std::vector<std::string> &elems);
   void get_statistics(ceph::Formatter *f) override;
-
+  void get_log(ceph::bufferlist& out) override;
+  std::list<std::string> loglines;
+  ceph::mutex log_lock =
+    ceph::make_mutex("RocksDBStore::log_lock");
+  void log(std::string&& line);
   PerfCounters *get_perf_counters() override
   {
     return logger;
