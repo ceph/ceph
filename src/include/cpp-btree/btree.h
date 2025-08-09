@@ -57,6 +57,9 @@
 #include <type_traits>
 #include <utility>
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Warray-bounds"
+
 namespace btree::internal {
 
 template <typename Compare, typename T>
@@ -1326,8 +1329,10 @@ class btree {
     deallocate(node_type::InternalSize(), node);
   }
   void delete_leaf_node(node_type *node) {
-    node->destroy(mutable_allocator());
-    deallocate(node_type::LeafSize(node->max_count()), node);
+    if (node != EmptyNode()) {
+      node->destroy(mutable_allocator());
+      deallocate(node_type::LeafSize(node->max_count()), node);
+    }
   }
 
   // Rebalances or splits the node iter points to.
@@ -2569,3 +2574,5 @@ int btree<P>::internal_verify(
 }
 
 } // namespace btree::internal
+
+#pragma GCC diagnostic pop

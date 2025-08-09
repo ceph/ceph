@@ -672,14 +672,22 @@ struct ObjectOperation {
   template<typename Vals>
   struct CB_ObjectOperation_decodevals {
     uint64_t max_entries;
-    Vals* pattrs;
+    Vals pattrs;
     bool* ptruncated;
     int* prval;
     boost::system::error_code* pec;
-    CB_ObjectOperation_decodevals(uint64_t m, Vals* pa,
-				  bool *pt, int *pr,
-				  boost::system::error_code* pec)
-      : max_entries(m), pattrs(pa), ptruncated(pt), prval(pr), pec(pec) {
+
+    CB_ObjectOperation_decodevals(uint64_t m,
+                                  const Vals* pa,
+                                  bool* pt,
+                                  int* pr,
+                                  boost::system::error_code* pec)
+	: max_entries(m),
+	  pattrs(*pa),
+	  ptruncated(pt),
+	  prval(pr),
+	  pec(pec)
+    {
       if (ptruncated) {
 	*ptruncated = false;
       }
@@ -688,21 +696,18 @@ struct ObjectOperation {
       if (r >= 0) {
 	auto p = bl.cbegin();
 	try {
-	  if (pattrs)
-	    decode(*pattrs, p);
+	  if (!pattrs.empty()) {
+	    decode(pattrs, p);
+	  }
 	  if (ptruncated) {
-	    Vals ignore;
-	    if (!pattrs) {
-	      decode(ignore, p);
-	      pattrs = &ignore;
-	    }
+	    decode(pattrs, p);
 	    if (!p.end()) {
 	      decode(*ptruncated, p);
 	    } else {
 	      // The OSD did not provide this.  Since old OSDs do not
-	      // enfoce omap result limits either, we can infer it from
+	      // enforce omap result limits either, we can infer it from
 	      // the size of the result
-	      *ptruncated = (pattrs->size() == max_entries);
+	      *ptruncated = (pattrs.size() == max_entries);
 	    }
 	  }
 	} catch (const ceph::buffer::error& e) {
@@ -717,13 +722,19 @@ struct ObjectOperation {
   template<typename Keys>
   struct CB_ObjectOperation_decodekeys {
     uint64_t max_entries;
-    Keys* pattrs;
+    Keys pattrs;
     bool *ptruncated;
     int *prval;
     boost::system::error_code* pec;
-    CB_ObjectOperation_decodekeys(uint64_t m, Keys* pa, bool *pt,
-				  int *pr, boost::system::error_code* pec)
-      : max_entries(m), pattrs(pa), ptruncated(pt), prval(pr), pec(pec) {
+
+    CB_ObjectOperation_decodekeys(
+	uint64_t m, Keys* pa, bool* pt, int* pr, boost::system::error_code* pec)
+	: max_entries(m),
+	  pattrs(*pa),
+	  ptruncated(pt),
+	  prval(pr),
+	  pec(pec)
+    {
       if (ptruncated) {
 	*ptruncated = false;
       }
@@ -733,21 +744,18 @@ struct ObjectOperation {
 	using ceph::decode;
 	auto p = bl.cbegin();
 	try {
-	  if (pattrs)
-	    decode(*pattrs, p);
+	  if (!pattrs.empty()) {
+	    decode(pattrs, p);
+	  }
 	  if (ptruncated) {
-	    Keys ignore;
-	    if (!pattrs) {
-	      decode(ignore, p);
-	      pattrs = &ignore;
-	    }
+	    decode(pattrs, p);
 	    if (!p.end()) {
 	      decode(*ptruncated, p);
 	    } else {
 	      // the OSD did not provide this.  since old OSDs do not
 	      // enforce omap result limits either, we can infer it from
 	      // the size of the result
-	      *ptruncated = (pattrs->size() == max_entries);
+	      *ptruncated = (pattrs.size() == max_entries);
 	    }
 	  }
 	} catch (const ceph::buffer::error& e) {
