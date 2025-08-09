@@ -6,7 +6,7 @@ import _ from 'lodash';
 import { concat as observableConcat, forkJoin as observableForkJoin, Observable } from 'rxjs';
 
 import { RgwUserService } from '~/app/shared/api/rgw-user.service';
-import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
+import { ActionLabelsI18n, URLVerbs, USER } from '~/app/shared/constants/app.constants';
 import { Icons } from '~/app/shared/enum/icons.enum';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { CdForm } from '~/app/shared/forms/cd-form';
@@ -229,7 +229,7 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
               break;
           }
           // Map the quota values.
-          ['user', 'bucket'].forEach((type) => {
+          [USER, 'bucket'].forEach((type) => {
             const quota = resp[1][type + '_quota'];
             value[type + '_quota_enabled'] = quota.enabled;
             if (quota.max_size < 0) {
@@ -804,7 +804,7 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
    */
   _getUserQuotaArgs(): Record<string, any> {
     const result = {
-      quota_type: 'user',
+      quota_type: USER,
       enabled: this.userForm.getValue('user_quota_enabled'),
       max_size_kb: -1,
       max_objects: -1

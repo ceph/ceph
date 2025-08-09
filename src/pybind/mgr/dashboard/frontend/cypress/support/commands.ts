@@ -18,11 +18,12 @@ declare global {
 import { CdHelperClass } from '../../src/app/shared/classes/cd-helper.class';
 import { Permissions } from '../../src/app/shared/models/permissions';
 import { table } from 'table';
+import { LocalStorage } from '~/app/shared/enum/local-storage-enum';
 /* tslint:enable*/
 let auth: any;
 
 const fillAuth = () => {
-  window.localStorage.setItem('dashboard_username', auth.username);
+  window.localStorage.setItem(LocalStorage.DASHBOARD_USRENAME, auth.username);
   window.localStorage.setItem('dashboard_permissions', auth.permissions);
   window.localStorage.setItem('user_pwd_expiration_date', auth.pwdExpirationDate);
   window.localStorage.setItem('user_pwd_update_required', auth.pwdUpdateRequired);
@@ -64,7 +65,7 @@ Cypress.Commands.add('ceph2Login', (username, password) => {
         url,
         { args },
         ({ uname, permissions, pwdExpirationDate, pwdUpdateRequired, sso }: any) => {
-          window.localStorage.setItem('dashboard_username', uname);
+          window.localStorage.setItem(LocalStorage.DASHBOARD_USRENAME, uname);
           window.localStorage.setItem('dashboard_permissions', permissions);
           window.localStorage.setItem('user_pwd_expiration_date', pwdExpirationDate);
           window.localStorage.setItem('user_pwd_update_required', pwdUpdateRequired);
