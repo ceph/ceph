@@ -48,12 +48,22 @@ export interface StorageClassDetails {
   read_through_restore_days?: number;
   restore_storage_class?: string;
   retain_head_object?: boolean;
+  acls?: Acls[];
 }
 
 export interface ZoneGroup {
   name: string;
   id: string;
   placement_targets?: Target[];
+}
+
+export interface Acls {
+  key: string;
+  val: {
+    type: string;
+    source_id: string;
+    dest_id: string;
+  };
 }
 
 export interface S3Details {
@@ -69,6 +79,7 @@ export interface S3Details {
   host_style: boolean;
   retain_head_object?: boolean;
   allow_read_through?: boolean;
+  acl_mappings?: Acls[];
 }
 export interface S3Glacier {
   glacier_restore_days: number;
@@ -98,13 +109,14 @@ export interface PlacementTarget {
     glacier_restore_tier_type?: string;
     restore_storage_class?: string;
     read_through_restore_days?: number;
+    acls?: Acls[];
   };
   storage_class?: string;
   name?: string;
   tier_targets?: TierTarget[];
 }
 
-export interface StorageClassOption {
+export interface TypeOption {
   value: string;
   label: string;
 }
@@ -223,3 +235,56 @@ export const RESTORE_STORAGE_CLASS_TEXT = $localize`The storage class to which o
 export const ZONEGROUP_TEXT = $localize`A Zone Group is a logical grouping of one or more zones that share the same data
                   and metadata, allowing for multi-site replication and geographic distribution of
                   data.`;
+
+export type AclType = 'id' | 'email' | 'uri';
+
+export interface AclLabelAndHelper {
+  source: string;
+  destination: string;
+}
+
+export interface AclMaps {
+  [key: string]: {
+    source: string;
+    destination: string;
+    [field: string]: string;
+  };
+}
+
+export const AclTypeOptions = [
+  { value: 'id', label: 'ID' },
+  { value: 'email', label: 'Email' },
+  { value: 'uri', label: 'URI' }
+] as const;
+
+export type AclFieldType = 'source' | 'destination';
+
+export const AclTypeLabel: AclMaps = {
+  id: {
+    source: 'Source User',
+    destination: 'Destination User'
+  },
+  email: {
+    source: 'Source Email',
+    destination: 'Destination Email'
+  },
+  uri: {
+    source: 'Source URI',
+    destination: 'Destination URI'
+  }
+};
+
+export const AclHelperText: AclMaps = {
+  id: {
+    source: 'The unique user ID in the source system.',
+    destination: 'The unique user ID in the destination system.'
+  },
+  email: {
+    source: 'The email address of the source user.',
+    destination: 'The email address of the destination user.'
+  },
+  uri: {
+    source: 'The URI identifying the source group or user.',
+    destination: 'The URI identifying the destination group or user.'
+  }
+};
