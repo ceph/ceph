@@ -1412,4 +1412,11 @@ options:
   - mon
   flags:
   - runtime
- 
+- name: nvmeof_mon_client_connect_panic
+  type: secs
+  level: advanced
+  desc: The duration, expressed in seconds, after which the nvmeof gateway
+    should trigger a panic if it does not receive the initial map from the monitor
+  default: 30
+  services:
+  - mon
