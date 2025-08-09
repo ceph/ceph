@@ -587,7 +587,10 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
-    def cert_store_cert_ls(self, show_details: bool = False) -> OrchResult[Dict[str, Any]]:
+    def cert_store_cert_ls(self,
+                           filter_by: str = '',
+                           show_details: bool = False,
+                           include_cephadm_signed: bool = False) -> OrchResult[Dict[str, Any]]:
         raise NotImplementedError()
 
     def cert_store_entity_ls(self) -> OrchResult[Dict[Any, Dict[str, List[str]]]]:
@@ -599,7 +602,7 @@ class Orchestrator(object):
     def cert_store_cert_check(self) -> OrchResult[List[str]]:
         raise NotImplementedError()
 
-    def cert_store_key_ls(self) -> OrchResult[Dict[str, Any]]:
+    def cert_store_key_ls(self, include_cephadm_signed: bool = False) -> OrchResult[Dict[str, Any]]:
         raise NotImplementedError()
 
     def cert_store_get_cert(
@@ -638,6 +641,7 @@ class Orchestrator(object):
         cert: str,
         service_name: Optional[str] = None,
         hostname: Optional[str] = None,
+        force: bool = False
     ) -> OrchResult[str]:
         raise NotImplementedError()
 
