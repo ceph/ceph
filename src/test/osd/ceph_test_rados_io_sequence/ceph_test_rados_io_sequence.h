@@ -432,7 +432,8 @@ class SelectErasurePool : public ProgramOptionReader<std::string> {
 
 class TestObject {
  public:
-  TestObject(const std::string oid,
+  TestObject(const std::string primary_oid,
+             const std::string secondary_oid,
              librados::Rados& rados,
              boost::asio::io_context& asio,
              ceph::io_sequence::tester::SelectBlockSize& sbs,
@@ -520,8 +521,9 @@ class TestRunner {
   bool show_sequence;
   bool show_help;
 
-  int num_objects;
-  std::string object_name;
+  int num_object_pairs;
+  std::string primary_object_name;
+  std::string secondary_object_name;
 
   std::string line;
   ceph::split split = ceph::split("");
