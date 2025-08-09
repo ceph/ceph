@@ -211,22 +211,26 @@ class slice_iterator {
 
         // If we have reached the end of the extent, we need to move that on too.
         if (bl_iter == emap_iter.get_val().end()) {
+          // NOTE: Despite appearances, the following is happening BEFORE
+          // the caller gets to use the buffer pointers (since the in/out is
+          // set a few lines above).  This means that the caller must not
+          // check the CRC.
+          if (out_set.contains(shard)) {
+            invalidate_crcs(shard);
+          }
           ++emap_iter;
           if (emap_iter == input[shard].end()) {
             erase = true;
           } else {
-            if (out_set.contains(shard)) {
-              bufferlist bl = emap_iter.get_val();
-              bl.invalidate_crc();
-            }
             iters.at(shard).second = emap_iter.get_val().begin();
             if (zeros) {
               zeros->emplace(shard, emap_iter.get_off(), emap_iter.get_len());
             }
           }
         }
-      } else
+      } else {
         ceph_assert(iter_offset > start);
+      }
 
       if (erase) {
         iter = iters.erase(iter);
@@ -247,6 +251,11 @@ class slice_iterator {
     if (out.empty()) {
       advance();
     }
+  }
+
+  void invalidate_crcs(shard_id_t shard) {
+    bufferlist bl = iters.at(shard).first.get_val();
+    bl.invalidate_crc();
   }
 
 public:
@@ -567,40 +576,6 @@ public:
     ceph_assert(stripe_width % k == 0);
   }
 
-  stripe_info_t(unsigned int k, unsigned int m, uint64_t stripe_width,
-                const pg_pool_t *pool, const std::vector<shard_id_t> &_chunk_mapping)
-    : stripe_width(stripe_width),
-      plugin_flags(0xFFFFFFFFFFFFFFFFul),
-      // Everything enabled for test harnesses.
-      chunk_size(stripe_width / k),
-      pool(pool),
-      k(k),
-      m(m),
-      chunk_mapping(complete_chunk_mapping(_chunk_mapping, k + m)),
-      chunk_mapping_reverse(reverse_chunk_mapping(chunk_mapping)),
-      data_shards(calc_shards(raw_shard_id_t(), k, chunk_mapping)),
-      parity_shards(calc_shards(raw_shard_id_t(k), m, chunk_mapping)) {
-    ceph_assert(stripe_width != 0);
-    ceph_assert(stripe_width % k == 0);
-  }
-
-  stripe_info_t(unsigned int k, unsigned int m, uint64_t stripe_width,
-                const pg_pool_t *pool)
-    : stripe_width(stripe_width),
-      plugin_flags(0xFFFFFFFFFFFFFFFFul),
-      // Everything enabled for test harnesses.
-      chunk_size(stripe_width / k),
-      pool(pool),
-      k(k),
-      m(m),
-      chunk_mapping(complete_chunk_mapping(std::vector<shard_id_t>(), k + m)),
-      chunk_mapping_reverse(reverse_chunk_mapping(chunk_mapping)),
-      data_shards(calc_shards(raw_shard_id_t(), k, chunk_mapping)),
-      parity_shards(calc_shards(raw_shard_id_t(k), m, chunk_mapping)) {
-    ceph_assert(stripe_width != 0);
-    ceph_assert(stripe_width % k == 0);
-  }
-
   uint64_t object_size_to_shard_size(const uint64_t size, shard_id_t shard) const {
     uint64_t remainder = size % get_stripe_width();
     uint64_t shard_size = (size - remainder) / k;
@@ -651,10 +626,6 @@ public:
   bool supports_sub_chunks() const {
     return (plugin_flags &
       ErasureCodeInterface::FLAG_EC_PLUGIN_REQUIRE_SUB_CHUNKS) != 0;
-  }
-
-  bool get_is_hinfo_required() const {
-    return !supports_ec_overwrites();
   }
 
   bool supports_partial_reads() const {
@@ -1062,16 +1033,9 @@ public:
     }
   }
 
-  bool add_zero_padding_for_decode(uint64_t object_size, shard_id_set &exclude_set) {
-    shard_extent_set_t zeros(sinfo->get_k_plus_m());
-    sinfo->ro_size_to_zero_mask(object_size, zeros);
-    extent_set superset = get_extent_superset();
+  void add_zero_padding_for_decode(ECUtil::shard_extent_set_t &zeros) {
     bool changed = false;
     for (auto &&[shard, z] : zeros) {
-      if (exclude_set.contains(shard)) {
-        continue;
-      }
-      z.intersection_of(superset);
       for (auto [off, len] : z) {
         changed = true;
         bufferlist bl;
@@ -1083,8 +1047,6 @@ public:
     if (changed) {
       compute_ro_range();
     }
-
-    return changed;
   }
 
   template <typename IntervalSetT> requires is_interval_set_v<IntervalSetT>

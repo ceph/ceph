@@ -3075,8 +3075,16 @@ int Objecter::_calc_target(op_target_t *t, Connection *con, bool any_change)
     t->pg_num_pending = pg_num_pending;
     spg_t spgid(actual_pgid);
     if (pi->is_erasure()) {
+      // Optimized EC pools need to be careful when calculating the shard
+      // because an OSD may have multiple shards and the primary shard
+      // might not be the first one in the acting set. The lookup
+      // therefoere has to be done in primaryfirst order.
+      std::vector<int> pg_temp = t->acting;
+      if (osdmap->has_pgtemp(actual_pgid)) {
+	pg_temp = osdmap->pgtemp_primaryfirst(*pi, t->acting);
+      }
       for (uint8_t i = 0; i < t->acting.size(); ++i) {
-        if (t->acting[i] == acting_primary) {
+        if (pg_temp[i] == acting_primary) {
 	  spgid.reset_shard(osdmap->pgtemp_undo_primaryfirst(*pi, actual_pgid, shard_id_t(i)));
           break;
         }

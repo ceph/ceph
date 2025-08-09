@@ -571,11 +571,7 @@ void shard_extent_map_t::pad_on_shards(const shard_extent_set_t &pad_to,
     if (!pad_to.contains(shard)) {
       continue;
     }
-    for (auto &[off, length] : pad_to.at(shard)) {
-      bufferlist bl;
-      bl.push_back(buffer::create_aligned(length, EC_ALIGN_SIZE));
-      insert_in_shard(shard, off, bl);
-    }
+    pad_on_shard(pad_to.at(shard), shard);
   }
 }
 
@@ -585,10 +581,14 @@ void shard_extent_map_t::pad_on_shard(const extent_set &pad_to,
   if (pad_to.size() == 0) {
     return;
   }
+
   for (auto &[off, length] : pad_to) {
     bufferlist bl;
-    bl.push_back(buffer::create_aligned(length, EC_ALIGN_SIZE));
-    insert_in_shard(shard, off, bl);
+    uint64_t start = align_prev(off);
+    uint64_t end = align_next(off + length);
+
+    bl.push_back(buffer::create_aligned(end - start, EC_ALIGN_SIZE));
+    insert_in_shard(shard, start, bl);
   }
 }
 
@@ -599,11 +599,7 @@ void shard_extent_map_t::pad_on_shards(const extent_set &pad_to,
     return;
   }
   for (auto &shard : shards) {
-    for (auto &[off, length] : pad_to) {
-      bufferlist bl;
-      bl.push_back(buffer::create_aligned(length, EC_ALIGN_SIZE));
-      insert_in_shard(shard, off, bl);
-    }
+    pad_on_shard(pad_to, shard);
   }
 }
 
@@ -657,32 +653,48 @@ int shard_extent_map_t::decode(const ErasureCodeInterfaceRef &ec_impl,
     return 0;
   }
 
-  if (add_zero_padding_for_decode(object_size, need_set)) {
-    // We added some zero buffers, which means our have and need set may change
-    extent_maps.populate_bitset_set(have_set);
-    need_set = shard_id_set::difference(want_set, have_set);
-  }
-
   shard_id_set decode_set = shard_id_set::intersection(need_set, sinfo->get_data_shards());
   shard_id_set encode_set = shard_id_set::intersection(need_set, sinfo->get_parity_shards());
-  shard_extent_set_t read_mask(sinfo->get_k_plus_m());
-  sinfo->ro_size_to_read_mask(object_size, read_mask);
+
+  if (!encode_set.empty()) {
+    shard_extent_set_t read_mask(sinfo->get_k_plus_m());
+    sinfo->ro_size_to_read_mask(object_size, read_mask);
+
+    /* The function has been asked to "decode" parity. To achieve this, we
+     * need all the data shards to be present... So first see if there are
+     * any missing...
+     */
+    shard_id_set decode_for_parity_shards = shard_id_set::difference(sinfo->get_data_shards(), have_set);
+    decode_for_parity_shards = shard_id_set::intersection(decode_for_parity_shards, read_mask.get_shard_id_set());
+
+    if (!decode_for_parity_shards.empty()) {
+      /* So there are missing data shards which need decoding before we encode,
+       * We need to add these to the decode set and insert buffers for the
+       * decode to happen.
+       */
+      decode_set.insert(decode_for_parity_shards);
+      need_set.insert(decode_for_parity_shards);
+      extent_set decode_for_parity;
+
+      for (auto shard : encode_set) {
+        decode_for_parity.insert(want.at(shard));
+      }
+
+      for (auto shard : decode_for_parity_shards) {
+        extent_set parity_pad;
+        parity_pad.intersection_of(decode_for_parity, read_mask.at(shard));
+        pad_on_shard(decode_for_parity, shard);
+      }
+    }
+  }
+
   int r = 0;
   if (!decode_set.empty()) {
     pad_on_shards(want, decode_set);
-    /* If we are going to be encoding, we need to make sure all the necessary
-     * shards are decoded. The get_min_available functions should have already
-     * worked out what needs to be read for this.
-     */
-    for (auto shard : encode_set) {
-      extent_set decode_for_parity;
-      decode_for_parity.intersection_of(want.at(shard), read_mask.at(shard));
-      pad_on_shard(decode_for_parity, shard);
-    }
     r = _decode(ec_impl, want_set, decode_set, dpp);
   }
   if (!r && !encode_set.empty()) {
-    pad_on_shards(want, encode_set);
+    pad_on_shards(get_extent_superset(), sinfo->get_parity_shards());
     r = encode(ec_impl, dpp, dedup_zeros?&need_set:nullptr);
   }
 
@@ -705,13 +717,19 @@ int shard_extent_map_t::_decode(const ErasureCodeInterfaceRef &ec_impl,
                                 const shard_id_set &need_set,
                                 DoutPrefixProvider *dpp) {
   bool rebuild_req = false;
+
   for (auto iter = begin_slice_iterator(need_set, dpp); !iter.is_end(); ++iter) {
     if (!iter.is_page_aligned()) {
       rebuild_req = true;
       break;
     }
+
     shard_id_map<bufferptr> &in = iter.get_in_bufferptrs();
     shard_id_map<bufferptr> &out = iter.get_out_bufferptrs();
+
+    if (out.empty()) {
+      continue;
+    }
 
     if (int ret = ec_impl->decode_chunks(want_set, in, out)) {
       return ret;
@@ -969,25 +987,42 @@ bufferlist shard_extent_map_t::get_ro_buffer() const {
   return get_ro_buffer(ro_start, ro_end - ro_start);
 }
 
+bool get_int_from_bufferlist(bufferlist bl, int offset, uint32_t *value) {
+  auto bl_iter = bl.begin();
+  bl_iter += offset;
+
+  *value = 0;
+  int b = 0;
+  for (; b < sizeof(uint32_t) && bl_iter != bl.end(); ++b, ++bl_iter) {
+    *value |= (((unsigned int)bl_iter.get_current_ptr().c_str()[0]) << b);
+  }
+  return b == sizeof(uint32_t);
+}
+
 std::string shard_extent_map_t::debug_string(uint64_t interval, uint64_t offset) const {
   std::stringstream str;
   str << "shard_extent_map_t: " << *this << " bufs: [";
 
   bool s_comma = false;
   for (auto &&[shard, emap] : get_extent_maps()) {
-    if (s_comma) str << ", ";
+    if (s_comma) {
+      str << ", ";
+    }
     s_comma = true;
     str << shard << ": [";
 
     bool comma = false;
     for (auto &&extent : emap) {
       bufferlist bl = extent.get_val();
-      char *buf = bl.c_str();
-      for (uint64_t i = 0; i < extent.get_len(); i += interval) {
-        int *seed = (int*)&buf[i + offset];
-        if (comma) str << ", ";
-        str << (i + extent.get_off()) << ":" << std::to_string(*seed);
+      uint32_t seed;
+      int i = 0;
+      while (get_int_from_bufferlist(bl, i + offset, &seed)) {
+        if (comma) {
+          str << ", ";
+        }
+        str << (i + extent.get_off()) << ":" << seed;
         comma = true;
+        i += interval;
       }
     }
     str << "]";
