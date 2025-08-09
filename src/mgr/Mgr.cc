@@ -170,8 +170,7 @@ void Mgr::background_init(Context *completion)
   finisher.start();
 
   finisher.queue(new LambdaContext([this, completion](int r){
-    init();
-    completion->complete(0);
+    init(completion);
   }));
 }
 
@@ -227,7 +226,7 @@ static void handle_mgr_signal(int signum)
   _exit(0);  // exit with 0 result code, as if we had done an orderly shutdown
 }
 
-void Mgr::init()
+void Mgr::init(Context *init_complete)
 {
   std::unique_lock l(lock);
   ceph_assert(initializing);
@@ -388,9 +387,14 @@ void Mgr::init()
   }
 #endif
 
-  dout(4) << "Complete." << dendl;
-  initializing = false;
-  initialized = true;
+  finisher.queue(new LambdaContext([this, init_complete](int r) {
+    std::unique_lock l(lock);
+    dout(4) << "Complete." << dendl;
+    initializing = false;
+    initialized = true;
+    // finally queue the send_beacon work
+    finisher.queue(init_complete);
+  }));
 }
 
 void Mgr::load_all_metadata()
