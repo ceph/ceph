@@ -20,7 +20,9 @@
 #include "common/strtol.h"
 #include "include/ceph_assert.h"	// boost clobbers this
 #include "include/types.h" // for operator<<(std::vector)
+
 #include "json_spirit/json_spirit.h"
+#include "common/ceph_json.h"
 
 #include <ostream>
 #include <sstream>
@@ -321,13 +323,15 @@ cmdmap_from_json(const vector<string>& cmd, cmdmap_t *mapp, std::ostream& ss)
   json_spirit::mValue v;
 
   string fullcmd;
+
   // First, join all cmd strings
   for (auto& c : cmd)
     fullcmd += c;
 
   try {
     if (!json_spirit::read(fullcmd, v))
-      throw std::runtime_error("unparseable JSON " + fullcmd);
+      throw std::runtime_error("unparseable JSON: |" + fullcmd + '|');
+
     if (v.type() != json_spirit::obj_type)
       throw std::runtime_error("not JSON object " + fullcmd);
 

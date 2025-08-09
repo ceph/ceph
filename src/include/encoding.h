@@ -245,7 +245,7 @@ inline void decode_nohead(unsigned len, std::string& s, bufferlist::const_iterat
 // const char* (encode only, string compatible)
 inline void encode(const char *s, bufferlist& bl) 
 {
-  encode(std::string_view(s, strlen(s)), bl);
+  encode(std::string_view(s), bl);
 }
 
 // opaque byte vectors
