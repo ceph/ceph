@@ -8733,6 +8733,102 @@ class TestSubvolumeSnapshotClones(TestVolumesHelper):
         # verify trash dir is clean
         self._wait_for_trash_empty()
 
+    def test_subvolume_snapshot_create_with_uid(self):
+        UID = '1234'
+        subvol = 'sv1'
+        snap =  'snap1'
+        clone =  'clone1'
+
+        self.run_ceph_cmd(f'fs subvolume create {self.volname} {subvol} --mode 777')
+        self._do_subvolume_io(subvol, number_of_files=3)
+        self.run_ceph_cmd(f'fs subvolume snapshot create {self.volname} '
+                          f'{subvol} {snap}')
+        self.run_ceph_cmd(f'fs subvolume snapshot clone {self.volname} '
+                          f'{subvol} {snap} {clone} --uid {UID}')
+        self._wait_for_clone_to_complete(clone)
+
+        clone_path = self.get_ceph_cmd_stdout('fs subvolume getpath '
+                                              f'{self.volname} {clone}')
+        # remove preceding '/' and trailing '\n'
+        clone_path = clone_path[1:-1]
+        CLONE_BASE_PATH = os.path.dirname(clone_path)
+        CLONE_UUID = os.path.basename(clone_path)
+
+        output = self.mount_a.get_shell_stdout(f'ls -l {CLONE_BASE_PATH} | grep '
+                                               f'{CLONE_UUID} | ' + "awk '{print $3}'")
+        self.assertIn(UID, output)
+
+        output = self.mount_a.get_shell_stdout(f'ls -l {clone_path} | ' +
+                                                "awk '{print $3}'")
+        self.assertIn(f'{UID}\n{UID}\n{UID}', output)
+
+    def test_subvolume_snapshot_create_with_gid(self):
+        GID = '1234'
+        subvol = 'sv1'
+        snap =  'snap1'
+        clone =  'clone1'
+
+        self.run_ceph_cmd(f'fs subvolume create {self.volname} {subvol} --mode 777')
+        self._do_subvolume_io(subvol, number_of_files=3)
+        self.run_ceph_cmd(f'fs subvolume snapshot create {self.volname} '
+                          f'{subvol} {snap}')
+        self.run_ceph_cmd(f'fs subvolume snapshot clone {self.volname} '
+                          f'{subvol} {snap} {clone} --gid {GID}')
+        self._wait_for_clone_to_complete(clone)
+
+        clone_path = self.get_ceph_cmd_stdout('fs subvolume getpath '
+                                              f'{self.volname} {clone}')
+        # remove preceding '/' and trailing '\n'
+        clone_path = clone_path[1:-1]
+        CLONE_BASE_PATH = os.path.dirname(clone_path)
+        CLONE_UUID = os.path.basename(clone_path)
+
+        output = self.mount_a.get_shell_stdout(f'ls -l {CLONE_BASE_PATH} | grep '
+                                               f'{CLONE_UUID} | ' + "awk '{print $4}'")
+        self.assertIn(GID, output)
+
+        output = self.mount_a.get_shell_stdout(f'ls -l {clone_path} | ' +
+                                                "awk '{print $4}'")
+        self.assertIn(f'{GID}\n{GID}\n{GID}', output)
+
+    def test_subvolume_snapshot_create_with_uid_and_gid(self):
+        UID = '1234'
+        GID = '1234'
+        subvol = 'sv1'
+        snap =  'snap1'
+        clone =  'clone1'
+
+        self.run_ceph_cmd(f'fs subvolume create {self.volname} {subvol} --mode 777')
+        self._do_subvolume_io(subvol, number_of_files=3)
+        self.run_ceph_cmd(f'fs subvolume snapshot create {self.volname} '
+                          f'{subvol} {snap}')
+        self.run_ceph_cmd(f'fs subvolume snapshot clone {self.volname} '
+                          f'{subvol} {snap} {clone} --uid {UID} --gid {GID}')
+        self._wait_for_clone_to_complete(clone)
+
+        clone_path = self.get_ceph_cmd_stdout(f'fs subvolume getpath '
+                                              f'{self.volname} {clone}')
+        # remove preceding '/' and trailing '\n'
+        clone_path = clone_path[1:-1]
+        CLONE_BASE_PATH = os.path.dirname(clone_path)
+        CLONE_UUID = os.path.basename(clone_path)
+
+        output = self.mount_a.get_shell_stdout(f'ls -l {CLONE_BASE_PATH} | grep '
+                                               f'{CLONE_UUID} | ' + "awk '{print $3}'")
+        self.assertIn(UID, output)
+
+        output = self.mount_a.get_shell_stdout(f'ls -l {CLONE_BASE_PATH} | grep '
+                                               f'{CLONE_UUID} | ' + "awk '{print $4}'")
+        self.assertIn(GID, output)
+
+        output = self.mount_a.get_shell_stdout(f'ls -l {clone_path} | ' +
+                                                "awk '{print $3}'")
+        self.assertIn(f'{UID}\n{UID}\n{UID}', output)
+
+        output = self.mount_a.get_shell_stdout(f'ls -l {clone_path} | ' +
+                                                "awk '{print $4}'")
+        self.assertIn(f'{GID}\n{GID}\n{GID}', output)
+
     def test_subvolume_snapshot_clone_with_upgrade(self):
         """
         yet another poor man's upgrade test -- rather than going through a full

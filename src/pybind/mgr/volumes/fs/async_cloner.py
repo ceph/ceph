@@ -113,7 +113,7 @@ def bulk_copy(fs_handle, source_path, dst_path, should_cancel):
     and regular files are synced.
     """
     log.info("copying data from {0} to {1}".format(source_path, dst_path))
-    def cptree(src_root_path, dst_root_path):
+    def cptree(src_root_path, dst_root_path, uid=None, gid=None):
         log.debug("cptree: {0} -> {1}".format(src_root_path, dst_root_path))
         try:
             with fs_handle.opendir(src_root_path) as dir_handle:
@@ -139,7 +139,7 @@ def bulk_copy(fs_handle, source_path, dst_path, should_cancel):
                             except cephfs.Error as e:
                                 if not e.args[0] == errno.EEXIST:
                                     raise
-                            cptree(d_full_src, d_full_dst)
+                            cptree(d_full_src, d_full_dst, uid, gid)
                         elif stat.S_ISLNK(stx["mode"]):
                             log.debug("cptree: (SYMLINK) {0}".format(d_full_src))
                             target = fs_handle.readlink(d_full_src, 4096)
@@ -154,8 +154,12 @@ def bulk_copy(fs_handle, source_path, dst_path, should_cancel):
                         else:
                             handled = False
                             log.warning("cptree: (IGNORE) {0}".format(d_full_src))
+
                         if handled:
                             sync_attrs(fs_handle, d_full_dst, stx)
+                            fs_handle.chown(d_full_dst, uid, gid,
+                                            follow_symlink=False)
+
                     d = fs_handle.readdir(dir_handle)
                 stx_root = fs_handle.statx(src_root_path, cephfs.CEPH_STATX_ATIME |
                                                           cephfs.CEPH_STATX_MTIME,
@@ -165,7 +169,9 @@ def bulk_copy(fs_handle, source_path, dst_path, should_cancel):
         except cephfs.Error as e:
             if not e.args[0] == errno.ENOENT:
                 raise VolumeException(-e.args[0], e.args[1])
-    cptree(source_path, dst_path)
+
+    st = fs_handle.stat(dst_path)
+    cptree(source_path, dst_path, st.st_uid, st.st_gid)
     if should_cancel():
         raise VolumeException(-errno.EINTR, "user interrupted clone operation")
 
