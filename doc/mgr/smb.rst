@@ -456,6 +456,22 @@ custom_ports
     ports used by smb for client access and the metrics exporter, but
     not change the port used by the CTDB clustering daemon.
     Note - not all SMB clients are able to use alternate port numbers.
+bind_addrs
+    Optional. A list of objects indicating what IP address or IP network the
+    SMB and related services may bind to. The fields described for these
+    objects are mutually exclusive, but at least one field is required.
+    (The behavior of this option changes when used with clustering and
+    ``public_addrs``. See note below.)
+    Fields:
+
+    address
+        Optional. A single IP address represented as a string. For example,
+        ``192.168.7.50``.
+    network
+        Optional. A single IP network represented as a string. A network
+        can be used to specify a range of many IP addresses. The network
+        string always includes a "/" character before a prefix length.
+        For example, ``192.168.7.0/24``.
 placement
     Optional. A Ceph Orchestration :ref:`placement specifier
     <orchestrator-cli-placement-spec>`.  Defaults to one host if not provided
@@ -472,6 +488,8 @@ public_addrs
     Assign "virtual" IP addresses that will be managed by the clustering
     subsystem and may automatically move between nodes running Samba
     containers.
+    (The behavior of this option changes when used with ``bind_addrs``. See
+    note below.)
     Fields:
 
     address
@@ -511,6 +529,16 @@ custom_smb_global_options
    ``clustering`` make sure you understand how clustering interacts with
    placement. In particular, be aware that running multiple instances of the
    same ``smb`` service without clustering enabled can cause unexpected behavior.
+
+.. warning::
+   The behavior of the system when combining ``bind_addrs`` and
+   ``public_addrs`` on a cluster could lead to unexpected results. The ``smbd``
+   process can only dynamically add/remove public addresses when assigned to
+   monitor a network device (e.g. ``eth0``) versus a specific address. If the
+   network device is assigned multiple addresses and those addreses overlap
+   with a different smb cluster it is possible the services may fail to start.
+   Currently, one must manually ensure that the devices used by a IP or network
+   is exclusvely used for that network to ensure SMB services start properly.
 
 
 .. _join-source-fields:
