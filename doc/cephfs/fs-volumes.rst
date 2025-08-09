@@ -1046,6 +1046,117 @@ following command.
 
 .. _subvol-pinning:
 
+Controlling Subvolume Snapshot Visibility
+-----------------------------------------
+
+Snapshots of a subvolume can be hidden from specific FUSE clients by
+performing two actions:
+    1) Disable the subvolume's ``snapshot_visibility`` flag (default is ``true``).
+    2) Enable the client-side configuration option ``client_respect_subvolume_snapshot_visibility``
+       for the intended FUSE client(s).
+
+The CLI command for toggling ``snapshot_visibility`` is as follows:
+
+.. prompt:: bash #
+
+   ceph fs subvolume snapshot_visibility set <vol_name> <sub_volname> [--group-name <subvol_group_name>] <true|false>
+
+This command updates the internal vxattr ``ceph.dir.subvolume.snaps.visible``
+and sets the ``is_snapdir_visible`` flag within the dirinode(i.e. subvolume’s)
+SnapRealm.
+
+.. note:: Although direct modification is possible, using the subvolume API is
+          recommended. It is more convenient and avoids potential ``EPERM``
+          (Permission Denied) errors when setting vxattrs, especially if the
+          client lacks the required capabilities. The way to set this vxattr
+          is:
+
+          .. prompt:: bash #
+
+             setfattr -n ceph.dir.subvolume.snaps.visible -v 0|1 <subvolume_path>
+
+The ``client_respect_subvolume_snapshot_visibility`` setting determines whether
+a FUSE client honors the subvolume's visibility flag. This can be set per-client
+using:
+
+.. prompt:: bash #
+
+   ceph config set client.<id> client_respect_subvolume_snapshot_visibility <true|false>
+
+.. note:: The `id` over here is a CephX user.
+
+To set the ``client_respect_subvolume_snapshot_visibility`` config globally
+i.e. across all the FUSE clients then set the config without mentioning the
+``id``:
+
+.. prompt:: bash #
+
+   ceph config set client client_respect_subvolume_snapshot_visibility <true|false>
+
+.. note:: Changing the global config value won't apply the changes to the
+          CephFS instance running inside MGR daemon i.e all the ``ceph fs subvolume snapshot``
+          commands would be executed according to MGR's config. To apply
+          changes to MGR's CephFS instance, please make use of:
+
+          .. prompt:: bash #
+
+             ceph config set mgr client_respect_subvolume_snapshot_visibility <true|false>
+
+How to disable snapshot visibility on a subvolume?
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Say, for instance, to prevent snapshots of subvolume ``sv1`` under a volume
+``vol1`` from being visible to a FUSE client mounted using CephX user
+``client.user1``, first disable the ``snapshot_visibility`` flag on ``sv1``
+using:
+
+.. prompt:: bash #
+
+   ceph fs subvolume snapshot_visibility set vol1 sv1 false
+
+Then toggle the client config using:
+
+.. prompt:: bash #
+
+   ceph config set client.user1 client_respect_subvolume_snapshot_visibility true
+
+This effectively prevents the client mounted using ``client.user1`` from
+performing a ``lookup()`` call on the ``.snap`` directory of the ``sv1``
+subvolume, thereby hiding its snapshots.
+
+.. note:: The above case only disables access to FUSE client mounted via
+          CephX user ``client.user1``, as explained in the previous section,
+          even if the global client config is changed, it won't affect the
+          CephFS instance running inside MGR daemon, i.e., the snapshot
+          operations happening via ``ceph fs subvolume snapshot`` interface
+          would still be able to access snapshots. So, in order to make MGR
+          respect subvolume ``sv1``'s ``snapshot_visibility``, please make
+          use of:
+
+          .. prompt:: bash #
+
+             ceph config set mgr client_respect_subvolume_snapshot_visibility true
+
+.. note:: When a subvolume's snapshot visibility is disabled, any snapshot
+          operation such as snapshot creation, deletion or rename are all
+          prevented, since they all rely on a successful ``.snap`` directory
+          lookup.
+
+.. warning:: Disabling snapshot visibility for a subvolume (i.e., setting
+             ``client_respect_subvolume_snapshot_visibility`` to ``true``
+             and the subvolume’s ``snapshot_visibility`` flag to ``false``)
+             can break critical operations such as snapshot cloning and
+             snapshot scheduling. Make absolutely sure these workflows are
+             properly accounted for before toggling the visibility setting,
+             as it may lead to unexpected failures.
+
+.. note:: A subvolume’s snapshot visibility is determined entirely by whether
+          the client is configured to respect the subvolume’s ``snapshot_visibility``
+          flag. That is, regardless of whether the flag is set to ``true`` or
+          ``false`` on the subvolume, it will be ignored unless the client’s
+          ``client_respect_subvolume_snapshot_visibility`` setting is
+          explicitly set to ``true``.
+
 Pinning Subvolumes and Subvolume Groups
 ---------------------------------------
 
