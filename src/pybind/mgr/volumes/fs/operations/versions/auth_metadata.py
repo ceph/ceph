@@ -1,4 +1,5 @@
 from contextlib import contextmanager
+import errno
 import os
 import fcntl
 import json
@@ -9,8 +10,12 @@ import uuid
 import cephfs
 
 from ..group import Group
+from ...exception import VolumeException
 
 log = logging.getLogger(__name__)
+
+
+FILE_NAME_MAX = 255
 
 
 class AuthMetadataError(Exception):
@@ -43,10 +48,17 @@ class AuthMetadataManager(object):
             return str(param).encode('utf-8')
 
     def _subvolume_metadata_path(self, group_name, subvol_name):
-        return os.path.join(self.volume_prefix, "_{0}:{1}{2}".format(
-            group_name if group_name != Group.NO_GROUP_NAME else "",
-            subvol_name,
-            self.META_FILE_EXT))
+        group_name = group_name if group_name != Group.NO_GROUP_NAME else ""
+        metadata_filename = f'_{group_name}:{subvol_name}{self.META_FILE_EXT}'
+        # in order to allow creation of this metadata file, 5 chars for ".meta"
+        # extension and 2 chars for "_" and ":" respectively. so that combina-
+        # -tion of group and subvolname should be shorter than 248 chars.
+        if len(metadata_filename) > FILE_NAME_MAX:
+            raise VolumeException(-errno.ENAMETOOLONG,
+                                 'use shorter group or subvol name, '
+                                 'combination of both should be less '
+                                 'than 249 characters')
+        return os.path.join(self.volume_prefix, metadata_filename)
 
     def _check_compat_version(self, compat_version):
         if self.version < compat_version:
