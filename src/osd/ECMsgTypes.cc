@@ -252,6 +252,24 @@ void ECSubRead::decode(bufferlist::const_iterator &bl)
   DECODE_FINISH(bl);
 }
 
+uint64_t ECSubRead::cost(CephContext *cct)
+{
+  uint64_t cost = 0;
+  /* Calculate the cost of the read operation for mClock scheduler.
+   * Note: Return a cost of '0' as before for WeightedPriorityQueue
+   *       to preserve the legacy behavior.
+   */
+  if (cct->_conf->osd_op_queue == "mclock_scheduler") {
+    // 'to_read' (map<hobject_t, list<tuple<offset, length, flags>>>)
+    for (const auto &rd : to_read) {
+      for (const auto &tl : rd.second) {
+        cost += boost::get<1>(tl);
+      }
+    }
+  }
+  return cost;
+}
+
 std::ostream &operator<<(
   std::ostream &lhs, const ECSubRead &rhs)
 {
