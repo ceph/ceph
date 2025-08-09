@@ -16,6 +16,7 @@
 #include "Striper.h"
 
 #include <algorithm>
+#include <expected>
 #include <sstream>
 
 #include "osd/OSDMap.h"
@@ -765,7 +766,7 @@ void Objecter::_linger_ping(LingerOp *info, bs::error_code ec, ceph::coarse_mono
   }
 }
 
-tl::expected<ceph::timespan,
+std::expected<ceph::timespan,
 	     bs::error_code> Objecter::linger_check(LingerOp *info)
 {
   std::shared_lock l(info->watch_lock);
@@ -779,7 +780,7 @@ tl::expected<ceph::timespan,
 		 << " err " << info->last_error
 		 << " age " << age << dendl;
   if (info->last_error)
-    return tl::unexpected(info->last_error);
+    return std::unexpected(info->last_error);
   // return a safe upper bound (we are truncating to ms)
   return age;
 }
