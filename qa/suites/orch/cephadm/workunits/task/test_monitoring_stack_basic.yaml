@@ -64,3 +64,7 @@ tasks:
         curl -s http://${ALERTM_IP}:9093/api/v2/status
         curl -s http://${ALERTM_IP}:9093/api/v2/alerts
         curl -s http://${ALERTM_IP}:9093/api/v2/alerts | jq -e '.[] | select(.labels | .alertname == "CephMonDown") | .status | .state == "active"'
+        # check prometheus metrics endpoint is not empty and make sure we can get metrics
+        METRICS_URL=$(ceph mgr services | jq -r .prometheus)
+        [ -n "$METRICS_URL" ] || exit 1
+        curl -s "${METRICS_URL}metrics" | grep -q '^ceph_health_status'
