@@ -229,6 +229,8 @@ class PSNotificationS3:
 
 
 test_path = os.path.normpath(os.path.dirname(os.path.realpath(__file__))) + '/../'
+build_path = test_path + '../../../build/'
+bin_path = os.path.join(build_path, 'bin/')
 
 def bash(cmd, **kwargs):
     log.debug('running command: %s', ' '.join(cmd))
@@ -262,4 +264,15 @@ def delete_all_topics(conn, tenant, cluster):
         except TypeError:
             for topic in topics_json:
                 admin(['topic', 'rm', '--tenant', tenant, '--topic', topic['name']], cluster)
+
+def change_rgw_config_option(rgw_port, config_option, config_val, **kwargs):
+    """ change rgw config option """
+    conf_path = os.path.join(build_path, 'ceph.conf')
+    bin_path = os.path.join(build_path, 'bin/')
+    rgw_client = f'client.rgw.{rgw_port}'
+    if not os.path.exists(conf_path):
+        conf_path = '/etc/ceph/ceph.conf'
+    args = ['--conf', conf_path]
+    cmd = [bin_path + 'ceph', 'config', 'set', rgw_client, config_option, str(config_val)] + args
+    return bash(cmd, **kwargs)
 
