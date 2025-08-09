@@ -14,6 +14,7 @@
  */
 
 #include "rgw_perf_counters.h"
+#include <memory>
 #include "rgw_sal_d4n.h"
 
 namespace rgw { namespace sal {
@@ -56,9 +57,6 @@ int D4NFilterDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
   using boost::redis::config;
 
   conn = std::make_shared<connection>(boost::asio::make_strand(io_context));
-  objDir = std::make_unique<rgw::d4n::ObjectDirectory>(conn);
-  blockDir = std::make_unique<rgw::d4n::BlockDirectory>(conn);
-  bucketDir = std::make_unique<rgw::d4n::BucketDirectory>(conn);
   policyDriver = std::make_unique<rgw::d4n::PolicyDriver>(conn,
 							  cacheDriver.get(),
 							  "lfuda",
@@ -120,6 +118,43 @@ int D4NFilterBucket::create(const DoutPrefixProvider* dpp,
   return next->create(dpp, params, y);
 }
 
+void D4NFilterBucket::d4n_init_transaction(const DoutPrefixProvider* dpp)
+{
+	//create D4NTransaction object and pass the Directory* objects to it
+	m_objDir = std::make_unique<rgw::d4n::ObjectDirectory>(this->filter->get_connection());
+	m_blockDir = std::make_unique<rgw::d4n::BlockDirectory>(this->filter->get_connection());
+	m_bucketDir = std::make_unique<rgw::d4n::BucketDirectory>(this->filter->get_connection());
+	m_d4n_trx = std::make_unique<rgw::d4n::D4NTransaction>();
+	m_objDir->set_d4n_trx(m_d4n_trx.get());
+	m_blockDir->set_d4n_trx(m_d4n_trx.get());
+	m_bucketDir->set_d4n_trx(m_d4n_trx.get());
+	//start transaction
+	m_d4n_trx->start_trx();
+}
+
+void D4NFilterBucket::finalize_transaction(const DoutPrefixProvider* dpp, int& result_code)
+{
+	//end transaction (what about the optional_yield?)
+	if (m_d4n_trx == nullptr) {
+		ldpp_dout(dpp, 0) << "D4NFilterBucket::" << __func__ << "(): D4NTransaction is not initialized!" << dendl;
+		result_code = -EINVAL;
+		return;
+	}
+
+	//NOTE: upon end_trx failed , the rc should be set to result_code, so that the caller can decide whether to retry the transaction or not.
+	auto rc = m_d4n_trx->end_trx(dpp, this->filter->get_connection(), null_yield);
+	if (rc < 0) {
+		result_code = rc;
+	} else {
+		result_code = 0;
+	}
+	//delete the Directory* objects. (if driver create Directory* objects, it should delete them)
+	m_objDir.reset();
+	m_blockDir.reset();
+	m_bucketDir.reset();
+	m_d4n_trx.reset();
+}
+  
 int D4NFilterBucket::list(const DoutPrefixProvider* dpp, ListParams& params, int max,
                           ListResults& results, optional_yield y)
 {
@@ -133,8 +168,8 @@ int D4NFilterBucket::list(const DoutPrefixProvider* dpp, ListParams& params, int
   }
 
   //Get objects from cache
-  auto bucketDir = this->filter->get_bucket_dir();
-  auto objDir = this->filter->get_obj_dir();
+  auto bucketDir = m_bucketDir.get();
+  auto objDir = m_objDir.get();
   std::vector<rgw_obj_key> objects;
   std::vector<rgw_bucket_list_entries> entries;
 
@@ -436,7 +471,7 @@ int D4NFilterBucket::list(const DoutPrefixProvider* dpp, ListParams& params, int
       } while(num_objs <= max);
     } //end - else
 
-    rgw::d4n::BlockDirectory* blockDir = this->filter->get_block_dir();
+    rgw::d4n::BlockDirectory* blockDir = m_blockDir.get();
     auto remainder_size = entries.size();
     size_t j = 0, start_j = 0;
     while (remainder_size > 0) {
@@ -611,6 +646,39 @@ std::unique_ptr<MultipartUpload> D4NFilterBucket::get_multipart_upload(
     next->get_multipart_upload(oid, upload_id, owner, mtime);
 
   return std::make_unique<D4NFilterMultipartUpload>(std::move(nmu), this, this->filter);
+}
+
+void D4NFilterObject::d4n_init_transaction(const DoutPrefixProvider* dpp)
+{
+  //create D4NTransaction object and pass the Directory* objects to it
+    m_objDir = std::make_unique<rgw::d4n::ObjectDirectory>(driver->get_connection());
+    m_blockDir = std::make_unique<rgw::d4n::BlockDirectory>(driver->get_connection());
+    m_bucketDir = std::make_unique<rgw::d4n::BucketDirectory>(driver->get_connection());
+    m_d4n_trx = std::make_unique<rgw::d4n::D4NTransaction>();
+    m_objDir->set_d4n_trx(m_d4n_trx.get());
+    m_blockDir->set_d4n_trx(m_d4n_trx.get());
+    m_bucketDir->set_d4n_trx(m_d4n_trx.get());
+    //start transaction
+    m_d4n_trx->start_trx();
+}
+
+void D4NFilterObject::finalize_transaction(const DoutPrefixProvider* dpp, int& result_code)
+{
+  //end transaction (what about the optional_yield?)
+  if (m_d4n_trx == nullptr) {
+		ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): D4NTransaction is not initialized!" << dendl;
+		result_code = -EINVAL;
+		return;
+  }
+
+  //NOTE: upon end_trx failed , the rc should be set to result_code, so that the caller can decide whether to retry the transaction or not.
+  auto rc = m_d4n_trx->end_trx(dpp, driver->get_connection(), null_yield);
+  ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): end_trx returned rc: " << rc << dendl;	
+  //according to rc, its possible to decide whether to retry the transaction or not(in case of failure)
+  m_objDir.reset();
+  m_blockDir.reset();
+  m_bucketDir.reset();
+  m_d4n_trx.reset();
 }
 
 int D4NFilterObject::copy_object(const ACLOwner& owner,
@@ -1120,7 +1188,7 @@ int D4NFilterObject::set_head_obj_dir_entry(const DoutPrefixProvider* dpp, std::
 {
   ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): object name: " << this->get_name() << " bucket name: " << this->get_bucket()->get_name() << dendl;
   rgw::d4n::CacheBlock block; 
-  rgw::d4n::BlockDirectory* blockDir = this->driver->get_block_dir();
+  rgw::d4n::BlockDirectory* blockDir = m_blockDir.get();
   auto attrs = this->get_attrs();
   bufferlist bl_etag, bl_acl;
   auto etag_it = attrs.find(RGW_ATTR_ETAG);
@@ -1206,7 +1274,7 @@ int D4NFilterObject::set_head_obj_dir_entry(const DoutPrefixProvider* dpp, std::
       auto mtime = this->get_mtime();
       auto score = ceph::real_clock::to_double(mtime);
       ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): Score of object name: "<< this->get_name() << " version: " << object_version << " is: "  << score << ret << dendl;
-      rgw::d4n::ObjectDirectory* objDir = this->driver->get_obj_dir();
+      rgw::d4n::ObjectDirectory* objDir = m_objDir.get();
       ret = objDir->zadd(dpp, &object, score, object_version, y);
       if (ret < 0) {
         ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): Failed to add version to ordered set with error: " << ret << dendl;
@@ -1214,7 +1282,7 @@ int D4NFilterObject::set_head_obj_dir_entry(const DoutPrefixProvider* dpp, std::
         return ret;
       }
       //add an entry to ordered set containing objects for bucket listing, set score to 0 always to lexicographically order the objects
-      rgw::d4n::BucketDirectory* bucketDir = this->driver->get_bucket_dir();
+      rgw::d4n::BucketDirectory* bucketDir = m_bucketDir.get();
       ret = bucketDir->zadd(dpp, this->get_bucket()->get_bucket_id(), 0, this->get_name(), y, true);
       if (ret < 0) {
         ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): Failed to add object to ordered set with error: " << ret << dendl;
@@ -1313,7 +1381,7 @@ int D4NFilterObject::set_head_obj_dir_entry(const DoutPrefixProvider* dpp, std::
 
 int D4NFilterObject::set_data_block_dir_entries(const DoutPrefixProvider* dpp, optional_yield y, std::string& version, bool dirty)
 {
-  rgw::d4n::BlockDirectory* blockDir = driver->get_block_dir();
+  rgw::d4n::BlockDirectory* blockDir = m_blockDir.get();
 
   //update data block entries in directory
   off_t lst = this->get_size();
@@ -1397,7 +1465,7 @@ int D4NFilterObject::delete_data_block_cache_entries(const DoutPrefixProvider* d
 
 bool D4NFilterObject::check_head_exists_in_cache_get_oid(const DoutPrefixProvider* dpp, std::string& head_oid_in_cache, rgw::sal::Attrs& attrs, rgw::d4n::CacheBlock& blk, optional_yield y)
 {
-  rgw::d4n::BlockDirectory* blockDir = this->driver->get_block_dir();
+  rgw::d4n::BlockDirectory* blockDir = m_blockDir.get();
   std::string objName = this->get_oid();
   //object oid does not contain "null" in case the instance is "null", so explicitly populating that
   if (this->have_instance() && this->get_instance() == "null") {
@@ -1634,9 +1702,6 @@ void D4NFilterDriver::shutdown()
   boost::asio::dispatch(conn->get_executor(), [c = conn] { c->cancel(); });
 
   cacheDriver.reset();
-  objDir.reset();
-  blockDir.reset();
-  bucketDir.reset();
   policyDriver.reset();
 
   next->shutdown();
@@ -1853,7 +1918,7 @@ int D4NFilterObject::D4NFilterReadOp::flush(const DoutPrefixProvider* dpp, rgw::
 
       std::string oid_in_cache = get_key_in_cache(prefix, std::to_string(ofs), std::to_string(len));
 
-      if (source->driver->get_block_dir()->get(dpp, &block, y) == 0){
+     if (source->m_blockDir->get(dpp, &block, y) == 0){
         if (block.cacheObj.dirty){ 
           dirty = true;
         }
@@ -1885,7 +1950,7 @@ int D4NFilterObject::D4NFilterReadOp::flush(const DoutPrefixProvider* dpp, rgw::
           if (ret == 0) {
             source->driver->get_policy_driver()->get_cache_policy()->update(dpp, key, ofs, bl.length(), dest_version, true, rgw::d4n::RefCount::NOOP, y);
           }
-          if (ret = source->driver->get_block_dir()->set(dpp, &dest_block, y); ret < 0){
+          if (ret = source->m_blockDir->set(dpp, &dest_block, y); ret < 0){
             ldpp_dout(dpp, 20) << "D4NFilterObject::" << __func__ << " BlockDirectory set failed with ret: " << ret << dendl;
           }
         } else {
@@ -1976,7 +2041,7 @@ int D4NFilterObject::D4NFilterReadOp::iterate(const DoutPrefixProvider* dpp, int
       " read_ofs: " << read_ofs << " part len: " << part_len << dendl;
 
       int ret;
-      if ((ret = source->driver->get_block_dir()->get(dpp, &block, y)) == 0) {
+      if ((ret = source->m_blockDir->get(dpp, &block, y)) == 0) {
         auto it = block.cacheObj.hostsList.find(dpp->get_cct()->_conf->rgw_d4n_l1_datacache_address);
 
         if (it != block.cacheObj.hostsList.end()) { /* Local copy */
@@ -1999,7 +2064,7 @@ int D4NFilterObject::D4NFilterReadOp::iterate(const DoutPrefixProvider* dpp, int
               }
             } else { // end - if update_refcount_if_key_exists
               int r = -1;
-              if ((r = source->driver->get_block_dir()->remove_host(dpp, &block, dpp->get_cct()->_conf->rgw_d4n_l1_datacache_address, y)) < 0)
+              if ((r = source->m_blockDir->remove_host(dpp, &block, dpp->get_cct()->_conf->rgw_d4n_l1_datacache_address, y)) < 0)
                 ldpp_dout(dpp, 10) << "D4NFilterObject::iterate:: " << __func__ << "(): Error: failed to remove incorrect host from block with oid=" << oid_in_cache <<", ret=" << r << dendl;
 
               if ((block.cacheObj.hostsList.size() - 1) > 0 && r == 0) { /* Remote copy */
@@ -2041,8 +2106,8 @@ int D4NFilterObject::D4NFilterReadOp::iterate(const DoutPrefixProvider* dpp, int
         }
         block.size = chunk_size;
 
-        if ((ret = source->driver->get_block_dir()->get(dpp, &block, y)) == 0) {
-          auto it = block.cacheObj.hostsList.find(dpp->get_cct()->_conf->rgw_d4n_l1_datacache_address);
+        if ((ret = source->m_blockDir->get(dpp, &block, y)) == 0) {
+	  auto it = block.cacheObj.hostsList.find(dpp->get_cct()->_conf->rgw_d4n_l1_datacache_address);
 
           if (it != block.cacheObj.hostsList.end()) { /* Local copy */
             ldpp_dout(dpp, 20) << "D4NFilterObject::iterate:: " << __func__ << "(): Block with oid=" << oid_in_cache << " found in local cache." << dendl;
@@ -2069,7 +2134,7 @@ int D4NFilterObject::D4NFilterReadOp::iterate(const DoutPrefixProvider* dpp, int
                 }
               } else { // end - if ((part_len != chunk_size) && update_refcount_if_key_exists
                 int r = -1;
-                if ((r = source->driver->get_block_dir()->remove_host(dpp, &block, dpp->get_cct()->_conf->rgw_d4n_l1_datacache_address, y)) < 0)
+                if ((r = source->m_blockDir->remove_host(dpp, &block, dpp->get_cct()->_conf->rgw_d4n_l1_datacache_address, y)) < 0)
                   ldpp_dout(dpp, 0) << "D4NFilterObject::iterate:: " << __func__ << "(): Error: failed to remove incorrect host from block with oid=" << oid_in_cache << ", ret=" << r << dendl;
 
                 if ((block.cacheObj.hostsList.size() - 1) > 0 && r == 0) { /* Remote copy */
@@ -2106,7 +2171,7 @@ int D4NFilterObject::D4NFilterReadOp::iterate(const DoutPrefixProvider* dpp, int
           block.blockID = adjusted_start_ofs;
           uint64_t last_part_size = source->get_size() - adjusted_start_ofs;
           block.size = last_part_size;
-          if ((ret = source->driver->get_block_dir()->get(dpp, &block, y)) == 0) {
+          if ((ret = source->m_blockDir->get(dpp, &block, y)) == 0) {
             auto it = block.cacheObj.hostsList.find(dpp->get_cct()->_conf->rgw_d4n_l1_datacache_address);
             if (it != block.cacheObj.hostsList.end()) { /* Local copy */
               ldpp_dout(dpp, 20) << "D4NFilterObject::iterate:: " << __func__ << "(): Block with oid=" << oid_in_cache << " found in local cache." << dendl;
@@ -2129,7 +2194,7 @@ int D4NFilterObject::D4NFilterReadOp::iterate(const DoutPrefixProvider* dpp, int
                   }
                 } else { // if get_policy_driver()->get_cache_policy()->update_refcount_if_key_exists
                   int r = -1;
-                  if ((r = source->driver->get_block_dir()->remove_host(dpp, &block, dpp->get_cct()->_conf->rgw_d4n_l1_datacache_address, y)) < 0)
+                  if ((r = source->m_blockDir->remove_host(dpp, &block, dpp->get_cct()->_conf->rgw_d4n_l1_datacache_address, y)) < 0)
                     ldpp_dout(dpp, 0) << "D4NFilterObject::iterate:: " << __func__ << "(): Error: failed to remove incorrect host from block with oid=" << oid_in_cache << ", ret=" << r << dendl;
                   if ((block.cacheObj.hostsList.size() - 1) > 0 && r == 0) { /* Remote copy */
                     ldpp_dout(dpp, 20) << "D4NFilterObject::iterate:: " << __func__ << "(): Block with oid=" << oid_in_cache << " found in remote cache." << dendl;
@@ -2289,7 +2354,7 @@ int D4NFilterObject::D4NFilterReadOp::D4NFilterGetCB::handle_data(bufferlist& bl
     std::string dest_prefix;
 
     rgw::d4n::CacheBlock block, existing_block, dest_block;
-    rgw::d4n::BlockDirectory* blockDir = source->driver->get_block_dir();
+    rgw::d4n::BlockDirectory* blockDir = source->m_blockDir.get();
     block.cacheObj.objName = source->get_key().get_oid();
     block.cacheObj.bucketName = source->get_bucket()->get_bucket_id();
     std::stringstream s;
@@ -2517,9 +2582,9 @@ int D4NFilterObject::D4NFilterDeleteOp::delete_obj(const DoutPrefixProvider* dpp
     return ret;
   } else {
     bool objDirty = block.cacheObj.dirty;
-    auto blockDir = source->driver->get_block_dir();
-    auto objDir = source->driver->get_obj_dir();
-    auto bucketDir = source->driver->get_bucket_dir();
+    auto blockDir = source->m_blockDir.get();
+    auto objDir = source->m_objDir.get();
+    auto bucketDir = source->m_bucketDir.get();
     std::string version = source->get_object_version();
     std::string objName = source->get_name();
     // special handling for name starting with '_'
