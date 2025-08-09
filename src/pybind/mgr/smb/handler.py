@@ -719,6 +719,21 @@ def _generate_share(
             'smbd profiling share': 'yes',
         }
     }
+
+    # Add QoS settings if they exist
+    if cephfs.qos:
+        qos = cephfs.qos
+        opts = cfg['options']
+        for field in (
+            'read_iops_limit',
+            'write_iops_limit',
+            'read_bw_limit',
+            'write_bw_limit',
+        ):
+            value = getattr(qos, field)
+            if value:
+                opts[f'{ceph_vfs}:{field}'] = str(value)
+
     if share.comment is not None:
         cfg['options']['comment'] = share.comment
 
