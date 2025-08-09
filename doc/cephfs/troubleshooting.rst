@@ -215,8 +215,10 @@ RADOS Health
 ============
 
 If part of the CephFS metadata or data pools is unavailable and CephFS is not
-responding, it is probably because RADOS itself is unhealthy. Resolve those
-problems first (:doc:`../../rados/troubleshooting/index`).
+responding, it could indicate that RADOS itself is unhealthy. 
+
+Resolve problems with RADOS before attempting to locate any problems in CephFS.
+See the :ref:`RADOS troubleshooting documentation<rados_troubleshooting>`.
 
 The MDS
 =======
