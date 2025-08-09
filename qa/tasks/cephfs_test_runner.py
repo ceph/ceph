@@ -120,8 +120,20 @@ def task(ctx, config):
            fail_on_skip: false
 
     """
+    def _get_client_snapdir(ctx):
+        overrides = ctx.config.get('overrides', {})
+        ceph = overrides.get('ceph', {})
+        conf = ceph.get('conf', {})
+        client_conf = conf.get('client', {})
+        client_snapdir = client_conf.get('client_snapdir', '.snap')
+        return client_snapdir
 
     ceph_cluster = CephCluster(ctx)
+
+    # dump the overridden 'client snapdir' into the ceph conf so that the
+    # fuse client picks it up when mounting
+    sdn = _get_client_snapdir(ctx)
+    ceph_cluster.set_ceph_conf('client', 'client snapdir', sdn)
 
     if len(list(misc.all_roles_of_type(ctx.cluster, 'mds'))):
         mds_cluster = MDSCluster(ctx)
