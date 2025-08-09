@@ -6028,7 +6028,10 @@ void RGWDeleteLC::execute(optional_yield y)
     return;
   }
 
-  op_ret = driver->get_rgwlc()->remove_bucket_config(s->bucket.get(), s->bucket_attrs);
+  // remove RGW_ATTR_LC and remove the bucket from the 'lc list'
+  constexpr bool update_attrs = true;
+  op_ret = driver->get_rgwlc()->remove_bucket_config(this, y, s->bucket.get(),
+                                                     update_attrs);
   if (op_ret < 0) {
     return;
   }
