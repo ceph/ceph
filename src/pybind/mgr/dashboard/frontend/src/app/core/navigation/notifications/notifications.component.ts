@@ -37,6 +37,10 @@ export class NotificationsComponent implements OnInit, OnDestroy {
     );
   }
 
+  toggleNotifications() {
+    this.notificationService.toggleCarbonPanel();
+  }
+
   ngOnDestroy(): void {
     this.subs.unsubscribe();
   }
