@@ -2,6 +2,11 @@ overrides:
   ceph:
     log-ignorelist:
     - \(POOL_APP_NOT_ENABLED\)
+    - for optimal performance #todo remove warning?
+    #  - \(PG_
+    #  - \(OSD_
+    #  - \(OBJECT_
+    #  - overall HEALTH
     conf:
       global:
         enable experimental unrecoverable data corrupting features: crimson
