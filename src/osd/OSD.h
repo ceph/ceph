@@ -2191,6 +2191,7 @@ private:
   int mon_cmd_maybe_osd_create(std::string &cmd);
   int update_crush_device_class();
   int update_crush_location();
+  int check_crush_weight();
 
   static int write_meta(CephContext *cct,
 			ObjectStore *store,

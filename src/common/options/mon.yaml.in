@@ -1412,4 +1412,13 @@ options:
   - mon
   flags:
   - runtime
- 
+- name: mon_warn_on_large_crush_bucket
+  type: bool
+  level: advanced
+  desc: Raise a LARGE_CRUSH_BUCKET health check warning if any CRUSH bucket
+    nears the maximum weight of 65535.
+  default: true
+  services:
+  - mon
+  flags:
+  - runtime
