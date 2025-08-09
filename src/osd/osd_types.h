@@ -4059,7 +4059,7 @@ public:
       rmobject(old_version);
     }
     virtual void create() {}
-    virtual void update_snaps(const std::set<snapid_t> &old_snaps) {}
+    virtual void update_snaps(const std::vector<snapid_t> &old_snaps) {}
     virtual void rollback_extents(
       const version_t gen,
       const std::vector<std::pair<uint64_t, uint64_t>> &extents,
@@ -4159,7 +4159,7 @@ public:
     append_id(CREATE);
     ENCODE_FINISH(bl);
   }
-  void update_snaps(const std::set<snapid_t> &old_snaps) {
+  void update_snaps(const std::vector<snapid_t> &old_snaps) {
     if (!can_local_rollback || rollback_info_completed) {
       return;
     }
@@ -6476,7 +6476,7 @@ struct PushOp {
   ceph::buffer::list data;
   interval_set<uint64_t> data_included;
   ceph::buffer::list omap_header;
-  std::map<std::string, ceph::buffer::list> omap_entries;
+  std::vector<std::pair<std::string, ceph::buffer::list>> omap_entries;
   std::map<std::string, ceph::buffer::list, std::less<>> attrset;
 
   ObjectRecoveryInfo recovery_info;
@@ -6969,7 +6969,7 @@ static const __u8 pg_compat_struct_v = 10;
 
 int prepare_info_keymap(
   CephContext* cct,
-  std::map<std::string,ceph::buffer::list> *km,
+  std::vector<std::pair<std::string,ceph::buffer::list>> *km,
   std::string *key_to_remove,
   epoch_t epoch,
   pg_info_t &info,

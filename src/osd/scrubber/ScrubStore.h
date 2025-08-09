@@ -117,7 +117,7 @@ class Store {
     MapCacher::MapCacher<std::string, ceph::buffer::list> backend;
 
     /// a temp object mapping seq-id to inconsistencies
-    std::map<std::string, ceph::buffer::list> results;
+    std::vector<std::pair<std::string, ceph::buffer::list>> results;
   };
 
   using CacherPosData =
