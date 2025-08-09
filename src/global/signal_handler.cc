@@ -12,12 +12,15 @@
  *
  */
 
+#include "signal_handler.h"
+
 #include <sys/utsname.h>
 
 #include "include/compat.h"
 #include "pthread.h"
 
 #include "common/ceph_mutex.h"
+#include "common/Clock.h" // for ceph_clock_now()
 #include "common/BackTrace.h"
 #include "common/debug.h"
 #include "common/safe_io.h"
@@ -25,7 +28,7 @@
 
 #include "include/uuid.h"
 #include "global/pidfile.h"
-#include "global/signal_handler.h"
+#include "log/Log.h"
 
 #include <poll.h>
 #include <signal.h>
