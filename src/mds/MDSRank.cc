@@ -4066,6 +4066,7 @@ const char** MDSRankDispatcher::get_tracked_conf_keys() const
     "clog_to_syslog_level",
     "fsid",
     "host",
+    "mds_allow_batched_ops",
     "mds_alternate_name_max",
     "mds_bal_fragment_dirs",
     "mds_bal_fragment_interval",
