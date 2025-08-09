@@ -22,6 +22,7 @@
     dedup abort                      Abort dedup
     dedup pause                      Pause dedup
     dedup resume                     Resume paused dedup
+    dedup throttle                   Throttle dedup execution
     subuser create                   create a new subuser
     subuser modify                   modify subuser
     subuser rm                       remove subuser
@@ -350,6 +351,10 @@
      --disable-feature                 disable a zone/zonegroup feature
   
   <date> := "YYYY-MM-DD[ hh:mm:ss]"
+  
+  Dedup throttle options:
+     --max-bucket-index-ops        specify max bucket-index requests per second allowed for an RGW during dedup, 0 means unlimited
+     --max-metadata-ops            specify max metadata requests per second allowed for an RGW during dedup, 0 means unlimited
   
   Quota options:
      --max-objects                 specify max objects (negative value to disable)

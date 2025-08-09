@@ -36,6 +36,57 @@ namespace rgw::dedup {
   }
 
   //---------------------------------------------------------------------------
+  std::ostream& operator<<(std::ostream &out, const throttle_msg_t& msg)
+  {
+    if (msg.op_type == BUCKET_INDEX_OP) {
+      out << "Set Bucket Index Throttling to ";
+      if (msg.limit) {
+        out << msg.limit << " IOPS";
+      }
+      else {
+        out << "unlimited IOPS";
+      }
+    }
+    else if (msg.op_type == METADATA_ACCESS_OP) {
+      out << "Set Metadata Throttling to ";
+      if (msg.limit) {
+        out << msg.limit << " IOPS";
+      }
+      else {
+        out << "unlimited IOPS";
+      }
+    }
+    else if (msg.op_type == DATA_READ_WRITE_OP) {
+      out << "Set Read/Write Throttling to " << msg.limit << " MB/sec";
+    }
+    else {
+      out << "\n*** unexpected throttling type ***\n";
+    }
+
+    return out;
+  }
+
+  //---------------------------------------------------------------------------
+  void encode(const throttle_msg_t& m, ceph::bufferlist& bl)
+  {
+    ENCODE_START(1, 1, bl);
+    encode((int)m.op_type, bl);
+    encode(m.limit, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  //---------------------------------------------------------------------------
+  void decode(throttle_msg_t& m, ceph::bufferlist::const_iterator& bl)
+  {
+    DECODE_START(1, bl);
+    int tmp;
+    decode(tmp, bl);
+    m.op_type = (op_type_t)tmp;
+    decode(m.limit, bl);
+    DECODE_FINISH(bl);
+  }
+
+  //---------------------------------------------------------------------------
   dedup_stats_t& dedup_stats_t::operator+=(const dedup_stats_t& other)
   {
     this->singleton_count += other.singleton_count;
@@ -244,6 +295,7 @@ namespace rgw::dedup {
     "URGENT_MSG_PASUE",
     "URGENT_MSG_RESUME",
     "URGENT_MSG_RESTART",
+    "URGENT_MSG_THROTTLE",
     "URGENT_MSG_INVALID"
   };
 
@@ -413,6 +465,7 @@ namespace rgw::dedup {
   {
     this->small_objs_stat               += other.small_objs_stat;
     this->big_objs_stat                 += other.big_objs_stat;
+    this->ingress_slabs                 += other.ingress_slabs;
     this->ingress_failed_load_bucket    += other.ingress_failed_load_bucket;
     this->ingress_failed_get_object     += other.ingress_failed_get_object;
     this->ingress_failed_get_obj_attrs  += other.ingress_failed_get_obj_attrs;
@@ -476,6 +529,7 @@ namespace rgw::dedup {
 
       f->dump_unsigned("Total processed objects", this->processed_objects);
       f->dump_unsigned("Loaded objects", this->loaded_objects);
+      f->dump_unsigned("Ingress Slabs", this->ingress_slabs);
       f->dump_unsigned("Set Shared-Manifest SRC", this->set_shared_manifest_src);
       f->dump_unsigned("Deduped Obj (this cycle)", this->deduped_objects);
       f->dump_unsigned("Deduped Bytes(this cycle)", this->deduped_objects_bytes);
@@ -601,6 +655,7 @@ namespace rgw::dedup {
 
     encode(m.small_objs_stat, bl);
     encode(m.big_objs_stat, bl);
+    encode(m.ingress_slabs, bl);
     encode(m.ingress_failed_load_bucket, bl);
     encode(m.ingress_failed_get_object, bl);
     encode(m.ingress_failed_get_obj_attrs, bl);
@@ -651,6 +706,7 @@ namespace rgw::dedup {
     DECODE_START(1, bl);
     decode(m.small_objs_stat, bl);
     decode(m.big_objs_stat, bl);
+    decode(m.ingress_slabs, bl);
     decode(m.ingress_failed_load_bucket, bl);
     decode(m.ingress_failed_get_object, bl);
     decode(m.ingress_failed_get_obj_attrs, bl);

@@ -19,12 +19,14 @@
 #include "common/Formatter.h"
 #include "common/ceph_json.h"
 #include <time.h>
+#include <chrono>
 #include "include/utime.h"
 #include "include/encoding.h"
 #include "common/dout.h"
 
 //#define FULL_DEDUP_SUPPORT
 namespace rgw::dedup {
+  using namespace std::chrono;
   using work_shard_t   = uint16_t;
   using md5_shard_t    = uint16_t;
 
@@ -85,6 +87,68 @@ namespace rgw::dedup {
     uint8_t flags;
   };
 
+  class Throttle {
+    static constexpr uint64_t MICROSECONDS_PER_SECOND = 1000000;
+  public:
+    // disbaled by default
+    Throttle(size_t max_calls_per_sec=0) {
+      reset(max_calls_per_sec);
+    }
+
+    // set the number of calls per second
+    // zero means unlimited
+    void reset(size_t max_calls_per_sec) {
+      std::unique_lock lock(reset_mutex);
+      if (max_calls_per_sec == 0) {
+        disabled = true;
+      }
+      else {
+        disabled = false;
+        max_calls = max_calls_per_sec;
+        tokens = max_calls_per_sec;
+        last_reset.store(steady_clock::now());
+      }
+    }
+
+    // Blocks until allowed to proceed
+    void acquire() {
+      if (disabled) {
+        return;
+      }
+      // get last_reset time atomically to prevent a race with ouside reset call
+      const steady_clock::time_point last_reset_copy = last_reset.load();
+      const steady_clock::time_point now = steady_clock::now();
+
+      uint64_t elapsed_usec = duration_cast<microseconds>(now - last_reset_copy).count();
+      if (elapsed_usec >= MICROSECONDS_PER_SECOND) {
+        // Renew tokens if a second (or more) has passed since last_reset
+        reset(max_calls);
+        tokens --;
+        return;
+      }
+
+      if (tokens > 0) {
+        --tokens;
+        return;
+      }
+
+      // if reached here, all tokens were exhausted, wait for the next time slot
+      ceph_assert(MICROSECONDS_PER_SECOND > elapsed_usec);
+      uint64_t wait_time_usec = MICROSECONDS_PER_SECOND - elapsed_usec;
+      std::this_thread::sleep_for(microseconds(wait_time_usec));
+      // After sleeping, reset and return
+      reset(max_calls);
+      tokens --;
+    }
+
+  private:
+    size_t max_calls;
+    size_t tokens;
+    std::atomic<steady_clock::time_point> last_reset;
+    bool disabled = true;
+    std::mutex reset_mutex;
+  };
+
   struct dedup_stats_t {
     dedup_stats_t& operator+=(const dedup_stats_t& other);
 
@@ -139,6 +203,7 @@ namespace rgw::dedup {
 
     dedup_stats_t small_objs_stat;
     dedup_stats_t big_objs_stat;
+    uint64_t ingress_slabs = 0;
     uint64_t ingress_failed_load_bucket = 0;
     uint64_t ingress_failed_get_object = 0;
     uint64_t ingress_failed_get_obj_attrs = 0;
@@ -218,15 +283,31 @@ namespace rgw::dedup {
   }
 
   enum urgent_msg_t {
-    URGENT_MSG_NONE    = 0,
-    URGENT_MSG_ABORT   = 1,
-    URGENT_MSG_PASUE   = 2,
-    URGENT_MSG_RESUME  = 3,
-    URGENT_MSG_RESTART = 4,
-    URGENT_MSG_INVALID = 5
+    URGENT_MSG_NONE = 0,
+    URGENT_MSG_ABORT,
+    URGENT_MSG_PASUE,
+    URGENT_MSG_RESUME,
+    URGENT_MSG_RESTART,
+    URGENT_MSG_THROTTLE,
+    URGENT_MSG_INVALID
+  };
+  const char* get_urgent_msg_names(int msg);
+  enum op_type_t {
+    NO_OP = 0,
+    BUCKET_INDEX_OP,
+    METADATA_ACCESS_OP,
+    DATA_READ_WRITE_OP,
+    INVALID_OP
   };
 
-  const char* get_urgent_msg_names(int msg);
+  struct throttle_msg_t {
+    op_type_t op_type;
+    uint32_t  limit;
+  };
+  std::ostream& operator<<(std::ostream &out, const throttle_msg_t& msg);
+  void encode(const throttle_msg_t& m, ceph::bufferlist& bl);
+  void decode(throttle_msg_t& m, ceph::bufferlist::const_iterator& bl);
+
   bool hex2int(const char *p, const char *p_end, uint64_t *p_val);
   bool parse_etag_string(const std::string& etag, parsed_etag_t *parsed_etag);
   void etag_to_bufferlist(uint64_t md5_high, uint64_t md5_low, uint16_t num_parts,

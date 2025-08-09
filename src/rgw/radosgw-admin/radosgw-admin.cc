@@ -160,6 +160,7 @@ void usage()
   cout << "  dedup abort                      Abort dedup\n";
   cout << "  dedup pause                      Pause dedup\n";
   cout << "  dedup resume                     Resume paused dedup\n";
+  cout << "  dedup throttle                   Throttle dedup execution\n";
   cout << "  subuser create                   create a new subuser\n" ;
   cout << "  subuser modify                   modify subuser\n";
   cout << "  subuser rm                       remove subuser\n";
@@ -488,6 +489,9 @@ void usage()
   cout << "   --disable-feature                 disable a zone/zonegroup feature\n";
   cout << "\n";
   cout << "<date> := \"YYYY-MM-DD[ hh:mm:ss]\"\n";
+  cout << "\nDedup throttle options:\n";
+  cout << "   --max-bucket-index-ops        specify max bucket-index requests per second allowed for an RGW during dedup, 0 means unlimited\n";
+  cout << "   --max-metadata-ops            specify max metadata requests per second allowed for an RGW during dedup, 0 means unlimited\n";
   cout << "\nQuota options:\n";
   cout << "   --max-objects                 specify max objects (negative value to disable)\n";
   cout << "   --max-size                    specify max size (in B/K/M/G/T, negative value to disable)\n";
@@ -757,6 +761,7 @@ enum class OPT {
   DEDUP_RESTART,
   DEDUP_PAUSE,
   DEDUP_RESUME,
+  DEDUP_THROTTLE,
   GC_LIST,
   GC_PROCESS,
   LC_LIST,
@@ -1010,6 +1015,7 @@ static SimpleCmd::Commands all_cmds = {
   { "dedup restart", OPT::DEDUP_RESTART },
   { "dedup pause", OPT::DEDUP_PAUSE },
   { "dedup resume", OPT::DEDUP_RESUME },
+  { "dedup throttle", OPT::DEDUP_THROTTLE },
   { "gc list", OPT::GC_LIST },
   { "gc process", OPT::GC_PROCESS },
   { "lc list", OPT::LC_LIST },
@@ -3687,12 +3693,16 @@ int main(int argc, const char **argv)
   int64_t max_write_ops = 0;
   int64_t max_read_bytes = 0;
   int64_t max_write_bytes = 0;
+  int64_t max_bucket_index_ops = 0;
+  int64_t max_metadata_ops = 0;
   bool have_max_objects = false;
   bool have_max_size = false;
   bool have_max_write_ops = false;
   bool have_max_read_ops = false;
   bool have_max_write_bytes = false;
   bool have_max_read_bytes = false;
+  bool have_max_bucket_index_ops = false;
+  bool have_max_metadata_ops = false;
   int include_all = false;
   int allow_unordered = false;
 
@@ -4001,6 +4011,20 @@ int main(int argc, const char **argv)
         return EINVAL;
       }
       have_max_write_bytes = true;
+    } else if (ceph_argparse_witharg(args, i, &val, "--max-bucket-index-ops", (char*)NULL)) {
+      max_bucket_index_ops = (int64_t)strict_strtoll(val.c_str(), 10, &err);
+      if (!err.empty()) {
+	cerr << "ERROR: failed to parse max bucket index ops: " << err << std::endl;
+	return EINVAL;
+      }
+      have_max_bucket_index_ops = true;
+    } else if (ceph_argparse_witharg(args, i, &val, "--max-metadata-ops", (char*)NULL)) {
+      max_metadata_ops = (int64_t)strict_strtoll(val.c_str(), 10, &err);
+      if (!err.empty()) {
+	cerr << "ERROR: failed to parse max metadata ops: " << err << std::endl;
+	return EINVAL;
+      }
+      have_max_metadata_ops = true;
     } else if (ceph_argparse_witharg(args, i, &val, "--date", "--time", (char*)NULL)) {
       date = val;
       if (end_date.empty())
@@ -4515,6 +4539,7 @@ int main(int argc, const char **argv)
 			 OPT::DEDUP_RESTART,   // TBD - not READ-ONLY
 			 OPT::DEDUP_PAUSE,
 			 OPT::DEDUP_RESUME,
+			 OPT::DEDUP_THROTTLE,
 			 OPT::GC_LIST,
 			 OPT::LC_LIST,
 			 OPT::ORPHANS_LIST_JOBS,
@@ -9179,6 +9204,7 @@ next:
       opt_cmd == OPT::DEDUP_ABORT    ||
       opt_cmd == OPT::DEDUP_PAUSE    ||
       opt_cmd == OPT::DEDUP_RESUME   ||
+      opt_cmd == OPT::DEDUP_THROTTLE ||
       opt_cmd == OPT::DEDUP_RESTART) {
 
     using namespace rgw::dedup;
@@ -9200,7 +9226,36 @@ next:
       return ret;
     }
 
-    if (opt_cmd == OPT::DEDUP_ABORT || opt_cmd == OPT::DEDUP_PAUSE || opt_cmd == OPT::DEDUP_RESUME) {
+    if (opt_cmd == OPT::DEDUP_THROTTLE ) {
+      bufferlist urgent_msg_bl;
+      urgent_msg_t urgent_msg = URGENT_MSG_THROTTLE;
+      ceph::encode(urgent_msg, urgent_msg_bl);
+      throttle_msg_t throttle_msg;
+      if (have_max_bucket_index_ops) {
+	if (have_max_metadata_ops) {
+	  std::cerr << "--max-bucket-index-ops can not be used together with --max-metadata-ops" << std::endl;
+	  return EINVAL;
+	}
+	cout << "max_bucket_index_ops=" << max_bucket_index_ops << std::endl;
+	throttle_msg.op_type = BUCKET_INDEX_OP;
+	throttle_msg.limit = max_bucket_index_ops;
+      }
+      else if (have_max_metadata_ops) {
+	cout << "::max_metadata_ops=" << max_metadata_ops << std::endl;
+	throttle_msg.op_type = METADATA_ACCESS_OP;
+	throttle_msg.limit = max_metadata_ops;
+      }
+      else {
+	std::cerr << "dedup throttle must set either --max-bucket-index-ops or --max-metadata-ops" << std::endl;
+	return EINVAL;
+      }
+      encode(throttle_msg, urgent_msg_bl);
+      return cluster::dedup_control_bl(store, dpp(), urgent_msg_bl);
+    }
+
+    if (opt_cmd == OPT::DEDUP_ABORT  ||
+	opt_cmd == OPT::DEDUP_PAUSE  ||
+	opt_cmd == OPT::DEDUP_RESUME) {
       urgent_msg_t urgent_msg;
       if (opt_cmd == OPT::DEDUP_ABORT) {
 	urgent_msg = URGENT_MSG_ABORT;
