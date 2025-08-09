@@ -89,6 +89,11 @@ OSD_METADATA = ('back_iface', 'ceph_daemon', 'cluster_addr', 'device_class',
                 'front_iface', 'hostname', 'objectstore', 'public_addr',
                 'ceph_version')
 
+
+OSD_NEARFULL_RATIO = ()
+
+OSD_FULL_RATIO = ()
+
 OSD_STATUS = ['weight', 'up', 'in']
 
 OSD_STATS = ['apply_latency_ms', 'commit_latency_ms']
@@ -703,6 +708,18 @@ class Module(MgrModule, OrchestratorClientMixin):
             'OSD Metadata',
             OSD_METADATA
         )
+        metrics['osd_nearfull_ratio'] = Metric(
+            'gauge',
+            'osd_nearfull_ratio',
+            'OSD cluster-wide nearfull ratio',
+            ()
+        )
+        metrics['osd_full_ratio'] = Metric(  # <-- Add this block
+            'gauge',
+            'osd_full_ratio',
+            'OSD cluster-wide full ratio',
+            ()
+        )
 
         # The reason for having this separate to OSD_METADATA is
         # so that we can stably use the same tag names that
@@ -1138,6 +1155,14 @@ class Module(MgrModule, OrchestratorClientMixin):
     @profile_method()
     def get_metadata_and_osd_status(self) -> None:
         osd_map = self.get('osd_map')
+
+        cluster_nearfull_ratio = osd_map.get('nearfull_ratio', None)
+        cluster_full_ratio = osd_map.get('full_ratio', None)
+        if cluster_nearfull_ratio is not None:
+            self.metrics['osd_nearfull_ratio'].set(cluster_nearfull_ratio, ('cluster',))
+        if cluster_full_ratio is not None:
+            self.metrics['osd_full_ratio'].set(cluster_full_ratio, ('cluster',))
+
         osd_flags = osd_map['flags'].split(',')
         for flag in OSD_FLAGS:
             self.metrics['osd_flag_{}'.format(flag)].set(
