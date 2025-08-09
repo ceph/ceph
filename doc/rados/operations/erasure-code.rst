@@ -264,6 +264,11 @@ of ``k`` more viable. Increasing ``m`` still impacts write performance,
 especially for small writes, so for block and file workloads a value of ``m``
 no larger than 3 is recommended.
 
+For RBD, a default data pool can be set at the pool level by:
+
+.. prompt:: bash $
+    rbd config pool set replicated_pool rbd_default_data_pool ec_pool 
+
 Erasure-coded pool overhead
 ---------------------------
 
