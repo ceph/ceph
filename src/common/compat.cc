@@ -18,6 +18,7 @@
 #include "common/safe_io.h"
 
 #include <cstdio>
+#include <limits>
 #include <sstream>
 
 #include <errno.h>
@@ -523,6 +524,15 @@ unsigned get_page_size() {
   return system_info.dwPageSize;
 }
 
+unsigned long long get_physical_memory_size() {
+  MEMORYSTATUSEX memory_status;
+  memory_status.dwLength = sizeof(memory_status);
+  if (GlobalMemoryStatusEx(&memory_status)) {
+    return memory_status.ullTotalPhys;
+  }
+  return 0;  // Return 0 on error
+}
+
 int setenv(const char *name, const char *value, int overwrite) {
   if (!overwrite && getenv(name)) {
     return 0;
@@ -558,6 +568,18 @@ int getgid()
 
 unsigned get_page_size() {
   return sysconf(_SC_PAGESIZE);
+}
+
+unsigned long long get_physical_memory_size() {
+  long pages = sysconf(_SC_PHYS_PAGES);
+  long page_size = sysconf(_SC_PAGESIZE);
+
+  if (pages <= 0 || page_size <= 0) {
+    return 0;  // Return 0 on error
+  }
+
+  return static_cast<unsigned long long>(pages) *
+         static_cast<unsigned long long>(page_size);
 }
 
 ssize_t get_self_exe_path(char* path, int buff_length) {
