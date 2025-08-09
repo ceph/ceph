@@ -59,10 +59,16 @@ class AuthMode(_StrEnum):
     ACTIVE_DIRECTORY = 'active-directory'
 
 
+class SourceReferenceType(_StrEnum):
+    RESOURCE = 'resource'
+
+
+# NOTE: Use SourceReferenceType for new source objects
 class JoinSourceType(_StrEnum):
     RESOURCE = 'resource'
 
 
+# NOTE: Use SourceReferenceType for new source objects
 class UserGroupSourceType(_StrEnum):
     RESOURCE = 'resource'
     EMPTY = 'empty'
@@ -73,6 +79,7 @@ class ConfigNS(_StrEnum):
     SHARES = 'shares'
     USERS_AND_GROUPS = 'users_and_groups'
     JOIN_AUTHS = 'join_auths'
+    TLS_CREDENTIALS = 'tls_creds'
 
 
 class LoginCategory(_StrEnum):
@@ -129,3 +136,36 @@ class InputPasswordFilter(_StrEnum):
         # but we want a InputPasswordFilter to be a strict subset of the
         # password filter enum.
         return PasswordFilter(self.value)
+
+
+class TLSCredentialType(_StrEnum):
+    """Specify the type of a TSL credential."""
+
+    CERT = 'cert'
+    KEY = 'key'
+    CA_CERT = 'ca-cert'
+
+
+class KeyBridgeScopeType(_StrEnum):
+    """Specify the type of a keybridge scope."""
+
+    MEM = 'mem'
+    KMIP = 'kmip'
+
+    def unique(self) -> bool:
+        """Return true if the scope is unique for a keybridge.
+        A unique scope can only appear once and has no additional qualifying
+        name(s).
+        """
+        return self in {self.MEM}
+
+
+class KeyBridgePeerPolicy(_StrEnum):
+    """Specify keybridge peer policy for validating access.
+    The policy bundles keybridge peer validation approaches into a single named
+    policy. Typically users *should not* be changing this. It's mainly for
+    debugging and hacking.
+    """
+
+    RESTRICTED = 'restricted'
+    UNRESTRICTED = 'unrestricted'
