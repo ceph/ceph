@@ -67,12 +67,13 @@ class ObjectCacher {
     snapid_t snap;
     ceph::buffer::list *bl;
     int fadvise_flags;
-    OSDRead(snapid_t s, ceph::buffer::list *b, int f)
-      : snap(s), bl(b), fadvise_flags(f) {}
+    uint64_t len;
+    OSDRead(snapid_t s, ceph::buffer::list *b, int f, uint64_t l)
+      : snap(s), bl(b), fadvise_flags(f), len(l) {}
   };
 
-  OSDRead *prepare_read(snapid_t snap, ceph::buffer::list *b, int f) const {
-    return new OSDRead(snap, b, f);
+  OSDRead *prepare_read(snapid_t snap, ceph::buffer::list *b, int f ,uint64_t l=0) const {
+    return new OSDRead(snap, b, f, l);
   }
 
   // write scatter/gather
@@ -700,9 +701,14 @@ public:
 
   int file_read(ObjectSet *oset, file_layout_t *layout, snapid_t snapid,
 		loff_t offset, uint64_t len, ceph::buffer::list *bl, int flags,
-		Context *onfinish) {
-    OSDRead *rd = prepare_read(snapid, bl, flags);
-    Striper::file_to_extents(cct, oset->ino, layout, offset, len,
+		Context *onfinish, uint64_t ra = 0) {
+    OSDRead *rd;
+    if (ra) {
+      rd = prepare_read(snapid, bl, flags, len);
+    } else {
+      rd = prepare_read(snapid, bl, flags);
+    }
+    Striper::file_to_extents(cct, oset->ino, layout, offset, len + ra,
 			     oset->truncate_size, rd->extents);
     return readx(rd, oset, onfinish);
   }
