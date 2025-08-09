@@ -373,9 +373,27 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         ),
         Option(
             'agent_refresh_rate',
-            type='secs',
-            default=20,
-            desc='How often agent on each host will try to gather and send metadata'
+            type='int',
+            default=-1,
+            desc='How often each agent sends metadata. Use -1 to auto-adjust based on cluster size.'
+        ),
+        Option(
+            'agent_avg_concurrency',
+            type='int',
+            default=-1,
+            desc='Target average number of agents sending per second. Used to compute jitter window. Set -1 for auto.'
+        ),
+        Option(
+            'agent_initial_startup_delay_max',
+            type='int',
+            default=-1,
+            desc='Max random startup delay (sec) before agent start sending metadata. Set to -1 for auto (default), or 0 to disable.'
+        ),
+        Option(
+            'agent_jitter_seconds',
+            type='int',
+            default=-1,
+            desc='Max random delay before agent sends metadata; set -1 for auto (default), 0 to disable'
         ),
         Option(
             'agent_starting_port',
@@ -578,6 +596,9 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             self.ssh_cert: Optional[str] = None
             self.use_agent = False
             self.agent_refresh_rate = 0
+            self.agent_avg_concurrency = 0
+            self.agent_initial_startup_delay_max = 0
+            self.agent_jitter_seconds = 0
             self.agent_down_multiplier = 0.0
             self.agent_starting_port = 0
             self.hw_monitoring = False
@@ -3321,6 +3342,18 @@ Then run the following:
         return {'user': user,
                 'password': password,
                 'certificate': self.cert_mgr.get_root_ca()}
+
+    @handle_orch_error
+    def show_agent_config(self) -> Dict[str, str]:
+        agent = self.http_server.agent
+        return {
+            'agent_refresh_rate': str(agent.compute_agents_refrsh_rate()),
+            'agent_avg_concurrency': str(agent.compute_agents_avg_concurrency()),
+            'agent_initial_startup_delay_max': str(agent.get_initial_delay()),
+            'agent_jitter_seconds': str(agent.get_jitter()),
+            'agent_down_multiplier': str(self.agent_down_multiplier),
+            'agent_starting_port': str(self.agent_starting_port)
+        }
 
     @handle_orch_error
     def cert_store_cert_ls(self, show_details: bool = False) -> Dict[str, Any]:
