@@ -1,13 +1,15 @@
 from __future__ import print_function
+from typing import Any, Dict, Optional, List as _List
+import os
 import argparse
 import json
 import logging
 from textwrap import dedent
+from concurrent.futures import ThreadPoolExecutor
+
 from ceph_volume import decorators, process
 from ceph_volume.util import disk
 from ceph_volume.util.device import Device
-from typing import Any, Dict, Optional, List as _List
-from concurrent.futures import ThreadPoolExecutor
 
 logger = logging.getLogger(__name__)
 
@@ -57,6 +59,13 @@ class List(object):
         self.info_devices: _List[Dict[str, str]] = []
         self.devices_to_scan: _List[str] = []
 
+    def exclude_invalid_devices(self, devices: _List[Dict[str, str]]) -> _List[Dict[str, str]]:
+        return [
+            dev
+            for dev in devices
+            if (dev_name := dev["NAME"]) and os.path.exists(dev_name)
+        ]
+
     def exclude_atari_partitions(self) -> None:
         result: _List[str] = []
         for info_device in self.info_devices:
@@ -92,6 +101,8 @@ class List(object):
             # the parent disk has a bluestore header, but children may be the most appropriate
             # devices to return if the parent disk does not have a bluestore header.
             self.info_devices = disk.lsblk_all(abspath=True)
+            self.info_devices = self.exclude_invalid_devices(self.info_devices)
+            
             # Linux kernels built with CONFIG_ATARI_PARTITION enabled can falsely interpret
             # bluestore's on-disk format as an Atari partition table. These false Atari partitions
             # can be interpreted as real OSDs if a bluestore OSD was previously created on the false
