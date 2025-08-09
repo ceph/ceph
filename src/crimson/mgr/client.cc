@@ -99,7 +99,7 @@ void Client::ms_handle_connect(
 {
   LOG_PREFIX(Client::ms_handle_connect);
   DEBUGDPP("prev_shard: {}", *this, prv_shard);
-  ceph_assert_always(prv_shard == seastar::this_shard_id());
+  ceph_assert(prv_shard == seastar::this_shard_id());
   gates.dispatch_in_background(__func__, *this,
   [this, c, FNAME] {
     if (conn == c) {
