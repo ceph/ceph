@@ -145,8 +145,10 @@ struct RGWUserAdminOpState {
   // key_attributes
   std::string id; // access key
   std::string key; // secret key
-  // access keys fetched for a user in the middle of an op
+  // access keys fetched for a user in the middle of a create_user op
   std::map<std::string, RGWAccessKey> op_access_keys;
+  // access key fetched for a user in the middle of a create_key op
+  RGWAccessKey op_master_key;
   int32_t key_type{-1};
   bool access_key_exist = false;
   std::optional<bool> access_key_active;
@@ -445,6 +447,8 @@ struct RGWUserAdminOpState {
   std::string get_subuser() { return subuser; }
   std::string get_access_key() { return id; }
   std::string get_secret_key() { return key; }
+  std::string get_master_access_key() { return op_master_key.id; }
+  std::string get_master_secret_key() { return op_master_key.key; }
   std::string get_caps() { return caps; }
   std::string get_user_email() { return user_email; }
   std::string get_display_name() { return display_name; }
@@ -457,6 +461,7 @@ struct RGWUserAdminOpState {
   std::map<std::string, RGWAccessKey>* get_swift_keys();
   std::map<std::string, RGWAccessKey>* get_access_keys();
   std::map<std::string, RGWSubUser>* get_subusers();
+  RGWAccessKey* get_master_key();
 
   RGWUserCaps* get_caps_obj();
 
@@ -479,6 +484,7 @@ class RGWAccessKeyPool
 
   std::map<std::string, RGWAccessKey> *swift_keys{nullptr};
   std::map<std::string, RGWAccessKey> *access_keys{nullptr};
+  RGWAccessKey *master_key{nullptr};
 
   // we don't want to allow keys for the anonymous user or a null user
   bool keys_allowed{false};

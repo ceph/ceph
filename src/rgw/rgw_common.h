@@ -612,6 +612,7 @@ struct RGWUserInfo
   int32_t max_buckets;
   uint32_t op_mask;
   RGWUserCaps caps;
+  RGWAccessKey master_key;
   __u8 admin = 0;
   __u8 system = 0;
   rgw_placement_rule default_placement;
@@ -645,7 +646,7 @@ struct RGWUserInfo
   }
 
   void encode(bufferlist& bl) const {
-     ENCODE_START(23, 9, bl);
+     ENCODE_START(24, 9, bl);
      encode((uint64_t)0, bl); // old auid
      std::string access_key;
      std::string secret_key;
@@ -697,10 +698,11 @@ struct RGWUserInfo
      encode(create_date, bl);
      encode(tags, bl);
      encode(group_ids, bl);
+     encode(master_key, bl);
      ENCODE_FINISH(bl);
   }
   void decode(bufferlist::const_iterator& bl) {
-     DECODE_START_LEGACY_COMPAT_LEN_32(23, 9, 9, bl);
+     DECODE_START_LEGACY_COMPAT_LEN_32(24, 9, 9, bl);
      if (struct_v >= 2) {
        uint64_t old_auid;
        decode(old_auid, bl);
@@ -795,6 +797,9 @@ struct RGWUserInfo
       decode(group_ids, bl);
     } else {
       path = "/";
+    }
+    if (struct_v >= 24) {
+      decode(master_key, bl);
     }
     DECODE_FINISH(bl);
   }
