@@ -5,12 +5,12 @@ import { Pipe, PipeTransform } from '@angular/core';
 })
 export class ColorClassFromTextPipe implements PipeTransform {
   readonly cssClasses: string[] = [
-    'badge-cd-label-green',
-    'badge-cd-label-cyan',
-    'badge-cd-label-purple',
-    'badge-cd-label-light-blue',
-    'badge-cd-label-gold',
-    'badge-cd-label-light-green'
+    'tags-cd-label-green',
+    'tags-cd-label-cyan',
+    'tags-cd-label-purple',
+    'tags-cd-label-light-blue',
+    'tags-cd-label-gold',
+    'tags-cd-label-light-green'
   ];
 
   transform(text: string): string {
