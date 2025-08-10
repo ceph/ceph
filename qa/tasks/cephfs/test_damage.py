@@ -51,7 +51,7 @@ class TestDamage(CephFSTestCase):
         # to avoid waiting through reconnect on every MDS start.
         self.mount_a.umount_wait()
         for mds_name in self.fs.get_active_names():
-            self.fs.mds_asok(["flush", "journal"], mds_name)
+            self.fs.mds_asok(["flush", "journal"], mds_id=mds_name)
 
         self.fs.fail()
 
@@ -387,7 +387,7 @@ class TestDamage(CephFSTestCase):
 
         self.mount_a.umount_wait()
         for mds_name in self.fs.get_active_names():
-            self.fs.mds_asok(["flush", "journal"], mds_name)
+            self.fs.mds_asok(["flush", "journal"], mds_id=mds_name)
 
         self.fs.fail()
 
