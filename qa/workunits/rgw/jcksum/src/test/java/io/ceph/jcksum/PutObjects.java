@@ -151,6 +151,7 @@ class PutObjects {
     System.out.println("DEBUG: Environment Variables Read");
     try {
       client = S3Client.builder()
+        .httpClient(apacheHttpClient)
         .endpointOverride(http_uri)
         .credentialsProvider(StaticCredentialsProvider.create(creds))
         .region(jcksum.region)
