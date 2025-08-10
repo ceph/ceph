@@ -321,10 +321,17 @@ If you suspect a potential monitor issue, enable monitor debugging as well
 Kernel mount debugging
 ======================
 
-If there is an issue with the kernel client, the most important thing is
-figuring out whether the problem is with the kernel client or the MDS. Generally,
-this is easy to work out. If the kernel client broke directly, there will be
-output in ``dmesg``. Collect it and any inappropriate kernel state.
+The first step in diagnosing and repairing an issue with the kernel client is
+determining whether the problem is in the kernel client or in the MDS. If the
+kernel client itself is broken, evidence of its breakage will be in the kernel
+ring buffer, which can be examined by running the following command:
+
+.. prompt:: bash #
+
+   dmesg
+
+Find the relevant kernel state.
+
 
 Slow requests
 -------------
