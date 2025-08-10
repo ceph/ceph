@@ -30,6 +30,9 @@
 #include "crimson/os/seastore/extent_placement_manager.h"
 #include "crimson/os/seastore/device.h"
 
+class transaction_manager_test_t;
+class object_data_handler_test_t;
+
 namespace crimson::os::seastore {
 class Journal;
 
@@ -108,7 +111,34 @@ public:
     laddr_t offset) {
     LOG_PREFIX(TransactionManager::get_pin);
     SUBDEBUGT(seastore_tm, "{} ...", t, offset);
-    return lba_manager->get_mapping(t, offset
+    return lba_manager->get_mapping(t, offset, false
+    ).si_then([FNAME, &t](LBAMapping pin) {
+      SUBDEBUGT(seastore_tm, "got {}", t, pin);
+      return pin;
+    });
+  }
+
+  /**
+   * get_containing_pin
+   *
+   * Get the logical pin containing laddr
+   */
+  get_pin_ret get_containing_pin(
+    Transaction &t,
+    laddr_t laddr) {
+    LOG_PREFIX(TransactionManager::get_containing_pin);
+    SUBDEBUGT(seastore_tm, "{} ...", t, laddr);
+    return lba_manager->get_mapping(t, laddr, true
+    ).si_then([FNAME, &t](LBAMapping pin) {
+      SUBDEBUGT(seastore_tm, "got {}", t, pin);
+      return pin;
+    });
+  }
+
+  get_pin_ret get_pin(Transaction &t, LogicalChildNode &extent) {
+    LOG_PREFIX(TransactionManager::get_pin);
+    SUBDEBUGT(seastore_tm, "{} ...", t, extent);
+    return lba_manager->get_mapping(t, extent
     ).si_then([FNAME, &t](LBAMapping pin) {
       SUBDEBUGT(seastore_tm, "got {}", t, pin);
       return pin;
@@ -263,55 +293,67 @@ public:
     // must be user-oriented required by maybe_init
     assert(is_user_transaction(t.get_src()));
 
-    extent_len_t direct_partial_off = partial_off;
-    bool is_clone = pin.is_clone();
-    std::optional<indirect_info_t> maybe_indirect_info;
-    if (pin.is_indirect()) {
-      auto intermediate_offset = pin.get_intermediate_offset();
-      direct_partial_off = intermediate_offset + partial_off;
-      maybe_indirect_info = indirect_info_t{
-        intermediate_offset, pin.get_length()};
-    }
-
-    LOG_PREFIX(TransactionManager::read_pin);
-    SUBDEBUGT(seastore_tm, "{} {} 0x{:x}~0x{:x} direct_off=0x{:x} ...",
-              t, T::TYPE, pin, partial_off, partial_len, direct_partial_off);
-
-    return lba_manager->refresh_lba_mapping(t, std::move(pin)
-    ).si_then([&t, this, direct_partial_off, partial_len,
-	       maybe_init=std::move(maybe_init)](auto npin) mutable {
-      // checking the lba child must be atomic with creating
-      // and linking the absent child
-      auto ret = get_extent_if_linked<T>(t, std::move(npin));
-      if (ret.index() == 1) {
-	return std::get<1>(ret
-        ).si_then([direct_partial_off, partial_len, this, &t](auto extent) {
-          return cache->read_extent_maybe_partial(
-            t, std::move(extent), direct_partial_off, partial_len);
-        }).si_then([maybe_init=std::move(maybe_init)](auto extent) {
-          if (!extent->is_seen_by_users()) {
-            maybe_init(*extent);
-            extent->set_seen_by_users();
-          }
-          return std::move(extent);
-        });
+    return pin.refresh(
+    ).si_then([this, &t](auto npin) {
+      if (npin.is_indirect()) {
+	return lba_manager->complete_indirect_lba_mapping(
+	  t, std::move(npin));
       } else {
-	auto &r = std::get<0>(ret);
-	return this->pin_to_extent<T>(
-          t, std::move(r.mapping), std::move(r.child_pos),
-	  direct_partial_off, partial_len,
-	  std::move(maybe_init));
+	return LBAManager::complete_lba_mapping_iertr::make_ready_future<
+	  LBAMapping>(std::move(npin));
       }
-    }).si_then([FNAME, maybe_indirect_info, is_clone, &t](TCachedExtentRef<T> ext) {
-      if (maybe_indirect_info.has_value()) {
-        SUBDEBUGT(seastore_tm, "got indirect +0x{:x}~0x{:x} is_clone={} {}",
-                  t, maybe_indirect_info->intermediate_offset,
-                  maybe_indirect_info->length, is_clone, *ext);
-      } else {
-        SUBDEBUGT(seastore_tm, "got direct is_clone={} {}",
-                  t, is_clone, *ext);
+    }).si_then([&t, this, partial_off, partial_len,
+		maybe_init=std::move(maybe_init)](auto npin) mutable {
+
+      extent_len_t direct_partial_off = partial_off;
+      bool is_clone = npin.is_clone();
+      std::optional<indirect_info_t> maybe_indirect_info;
+      if (npin.is_indirect()) {
+	auto intermediate_offset = npin.get_intermediate_offset();
+	direct_partial_off = intermediate_offset + partial_off;
+	maybe_indirect_info = indirect_info_t{
+	  intermediate_offset, npin.get_length()};
       }
-      return maybe_indirect_extent_t<T>{ext, maybe_indirect_info, is_clone};
+
+      LOG_PREFIX(TransactionManager::read_pin);
+      SUBDEBUGT(seastore_tm, "{} {} 0x{:x}~0x{:x} direct_off=0x{:x} ...",
+		t, T::TYPE, npin, partial_off, partial_len, direct_partial_off);
+
+      return [this, &t, npin, direct_partial_off, partial_len,
+	      maybe_init=std::move(maybe_init)]() mutable {
+	// checking the lba child must be atomic with creating
+	// and linking the absent child
+	auto ret = get_extent_if_linked<T>(t, std::move(npin));
+	if (ret.index() == 1) {
+	  return std::get<1>(ret
+	  ).si_then([direct_partial_off, partial_len, this, &t](auto extent) {
+	    return cache->read_extent_maybe_partial(
+	      t, std::move(extent), direct_partial_off, partial_len);
+	  }).si_then([maybe_init=std::move(maybe_init)](auto extent) {
+	    if (!extent->is_seen_by_users()) {
+	      maybe_init(*extent);
+	      extent->set_seen_by_users();
+	    }
+	    return std::move(extent);
+	  });
+	} else {
+	  auto &r = std::get<0>(ret);
+	  return this->pin_to_extent<T>(
+	    t, std::move(r.mapping), std::move(r.child_pos),
+	    direct_partial_off, partial_len,
+	    std::move(maybe_init));
+	}
+      }().si_then([FNAME, maybe_indirect_info, is_clone, &t](TCachedExtentRef<T> ext) {
+	if (maybe_indirect_info.has_value()) {
+	  SUBDEBUGT(seastore_tm, "got indirect +0x{:x}~0x{:x} is_clone={} {}",
+		    t, maybe_indirect_info->intermediate_offset,
+		    maybe_indirect_info->length, is_clone, *ext);
+	} else {
+	  SUBDEBUGT(seastore_tm, "got direct is_clone={} {}",
+		    t, is_clone, *ext);
+	}
+	return maybe_indirect_extent_t<T>{ext, maybe_indirect_info, is_clone};
+      });
     });
   }
 
@@ -348,6 +390,10 @@ public:
   ref_ret remove(
     Transaction &t,
     laddr_t offset);
+
+  ref_iertr::future<LBAMapping> remove(
+    Transaction &t,
+    LBAMapping mapping);
 
   /// remove refcount for list of offset
   using refs_ret = ref_iertr::future<std::vector<unsigned>>;
@@ -410,33 +456,59 @@ public:
     Transaction &t,
     laddr_t laddr_hint,
     extent_len_t len,
+    std::optional<LBAMapping> pos = std::nullopt,
     placement_hint_t placement_hint = placement_hint_t::HOT) {
     static_assert(is_data_type(T::TYPE));
     LOG_PREFIX(TransactionManager::alloc_data_extents);
     SUBDEBUGT(seastore_tm, "{} hint {}~0x{:x} phint={} ...",
               t, T::TYPE, laddr_hint, len, placement_hint);
-    auto exts = cache->alloc_new_data_extents<T>(
-      t,
-      len,
-      placement_hint,
-      INIT_GENERATION);
-    // user must initialize the logical extent themselves
-    assert(is_user_transaction(t.get_src()));
-    for (auto& ext : exts) {
-      ext->set_seen_by_users();
-    }
-    return lba_manager->alloc_extents(
-      t,
-      laddr_hint,
-      std::vector<LogicalChildNodeRef>(
-	exts.begin(), exts.end()),
-      EXTENT_DEFAULT_REF_COUNT
-    ).si_then([exts=std::move(exts), &t, FNAME](auto &&) mutable {
-      for (auto &ext : exts) {
-	SUBDEBUGT(seastore_tm, "allocated {}", t, *ext);
+    return seastar::do_with(
+      cache->alloc_new_data_extents<T>(
+	t,
+	len,
+	placement_hint,
+	INIT_GENERATION),
+      [pos=std::move(pos), this, &t,
+      FNAME, laddr_hint](auto &exts) mutable {
+      // user must initialize the logical extent themselves
+      assert(is_user_transaction(t.get_src()));
+      for (auto& ext : exts) {
+	ext->set_seen_by_users();
       }
-      return alloc_extent_iertr::make_ready_future<
-	std::vector<TCachedExtentRef<T>>>(std::move(exts));
+      if (pos) {
+	// laddr_hint is determined
+	auto off = laddr_hint;
+	for (auto &extent : exts) {
+	  extent->set_laddr(off);
+	  off = (off + extent->get_length()).checked_to_laddr();
+	}
+      }
+      auto fut = alloc_extents_iertr::make_ready_future<
+	std::vector<LBAMapping>>();
+      if (pos) {
+	fut = pos->refresh(
+	).si_then([&t, &exts, this](auto pos) {
+	  return lba_manager->alloc_extents(
+	    t,
+	    std::move(pos),
+	    std::vector<LogicalChildNodeRef>(
+	      exts.begin(), exts.end()));
+	});
+      } else {
+	fut = lba_manager->alloc_extents(
+	  t,
+	  laddr_hint,
+	  std::vector<LogicalChildNodeRef>(
+	    exts.begin(), exts.end()),
+	  EXTENT_DEFAULT_REF_COUNT);
+      }
+      return fut.si_then([&exts, &t, FNAME](auto &&) mutable {
+	for (auto &ext : exts) {
+	  SUBDEBUGT(seastore_tm, "allocated {}", t, *ext);
+	}
+	return alloc_extent_iertr::make_ready_future<
+	  std::vector<TCachedExtentRef<T>>>(std::move(exts));
+      });
     });
   }
 
@@ -465,158 +537,6 @@ public:
     });
   }
 
-  /**
-   * remap_pin
-   *
-   * Remap original extent to new extents.
-   * Return the pins of new extent.
-   */
-  using remap_entry_t = LBAManager::remap_entry_t;
-  using remap_pin_iertr = base_iertr;
-  using remap_pin_ret = remap_pin_iertr::future<std::vector<LBAMapping>>;
-  template <typename T, std::size_t N>
-  remap_pin_ret remap_pin(
-    Transaction &t,
-    LBAMapping &&pin,
-    std::array<remap_entry_t, N> remaps) {
-    static_assert(std::is_base_of_v<LogicalChildNode, T>);
-    // data extents don't need maybe_init yet, currently,
-    static_assert(is_data_type(T::TYPE));
-    // must be user-oriented required by (the potential) maybe_init
-    assert(is_user_transaction(t.get_src()));
-
-#ifndef NDEBUG
-    std::sort(remaps.begin(), remaps.end(),
-      [](remap_entry_t x, remap_entry_t y) {
-        return x.offset < y.offset;
-    });
-    auto original_len = pin.get_length();
-    extent_len_t total_remap_len = 0;
-    extent_len_t last_offset = 0;
-    extent_len_t last_len = 0;
-
-    for (auto &remap : remaps) {
-      auto remap_offset = remap.offset;
-      auto remap_len = remap.len;
-      assert(remap_len > 0);
-      total_remap_len += remap.len;
-      assert(remap_offset >= (last_offset + last_len));
-      last_offset = remap_offset;
-      last_len = remap_len;
-    }
-    if (remaps.size() == 1) {
-      assert(total_remap_len < original_len);
-    } else {
-      assert(total_remap_len <= original_len);
-    }
-#endif
-
-    return seastar::do_with(
-      std::vector<LogicalChildNodeRef>(),
-      std::move(pin),
-      std::move(remaps),
-      [&t, this](auto &extents, auto &pin, auto &remaps) {
-      laddr_t original_laddr = pin.get_key();
-      extent_len_t original_len = pin.get_length();
-      paddr_t original_paddr = pin.get_val();
-      LOG_PREFIX(TransactionManager::remap_pin);
-      SUBDEBUGT(seastore_tm, "{}~0x{:x} {} into {} remaps ... {}",
-                t, original_laddr, original_len, original_paddr, remaps.size(), pin);
-      // The according extent might be stable or pending.
-      auto fut = base_iertr::now();
-      if (!pin.is_indirect()) {
-        ceph_assert(!pin.is_clone());
-	fut = fut.si_then([this, &t, &pin]() mutable {
-	  return lba_manager->refresh_lba_mapping(t, std::move(pin));
-	}).si_then([this, &t, &pin, original_paddr, original_len](auto newpin) {
-	  pin = std::move(newpin);
-	  if (full_extent_integrity_check) {
-	    return read_pin<T>(t, pin.duplicate()
-            ).si_then([](auto maybe_indirect_extent) {
-              assert(!maybe_indirect_extent.is_indirect());
-              assert(!maybe_indirect_extent.is_clone);
-              return maybe_indirect_extent.extent;
-            });
-	  } else {
-	    auto ret = get_extent_if_linked<T>(t, pin.duplicate());
-	    if (ret.index() == 1) {
-	      return std::get<1>(ret
-	      ).si_then([](auto extent) {
-	        if (!extent->is_seen_by_users()) {
-	          // Note, no maybe_init available for data extents
-	          extent->set_seen_by_users();
-	        }
-	        return std::move(extent);
-	      });
-	    } else {
-	      // absent
-	      cache->retire_absent_extent_addr(t, original_paddr, original_len);
-	      return base_iertr::make_ready_future<TCachedExtentRef<T>>();
-	    }
-	  }
-	}).si_then([this, &t, &remaps, original_paddr,
-			    original_laddr, original_len,
-			    &extents, FNAME](auto ext) mutable {
-	  ceph_assert(full_extent_integrity_check
-	      ? (ext && ext->is_fully_loaded())
-	      : true);
-	  std::optional<ceph::bufferptr> original_bptr;
-	  // TODO: preserve the bufferspace if partially loaded
-	  if (ext && ext->is_fully_loaded()) {
-	    ceph_assert(ext->is_data_stable());
-	    ceph_assert(ext->get_length() >= original_len);
-	    ceph_assert(ext->get_paddr() == original_paddr);
-	    original_bptr = ext->get_bptr();
-	  }
-	  if (ext) {
-	    assert(ext->is_seen_by_users());
-	    cache->retire_extent(t, ext);
-	  }
-	  for (auto &remap : remaps) {
-	    auto remap_offset = remap.offset;
-	    auto remap_len = remap.len;
-	    auto remap_laddr = (original_laddr + remap_offset).checked_to_laddr();
-	    auto remap_paddr = original_paddr.add_offset(remap_offset);
-	    SUBDEBUGT(seastore_tm, "remap direct pin into {}~0x{:x} {} ...",
-	              t, remap_laddr, remap_len, remap_paddr);
-	    ceph_assert(remap_len < original_len);
-	    ceph_assert(remap_offset + remap_len <= original_len);
-	    ceph_assert(remap_len != 0);
-	    ceph_assert(remap_offset % cache->get_block_size() == 0);
-	    ceph_assert(remap_len % cache->get_block_size() == 0);
-	    auto extent = cache->alloc_remapped_extent<T>(
-	      t,
-	      remap_laddr,
-	      remap_paddr,
-	      remap_len,
-	      original_laddr,
-	      original_bptr);
-	    // user must initialize the logical extent themselves.
-	    extent->set_seen_by_users();
-	    extents.emplace_back(std::move(extent));
-	  }
-	});
-      }
-      return fut.si_then([this, &t, &pin, &remaps, &extents, FNAME] {
-	return lba_manager->remap_mappings(
-	  t,
-	  std::move(pin),
-	  std::vector<remap_entry_t>(remaps.begin(), remaps.end()),
-	  std::move(extents)
-	).si_then([FNAME, &t](auto ret) {
-	  SUBDEBUGT(seastore_tm, "remapped {} pins", t, ret.size());
-	  return Cache::retire_extent_iertr::make_ready_future<
-	    std::vector<LBAMapping>>(std::move(ret));
-	});
-      }).handle_error_interruptible(
-	remap_pin_iertr::pass_further{},
-	crimson::ct_error::assert_all{
-	  "TransactionManager::remap_pin hit invalid error"
-	}
-      );
-    });
-  }
-
   using reserve_extent_iertr = alloc_extent_iertr;
   using reserve_extent_ret = reserve_extent_iertr::future<LBAMapping>;
   reserve_extent_ret reserve_region(
@@ -635,6 +555,27 @@ public:
     });
   }
 
+  reserve_extent_ret reserve_region(
+    Transaction &t,
+    LBAMapping pos,
+    laddr_t hint,
+    extent_len_t len) {
+    LOG_PREFIX(TransactionManager::reserve_region);
+    SUBDEBUGT(seastore_tm, "hint {}~0x{:x} ...", t, hint, len);
+    return pos.refresh(
+    ).si_then([FNAME, this, &t, hint, len](auto pos) {
+      return lba_manager->reserve_region(
+	t,
+	std::move(pos),
+	hint,
+	len
+      ).si_then([FNAME, &t](auto pin) {
+	SUBDEBUGT(seastore_tm, "reserved {}", t, pin);
+	return pin;
+      });
+    });
+  }
+
   /*
    * clone_mapping
    *
@@ -643,32 +584,101 @@ public:
    * for the definition of "indirect lba mapping" and "direct lba mapping".
    * Note that the cloned extent must be stable
    */
-  using clone_extent_iertr = alloc_extent_iertr;
-  using clone_extent_ret = clone_extent_iertr::future<LBAMapping>;
+  using clone_extent_iertr = LBAManager::clone_mapping_iertr;
+  using clone_extent_ret = LBAManager::clone_mapping_ret;
   clone_extent_ret clone_pin(
     Transaction &t,
+    LBAMapping pos,
+    LBAMapping mapping,
     laddr_t hint,
-    const LBAMapping &mapping) {
-    auto intermediate_key =
-      mapping.is_indirect()
-	? mapping.get_intermediate_key()
-	: mapping.get_key();
-    auto intermediate_base =
-      mapping.is_indirect()
-        ? mapping.get_intermediate_base()
-        : mapping.get_key();
-
+    bool updateref) {
     LOG_PREFIX(TransactionManager::clone_pin);
-    SUBDEBUGT(seastore_tm, "{} clone to hint {} ...", t, mapping, hint);
-    return lba_manager->clone_mapping(
-      t,
-      hint,
-      mapping.get_length(),
-      intermediate_key,
-      intermediate_base
-    ).si_then([FNAME, &t](auto pin) {
-      SUBDEBUGT(seastore_tm, "cloned as {}", t, pin);
-      return pin;
+    SUBDEBUGT(seastore_tm, "{} clone to hint {} ... pos={}, updateref={}",
+      t, mapping, hint, pos, updateref);
+    return seastar::do_with(
+      std::move(pos),
+      std::move(mapping),
+      [FNAME, this, &t, hint, updateref](auto &pos, auto &mapping) {
+      return pos.refresh(
+      ).si_then([&pos, &mapping](auto m) {
+	pos = std::move(m);
+	return mapping.refresh();
+      }).si_then([FNAME, this, &pos, &t, hint, updateref](auto mapping) {
+	return lba_manager->clone_mapping(
+	  t,
+	  std::move(pos),
+	  std::move(mapping),
+	  hint,
+	  updateref
+	).si_then([FNAME, &t](auto ret) {
+	  SUBDEBUGT(seastore_tm, "cloned as {}", t, ret.cloned_mapping);
+	  return ret;
+	});
+      });
+    });
+  }
+
+  using clone_iertr = base_iertr;
+  using clone_ret = clone_iertr::future<>;
+  clone_ret clone_range(
+    Transaction &t,
+    laddr_t base,
+    extent_len_t len,
+    LBAMapping pos,
+    LBAMapping mapping,
+    bool updateref)
+  {
+    LOG_PREFIX(TransactionManager::clone_range);
+    SUBDEBUGT(seastore_tm, "object_data={}~{} mapping={} updateref={}",
+      t, base, len, mapping, updateref);
+    return seastar::do_with(
+      std::move(pos),
+      std::move(mapping),
+      (extent_len_t)0,
+      [&t, this, updateref, base, len](auto &pos, auto &mapping, auto &offset) {
+      return trans_intr::repeat(
+	[&t, this, &pos, &mapping, &offset, updateref, base, len]()
+	-> clone_iertr::future<seastar::stop_iteration> {
+	if (offset >= len) {
+	  return clone_iertr::make_ready_future<
+	    seastar::stop_iteration>(seastar::stop_iteration::yes);
+	}
+	if (!mapping.is_indirect() && mapping.is_zero_reserved()) {
+	  return reserve_region(
+	    t,
+	    std::move(pos),
+	    (base + offset).checked_to_laddr(),
+	    mapping.get_length()
+	  ).si_then([base, &offset](auto r) {
+	    assert((base + offset).checked_to_laddr() == r.get_key());
+	    offset += r.get_length();
+	    return r.next();
+	  }).si_then([&pos, &mapping](auto r) {
+	    pos = std::move(r);
+	    return mapping.next();
+	  }).si_then([&mapping](auto p) {
+	    mapping = std::move(p);
+	    return seastar::stop_iteration::no;
+	  }).handle_error_interruptible(
+	    clone_iertr::pass_further{},
+	    crimson::ct_error::assert_all{"unexpected error"}
+	  );
+	}
+	return clone_pin(
+	  t, std::move(pos), std::move(mapping),
+	  (base + offset).checked_to_laddr(), updateref
+	).si_then([&offset, &pos, &mapping](auto ret) {
+	  offset += ret.cloned_mapping.get_length();
+	  return ret.cloned_mapping.next(
+	  ).si_then([&pos, ret=std::move(ret)](auto p) mutable {
+	    pos = std::move(p);
+	    return ret.orig_mapping.next();
+	  }).si_then([&mapping](auto p) {
+	    mapping = std::move(p);
+	    return seastar::stop_iteration::no;
+	  });
+	});
+      });
     });
   }
 
@@ -933,6 +943,209 @@ public:
     return *cache;
   }
 
+  using remap_entry_t = LBAManager::remap_entry_t;
+  using remap_mappings_iertr = base_iertr;
+  using remap_mappings_ret = remap_mappings_iertr::future<
+    std::vector<LBAMapping>>;
+  template <typename T, std::size_t N>
+  remap_mappings_ret remap_mappings(
+    Transaction &t,
+    LBAMapping mapping,
+    std::array<TransactionManager::remap_entry_t, N> remaps)
+  {
+    if (!mapping.is_indirect() && mapping.is_zero_reserved()) {
+      return seastar::do_with(
+	std::vector<TransactionManager::remap_entry_t>(
+	  remaps.begin(), remaps.end()),
+	std::vector<LBAMapping>(),
+	[&t, mapping=std::move(mapping), this]
+	(auto &remaps, auto &mappings) mutable {
+	auto orig_laddr = mapping.get_key();
+	return remove(t, std::move(mapping)
+	).si_then([&remaps, &t, &mappings, orig_laddr,
+		  this](auto pos) {
+	  return seastar::do_with(
+	    std::move(pos),
+	    [this, &t, &remaps, orig_laddr, &mappings](auto &pos) {
+	    return trans_intr::do_for_each(
+	      remaps.begin(),
+	      remaps.end(),
+	      [&t, &pos, orig_laddr, &mappings, this]
+	      (const auto &remap) mutable {
+	      auto laddr = (orig_laddr + remap.offset).checked_to_laddr();
+	      return this->reserve_region(
+		t,
+		std::move(pos),
+		laddr,
+		remap.len
+	      ).si_then([&mappings](auto new_mapping) {
+		mappings.emplace_back(new_mapping);
+		return new_mapping.next();
+	      }).si_then([&pos](auto new_mapping) {
+		pos = std::move(new_mapping);
+		return seastar::now();
+	      });
+	    });
+	  });
+	}).si_then([&mappings] { return std::move(mappings); });
+      }).handle_error_interruptible(
+	remap_mappings_iertr::pass_further{},
+	crimson::ct_error::assert_all{
+	  "remap_mappings hit invalid error"
+	}
+      );
+    } else {
+      return remap_pin<T, N>(
+	t, std::move(mapping), std::move(remaps));
+    }
+  }
+
+  /*
+   * punch_hole_in_mapping
+   *
+   * punch an lba hole inside a single mapping, this requires laddr~len
+   * is within the mapping.
+   *
+   * Return: the position for later inserts, e.g. the mapping next to
+   * 	     the hole
+   */
+  using punch_mappings_iertr = base_iertr;
+  using punch_mappings_ret = punch_mappings_iertr::future<LBAMapping>;
+  template <typename T>
+  punch_mappings_ret punch_hole_in_mapping(
+    Transaction &t,
+    laddr_t laddr,
+    objaddr_t aligned_len,
+    LBAMapping mapping)
+  {
+    LOG_PREFIX(TransactionManager::punch_hole_in_mapping);
+    SUBDEBUGT(seastore_tm, "{}~{} {}", t, laddr, aligned_len, mapping);
+    assert(!mapping.is_pending());
+    assert(laddr >= mapping.get_key() &&
+	laddr + aligned_len <= mapping.get_key() + mapping.get_length());
+    if (laddr > mapping.get_key()) {
+      if (laddr + aligned_len < mapping.get_key() + mapping.get_length()) {
+	auto offset1 = laddr.template get_byte_distance<
+	  extent_len_t>(mapping.get_key());
+	auto offset2 = (laddr + aligned_len).template get_byte_distance<
+	  extent_len_t>(mapping.get_key());
+	auto len2 = mapping.get_length() - offset2;
+	return remap_mappings<T, 2>(
+	  t,
+	  std::move(mapping),
+	  std::array{
+	    remap_entry_t{0, offset1},
+	    remap_entry_t{offset2, len2}}
+	).si_then([](auto ret) {
+	  assert(ret.size() == 2);
+	  return std::move(ret.back());
+	});
+      } else {
+	return cut_mapping<T>(t, laddr, std::move(mapping), true
+	).si_then([](auto mapping) {
+	  return mapping.next();
+	});
+      }
+    } else if (laddr + aligned_len < mapping.get_key() + mapping.get_length()) {
+      return cut_mapping<T>(
+	t, (laddr + aligned_len).checked_to_laddr(), std::move(mapping), false);
+    } else {
+      return remove(t, std::move(mapping)
+      ).handle_error_interruptible(
+	punch_mappings_iertr::pass_further{},
+	crimson::ct_error::assert_all{"impossible"}
+      );
+    }
+  }
+
+  /*
+   * cut_mapping
+   *
+   * remove the left/right part of the mapping
+   *
+   * Return: the remaining part of the mapping
+   */
+  using cut_mapping_iertr = punch_mappings_ret;
+  using cut_mapping_ret = punch_mappings_ret;
+  template <typename T>
+  cut_mapping_ret cut_mapping(
+    Transaction &t,
+    laddr_t pivot,
+    LBAMapping mapping,
+    bool keep_left)
+  {
+    LOG_PREFIX(TransactionManager::cut_mapping);
+    SUBDEBUGT(seastore_tm, "{} {} {}",
+      t, pivot, mapping, keep_left ? "LEFT" : "RIGHT");
+    assert(mapping.is_indirect() || mapping.is_data_stable());
+    assert(pivot > mapping.get_key() &&
+      pivot < mapping.get_key() + mapping.get_length());
+    auto offset = keep_left
+      ? 0
+      : pivot.template get_byte_distance<extent_len_t>(mapping.get_key());
+    auto len = keep_left
+      ? pivot.template get_byte_distance<
+	extent_len_t>(mapping.get_key())
+      : pivot.template get_byte_distance<
+	extent_len_t>(mapping.get_key() + mapping.get_length());
+    return remap_mappings<T, 1>(
+      t,
+      std::move(mapping),
+      std::array{remap_entry_t{offset, len}}
+    ).si_then([] (auto ret) {
+      assert(ret.size() == 1);
+      return std::move(ret.back());
+    });
+  }
+
+  /*
+   * remove_mappings_in_range
+   *
+   * remove the mappings that are completely inside the range start~unaligned_len
+   *
+   * Return: the mapping next to the right boundary of the range
+   */
+  punch_mappings_ret remove_mappings_in_range(
+    Transaction &t,
+    laddr_t start,
+    objaddr_t unaligned_len,
+    LBAMapping first_mapping)
+  {
+    LOG_PREFIX(TransactionManager::remove_mappings_in_range);
+    SUBDEBUGT(seastore_tm, "{}~{}, first_mapping: {}",
+      t, start, unaligned_len, first_mapping);
+    // remove all middle mappings
+    return seastar::do_with(
+      std::move(first_mapping),
+      [&t, this, start, unaligned_len](auto &mapping) {
+      return trans_intr::repeat([&t, this, start, unaligned_len, &mapping] {
+	if (mapping.is_end()) {
+	  return punch_mappings_iertr::make_ready_future<
+	    seastar::stop_iteration>(seastar::stop_iteration::yes);
+	}
+	assert(mapping.get_key() >= start);
+	auto mapping_end =
+	  (mapping.get_key() + mapping.get_length()).checked_to_laddr();
+	if (mapping_end > start + unaligned_len) {
+	  return punch_mappings_iertr::make_ready_future<
+	    seastar::stop_iteration>(seastar::stop_iteration::yes);
+	}
+	return remove(t, std::move(mapping)
+	).si_then([&mapping](auto next_mapping) {
+	  mapping = std::move(next_mapping);
+	  return seastar::stop_iteration::no;
+	}).handle_error_interruptible(
+	  punch_mappings_iertr::pass_further{},
+	  crimson::ct_error::assert_all{
+	    "remove_mappings_in_range hit invalid error"
+	  }
+	);
+      }).si_then([&mapping] {
+	return std::move(mapping);
+      });
+    });
+  }
+
   ~TransactionManager();
 
 private:
@@ -967,7 +1180,7 @@ private:
     auto v = pin.get_logical_extent(t);
     if (v.has_child()) {
       return v.get_child_fut(
-      ).si_then([pin=std::move(pin)](auto extent) {
+      ).si_then([pin](auto extent) {
 #ifndef NDEBUG
         auto lextent = extent->template cast<LogicalChildNode>();
         auto pin_laddr = pin.get_intermediate_base();
@@ -977,7 +1190,7 @@ private:
       });
     } else {
       return unlinked_child_t{
-	std::move(pin),
+	std::move(const_cast<LBAMapping&>(pin)),
 	v.get_child_pos()};
     }
   }
@@ -1000,8 +1213,166 @@ private:
         return ext;
       });
     } else {
-      return pin_to_extent_by_type(t, std::move(pin), v.get_child_pos(), type);
+      return pin_to_extent_by_type(t, pin, v.get_child_pos(), type);
     }
+  }
+
+  /**
+   * remap_pin
+   *
+   * Remap original extent to new extents.
+   * Return the pins of new extent.
+   */
+  using remap_pin_iertr = base_iertr;
+  using remap_pin_ret = remap_pin_iertr::future<std::vector<LBAMapping>>;
+  template <typename T, std::size_t N>
+  remap_pin_ret remap_pin(
+    Transaction &t,
+    LBAMapping &&pin,
+    std::array<remap_entry_t, N> remaps) {
+    static_assert(std::is_base_of_v<LogicalChildNode, T>);
+    // data extents don't need maybe_init yet, currently,
+    static_assert(is_data_type(T::TYPE));
+    // must be user-oriented required by (the potential) maybe_init
+    assert(is_user_transaction(t.get_src()));
+    assert(pin.is_indirect() || !pin.is_zero_reserved());
+
+    LOG_PREFIX(TransactionManager::remap_pin);
+#ifndef NDEBUG
+    std::sort(remaps.begin(), remaps.end(),
+      [](remap_entry_t x, remap_entry_t y) {
+        return x.offset < y.offset;
+    });
+    auto original_len = pin.get_length();
+    extent_len_t total_remap_len = 0;
+    extent_len_t last_offset = 0;
+    extent_len_t last_len = 0;
+
+    for (auto &remap : remaps) {
+      auto remap_offset = remap.offset;
+      auto remap_len = remap.len;
+      assert(remap_len > 0);
+      total_remap_len += remap.len;
+      assert(remap_offset >= (last_offset + last_len));
+      last_offset = remap_offset;
+      last_len = remap_len;
+    }
+    if (remaps.size() == 1) {
+      assert(total_remap_len < original_len);
+    } else {
+      assert(total_remap_len <= original_len);
+    }
+#endif
+
+    return seastar::do_with(
+      std::move(pin),
+      std::move(remaps),
+      [FNAME, &t, this](auto &pin, auto &remaps) {
+      // The according extent might be stable or pending.
+      auto fut = base_iertr::now();
+      if (pin.is_indirect()) {
+	SUBDEBUGT(seastore_tm, "{} into {} remaps ...",
+	  t, pin, remaps.size());
+	fut = pin.refresh().si_then([this, &pin, &t](auto mapping) {
+	  return lba_manager->complete_indirect_lba_mapping(
+	    t, std::move(mapping)
+	  ).si_then([&pin](auto mapping) {
+	    pin = std::move(mapping);
+	  });
+	});
+      } else {
+	laddr_t original_laddr = pin.get_key();
+	extent_len_t original_len = pin.get_length();
+	paddr_t original_paddr = pin.get_val();
+	SUBDEBUGT(seastore_tm, "{}~0x{:x} {} into {} remaps ... {}",
+	  t, original_laddr, original_len, original_paddr, remaps.size(), pin);
+        ceph_assert(!pin.is_clone());
+	fut = pin.refresh().si_then([this, &t, &pin, original_paddr,
+				    original_len](auto newpin) {
+	  pin = std::move(newpin);
+	  if (full_extent_integrity_check) {
+	    return read_pin<T>(t, pin
+            ).si_then([](auto maybe_indirect_extent) {
+              assert(!maybe_indirect_extent.is_indirect());
+              assert(!maybe_indirect_extent.is_clone);
+              return maybe_indirect_extent.extent;
+            });
+	  } else {
+	    auto ret = get_extent_if_linked<T>(t, pin);
+	    if (ret.index() == 1) {
+	      return std::get<1>(ret
+	      ).si_then([](auto extent) {
+	        if (!extent->is_seen_by_users()) {
+	          // Note, no maybe_init available for data extents
+	          extent->set_seen_by_users();
+	        }
+	        return std::move(extent);
+	      });
+	    } else {
+	      // absent
+	      cache->retire_absent_extent_addr(t, original_paddr, original_len);
+	      return base_iertr::make_ready_future<TCachedExtentRef<T>>();
+	    }
+	  }
+	}).si_then([this, &t, &remaps, original_paddr,
+		    original_laddr, original_len, FNAME](auto ext) mutable {
+	  ceph_assert(full_extent_integrity_check
+	      ? (ext && ext->is_fully_loaded())
+	      : true);
+	  std::optional<ceph::bufferptr> original_bptr;
+	  // TODO: preserve the bufferspace if partially loaded
+	  if (ext && ext->is_fully_loaded()) {
+	    ceph_assert(ext->is_data_stable());
+	    ceph_assert(ext->get_length() >= original_len);
+	    ceph_assert(ext->get_paddr() == original_paddr);
+	    original_bptr = ext->get_bptr();
+	  }
+	  if (ext) {
+	    assert(ext->is_seen_by_users());
+	    cache->retire_extent(t, ext);
+	  }
+	  for (auto &remap : remaps) {
+	    auto remap_offset = remap.offset;
+	    auto remap_len = remap.len;
+	    auto remap_laddr = (original_laddr + remap_offset).checked_to_laddr();
+	    auto remap_paddr = original_paddr.add_offset(remap_offset);
+	    SUBDEBUGT(seastore_tm, "remap direct pin into {}~0x{:x} {} ...",
+	              t, remap_laddr, remap_len, remap_paddr);
+	    ceph_assert(remap_len < original_len);
+	    ceph_assert(remap_offset + remap_len <= original_len);
+	    ceph_assert(remap_len != 0);
+	    ceph_assert(remap_offset % cache->get_block_size() == 0);
+	    ceph_assert(remap_len % cache->get_block_size() == 0);
+	    auto extent = cache->alloc_remapped_extent<T>(
+	      t,
+	      remap_laddr,
+	      remap_paddr,
+	      remap_len,
+	      original_laddr,
+	      original_bptr);
+	    // user must initialize the logical extent themselves.
+	    extent->set_seen_by_users();
+	    remap.extent = extent.get();
+	  }
+	});
+      }
+      return fut.si_then([this, &t, &pin, &remaps, FNAME] {
+	return lba_manager->remap_mappings(
+	  t,
+	  std::move(pin),
+	  std::vector<remap_entry_t>(remaps.begin(), remaps.end())
+	).si_then([FNAME, &t](auto ret) {
+	  SUBDEBUGT(seastore_tm, "remapped {} pins", t, ret.size());
+	  return Cache::retire_extent_iertr::make_ready_future<
+	    std::vector<LBAMapping>>(std::move(ret));
+	});
+      }).handle_error_interruptible(
+	remap_pin_iertr::pass_further{},
+	crimson::ct_error::assert_all{
+	  "TransactionManager::remap_pin hit invalid error"
+	}
+      );
+    });
   }
 
   rewrite_extent_ret rewrite_logical_extent(
@@ -1039,6 +1410,7 @@ private:
     static_assert(is_logical_type(T::TYPE));
     // must be user-oriented required by maybe_init
     assert(is_user_transaction(t.get_src()));
+    assert(pin.is_viewable());
     using ret = pin_to_extent_ret<T>;
     auto direct_length = pin.get_intermediate_length();
     if (full_extent_integrity_check) {
@@ -1066,7 +1438,7 @@ private:
 	maybe_init(extent);
 	extent.set_seen_by_users();
       }
-    ).si_then([FNAME, &t, pin=std::move(pin), this](auto ref) mutable -> ret {
+    ).si_then([FNAME, &t, pin=pin, this](auto ref) mutable -> ret {
       if (ref->is_fully_loaded()) {
         auto crc = ref->calc_crc32c();
         SUBTRACET(
@@ -1117,6 +1489,7 @@ private:
     LOG_PREFIX(TransactionManager::pin_to_extent_by_type);
     SUBTRACET(seastore_tm, "getting absent extent from pin {} type {} ...",
               t, pin, type);
+    assert(pin.is_viewable());
     assert(is_logical_type(type));
     assert(is_background_transaction(t.get_src()));
     laddr_t direct_key = pin.get_intermediate_base();
@@ -1137,7 +1510,7 @@ private:
         // No change to extent::seen_by_user because this path is only
         // for background cleaning.
       }
-    ).si_then([FNAME, &t, pin=std::move(pin), this](auto ref) {
+    ).si_then([FNAME, &t, pin=pin, this](auto ref) {
       auto crc = ref->calc_crc32c();
       SUBTRACET(
 	seastore_tm,
@@ -1176,6 +1549,8 @@ private:
     return epm->get_checksum_needed(paddr);
   }
 
+  friend class ::transaction_manager_test_t;
+  friend class ::object_data_handler_test_t;
 public:
   // Testing interfaces
   auto get_epm() {

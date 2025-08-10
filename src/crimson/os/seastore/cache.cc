@@ -213,6 +213,26 @@ void Cache::register_metrics()
         },
         sm::description("total number of cache hits")
       ),
+      sm::make_counter(
+        "refresh_parent_total",
+        cursor_stats.num_refresh_parent_total,
+        sm::description("total number of refreshed cursors")
+      ),
+      sm::make_counter(
+        "refresh_invalid_parent",
+        cursor_stats.num_refresh_invalid_parent,
+        sm::description("total number of refreshed cursors with invalid parents")
+      ),
+      sm::make_counter(
+        "refresh_unviewable_parent",
+        cursor_stats.num_refresh_unviewable_parent,
+        sm::description("total number of refreshed cursors with unviewable parents")
+      ),
+      sm::make_counter(
+        "refresh_modified_viewable_parent",
+        cursor_stats.num_refresh_modified_viewable_parent,
+        sm::description("total number of refreshed cursors with viewable but modified parents")
+      ),
     }
   );
 
@@ -1743,6 +1763,7 @@ record_t Cache::prepare_record(
     assert(rewrite_stats.is_clear());
   }
 
+  cursor_stats.apply(t.cursor_stats);
   return record;
 }
 

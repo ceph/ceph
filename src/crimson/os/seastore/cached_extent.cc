@@ -104,9 +104,7 @@ void CachedExtent::set_invalid(Transaction &t) {
 
 std::pair<bool, CachedExtent::viewable_state_t>
 CachedExtent::is_viewable_by_trans(Transaction &t) {
-  if (!is_valid()) {
-    return std::make_pair(false, viewable_state_t::invalid);
-  }
+  ceph_assert(is_valid());
 
   auto trans_id = t.get_trans_id();
   if (is_pending()) {
@@ -142,8 +140,6 @@ std::ostream &operator<<(
     return out << "stable";
   case CachedExtent::viewable_state_t::pending:
     return out << "pending";
-  case CachedExtent::viewable_state_t::invalid:
-    return out << "invalid";
   case CachedExtent::viewable_state_t::stable_become_retired:
     return out << "stable_become_retired";
   case CachedExtent::viewable_state_t::stable_become_pending:
