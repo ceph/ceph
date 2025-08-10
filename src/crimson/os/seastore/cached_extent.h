@@ -806,7 +806,6 @@ public:
   enum class viewable_state_t {
     stable,                // viewable
     pending,               // viewable
-    invalid,               // unviewable
     stable_become_retired, // unviewable
     stable_become_pending, // unviewable
   };

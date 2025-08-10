@@ -198,7 +198,9 @@ struct __attribute__((packed)) backref_map_val_le_t {
  * time.
  */
 template <typename key_t, typename val_t>
-struct BtreeCursor {
+struct BtreeCursor
+  : public boost::intrusive_ref_counter<
+      BtreeCursor<key_t, val_t>, boost::thread_unsafe_counter> {
   BtreeCursor(
     op_context_t &ctx,
     CachedExtentRef parent,
@@ -253,8 +255,7 @@ struct LBACursor : BtreeCursor<laddr_t, lba::lba_map_val_t> {
   using Base = BtreeCursor<laddr_t, lba::lba_map_val_t>;
   using Base::BtreeCursor;
   bool is_indirect() const {
-    assert(!is_end());
-    return val->pladdr.is_laddr();
+    return !is_end() && val->pladdr.is_laddr();
   }
   laddr_t get_laddr() const {
     return key;
@@ -274,21 +275,27 @@ struct LBACursor : BtreeCursor<laddr_t, lba::lba_map_val_t> {
     assert(!is_indirect());
     return val->checksum;
   }
+  bool contains(laddr_t laddr) const {
+    return get_laddr() <= laddr && get_laddr() + get_length() > laddr;
+  }
   extent_ref_count_t get_refcount() const {
     assert(!is_end());
     assert(!is_indirect());
     return val->refcount;
   }
-  std::unique_ptr<LBACursor> duplicate() const {
-    return std::make_unique<LBACursor>(*this);
-  }
+
+  using base_ertr = crimson::errorator<
+    crimson::ct_error::input_output_error>;
+  using base_iertr = trans_iertr<base_ertr>;
+  base_iertr::future<> refresh();
 };
-using LBACursorRef = std::unique_ptr<LBACursor>;
+using LBACursorRef = boost::intrusive_ptr<LBACursor>;
 
 struct BackrefCursor : BtreeCursor<paddr_t, backref::backref_map_val_t> {
   using Base = BtreeCursor<paddr_t, backref::backref_map_val_t>;
   using Base::BtreeCursor;
   paddr_t get_paddr() const {
+    assert(key.is_absolute());
     return key;
   }
   laddr_t get_laddr() const {
@@ -300,7 +307,7 @@ struct BackrefCursor : BtreeCursor<paddr_t, backref::backref_map_val_t> {
     return val->type;
   }
 };
-using BackrefCursorRef = std::unique_ptr<BackrefCursor>;
+using BackrefCursorRef = boost::intrusive_ptr<BackrefCursor>;
 
 template <typename key_t, typename val_t>
 std::ostream &operator<<(
