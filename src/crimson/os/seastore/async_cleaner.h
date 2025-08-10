@@ -1178,8 +1178,6 @@ using RBMSpaceTrackerRef = std::unique_ptr<RBMSpaceTracker>;
 class AsyncCleaner {
 public:
   using state_t = BackgroundListener::state_t;
-  using base_ertr = crimson::errorator<
-    crimson::ct_error::input_output_error>;
 
   virtual void set_background_callback(BackgroundListener *) = 0;
 
