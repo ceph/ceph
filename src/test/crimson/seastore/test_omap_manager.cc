@@ -95,13 +95,14 @@ struct omap_manager_test_t :
 
   std::string set_random_key(
     omap_root_t &omap_root,
-    Transaction &t) {
-    auto key = rand_name(STR_LEN);
-    set_key(
-      omap_root,
-      t,
-      key,
-      rand_buffer(STR_LEN));
+    Transaction &t,
+    bool variable_length = false) {
+    // Generates a random number in the range [4, 128].
+    auto randu = []() -> int { return 4 + (std::rand() % 125); };
+    auto key = rand_name(variable_length ? randu() : STR_LEN);
+    set_key(omap_root, t, key,
+	    rand_buffer(variable_length ? randu() : STR_LEN));
+
     return key;
   }
 
@@ -725,31 +726,20 @@ TEST_P(omap_manager_test_t, replay)
   });
 }
 
-TEST_P(omap_manager_test_t, internal_force_split_to_root)
+TEST_P(omap_manager_test_t, variable_key_value_sizes)
 {
   run_async([this] {
     omap_root_t omap_root = initialize();
 
-    logger().debug("set big keys");
-    for (unsigned i = 0; i < 53; i++) {
+    while (omap_root.get_depth() < 2) {
       auto t = create_mutate_transaction();
-
-      for (unsigned j = 0; j < 8; ++j) {
-        set_random_key(omap_root, *t);
+      for (unsigned i = 0; i < 128; ++i) {
+        set_random_key(omap_root, *t, true /* variable sizes */);
       }
-      logger().debug("submitting transaction i = {}", i);
+      check_mappings(omap_root, *t);
       submit_transaction(std::move(t));
+      check_mappings(omap_root);
     }
-     logger().debug("set small keys");
-     for (unsigned i = 0; i < 100; i++) {
-       auto t = create_mutate_transaction();
-       for (unsigned j = 0; j < 8; ++j) {
-         set_random_key(omap_root, *t);
-       }
-      logger().debug("submitting transaction last");
-      submit_transaction(std::move(t));
-     }
-    check_mappings(omap_root);
   });
 }
 
