@@ -46,6 +46,17 @@ public:
   LBAMapping &operator=(LBAMapping &&) = default;
   ~LBAMapping() = default;
 
+  // whether the removal of this mapping would cause
+  // other mappings to be removed.
+  //
+  // Note that this should only be called on complete
+  // indirect mappings
+  bool would_cascade_remove() const {
+    assert(is_indirect());
+    assert(is_complete_indirect());
+    return direct_cursor->get_refcount() == 1;
+  }
+
   // whether the mapping corresponds to a pending extent
   bool is_pending() const {
     return !is_indirect() && !is_data_stable();
