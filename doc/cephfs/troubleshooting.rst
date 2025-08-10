@@ -301,8 +301,15 @@ or the client's requests are not reaching the MDS.
 ceph-fuse debugging
 ===================
 
-ceph-fuse also supports ``dump_ops_in_flight``. See if it has any and where they are
-stuck.
+ceph-fuse is an alternative to the CephFS kernel driver that mounts CephFS file
+systems in user space. ceph-fuse supports ``dump_ops_in_flight``. Use the following command to dump in-flight ceph-fuse operations for examination:  
+
+..
+  .. prompt:: bash #
+
+  the command goes here - 10 Aug 2025
+
+See the :ref:`Mount CephFS using FUSE<cephfs_mount_using_fuse>` documentation.
 
 Debug output
 ------------
