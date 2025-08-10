@@ -177,12 +177,9 @@ EphemeralSegmentManager::init_ertr::future<> EphemeralSegmentManager::init()
     return crimson::ct_error::invarg::make();
   }
 
-  void* addr = ::mmap(
-    nullptr,
-    config.size,
-    PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS,
-    -1,
-    0);
+  // memset 0 is not needed: anonymous mapping is zero-filled
+  void* addr = ::mmap(nullptr, config.size, PROT_READ | PROT_WRITE,
+                      MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
 
   segment_state.resize(config.size / config.segment_size, segment_state_t::EMPTY);
 
@@ -191,7 +188,6 @@ EphemeralSegmentManager::init_ertr::future<> EphemeralSegmentManager::init()
 
   buffer = (char*)addr;
 
-  ::memset(buffer, 0, config.size);
   return init_ertr::now().safe_then([] {
     return seastar::sleep(std::chrono::milliseconds(1));
   });
