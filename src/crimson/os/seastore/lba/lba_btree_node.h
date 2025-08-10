@@ -266,6 +266,8 @@ struct LBALeafNode
     uint32_t pivot_idx,
     LBALeafNode &replacement_left,
     LBALeafNode &replacement_right) final {
+    // We should do full merge if pivot_idx == right.get_size().
+    ceph_assert(pivot_idx != right.get_size());
     this->balance_child_ptrs(
       t, left, right, pivot_idx, replacement_left, replacement_right);
   }

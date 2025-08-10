@@ -349,6 +349,8 @@ struct FixedKVInternalNode
     auto replacement_right = c.cache.template alloc_new_non_data_extent<node_type_t>(
       c.trans, node_size, placement_hint_t::HOT, INIT_GENERATION);
 
+    // We should do full merge if pivot_idx == right.get_size().
+    ceph_assert(pivot_idx != right.get_size());
     this->balance_child_ptrs(
       c.trans,
       static_cast<node_type_t&>(*this),
