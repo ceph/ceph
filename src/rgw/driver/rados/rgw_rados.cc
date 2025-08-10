@@ -5554,6 +5554,7 @@ int RGWRados::restore_obj_from_cloud(RGWLCCloudTierCtx& tier_ctx,
     ret = rgw_cloud_tier_get_object(tier_ctx, false,  headers,
                                 &set_mtime, etag, accounted_size,
                                 attrs, &cb);
+    in_progress = false;
   }
 
   if (ret < 0) { 
