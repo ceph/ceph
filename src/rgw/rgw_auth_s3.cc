@@ -1235,7 +1235,7 @@ AWSv4ComplMulti::ReceiveChunkResult AWSv4ComplMulti::recv_chunk(
      * won't be triggered for the last, zero-length chunk. Instead, it will
      * be checked in the complete() method.  */
     if (stream_pos >= ChunkMeta::META_MAX_SIZE && is_signature_mismatched()) {
-      throw rgw::io::Exception(ERR_SIGNATURE_NO_MATCH, std::system_category());
+      throw rgw::io::Exception(ERR_AMZ_CONTENT_SHA256_MISMATCH, std::system_category());
     }
 
     /* We don't have metadata for this range. This means a new chunk, so we
@@ -1312,6 +1312,8 @@ AWSv4ComplMulti::ReceiveChunkResult AWSv4ComplMulti::recv_chunk(
 
     to_extract -= data_len;
     buf_pos += data_len;
+  } else {
+    lf_bytes = stream_pos - stream_pos_was;
   }
 
   /* Now we can do the bulk read directly from RestfulClient without any extra
@@ -1389,7 +1391,7 @@ static inline ExtractResult mut_extract_helper(std::string_view& region) {
 	epos != std::string_view::npos) {
       std::string_view matched = region.substr(spos, epos - spos);
       auto consumed = matched.size() + sarrlen(end.val);
-      region.remove_prefix(consumed);
+      region.remove_prefix(spos + consumed);
       return ExtractResult(true, matched, spos + consumed);
     }
   }
@@ -1508,33 +1510,13 @@ bool AWSv4ComplMulti::complete()
                    << dendl;
     return false;
   } else {
-    /* now it's time to verify the signature of the last, zero-length chunk */
-    const auto string_to_sign = string_join_reserve("\n",
-    "AWS4-HMAC-SHA256-PAYLOAD",
-    date,
-    credential_scope,
-    prev_chunk_signature,
-    AWS4_EMPTY_PAYLOAD_HASH,
-    AWS4_EMPTY_PAYLOAD_HASH);
-
-    const auto final_chunk_signature =
-      calc_hmac_sha256(signing_key, string_to_sign).to_str();
-
-    ldout(cct(), 10) << "final chunk signature = "
-		     << final_chunk_signature
-		     << "\nprev_chunk_signature was "
-		     << prev_chunk_signature
-		     << dendl;
-
-    /* in the last-chunk case, parsing_buf potentially holds unconsumed
-     * data, including the final chunk boundary */
-    std::string_view last_frag(parsing_buf.begin().get_ptr(), lf_bytes);
-
     size_t tbuf_pos = 0;
 
     static constexpr size_t trailer_buf_size = 256;
     boost::container::static_vector<char, trailer_buf_size> trailer_vec;
 
+    /* in the last-chunk case, parsing_buf potentially holds unconsumed
+     * data, including the final chunk boundary */
     std::copy(parsing_buf.begin(), parsing_buf.begin() + lf_bytes,
               trailer_vec.begin());
     tbuf_pos += lf_bytes;
@@ -1562,42 +1544,64 @@ bool AWSv4ComplMulti::complete()
     std::string_view expected_trailer_signature;
     std::string calculated_trailer_signature;
 
-    /* I have seen variations in the 0-byte case, with and without
-     * ssl transport. I have observed "\r\n0;" but also "0;" in the
-     * trailer-signature case.  I have observed only "\r\n0" in the
-     * no-trailer-signature case--but assume "0" might be possible.
-     * The logic below handles all 4 cases. */
+    /* removing grovel over the trailer offset with
+     * range based logic (change by Yixin Jin), plus
+     * conditional logic below */
     if (tbuf_pos > sarrlen("\r\n0")) {
-      const char* tv_data = trailer_vec.data();
-      auto trailer_off = 0;
-      if (*(tv_data + trailer_off) == '\r') {
-	trailer_off += 2;
-      }
-      if (*(tv_data + trailer_off) == '0') {
-	++trailer_off;
-      }
-      if (*(tv_data + trailer_off) == ';') {
-	++trailer_off;
-      }
-      const std::string_view sv_trailer(
-        trailer_vec.data() + trailer_off, tbuf_pos - trailer_off);
+      auto trailer_off = sarrlen("\r\n0");
+      std::string_view mut_sv_trailer(trailer_vec.data(), tbuf_pos);
+      const std::string_view chunk_head(trailer_vec.data(), trailer_off);
+      // If last chunk has already been processed. Previous chunk signature is the final one.
+      std::string final_chunk_signature = prev_chunk_signature;
+      if (chunk_head == "\r\n0") {
+        /*
+         * The last chunk has not yet been processed
+         * now it's time to verify the signature of the last, zero-length chunk
+         */
+        const auto string_to_sign = string_join_reserve("\n",
+        "AWS4-HMAC-SHA256-PAYLOAD",
+        date,
+        credential_scope,
+        prev_chunk_signature,
+        AWS4_EMPTY_PAYLOAD_HASH,
+        AWS4_EMPTY_PAYLOAD_HASH);
 
-      if (cct()->_conf->subsys.should_gather(ceph_subsys_rgw, 10)) [[unlikely]] {
-        ldout(cct(), 10) << "trailer_section: " << sv_trailer << dendl;
-      }
+        final_chunk_signature =
+          calc_hmac_sha256(signing_key, string_to_sign).to_str();
 
-      std::string_view mut_sv_trailer(sv_trailer);
+        ldout(cct(), 10) << "final chunk signature = "
+                         << final_chunk_signature
+                         << "\nprev_chunk_signature was "
+                         << prev_chunk_signature
+                         << dendl;
 
-      auto chunk_signature =
-          mut_extract_helper<"chunk-signature=", "\r\n">(mut_sv_trailer);
+        if (*(trailer_vec.data() + trailer_off) == ';') {
+          ++trailer_off;
+        }
+        const std::string_view sv_trailer(
+          trailer_vec.data() + trailer_off, tbuf_pos - trailer_off);
 
-      std::string_view sig_sv;
-      if (get<0>(chunk_signature)) {
-        sig_sv = get<1>(chunk_signature);
-        sig_sv.remove_prefix(sarrlen("chunk-signature="));
+        if (cct()->_conf->subsys.should_gather(ceph_subsys_rgw, 10)) [[unlikely]] {
+          ldout(cct(), 10) << "trailer_section: " << sv_trailer << dendl;
+        }
 
-        ldout(cct(), 10) << "expected last chunk signature: " << sig_sv
-                         << " remaining: " << mut_sv_trailer << dendl;
+        mut_sv_trailer = sv_trailer;
+
+        auto chunk_signature =
+            mut_extract_helper<"chunk-signature=", "\r\n">(mut_sv_trailer);
+
+        std::string_view sig_sv;
+        if (get<0>(chunk_signature)) {
+          sig_sv = get<1>(chunk_signature);
+          sig_sv.remove_prefix(sarrlen("chunk-signature="));
+
+          ldout(cct(), 10) << "expected last chunk signature: " << sig_sv
+                           << "\n calculated last chunk signature: " << final_chunk_signature
+                           << "\n remaining: " << mut_sv_trailer << dendl;
+          if (sig_sv != final_chunk_signature) {
+            throw rgw::io::Exception(ERR_AMZ_CONTENT_SHA256_MISMATCH, std::system_category());
+          }
+        }
       }
 
       trailer_map_t trailer_map;
@@ -1632,7 +1636,7 @@ bool AWSv4ComplMulti::complete()
     if (expect_trailer_signature() &&
 	(expected_trailer_signature.empty() ||
 	 (calculated_trailer_signature != expected_trailer_signature))) {
-      throw rgw::io::Exception(ERR_SIGNATURE_NO_MATCH, std::system_category());
+      throw rgw::io::Exception(ERR_AMZ_CONTENT_SHA256_MISMATCH, std::system_category());
     }
 
     return true;
