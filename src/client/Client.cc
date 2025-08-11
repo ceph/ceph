@@ -12457,10 +12457,6 @@ int Client::getcwd(string& dir, const UserPerm& perms)
 int Client::_statfs(Inode *in, struct statvfs *stbuf,
 		   const UserPerm& perms)
 {
-  RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
-  if (!mref_reader.is_state_satisfied())
-    return -ENOTCONN;
-
   ldout(cct, 10) << __func__ << dendl;
   tout(cct) << __func__ << std::endl;
   unsigned long int total_files_on_fs;
@@ -12898,6 +12894,10 @@ int Client::get_snap_info(const char *path, const UserPerm &perms, SnapInfo *sna
 
 int Client::ll_statfs(Inode *in, struct statvfs *stbuf, const UserPerm& perms)
 {
+  RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
+  if (!mref_reader.is_state_satisfied())
+    return -ENOTCONN;
+
   /* Since the only thing this does is wrap a call to statfs, and
      statfs takes a lock, it doesn't seem we have a need to split it
      out. */
@@ -12906,6 +12906,10 @@ int Client::ll_statfs(Inode *in, struct statvfs *stbuf, const UserPerm& perms)
 
 int Client::statfs(const char *path, struct statvfs *stbuf, const UserPerm& perms)
 {
+  RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
+  if (!mref_reader.is_state_satisfied())
+    return -ENOTCONN;
+
   walk_dentry_result wdr;
   {
     std::scoped_lock l(client_lock);
