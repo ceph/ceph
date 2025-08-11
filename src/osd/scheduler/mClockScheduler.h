@@ -86,7 +86,7 @@ public:
     : cct(cct),
       cutoff_priority(cutoff_priority),
       monc(monc),
-      mclock_conf(cct, client_registry, monc, num_shards,
+      mclock_conf(cct, client_registry, num_shards,
 	          is_rotational, shard_id, whoami),
       scheduler(
 	std::bind(&ClientRegistry::get_info,
