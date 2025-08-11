@@ -107,8 +107,7 @@ class HostControllerTest(ControllerTestCase):
             },
             'cpu_count': 1,
             'memory_total_kb': 1024,
-            'services': [],
-            'service_instances': [{'type': 'mon', 'count': 1}]
+            'services': []
         }, {
             'hostname': 'host-1',
             'sources': {
@@ -117,8 +116,7 @@ class HostControllerTest(ControllerTestCase):
             },
             'cpu_count': 2,
             'memory_total_kb': 1024,
-            'services': [],
-            'service_instances': [{'type': 'mon', 'count': 1}]
+            'services': []
         }]
         # test with orchestrator available
         with patch_orch(True, hosts=hosts_without_facts) as fake_client:
@@ -129,8 +127,11 @@ class HostControllerTest(ControllerTestCase):
                     return [hosts_facts[0]]
                 return [hosts_facts[1]]
             fake_client.hosts.get_facts.side_effect = get_facts_mock
-            # test with ?facts=true
-            self._get('{}?facts=true'.format(self.URL_HOST), version=APIVersion(1, 3))
+            # test with ?facts=true (explicitly disable service_instances)
+            self._get(
+                '{}?facts=true&include_service_instances=false'.format(self.URL_HOST),
+                version=APIVersion(1, 3)
+            )
             self.assertStatus(200)
             self.assertHeader('Content-Type',
                               APIVersion(1, 3).to_mime_type())
@@ -164,6 +165,70 @@ class HostControllerTest(ControllerTestCase):
             self.assertHeader('Content-Type',
                               APIVersion(1, 3).to_mime_type())
             self.assertJsonBody(hosts_without_facts)
+
+    def test_host_list_include_service_instances_flag(self):
+
+        orch_hosts = [
+            HostSpec('host-0'),
+            HostSpec('host-1')
+        ]
+
+        host0_daemons = [
+            DaemonDescription(hostname='host-0', daemon_type='mon', daemon_id='a'),
+        ]
+        host1_daemons = [
+            DaemonDescription(hostname='host-1', daemon_type='mon', daemon_id='a'),
+            DaemonDescription(hostname='host-1', daemon_type='mon', daemon_id='b'),
+        ]
+
+        with patch_orch(True, hosts=orch_hosts) as fake_client:
+            def list_daemons_mock(hostname=None, **_kwargs):
+                if hostname == 'host-0':
+                    return host0_daemons
+                if hostname == 'host-1':
+                    return host1_daemons
+                return []
+
+            fake_client.services.list_daemons.side_effect = list_daemons_mock
+            # include_service_instances=true should include expected counts
+            self._get(f'{self.URL_HOST}?include_service_instances=true', version=APIVersion(1, 3))
+            self.assertStatus(200)
+            body = self.json_body()
+            self.assertEqual(len(body), 2)
+            by_host = {h['hostname']: h for h in body}
+            self.assertIn('service_instances', by_host['host-0'])
+            self.assertIn('service_instances', by_host['host-1'])
+            self.assertEqual(by_host['host-0']['service_instances'], [{'type': 'mon', 'count': 1}])
+            self.assertEqual(by_host['host-1']['service_instances'], [{'type': 'mon', 'count': 2}])
+
+            # include_service_instances=false should omit service_instances
+            self._get(f'{self.URL_HOST}?include_service_instances=false', version=APIVersion(1, 3))
+            self.assertStatus(200)
+            body = self.json_body()
+            by_host = {h['hostname']: h for h in body}
+            self.assertNotIn('service_instances', by_host['host-0'])
+            self.assertNotIn('service_instances', by_host['host-1'])
+
+            # facts=true and include_service_instances=true
+            def get_facts_mock(hostname: str):
+                return [{
+                    'hostname': hostname,
+                    'cpu_count': 1 if hostname == 'host-0' else 2,
+                    'memory_total_kb': 1024
+                }]
+
+            fake_client.hosts.get_facts.side_effect = get_facts_mock
+            self._get(
+                f'{self.URL_HOST}?facts=true&include_service_instances=true',
+                version=APIVersion(1, 3)
+            )
+            self.assertStatus(200)
+            body = self.json_body()
+            by_host = {h['hostname']: h for h in body}
+            self.assertIn('service_instances', by_host['host-0'])
+            self.assertIn('service_instances', by_host['host-1'])
+            self.assertIn('cpu_count', by_host['host-0'])
+            self.assertIn('cpu_count', by_host['host-1'])
 
     def test_get_1(self):
         mgr.list_servers.return_value = []
