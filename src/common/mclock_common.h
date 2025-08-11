@@ -180,8 +180,10 @@ class ClientRegistry {
         internal_client_infos.emplace_back(1, 1, 1);
       }
     }
-    void update_from_config(const ConfigProxy &conf,
-      double capacity_per_shard);
+    void update_from_profile(
+      const profile_t &current_profile,
+      const double capacity_per_shard);
+
     const crimson::dmclock::ClientInfo *get_info(
       const scheduler_id_t &id) const;
 };
@@ -191,55 +193,32 @@ private:
   CephContext *cct;
   uint32_t num_shards;
   bool is_rotational;
-  PerfCounters *logger;
+  PerfCounters *logger = nullptr;
   int shard_id;
   int whoami;
-  double osd_bandwidth_cost_per_io;
-  double osd_bandwidth_capacity_per_shard;
+  double osd_bandwidth_cost_per_io = 0.0;
+  double osd_bandwidth_capacity_per_shard = 0.0;
   ClientRegistry& client_registry;
-  #ifndef WITH_CRIMSON
-  MonClient *monc;
-  #endif
+
+  // currently active profile, will be overridden from config on startup
+  // and upon config change
+  profile_t current_profile = BALANCED;
 public:
-  #ifdef WITH_CRIMSON
   MclockConfig(CephContext *cct, ClientRegistry& creg,
                uint32_t num_shards, bool is_rotational, int shard_id,
 	       int whoami):cct(cct),
                            num_shards(num_shards),
                            is_rotational(is_rotational),
-			   logger(nullptr),shard_id(shard_id),
-                           whoami(whoami), osd_bandwidth_cost_per_io(0.0),
-	                   osd_bandwidth_capacity_per_shard(0.0),
+			   shard_id(shard_id),
+                           whoami(whoami),
 	                   client_registry(creg)
   {
     cct->_conf.add_observer(this);
-    set_osd_capacity_params_from_config();
-    set_config_defaults_from_profile();
-    client_registry.update_from_config(
-      cct->_conf, get_capacity_per_shard());
+    set_from_config();
   }
-  #else
-  MclockConfig(CephContext *cct, ClientRegistry& creg,
-               MonClient *monc, uint32_t num_shards, bool is_rotational,
-	       int shard_id, int whoami):cct(cct),
-                                         num_shards(num_shards),
-                                         is_rotational(is_rotational),
-					 logger(nullptr),shard_id(shard_id),
-                                         whoami(whoami),
-					 osd_bandwidth_cost_per_io(0.0),
-	                                 osd_bandwidth_capacity_per_shard(0.0),
-	                                 client_registry(creg), monc(monc)
-  {
-    cct->_conf.add_observer(this);
-    set_osd_capacity_params_from_config();
-    set_config_defaults_from_profile();
-    client_registry.update_from_config(
-      cct->_conf, get_capacity_per_shard());
-  }
-#endif
   ~MclockConfig() final;
-  void set_config_defaults_from_profile();
-  void set_osd_capacity_params_from_config();
+
+  void set_from_config();
   void init_logger();
   void get_mclock_counter(scheduler_id_t id);
   void put_mclock_counter(scheduler_id_t id);
