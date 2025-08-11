@@ -327,8 +327,7 @@ public:
   }
 
   /// See Cache::get_next_dirty_extents
-  using get_next_dirty_extents_iertr = base_iertr;
-  using get_next_dirty_extents_ret = get_next_dirty_extents_iertr::future<
+  using get_next_dirty_extents_ret = base_iertr::future<
     std::vector<CachedExtentRef>>;
   virtual get_next_dirty_extents_ret get_next_dirty_extents(
     Transaction &t,     ///< [in] current transaction
@@ -344,9 +343,7 @@ public:
    * handle finding the current instance if it is still alive and
    * otherwise ignore it.
    */
-  using rewrite_extent_iertr = base_iertr;
-  using rewrite_extent_ret = rewrite_extent_iertr::future<>;
-  virtual rewrite_extent_ret rewrite_extent(
+  virtual base_iertr::future<> rewrite_extent(
     Transaction &t,
     CachedExtentRef extent,
     rewrite_gen_t target_generation,
@@ -361,8 +358,7 @@ public:
    * See TransactionManager::get_extents_if_live and
    * LBAManager::get_physical_extent_if_live.
    */
-  using get_extents_if_live_iertr = base_iertr;
-  using get_extents_if_live_ret = get_extents_if_live_iertr::future<
+  using get_extents_if_live_ret = base_iertr::future<
     std::list<CachedExtentRef>>;
   virtual get_extents_if_live_ret get_extents_if_live(
     Transaction &t,
@@ -376,10 +372,7 @@ public:
    *
    * Submits transaction without any space throttling.
    */
-  using submit_transaction_direct_iertr = base_iertr;
-  using submit_transaction_direct_ret =
-    submit_transaction_direct_iertr::future<>;
-  virtual submit_transaction_direct_ret submit_transaction_direct(
+  virtual base_iertr::future<> submit_transaction_direct(
     Transaction &t,
     std::optional<journal_seq_t> seq_to_trim = std::nullopt) = 0;
 

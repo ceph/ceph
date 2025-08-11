@@ -73,8 +73,7 @@ class NodeExtentManager {
   virtual read_iertr::future<NodeExtentRef> read_extent(
       Transaction&, laddr_t) = 0;
 
-  using alloc_iertr = base_iertr;
-  virtual alloc_iertr::future<NodeExtentRef> alloc_extent(
+  virtual base_iertr::future<NodeExtentRef> alloc_extent(
       Transaction&, laddr_t hint, extent_len_t) = 0;
 
   using retire_iertr = base_iertr::extend<
@@ -82,8 +81,7 @@ class NodeExtentManager {
   virtual retire_iertr::future<> retire_extent(
       Transaction&, NodeExtentRef) = 0;
 
-  using getsuper_iertr = base_iertr;
-  virtual getsuper_iertr::future<Super::URef> get_super(
+  virtual base_iertr::future<Super::URef> get_super(
       Transaction&, RootNodeTracker&) = 0;
 
   virtual std::ostream& print(std::ostream& os) const = 0;

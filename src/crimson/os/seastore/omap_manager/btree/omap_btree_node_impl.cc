@@ -436,7 +436,7 @@ OMapInnerNode::make_full_merge(omap_context_t oc, OMapNodeRef right)
         std::move(replacement));
   }).handle_error_interruptible(
     crimson::ct_error::enospc::assert_failure{"unexpected enospc"},
-    full_merge_iertr::pass_further{}
+    base_iertr::pass_further{}
   );
 }
 
@@ -462,7 +462,7 @@ OMapInnerNode::make_balanced(
                                *replacement_left, *replacement_right)));
   }).handle_error_interruptible(
     crimson::ct_error::enospc::assert_failure{"unexpected enospc"},
-    make_balanced_iertr::pass_further{}
+    base_iertr::pass_further{}
   );
 }
 
@@ -909,7 +909,7 @@ OMapLeafNode::make_full_merge(omap_context_t oc, OMapNodeRef right)
         std::move(replacement));
   }).handle_error_interruptible(
     crimson::ct_error::enospc::assert_failure{"unexpected enospc"},
-    full_merge_iertr::pass_further{}
+    base_iertr::pass_further{}
   );
 }
 
@@ -934,7 +934,7 @@ OMapLeafNode::make_balanced(
                  *replacement_left, *replacement_right)));
   }).handle_error_interruptible(
     crimson::ct_error::enospc::assert_failure{"unexpected enospc"},
-    make_balanced_iertr::pass_further{}
+    base_iertr::pass_further{}
   );
 }
 

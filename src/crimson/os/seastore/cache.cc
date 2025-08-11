@@ -49,7 +49,7 @@ Cache::~Cache()
 }
 
 // TODO: this method can probably be removed in the future
-Cache::retire_extent_ret Cache::retire_extent_addr(
+base_iertr::future<> Cache::retire_extent_addr(
   Transaction &t, paddr_t paddr, extent_len_t length)
 {
   LOG_PREFIX(Cache::retire_extent_addr);
@@ -63,7 +63,7 @@ Cache::retire_extent_ret Cache::retire_extent_addr(
     DEBUGT("retire {}~0x{:x} on t -- {}",
            t, paddr, length, *ext);
     t.add_present_to_retired_set(ext);
-    return retire_extent_iertr::now();
+    return base_iertr::now();
   } else if (result == Transaction::get_extent_ret::RETIRED) {
     ERRORT("retire {}~0x{:x} failed, already retired -- {}",
            t, paddr, length, *ext);
@@ -90,7 +90,7 @@ Cache::retire_extent_ret Cache::retire_extent_addr(
     add_extent(ext);
   }
   t.add_absent_to_retired_set(ext);
-  return retire_extent_iertr::now();
+  return base_iertr::now();
 }
 
 void Cache::retire_absent_extent_addr(
@@ -2248,7 +2248,7 @@ Cache::get_root_ret Cache::get_root(Transaction &t)
   if (t.root) {
     TRACET("root already on t -- {}", t, *t.root);
     return t.root->wait_io().then([&t] {
-      return get_root_iertr::make_ready_future<RootBlockRef>(
+      return base_iertr::make_ready_future<RootBlockRef>(
 	t.root);
     });
   } else {
@@ -2256,7 +2256,7 @@ Cache::get_root_ret Cache::get_root(Transaction &t)
     t.root = root;
     t.add_to_read_set(root);
     return root->wait_io().then([root=root] {
-      return get_root_iertr::make_ready_future<RootBlockRef>(
+      return base_iertr::make_ready_future<RootBlockRef>(
 	root);
     });
   }

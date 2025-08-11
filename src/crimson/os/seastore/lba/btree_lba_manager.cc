@@ -77,11 +77,11 @@ const get_phy_tree_root_node_ret get_phy_tree_root_node<
               c.cache.get_extent_viewable_by_trans(c.trans, lba_root)};
     } else {
       return {false,
-              Cache::get_extent_iertr::make_ready_future<CachedExtentRef>()};
+              base_iertr::make_ready_future<CachedExtentRef>()};
     }
   } else {
     return {false,
-            Cache::get_extent_iertr::make_ready_future<CachedExtentRef>()};
+            base_iertr::make_ready_future<CachedExtentRef>()};
   }
 }
 
@@ -151,7 +151,7 @@ BtreeLBAManager::get_mappings(
             ret.emplace_back(LBAMapping::create_direct(std::move(cursor)));
             TRACET("{}~0x{:x} got {}",
                    c.trans, laddr, length, ret.back());
-            return get_mappings_iertr::now();
+            return base_iertr::now();
           }
 	  assert(cursor->val->refcount == EXTENT_DEFAULT_REF_COUNT);
 	  assert(cursor->val->checksum == 0);
@@ -161,7 +161,7 @@ BtreeLBAManager::get_mappings(
 		std::move(direct), std::move(cursor)));
             TRACET("{}~0x{:x} got {}",
                    c.trans, laddr, length, ret.back());
-            return get_mappings_iertr::now();
+            return base_iertr::now();
           });
         });
       });
@@ -818,8 +818,7 @@ BtreeLBAManager::scan_mappings(
     });
 }
 
-BtreeLBAManager::rewrite_extent_ret
-BtreeLBAManager::rewrite_extent(
+base_iertr::future<> BtreeLBAManager::rewrite_extent(
   Transaction &t,
   CachedExtentRef extent)
 {
@@ -841,7 +840,7 @@ BtreeLBAManager::rewrite_extent(
       });
   } else {
     DEBUGT("skip non lba extent -- {}", t, *extent);
-    return rewrite_extent_iertr::now();
+    return base_iertr::now();
   }
 }
 
@@ -1002,7 +1001,7 @@ BtreeLBAManager::complete_indirect_lba_mapping(
   assert(mapping.is_viewable());
   assert(mapping.is_indirect());
   if (mapping.is_complete_indirect()) {
-    return complete_lba_mapping_iertr::make_ready_future<
+    return base_iertr::make_ready_future<
       LBAMapping>(std::move(mapping));
   }
   auto c = get_context(t);

@@ -54,7 +54,7 @@ FlatCollectionManager::get_coll_root(const coll_root_t &coll_root, Transaction &
   ).si_then([](auto maybe_indirect_extent) {
     assert(!maybe_indirect_extent.is_indirect());
     assert(!maybe_indirect_extent.is_clone);
-    return get_root_iertr::make_ready_future<CollectionNodeRef>(
+    return base_iertr::make_ready_future<CollectionNodeRef>(
         std::move(maybe_indirect_extent.extent));
   });
 }

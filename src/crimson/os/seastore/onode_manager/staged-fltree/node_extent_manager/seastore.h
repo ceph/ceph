@@ -127,14 +127,14 @@ class SeastoreNodeExtentManager final: public TransactionManagerHandle {
     });
   }
 
-  alloc_iertr::future<NodeExtentRef> alloc_extent(
+  base_iertr::future<NodeExtentRef> alloc_extent(
       Transaction& t, laddr_t hint, extent_len_t len) override {
     SUBTRACET(seastore_onode, "allocating {}B with hint {} ...", t, len, hint);
     if constexpr (INJECT_EAGAIN) {
       if (trigger_eagain()) {
         SUBDEBUGT(seastore_onode, "allocating {}B: trigger eagain", t, len);
         t.test_set_conflict();
-        return alloc_iertr::make_ready_future<NodeExtentRef>();
+        return base_iertr::make_ready_future<NodeExtentRef>();
       }
     }
     return tm.alloc_non_data_extent<SeastoreNodeExtent>(t, hint, len
@@ -153,7 +153,7 @@ class SeastoreNodeExtentManager final: public TransactionManagerHandle {
       return NodeExtentRef(extent);
     }).handle_error_interruptible(
       crimson::ct_error::enospc::assert_failure{"unexpected enospc"},
-      alloc_iertr::pass_further{}
+      base_iertr::pass_further{}
     );
   }
 
@@ -180,14 +180,14 @@ class SeastoreNodeExtentManager final: public TransactionManagerHandle {
     });
   }
 
-  getsuper_iertr::future<Super::URef> get_super(
+  base_iertr::future<Super::URef> get_super(
       Transaction& t, RootNodeTracker& tracker) override {
     SUBTRACET(seastore_onode, "get root ...", t);
     if constexpr (INJECT_EAGAIN) {
       if (trigger_eagain()) {
         SUBDEBUGT(seastore_onode, "get root: trigger eagain", t);
         t.test_set_conflict();
-        return getsuper_iertr::make_ready_future<Super::URef>();
+        return base_iertr::make_ready_future<Super::URef>();
       }
     }
     return tm.read_onode_root(t).si_then([this, &t, &tracker](auto root_addr) {

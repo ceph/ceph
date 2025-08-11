@@ -42,8 +42,7 @@ public:
    * For indirect lba mappings, get_mappings will always retrieve the original
    * lba value.
    */
-  using get_mappings_iertr = base_iertr;
-  using get_mappings_ret = get_mappings_iertr::future<lba_mapping_list_t>;
+  using get_mappings_ret = base_iertr::future<lba_mapping_list_t>;
   virtual get_mappings_ret get_mappings(
     Transaction &t,
     laddr_t offset, extent_len_t length) = 0;
@@ -73,8 +72,7 @@ public:
 
 
 #ifdef UNIT_TESTS_BUILT
-  using get_end_mapping_iertr = base_iertr;
-  using get_end_mapping_ret = get_end_mapping_iertr::future<LBAMapping>;
+  using get_end_mapping_ret = base_iertr::future<LBAMapping>;
   virtual get_end_mapping_ret get_end_mapping(Transaction &t) = 0;
 #endif
 
@@ -230,8 +228,7 @@ public:
    *
    * @return returns whether the extent is alive
    */
-  using init_cached_extent_iertr = base_iertr;
-  using init_cached_extent_ret = init_cached_extent_iertr::future<bool>;
+  using init_cached_extent_ret = base_iertr::future<bool>;
   virtual init_cached_extent_ret init_cached_extent(
     Transaction &t,
     CachedExtentRef e) = 0;
@@ -259,9 +256,7 @@ public:
    *
    * rewrite extent into passed transaction
    */
-  using rewrite_extent_iertr = base_iertr;
-  using rewrite_extent_ret = rewrite_extent_iertr::future<>;
-  virtual rewrite_extent_ret rewrite_extent(
+  virtual base_iertr::future<> rewrite_extent(
     Transaction &t,
     CachedExtentRef extent) = 0;
 
@@ -309,9 +304,7 @@ public:
     laddr_t laddr,
     extent_len_t len) = 0;
 
-  using complete_lba_mapping_iertr = get_mappings_iertr;
-  using complete_lba_mapping_ret =
-    complete_lba_mapping_iertr::future<LBAMapping>;
+  using complete_lba_mapping_ret = base_iertr::future<LBAMapping>;
   /*
    * Completes an incomplete indirect mappings
    *

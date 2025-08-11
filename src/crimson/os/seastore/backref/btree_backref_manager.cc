@@ -37,11 +37,11 @@ const get_phy_tree_root_node_ret get_phy_tree_root_node<
               c.cache.get_extent_viewable_by_trans(c.trans, backref_root)};
     } else {
       return {false,
-              Cache::get_extent_iertr::make_ready_future<CachedExtentRef>()};
+              base_iertr::make_ready_future<CachedExtentRef>()};
     }
   } else {
     return {false,
-            Cache::get_extent_iertr::make_ready_future<CachedExtentRef>()};
+            base_iertr::make_ready_future<CachedExtentRef>()};
   }
 }
 
@@ -237,7 +237,7 @@ BtreeBackrefManager::new_mapping(
 	  });
 	});
     }).si_then([c](auto &&state) {
-      return new_mapping_iertr::make_ready_future<BackrefMapping>(
+      return base_iertr::make_ready_future<BackrefMapping>(
 	BackrefMapping::create(state.ret->get_cursor(c)));
     });
 }
@@ -261,7 +261,7 @@ BtreeBackrefManager::merge_cached_backrefs(
       [this, &t, &limit, &backref_entryrefs_by_seq, max](auto &iter, auto &inserted_to) {
       return trans_intr::repeat(
         [&iter, this, &t, &limit, &backref_entryrefs_by_seq, max, &inserted_to]()
-        -> merge_cached_backrefs_iertr::future<seastar::stop_iteration> {
+        -> base_iertr::future<seastar::stop_iteration> {
         if (iter == backref_entryrefs_by_seq.end()) {
           return seastar::make_ready_future<seastar::stop_iteration>(
             seastar::stop_iteration::yes);
@@ -317,13 +317,12 @@ BtreeBackrefManager::merge_cached_backrefs(
           std::move(inserted_to));
       });
     });
-    return merge_cached_backrefs_iertr::make_ready_future<journal_seq_t>(
+    return base_iertr::make_ready_future<journal_seq_t>(
       std::move(inserted_to));
   });
 }
 
-BtreeBackrefManager::scan_mapped_space_ret
-BtreeBackrefManager::scan_mapped_space(
+base_iertr::future<> BtreeBackrefManager::scan_mapped_space(
   Transaction &t,
   BtreeBackrefManager::scan_mapped_space_func_t &&f)
 {
@@ -483,8 +482,7 @@ BtreeBackrefManager::init_cached_extent_ret BtreeBackrefManager::init_cached_ext
   });
 }
 
-BtreeBackrefManager::rewrite_extent_ret
-BtreeBackrefManager::rewrite_extent(
+base_iertr::future<> BtreeBackrefManager::rewrite_extent(
   Transaction &t,
   CachedExtentRef extent)
 {

@@ -150,7 +150,7 @@ public:
    *
    * Get logical pins overlapping offset~length
    */
-  using get_pins_iertr = LBAManager::get_mappings_iertr;
+  using get_pins_iertr = base_iertr;
   using get_pins_ret = get_pins_iertr::future<lba_mapping_list_t>;
   get_pins_ret get_pins(
     Transaction &t,
@@ -299,7 +299,7 @@ public:
 	return lba_manager->complete_indirect_lba_mapping(
 	  t, std::move(npin));
       } else {
-	return LBAManager::complete_lba_mapping_iertr::make_ready_future<
+	return base_iertr::make_ready_future<
 	  LBAMapping>(std::move(npin));
       }
     }).si_then([&t, this, partial_off, partial_len,
@@ -750,8 +750,7 @@ public:
     return cache->create_transaction(src, name, cache_hint, is_weak);
   }
 
-  using ExtentCallbackInterface::submit_transaction_direct_ret;
-  submit_transaction_direct_ret submit_transaction_direct(
+  base_iertr::future<> submit_transaction_direct(
     Transaction &t,
     std::optional<journal_seq_t> seq_to_trim = std::nullopt) final;
 
@@ -761,8 +760,7 @@ public:
     journal_seq_t seq,
     size_t max_bytes) final;
 
-  using ExtentCallbackInterface::rewrite_extent_ret;
-  rewrite_extent_ret rewrite_extent(
+  base_iertr::future<> rewrite_extent(
     Transaction &t,
     CachedExtentRef extent,
     rewrite_gen_t target_generation,
@@ -1365,7 +1363,7 @@ private:
 	  std::vector<remap_entry_t>(remaps.begin(), remaps.end())
 	).si_then([FNAME, &t](auto ret) {
 	  SUBDEBUGT(seastore_tm, "remapped {} pins", t, ret.size());
-	  return Cache::retire_extent_iertr::make_ready_future<
+	  return base_iertr::make_ready_future<
 	    std::vector<LBAMapping>>(std::move(ret));
 	});
       }).handle_error_interruptible(
@@ -1377,11 +1375,11 @@ private:
     });
   }
 
-  rewrite_extent_ret rewrite_logical_extent(
+  base_iertr::future<> rewrite_logical_extent(
     Transaction& t,
     LogicalChildNodeRef extent);
 
-  submit_transaction_direct_ret do_submit_transaction(
+  base_iertr::future<> do_submit_transaction(
     Transaction &t,
     ExtentPlacementManager::dispatch_result_t dispatch_result,
     std::optional<journal_seq_t> seq_to_trim = std::nullopt);
