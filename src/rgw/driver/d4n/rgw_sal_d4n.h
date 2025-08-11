@@ -323,7 +323,10 @@ class D4NTransactionMng {
   public:
 
     D4NTransactionMng(d4n::ObjectDirectory* o, const DoutPrefixProvider* d, int& rc):obj_dir(o), dpp(d), result_code(rc) {
-      if (obj_dir) obj_dir->m_d4n_trx->start_trx();
+      if (obj_dir) {
+	obj_dir->m_d4n_trx->clear_temp_keys();
+	obj_dir->m_d4n_trx->start_trx();
+      }
     }
 
     D4NTransactionMng(D4NFilterObject* o, const DoutPrefixProvider* d, int& rc)
