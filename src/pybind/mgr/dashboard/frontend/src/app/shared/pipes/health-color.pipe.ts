@@ -9,9 +9,15 @@ import { HealthColor } from '~/app/shared/enum/health-color.enum';
 export class HealthColorPipe implements PipeTransform {
   constructor(private cssHelper: CssHelper) {}
 
+  private cache: Record<string, any> = {};
+
   transform(value: any): any {
-    return Object.keys(HealthColor).includes(value as HealthColor)
-      ? { color: this.cssHelper.propertyValue(HealthColor[value]) }
-      : null;
+    if (!Object.keys(HealthColor).includes(value as HealthColor)) {
+      return null;
+    }
+    if (!this.cache[value]) {
+      this.cache[value] = { color: this.cssHelper.propertyValue(HealthColor[value]) };
+    }
+    return this.cache[value];
   }
 }
