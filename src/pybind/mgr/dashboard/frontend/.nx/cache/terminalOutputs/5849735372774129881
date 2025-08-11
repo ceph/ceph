@@ -1,0 +1,20 @@
+[36m⠋[39m Generating browser application bundles (phase: setup)...[1m[33m    TypeScript compiler options "target" and "useDefineForClassFields" are set to "ES2022" and "false" respectively by the Angular CLI. To control ECMA version and features use the Browserslist configuration. For more information, see https://angular.dev/tools/cli/build#configuring-browser-compatibility[39m[22m
+[1m[33m    NOTE: You can set the "target" to "ES2022" in the project's tsconfig to remove this warning.[39m[22m
+[1m[33m[7m[1m[36m NX [39m[33m[22m[1m[27m Falling back to ts-node for local typescript execution. This may be a little slower.[39m[22m
+[1m[33m  - To fix this, ensure @swc-node/register and @swc/core have been installed[39m[22m
+[1m[33mCould not find a version for "@rollup/rollup-linux-arm64-gnu" in the root "package.json" when collecting shared packages for the Module Federation setup. The package will not be shared.[39m[22m
+[1m[33mCould not find a version for "brace-expansion" in the root "package.json" when collecting shared packages for the Module Federation setup. The package will not be shared.[39m[22m
+(node:196887) [DEP0128] DeprecationWarning: Invalid 'main' field in '/home/afreenmisbah/repos/forks/dev/ceph/src/pybind/mgr/dashboard/frontend/node_modules/rxjs/src/ajax/package.json' of './index.js'. Please either fix that or report it to the module author
+(Use `node --trace-deprecation ...` to show where the warning was created)
+(node:196887) [DEP0128] DeprecationWarning: Invalid 'main' field in '/home/afreenmisbah/repos/forks/dev/ceph/src/pybind/mgr/dashboard/frontend/node_modules/rxjs/src/fetch/package.json' of './index.js'. Please either fix that or report it to the module author
+(node:196887) [DEP0128] DeprecationWarning: Invalid 'main' field in '/home/afreenmisbah/repos/forks/dev/ceph/src/pybind/mgr/dashboard/frontend/node_modules/rxjs/src/internal-compatibility/package.json' of './index.js'. Please either fix that or report it to the module author
+(node:196887) [DEP0128] DeprecationWarning: Invalid 'main' field in '/home/afreenmisbah/repos/forks/dev/ceph/src/pybind/mgr/dashboard/frontend/node_modules/rxjs/src/operators/package.json' of './index.js'. Please either fix that or report it to the module author
+(node:196887) [DEP0128] DeprecationWarning: Invalid 'main' field in '/home/afreenmisbah/repos/forks/dev/ceph/src/pybind/mgr/dashboard/frontend/node_modules/rxjs/src/testing/package.json' of './index.js'. Please either fix that or report it to the module author
+(node:196887) [DEP0128] DeprecationWarning: Invalid 'main' field in '/home/afreenmisbah/repos/forks/dev/ceph/src/pybind/mgr/dashboard/frontend/node_modules/rxjs/src/webSocket/package.json' of './index.js'. Please either fix that or report it to the module author
+[2K[1G[36m⠙[39m Generating browser application bundles (phase: setup)...(node:196887) [DEP0180] DeprecationWarning: fs.Stats constructor is deprecated.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+
+[0m[7m[1m[31m NX [39m[22m[27m[0m  [31mEACCES: permission denied, unlink '/home/afreenmisbah/repos/forks/dev/ceph/src/pybind/mgr/dashboard/frontend/dist/en-US/Ceph_Logo.svg'[39m
+
+Pass --verbose to see the stacktrace.
+

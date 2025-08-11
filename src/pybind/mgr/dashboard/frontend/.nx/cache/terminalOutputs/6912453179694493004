@@ -1,0 +1,1706 @@
+[36m⠋[39m Generating browser application bundles (phase: setup)...[1m[33m    TypeScript compiler options "target" and "useDefineForClassFields" are set to "ES2022" and "false" respectively by the Angular CLI. To control ECMA version and features use the Browserslist configuration. For more information, see https://angular.dev/tools/cli/build#configuring-browser-compatibility[39m[22m
+[1m[33m    NOTE: You can set the "target" to "ES2022" in the project's tsconfig to remove this warning.[39m[22m
+[1m[33m[7m[1m[36m NX [39m[33m[22m[1m[27m Falling back to ts-node for local typescript execution. This may be a little slower.[39m[22m
+[1m[33m  - To fix this, ensure @swc-node/register and @swc/core have been installed[39m[22m
+[1m[33mCould not find a version for "@rollup/rollup-linux-arm64-gnu" in the root "package.json" when collecting shared packages for the Module Federation setup. The package will not be shared.[39m[22m
+[1m[33mCould not find a version for "brace-expansion" in the root "package.json" when collecting shared packages for the Module Federation setup. The package will not be shared.[39m[22m
+(node:215552) [DEP0128] DeprecationWarning: Invalid 'main' field in '/home/afreenmisbah/repos/forks/dev/ceph/src/pybind/mgr/dashboard/frontend/node_modules/rxjs/src/ajax/package.json' of './index.js'. Please either fix that or report it to the module author
+(Use `node --trace-deprecation ...` to show where the warning was created)
+(node:215552) [DEP0128] DeprecationWarning: Invalid 'main' field in '/home/afreenmisbah/repos/forks/dev/ceph/src/pybind/mgr/dashboard/frontend/node_modules/rxjs/src/fetch/package.json' of './index.js'. Please either fix that or report it to the module author
+(node:215552) [DEP0128] DeprecationWarning: Invalid 'main' field in '/home/afreenmisbah/repos/forks/dev/ceph/src/pybind/mgr/dashboard/frontend/node_modules/rxjs/src/internal-compatibility/package.json' of './index.js'. Please either fix that or report it to the module author
+(node:215552) [DEP0128] DeprecationWarning: Invalid 'main' field in '/home/afreenmisbah/repos/forks/dev/ceph/src/pybind/mgr/dashboard/frontend/node_modules/rxjs/src/operators/package.json' of './index.js'. Please either fix that or report it to the module author
+(node:215552) [DEP0128] DeprecationWarning: Invalid 'main' field in '/home/afreenmisbah/repos/forks/dev/ceph/src/pybind/mgr/dashboard/frontend/node_modules/rxjs/src/testing/package.json' of './index.js'. Please either fix that or report it to the module author
+(node:215552) [DEP0128] DeprecationWarning: Invalid 'main' field in '/home/afreenmisbah/repos/forks/dev/ceph/src/pybind/mgr/dashboard/frontend/node_modules/rxjs/src/webSocket/package.json' of './index.js'. Please either fix that or report it to the module author
+[2K[1G[36m⠙[39m Generating browser application bundles (phase: setup)...(node:215552) [DEP0180] DeprecationWarning: fs.Stats constructor is deprecated.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+[2K[1G[36m⠹[39m Generating browser application bundles (phase: setup)...[36m[ Module Federation Manifest Plugin ][39m Manifest will use absolute path resolution via its host at runtime, reason: publicPath='auto'
+[2K[1G[36m⠸[39m Generating browser application bundles (phase: setup)...[2K[1G[36m⠼[39m Generating browser application bundles (phase: building)...[2K[1G[36m⠴[39m Generating browser application bundles (phase: building)...[2K[1G[36m⠦[39m Generating browser application bundles (phase: building)...[2K[1G[36m⠧[39m Generating browser application bundles (phase: building)...[2K[1G[36m⠇[39m Generating browser application bundles (phase: building)...[2K[1G[36m⠏[39m Generating browser application bundles (phase: building)...[2K[1G[36m⠋[39m Generating browser application bundles (phase: building)...[2K[1G[36m⠙[39m Generating browser application bundles (phase: building)...[2K[1G[36m⠹[39m Generating browser application bundles (phase: building)...[2K[1G[36m⠸[39m Generating browser application bundles (phase: building)...[2K[1G[36m⠼[39m Generating browser application bundles (phase: building)...[2K[1G[36m⠴[39m Generating browser application bundles (phase: building)...[2K[1G[36m⠦[39m Generating browser application bundles (phase: building)...[2K[1G[36m⠧[39m Generating browser application bundles (phase: building)...[2K[1G[36m⠇[39m Generating browser application bundles (phase: building)...[2K[1G[36m⠏[39m Generating browser application bundles (phase: building)...[2K[1G[36m⠋[39m Generating browser application bundles (phase: building)...[2K[1G[36m⠙[39m Generating browser application bundles (phase: building)...[2K[1G[36m⠹[39m Generating browser application bundles (phase: building)...[2K[1G[36m⠸[39m Generating browser application bundles (phase: building)...[2K[1G[36m⠼[39m Generating browser application bundles (phase: building)...[2K[1G[36m⠴[39m Generating browser application bundles (phase: building)...[2K[1G[36m⠦[39m Generating browser application bundles (phase: building)...[2K[1G[36m⠧[39m Generating browser application bundles (phase: building)...[2K[1G[36m⠇[39m Generating browser application bundles (phase: building)...[2K[1G[36m⠏[39m Generating browser application bundles (phase: building)...[2K[1G[36m⠋[39m Generating browser application bundles (phase: building)...[2K[1G[36m⠙[39m Generating browser application bundles (phase: building)...[2K[1G[36m⠹[39m Generating browser application bundles (phase: building)...[2K[1G[36m⠸[39m Generating browser application bundles (phase: building)...[2K[1G[36m⠼[39m Generating browser application bundles (phase: building)...[2K[1G[36m⠴[39m Generating browser application bundles (phase: building)...[2K[1G[36m⠦[39m Generating browser application bundles (phase: building)...[2K[1G[36m⠧[39m Generating browser application bundles (phase: building)...[2K[1G[36m⠇[39m Generating browser application bundles (phase: building)...[2K[1G[36m⠏[39m Generating browser application bundles (phase: building)...[2K[1G[36m⠋[39m Generating browser application bundles (phase: building)...[2K[1G[36m⠙[39m Generating browser application bundles (phase: building)...[2K[1G[36m⠹[39m Generating browser application bundles (phase: building)...[2K[1G[36m⠸[39m Generating browser application bundles (phase: building)...[2K[1G[36m⠼[39m Generating browser application bundles (phase: building)...[2K[1G[36m⠴[39m Generating browser application bundles (phase: building)...[2K[1G[36m⠦[39m Generating browser application bundles (phase: building)...[2K[1G[36m⠧[39m Generating browser application bundles (phase: building)...[2K[1G[36m⠇[39m Generating browser application bundles (phase: building)...[2K[1G[36m⠏[39m Generating browser application bundles (phase: building)...[2K[1G[36m⠋[39m Generating browser application bundles (phase: building)...[2K[1G[36m⠙[39m Generating browser application bundles (phase: building)...[2K[1G[36m⠹[39m Generating browser application bundles (phase: building)...[2K[1G[36m⠸[39m Generating browser application bundles (phase: building)...[2K[1G[36m⠼[39m Generating browser application bundles (phase: building)...[2K[1G[36m⠴[39m Generating browser application bundles (phase: building)...[2K[1G[36m⠦[39m Generating browser application bundles (phase: building)...[2K[1G[36m⠧[39m Generating browser application bundles (phase: building)...[2K[1G[36m⠇[39m Generating browser application bundles (phase: sealing)...[2K[1G[36m⠏[39m Generating browser application bundles (phase: sealing)...[2K[1G[36m⠋[39m Generating browser application bundles (phase: sealing)...[2K[1G[36m⠙[39m Generating browser application bundles (phase: sealing)...[2K[1G[36m⠹[39m Generating browser application bundles (phase: building)...[2K[1G[36m⠸[39m Generating browser application bundles (phase: building)...[2K[1G[36m⠼[39m Generating browser application bundles (phase: building)...[2K[1G[36m⠴[39m Generating browser application bundles (phase: building)...[2K[1G[36m⠦[39m Generating browser application bundles (phase: building)...[2K[1G[36m⠧[39m Generating browser application bundles (phase: building)...[2K[1G[36m⠇[39m Generating browser application bundles (phase: building)...[2K[1G[36m⠏[39m Generating browser application bundles (phase: building)...[2K[1G[36m⠋[39m Generating browser application bundles (phase: building)...[2K[1G[36m⠙[39m Generating browser application bundles (phase: building)...[2K[1G[36m⠹[39m Generating browser application bundles (phase: building)...[2K[1G[36m⠸[39m Generating browser application bundles (phase: building)...[2K[1G[36m⠼[39m Generating browser application bundles (phase: building)...[2K[1G[36m⠴[39m Generating browser application bundles (phase: building)...[2K[1G[36m⠦[39m Generating browser application bundles (phase: building)...[2K[1G[36m⠧[39m Generating browser application bundles (phase: building)...[2K[1G[36m⠇[39m Generating browser application bundles (phase: building)...[2K[1G[36m⠏[39m Generating browser application bundles (phase: building)...[2K[1G[36m⠋[39m Generating browser application bundles (phase: building)...[2K[1G[36m⠙[39m Generating browser application bundles (phase: building)...[2K[1G[36m⠹[39m Generating browser application bundles (phase: building)...[2K[1G[36m⠸[39m Generating browser application bundles (phase: building)...[2K[1G[36m⠼[39m Generating browser application bundles (phase: building)...[2K[1G[36m⠴[39m Generating browser application bundles (phase: building)...[2K[1G[36m⠦[39m Generating browser application bundles (phase: sealing)...[2K[1G[36m⠧[39m Generating browser application bundles (phase: sealing)...[2K[1G[32m✔[39m Browser application bundle generation complete.
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/home/afreenmisbah/repos/forks/dev/ceph/src/pybind/mgr/dashboard/frontend/node_modules/@swagger-api/apidom-ast/src/yaml/schemas/canonical-format.mjs depends on 'unraw'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/home/afreenmisbah/repos/forks/dev/ceph/src/pybind/mgr/dashboard/frontend/node_modules/@swagger-api/apidom-core/src/index.mjs depends on 'minim'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/home/afreenmisbah/repos/forks/dev/ceph/src/pybind/mgr/dashboard/frontend/node_modules/@swagger-api/apidom-reference/src/util/url.mjs depends on 'process'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/home/afreenmisbah/repos/forks/dev/ceph/src/pybind/mgr/dashboard/frontend/node_modules/carbon-components-angular/fesm2020/carbon-components-angular-datepicker.mjs depends on 'flatpickr/dist/l10n/index'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/home/afreenmisbah/repos/forks/dev/ceph/src/pybind/mgr/dashboard/frontend/node_modules/carbon-components-angular/fesm2020/carbon-components-angular-datepicker.mjs depends on 'flatpickr/dist/plugins/rangePlugin'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/home/afreenmisbah/repos/forks/dev/ceph/src/pybind/mgr/dashboard/frontend/node_modules/react-redux/es/components/connect.js depends on 'hoist-non-react-statics'. CommonJS or AMD dependencies [39m[22m[1m[33mcan cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/home/afreenmisbah/repos/forks/dev/ceph/src/pybind/mgr/dashboard/frontend/node_modules/swagger-client/es/resolver/specmap/lib/index.js depends on 'deepmerge'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/home/afreenmisbah/repos/forks/dev/ceph/src/pybind/mgr/dashboard/frontend/node_modules/swagger-ui/dist/swagger-ui-es-bundle-core.js depends on '@braintree/sanitize-url'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/home/afreenmisbah/repos/forks/dev/ceph/src/pybind/mgr/dashboard/frontend/node_modules/swagger-ui/dist/swagger-ui-es-bundle-core.js depends on 'base64-js'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/home/afreenmisbah/repos/forks/dev/ceph/src/pybind/mgr/dashboard/frontend/node_modules/swagger-ui/dist/swagger-ui-es-bundle-core.js depends on 'classnames'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/home/afreenmisbah/repos/forks/dev/ceph/src/pybind/mgr/dashboard/frontend/node_modules/swagger-ui/dist/swagger-ui-es-bundle-core.js depends on 'css.escape'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/home/afreenmisbah/repos/forks/dev/ceph/src/pybind/mgr/dashboard/frontend/node_modules/swagger-ui/dist/swagger-ui-es-bundle-core.js depends on 'dompurify'. [39m[22m[1m[33mCommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/home/afreenmisbah/repos/forks/dev/ceph/src/pybind/mgr/dashboard/frontend/node_modules/swagger-ui/dist/swagger-ui-es-bundle-core.js depends on 'ieee754'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/home/afreenmisbah/repos/forks/dev/ceph/src/pybind/mgr/dashboard/frontend/node_modules/swagger-ui/dist/swagger-ui-es-bundle-core.js depends on 'immutable'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/home/afreenmisbah/repos/forks/dev/ceph/src/pybind/mgr/dashboard/frontend/node_modules/swagger-ui/dist/swagger-ui-es-bundle-core.js depends on 'js-file-download'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/home/afreenmisbah/repos/forks/dev/ceph/src/pybind/mgr/dashboard/frontend/node_modules/swagger-ui/dist/swagger-ui-es-bundle-core.js depends on 'prop-types'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/home/afreenmisbah/repos/forks/dev/ceph/src/pybind/mgr/dashboard/frontend/node_modules/swagger-ui/dist/swagger-ui-es-bundle-core.js depends on 'randexp'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/home/afreenmisbah/repos/forks/dev/ceph/src/pybind/mgr/dashboard/frontend/node_modules/swagger-ui/dist/swagger-ui-es-bundle-core.js depends on[39m[22m[1m[33m 'react-copy-to-clipboard'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/home/afreenmisbah/repos/forks/dev/ceph/src/pybind/mgr/dashboard/frontend/node_modules/swagger-ui/dist/swagger-ui-es-bundle-core.js depends on 'react-debounce-input'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/home/afreenmisbah/repos/forks/dev/ceph/src/pybind/mgr/dashboard/frontend/node_modules/swagger-ui/dist/swagger-ui-es-bundle-core.js depends on 'react-immutable-proptypes'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/home/afreenmisbah/repos/forks/dev/ceph/src/pybind/mgr/dashboard/frontend/node_modules/swagger-ui/dist/swagger-ui-es-bundle-core.js depends on 'redux-immutable'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/home/afreenmisbah/repos/forks/dev/ceph/src/pybind/mgr/dashboard/frontend/node_modules/swagger-ui/dist/swagger-ui-es-bundle-core.js depends on 'serialize-error'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/home/afreenmisbah/repos/forks/dev/ceph/src/pybind/mgr/dashboard/frontend/node_modules/swagger-ui/dist/swagger-ui-es-bundle-core.js depends on 'url-parse'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/home/afreenmisbah/repos/forks/dev/ceph/src/pybind/mgr/dashboard/frontend/node_[39m[22m[1m[33mmodules/swagger-ui/dist/swagger-ui-es-bundle-core.js depends on 'xml-but-prettier'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/home/afreenmisbah/repos/forks/dev/ceph/src/pybind/mgr/dashboard/frontend/node_modules/swagger-ui/dist/swagger-ui-es-bundle-core.js depends on 'zenscroll'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0mundefined depends on 'moment'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0mundefined depends on 'validator'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0mundefined depends on 'xml2js'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/app.module.ts[0m:[93m19[0m:[93m13[0m - [91merror[0m[90m NG6003: [0mThis export contains errors, which may affect components that depend on this NgModule.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m19[0m   exports: [SharedModule],[39m[22m
+[1m[31m[7m  [0m [91m            ~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/app.module.ts[0m:[93m30[0m:[93m5[0m - [91merror[0m[90m NG6002: [0mThis import contains errors, which may affect components that depend on this NgModule.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m30[0m     CoreModule,[39m[22m
+[1m[31m[7m  [0m [91m    ~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/app.module.ts[0m:[93m31[0m:[93m5[0m - [91merror[0m[90m NG6002: [0mThis import contains errors, which may affect components that depend on this NgModule.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m31[0m     SharedModule,[39m[22m
+[1m[31m[7m  [0m [91m    ~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/app.module.ts[0m:[93m32[0m:[93m5[0m - [91merror[0m[90m NG6002: [0mThis import contains errors, which may affect components that depend on this NgModule.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m32[0m     CephModule[39m[22m
+[1m[31m[7m  [0m [91m    ~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/ceph/block/block.module.ts[0m:[93m82[0m:[93m5[0m - [91merror[0m[90m NG6002: [0mThis import contains errors, which may affect components that depend on this NgModule.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m82[0m     MirroringModule,[39m[22m
+[1m[31m[7m  [0m [91m    ~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/ceph/block/block.module.ts[0m:[93m89[0m:[93m5[0m - [91merror[0m[90m NG6002: [0mThis import contains errors, which may affect components that depend on this NgModule.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m89[0m     SharedModule,[39m[22m
+[1m[31m[7m  [0m [91m    ~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/ceph/block/block.module.ts[0m:[93m338[0m:[93m13[0m - [91merror[0m[90m NG6002: [0mThis import contains errors, which may affect components that depend on this NgModule.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m338[0m   imports: [BlockModule, RouterModule.forChild(routes)][39m[22m
+[1m[31m[7m   [0m [91m            ~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mErro[39m[22m[1m[31mr: [39m[31m[0m[96msrc/app/ceph/block/mirroring/mirroring.module.ts[0m:[93m39[0m:[93m5[0m - [91merror[0m[90m NG6002: [0mThis import contains errors, which may affect components that depend on this NgModule.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m39[0m     SharedModule,[39m[22m
+[1m[31m[7m  [0m [91m    ~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/ceph/ceph.module.ts[0m:[93m15[0m:[93m5[0m - [91merror[0m[90m NG6002: [0mThis import contains errors, which may affect components that depend on this NgModule.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m15[0m     ClusterModule,[39m[22m
+[1m[31m[7m  [0m [91m    ~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/ceph/ceph.module.ts[0m:[93m16[0m:[93m5[0m - [91merror[0m[90m NG6002: [0mThis import contains errors, which may affect components that depend on this NgModule.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m16[0m     DashboardModule,[39m[22m
+[1m[31m[7m  [0m [91m    ~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/ceph/ceph.module.ts[0m:[93m17[0m:[93m5[0m - [91merror[0m[90m NG6002: [0mThis import contains errors, which may affect components that depend on this NgModule.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m17[0m     PerformanceCounterModule,[39m[22m
+[1m[31m[7m  [0m [91m    ~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/ceph/ceph.module.ts[0m:[93m18[0m:[93m5[0m - [91merror[0m[90m NG6002: [0mThis import contains errors, which may affect components that depend on this NgModule.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m18[0m     CephfsModule,[39m[22m
+[1m[31m[7m  [0m [91m    ~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/ceph/ceph.module.ts[0m:[93m19[0m:[93m5[0m - [91merror[0m[90m NG6002: [0mThis import contains errors, which may affect components that depend on this NgModule.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m19[0m     NfsModule,[39m[22m
+[1m[31m[7m  [0m [91m    ~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/ceph/ceph.module.ts[0m:[93m20[0m:[93m5[0m - [91merror[0m[90m NG6002: [0mThis import contains errors, which may affect components that depend on this NgModule.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m20[0m     SmbModule,[39m[22m
+[1m[31m[7m  [0m [91m    ~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/ceph/ceph[39m[22m[1m[31m.module.ts[0m:[93m21[0m:[93m5[0m - [91merror[0m[90m NG6002: [0mThis import contains errors, which may affect components that depend on this NgModule.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m21[0m     SharedModule[39m[22m
+[1m[31m[7m  [0m [91m    ~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/ceph/cephfs/cephfs.module.ts[0m:[93m62[0m:[93m5[0m - [91merror[0m[90m NG6002: [0mThis import contains errors, which may affect components that depend on this NgModule.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m62[0m     SharedModule,[39m[22m
+[1m[31m[7m  [0m [91m    ~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/ceph/cephfs/cephfs.module.ts[0m:[93m70[0m:[93m5[0m - [91merror[0m[90m NG6002: [0mThis import contains errors, which may affect components that depend on this NgModule.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m70[0m     DataTableModule,[39m[22m
+[1m[31m[7m  [0m [91m    ~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/ceph/cluster/cluster.module.ts[0m:[93m90[0m:[93m5[0m - [91merror[0m[90m NG6002: [0mThis import contains errors, which may affect components that depend on this NgModule.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m90[0m     PerformanceCounterModule,[39m[22m
+[1m[31m[7m  [0m [91m    ~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/ceph/cluster/cluster.module.ts[0m:[93m92[0m:[93m5[0m - [91merror[0m[90m NG6002: [0mThis import contains errors, which may affect components that depend on this NgModule.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m92[0m     SharedModule,[39m[22m
+[1m[31m[7m  [0m [91m    ~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/ceph/cluster/cluster.module.ts[0m:[93m97[0m:[93m5[0m - [91merror[0m[90m NG6002: [0mThis import contains errors, which may affect components that depend on this NgModule.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m97[0m     MgrModulesModule,[39m[22m
+[1m[31m[7m  [0m [91m    ~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/ceph/cluster/cluster.module.ts[0m:[93m101[0m:[93m5[0m - [91merror[0m[90m NG6002: [0mThis import contains errors, which may affect components that depend on this NgModule.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m101[0m     CephSharedModule,[39m[22m
+[1m[31m[7m   [0m [91m    ~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mErr[39m[22m[1m[31mor: [39m[31m[0m[96msrc/app/ceph/cluster/cluster.module.ts[0m:[93m107[0m:[93m5[0m - [91merror[0m[90m NG6002: [0mThis import contains errors, which may affect components that depend on this NgModule.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m107[0m     DashboardV3Module,[39m[22m
+[1m[31m[7m   [0m [91m    ~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/ceph/cluster/mgr-modules/mgr-modules.module.ts[0m:[93m14[0m:[93m66[0m - [91merror[0m[90m NG6002: [0mThis import contains errors, which may affect components that depend on this NgModule.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m14[0m   imports: [AppRoutingModule, CommonModule, ReactiveFormsModule, SharedModule, NgbNavModule],[39m[22m
+[1m[31m[7m  [0m [91m                                                                 ~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/ceph/dashboard-v3/dashboard-v3.module.ts[0m:[93m21[0m:[93m5[0m - [91merror[0m[90m NG6002: [0mThis import contains errors, which may affect components that depend on this NgModule.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m21[0m     CephSharedModule,[39m[22m
+[1m[31m[7m  [0m [91m    ~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/ceph/dashboard-v3/dashboard-v3.module.ts[0m:[93m24[0m:[93m5[0m - [91merror[0m[90m NG6002: [0mThis import contains errors, which may affect components that depend on this NgModule.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m24[0m     SharedModule,[39m[22m
+[1m[31m[7m  [0m [91m    ~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/ceph/dashboard/dashboard.module.ts[0m:[93m25[0m:[93m5[0m - [91merror[0m[90m NG6002: [0mThis import contains errors, which may affect components that depend on this NgModule.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m25[0m     CephSharedModule,[39m[22m
+[1m[31m[7m  [0m [91m    ~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/ceph/dashboard/dashboard.module.ts[0m:[93m28[0m:[93m5[0m - [91merror[0m[90m NG6002: [0mThis import contains errors, which may affect components that depend on this NgModule.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m28[0m     SharedModule,[39m[22m
+[1m[31m[7m  [0m [91m    ~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/ceph/dashboard/dashboard.module.ts[0m:[93m32[39m[22m[1m[31m[0m:[93m5[0m - [91merror[0m[90m NG6002: [0mThis import contains errors, which may affect components that depend on this NgModule.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m32[0m     DashboardV3Module,[39m[22m
+[1m[31m[7m  [0m [91m    ~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/ceph/nfs/nfs.module.ts[0m:[93m35[0m:[93m5[0m - [91merror[0m[90m NG6002: [0mThis import contains errors, which may affect components that depend on this NgModule.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m35[0m     SharedModule,[39m[22m
+[1m[31m[7m  [0m [91m    ~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/ceph/nfs/nfs.module.ts[0m:[93m49[0m:[93m5[0m - [91merror[0m[90m NG6002: [0mThis import contains errors, which may affect components that depend on this NgModule.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m49[0m     ClusterModule[39m[22m
+[1m[31m[7m  [0m [91m    ~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/ceph/performance-counter/performance-counter.module.ts[0m:[93m10[0m:[93m27[0m - [91merror[0m[90m NG6002: [0mThis import contains errors, which may affect components that depend on this NgModule.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m10[0m   imports: [CommonModule, SharedModule, RouterModule],[39m[22m
+[1m[31m[7m  [0m [91m                          ~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/ceph/pool/pool.module.ts[0m:[93m24[0m:[93m5[0m - [91merror[0m[90m NG6002: [0mThis import contains errors, which may affect components that depend on this NgModule.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m24[0m     CephSharedModule,[39m[22m
+[1m[31m[7m  [0m [91m    ~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/ceph/pool/pool.module.ts[0m:[93m27[0m:[93m5[0m - [91merror[0m[90m NG6002: [0mThis import contains errors, which may affect components that depend on this NgModule.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m27[0m     SharedModule,[39m[22m
+[1m[31m[7m  [0m [91m    ~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/ceph/pool/pool.module.ts[0m:[93m31[0m:[93m5[0m - [91merror[0m[90m NG6002: [0mThis import contains errors, which may affect components that depend on this NgModule.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m31[0m     BlockModule,[39m[22m
+[1m[31m[7m  [0m [91m    ~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mErr[39m[22m[1m[31mor: [39m[31m[0m[96msrc/app/ceph/pool/pool.module.ts[0m:[93m64[0m:[93m13[0m - [91merror[0m[90m NG6002: [0mThis import contains errors, which may affect components that depend on this NgModule.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m64[0m   imports: [PoolModule, RouterModule.forChild(routes)][39m[22m
+[1m[31m[7m  [0m [91m            ~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/ceph/rgw/rgw.module.ts[0m:[93m122[0m:[93m5[0m - [91merror[0m[90m NG6002: [0mThis import contains errors, which may affect components that depend on this NgModule.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m122[0m     CephSharedModule,[39m[22m
+[1m[31m[7m   [0m [91m    ~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/ceph/rgw/rgw.module.ts[0m:[93m123[0m:[93m5[0m - [91merror[0m[90m NG6002: [0mThis import contains errors, which may affect components that depend on this NgModule.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m123[0m     SharedModule,[39m[22m
+[1m[31m[7m   [0m [91m    ~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/ceph/rgw/rgw.module.ts[0m:[93m126[0m:[93m5[0m - [91merror[0m[90m NG6002: [0mThis import contains errors, which may affect components that depend on this NgModule.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m126[0m     PerformanceCounterModule,[39m[22m
+[1m[31m[7m   [0m [91m    ~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/ceph/rgw/rgw.module.ts[0m:[93m133[0m:[93m5[0m - [91merror[0m[90m NG6002: [0mThis import contains errors, which may affect components that depend on this NgModule.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m133[0m     DataTableModule,[39m[22m
+[1m[31m[7m   [0m [91m    ~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/ceph/rgw/rgw.module.ts[0m:[93m134[0m:[93m5[0m - [91merror[0m[90m NG6002: [0mThis import contains errors, which may affect components that depend on this NgModule.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m134[0m     DashboardV3Module,[39m[22m
+[1m[31m[7m   [0m [91m    ~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/ceph/rgw/rgw.module.ts[0m:[93m458[0m:[93m13[0m - [91merror[0m[90m NG6002: [0mThis import contains errors, which may affect components that depend on this NgModule.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m458[0m   imports: [39m[22m[1m[31m[RgwModule, RouterModule.forChild(routes)][39m[22m
+[1m[31m[7m   [0m [91m            ~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/ceph/shared/ceph-shared.module.ts[0m:[93m14[0m:[93m27[0m - [91merror[0m[90m NG6002: [0mThis import contains errors, which may affect components that depend on this NgModule.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m14[0m   imports: [CommonModule, DataTableModule, SharedModule, NgbNavModule, PipesModule],[39m[22m
+[1m[31m[7m  [0m [91m                          ~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/ceph/shared/ceph-shared.module.ts[0m:[93m14[0m:[93m44[0m - [91merror[0m[90m NG6002: [0mThis import contains errors, which may affect components that depend on this NgModule.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m14[0m   imports: [CommonModule, DataTableModule, SharedModule, NgbNavModule, PipesModule],[39m[22m
+[1m[31m[7m  [0m [91m                                           ~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/ceph/smb/smb.module.ts[0m:[93m46[0m:[93m5[0m - [91merror[0m[90m NG6002: [0mThis import contains errors, which may affect components that depend on this NgModule.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m46[0m     SharedModule,[39m[22m
+[1m[31m[7m  [0m [91m    ~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/ceph/smb/smb.module.ts[0m:[93m51[0m:[93m5[0m - [91merror[0m[90m NG6002: [0mThis import contains errors, which may affect components that depend on this NgModule.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m51[0m     DataTableModule,[39m[22m
+[1m[31m[7m  [0m [91m    ~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/core/auth/auth.module.ts[0m:[93m49[0m:[93m5[0m - [91merror[0m[90m NG6002: [0mThis import contains errors, which may affect components that depend on this NgModule.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m49[0m     SharedModule,[39m[22m
+[1m[31m[7m  [0m [91m    ~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/core/auth/auth.module.ts[0m:[93m129[0m:[93m13[0m - [91merror[0m[90m NG6002: [0mThis import contains errors, which may affect components that depend on this NgModule.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m129[0m   imports: [AuthModule, RouterModule.forChild(routes)][39m[22m
+[1m[31m[7m   [0m[39m[22m[1m[31m [91m            ~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/core/core.module.ts[0m:[93m21[0m:[93m5[0m - [91merror[0m[90m NG6002: [0mThis import contains errors, which may affect components that depend on this NgModule.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m21[0m     NavigationModule,[39m[22m
+[1m[31m[7m  [0m [91m    ~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/core/core.module.ts[0m:[93m24[0m:[93m5[0m - [91merror[0m[90m NG6002: [0mThis import contains errors, which may affect components that depend on this NgModule.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m24[0m     SharedModule,[39m[22m
+[1m[31m[7m  [0m [91m    ~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/core/core.module.ts[0m:[93m27[0m:[93m13[0m - [91merror[0m[90m NG6003: [0mThis export contains errors, which may affect components that depend on this NgModule.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m27[0m   exports: [NavigationModule],[39m[22m
+[1m[31m[7m  [0m [91m            ~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/core/navigation/navigation.module.ts[0m:[93m49[0m:[93m5[0m - [91merror[0m[90m NG6002: [0mThis import contains errors, which may affect components that depend on this NgModule.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m49[0m     AuthModule,[39m[22m
+[1m[31m[7m  [0m [91m    ~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/core/navigation/navigation.module.ts[0m:[93m53[0m:[93m5[0m - [91merror[0m[90m NG6002: [0mThis import contains errors, which may affect components that depend on this NgModule.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m53[0m     SharedModule,[39m[22m
+[1m[31m[7m  [0m [91m    ~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/components/alert-panel/alert-panel.component.html[0m:[93m1[0m:[93m1[0m - [91merror[0m[90m NG8001: [0m'cds-actionable-notification' is not a known element:[39m[22m
+[1m[31m1. If 'cds-actionable-notification' is an Angular component, then verify that it is part of this module.[39m[22m
+[1m[31m2. If 'cds-actionable-notification' is a Web Component then add 'CUSTOM_ELEMENTS_SCHEMA' to the '@NgModule.schemas' of this component to suppress this message.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m1[0m <cds-actionable-notification class="mb-1 [39m[22m[1m[31mcontent-theme"[39m[22m
+[1m[31m[7m [0m [91m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[7m2[0m                              [ngClass]="spacingClass"[39m[22m
+[1m[31m[7m [0m [91m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[7m3[0m                              [notificationObj]="notificationContent"[39m[22m
+[1m[31m[7m [0m [91m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[7m4[0m                              (close)="onClose()"></cds-actionable-notification>[39m[22m
+[1m[31m[7m [0m [91m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96msrc/app/shared/components/alert-panel/alert-panel.component.ts[0m:[93m16[0m:[93m16[0m[39m[22m
+[1m[31m    [7m16[0m   templateUrl: './alert-panel.component.html',[39m[22m
+[1m[31m    [7m  [0m [96m               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Error occurs in the template of component AlertPanelComponent.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/components/alert-panel/alert-panel.component.html[0m:[93m2[0m:[93m30[0m - [91merror[0m[90m NG8002: [0mCan't bind to 'ngClass' since it isn't a known property of 'cds-actionable-notification'.[39m[22m
+[1m[31m1. If 'cds-actionable-notification' is an Angular component and it has 'ngClass' input, then verify that it is part of this module.[39m[22m
+[1m[31m2. If 'cds-actionable-notification' is a Web Component then add 'CUSTOM_ELEMENTS_SCHEMA' to the '@NgModule.schemas' of this component to suppress this message.[39m[22m
+[1m[31m3. To allow any property add 'NO_ERRORS_SCHEMA' to the '@NgModule.schemas' of this component.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m2[0m                              [ngClass]="spacingClass"[39m[22m
+[1m[31m[7m [0m [91m                             ~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96msrc/app/shared/components/alert-panel/alert-panel.component.ts[0m:[93m16[0m:[93m16[0m[39m[22m
+[1m[31m    [7m16[0m   templateUrl: './alert-panel.component.html',[39m[22m
+[1m[31m    [7m  [0m [96m               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Error occurs in the template of component AlertPanelComponent.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/components/alert-panel/alert-pan[39m[22m[1m[31mel.component.html[0m:[93m3[0m:[93m30[0m - [91merror[0m[90m NG8002: [0mCan't bind to 'notificationObj' since it isn't a known property of 'cds-actionable-notification'.[39m[22m
+[1m[31m1. If 'cds-actionable-notification' is an Angular component and it has 'notificationObj' input, then verify that it is part of this module.[39m[22m
+[1m[31m2. If 'cds-actionable-notification' is a Web Component then add 'CUSTOM_ELEMENTS_SCHEMA' to the '@NgModule.schemas' of this component to suppress this message.[39m[22m
+[1m[31m3. To allow any property add 'NO_ERRORS_SCHEMA' to the '@NgModule.schemas' of this component.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m3[0m                              [notificationObj]="notificationContent"[39m[22m
+[1m[31m[7m [0m [91m                             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96msrc/app/shared/components/alert-panel/alert-panel.component.ts[0m:[93m16[0m:[93m16[0m[39m[22m
+[1m[31m    [7m16[0m   templateUrl: './alert-panel.component.html',[39m[22m
+[1m[31m    [7m  [0m [96m               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Error occurs in the template of component AlertPanelComponent.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/components/back-button/back-button.component.html[0m:[93m2[0m:[93m9[0m - [91merror[0m[90m NG8002: [0mCan't bind to 'ngClass' since it isn't a known property of 'button'.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m2[0m         [ngClass]="{'w-100': modalForm && showSubmit, 'w-50 float-end': modalForm && !showSubmit}"[39m[22m
+[1m[31m[7m [0m [91m        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96msrc/app/shared/components/back-button/back-button.component.ts[0m:[93m8[0m:[93m16[0m[39m[22m
+[1m[31m    [7m8[0m   templateUrl: './back-button.component.html',[39m[22m
+[1m[31m    [7m [0m [96m               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Error occurs in the template of component BackButtonComponent.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/components/card-row/card-row.component.html[0m:[93m22[0m:[93m21[0m - [91merror[0m[90m NG8002: [0mCan't bind to 'ngSwitch' since it isn't a known property of '[39m[22m[1m[31mng-container'.[39m[22m
+[1m[31m1. If 'ngSwitch' is an Angular directive, then add 'CommonModule' to the '@NgModule.imports' of this component.[39m[22m
+[1m[31m2. To allow any property add 'NO_ERRORS_SCHEMA' to the '@NgModule.schemas' of this component.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m22[0m       <ng-container [ngSwitch]="summaryType">[39m[22m
+[1m[31m[7m  [0m [91m                    ~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96msrc/app/shared/components/card-row/card-row.component.ts[0m:[93m7[0m:[93m16[0m[39m[22m
+[1m[31m    [7m7[0m   templateUrl: './card-row.component.html',[39m[22m
+[1m[31m    [7m [0m [96m               ~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Error occurs in the template of component CardRowComponent.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/components/card/card.component.html[0m:[93m2[0m:[93m6[0m - [91merror[0m[90m NG8002: [0mCan't bind to 'ngClass' since it isn't a known property of 'div'.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m2[0m      [ngClass]="{'border-0': removeBorder, 'bg-color': cardType === 'Sync Status Card', 'shadow': shadow, 'shadow-sm': !shadow && cardType !== 'syncCards', 'h-100': fullHeight}">[39m[22m
+[1m[31m[7m [0m [91m     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96msrc/app/shared/components/card/card.component.ts[0m:[93m6[0m:[93m16[0m[39m[22m
+[1m[31m    [7m6[0m   templateUrl: './card.component.html',[39m[22m
+[1m[31m    [7m [0m [96m               ~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Error occurs in the template of component CardComponent.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/components/card/card.component.html[0m:[93m19[0m:[93m8[0m - [91merror[0m[90m NG8002: [0mCan't bind to 'ngClass' since it isn't a known property of 'div'.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m19[0m        [ngClass]="{'d-flex align-items-center': alignItemsCenter, 'justify-content-center': justifyContentCenter}">[39m[22m
+[1m[31m[7m  [0m [91m       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96msrc/app/shared/components/card/card.co[39m[22m[1m[31mmponent.ts[0m:[93m6[0m:[93m16[0m[39m[22m
+[1m[31m    [7m6[0m   templateUrl: './card.component.html',[39m[22m
+[1m[31m    [7m [0m [96m               ~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Error occurs in the template of component CardComponent.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/components/components.module.ts[0m:[93m194[0m:[93m5[0m - [91merror[0m[90m NG6001: [0mCannot declare 'LinkModule' in an NgModule as it's not a part of the current compilation.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m194[0m     LinkModule[39m[22m
+[1m[31m[7m   [0m [91m    ~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96mnode_modules/carbon-components-angular/link/link.module.d.ts[0m:[93m25[0m:[93m22[0m[39m[22m
+[1m[31m    [7m25[0m export declare class LinkModule {[39m[22m
+[1m[31m    [7m  [0m [96m                     ~~~~~~~~~~[0m[39m[22m
+[1m[31m    'LinkModule' is declared here.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/components/config-option/config-option.component.html[0m:[93m1[0m:[93m6[0m - [91merror[0m[90m NG8002: [0mCan't bind to 'formGroup' since it isn't a known property of 'div'.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m1[0m <div [formGroup]="optionsFormGroup">[39m[22m
+[1m[31m[7m [0m [91m     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96msrc/app/shared/components/config-option/config-option.component.ts[0m:[93m13[0m:[93m16[0m[39m[22m
+[1m[31m    [7m13[0m   templateUrl: './config-option.component.html',[39m[22m
+[1m[31m    [7m  [0m [96m               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Error occurs in the template of component ConfigOptionComponent.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/components/confirmation-modal/confirmation-modal.component.html[0m:[93m1[0m:[93m1[0m - [91merror[0m[90m NG8001: [0m'cds-modal' is not a known element:[39m[22m
+[1m[31m1. If 'cds-modal' is an Angular component, then verify that it is part of this module.[39m[22m
+[1m[31m2. If 'cds-modal' is a Web Component then add 'CUSTOM_ELEMENTS_SCHEMA' to the '@NgModule.schemas' of this component to suppress this message.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m1[0m <cds-modal size="sm"[39m[22m
+[1m[31m[7m [0m [91m~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[7m2[0m            [open]="open"[39m[22m
+[1m[31m[7m [0m [91m~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[7m3[0m            (over[39m[22m[1m[31mlaySelected)="closeModal()">[39m[22m
+[1m[31m[7m [0m [91m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96msrc/app/shared/components/confirmation-modal/confirmation-modal.component.ts[0m:[93m8[0m:[93m16[0m[39m[22m
+[1m[31m    [7m8[0m   templateUrl: './confirmation-modal.component.html',[39m[22m
+[1m[31m    [7m [0m [96m               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Error occurs in the template of component ConfirmationModalComponent.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/components/confirmation-modal/confirmation-modal.component.html[0m:[93m2[0m:[93m12[0m - [91merror[0m[90m NG8002: [0mCan't bind to 'open' since it isn't a known property of 'cds-modal'.[39m[22m
+[1m[31m1. If 'cds-modal' is an Angular component and it has 'open' input, then verify that it is part of this module.[39m[22m
+[1m[31m2. If 'cds-modal' is a Web Component then add 'CUSTOM_ELEMENTS_SCHEMA' to the '@NgModule.schemas' of this component to suppress this message.[39m[22m
+[1m[31m3. To allow any property add 'NO_ERRORS_SCHEMA' to the '@NgModule.schemas' of this component.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m2[0m            [open]="open"[39m[22m
+[1m[31m[7m [0m [91m           ~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96msrc/app/shared/components/confirmation-modal/confirmation-modal.component.ts[0m:[93m8[0m:[93m16[0m[39m[22m
+[1m[31m    [7m8[0m   templateUrl: './confirmation-modal.component.html',[39m[22m
+[1m[31m    [7m [0m [96m               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Error occurs in the template of component ConfirmationModalComponent.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/components/confirmation-modal/confirmation-modal.component.html[0m:[93m4[0m:[93m3[0m - [91merror[0m[90m NG8001: [0m'cds-modal-header' is not a known element:[39m[22m
+[1m[31m1. If 'cds-modal-header' is an Angular component, then verify that it is part of this module.[39m[22m
+[1m[31m2. If 'cds-modal-header' is a Web Component then add 'CUSTOM_ELEMENTS_SCHEMA' to the '@NgModule.schemas' of this component to suppress this message.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m4[0m   <cds-modal-header (closeSelect)="closeModal()">[39m[22m
+[1m[31m[7m [0m [91m  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[39m[22m[1m[31m~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96msrc/app/shared/components/confirmation-modal/confirmation-modal.component.ts[0m:[93m8[0m:[93m16[0m[39m[22m
+[1m[31m    [7m8[0m   templateUrl: './confirmation-modal.component.html',[39m[22m
+[1m[31m    [7m [0m [96m               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Error occurs in the template of component ConfirmationModalComponent.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/components/confirmation-modal/confirmation-modal.component.html[0m:[93m10[0m:[93m21[0m - [91merror[0m[90m NG8003: [0mNo directive found with exportAs 'ngForm'.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m10[0m           #formDir="ngForm"[39m[22m
+[1m[31m[7m  [0m [91m                    ~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96msrc/app/shared/components/confirmation-modal/confirmation-modal.component.ts[0m:[93m8[0m:[93m16[0m[39m[22m
+[1m[31m    [7m8[0m   templateUrl: './confirmation-modal.component.html',[39m[22m
+[1m[31m    [7m [0m [96m               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Error occurs in the template of component ConfirmationModalComponent.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/components/confirmation-modal/confirmation-modal.component.html[0m:[93m11[0m:[93m11[0m - [91merror[0m[90m NG8002: [0mCan't bind to 'formGroup' since it isn't a known property of 'form'.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m11[0m           [formGroup]="confirmationForm"[39m[22m
+[1m[31m[7m  [0m [91m          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96msrc/app/shared/components/confirmation-modal/confirmation-modal.component.ts[0m:[93m8[0m:[93m16[0m[39m[22m
+[1m[31m    [7m8[0m   templateUrl: './confirmation-modal.component.html',[39m[22m
+[1m[31m    [7m [0m [96m               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Error occurs in the template of component ConfirmationModalComponent.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/components/confirmation-modal/confirmation-modal.component.html[0m:[93m20[0m:[93m3[0m - [91merror[0m[90m NG8001: [0m'cd-form-button-panel' is not a known element:[39m[22m
+[1m[31m1. If 'cd-form-button-panel' is an Angular component, then verify that it is part of this module.[39m[22m
+[1m[31m2. If 'cd-form-button-pane[39m[22m[1m[31ml' is a Web Component then add 'CUSTOM_ELEMENTS_SCHEMA' to the '@NgModule.schemas' of this component to suppress this message.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m 20[0m   <cd-form-button-panel (submitActionEvent)="onSubmit(confirmationForm.value)"[39m[22m
+[1m[31m[7m   [0m [91m  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[7m 21[0m                         [form]="confirmationForm"[39m[22m
+[1m[31m[7m   [0m [91m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[7m...[0m [39m[22m
+[1m[31m[7m 24[0m                         [showSubmit]="showSubmit"[39m[22m
+[1m[31m[7m   [0m [91m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[7m 25[0m                         [modalForm]="true"></cd-form-button-panel>[39m[22m
+[1m[31m[7m   [0m [91m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96msrc/app/shared/components/confirmation-modal/confirmation-modal.component.ts[0m:[93m8[0m:[93m16[0m[39m[22m
+[1m[31m    [7m8[0m   templateUrl: './confirmation-modal.component.html',[39m[22m
+[1m[31m    [7m [0m [96m               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Error occurs in the template of component ConfirmationModalComponent.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/components/confirmation-modal/confirmation-modal.component.html[0m:[93m21[0m:[93m25[0m - [91merror[0m[90m NG8002: [0mCan't bind to 'form' since it isn't a known property of 'cd-form-button-panel'.[39m[22m
+[1m[31m1. If 'cd-form-button-panel' is an Angular component and it has 'form' input, then verify that it is part of this module.[39m[22m
+[1m[31m2. If 'cd-form-button-panel' is a Web Component then add 'CUSTOM_ELEMENTS_SCHEMA' to the '@NgModule.schemas' of this component to suppress this message.[39m[22m
+[1m[31m3. To allow any property add 'NO_ERRORS_SCHEMA' to the '@NgModule.schemas' of this component.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m21[0m                         [form]="confirmationForm"[39m[22m
+[1m[31m[7m  [0m [91m                        ~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96msrc/app/shared/components/confirmation-modal/confirmation-modal.component.ts[0m:[93m8[0m:[93m16[0m[39m[22m
+[1m[31m    [7m8[0m   templateUrl: './confirmation-modal.component.h[39m[22m[1m[31mtml',[39m[22m
+[1m[31m    [7m [0m [96m               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Error occurs in the template of component ConfirmationModalComponent.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/components/confirmation-modal/confirmation-modal.component.html[0m:[93m22[0m:[93m25[0m - [91merror[0m[90m NG8002: [0mCan't bind to 'submitText' since it isn't a known property of 'cd-form-button-panel'.[39m[22m
+[1m[31m1. If 'cd-form-button-panel' is an Angular component and it has 'submitText' input, then verify that it is part of this module.[39m[22m
+[1m[31m2. If 'cd-form-button-panel' is a Web Component then add 'CUSTOM_ELEMENTS_SCHEMA' to the '@NgModule.schemas' of this component to suppress this message.[39m[22m
+[1m[31m3. To allow any property add 'NO_ERRORS_SCHEMA' to the '@NgModule.schemas' of this component.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m22[0m                         [submitText]="buttonText"[39m[22m
+[1m[31m[7m  [0m [91m                        ~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96msrc/app/shared/components/confirmation-modal/confirmation-modal.component.ts[0m:[93m8[0m:[93m16[0m[39m[22m
+[1m[31m    [7m8[0m   templateUrl: './confirmation-modal.component.html',[39m[22m
+[1m[31m    [7m [0m [96m               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Error occurs in the template of component ConfirmationModalComponent.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/components/confirmation-modal/confirmation-modal.component.html[0m:[93m23[0m:[93m25[0m - [91merror[0m[90m NG8002: [0mCan't bind to 'showCancel' since it isn't a known property of 'cd-form-button-panel'.[39m[22m
+[1m[31m1. If 'cd-form-button-panel' is an Angular component and it has 'showCancel' input, then verify that it is part of this module.[39m[22m
+[1m[31m2. If 'cd-form-button-panel' is a Web Component then add 'CUSTOM_ELEMENTS_SCHEMA' to the '@NgModule.schemas' of this component to suppress this message.[39m[22m
+[1m[31m3. To allow any property add 'NO_ERRORS_SCHEMA' to the '@NgModule.schemas' of this component.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m23[0m                         [showCancel]="showCancel"[39m[22m
+[1m[31m[7m  [0m [91m                        ~~~~~~~~~~~~[39m[22m[1m[31m~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96msrc/app/shared/components/confirmation-modal/confirmation-modal.component.ts[0m:[93m8[0m:[93m16[0m[39m[22m
+[1m[31m    [7m8[0m   templateUrl: './confirmation-modal.component.html',[39m[22m
+[1m[31m    [7m [0m [96m               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Error occurs in the template of component ConfirmationModalComponent.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/components/confirmation-modal/confirmation-modal.component.html[0m:[93m24[0m:[93m25[0m - [91merror[0m[90m NG8002: [0mCan't bind to 'showSubmit' since it isn't a known property of 'cd-form-button-panel'.[39m[22m
+[1m[31m1. If 'cd-form-button-panel' is an Angular component and it has 'showSubmit' input, then verify that it is part of this module.[39m[22m
+[1m[31m2. If 'cd-form-button-panel' is a Web Component then add 'CUSTOM_ELEMENTS_SCHEMA' to the '@NgModule.schemas' of this component to suppress this message.[39m[22m
+[1m[31m3. To allow any property add 'NO_ERRORS_SCHEMA' to the '@NgModule.schemas' of this component.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m24[0m                         [showSubmit]="showSubmit"[39m[22m
+[1m[31m[7m  [0m [91m                        ~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96msrc/app/shared/components/confirmation-modal/confirmation-modal.component.ts[0m:[93m8[0m:[93m16[0m[39m[22m
+[1m[31m    [7m8[0m   templateUrl: './confirmation-modal.component.html',[39m[22m
+[1m[31m    [7m [0m [96m               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Error occurs in the template of component ConfirmationModalComponent.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/components/confirmation-modal/confirmation-modal.component.html[0m:[93m25[0m:[93m25[0m - [91merror[0m[90m NG8002: [0mCan't bind to 'modalForm' since it isn't a known property of 'cd-form-button-panel'.[39m[22m
+[1m[31m1. If 'cd-form-button-panel' is an Angular component and it has 'modalForm' input, then verify that it is part of this module.[39m[22m
+[1m[31m2. If 'cd-form-button-panel' is a Web Component then add 'CUSTOM_ELEMENTS_SCHEMA' to the '@NgModule.schemas' of this component to suppress this message.[39m[22m
+[1m[31m3. To allow any pr[39m[22m[1m[31moperty add 'NO_ERRORS_SCHEMA' to the '@NgModule.schemas' of this component.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m25[0m                         [modalForm]="true"></cd-form-button-panel>[39m[22m
+[1m[31m[7m  [0m [91m                        ~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96msrc/app/shared/components/confirmation-modal/confirmation-modal.component.ts[0m:[93m8[0m:[93m16[0m[39m[22m
+[1m[31m    [7m8[0m   templateUrl: './confirmation-modal.component.html',[39m[22m
+[1m[31m    [7m [0m [96m               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Error occurs in the template of component ConfirmationModalComponent.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/components/copy2clipboard-button/copy2clipboard-button.component.html[0m:[93m4[0m:[93m9[0m - [91merror[0m[90m NG8002: [0mCan't bind to 'ngClass' since it isn't a known property of 'button'.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m4[0m         [ngClass]="{'clipboard-btn-with-text': text}"[39m[22m
+[1m[31m[7m [0m [91m        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96msrc/app/shared/components/copy2clipboard-button/copy2clipboard-button.component.ts[0m:[93m10[0m:[93m16[0m[39m[22m
+[1m[31m    [7m10[0m   templateUrl: './copy2clipboard-button.component.html',[39m[22m
+[1m[31m    [7m  [0m [96m               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Error occurs in the template of component Copy2ClipboardButtonComponent.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/components/copy2clipboard-button/copy2clipboard-button.component.html[0m:[93m5[0m:[93m9[0m - [91merror[0m[90m NG8002: [0mCan't bind to 'size' since it isn't a known property of 'button'.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m5[0m         [size]="size"[39m[22m
+[1m[31m[7m [0m [91m        ~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96msrc/app/shared/components/copy2clipboard-button/copy2clipboard-button.component.ts[0m:[93m10[0m:[93m16[0m[39m[22m
+[1m[31m    [7m10[0m   templateUrl: './copy2clipboard-button.component.html',[39m[22m
+[1m[31m    [7m  [0m [96m               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Error occurs in the template of component Copy2ClipboardButtonComponent.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/componen[39m[22m[1m[31mts/copy2clipboard-button/copy2clipboard-button.component.html[0m:[93m14[0m:[93m3[0m - [91merror[0m[90m NG8001: [0m'cd-icon' is not a known element:[39m[22m
+[1m[31m1. If 'cd-icon' is an Angular component, then verify that it is part of this module.[39m[22m
+[1m[31m2. If 'cd-icon' is a Web Component then add 'CUSTOM_ELEMENTS_SCHEMA' to the '@NgModule.schemas' of this component to suppress this message.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m14[0m   <cd-icon type="copy"></cd-icon>[39m[22m
+[1m[31m[7m  [0m [91m  ~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96msrc/app/shared/components/copy2clipboard-button/copy2clipboard-button.component.ts[0m:[93m10[0m:[93m16[0m[39m[22m
+[1m[31m    [7m10[0m   templateUrl: './copy2clipboard-button.component.html',[39m[22m
+[1m[31m    [7m  [0m [96m               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Error occurs in the template of component Copy2ClipboardButtonComponent.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/components/date-time-picker/date-time-picker.component.html[0m:[93m4[0m:[93m5[0m - [91merror[0m[90m NG8001: [0m'cds-text-label' is not a known element:[39m[22m
+[1m[31m1. If 'cds-text-label' is an Angular component, then verify that it is part of this module.[39m[22m
+[1m[31m2. If 'cds-text-label' is a Web Component then add 'CUSTOM_ELEMENTS_SCHEMA' to the '@NgModule.schemas' of this component to suppress this message.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m4[0m     <cds-text-label>{{name}}[39m[22m
+[1m[31m[7m [0m [91m    ~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96msrc/app/shared/components/date-time-picker/date-time-picker.component.ts[0m:[93m10[0m:[93m16[0m[39m[22m
+[1m[31m    [7m10[0m   templateUrl: './date-time-picker.component.html',[39m[22m
+[1m[31m    [7m  [0m [96m               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Error occurs in the template of component DateTimePickerComponent.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/components/date-time-picker/date-time-picker.component.html[0m:[93m5[0m:[93m7[0m - [91merror[0m[90m NG8001: [0m'cds-date-picker' is not a known element:[39m[22m
+[1m[31m1. If 'cds-date-picker' is an Angular component, then verify that it is part of this module.[39m[22m
+[1m[31m2. If 'cds-date-picker' is a [39m[22m[1m[31mWeb Component then add 'CUSTOM_ELEMENTS_SCHEMA' to the '@NgModule.schemas' of this component to suppress this message.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m  5[0m       <cds-date-picker  i18n-label[39m[22m
+[1m[31m[7m   [0m [91m      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[7m  6[0m                         [placeholder]="placeHolder"[39m[22m
+[1m[31m[7m   [0m [91m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[7m...[0m [39m[22m
+[1m[31m[7m 12[0m                         [disabled]="disabled"[39m[22m
+[1m[31m[7m   [0m [91m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[7m 13[0m                         cdsTheme="theme"></cds-date-picker>[39m[22m
+[1m[31m[7m   [0m [91m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96msrc/app/shared/components/date-time-picker/date-time-picker.component.ts[0m:[93m10[0m:[93m16[0m[39m[22m
+[1m[31m    [7m10[0m   templateUrl: './date-time-picker.component.html',[39m[22m
+[1m[31m    [7m  [0m [96m               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Error occurs in the template of component DateTimePickerComponent.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/components/date-time-picker/date-time-picker.component.html[0m:[93m6[0m:[93m25[0m - [91merror[0m[90m NG8002: [0mCan't bind to 'placeholder' since it isn't a known property of 'cds-date-picker'.[39m[22m
+[1m[31m1. If 'cds-date-picker' is an Angular component and it has 'placeholder' input, then verify that it is part of this module.[39m[22m
+[1m[31m2. If 'cds-date-picker' is a Web Component then add 'CUSTOM_ELEMENTS_SCHEMA' to the '@NgModule.schemas' of this component to suppress this message.[39m[22m
+[1m[31m3. To allow any property add 'NO_ERRORS_SCHEMA' to the '@NgModule.schemas' of this component.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m6[0m                         [placeholder]="placeHolder"[39m[22m
+[1m[31m[7m [0m [91m                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96msrc/app/shared/components/date-time-picker/date-time-picker.component.ts[0m:[93m10[0m:[93m16[0m[39m[22m
+[1m[31m    [7m10[0m   templateUrl: './date-time-picker.component.html',[39m[22m
+[1m[31m    [7m  [0m [96m               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Error occurs in the template of componen[39m[22m[1m[31mt DateTimePickerComponent.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/components/date-time-picker/date-time-picker.component.html[0m:[93m9[0m:[93m25[0m - [91merror[0m[90m NG8002: [0mCan't bind to 'value' since it isn't a known property of 'cds-date-picker'.[39m[22m
+[1m[31m1. If 'cds-date-picker' is an Angular component and it has 'value' input, then verify that it is part of this module.[39m[22m
+[1m[31m2. If 'cds-date-picker' is a Web Component then add 'CUSTOM_ELEMENTS_SCHEMA' to the '@NgModule.schemas' of this component to suppress this message.[39m[22m
+[1m[31m3. To allow any property add 'NO_ERRORS_SCHEMA' to the '@NgModule.schemas' of this component.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m9[0m                         [value]="date"[39m[22m
+[1m[31m[7m [0m [91m                        ~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96msrc/app/shared/components/date-time-picker/date-time-picker.component.ts[0m:[93m10[0m:[93m16[0m[39m[22m
+[1m[31m    [7m10[0m   templateUrl: './date-time-picker.component.html',[39m[22m
+[1m[31m    [7m  [0m [96m               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Error occurs in the template of component DateTimePickerComponent.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/components/date-time-picker/date-time-picker.component.html[0m:[93m11[0m:[93m25[0m - [91merror[0m[90m NG8002: [0mCan't bind to 'helperText' since it isn't a known property of 'cds-date-picker'.[39m[22m
+[1m[31m1. If 'cds-date-picker' is an Angular component and it has 'helperText' input, then verify that it is part of this module.[39m[22m
+[1m[31m2. If 'cds-date-picker' is a Web Component then add 'CUSTOM_ELEMENTS_SCHEMA' to the '@NgModule.schemas' of this component to suppress this message.[39m[22m
+[1m[31m3. To allow any property add 'NO_ERRORS_SCHEMA' to the '@NgModule.schemas' of this component.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m11[0m                         [helperText]="helperText"[39m[22m
+[1m[31m[7m  [0m [91m                        ~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96msrc/app/shared/components/date-time-picker/date-time-picker.component.ts[0m:[93m10[0m:[93m16[0m[39m[22m
+[1m[31m    [7m10[0m   templateUrl: './date-time-picker.component.html',[39m[22m
+[1m[31m    [7m  [0m [39m[22m[1m[31m[96m               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Error occurs in the template of component DateTimePickerComponent.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/components/date-time-picker/date-time-picker.component.html[0m:[93m12[0m:[93m25[0m - [91merror[0m[90m NG8002: [0mCan't bind to 'disabled' since it isn't a known property of 'cds-date-picker'.[39m[22m
+[1m[31m1. If 'cds-date-picker' is an Angular component and it has 'disabled' input, then verify that it is part of this module.[39m[22m
+[1m[31m2. If 'cds-date-picker' is a Web Component then add 'CUSTOM_ELEMENTS_SCHEMA' to the '@NgModule.schemas' of this component to suppress this message.[39m[22m
+[1m[31m3. To allow any property add 'NO_ERRORS_SCHEMA' to the '@NgModule.schemas' of this component.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m12[0m                         [disabled]="disabled"[39m[22m
+[1m[31m[7m  [0m [91m                        ~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96msrc/app/shared/components/date-time-picker/date-time-picker.component.ts[0m:[93m10[0m:[93m16[0m[39m[22m
+[1m[31m    [7m10[0m   templateUrl: './date-time-picker.component.html',[39m[22m
+[1m[31m    [7m  [0m [96m               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Error occurs in the template of component DateTimePickerComponent.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component.html[0m:[93m1[0m:[93m1[0m - [91merror[0m[90m NG8001: [0m'cds-modal' is not a known element:[39m[22m
+[1m[31m1. If 'cds-modal' is an Angular component, then verify that it is part of this module.[39m[22m
+[1m[31m2. If 'cds-modal' is a Web Component then add 'CUSTOM_ELEMENTS_SCHEMA' to the '@NgModule.schemas' of this component to suppress this message.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m1[0m <cds-modal size="sm"[39m[22m
+[1m[31m[7m [0m [91m~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[7m2[0m            [open]="open"[39m[22m
+[1m[31m[7m [0m [91m~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[7m3[0m            (overlaySelected)="closeModal()">[39m[22m
+[1m[31m[7m [0m [91m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96msrc/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.compone[39m[22m[1m[31mnt.ts[0m:[93m13[0m:[93m16[0m[39m[22m
+[1m[31m    [7m13[0m   templateUrl: './delete-confirmation-modal.component.html',[39m[22m
+[1m[31m    [7m  [0m [96m               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Error occurs in the template of component DeleteConfirmationModalComponent.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component.html[0m:[93m2[0m:[93m12[0m - [91merror[0m[90m NG8002: [0mCan't bind to 'open' since it isn't a known property of 'cds-modal'.[39m[22m
+[1m[31m1. If 'cds-modal' is an Angular component and it has 'open' input, then verify that it is part of this module.[39m[22m
+[1m[31m2. If 'cds-modal' is a Web Component then add 'CUSTOM_ELEMENTS_SCHEMA' to the '@NgModule.schemas' of this component to suppress this message.[39m[22m
+[1m[31m3. To allow any property add 'NO_ERRORS_SCHEMA' to the '@NgModule.schemas' of this component.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m2[0m            [open]="open"[39m[22m
+[1m[31m[7m [0m [91m           ~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96msrc/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component.ts[0m:[93m13[0m:[93m16[0m[39m[22m
+[1m[31m    [7m13[0m   templateUrl: './delete-confirmation-modal.component.html',[39m[22m
+[1m[31m    [7m  [0m [96m               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Error occurs in the template of component DeleteConfirmationModalComponent.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component.html[0m:[93m4[0m:[93m3[0m - [91merror[0m[90m NG8001: [0m'cds-modal-header' is not a known element:[39m[22m
+[1m[31m1. If 'cds-modal-header' is an Angular component, then verify that it is part of this module.[39m[22m
+[1m[31m2. If 'cds-modal-header' is a Web Component then add 'CUSTOM_ELEMENTS_SCHEMA' to the '@NgModule.schemas' of this component to suppress this message.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m4[0m   <cds-modal-header (closeSelect)="closeModal()">[39m[22m
+[1m[31m[7m [0m [91m  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96msrc/app/shared/components/delete-confirmation-modal/delete-confirmat[39m[22m[1m[31mion-modal.component.ts[0m:[93m13[0m:[93m16[0m[39m[22m
+[1m[31m    [7m13[0m   templateUrl: './delete-confirmation-modal.component.html',[39m[22m
+[1m[31m    [7m  [0m [96m               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Error occurs in the template of component DeleteConfirmationModalComponent.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component.html[0m:[93m10[0m:[93m21[0m - [91merror[0m[90m NG8003: [0mNo directive found with exportAs 'ngForm'.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m10[0m           #formDir="ngForm"[39m[22m
+[1m[31m[7m  [0m [91m                    ~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96msrc/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component.ts[0m:[93m13[0m:[93m16[0m[39m[22m
+[1m[31m    [7m13[0m   templateUrl: './delete-confirmation-modal.component.html',[39m[22m
+[1m[31m    [7m  [0m [96m               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Error occurs in the template of component DeleteConfirmationModalComponent.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component.html[0m:[93m11[0m:[93m11[0m - [91merror[0m[90m NG8002: [0mCan't bind to 'formGroup' since it isn't a known property of 'form'.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m11[0m           [formGroup]="deletionForm"[39m[22m
+[1m[31m[7m  [0m [91m          ~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96msrc/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component.ts[0m:[93m13[0m:[93m16[0m[39m[22m
+[1m[31m    [7m13[0m   templateUrl: './delete-confirmation-modal.component.html',[39m[22m
+[1m[31m    [7m  [0m [96m               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Error occurs in the template of component DeleteConfirmationModalComponent.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component.html[0m:[93m75[0m:[93m3[0m - [91merror[0m[90m NG8001: [0m'cd-form-button-panel' is not a known element:[39m[22m
+[1m[31m1. If 'cd-form-button-panel' is an Angular component, then veri[39m[22m[1m[31mfy that it is part of this module.[39m[22m
+[1m[31m2. If 'cd-form-button-panel' is a Web Component then add 'CUSTOM_ELEMENTS_SCHEMA' to the '@NgModule.schemas' of this component to suppress this message.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m 75[0m   <cd-form-button-panel (submitActionEvent)="callSubmitAction()"[39m[22m
+[1m[31m[7m   [0m [91m  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[7m 76[0m                         (backActionEvent)="backAction ? callBackAction() : hideModal()"[39m[22m
+[1m[31m[7m   [0m [91m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[7m...[0m [39m[22m
+[1m[31m[7m 79[0m                         [modalForm]="true"[39m[22m
+[1m[31m[7m   [0m [91m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[7m 80[0m                         [submitBtnType]="(actionDescription === 'delete' || actionDescription === 'remove') ? 'danger' : 'primary'"></cd-form-button-panel>[39m[22m
+[1m[31m[7m   [0m [91m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96msrc/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component.ts[0m:[93m13[0m:[93m16[0m[39m[22m
+[1m[31m    [7m13[0m   templateUrl: './delete-confirmation-modal.component.html',[39m[22m
+[1m[31m    [7m  [0m [96m               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Error occurs in the template of component DeleteConfirmationModalComponent.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component.html[0m:[93m77[0m:[93m25[0m - [91merror[0m[90m NG8002: [0mCan't bind to 'form' since it isn't a known property of 'cd-form-button-panel'.[39m[22m
+[1m[31m1. If 'cd-form-button-panel' is an Angular component and it has 'form' input, then verify that it is part of this module.[39m[22m
+[1m[31m2. If 'cd-form-button-panel' is a Web Component then add 'CUSTOM_ELEMENTS_SCHEMA' to the '@NgModule.schemas' of this component to suppress this message.[39m[22m
+[1m[31m3. To allow any property add 'NO_ERRORS_SCHEMA' to the '@NgModule.schemas' o[39m[22m[1m[31mf this component.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m77[0m                         [form]="deletionForm"[39m[22m
+[1m[31m[7m  [0m [91m                        ~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96msrc/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component.ts[0m:[93m13[0m:[93m16[0m[39m[22m
+[1m[31m    [7m13[0m   templateUrl: './delete-confirmation-modal.component.html',[39m[22m
+[1m[31m    [7m  [0m [96m               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Error occurs in the template of component DeleteConfirmationModalComponent.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component.html[0m:[93m78[0m:[93m25[0m - [91merror[0m[90m NG8002: [0mCan't bind to 'submitText' since it isn't a known property of 'cd-form-button-panel'.[39m[22m
+[1m[31m1. If 'cd-form-button-panel' is an Angular component and it has 'submitText' input, then verify that it is part of this module.[39m[22m
+[1m[31m2. If 'cd-form-button-panel' is a Web Component then add 'CUSTOM_ELEMENTS_SCHEMA' to the '@NgModule.schemas' of this component to suppress this message.[39m[22m
+[1m[31m3. To allow any property add 'NO_ERRORS_SCHEMA' to the '@NgModule.schemas' of this component.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m78[0m                         [submitText]="(actionDescription | titlecase) + ' ' + itemDescription"[39m[22m
+[1m[31m[7m  [0m [91m                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96msrc/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component.ts[0m:[93m13[0m:[93m16[0m[39m[22m
+[1m[31m    [7m13[0m   templateUrl: './delete-confirmation-modal.component.html',[39m[22m
+[1m[31m    [7m  [0m [96m               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Error occurs in the template of component DeleteConfirmationModalComponent.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component.html[0m:[93m78[0m:[93m60[0m - [91merror[0m[90m NG8004: [0mNo pipe found with name 'titlecase'.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m78[0m                   [39m[22m[1m[31m      [submitText]="(actionDescription | titlecase) + ' ' + itemDescription"[39m[22m
+[1m[31m[7m  [0m [91m                                                           ~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96msrc/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component.ts[0m:[93m13[0m:[93m16[0m[39m[22m
+[1m[31m    [7m13[0m   templateUrl: './delete-confirmation-modal.component.html',[39m[22m
+[1m[31m    [7m  [0m [96m               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Error occurs in the template of component DeleteConfirmationModalComponent.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component.html[0m:[93m79[0m:[93m25[0m - [91merror[0m[90m NG8002: [0mCan't bind to 'modalForm' since it isn't a known property of 'cd-form-button-panel'.[39m[22m
+[1m[31m1. If 'cd-form-button-panel' is an Angular component and it has 'modalForm' input, then verify that it is part of this module.[39m[22m
+[1m[31m2. If 'cd-form-button-panel' is a Web Component then add 'CUSTOM_ELEMENTS_SCHEMA' to the '@NgModule.schemas' of this component to suppress this message.[39m[22m
+[1m[31m3. To allow any property add 'NO_ERRORS_SCHEMA' to the '@NgModule.schemas' of this component.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m79[0m                         [modalForm]="true"[39m[22m
+[1m[31m[7m  [0m [91m                        ~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96msrc/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component.ts[0m:[93m13[0m:[93m16[0m[39m[22m
+[1m[31m    [7m13[0m   templateUrl: './delete-confirmation-modal.component.html',[39m[22m
+[1m[31m    [7m  [0m [96m               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Error occurs in the template of component DeleteConfirmationModalComponent.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component.html[0m:[93m80[0m:[93m25[0m - [91merror[0m[90m NG8002: [0mCan't bind to 'submitBtnType' since it isn't a known property of 'cd-form-button-panel'.[39m[22m
+[1m[31m1. If 'cd-form-button-panel' is an Angular component and it [39m[22m[1m[31mhas 'submitBtnType' input, then verify that it is part of this module.[39m[22m
+[1m[31m2. If 'cd-form-button-panel' is a Web Component then add 'CUSTOM_ELEMENTS_SCHEMA' to the '@NgModule.schemas' of this component to suppress this message.[39m[22m
+[1m[31m3. To allow any property add 'NO_ERRORS_SCHEMA' to the '@NgModule.schemas' of this component.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m80[0m                         [submitBtnType]="(actionDescription === 'delete' || actionDescription === 'remove') ? 'danger' : 'primary'"></cd-form-button-panel>[39m[22m
+[1m[31m[7m  [0m [91m                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96msrc/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component.ts[0m:[93m13[0m:[93m16[0m[39m[22m
+[1m[31m    [7m13[0m   templateUrl: './delete-confirmation-modal.component.html',[39m[22m
+[1m[31m    [7m  [0m [96m               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Error occurs in the template of component DeleteConfirmationModalComponent.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/components/details-card/details-card.component.html[0m:[93m1[0m:[93m1[0m - [91merror[0m[90m NG8001: [0m'cds-tile' is not a known element:[39m[22m
+[1m[31m1. If 'cds-tile' is an Angular component, then verify that it is part of this module.[39m[22m
+[1m[31m2. If 'cds-tile' is a Web Component then add 'CUSTOM_ELEMENTS_SCHEMA' to the '@NgModule.schemas' of this component to suppress this message.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m1[0m <cds-tile>[39m[22m
+[1m[31m[7m [0m [91m~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96msrc/app/shared/components/details-card/details-card.component.ts[0m:[93m5[0m:[93m16[0m[39m[22m
+[1m[31m    [7m5[0m   templateUrl: './details-card.component.html',[39m[22m
+[1m[31m    [7m [0m [96m               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Error occurs in the template of component DetailsCardComponent.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/components/download-button/download-button.component.html[0m:[93m7[0m:[93m10[0m - [91merror[0m[90m NG8002: [0mCan't bind to 'cdsIcon' since it isn't a known property [39m[22m[1m[31mof ':svg:svg'.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m7[0m     <svg [cdsIcon]="icons.download"[39m[22m
+[1m[31m[7m [0m [91m         ~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96msrc/app/shared/components/download-button/download-button.component.ts[0m:[93m8[0m:[93m16[0m[39m[22m
+[1m[31m    [7m8[0m   templateUrl: './download-button.component.html',[39m[22m
+[1m[31m    [7m [0m [96m               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Error occurs in the template of component DownloadButtonComponent.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/components/form-advanced-fieldset/form-advanced-fieldset.component.html[0m:[93m2[0m:[93m3[0m - [91merror[0m[90m NG8001: [0m'cds-accordion' is not a known element:[39m[22m
+[1m[31m1. If 'cds-accordion' is an Angular component, then verify that it is part of this module.[39m[22m
+[1m[31m2. If 'cds-accordion' is a Web Component then add 'CUSTOM_ELEMENTS_SCHEMA' to the '@NgModule.schemas' of this component to suppress this message.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m2[0m   <cds-accordion size="lg"[39m[22m
+[1m[31m[7m [0m [91m  ~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[7m3[0m                  class="form-item">[39m[22m
+[1m[31m[7m [0m [91m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96msrc/app/shared/components/form-advanced-fieldset/form-advanced-fieldset.component.ts[0m:[93m5[0m:[93m16[0m[39m[22m
+[1m[31m    [7m5[0m   templateUrl: './form-advanced-fieldset.component.html',[39m[22m
+[1m[31m    [7m [0m [96m               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Error occurs in the template of component FormAdvancedFieldsetComponent.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/components/form-advanced-fieldset/form-advanced-fieldset.component.html[0m:[93m4[0m:[93m5[0m - [91merror[0m[90m NG8001: [0m'cds-accordion-item' is not a known element:[39m[22m
+[1m[31m1. If 'cds-accordion-item' is an Angular component, then verify that it is part of this module.[39m[22m
+[1m[31m2. If 'cds-accordion-item' is a Web Component then add 'CUSTOM_ELEMENTS_SCHEMA' to the '@NgModule.schemas' of this component to suppress this message.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m4[0m     <cds-accordion-item [title]="titleTpl"[39m[22m
+[1m[31m[7m [0m [91m    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[39m[22m[1m[31m~~~~[0m[39m[22m
+[1m[31m[7m5[0m                         i18n[39m[22m
+[1m[31m[7m [0m [91m~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[7m6[0m                         id="advanced-fieldset"[39m[22m
+[1m[31m[7m [0m [91m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[7m7[0m                         (selected)="showAdvanced = !showAdvanced">[39m[22m
+[1m[31m[7m [0m [91m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96msrc/app/shared/components/form-advanced-fieldset/form-advanced-fieldset.component.ts[0m:[93m5[0m:[93m16[0m[39m[22m
+[1m[31m    [7m5[0m   templateUrl: './form-advanced-fieldset.component.html',[39m[22m
+[1m[31m    [7m [0m [96m               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Error occurs in the template of component FormAdvancedFieldsetComponent.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/components/form-modal/form-modal.component.html[0m:[93m1[0m:[93m1[0m - [91merror[0m[90m NG8001: [0m'cds-modal' is not a known element:[39m[22m
+[1m[31m1. If 'cds-modal' is an Angular component, then verify that it is part of this module.[39m[22m
+[1m[31m2. If 'cds-modal' is a Web Component then add 'CUSTOM_ELEMENTS_SCHEMA' to the '@NgModule.schemas' of this component to suppress this message.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m1[0m <cds-modal size="md"[39m[22m
+[1m[31m[7m [0m [91m~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[7m2[0m            [open]="open"[39m[22m
+[1m[31m[7m [0m [91m~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[7m3[0m            (overlaySelected)="closeModal()"[39m[22m
+[1m[31m[7m [0m [91m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[7m4[0m            [hasScrollingContent]="true">[39m[22m
+[1m[31m[7m [0m [91m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96msrc/app/shared/components/form-modal/form-modal.component.ts[0m:[93m15[0m:[93m16[0m[39m[22m
+[1m[31m    [7m15[0m   templateUrl: './form-modal.component.html',[39m[22m
+[1m[31m    [7m  [0m [96m               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Error occurs in the template of component FormModalComponent.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/components/form-modal/form-modal.component.html[0m:[93m2[0m:[93m12[0m - [91merror[0m[90m NG8002: [0mCan't bind to 'open' [39m[22m[1m[31msince it isn't a known property of 'cds-modal'.[39m[22m
+[1m[31m1. If 'cds-modal' is an Angular component and it has 'open' input, then verify that it is part of this module.[39m[22m
+[1m[31m2. If 'cds-modal' is a Web Component then add 'CUSTOM_ELEMENTS_SCHEMA' to the '@NgModule.schemas' of this component to suppress this message.[39m[22m
+[1m[31m3. To allow any property add 'NO_ERRORS_SCHEMA' to the '@NgModule.schemas' of this component.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m2[0m            [open]="open"[39m[22m
+[1m[31m[7m [0m [91m           ~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96msrc/app/shared/components/form-modal/form-modal.component.ts[0m:[93m15[0m:[93m16[0m[39m[22m
+[1m[31m    [7m15[0m   templateUrl: './form-modal.component.html',[39m[22m
+[1m[31m    [7m  [0m [96m               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Error occurs in the template of component FormModalComponent.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/components/form-modal/form-modal.component.html[0m:[93m4[0m:[93m12[0m - [91merror[0m[90m NG8002: [0mCan't bind to 'hasScrollingContent' since it isn't a known property of 'cds-modal'.[39m[22m
+[1m[31m1. If 'cds-modal' is an Angular component and it has 'hasScrollingContent' input, then verify that it is part of this module.[39m[22m
+[1m[31m2. If 'cds-modal' is a Web Component then add 'CUSTOM_ELEMENTS_SCHEMA' to the '@NgModule.schemas' of this component to suppress this message.[39m[22m
+[1m[31m3. To allow any property add 'NO_ERRORS_SCHEMA' to the '@NgModule.schemas' of this component.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m4[0m            [hasScrollingContent]="true">[39m[22m
+[1m[31m[7m [0m [91m           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96msrc/app/shared/components/form-modal/form-modal.component.ts[0m:[93m15[0m:[93m16[0m[39m[22m
+[1m[31m    [7m15[0m   templateUrl: './form-modal.component.html',[39m[22m
+[1m[31m    [7m  [0m [96m               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Error occurs in the template of component FormModalComponent.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/components/form-modal/form-modal.component.html[0m:[93m5[0m:[93m3[0m - [91merror[0m[90m NG8001: [0m'cds-modal-header' is not a known element:[39m[22m
+[1m[31m1. If 'cds-modal-header' is [39m[22m[1m[31man Angular component, then verify that it is part of this module.[39m[22m
+[1m[31m2. If 'cds-modal-header' is a Web Component then add 'CUSTOM_ELEMENTS_SCHEMA' to the '@NgModule.schemas' of this component to suppress this message.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m5[0m   <cds-modal-header (closeSelect)="closeModal()">[39m[22m
+[1m[31m[7m [0m [91m  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96msrc/app/shared/components/form-modal/form-modal.component.ts[0m:[93m15[0m:[93m16[0m[39m[22m
+[1m[31m    [7m15[0m   templateUrl: './form-modal.component.html',[39m[22m
+[1m[31m    [7m  [0m [96m               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Error occurs in the template of component FormModalComponent.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/components/form-modal/form-modal.component.html[0m:[93m13[0m:[93m13[0m - [91merror[0m[90m NG8002: [0mCan't bind to 'formGroup' since it isn't a known property of 'form'.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m13[0m       <form [formGroup]="formGroup"[39m[22m
+[1m[31m[7m  [0m [91m            ~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96msrc/app/shared/components/form-modal/form-modal.component.ts[0m:[93m15[0m:[93m16[0m[39m[22m
+[1m[31m    [7m15[0m   templateUrl: './form-modal.component.html',[39m[22m
+[1m[31m    [7m  [0m [96m               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Error occurs in the template of component FormModalComponent.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/components/form-modal/form-modal.component.html[0m:[93m14[0m:[93m23[0m - [91merror[0m[90m NG8003: [0mNo directive found with exportAs 'ngForm'.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m14[0m             #formDir="ngForm"[39m[22m
+[1m[31m[7m  [0m [91m                      ~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96msrc/app/shared/components/form-modal/form-modal.component.ts[0m:[93m15[0m:[93m16[0m[39m[22m
+[1m[31m    [7m15[0m   templateUrl: './form-modal.component.html',[39m[22m
+[1m[31m    [7m  [0m [96m               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Error occurs in the template of component FormModalComponent.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/components/form-modal/form-modal.component.html[0m:[93m100[0m:[93m3[0m - [91merror[0m[90m NG8001: [[39m[22m[1m[31m0m'cd-form-button-panel' is not a known element:[39m[22m
+[1m[31m1. If 'cd-form-button-panel' is an Angular component, then verify that it is part of this module.[39m[22m
+[1m[31m2. If 'cd-form-button-panel' is a Web Component then add 'CUSTOM_ELEMENTS_SCHEMA' to the '@NgModule.schemas' of this component to suppress this message.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m100[0m   <cd-form-button-panel (submitActionEvent)="onSubmitForm(formGroup.value)"[39m[22m
+[1m[31m[7m   [0m [91m  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[7m101[0m                         [form]="formGroup"[39m[22m
+[1m[31m[7m   [0m [91m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[7m102[0m                         [submitText]="submitButtonText"[39m[22m
+[1m[31m[7m   [0m [91m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[7m103[0m                         [modalForm]="true"></cd-form-button-panel>[39m[22m
+[1m[31m[7m   [0m [91m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96msrc/app/shared/components/form-modal/form-modal.component.ts[0m:[93m15[0m:[93m16[0m[39m[22m
+[1m[31m    [7m15[0m   templateUrl: './form-modal.component.html',[39m[22m
+[1m[31m    [7m  [0m [96m               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Error occurs in the template of component FormModalComponent.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/components/form-modal/form-modal.component.html[0m:[93m101[0m:[93m25[0m - [91merror[0m[90m NG8002: [0mCan't bind to 'form' since it isn't a known property of 'cd-form-button-panel'.[39m[22m
+[1m[31m1. If 'cd-form-button-panel' is an Angular component and it has 'form' input, then verify that it is part of this module.[39m[22m
+[1m[31m2. If 'cd-form-button-panel' is a Web Component then add 'CUSTOM_ELEMENTS_SCHEMA' to the '@NgModule.schemas' of this component to suppress this message.[39m[22m
+[1m[31m3. To allow any property add 'NO_ERRORS_SCHEMA' to the '@NgModule.schemas' of this component.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m101[0m                         [form]="formGroup"[39m[22m
+[1m[31m[7m   [0m [91m                        ~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96msrc/app/shared/components/form-modal/form-modal.component.ts[0m:[93m15[0m:[39m[22m[1m[31m[93m16[0m[39m[22m
+[1m[31m    [7m15[0m   templateUrl: './form-modal.component.html',[39m[22m
+[1m[31m    [7m  [0m [96m               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Error occurs in the template of component FormModalComponent.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/components/form-modal/form-modal.component.html[0m:[93m102[0m:[93m25[0m - [91merror[0m[90m NG8002: [0mCan't bind to 'submitText' since it isn't a known property of 'cd-form-button-panel'.[39m[22m
+[1m[31m1. If 'cd-form-button-panel' is an Angular component and it has 'submitText' input, then verify that it is part of this module.[39m[22m
+[1m[31m2. If 'cd-form-button-panel' is a Web Component then add 'CUSTOM_ELEMENTS_SCHEMA' to the '@NgModule.schemas' of this component to suppress this message.[39m[22m
+[1m[31m3. To allow any property add 'NO_ERRORS_SCHEMA' to the '@NgModule.schemas' of this component.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m102[0m                         [submitText]="submitButtonText"[39m[22m
+[1m[31m[7m   [0m [91m                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96msrc/app/shared/components/form-modal/form-modal.component.ts[0m:[93m15[0m:[93m16[0m[39m[22m
+[1m[31m    [7m15[0m   templateUrl: './form-modal.component.html',[39m[22m
+[1m[31m    [7m  [0m [96m               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Error occurs in the template of component FormModalComponent.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/components/form-modal/form-modal.component.html[0m:[93m103[0m:[93m25[0m - [91merror[0m[90m NG8002: [0mCan't bind to 'modalForm' since it isn't a known property of 'cd-form-button-panel'.[39m[22m
+[1m[31m1. If 'cd-form-button-panel' is an Angular component and it has 'modalForm' input, then verify that it is part of this module.[39m[22m
+[1m[31m2. If 'cd-form-button-panel' is a Web Component then add 'CUSTOM_ELEMENTS_SCHEMA' to the '@NgModule.schemas' of this component to suppress this message.[39m[22m
+[1m[31m3. To allow any property add 'NO_ERRORS_SCHEMA' to the '@NgModule.schemas' of this component.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m103[0m                         [modalForm]="true"></cd-form-button-panel>[39m[22m
+[1m[31m[7m   [0m [91m                     [39m[22m[1m[31m   ~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96msrc/app/shared/components/form-modal/form-modal.component.ts[0m:[93m15[0m:[93m16[0m[39m[22m
+[1m[31m    [7m15[0m   templateUrl: './form-modal.component.html',[39m[22m
+[1m[31m    [7m  [0m [96m               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Error occurs in the template of component FormModalComponent.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/components/icon/icon.component.html[0m:[93m1[0m:[93m7[0m - [91merror[0m[90m NG8002: [0mCan't bind to 'cdsIcon' since it isn't a known property of ':svg:svg'.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m1[0m <svg  [cdsIcon]="icon"[39m[22m
+[1m[31m[7m [0m [91m      ~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96msrc/app/shared/components/icon/icon.component.ts[0m:[93m6[0m:[93m16[0m[39m[22m
+[1m[31m    [7m6[0m   templateUrl: './icon.component.html',[39m[22m
+[1m[31m    [7m [0m [96m               ~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Error occurs in the template of component IconComponent.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/components/icon/icon.component.html[0m:[93m2[0m:[93m7[0m - [91merror[0m[90m NG8002: [0mCan't bind to 'size' since it isn't a known property of ':svg:svg'.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m2[0m       [size]="size"[39m[22m
+[1m[31m[7m [0m [91m      ~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96msrc/app/shared/components/icon/icon.component.ts[0m:[93m6[0m:[93m16[0m[39m[22m
+[1m[31m    [7m6[0m   templateUrl: './icon.component.html',[39m[22m
+[1m[31m    [7m [0m [96m               ~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Error occurs in the template of component IconComponent.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/components/language-selector/language-selector.component.html[0m:[93m1[0m:[93m1[0m - [91merror[0m[90m NG8001: [0m'cds-header-menu' is not a known element:[39m[22m
+[1m[31m1. If 'cds-header-menu' is an Angular component, then verify that it is part of this module.[39m[22m
+[1m[31m2. If 'cds-header-menu' is a Web Component then add 'CUSTOM_ELEMENTS_SCHEMA' to the '@NgModule.schemas' of this component to suppress this message.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m1[0m <cds-header-menu [title]="allLanguages[selectedLanguage]">[39m[22m
+[1m[31m[7m [0m [91m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[39m[22m[1m[31m~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96msrc/app/shared/components/language-selector/language-selector.component.ts[0m:[93m10[0m:[93m16[0m[39m[22m
+[1m[31m    [7m10[0m   templateUrl: './language-selector.component.html',[39m[22m
+[1m[31m    [7m  [0m [96m               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Error occurs in the template of component LanguageSelectorComponent.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/components/loading-panel/loading-panel.component.html[0m:[93m1[0m:[93m1[0m - [91merror[0m[90m NG8001: [0m'ngb-alert' is not a known element:[39m[22m
+[1m[31m1. If 'ngb-alert' is an Angular component, then verify that it is part of this module.[39m[22m
+[1m[31m2. If 'ngb-alert' is a Web Component then add 'CUSTOM_ELEMENTS_SCHEMA' to the '@NgModule.schemas' of this component to suppress this message.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m1[0m <ngb-alert type="info"[39m[22m
+[1m[31m[7m [0m [91m~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[7m2[0m            [dismissible]="false">[39m[22m
+[1m[31m[7m [0m [91m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96msrc/app/shared/components/loading-panel/loading-panel.component.ts[0m:[93m7[0m:[93m16[0m[39m[22m
+[1m[31m    [7m7[0m   templateUrl: './loading-panel.component.html',[39m[22m
+[1m[31m    [7m [0m [96m               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Error occurs in the template of component LoadingPanelComponent.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/components/loading-panel/loading-panel.component.html[0m:[93m2[0m:[93m12[0m - [91merror[0m[90m NG8002: [0mCan't bind to 'dismissible' since it isn't a known property of 'ngb-alert'.[39m[22m
+[1m[31m1. If 'ngb-alert' is an Angular component and it has 'dismissible' input, then verify that it is part of this module.[39m[22m
+[1m[31m2. If 'ngb-alert' is a Web Component then add 'CUSTOM_ELEMENTS_SCHEMA' to the '@NgModule.schemas' of this component to suppress this message.[39m[22m
+[1m[31m3. To allow any property add 'NO_ERRORS_SCHEMA' to the '@NgModule.schemas' of this component.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m2[0m            [dismissible]="false">[39m[22m
+[1m[31m[7m [0m [91m           ~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96msrc/app/shared/components/loading-panel/loading-panel.compo[39m[22m[1m[31mnent.ts[0m:[93m7[0m:[93m16[0m[39m[22m
+[1m[31m    [7m7[0m   templateUrl: './loading-panel.component.html',[39m[22m
+[1m[31m    [7m [0m [96m               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Error occurs in the template of component LoadingPanelComponent.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/components/loading-panel/loading-panel.component.html[0m:[93m4[0m:[93m8[0m - [91merror[0m[90m NG8002: [0mCan't bind to 'ngClass' since it isn't a known property of 'i'.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m4[0m     <i [ngClass]="[icons.spinner, icons.spin]"[39m[22m
+[1m[31m[7m [0m [91m       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96msrc/app/shared/components/loading-panel/loading-panel.component.ts[0m:[93m7[0m:[93m16[0m[39m[22m
+[1m[31m    [7m7[0m   templateUrl: './loading-panel.component.html',[39m[22m
+[1m[31m    [7m [0m [96m               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Error occurs in the template of component LoadingPanelComponent.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/components/modal/modal.component.html[0m:[93m1[0m:[93m6[0m - [91merror[0m[90m NG8002: [0mCan't bind to 'ngClass' since it isn't a known property of 'div'.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m1[0m <div [ngClass]="pageURL ? 'modal' : ''">[39m[22m
+[1m[31m[7m [0m [91m     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96msrc/app/shared/components/modal/modal.component.ts[0m:[93m8[0m:[93m16[0m[39m[22m
+[1m[31m    [7m8[0m   templateUrl: './modal.component.html',[39m[22m
+[1m[31m    [7m [0m [96m               ~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Error occurs in the template of component ModalComponent.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/components/modal/modal.component.html[0m:[93m2[0m:[93m8[0m - [91merror[0m[90m NG8002: [0mCan't bind to 'ngClass' since it isn't a known property of 'div'.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m2[0m   <div [ngClass]="pageURL ? 'modal-dialog' : ''">[39m[22m
+[1m[31m[7m [0m [91m       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96msrc/app/shared/components/modal/modal.component.ts[0m:[93m8[0m:[93m16[0m[39m[22m
+[1m[31m    [7m8[0m   templateUrl: './modal.component.html',[39m[22m
+[1m[31m    [7m [0m [96m               ~~~~~[39m[22m[1m[31m~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Error occurs in the template of component ModalComponent.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/components/notifications-sidebar/notifications-sidebar.component.html[0m:[93m130[0m:[93m6[0m - [91merror[0m[90m NG8002: [0mCan't bind to 'clickOutsideEnabled' since it isn't a known property of 'div'.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m130[0m      [clickOutsideEnabled]="isSidebarOpened">[39m[22m
+[1m[31m[7m   [0m [91m     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96msrc/app/shared/components/notifications-sidebar/notifications-sidebar.component.ts[0m:[93m36[0m:[93m16[0m[39m[22m
+[1m[31m    [7m36[0m   templateUrl: './notifications-sidebar.component.html',[39m[22m
+[1m[31m    [7m  [0m [96m               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Error occurs in the template of component NotificationsSidebarComponent.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/components/notifications-sidebar/notifications-sidebar.component.html[0m:[93m142[0m:[93m3[0m - [91merror[0m[90m NG8001: [0m'ngx-simplebar' is not a known element:[39m[22m
+[1m[31m1. If 'ngx-simplebar' is an Angular component, then verify that it is part of this module.[39m[22m
+[1m[31m2. If 'ngx-simplebar' is a Web Component then add 'CUSTOM_ELEMENTS_SCHEMA' to the '@NgModule.schemas' of this component to suppress this message.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m142[0m   <ngx-simplebar [options]="simplebar">[39m[22m
+[1m[31m[7m   [0m [91m  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96msrc/app/shared/components/notifications-sidebar/notifications-sidebar.component.ts[0m:[93m36[0m:[93m16[0m[39m[22m
+[1m[31m    [7m36[0m   templateUrl: './notifications-sidebar.component.html',[39m[22m
+[1m[31m    [7m  [0m [96m               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Error occurs in the template of component NotificationsSidebarComponent.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/components/notifications-sidebar/notifications-sidebar.component.html[0m:[93m142[0m:[93m18[0m - [91merror[0m[90m NG8002: [0mCan't bind to 'options' since it isn't a known property of 'ngx-simplebar'.[39m[22m
+[1m[31m1. If 'ngx[39m[22m[1m[31m-simplebar' is an Angular component and it has 'options' input, then verify that it is part of this module.[39m[22m
+[1m[31m2. If 'ngx-simplebar' is a Web Component then add 'CUSTOM_ELEMENTS_SCHEMA' to the '@NgModule.schemas' of this component to suppress this message.[39m[22m
+[1m[31m3. To allow any property add 'NO_ERRORS_SCHEMA' to the '@NgModule.schemas' of this component.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m142[0m   <ngx-simplebar [options]="simplebar">[39m[22m
+[1m[31m[7m   [0m [91m                 ~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96msrc/app/shared/components/notifications-sidebar/notifications-sidebar.component.ts[0m:[93m36[0m:[93m16[0m[39m[22m
+[1m[31m    [7m36[0m   templateUrl: './notifications-sidebar.component.html',[39m[22m
+[1m[31m    [7m  [0m [96m               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Error occurs in the template of component NotificationsSidebarComponent.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/components/progress/progress.component.html[0m:[93m47[0m:[93m9[0m - [91merror[0m[90m NG8001: [0m'ngb-progressbar' is not a known element:[39m[22m
+[1m[31m1. If 'ngb-progressbar' is an Angular component, then verify that it is part of this module.[39m[22m
+[1m[31m2. If 'ngb-progressbar' is a Web Component then add 'CUSTOM_ELEMENTS_SCHEMA' to the '@NgModule.schemas' of this component to suppress this message.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m47[0m         <ngb-progressbar type="info"[39m[22m
+[1m[31m[7m  [0m [91m        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[7m48[0m                          [value]="value"[39m[22m
+[1m[31m[7m  [0m [91m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[7m49[0m                          [striped]="true"[39m[22m
+[1m[31m[7m  [0m [91m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[7m50[0m                          [animated]="!isPaused"></ngb-progressbar>[39m[22m
+[1m[31m[7m  [0m [91m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96msrc/app/shared/components/progress/progress.component.ts[0m:[93m6[0m:[93m16[0m[39m[22m
+[1m[31m    [7m6[0m   templateUrl: './progress.component.html',[39m[22m
+[1m[31m    [7m [0m [96m               ~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Error occurs in the template of component ProgressCompo[39m[22m[1m[31mnent.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/components/progress/progress.component.html[0m:[93m48[0m:[93m26[0m - [91merror[0m[90m NG8002: [0mCan't bind to 'value' since it isn't a known property of 'ngb-progressbar'.[39m[22m
+[1m[31m1. If 'ngb-progressbar' is an Angular component and it has 'value' input, then verify that it is part of this module.[39m[22m
+[1m[31m2. If 'ngb-progressbar' is a Web Component then add 'CUSTOM_ELEMENTS_SCHEMA' to the '@NgModule.schemas' of this component to suppress this message.[39m[22m
+[1m[31m3. To allow any property add 'NO_ERRORS_SCHEMA' to the '@NgModule.schemas' of this component.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m48[0m                          [value]="value"[39m[22m
+[1m[31m[7m  [0m [91m                         ~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96msrc/app/shared/components/progress/progress.component.ts[0m:[93m6[0m:[93m16[0m[39m[22m
+[1m[31m    [7m6[0m   templateUrl: './progress.component.html',[39m[22m
+[1m[31m    [7m [0m [96m               ~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Error occurs in the template of component ProgressComponent.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/components/progress/progress.component.html[0m:[93m49[0m:[93m26[0m - [91merror[0m[90m NG8002: [0mCan't bind to 'striped' since it isn't a known property of 'ngb-progressbar'.[39m[22m
+[1m[31m1. If 'ngb-progressbar' is an Angular component and it has 'striped' input, then verify that it is part of this module.[39m[22m
+[1m[31m2. If 'ngb-progressbar' is a Web Component then add 'CUSTOM_ELEMENTS_SCHEMA' to the '@NgModule.schemas' of this component to suppress this message.[39m[22m
+[1m[31m3. To allow any property add 'NO_ERRORS_SCHEMA' to the '@NgModule.schemas' of this component.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m49[0m                          [striped]="true"[39m[22m
+[1m[31m[7m  [0m [91m                         ~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96msrc/app/shared/components/progress/progress.component.ts[0m:[93m6[0m:[93m16[0m[39m[22m
+[1m[31m    [7m6[0m   templateUrl: './progress.component.html',[39m[22m
+[1m[31m    [7m [0m [96m               ~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Error occurs in the template of component ProgressComponent.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [[39m[22m[1m[31m39m[0m[96msrc/app/shared/components/progress/progress.component.html[0m:[93m50[0m:[93m26[0m - [91merror[0m[90m NG8002: [0mCan't bind to 'animated' since it isn't a known property of 'ngb-progressbar'.[39m[22m
+[1m[31m1. If 'ngb-progressbar' is an Angular component and it has 'animated' input, then verify that it is part of this module.[39m[22m
+[1m[31m2. If 'ngb-progressbar' is a Web Component then add 'CUSTOM_ELEMENTS_SCHEMA' to the '@NgModule.schemas' of this component to suppress this message.[39m[22m
+[1m[31m3. To allow any property add 'NO_ERRORS_SCHEMA' to the '@NgModule.schemas' of this component.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m50[0m                          [animated]="!isPaused"></ngb-progressbar>[39m[22m
+[1m[31m[7m  [0m [91m                         ~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96msrc/app/shared/components/progress/progress.component.ts[0m:[93m6[0m:[93m16[0m[39m[22m
+[1m[31m    [7m6[0m   templateUrl: './progress.component.html',[39m[22m
+[1m[31m    [7m [0m [96m               ~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Error occurs in the template of component ProgressComponent.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/components/refresh-selector/refresh-selector.component.html[0m:[93m12[0m:[93m17[0m - [91merror[0m[90m NG8002: [0mCan't bind to 'ngModel' since it isn't a known property of 'select'.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m12[0m                 [(ngModel)]="selectedInterval">[39m[22m
+[1m[31m[7m  [0m [91m                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96msrc/app/shared/components/refresh-selector/refresh-selector.component.ts[0m:[93m7[0m:[93m16[0m[39m[22m
+[1m[31m    [7m7[0m   templateUrl: './refresh-selector.component.html',[39m[22m
+[1m[31m    [7m [0m [96m               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Error occurs in the template of component RefreshSelectorComponent.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/components/select-badges/select-badges.component.html[0m:[93m1[0m:[93m1[0m - [91merror[0m[90m NG8001: [0m'cd-select' is not a known element:[39m[22m
+[1m[31m1. If 'cd-select' is an Angular component, then verify that it is part of this module.[39m[22m
+[1m[31m2. If 'cd-select' is a Web C[39m[22m[1m[31momponent then add 'CUSTOM_ELEMENTS_SCHEMA' to the '@NgModule.schemas' of this component to suppress this message.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m  1[0m <cd-select #cdSelect[39m[22m
+[1m[31m[7m   [0m [91m~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[7m  2[0m            [data]="data"[39m[22m
+[1m[31m[7m   [0m [91m~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[7m...[0m [39m[22m
+[1m[31m[7m  8[0m            elemClass="me-2 select-menu-edit"[39m[22m
+[1m[31m[7m   [0m [91m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[7m  9[0m            (selection)="selection.emit($event)">[39m[22m
+[1m[31m[7m   [0m [91m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96msrc/app/shared/components/select-badges/select-badges.component.ts[0m:[93m11[0m:[93m16[0m[39m[22m
+[1m[31m    [7m11[0m   templateUrl: './select-badges.component.html',[39m[22m
+[1m[31m    [7m  [0m [96m               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Error occurs in the template of component SelectBadgesComponent.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/components/select-badges/select-badges.component.html[0m:[93m2[0m:[93m12[0m - [91merror[0m[90m NG8002: [0mCan't bind to 'data' since it isn't a known property of 'cd-select'.[39m[22m
+[1m[31m1. If 'cd-select' is an Angular component and it has 'data' input, then verify that it is part of this module.[39m[22m
+[1m[31m2. If 'cd-select' is a Web Component then add 'CUSTOM_ELEMENTS_SCHEMA' to the '@NgModule.schemas' of this component to suppress this message.[39m[22m
+[1m[31m3. To allow any property add 'NO_ERRORS_SCHEMA' to the '@NgModule.schemas' of this component.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m2[0m            [data]="data"[39m[22m
+[1m[31m[7m [0m [91m           ~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96msrc/app/shared/components/select-badges/select-badges.component.ts[0m:[93m11[0m:[93m16[0m[39m[22m
+[1m[31m    [7m11[0m   templateUrl: './select-badges.component.html',[39m[22m
+[1m[31m    [7m  [0m [96m               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Error occurs in the template of component SelectBadgesComponent.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/components/select-badges/select-badges.component.html[0m:[93m3[0m:[93m12[0m - [91merror[0m[90m NG8002: [0mCan't bind to 'options' [39m[22m[1m[31msince it isn't a known property of 'cd-select'.[39m[22m
+[1m[31m1. If 'cd-select' is an Angular component and it has 'options' input, then verify that it is part of this module.[39m[22m
+[1m[31m2. If 'cd-select' is a Web Component then add 'CUSTOM_ELEMENTS_SCHEMA' to the '@NgModule.schemas' of this component to suppress this message.[39m[22m
+[1m[31m3. To allow any property add 'NO_ERRORS_SCHEMA' to the '@NgModule.schemas' of this component.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m3[0m            [options]="options"[39m[22m
+[1m[31m[7m [0m [91m           ~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96msrc/app/shared/components/select-badges/select-badges.component.ts[0m:[93m11[0m:[93m16[0m[39m[22m
+[1m[31m    [7m11[0m   templateUrl: './select-badges.component.html',[39m[22m
+[1m[31m    [7m  [0m [96m               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Error occurs in the template of component SelectBadgesComponent.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/components/select-badges/select-badges.component.html[0m:[93m4[0m:[93m12[0m - [91merror[0m[90m NG8002: [0mCan't bind to 'messages' since it isn't a known property of 'cd-select'.[39m[22m
+[1m[31m1. If 'cd-select' is an Angular component and it has 'messages' input, then verify that it is part of this module.[39m[22m
+[1m[31m2. If 'cd-select' is a Web Component then add 'CUSTOM_ELEMENTS_SCHEMA' to the '@NgModule.schemas' of this component to suppress this message.[39m[22m
+[1m[31m3. To allow any property add 'NO_ERRORS_SCHEMA' to the '@NgModule.schemas' of this component.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m4[0m            [messages]="messages"[39m[22m
+[1m[31m[7m [0m [91m           ~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96msrc/app/shared/components/select-badges/select-badges.component.ts[0m:[93m11[0m:[93m16[0m[39m[22m
+[1m[31m    [7m11[0m   templateUrl: './select-badges.component.html',[39m[22m
+[1m[31m    [7m  [0m [96m               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Error occurs in the template of component SelectBadgesComponent.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/components/select-badges/select-badges.component.html[0m:[93m5[0m:[93m12[0m - [91merror[0m[90m NG8002: [0mCan't bind to 'selectionLimit' since it isn't a kn[39m[22m[1m[31mown property of 'cd-select'.[39m[22m
+[1m[31m1. If 'cd-select' is an Angular component and it has 'selectionLimit' input, then verify that it is part of this module.[39m[22m
+[1m[31m2. If 'cd-select' is a Web Component then add 'CUSTOM_ELEMENTS_SCHEMA' to the '@NgModule.schemas' of this component to suppress this message.[39m[22m
+[1m[31m3. To allow any property add 'NO_ERRORS_SCHEMA' to the '@NgModule.schemas' of this component.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m5[0m            [selectionLimit]="selectionLimit"[39m[22m
+[1m[31m[7m [0m [91m           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96msrc/app/shared/components/select-badges/select-badges.component.ts[0m:[93m11[0m:[93m16[0m[39m[22m
+[1m[31m    [7m11[0m   templateUrl: './select-badges.component.html',[39m[22m
+[1m[31m    [7m  [0m [96m               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Error occurs in the template of component SelectBadgesComponent.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/components/select-badges/select-badges.component.html[0m:[93m6[0m:[93m12[0m - [91merror[0m[90m NG8002: [0mCan't bind to 'customBadges' since it isn't a known property of 'cd-select'.[39m[22m
+[1m[31m1. If 'cd-select' is an Angular component and it has 'customBadges' input, then verify that it is part of this module.[39m[22m
+[1m[31m2. If 'cd-select' is a Web Component then add 'CUSTOM_ELEMENTS_SCHEMA' to the '@NgModule.schemas' of this component to suppress this message.[39m[22m
+[1m[31m3. To allow any property add 'NO_ERRORS_SCHEMA' to the '@NgModule.schemas' of this component.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m6[0m            [customBadges]="customBadges"[39m[22m
+[1m[31m[7m [0m [91m           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96msrc/app/shared/components/select-badges/select-badges.component.ts[0m:[93m11[0m:[93m16[0m[39m[22m
+[1m[31m    [7m11[0m   templateUrl: './select-badges.component.html',[39m[22m
+[1m[31m    [7m  [0m [96m               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Error occurs in the template of component SelectBadgesComponent.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/components/select-badges/select-badges.component.html[0m:[93m7[0m:[93m12[0m - [91merror[0m[90m NG8002: [0mCan't bind[39m[22m[1m[31m to 'customBadgeValidators' since it isn't a known property of 'cd-select'.[39m[22m
+[1m[31m1. If 'cd-select' is an Angular component and it has 'customBadgeValidators' input, then verify that it is part of this module.[39m[22m
+[1m[31m2. If 'cd-select' is a Web Component then add 'CUSTOM_ELEMENTS_SCHEMA' to the '@NgModule.schemas' of this component to suppress this message.[39m[22m
+[1m[31m3. To allow any property add 'NO_ERRORS_SCHEMA' to the '@NgModule.schemas' of this component.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m7[0m            [customBadgeValidators]="customBadgeValidators"[39m[22m
+[1m[31m[7m [0m [91m           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96msrc/app/shared/components/select-badges/select-badges.component.ts[0m:[93m11[0m:[93m16[0m[39m[22m
+[1m[31m    [7m11[0m   templateUrl: './select-badges.component.html',[39m[22m
+[1m[31m    [7m  [0m [96m               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Error occurs in the template of component SelectBadgesComponent.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/components/select-badges/select-badges.component.html[0m:[93m10[0m:[93m8[0m - [91merror[0m[90m NG8002: [0mCan't bind to 'cdsIcon' since it isn't a known property of ':svg:svg'.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m10[0m   <svg [cdsIcon]="icons.edit"[39m[22m
+[1m[31m[7m  [0m [91m       ~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96msrc/app/shared/components/select-badges/select-badges.component.ts[0m:[93m11[0m:[93m16[0m[39m[22m
+[1m[31m    [7m11[0m   templateUrl: './select-badges.component.html',[39m[22m
+[1m[31m    [7m  [0m [96m               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Error occurs in the template of component SelectBadgesComponent.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/components/select-badges/select-badges.component.html[0m:[93m11[0m:[93m8[0m - [91merror[0m[90m NG8002: [0mCan't bind to 'size' since it isn't a known property of ':svg:svg'.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m11[0m        [size]="icons.size20"[39m[22m
+[1m[31m[7m  [0m [91m       ~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96msrc/app/shared/components/select-badges/select-badges.component.ts[0m:[93m11[0m:[93m16[0m[39m[22m
+[1m[31m    [7m11[0m   templateUrl: './select-badges.c[39m[22m[1m[31momponent.html',[39m[22m
+[1m[31m    [7m  [0m [96m               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Error occurs in the template of component SelectBadgesComponent.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/components/side-panel/side-panel.component.html[0m:[93m5[0m:[93m1[0m - [91merror[0m[90m NG8001: [0m'cds-panel' is not a known element:[39m[22m
+[1m[31m1. If 'cds-panel' is an Angular component, then verify that it is part of this module.[39m[22m
+[1m[31m2. If 'cds-panel' is a Web Component then add 'CUSTOM_ELEMENTS_SCHEMA' to the '@NgModule.schemas' of this component to suppress this message.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m5[0m <cds-panel [expanded]="expanded"[39m[22m
+[1m[31m[7m [0m [91m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[7m6[0m            [attr.panel-size]="size">[39m[22m
+[1m[31m[7m [0m [91m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96msrc/app/shared/components/side-panel/side-panel.component.ts[0m:[93m5[0m:[93m16[0m[39m[22m
+[1m[31m    [7m5[0m   templateUrl: './side-panel.component.html',[39m[22m
+[1m[31m    [7m [0m [96m               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Error occurs in the template of component SidePanelComponent.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/components/side-panel/side-panel.component.html[0m:[93m5[0m:[93m12[0m - [91merror[0m[90m NG8002: [0mCan't bind to 'expanded' since it isn't a known property of 'cds-panel'.[39m[22m
+[1m[31m1. If 'cds-panel' is an Angular component and it has 'expanded' input, then verify that it is part of this module.[39m[22m
+[1m[31m2. If 'cds-panel' is a Web Component then add 'CUSTOM_ELEMENTS_SCHEMA' to the '@NgModule.schemas' of this component to suppress this message.[39m[22m
+[1m[31m3. To allow any property add 'NO_ERRORS_SCHEMA' to the '@NgModule.schemas' of this component.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m5[0m <cds-panel [expanded]="expanded"[39m[22m
+[1m[31m[7m [0m [91m           ~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96msrc/app/shared/components/side-panel/side-panel.component.ts[0m:[93m5[0m:[93m16[0m[39m[22m
+[1m[31m    [7m5[0m   templateUrl: './side-panel.component.html',[39m[22m
+[1m[31m    [7m [0m [96m               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Error occurs in the template o[39m[22m[1m[31mf component SidePanelComponent.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/components/side-panel/side-panel.component.html[0m:[93m7[0m:[93m3[0m - [91merror[0m[90m NG8001: [0m'cds-icon-button' is not a known element:[39m[22m
+[1m[31m1. If 'cds-icon-button' is an Angular component, then verify that it is part of this module.[39m[22m
+[1m[31m2. If 'cds-icon-button' is a Web Component then add 'CUSTOM_ELEMENTS_SCHEMA' to the '@NgModule.schemas' of this component to suppress this message.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m  7[0m   <cds-icon-button[39m[22m
+[1m[31m[7m   [0m [91m  ~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[7m  8[0m     kind="ghost"[39m[22m
+[1m[31m[7m   [0m [91m~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[7m...[0m [39m[22m
+[1m[31m[7m 10[0m     title="Close"[39m[22m
+[1m[31m[7m   [0m [91m~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[7m 11[0m     (click)="close()">[39m[22m
+[1m[31m[7m   [0m [91m~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96msrc/app/shared/components/side-panel/side-panel.component.ts[0m:[93m5[0m:[93m16[0m[39m[22m
+[1m[31m    [7m5[0m   templateUrl: './side-panel.component.html',[39m[22m
+[1m[31m    [7m [0m [96m               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Error occurs in the template of component SidePanelComponent.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/components/sparkline/sparkline.component.html[0m:[93m2[0m:[93m6[0m - [91merror[0m[90m NG8002: [0mCan't bind to 'ngStyle' since it isn't a known property of 'div'.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m2[0m      [ngStyle]="style">[39m[22m
+[1m[31m[7m [0m [91m     ~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96msrc/app/shared/components/sparkline/sparkline.component.ts[0m:[93m17[0m:[93m16[0m[39m[22m
+[1m[31m    [7m17[0m   templateUrl: './sparkline.component.html',[39m[22m
+[1m[31m    [7m  [0m [96m               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Error occurs in the template of component SparklineComponent.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/components/sparkline/sparkline.component.html[0m:[93m5[0m:[93m11[0m - [91merror[0m[90m NG8002: [0mCan't bind to 'data' since it isn't a known property of 'canvas'.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m5[0m           [data]="chartData"[39m[22m
+[1m[31m[7m [0m [91m          ~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96msrc/app/shared/components/sparkline/spa[39m[22m[1m[31mrkline.component.ts[0m:[93m17[0m:[93m16[0m[39m[22m
+[1m[31m    [7m17[0m   templateUrl: './sparkline.component.html',[39m[22m
+[1m[31m    [7m  [0m [96m               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Error occurs in the template of component SparklineComponent.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/components/sparkline/sparkline.component.html[0m:[93m6[0m:[93m11[0m - [91merror[0m[90m NG8002: [0mCan't bind to 'options' since it isn't a known property of 'canvas'.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m6[0m           [options]="options"[39m[22m
+[1m[31m[7m [0m [91m          ~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96msrc/app/shared/components/sparkline/sparkline.component.ts[0m:[93m17[0m:[93m16[0m[39m[22m
+[1m[31m    [7m17[0m   templateUrl: './sparkline.component.html',[39m[22m
+[1m[31m    [7m  [0m [96m               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Error occurs in the template of component SparklineComponent.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/components/sparkline/sparkline.component.html[0m:[93m7[0m:[93m11[0m - [91merror[0m[90m NG8002: [0mCan't bind to 'type' since it isn't a known property of 'canvas'.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m7[0m           [type]="'line'">[39m[22m
+[1m[31m[7m [0m [91m          ~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96msrc/app/shared/components/sparkline/sparkline.component.ts[0m:[93m17[0m:[93m16[0m[39m[22m
+[1m[31m    [7m17[0m   templateUrl: './sparkline.component.html',[39m[22m
+[1m[31m    [7m  [0m [96m               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Error occurs in the template of component SparklineComponent.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/components/submit-button/submit-button.component.html[0m:[93m3[0m:[93m9[0m - [91merror[0m[90m NG8002: [0mCan't bind to 'ngClass' since it isn't a known property of 'button'.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m3[0m         [ngClass]="{'w-100': modalForm}"[39m[22m
+[1m[31m[7m [0m [91m        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96msrc/app/shared/components/submit-button/submit-button.component.ts[0m:[93m28[0m:[93m16[0m[39m[22m
+[1m[31m    [7m28[0m   templateUrl: './submit-button.component.html',[39m[22m
+[1m[31m    [7m  [0m [96m               ~~~~~~~~~~~~~~~~~~~~[39m[22m[1m[31m~~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Error occurs in the template of component SubmitButtonComponent.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/components/submit-button/submit-button.component.html[0m:[93m8[0m:[93m9[0m - [91merror[0m[90m NG8002: [0mCan't bind to 'cdsButton' since it isn't a known property of 'button'.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m8[0m         [cdsButton]="buttonType"[39m[22m
+[1m[31m[7m [0m [91m        ~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96msrc/app/shared/components/submit-button/submit-button.component.ts[0m:[93m28[0m:[93m16[0m[39m[22m
+[1m[31m    [7m28[0m   templateUrl: './submit-button.component.html',[39m[22m
+[1m[31m    [7m  [0m [96m               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Error occurs in the template of component SubmitButtonComponent.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/components/wizard/wizard.component.html[0m:[93m2[0m:[93m3[0m - [91merror[0m[90m NG8001: [0m'cds-progress-indicator' is not a known element:[39m[22m
+[1m[31m1. If 'cds-progress-indicator' is an Angular component, then verify that it is part of this module.[39m[22m
+[1m[31m2. If 'cds-progress-indicator' is a Web Component then add 'CUSTOM_ELEMENTS_SCHEMA' to the '@NgModule.schemas' of this component to suppress this message.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m2[0m   <cds-progress-indicator[39m[22m
+[1m[31m[7m [0m [91m  ~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[7m3[0m     orientation="vertical"[39m[22m
+[1m[31m[7m [0m [91m~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[7m4[0m     [steps]="stepsTitle"[39m[22m
+[1m[31m[7m [0m [91m~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[7m5[0m     [current]="currentStep?.stepIndex">[39m[22m
+[1m[31m[7m [0m [91m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96msrc/app/shared/components/wizard/wizard.component.ts[0m:[93m12[0m:[93m16[0m[39m[22m
+[1m[31m    [7m12[0m   templateUrl: './wizard.component.html',[39m[22m
+[1m[31m    [7m  [0m [96m               ~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Error occurs in the template of component WizardComponent.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/components/wizard/wizard.component.html[0m:[93m4[0m:[93m5[0m - [91merror[0m[90m NG8002: [0mCan't bind to 'steps' since it isn't a known property[39m[22m[1m[31m of 'cds-progress-indicator'.[39m[22m
+[1m[31m1. If 'cds-progress-indicator' is an Angular component and it has 'steps' input, then verify that it is part of this module.[39m[22m
+[1m[31m2. If 'cds-progress-indicator' is a Web Component then add 'CUSTOM_ELEMENTS_SCHEMA' to the '@NgModule.schemas' of this component to suppress this message.[39m[22m
+[1m[31m3. To allow any property add 'NO_ERRORS_SCHEMA' to the '@NgModule.schemas' of this component.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m4[0m     [steps]="stepsTitle"[39m[22m
+[1m[31m[7m [0m [91m    ~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96msrc/app/shared/components/wizard/wizard.component.ts[0m:[93m12[0m:[93m16[0m[39m[22m
+[1m[31m    [7m12[0m   templateUrl: './wizard.component.html',[39m[22m
+[1m[31m    [7m  [0m [96m               ~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Error occurs in the template of component WizardComponent.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/components/wizard/wizard.component.html[0m:[93m5[0m:[93m5[0m - [91merror[0m[90m NG8002: [0mCan't bind to 'current' since it isn't a known property of 'cds-progress-indicator'.[39m[22m
+[1m[31m1. If 'cds-progress-indicator' is an Angular component and it has 'current' input, then verify that it is part of this module.[39m[22m
+[1m[31m2. If 'cds-progress-indicator' is a Web Component then add 'CUSTOM_ELEMENTS_SCHEMA' to the '@NgModule.schemas' of this component to suppress this message.[39m[22m
+[1m[31m3. To allow any property add 'NO_ERRORS_SCHEMA' to the '@NgModule.schemas' of this component.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m5[0m     [current]="currentStep?.stepIndex">[39m[22m
+[1m[31m[7m [0m [91m    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96msrc/app/shared/components/wizard/wizard.component.ts[0m:[93m12[0m:[93m16[0m[39m[22m
+[1m[31m    [7m12[0m   templateUrl: './wizard.component.html',[39m[22m
+[1m[31m    [7m  [0m [96m               ~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Error occurs in the template of component WizardComponent.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/datatable.module.ts[0m:[93m57[0m:[93m5[0m - [91merror[0m[90m NG6002: [0m'ComponentsModule' does not appear to be an NgModule class.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m57[0m     ComponentsModule,[39m[22m
+[1m[31m[7m  [0m [91m   [39m[22m[1m[31m ~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96msrc/app/shared/components/components.module.ts[0m:[93m241[0m:[93m14[0m[39m[22m
+[1m[31m    [7m241[0m export class ComponentsModule {[39m[22m
+[1m[31m    [7m   [0m [96m             ~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Is it missing an @NgModule annotation?[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/shared.module.ts[0m:[93m25[0m:[93m5[0m - [91merror[0m[90m NG6002: [0m'ComponentsModule' does not appear to be an NgModule class.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m25[0m     ComponentsModule,[39m[22m
+[1m[31m[7m  [0m [91m    ~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96msrc/app/shared/components/components.module.ts[0m:[93m241[0m:[93m14[0m[39m[22m
+[1m[31m    [7m241[0m export class ComponentsModule {[39m[22m
+[1m[31m    [7m   [0m [96m             ~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Is it missing an @NgModule annotation?[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/shared.module.ts[0m:[93m26[0m:[93m5[0m - [91merror[0m[90m NG6002: [0mThis import contains errors, which may affect components that depend on this NgModule.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m26[0m     DataTableModule,[39m[22m
+[1m[31m[7m  [0m [91m    ~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/shared.module.ts[0m:[93m42[0m:[93m13[0m - [91merror[0m[90m NG6003: [0m'ComponentsModule' does not appear to be an NgModule, Component, Directive, or Pipe class.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m42[0m   exports: [ComponentsModule, PipesModule, DataTableModule, DirectivesModule],[39m[22m
+[1m[31m[7m  [0m [91m            ~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96msrc/app/shared/components/components.module.ts[0m:[93m241[0m:[93m14[0m[39m[22m
+[1m[31m    [7m241[0m export class ComponentsModule {[39m[22m
+[1m[31m    [7m   [0m [96m             ~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Is it missing an Angular annotation?[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/shared.module.ts[0m:[93m42[0m:[93m44[0m - [91merror[0m[90m NG6003: [0mThis export contains errors, which may affect components that depend on this NgModule.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m42[0m   exports: [ComponentsModule, PipesModule, DataTableModule, DirectivesModule],[39m[22m
+[1m[31m[7m  [0m [91m                                           ~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m

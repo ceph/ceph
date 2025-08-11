@@ -227,8 +227,8 @@
             <ng-container class="ms-4 me-4"
                           *ngIf="capacity">
               <cd-dashboard-pie [data]="{max: capacity.total_bytes, current: capacity.total_used_raw_bytes}"
-                                [lowThreshold]="osdSettings.nearfull_ratio"
-                                [highThreshold]="osdSettings.full_ratio">
+                                [lowThreshold]="capacityCardData.osdNearfull"
+                                [highThreshold]="capacityCardData.osdFull">
               </cd-dashboard-pie>
             </ng-container>
           </cd-card>
