@@ -1,6 +1,12 @@
 #pragma once
 
 #include "Model.h"
+#include "include/buffer.h"
+#include "include/interval_set.h"
+#include "include/random.h"
+
+#include <string>
+#include <vector>
 
 /* Overview
  *

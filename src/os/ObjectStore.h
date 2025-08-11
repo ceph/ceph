@@ -22,6 +22,7 @@
 #include "include/types.h"
 
 #include "osd/osd_types.h"
+#include "common/RefCountedObj.h"
 #include "common/TrackedOp.h"
 #include "common/WorkQueue.h"
 #include "os/Transaction.h"

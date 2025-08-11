@@ -19,6 +19,7 @@ add_subdirectory(options)
 set(common_srcs
   AsyncOpTracker.cc
   BackTrace.cc
+  CompatSet.cc
   ConfUtils.cc
   Cycles.cc
   CDC.cc

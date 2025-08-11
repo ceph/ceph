@@ -24,12 +24,11 @@
 #include <seastar/util/log.hh>
 #include "crimson/common/log.h"
 #include "crimson/common/config_proxy.h"
+#include <sstream>
 #else
 #include "global/global_context.h"
 #include "common/ceph_context.h"
 #include "common/config.h"
-#include "common/likely.h"
-#include "common/Clock.h"
 #include "log/Log.h"
 #endif
 
