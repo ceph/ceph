@@ -525,9 +525,11 @@ int main(int argc, char **argv) {
     return 1;
   }
 
-  seastar::app_template::config app_cfg;
+  seastar::app_template::seastar_options app_cfg;
   app_cfg.name = "crimson-store-bench";
-  app_cfg.auto_handle_sigint_sigterm = false;
+  app_cfg.auto_handle_sigint_sigterm = true;
+  // Only show "Reactor stalled for" above 200ms
+  app_cfg.reactor_opts.blocked_reactor_notify_ms.set_default_value(200);
   seastar::app_template app(std::move(app_cfg));
 
   std::string work_load_type = "pg_log";
