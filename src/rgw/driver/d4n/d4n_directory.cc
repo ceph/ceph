@@ -901,6 +901,18 @@ int D4NTransaction::clone_key_for_transaction(std::string key_source, std::strin
   return 0;
 }
 
+void D4NTransaction::clear_temp_keys()
+{
+  m_original_key.clear();
+  m_temp_key_read.clear();
+  m_temp_key_write.clear();
+  m_temp_key_test_write.clear();
+
+  m_temp_read_keys.clear();
+  m_temp_write_keys.clear();
+  m_temp_test_write_keys.clear();
+}
+
 bool D4NTransaction::is_trx_started(const DoutPrefixProvider* dpp,std::shared_ptr<connection> conn,std::string &key,redis_operation_type op, optional_yield y)
 {//TODO this method could reuse the ObjectDirectory::is_trx_started, sould placed on the base class.
 	if(trxState != TrxState::STARTED) {

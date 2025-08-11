@@ -174,8 +174,9 @@ public:
 
     void create_rw_temp_keys(std::string key);
     std::string create_unique_temp_keys(std::string key);
-    
+  
     int clone_key_for_transaction(std::string key_source, std::string key_destination, std::shared_ptr<connection> conn, optional_yield y);
+    void clear_temp_keys();
     std::string m_evalsha_clone_key;
     std::string m_evalsha_end_trx;
 
