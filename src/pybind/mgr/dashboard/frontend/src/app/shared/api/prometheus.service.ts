@@ -2,7 +2,7 @@ import { HttpClient } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 
 import { Observable, Subscription, forkJoin, timer } from 'rxjs';
-import { map } from 'rxjs/operators';
+import { map, switchMap } from 'rxjs/operators';
 
 import { AlertmanagerSilence } from '../models/alertmanager-silence';
 import {
@@ -141,37 +141,47 @@ export class PrometheusService {
       if (this.timerGetPrometheusDataSub) {
         this.timerGetPrometheusDataSub.unsubscribe();
       }
-      this.timerGetPrometheusDataSub = timer(0, this.timerTime).subscribe(() => {
-        selectedTime = this.updateTimeStamp(selectedTime);
-        for (const queryName in queries) {
-          if (queries.hasOwnProperty(queryName)) {
-            const query = queries[queryName];
-            this.getPrometheusData({
-              params: encodeURIComponent(query),
-              start: selectedTime['start'],
-              end: selectedTime['end'],
-              step: selectedTime['step']
-            }).subscribe((data: any) => {
-              if (data.result.length) {
-                queriesResults[queryName] = data.result[0].values;
-              } else {
-                queriesResults[queryName] = [];
+      this.timerGetPrometheusDataSub = timer(0, this.timerTime)
+        .pipe(
+          switchMap(() => {
+            selectedTime = this.updateTimeStamp(selectedTime);
+            const observables = [];
+            for (const queryName in queries) {
+              if (queries.hasOwnProperty(queryName)) {
+                const query = queries[queryName];
+                observables.push(
+                  this.getPrometheusData({
+                    params: encodeURIComponent(query),
+                    start: selectedTime['start'],
+                    end: selectedTime['end'],
+                    step: selectedTime['step']
+                  }).pipe(map((data: any) => ({ queryName, data })))
+                );
               }
-              if (
-                queriesResults[queryName] !== undefined &&
-                queriesResults[queryName] !== '' &&
-                checkNan
-              ) {
-                queriesResults[queryName].forEach((valueArray: any[]) => {
-                  if (isNaN(parseFloat(valueArray[1]))) {
-                    valueArray[1] = '0';
-                  }
-                });
-              }
-            });
-          }
-        }
-      });
+            }
+            return forkJoin(observables);
+          })
+        )
+        .subscribe((results: any) => {
+          results.forEach(({ queryName, data }: any) => {
+            if (data.result.length) {
+              queriesResults[queryName] = data.result[0].values;
+            } else {
+              queriesResults[queryName] = [];
+            }
+            if (
+              queriesResults[queryName] !== undefined &&
+              queriesResults[queryName] !== '' &&
+              checkNan
+            ) {
+              queriesResults[queryName].forEach((valueArray: any[]) => {
+                if (isNaN(parseFloat(valueArray[1]))) {
+                  valueArray[1] = '0';
+                }
+              });
+            }
+          });
+        });
     });
     return queriesResults;
   }
