@@ -37,11 +37,12 @@ else:
             logger.info("Initiating nvmeof gateway connection...")
             try:
                 if not gw_group:
-                    service_name, self.gateway_addr = NvmeofGatewaysConfig.get_service_info()
+                    res = NvmeofGatewaysConfig.get_service_info()
                 else:
-                    service_name, self.gateway_addr = NvmeofGatewaysConfig.get_service_info(
-                        gw_group
-                    )
+                    res = NvmeofGatewaysConfig.get_service_info(gw_group)
+                if res is None:
+                    raise DashboardException("Gateway group does not exists")
+                service_name, self.gateway_addr = res
             except TypeError as e:
                 raise DashboardException(
                     f'Unable to retrieve the gateway info: {e}'
