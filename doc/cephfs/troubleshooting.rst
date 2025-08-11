@@ -320,16 +320,17 @@ will switch to doing writes synchronously, which is quite slow.
 
 Disconnected+Remounted FS
 =========================
-Because CephFS has a "consistent cache", if your network connection is
-disrupted for a long enough time, the client will be forcibly
-disconnected from the system. At this point, the kernel client is in
-a bind: it cannot safely write back dirty data, and many applications
-do not handle IO errors correctly on close().
-At the moment, the kernel client will remount the FS, but outstanding file system
-IO may or may not be satisfied. In these cases, you may need to reboot your
+
+Because CephFS has a "consistent cache", your client is forcibly disconnected
+from the cluster when the network connection has been disrupted for a long
+time. When this happens, the kernel client cannot safely write back dirty data
+and many applications will not handle IO errors correctly on ``close()``.
+Currently, the kernel client will remount the file system, but any outstanding
+file-system IO may not be properly handled. If this is the case, reboot the
 client system.
 
-You can identify you are in this situation if dmesg/kern.log report something like::
+You are in this situation if the output of ``dmesg/kern.log`` contains
+something like the following::
 
    Jul 20 08:14:38 teuthology kernel: [3677601.123718] ceph: mds0 closed our session
    Jul 20 08:14:38 teuthology kernel: [3677601.128019] ceph: mds0 reconnect start
@@ -340,11 +341,12 @@ You can identify you are in this situation if dmesg/kern.log report something li
    Jul 20 08:14:40 teuthology kernel: [3677603.126214] libceph: mds0 172.21.5.114:6812 connection reset
    Jul 20 08:14:40 teuthology kernel: [3677603.132176] libceph: reset on mds0
 
-This is an area of ongoing work to improve the behavior. Kernels will soon
-be reliably issuing error codes to in-progress IO, although your application(s)
-may not deal with them well. In the longer-term, we hope to allow reconnect
-and reclaim of data in cases where it won't violate POSIX semantics (generally,
-data which hasn't been accessed or modified by other clients).
+This is an area of ongoing work to improve the behavior. Kernels will soon be
+reliably issuing error codes to in-progress IO, although your application(s)
+may not deal with them well. In the longer term, we hope to allow reconnection
+and reclamation of data in cases where doing so does not violate POSIX
+semantics (generally, data which hasn't been accessed or modified by other
+clients).
 
 Mounting
 ========
