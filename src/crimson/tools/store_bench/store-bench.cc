@@ -488,21 +488,21 @@ int main(int argc, char **argv) {
   std::string store_type;
   std::string store_path;
 
-  desc.add_options()("help,h", "show help message")(
-      "store-type",
-      po::value<std::string>(&store_type)->default_value("seastore"),
-      "set store type")
-      /* store-path is a path to a directory containing a file 'block'
-       * block should be a symlink to a real device for actual performance
-       * testing, but may be a file for testing this utility.
-       * See build/dev/osd* after starting a vstart cluster for an example
-       * of what that looks like.
-       */
-      ("store-path", po::value<std::string>(&store_path),
-       "path to store, <store-path>/block should "
-       "be a symlink to the target device for bluestore or seastore")(
-          "debug", po::value<bool>(&debug)->default_value(false),
-          "enable debugging");
+  desc.add_options()
+    ("help,h", "show help message")
+    ("store-type", po::value<std::string>(&store_type)->default_value("seastore"),
+     "set store type")
+    /* store-path is a path to a directory containing a file 'block'
+     * block should be a symlink to a real device for actual performance
+     * testing, but may be a file for testing this utility.
+     * See build/dev/osd* after starting a vstart cluster for an example
+     * of what that looks like.
+     */
+    ("store-path", po::value<std::string>(&store_path),
+     "path to store, <store-path>/block should "
+     "be a symlink to the target device for bluestore or seastore")
+    ("debug", po::value<bool>(&debug)->default_value(false),
+     "enable debugging");
 
   po::variables_map vm;
   std::vector<std::string> unrecognized_options;
