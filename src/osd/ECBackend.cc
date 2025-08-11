@@ -399,7 +399,7 @@ void ECBackend::RecoveryBackend::handle_recovery_read_complete(
   op.returned_data.emplace(std::move(res.buffers_read));
   uint64_t aligned_size = ECUtil::align_next(op.obc->obs.oi.size);
 
-  dout(30) << __func__ << " before decode: oid=" << op.hoid << " EC_DEBUG_BUFFERS: "
+  dout(20) << __func__ << " before decode: oid=" << op.hoid << " EC_DEBUG_BUFFERS: "
          << op.returned_data->debug_string(2048, 0)
          << dendl;
 
@@ -412,7 +412,7 @@ void ECBackend::RecoveryBackend::handle_recovery_read_complete(
   op.returned_data->erase_after_ro_offset(aligned_size);
 
   dout(20) << __func__ << ": oid=" << op.hoid << dendl;
-  dout(30) << __func__ << " after decode: oid=" << op.hoid << " EC_DEBUG_BUFFERS: "
+  dout(20) << __func__ << " after decode: oid=" << op.hoid << " EC_DEBUG_BUFFERS: "
            << op.returned_data->debug_string(2048, 0)
            << dendl;
 
