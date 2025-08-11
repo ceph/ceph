@@ -707,7 +707,7 @@ local g = import 'grafonnet/grafana.libsonnet';
       {
         gridPos: { x: 0, y: 27, w: 24, h: 1 },
       },
-       RgwOverviewPanel(
+      RgwOverviewPanel(
         'Persistent Topic Length',
         '',
         '',
@@ -723,7 +723,7 @@ local g = import 'grafonnet/grafana.libsonnet';
         12,
         8
       ),
-       RgwOverviewPanel(
+      RgwOverviewPanel(
         'Persistent Topic Size',
         '',
         'deckbytes',
