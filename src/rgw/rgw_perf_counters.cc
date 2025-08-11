@@ -10,6 +10,7 @@
 using namespace ceph::perf_counters;
 using namespace rgw::op_counters;
 using namespace rgw::persistent_topic_counters;
+using namespace rgw::usage_counters;
 
 PerfCounters *perfcounter = NULL;
 
@@ -97,6 +98,14 @@ void add_rgw_topic_counters(PerfCountersBuilder *lpcb) {
   lpcb->add_u64(l_rgw_persistent_topic_len, "persistent_topic_len", "Persistent topic queue length");
   lpcb->add_u64(l_rgw_persistent_topic_size, "persistent_topic_size", "Persistent topic queue size");
 
+}
+
+void add_rgw_usage_counters(PerfCountersBuilder *lpcb) {
+  lpcb->set_prio_default(PerfCountersBuilder::PRIO_USEFUL);
+  lpcb->add_u64(l_rgw_usage_bucket_used_bytes, "bucket_used_bytes", "Logical size in bytes for a bucket");
+  lpcb->add_u64(l_rgw_usage_bucket_num_objects, "bucket_num_objects", "Number of objects in the bucket");
+  lpcb->add_u64(l_rgw_usage_user_used_bytes, "user_used_bytes", "Logical size in bytes aggregated across user's buckets");
+  lpcb->add_u64(l_rgw_usage_user_num_objects, "user_num_objects", "Number of objects across user's buckets");
 }
 
 void frontend_counters_init(CephContext *cct) {
@@ -204,6 +213,23 @@ void tinc(const CountersContainer &counters, int idx, ceph::timespan amt) {
 
 } // namespace rgw::op_counters
 
+namespace rgw::usage_counters {
+
+ceph::perf_counters::PerfCountersCache *user_usage_counters_cache = NULL;
+ceph::perf_counters::PerfCountersCache *bucket_usage_counters_cache = NULL;
+const std::string rgw_user_usage_counters_key = "rgw_usage_per_user";
+const std::string rgw_bucket_usage_counters_key = "rgw_usage_per_bucket";
+
+std::shared_ptr<PerfCounters> create_rgw_usage_counters(const std::string& name, CephContext *cct) {
+  PerfCountersBuilder pcb(cct, name, l_rgw_usage_first, l_rgw_usage_last);
+  add_rgw_usage_counters(&pcb);
+  std::shared_ptr<PerfCounters> new_counters(pcb.create_perf_counters());
+  cct->get_perfcounters_collection()->add(new_counters.get());
+  return new_counters;
+}
+
+} // namespace rgw::usage_counters
+
 namespace rgw::persistent_topic_counters {
 
 const std::string rgw_topic_counters_key = "rgw_topic";
@@ -244,6 +270,10 @@ int rgw_perf_start(CephContext *cct)
     bucket_counters_cache = new PerfCountersCache(cct, target_size, create_rgw_op_counters);
   }
 
+  // initialize usage counters caches
+  user_usage_counters_cache = new PerfCountersCache(cct, 1024, create_rgw_usage_counters);
+  bucket_usage_counters_cache = new PerfCountersCache(cct, 1024, create_rgw_usage_counters);
+
   global_op_counters_init(cct);
   return 0;
 }
@@ -258,4 +288,6 @@ void rgw_perf_stop(CephContext *cct)
   delete global_op_counters;
   delete user_counters_cache;
   delete bucket_counters_cache;
+  delete user_usage_counters_cache;
+  delete bucket_usage_counters_cache;
 }

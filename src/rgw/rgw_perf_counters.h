@@ -92,6 +92,17 @@ enum {
   l_rgw_topic_last
 };
 
+enum {
+  l_rgw_usage_first = 18000,
+
+  l_rgw_usage_bucket_used_bytes,
+  l_rgw_usage_bucket_num_objects,
+  l_rgw_usage_user_used_bytes,
+  l_rgw_usage_user_num_objects,
+
+  l_rgw_usage_last
+};
+
 namespace rgw::op_counters {
 
 struct CountersContainer {
@@ -125,3 +136,12 @@ public:
 };
 
 } // namespace rgw::persistent_topic_counters
+
+namespace rgw::usage_counters {
+
+extern ceph::perf_counters::PerfCountersCache *user_usage_counters_cache;
+extern ceph::perf_counters::PerfCountersCache *bucket_usage_counters_cache;
+extern const std::string rgw_user_usage_counters_key;
+extern const std::string rgw_bucket_usage_counters_key;
+
+} // namespace rgw::usage_counters

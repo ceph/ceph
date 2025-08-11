@@ -71,6 +71,7 @@
 #endif
 #include "rgw_lua_background.h"
 #include "services/svc_zone.h"
+#include "rgw_exporter.h"
 
 #ifdef HAVE_SYS_PRCTL_H
 #include <sys/prctl.h>
@@ -410,6 +411,12 @@ void rgw::AppMain::init_opslog()
   olog = olog_manifold;
 } /* init_opslog */
 
+void rgw::AppMain::init_usage_exporter()
+{
+  usage_exporter = std::make_unique<RGWExporter>(g_ceph_context);
+  usage_exporter->start();
+}
+
 int rgw::AppMain::init_frontends2(RGWLib* rgwlib)
 {
   int r{0};
@@ -584,6 +591,11 @@ void rgw::AppMain::shutdown(std::function<void(void)> finalize_async_signals)
   if (env.driver->get_name() == "rados") {
     reloader.reset(); // stop the realm reloader
     static_cast<rgw::sal::RadosLuaManager*>(env.lua.manager.get())->unwatch_reload(dpp);
+  }
+
+  if (usage_exporter) {
+    usage_exporter->stop();
+    usage_exporter.reset();
   }
 
   for (auto& fe : fes) {

@@ -297,6 +297,10 @@ target_include_directories(unittest_rgw_url
   SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw")
 target_link_libraries(unittest_rgw_url ${rgw_libs})
 
+add_executable(unittest_rgw_usage_exporter test_rgw_usage_exporter.cc)
+add_ceph_unittest(unittest_rgw_usage_exporter)
+target_link_libraries(unittest_rgw_usage_exporter ${UNITTEST_LIBS} ${rgw_libs} ${LMDB_LIBRARIES})
+
 add_executable(ceph_test_rgw_gc_log test_rgw_gc_log.cc $<TARGET_OBJECTS:unit-main>)
 target_include_directories(ceph_test_rgw_gc_log
   SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw")
