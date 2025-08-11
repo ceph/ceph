@@ -15,6 +15,7 @@
 #include "librbd/api/Mirror.h"
 #include "librbd/api/Utils.h"
 #include "librbd/group/ListSnapshotsRequest.h"
+#include "librbd/mirror/GroupGetInfoRequest.h"
 #include "librbd/internal.h"
 #include "librbd/io/AioCompletion.h"
 
@@ -316,6 +317,22 @@ int Group<I>::image_remove_by_id(librados::IoCtx& group_ioctx,
     return r;
   }
 
+  mirror::PromotionState promotion_state;
+  cls::rbd::MirrorGroup mirror_group;
+  C_SaferCond ctx;
+  auto request = mirror::GroupGetInfoRequest<I>::create(
+    group_ioctx, "", group_id, &mirror_group, &promotion_state, &ctx);
+  request->send();
+  r = ctx.wait();
+  if (r < 0 && r != -ENOENT) {
+    lderr(cct) << "failed to get mirror group info: "
+               << cpp_strerror(r) << dendl;
+    return r;
+  } else if (r == 0 && promotion_state != mirror::PROMOTION_STATE_PRIMARY) {
+    lderr(cct) << "cannot remove image from seconday group" << dendl;
+    return -EINVAL;
+  }
+
   ldout(cct, 20) << "removing image from group name " << group_name
                  << " group id " << group_id << dendl;
 
@@ -375,6 +392,22 @@ int Group<I>::remove(librados::IoCtx& io_ctx, const char *group_name)
   if (r < 0 && r != -ENOENT) {
     lderr(cct) << "error getting id of group" << dendl;
     return r;
+  }
+
+  mirror::PromotionState promotion_state;
+  cls::rbd::MirrorGroup mirror_group;
+  C_SaferCond ctx;
+  auto request = mirror::GroupGetInfoRequest<I>::create(
+    io_ctx, "", group_id, &mirror_group, &promotion_state, &ctx);
+  request->send();
+  r = ctx.wait();
+  if (r < 0 && r != -ENOENT) {
+    lderr(cct) << "failed to get mirror group info: "
+               << cpp_strerror(r) << dendl;
+    return r;
+  } else if (r == 0 && promotion_state != mirror::PROMOTION_STATE_PRIMARY) {
+    lderr(cct) << "secondary group cannot be removed" << dendl;
+    return -EINVAL;
   }
 
   r = Mirror<I>::group_disable(io_ctx, group_name, false);
@@ -546,15 +579,25 @@ int Group<I>::image_add(librados::IoCtx& group_ioctx, const char *group_name,
   }
   string group_header_oid = librbd::util::group_header_name(group_id);
 
-  cls::rbd::MirrorGroup mirror_info;
-  r = cls_client::mirror_group_get(&group_ioctx, group_id, &mirror_info);
-  if (r < 0  && r != -ENOENT && r != -ENOTSUP) {
-    lderr(cct) << "error getting mirror info of group: "
+  mirror::PromotionState promotion_state;
+  cls::rbd::MirrorGroup mirror_group;
+  C_SaferCond ctx;
+  auto request = mirror::GroupGetInfoRequest<I>::create(
+    group_ioctx, "", group_id, &mirror_group, &promotion_state, &ctx);
+  request->send();
+  r = ctx.wait();
+  if (r < 0 && r != -ENOENT) {
+    lderr(cct) << "failed to get mirror group info: "
                << cpp_strerror(r) << dendl;
     return r;
   } else if (r == 0 &&
-             mirror_info.state != cls::rbd::MIRROR_GROUP_STATE_DISABLED) {
+             mirror_group.state != cls::rbd::MIRROR_GROUP_STATE_DISABLED) {
     lderr(cct) << "cannot add image to mirror enabled group" << dendl;
+    return -EINVAL;
+  }
+
+  if (r == 0 && promotion_state != mirror::PROMOTION_STATE_PRIMARY) {
+    lderr(cct) << "cannot add image to secondary group" << dendl;
     return -EINVAL;
   }
 
@@ -651,16 +694,26 @@ int Group<I>::image_remove(librados::IoCtx& group_ioctx,
     return r;
   }
 
-  cls::rbd::MirrorGroup mirror_info;
-  r = cls_client::mirror_group_get(&group_ioctx, group_id, &mirror_info);
-  if (r < 0  && r != -ENOENT && r != -ENOTSUP) {
-    lderr(cct) << "error getting mirror info of group: "
+  mirror::PromotionState promotion_state;
+  cls::rbd::MirrorGroup mirror_group;
+  C_SaferCond ctx;
+  auto request = mirror::GroupGetInfoRequest<I>::create(
+    group_ioctx, "", group_id, &mirror_group, &promotion_state, &ctx);
+  request->send();
+  r = ctx.wait();
+  if (r < 0 && r != -ENOENT) {
+    lderr(cct) << "failed to get mirror group info: "
                << cpp_strerror(r) << dendl;
     return r;
   } else if (r == 0 &&
-             mirror_info.state != cls::rbd::MIRROR_GROUP_STATE_DISABLED) {
+             mirror_group.state != cls::rbd::MIRROR_GROUP_STATE_DISABLED) {
     lderr(cct) << "cannot remove image from mirror enabled group"
                << dendl;
+    return -EINVAL;
+  }
+
+  if (r == 0 && promotion_state != mirror::PROMOTION_STATE_PRIMARY) {
+    lderr(cct) << "cannot remove image from secondary group" << dendl;
     return -EINVAL;
   }
 
@@ -736,6 +789,22 @@ int Group<I>::rename(librados::IoCtx& io_ctx, const char *src_name,
     return r;
   }
 
+  mirror::PromotionState promotion_state;
+  cls::rbd::MirrorGroup mirror_group;
+  C_SaferCond ctx;
+  auto request = mirror::GroupGetInfoRequest<I>::create(
+    io_ctx, "", group_id, &mirror_group, &promotion_state, &ctx);
+  request->send();
+  r = ctx.wait();
+  if (r < 0 && r != -ENOENT) {
+    lderr(cct) << "failed to get mirror group info: "
+               << cpp_strerror(r) << dendl;
+    return r;
+  } else if (r == 0 && promotion_state != mirror::PROMOTION_STATE_PRIMARY) {
+    lderr(cct) << "cannot rename the secondary group" << dendl;
+    return -EINVAL;
+  }
+
   r = cls_client::group_dir_rename(&io_ctx, RBD_GROUP_DIRECTORY,
                                    src_name, dest_name, group_id);
   if (r < 0 && r != -ENOENT) {
@@ -805,6 +874,22 @@ int Group<I>::snap_create(librados::IoCtx& group_ioctx,
   if (r < 0) {
     lderr(cct) << "error getting the group id: " << cpp_strerror(r) << dendl;
     return r;
+  }
+
+  mirror::PromotionState promotion_state;
+  cls::rbd::MirrorGroup mirror_group;
+  C_SaferCond ctx;
+  auto request = mirror::GroupGetInfoRequest<I>::create(
+    group_ioctx, "", group_id, &mirror_group, &promotion_state, &ctx);
+  request->send();
+  r = ctx.wait();
+  if (r < 0 && r != -ENOENT) {
+    lderr(cct) << "failed to get mirror group info: "
+               << cpp_strerror(r) << dendl;
+    return r;
+  } else if (r == 0 && promotion_state != mirror::PROMOTION_STATE_PRIMARY) {
+    lderr(cct) << "cannot create snap for secondary group" << dendl;
+    return -EINVAL;
   }
 
   std::vector<cls::rbd::GroupImageStatus> images;
@@ -1047,6 +1132,22 @@ int Group<I>::snap_remove(librados::IoCtx& group_ioctx, const char *group_name,
     return r;
   }
 
+  mirror::PromotionState promotion_state;
+  cls::rbd::MirrorGroup mirror_group;
+  C_SaferCond ctx;
+  auto request = mirror::GroupGetInfoRequest<I>::create(
+    group_ioctx, "", group_id, &mirror_group, &promotion_state, &ctx);
+  request->send();
+  r = ctx.wait();
+  if (r < 0 && r != -ENOENT) {
+    lderr(cct) << "failed to get mirror group info: "
+               << cpp_strerror(r) << dendl;
+    return r;
+  } else if (r == 0 && promotion_state != mirror::PROMOTION_STATE_PRIMARY) {
+    lderr(cct) << "cannot remove snap from secondary group" << dendl;
+    return -EINVAL;
+  }
+
   std::vector<cls::rbd::GroupSnapshot> snaps;
   r = group_snap_list<I>(group_ioctx, group_id, false, false, &snaps);
   if (r < 0) {
@@ -1084,6 +1185,22 @@ int Group<I>::snap_rename(librados::IoCtx& group_ioctx, const char *group_name,
   } else if (r < 0) {
     lderr(cct) << "error getting the group id: " << cpp_strerror(r) << dendl;
     return r;
+  }
+
+  mirror::PromotionState promotion_state;
+  cls::rbd::MirrorGroup mirror_group;
+  C_SaferCond ctx;
+  auto request = mirror::GroupGetInfoRequest<I>::create(
+    group_ioctx, "", group_id, &mirror_group, &promotion_state, &ctx);
+  request->send();
+  r = ctx.wait();
+  if (r < 0 && r != -ENOENT) {
+    lderr(cct) << "failed to get mirror group info: "
+               << cpp_strerror(r) << dendl;
+    return r;
+  } else if (r == 0 && promotion_state != mirror::PROMOTION_STATE_PRIMARY) {
+    lderr(cct) << "cannot rename snap from secondary group" << dendl;
+    return -EINVAL;
   }
 
   std::vector<cls::rbd::GroupSnapshot> group_snaps;
@@ -1196,7 +1313,7 @@ int Group<I>::snap_get_info(librados::IoCtx& group_ioctx,
 template <typename I>
 int Group<I>::snap_rollback(librados::IoCtx& group_ioctx,
                             const char *group_name, const char *snap_name,
-                            ProgressContext& pctx)
+                            ProgressContext& pctx, bool internal_call)
 {
   CephContext *cct = (CephContext *)group_ioctx.cct();
 
@@ -1206,6 +1323,24 @@ int Group<I>::snap_rollback(librados::IoCtx& group_ioctx,
   if (r < 0) {
     lderr(cct) << "error getting the group id: " << cpp_strerror(r) << dendl;
     return r;
+  }
+
+  if (!internal_call) {
+    mirror::PromotionState promotion_state;
+    cls::rbd::MirrorGroup mirror_group;
+    C_SaferCond ctx;
+    auto request = mirror::GroupGetInfoRequest<I>::create(
+      group_ioctx, "", group_id, &mirror_group, &promotion_state, &ctx);
+    request->send();
+    r = ctx.wait();
+    if (r < 0 && r != -ENOENT) {
+      lderr(cct) << "failed to get mirror group info: "
+                << cpp_strerror(r) << dendl;
+      return r;
+    } else if (r == 0 && promotion_state != mirror::PROMOTION_STATE_PRIMARY) {
+      lderr(cct) << "cannot perform rollback on secondary group" << dendl;
+      return -EINVAL;
+    }
   }
 
   std::vector<cls::rbd::GroupSnapshot> snaps;
