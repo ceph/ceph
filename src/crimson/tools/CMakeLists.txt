@@ -9,8 +9,9 @@ target_link_libraries(crimson-store-nbd
 install(TARGETS crimson-store-nbd DESTINATION bin)
 
 add_executable(crimson-store-bench
-	store_bench/store-bench.cc
-  )
+  store_bench/store-bench.cc
+  ${PROJECT_SOURCE_DIR}/src/crimson/osd/lsan_suppressions.cc)
+
 target_link_libraries(crimson-store-bench
   crimson-os)
 install(TARGETS crimson-store-bench DESTINATION bin)
