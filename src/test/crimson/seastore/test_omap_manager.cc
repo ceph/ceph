@@ -469,7 +469,7 @@ TEST_P(omap_manager_test_t, leafnode_split_merge_balancing)
 
     // Insert enough keys to grow tree depth to 2, ensuring the first
     // internal node is created via leaf node split.
-    logger().debug("== first split");
+    logger().debug("== first leaf node split");
     while (omap_root.get_depth() < 2) {
       auto t = create_mutate_transaction();
       for (int i = 0; i < 64; i++) {
@@ -482,7 +482,7 @@ TEST_P(omap_manager_test_t, leafnode_split_merge_balancing)
 
     // Insert the same total number of keys again to force additional
     // leaf node splits under the same internal node.
-    logger().debug("== second split");
+    logger().debug("== second leaf node split");
     auto keys_for_leaf_split = test_omap_mappings.size();
     auto t = create_mutate_transaction();
     for (unsigned i = 0; i < keys_for_leaf_split; ++i) {
@@ -496,16 +496,68 @@ TEST_P(omap_manager_test_t, leafnode_split_merge_balancing)
     // eventually contracting the tree back to depth 1.
     logger().debug("== merges and balancing");
     while (omap_root.get_depth() > 1) {
+      auto it = std::next(test_omap_mappings.begin(), test_omap_mappings.size()/2);
+      std::string first = it->first;
+      std::string last = std::next(it, 64)->first;
+
       auto t = create_mutate_transaction();
-      for (int i = 0; i < 64; i++) {
-        rm_key(omap_root, *t,
-               std::next(test_omap_mappings.begin(),
-		         test_omap_mappings.size()/2)->first);
-      }
+      rm_key_range(omap_root, *t, first, last);
       check_mappings(omap_root, *t);
       submit_transaction(std::move(t));
       check_mappings(omap_root);
     }
+  });
+}
+
+TEST_P(omap_manager_test_t, innernode_split_merge_balancing)
+{
+  run_async([this] {
+    omap_root_t omap_root = initialize();
+
+    // Grow tree depth to 3 so that inner nodes are created
+    // at depth 2 via inner node splits.
+    logger().debug("== first inner node split");
+    while (omap_root.get_depth() < 3) {
+      auto t = create_mutate_transaction();
+      for (int i = 0; i < 64; i++) {
+        // Use large value size to accelerate tree growth.
+        auto key = rand_name(STR_LEN);
+        set_key(omap_root, *t, key, rand_buffer(512));
+      }
+      submit_transaction(std::move(t));
+    }
+    check_mappings(omap_root);
+
+    // Insert the same total number of keys again to force additional
+    // inner node splits under the same internal node.
+    logger().debug("== second inner node split");
+    auto keys_for_leaf_split = test_omap_mappings.size();
+    auto t = create_mutate_transaction();
+    for (unsigned i = 0; i < keys_for_leaf_split; ++i) {
+      // Use large value size to accelerate tree growth.
+      auto key = rand_name(STR_LEN);
+      set_key(omap_root, *t, key, rand_buffer(512));
+      if (i % 64 == 0) {
+        submit_transaction(std::move(t));
+        t = create_mutate_transaction();
+      }
+    }
+    submit_transaction(std::move(t));
+    check_mappings(omap_root);
+
+    // Remove keys to trigger leaf node merges and balancing,
+    // eventually contracting the tree back to depth 2.
+    logger().debug("== merges and balancing");
+    while (omap_root.get_depth() > 2) {
+      auto it = std::next(test_omap_mappings.begin(), test_omap_mappings.size()/2);
+      std::string first = it->first;
+      std::string last = std::next(it, 64)->first;
+
+      auto t = create_mutate_transaction();
+      rm_key_range(omap_root, *t, first, last);
+      submit_transaction(std::move(t));
+    }
+    check_mappings(omap_root);
   });
 }
 
