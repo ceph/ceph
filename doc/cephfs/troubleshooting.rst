@@ -302,28 +302,33 @@ output in ``dmesg``. Collect it and any inappropriate kernel state.
 Slow requests
 -------------
 
-Unfortunately the kernel client does not support the admin socket, but it has
-similar (if limited) interfaces if your kernel has debugfs enabled. There
-will be a folder in ``sys/kernel/debug/ceph/``, and that folder (whose name will
-look something like ``28f7427e-5558-4ffd-ae1a-51ec3042759a.client25386880``)
-will contain a variety of files that output interesting output when you ``cat``
-them. These files are described below; the most interesting when debugging
-slow requests are probably the ``mdsc`` and ``osdc`` files.
+Unfortunately, the kernel client does not provide an admin socket. However,
+the the kernel on the client has `debugfs
+<https://docs.kernel.org/filesystems/debugfs.html>`_ enabled, interfaces
+similar to the admin socket are available. 
 
-* bdi: BDI info about the Ceph system (blocks dirtied, written, etc)
-* caps: counts of file "caps" structures in-memory and used
-* client_options: dumps the options provided to the CephFS mount
-* dentry_lru: Dumps the CephFS dentries currently in-memory
-* mdsc: Dumps current requests to the MDS
-* mdsmap: Dumps the current MDSMap epoch and MDSes
-* mds_sessions: Dumps the current sessions to MDSes
-* monc: Dumps the current maps from the monitor, and any "subscriptions" held
-* monmap: Dumps the current monitor map epoch and monitors
-* osdc: Dumps the current ops in-flight to OSDs (ie, file data IO)
-* osdmap: Dumps the current OSDMap epoch, pools, and OSDs
+Find a folder in ``/sys/kernel/debug/ceph/`` with a name like 
+``28f7427e-5558-4ffd-ae1a-51ec3042759a.client25386880``.
+That folder contains files that can be used to diagnose the causes of slow requests. Use ``cat`` to see their contents.  
 
-If the data pool is in a NEARFULL condition, then the kernel cephfs client
-will switch to doing writes synchronously, which is quite slow.
+These files are described below. The files most useful for diagnosis of slow
+requests are the ``mdsc`` (current requests to the MDS) and the ``osdc``
+(current operations in-flight to OSDs) files.
+
+* ``bdi``: BDI info about the Ceph system (blocks dirtied, written, etc)
+* ``caps``: counts of file "caps" structures in-memory and used
+* ``client_options``: dumps the options provided to the CephFS mount
+* ``dentry_lru``: Dumps the CephFS dentries currently in-memory
+* ``mdsc``: Dumps current requests to the MDS
+* ``mdsmap``: Dumps the current MDSMap epoch and MDSes
+* ``mds_sessions``: Dumps the current sessions to MDSes
+* ``monc``: Dumps the current maps from the monitor, and any "subscriptions" held
+* ``monmap``: Dumps the current monitor map epoch and monitors
+* ``osdc``: Dumps the current ops in-flight to OSDs (ie, file data IO)
+* ``osdmap``: Dumps the current OSDMap epoch, pools, and OSDs
+
+If the data pool is in a ``NEARFULL`` condition, then the kernel CephFS client
+will switch to doing writes synchronously. Synchronous writes are quite slow.
 
 Disconnected+Remounted FS
 =========================
