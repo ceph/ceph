@@ -12529,6 +12529,8 @@ int Client::getcwd(string& dir, const UserPerm& perms)
 int Client::_statfs(Inode *in, struct statvfs *stbuf,
 		   const UserPerm& perms)
 {
+  ceph_assert(ceph_mutex_is_locked_by_me(client_lock));
+
   ldout(cct, 10) << __func__ << dendl;
   tout(cct) << __func__ << std::endl;
   unsigned long int total_files_on_fs;
@@ -12536,7 +12538,6 @@ int Client::_statfs(Inode *in, struct statvfs *stbuf,
   ceph_statfs stats;
   C_SaferCond cond;
 
-  std::unique_lock lock(client_lock);
   const vector<int64_t> &data_pools = mdsmap->get_data_pools();
   if (data_pools.size() == 1) {
     objecter->get_fs_stats(stats, data_pools[0], &cond);
@@ -12544,9 +12545,9 @@ int Client::_statfs(Inode *in, struct statvfs *stbuf,
     objecter->get_fs_stats(stats, std::optional<int64_t>(), &cond);
   }
 
-  lock.unlock();
+  client_lock.unlock();
   int rval = cond.wait();
-  lock.lock();
+  client_lock.lock();
 
   ceph_assert(in);
   // Usually quota_root will == root_ancestor, but if the mount root has no
@@ -12970,9 +12971,7 @@ int Client::ll_statfs(Inode *in, struct statvfs *stbuf, const UserPerm& perms)
   if (!mref_reader.is_state_satisfied())
     return -ENOTCONN;
 
-  /* Since the only thing this does is wrap a call to statfs, and
-     statfs takes a lock, it doesn't seem we have a need to split it
-     out. */
+  std::unique_lock cl(client_lock);
   return _statfs(in, stbuf, perms);
 }
 
@@ -12982,12 +12981,11 @@ int Client::statfs(const char *path, struct statvfs *stbuf, const UserPerm& perm
   if (!mref_reader.is_state_satisfied())
     return -ENOTCONN;
 
+  std::unique_lock cl(client_lock);
+
   walk_dentry_result wdr;
-  {
-    std::scoped_lock l(client_lock);
-    if (int rc = path_walk(cwd, filepath(path), &wdr, perms, {}); rc < 0) {
-      return rc;
-    }
+  if (int rc = path_walk(cwd, filepath(path), &wdr, perms, {}); rc < 0) {
+    return rc;
   }
 
   auto in = wdr.target.get();
