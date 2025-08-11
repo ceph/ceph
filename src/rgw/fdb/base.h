@@ -57,19 +57,6 @@ namespace ceph::libfdb::concepts {
 
 // Capture things that model ContainerCompatibleRange. 
 
-/*JFW
-// Adapted from "https://en.cppreference.com/w/cpp/ranges/to.html#container_compatible_range":
-template< class Container >
-constexpr bool // reservable-container =
-    ranges::sized_range<Container> &&
-    requires (Container& c, ranges::range_size_t<Container> n)
-    {
-        c.reserve(n);
-        { c.capacity() } -> std::same_as<decltype(n)>;
-        { c.max_size() } -> std::same_as<decltype(n)>;
-    };
-*/
-
 // Adapted from "https://en.cppreference.com/w/cpp/ranges/to.html#container_compatible_range":
 template< class Container, class Reference >
 constexpr bool appendable_container  = requires (Container& c, Reference&& ref)
@@ -155,6 +142,13 @@ class select final
 
  private:
  friend bool get(ceph::libfdb::transaction_handle, const ceph::libfdb::concepts::selector auto&, auto);
+
+/* JFW:
+ template <typename SelectorT> 
+ friend inline bool get(ceph::libfdb::transaction_handle txn, const SelectorT&, auto out_iter); */
+
+ template <typename SelectorT> requires ceph::libfdb::concepts::selector<SelectorT>
+ friend inline bool get(ceph::libfdb::transaction_handle txn, const SelectorT& key_range, auto out_iter);
 };
 
 // Caution: do not let the actual key data go out of scope!

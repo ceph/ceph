@@ -320,7 +320,7 @@ simple and frankly focus on stability and getting the core mechanics right while
 
 inline bool get(ceph::libfdb::transaction_handle txn, auto key, std::int64_t& out_value)
 {
- auto result = get_single_value_from_transaction(txn, ceph::libfdb::to::convert(key));
+ auto result = ceph::libfdb::detail::get_single_value_from_transaction(txn, ceph::libfdb::to::convert(key));
 
  if(!result.key_was_found)
   return false;
@@ -331,12 +331,27 @@ inline bool get(ceph::libfdb::transaction_handle txn, auto key, std::int64_t& ou
  return true;
 }
 
-/*
-inline bool get(ceph::libfdb::transaction_handle txn, auto key, ceph::libfdb::concepts::appendable_container<char *> auto & out_value)
+inline bool get(ceph::libfdb::transaction_handle txn, auto key, std::string& out_value)
 {
- return ceph::libfdb::detail::get_single_value_from_transaction(txn, ceph::libfdb::to::convert(key), out_value);
+ auto result = ceph::libfdb::detail::get_single_value_from_transaction(txn, ceph::libfdb::to::convert(key));
+
+ if(!result.key_was_found)
+  return false;
+
+ ceph::libfdb::from::convert(result.out_data, out_value);
+
+ return true;
 }
 
+template <typename AppendTo, typename OutT>
+requires ceph::libfdb::concepts::appendable_container<AppendTo, OutT>
+inline bool get(ceph::libfdb::transaction_handle txn, auto key, AppendTo &out_container)
+{
+ return ceph::libfdb::detail::get_single_value_from_transaction(txn, 
+	  ceph::libfdb::to::convert(key), out_container);
+}
+
+/*
 inline bool get(ceph::libfdb::transaction_handle txn, auto key, std::input_iterator auto out_iter)
 {
  return ceph::libfdb::detail::get_single_value_from_transaction(txn, ceph::libfdb::to::convert(key), out_iter);
@@ -373,11 +388,14 @@ inline bool get(ceph::libfdb::transaction_handle txn, auto key, std::function<vo
 }
 
 // The user could get a range of values back:
-// JFW: right now, those values had best be strings...
+// JFW: right now, those values had best be strings... and, unfortunately, using the concept std::output_iterator
+// or std::output_iterator_tag is much trickier than it looks here, especially because of our compatibility
+// requirements and the fact that not all output_iterator sinks are written in a way that actually implements
+// the requirements:
 template <typename SelectorT> requires ceph::libfdb::concepts::selector<SelectorT>
-inline bool get(ceph::libfdb::transaction_handle txn, const SelectorT& key_range, std::output_iterator auto out_iter)
+inline bool get(ceph::libfdb::transaction_handle txn, const SelectorT& key_range, auto out_iter)
 {
- return get_value_range_from_transaction(txn, key_range.begin_key, key_range.end_key, out_iter);
+ return ceph::libfdb::detail::get_value_range_from_transaction(txn, key_range.begin_key, key_range.end_key, out_iter);
 }
 
 } // namespace ceph::libfdb
