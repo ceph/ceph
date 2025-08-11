@@ -34,6 +34,7 @@
 
 #include "common/dout.h"
 #include "common/dout_fmt.h"
+#include "common/strtol.h"
 
 #include "cls/fifo/cls_fifo_types.h"
 #include "cls/fifo/cls_fifo_ops.h"
