@@ -3154,7 +3154,7 @@ int Mirror<I>::group_promote(IoCtx& group_ioctx, const char *group_name,
 
       librbd::NoOpProgressContext prog_ctx;
       r = Group<I>::snap_rollback(group_ioctx,
-                                  group_name, snap->name.c_str(), prog_ctx);
+                                  group_name, snap->name.c_str(), prog_ctx, false);
       if (r < 0) {
         lderr(cct) << "failed to rollback to group snapshot: " << snap->id
                    << " :" << cpp_strerror(r) << dendl;
