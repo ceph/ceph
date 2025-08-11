@@ -59,7 +59,7 @@ struct Group {
                            group_snap_info2_t* group_snap);
   static int snap_rollback(librados::IoCtx& group_ioctx,
                            const char *group_name, const char *snap_name,
-                           ProgressContext& pctx);
+                           ProgressContext& pctx, bool restrict_to_primary);
 
   static int group_image_list_by_id(librados::IoCtx& group_ioctx,
                                     const std::string &group_id,
