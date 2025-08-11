@@ -1690,7 +1690,7 @@ namespace librbd {
                group_ioctx.get_id(), group_name, snap_name);
     librbd::NoOpProgressContext prog_ctx;
     int r = librbd::api::Group<>::snap_rollback(group_ioctx, group_name,
-                                                snap_name, prog_ctx);
+                                                snap_name, prog_ctx, true);
     tracepoint(librbd, group_snap_rollback_exit, r);
     return r;
   }
@@ -1704,7 +1704,7 @@ namespace librbd {
                group_ioctx.get_pool_name().c_str(),
                group_ioctx.get_id(), group_name, snap_name);
     int r = librbd::api::Group<>::snap_rollback(group_ioctx, group_name,
-                                                snap_name, prog_ctx);
+                                                snap_name, prog_ctx, true);
     tracepoint(librbd, group_snap_rollback_exit, r);
     return r;
   }
@@ -7984,7 +7984,7 @@ extern "C" int rbd_group_snap_rollback(rados_ioctx_t group_p,
 
   librbd::NoOpProgressContext prog_ctx;
   int r = librbd::api::Group<>::snap_rollback(group_ioctx, group_name,
-                                              snap_name, prog_ctx);
+                                              snap_name, prog_ctx, true);
 
   tracepoint(librbd, group_snap_rollback_exit, r);
 
@@ -8050,7 +8050,7 @@ extern "C" int rbd_group_snap_rollback_with_progress(rados_ioctx_t group_p,
 
   librbd::CProgressContext prog_ctx(cb, cbdata);
   int r = librbd::api::Group<>::snap_rollback(group_ioctx, group_name,
-                                              snap_name, prog_ctx);
+                                              snap_name, prog_ctx, true);
 
   tracepoint(librbd, group_snap_rollback_exit, r);
 
