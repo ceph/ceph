@@ -2,12 +2,14 @@ import { Component, OnDestroy, OnInit } from '@angular/core';
 
 import _ from 'lodash';
 import { BehaviorSubject, EMPTY, Observable, Subject, Subscription, of } from 'rxjs';
-import { catchError, exhaustMap, switchMap, take, takeUntil } from 'rxjs/operators';
+import { catchError, exhaustMap, switchMap, takeUntil } from 'rxjs/operators';
 
 import { HealthService } from '~/app/shared/api/health.service';
-import { OsdService } from '~/app/shared/api/osd.service';
-import { PrometheusService } from '~/app/shared/api/prometheus.service';
-import { Promqls as queries } from '~/app/shared/enum/dashboard-promqls.enum';
+import { PrometheusService, PromqlGuageMetric } from '~/app/shared/api/prometheus.service';
+import {
+  CapacityCardQueries,
+  UtilizationCardQueries
+} from '~/app/shared/enum/dashboard-promqls.enum';
 import { Icons } from '~/app/shared/enum/icons.enum';
 import { DashboardDetails } from '~/app/shared/models/cd-details';
 import { Permissions } from '~/app/shared/models/permissions';
@@ -26,7 +28,6 @@ import { MgrModuleService } from '~/app/shared/api/mgr-module.service';
 import { AlertClass } from '~/app/shared/enum/health-icon.enum';
 import { HardwareService } from '~/app/shared/api/hardware.service';
 import { SettingsService } from '~/app/shared/api/settings.service';
-import { OsdSettings } from '~/app/shared/models/osd-settings';
 import {
   IscsiMap,
   MdsMap,
@@ -36,6 +37,11 @@ import {
   PgStatus
 } from '~/app/shared/models/health.interface';
 
+type CapacityCardData = {
+  osdNearfull: number;
+  osdFull: number;
+};
+
 @Component({
   selector: 'cd-dashboard-v3',
   templateUrl: './dashboard-v3.component.html',
@@ -43,8 +49,11 @@ import {
 })
 export class DashboardV3Component extends PrometheusListHelper implements OnInit, OnDestroy {
   detailsCardData: DashboardDetails = {};
-  osdSettingsService: any;
-  osdSettings = new OsdSettings();
+  capacityCardData: CapacityCardData = {
+    osdNearfull: null,
+    osdFull: null
+  };
+  interval = new Subscription();
   permissions: Permissions;
   enabledFeature$: FeatureTogglesMap$;
   color: string;
@@ -102,7 +111,6 @@ export class DashboardV3Component extends PrometheusListHelper implements OnInit
   constructor(
     private summaryService: SummaryService,
     private orchestratorService: OrchestratorService,
-    private osdService: OsdService,
     private authStorageService: AuthStorageService,
     private featureToggles: FeatureTogglesService,
     private healthService: HealthService,
@@ -121,7 +129,6 @@ export class DashboardV3Component extends PrometheusListHelper implements OnInit
   ngOnInit() {
     super.ngOnInit();
     if (this.permissions.configOpt.read) {
-      this.getOsdSettings();
       this.isHardwareEnabled$ = this.getHardwareConfig();
       this.hardwareSummary$ = this.hardwareSubject.pipe(
         switchMap(() =>
@@ -148,6 +155,7 @@ export class DashboardV3Component extends PrometheusListHelper implements OnInit
     this.getPrometheusData(this.prometheusService.lastHourDateObject);
     this.getDetailsCardData();
     this.getTelemetryReport();
+    this.getCapacityCardData();
     this.prometheusAlertService.getAlerts(true);
   }
 
@@ -185,21 +193,36 @@ export class DashboardV3Component extends PrometheusListHelper implements OnInit
     );
   }
 
-  private getOsdSettings() {
-    this.osdSettingsService = this.osdService
-      .getOsdSettings()
-      .pipe(take(1))
-      .subscribe((data: OsdSettings) => {
-        this.osdSettings = data;
-      });
-  }
-
   public getPrometheusData(selectedTime: any) {
-    this.queriesResults = this.prometheusService.getPrometheusQueriesData(
+    this.queriesResults = this.prometheusService.getRangeQueriesData(
       selectedTime,
-      queries,
+      UtilizationCardQueries,
       this.queriesResults
     );
+  }
+
+  getCapacityQueryValues(data: PromqlGuageMetric['result']) {
+    let osdFull = null;
+    let osdNearfull = null;
+    if (data?.[0]?.metric?.['__name__'] === CapacityCardQueries.OSD_FULL) {
+      osdFull = data[0]?.value?.[1];
+      osdNearfull = data[1]?.value?.[1];
+    } else {
+      osdFull = data?.[1]?.value?.[1];
+      osdNearfull = data?.[0]?.value?.[1];
+    }
+    return [osdFull, osdNearfull];
+  }
+
+  getCapacityCardData() {
+    const CAPACITY_QUERY = `{__name__=~"${CapacityCardQueries.OSD_FULL}|${CapacityCardQueries.OSD_NEARFULL}"}`;
+    this.prometheusService
+      .getGaugeQueryData(CAPACITY_QUERY)
+      .subscribe((data: PromqlGuageMetric) => {
+        const [osdFull, osdNearfull] = this.getCapacityQueryValues(data?.result);
+        this.capacityCardData.osdFull = this.prometheusService.formatGuageMetric(osdFull);
+        this.capacityCardData.osdNearfull = this.prometheusService.formatGuageMetric(osdNearfull);
+      });
   }
 
   private getTelemetryReport() {
