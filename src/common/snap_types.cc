@@ -3,6 +3,7 @@
 
 #include "snap_types.h"
 #include "common/Formatter.h"
+#include "include/types.h" // for the ceph_mds_snap_realm encoder
 
 void SnapRealmInfo::encode(ceph::buffer::list& bl) const
 {
@@ -116,6 +117,18 @@ bool SnapContext::is_valid() const
   return true;
 }
 
+void SnapContext::encode(ceph::buffer::list& bl) const {
+  using ceph::encode;
+  encode(seq, bl);
+  encode(snaps, bl);
+}
+
+void SnapContext::decode(ceph::buffer::list::const_iterator& bl) {
+  using ceph::decode;
+  decode(seq, bl);
+  decode(snaps, bl);
+}
+
 void SnapContext::dump(ceph::Formatter *f) const
 {
   f->dump_unsigned("seq", seq);
@@ -134,4 +147,8 @@ void SnapContext::generate_test_instances(std::list<SnapContext*>& o)
   v.push_back(3);
   v.push_back(1);
   o.push_back(new SnapContext(20, v));
+}
+
+std::ostream& operator<<(std::ostream& out, const SnapContext& snapc) {
+  return out << snapc.seq << "=" << snapc.snaps;
 }

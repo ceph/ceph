@@ -50,6 +50,7 @@ add_library(crimson-common STATIC
   ${PROJECT_SOURCE_DIR}/src/common/errno.cc
   ${PROJECT_SOURCE_DIR}/src/common/escape.cc
   ${PROJECT_SOURCE_DIR}/src/common/hex.cc
+  ${PROJECT_SOURCE_DIR}/src/common/frag.cc
   ${PROJECT_SOURCE_DIR}/src/common/fs_types.cc
   ${PROJECT_SOURCE_DIR}/src/common/ceph_json.cc
   ${PROJECT_SOURCE_DIR}/src/common/histogram.cc
@@ -73,6 +74,7 @@ add_library(crimson-common STATIC
   ${PROJECT_SOURCE_DIR}/src/common/utf8.c
   ${PROJECT_SOURCE_DIR}/src/common/version.cc
   ${PROJECT_SOURCE_DIR}/src/common/BackTrace.cc
+  ${PROJECT_SOURCE_DIR}/src/common/CompatSet.cc
   ${PROJECT_SOURCE_DIR}/src/common/ConfUtils.cc
   ${PROJECT_SOURCE_DIR}/src/common/DecayCounter.cc
   ${PROJECT_SOURCE_DIR}/src/common/HTMLFormatter.cc
@@ -96,6 +98,11 @@ add_library(crimson-common STATIC
   ${PROJECT_SOURCE_DIR}/src/crush/CrushTester.cc
   ${PROJECT_SOURCE_DIR}/src/global/global_context.cc
   ${PROJECT_SOURCE_DIR}/src/global/pidfile.cc
+  ${PROJECT_SOURCE_DIR}/src/include/filepath.cc
+  ${PROJECT_SOURCE_DIR}/src/include/object.cc
+  ${PROJECT_SOURCE_DIR}/src/include/types.cc
+  ${PROJECT_SOURCE_DIR}/src/include/utime.cc
+  ${PROJECT_SOURCE_DIR}/src/include/uuid.cc
   ${PROJECT_SOURCE_DIR}/src/librbd/Features.cc
   ${PROJECT_SOURCE_DIR}/src/librbd/io/IoOperations.cc
   ${PROJECT_SOURCE_DIR}/src/mgr/ServiceMap.cc

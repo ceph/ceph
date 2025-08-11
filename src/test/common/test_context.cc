@@ -27,6 +27,7 @@
 #include "include/msgr.h"
 #include "common/ceph_context.h"
 #include "common/config_proxy.h"
+#include "common/Formatter.h"
 #include "log/Log.h"
 
 using namespace std;
