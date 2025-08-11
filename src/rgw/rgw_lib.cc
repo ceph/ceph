@@ -523,6 +523,7 @@ namespace rgw {
       return -EIO;
     }
 
+    main.init_usage_exporter();
     main.cond_init_apis();
 
     mutex.lock();
