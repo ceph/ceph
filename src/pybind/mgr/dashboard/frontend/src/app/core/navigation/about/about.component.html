@@ -1,47 +1,53 @@
-<div class="about-container">
-  <div class="modal-header">
-    <button type="button"
-            class="btn-close float-end"
-            aria-label="Close"
-            i18n-aria-label
-            (click)="activeModal.close()">
-    </button>
-  </div>
-  <div class="modal-body">
-    <img src="assets/Ceph_Ceph_Logo_with_text_red_white.svg"
-         class="ceph-logo"
-         alt="{{ projectConstants.organization }}">
-    <h3>
+<cds-modal [open]="open"
+           size="md"
+           (overlaySelected)="closeModal()">
+  <cds-modal-header (closeSelect)="closeModal()">
+    <div class="header-content">
+      <img src="assets/Ceph_Ceph_Logo_with_text_red_white.svg"
+           class="ceph-logo"
+           alt="{{ projectConstants.organization }}">
+    <h3 class="modal-title">
       <strong>{{ projectConstants.projectName }}</strong>
     </h3>
-    <div class="product-versions">
-      <strong i18n>Version</strong>
-      <br>
-      {{ versionNumber }}
-      {{ versionHash }}
-      <br>
-      {{ versionName }}
     </div>
-    <br>
-    <dl>
-      <dt i18n>Ceph Manager</dt>
-      <dd>{{ hostAddr }}</dd>
-      <dt i18n>User</dt>
-      <dd>{{ modalVariables.user }}</dd>
-      <dt i18n>User Role</dt>
-      <dd>{{ modalVariables.role }}</dd>
-      <dt i18n>Browser</dt>
-      <dd>{{ modalVariables.browserName }}</dd>
-      <dt i18n>Browser Version</dt>
-      <dd>{{ modalVariables.browserVersion }}</dd>
-      <dt i18n>Browser OS</dt>
-      <dd>{{ modalVariables.browserOS }}</dd>
-    </dl>
-  </div>
-  <div class="modal-footer">
-    <div class="text-left">
+
+  </cds-modal-header>
+    <section cdsModalContent>
+    <div class="modal-body" >
+      <div class="product-versions">
+        <strong i18n>Version</strong>
+        <br>
+        {{ versionNumber }}
+        {{ versionHash }}
+        <br>
+        {{ versionName }}
+      </div>
+
+      <br>
+
+      <dl>
+        <dt i18n>Ceph Manager</dt>
+        <dd>{{ hostAddr }}</dd>
+        <dt i18n>User</dt>
+        <dd>{{ modalVariables.user }}</dd>
+        <dt i18n>User Role</dt>
+        <dd>{{ modalVariables.role }}</dd>
+        <dt i18n>Browser</dt>
+        <dd>{{ modalVariables.browserName }}</dd>
+        <dt i18n>Browser Version</dt>
+        <dd>{{ modalVariables.browserVersion }}</dd>
+        <dt i18n>Browser OS</dt>
+        <dd>{{ modalVariables.browserOS }}</dd>
+      </dl>
+    </div>
+    </section>
+
+  <cds-modal-footer>
+    <div class="footer-content">
       {{ projectConstants.copyright }}
       {{ projectConstants.license }}
     </div>
-  </div>
-</div>
+  </cds-modal-footer>
+</cds-modal>
+
+
