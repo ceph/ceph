@@ -42,7 +42,6 @@
 
 #include "crimson/common/config_proxy.h"
 #include "crimson/common/coroutine.h"
-#include "crimson/common/log.h"
 
 #include "crimson/os/futurized_collection.h"
 #include "crimson/os/futurized_store.h"
@@ -50,8 +49,6 @@
 namespace po = boost::program_options;
 
 using namespace ceph;
-
-SET_SUBSYS(osd);
 
 /**
  * These are functions that are used in both types of work_loads
@@ -125,7 +122,6 @@ struct results_t {
 seastar::future<results_t>
 run_concurrent_ios(int duration, int num_concurrent_io,
                    std::function<seastar::future<results_t>()> work_load) {
-  LOG_PREFIX(run_concurrent_ios);
   std::vector<int> container_io;
   std::vector<results_t> all_io_res;
   for (int i = 0; i < num_concurrent_io; ++i) {
@@ -162,7 +158,6 @@ run_concurrent_ios(int duration, int num_concurrent_io,
 seastar::future<> pg_log_workload(crimson::os::FuturizedStore &global_store,
                                   int num_logs, int num_concurrent_io,
                                   int duration, int log_size, int log_length) {
-  LOG_PREFIX(pg_log_workload);
   auto &local_store = global_store.get_sharded_store();
 
   std::map<int, coll_t> collection_id;
@@ -363,7 +358,6 @@ seastar::future<> rgw_index_workload(crimson::os::FuturizedStore &global_store,
                                      int tolerance_range,
                                      int num_buckets_per_collection) {
 
-  LOG_PREFIX(rgw_index_workload);
   auto &local_store = global_store.get_sharded_store();
   std::map<int, coll_t> collection_id_for_rgw;
   std::map<int, crimson::os::CollectionRef>
@@ -489,7 +483,6 @@ seastar::future<> rgw_index_workload(crimson::os::FuturizedStore &global_store,
 };
 
 int main(int argc, char **argv) {
-  LOG_PREFIX(main);
   po::options_description desc{"Allowed options"};
   bool debug = false;
   std::string store_type;
@@ -678,7 +671,8 @@ int main(int argc, char **argv) {
         std::vector<seastar::future<>> per_shard_futures;
         for (unsigned i = 0; i < seastar::smp::count; ++i) {
           auto named_lambda = [=, &store_ref = *store]() -> seastar::future<> {
-            DEBUG("running example_io on reactor {}", seastar::this_shard_id());
+            fmt::println(std::cout, "running example_io on reactor {}",
+                         seastar::this_shard_id());
             if (work_load_type == "pg_log") {
               co_await pg_log_workload(store_ref, num_logs, num_concurrent_io,
                                        duration, log_size, log_length);
