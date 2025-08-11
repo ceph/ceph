@@ -10,9 +10,8 @@ export class HostsPageHelper extends PageHelper {
 
   columnIndex = {
     hostname: 2,
-    services: 3,
-    labels: 4,
-    status: 5
+    labels: 3,
+    status: 4
   };
 
   check_for_host() {
@@ -170,17 +169,5 @@ export class HostsPageHelper extends PageHelper {
       cy.wait(20000);
       this.expectTableCount('total', 0);
     });
-  }
-
-  checkServiceInstancesExist(hostname: string, instances: string[]) {
-    this.getTableCell(this.columnIndex.hostname, hostname, true)
-      .parent()
-      .find(`[cdstabledata]:nth-child(${this.columnIndex.services}) .badge`)
-      .should(($ele) => {
-        const serviceInstances = $ele.toArray().map((v) => v.innerText);
-        for (const instance of instances) {
-          expect(serviceInstances).to.include(instance);
-        }
-      });
   }
 }
