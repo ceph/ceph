@@ -56,7 +56,9 @@ struct FLTreeOnode final : Onode, Value {
       UPDATE_SNAPSET,
       CLEAR_OBJECT_INFO,
       CLEAR_SNAPSET,
-      CREATE_DEFAULT
+      CREATE_DEFAULT,
+      SET_NEED_COW,
+      UNSET_NEED_COW
     };
     Recorder(bufferlist &bl) : ValueDeltaRecorder(bl) {}
 
@@ -101,6 +103,34 @@ struct FLTreeOnode final : Onode, Value {
 	if (recorder) {
 	  recorder->encode_update(
 	    payload_mut, Recorder::delta_op_t::CREATE_DEFAULT);
+	}
+    });
+  }
+
+  void set_need_cow(Transaction &t) final {
+    with_mutable_layout(
+      t,
+      [](NodeExtentMutable &payload_mut, Recorder *recorder) {
+	auto &mlayout = *reinterpret_cast<onode_layout_t*>(
+          payload_mut.get_write());
+	mlayout.need_cow = true;
+	if (recorder) {
+	  recorder->encode_update(
+	    payload_mut, Recorder::delta_op_t::SET_NEED_COW);
+	}
+    });
+  }
+
+  void unset_need_cow(Transaction &t) final {
+    with_mutable_layout(
+      t,
+      [](NodeExtentMutable &payload_mut, Recorder *recorder) {
+	auto &mlayout = *reinterpret_cast<onode_layout_t*>(
+          payload_mut.get_write());
+	mlayout.need_cow = false;
+	if (recorder) {
+	  recorder->encode_update(
+	    payload_mut, Recorder::delta_op_t::UNSET_NEED_COW);
 	}
     });
   }

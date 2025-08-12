@@ -39,6 +39,18 @@ public:
   laddr_t get_hint() const final {return L_ADDR_MIN; }
   ~TestOnode() final = default;
 
+  void set_need_cow(Transaction &t) final {
+    with_mutable_layout(t, [](onode_layout_t &mlayout) {
+      mlayout.need_cow = true;
+    });
+  }
+
+  void unset_need_cow(Transaction &t) final {
+    with_mutable_layout(t, [](onode_layout_t &mlayout) {
+      mlayout.need_cow = false;
+    });
+  }
+
   void update_onode_size(Transaction &t, uint32_t size) final {
     with_mutable_layout(t, [size](onode_layout_t &mlayout) {
       mlayout.size = size;
