@@ -1100,6 +1100,10 @@ public:
     });
   }
 
+  struct remove_mappings_param_t {
+    bool cascade_remove_on_indirect = true;
+    bool skip_direct_mapping = false;
+  };
   /*
    * remove_mappings_in_range
    *
@@ -1111,7 +1115,8 @@ public:
     Transaction &t,
     laddr_t start,
     objaddr_t unaligned_len,
-    LBAMapping first_mapping)
+    LBAMapping first_mapping,
+    remove_mappings_param_t params)
   {
     LOG_PREFIX(TransactionManager::remove_mappings_in_range);
     SUBDEBUGT(seastore_tm, "{}~{}, first_mapping: {}",
@@ -1119,20 +1124,36 @@ public:
     auto mapping = co_await first_mapping.refresh();
     while (!mapping.is_end()) {
       assert(mapping.get_key() >= start);
-      auto mapping_end =
-	(mapping.get_key() + mapping.get_length()).checked_to_laddr();
+      auto mapping_end = (mapping.get_key() + mapping.get_length()
+	).checked_to_laddr();
       if (mapping_end > start + unaligned_len) {
 	break;
       }
-      mapping = co_await remove(t, std::move(mapping)
-      ).handle_error_interruptible(
-	punch_mappings_iertr::pass_further{},
-	crimson::ct_error::assert_all{
-	  "remove_mappings_in_range hit invalid error"
-	}
-      );
+      if (params.skip_direct_mapping && mapping.is_real()) {
+	mapping = co_await mapping.next();
+	continue;
+      }
+      if (params.cascade_remove_on_indirect ||
+	  mapping.is_zero_reserved()) {
+	mapping = co_await remove(t, std::move(mapping)
+	).handle_error_interruptible(
+	  punch_mappings_iertr::pass_further{},
+	  crimson::ct_error::assert_all{
+	    "remove_mappings_in_range hit invalid error"
+	  }
+	);
+      } else {
+	mapping = co_await _remove_indirect_mapping_only(
+	  t, std::move(mapping)
+	).handle_error_interruptible(
+	  punch_mappings_iertr::pass_further{},
+	  crimson::ct_error::assert_all{
+	    "remove_mappings_in_range hit invalid error"
+	  }
+	);
+      }
     }
-    co_return std::move(mapping);
+    co_return mapping;
   }
 
   ~TransactionManager();

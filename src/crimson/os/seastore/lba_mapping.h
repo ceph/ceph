@@ -111,6 +111,9 @@ public:
   bool is_zero_reserved() const {
     return !is_indirect() && get_val().is_zero();
   }
+  bool is_real() const {
+    return !is_indirect() && !get_val().is_zero();
+  }
 
   extent_len_t get_length() const {
     assert(!is_null());
