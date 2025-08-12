@@ -2487,7 +2487,7 @@ bool DaemonServer::_handle_command(
 	"}";
       op->mark_start_mon_command();
       auto on_finish = new ReplyOnFinish(cmdctx, op);
-      monc->start_mon_command({cmd}, json, nullptr, nullptr, on_finish);
+      monc->start_mon_command({cmd}, std::move(json), nullptr, nullptr, on_finish);
     }
     return true;
   } else if (prefix == "device rm-life-expectancy") {
@@ -2520,7 +2520,7 @@ bool DaemonServer::_handle_command(
       }
       op->mark_start_mon_command();
       auto on_finish = new ReplyOnFinish(cmdctx, op);
-      monc->start_mon_command({cmd}, json, nullptr, nullptr, on_finish);
+      monc->start_mon_command({std::move(cmd)}, std::move(json), nullptr, nullptr, on_finish);
     } else {
       cmdctx->reply(0, ss);
     }
