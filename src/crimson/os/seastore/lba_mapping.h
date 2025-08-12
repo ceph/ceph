@@ -111,6 +111,7 @@ public:
   bool is_zero_reserved() const {
     return !is_indirect() && get_val().is_zero();
   }
+  // true if the mapping corresponds to real data
   bool is_real() const {
     return !is_indirect() && !get_val().is_zero();
   }

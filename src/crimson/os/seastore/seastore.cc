@@ -2029,12 +2029,25 @@ SeaStore::Shard::_clone(
   {
     auto &object_size = onode.get_layout().size;
     d_onode.update_onode_size(*ctx.transaction, object_size);
-    return objHandler.clone(
-      ObjectDataHandler::context_t{
-	*transaction_manager,
-	*ctx.transaction,
-	onode,
-	&d_onode});
+    if (onode.is_head()) { // OP_CLONE
+      assert(onode.is_head());
+      assert(d_onode.is_snap());
+      onode.swap_layout(*ctx.transaction, d_onode);
+      return objHandler.clone(
+	ObjectDataHandler::context_t{
+	  *transaction_manager,
+	  *ctx.transaction,
+	  d_onode,
+	  &onode});
+    } else { // OP_ROLLBACK
+      assert(d_onode.is_head());
+      return objHandler.clone(
+	ObjectDataHandler::context_t{
+	  *transaction_manager,
+	  *ctx.transaction,
+	  onode,
+	  &d_onode});
+    }
   }).si_then([&ctx, &onode, &d_onode, this] {
     return omaptree_clone(
       *ctx.transaction, omap_type_t::XATTR, onode, d_onode);
