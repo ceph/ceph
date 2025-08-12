@@ -28,8 +28,6 @@ class Cache;
  * Different writers write extents to different locations.
  */
 class ExtentOolWriter {
-  using base_ertr = crimson::errorator<
-      crimson::ct_error::input_output_error>;
 public:
   virtual ~ExtentOolWriter() {}
 

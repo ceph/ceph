@@ -61,7 +61,6 @@ class NodeExtent : public LogicalChildNode {
 
 using crimson::os::seastore::TransactionManager;
 class NodeExtentManager {
-  using base_iertr = TransactionManager::base_iertr;
  public:
   virtual ~NodeExtentManager() = default;
 

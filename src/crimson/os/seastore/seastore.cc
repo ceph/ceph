@@ -401,52 +401,34 @@ seastar::future<> SeaStore::write_fsid(uuid_d new_osd_fsid)
   });
 }
 
-seastar::future<>
+TransactionManager::alloc_extent_ertr::future<>
 SeaStore::Shard::mkfs_managers()
 {
+  LOG_PREFIX(SeaStoreS::mkfs_managers);
+  INFO("...");
   init_managers();
-  return transaction_manager->mkfs(
-  ).safe_then([this] {
-    init_managers();
-    return transaction_manager->mount();
-  }).safe_then([this] {
-
-    ++(shard_stats.io_num);
-    ++(shard_stats.pending_io_num);
-    // For TM::submit_transaction()
-    ++(shard_stats.processing_inlock_io_num);
-
-    return repeat_eagain([this] {
-      ++(shard_stats.repeat_io_num);
-
-      return transaction_manager->with_transaction_intr(
-	Transaction::src_t::MUTATE,
-	"mkfs_seastore",
-	CACHE_HINT_TOUCH,
-	[this](auto& t)
-      {
-        LOG_PREFIX(SeaStoreS::mkfs_managers);
-        DEBUGT("...", t);
-	return onode_manager->mkfs(t
-	).si_then([this, &t] {
-	  return collection_manager->mkfs(t);
-	}).si_then([this, &t](auto coll_root) {
-	  transaction_manager->write_collection_root(
-	    t, coll_root);
-	  return transaction_manager->submit_transaction(t);
-	});
-      });
-    });
-  }).handle_error(
-    crimson::ct_error::assert_all{
-      "Invalid error in Shard::mkfs_managers"
-    }
-  ).finally([this] {
-    assert(shard_stats.pending_io_num);
-    --(shard_stats.pending_io_num);
-    // XXX: it's wrong to assume no failure
-    --(shard_stats.processing_postlock_io_num);
-  });
+  co_await transaction_manager->mkfs();
+  init_managers();
+  co_await transaction_manager->mount();
+  ++(shard_stats.io_num);
+  ++(shard_stats.pending_io_num);
+  // For TM::submit_transaction()
+  ++(shard_stats.processing_inlock_io_num);
+  TransactionRef t = transaction_manager->create_transaction(
+    Transaction::src_t::MUTATE, "mkfs_seastore", CACHE_HINT_TOUCH);
+   co_await with_repeat_trans_intr(*t,
+    seastar::coroutine::lambda([&](auto &tr) -> TransactionManager::alloc_extent_iertr::future<> {
+    ++(shard_stats.repeat_io_num);
+    DEBUGT("...", tr);
+    co_await onode_manager->mkfs(tr);
+    auto coll_root = co_await collection_manager->mkfs(tr);
+    transaction_manager->write_collection_root(tr, coll_root);
+    co_await transaction_manager->submit_transaction(tr);
+  }));
+  assert(shard_stats.pending_io_num);
+  --(shard_stats.pending_io_num);
+   // XXX: it's wrong to assume no failure
+  --(shard_stats.processing_postlock_io_num);
 }
 
 seastar::future<> SeaStore::set_secondaries()
@@ -472,11 +454,15 @@ SeaStore::mkfs_ertr::future<> SeaStore::test_mkfs(uuid_d new_osd_fsid)
       return seastar::now();
     } 
     return shard_stores.local().mkfs_managers(
-    ).then([this, new_osd_fsid] {
+    ).safe_then([this, new_osd_fsid] {
       return prepare_meta(new_osd_fsid);
-    }).then([FNAME] {
+    }).safe_then([FNAME] {
       INFO("done");
-    });
+    }).handle_error(
+      crimson::ct_error::assert_all{
+        "Invalid error in SeaStore::mkfs"
+      }
+    );
   });
 }
 
@@ -584,7 +570,8 @@ SeaStore::mkfs_ertr::future<> SeaStore::mkfs(uuid_d new_osd_fsid)
         return device->mount();
       }).safe_then([this] {
         return shard_stores.invoke_on_all([] (auto &local_store) {
-          return local_store.mkfs_managers();
+          return local_store.mkfs_managers().handle_error(
+            crimson::ct_error::assert_all{"Invalid error in SeaStoreS::mkfs_managers"});
         });
       }).safe_then([this, new_osd_fsid] {
         return prepare_meta(new_osd_fsid);
@@ -1102,7 +1089,7 @@ SeaStore::Shard::list_collections()
   });
 }
 
-SeaStore::base_iertr::future<ceph::bufferlist>
+base_iertr::future<ceph::bufferlist>
 SeaStore::Shard::_read(
   Transaction& t,
   Onode& onode,
@@ -1279,7 +1266,7 @@ SeaStore::Shard::get_attr(
   });
 }
 
-SeaStore::base_iertr::future<SeaStore::Shard::attrs_t>
+base_iertr::future<SeaStore::Shard::attrs_t>
 SeaStore::Shard::_get_attrs(
   Transaction& t,
   Onode& onode)
@@ -1459,7 +1446,7 @@ SeaStore::Shard::omap_iterate(
   });
 }
 
-SeaStore::base_iertr::future<SeaStore::Shard::fiemap_ret_t>
+base_iertr::future<SeaStore::Shard::fiemap_ret_t>
 SeaStore::Shard::_fiemap(
   Transaction &t,
   Onode &onode,
@@ -2543,7 +2530,7 @@ SeaStore::Shard::omaptree_get_value(
   });
 }
 
-SeaStore::base_iertr::future<SeaStore::Shard::omap_values_t>
+base_iertr::future<SeaStore::Shard::omap_values_t>
 SeaStore::Shard::omaptree_get_values(
   Transaction& t,
   omap_root_t&& root,
@@ -2634,7 +2621,7 @@ SeaStore::Shard::omaptree_list(
   });
 }
 
-SeaStore::base_iertr::future<SeaStore::Shard::omap_values_paged_t>
+base_iertr::future<SeaStore::Shard::omap_values_paged_t>
 SeaStore::Shard::omaptree_get_values(
   Transaction& t,
   omap_root_t&& root,
@@ -2654,7 +2641,7 @@ SeaStore::Shard::omaptree_get_values(
   });
 }
 
-SeaStore::base_iertr::future<omap_root_t>
+base_iertr::future<omap_root_t>
 SeaStore::Shard::omaptree_do_clear(
   Transaction& t,
   omap_root_t&& root)
@@ -2673,7 +2660,7 @@ SeaStore::Shard::omaptree_do_clear(
   });
 }
 
-SeaStore::base_iertr::future<>
+base_iertr::future<>
 SeaStore::Shard::omaptree_clear_no_onode(
   Transaction& t,
   omap_root_t&& root)
@@ -2707,7 +2694,7 @@ void omaptree_update_root(
   }
 }
 
-SeaStore::base_iertr::future<>
+base_iertr::future<>
 SeaStore::Shard::omaptree_clear(
   Transaction& t,
   omap_root_t&& root,
@@ -2728,7 +2715,7 @@ SeaStore::Shard::omaptree_clear(
   });
 }
 
-SeaStore::base_iertr::future<>
+base_iertr::future<>
 SeaStore::Shard::omaptree_clone(
   Transaction& t,
   omap_type_t type,
@@ -2819,7 +2806,7 @@ SeaStore::Shard::omaptree_set_keys(
   });
 }
 
-SeaStore::base_iertr::future<>
+base_iertr::future<>
 SeaStore::Shard::omaptree_rm_keys(
   Transaction& t,
   omap_root_t&& root,
@@ -2855,7 +2842,7 @@ SeaStore::Shard::omaptree_rm_keys(
   });
 }
 
-SeaStore::base_iertr::future<>
+base_iertr::future<>
 SeaStore::Shard::omaptree_rm_keyrange(
   Transaction& t,
   omap_root_t&& root,
@@ -2896,7 +2883,7 @@ SeaStore::Shard::omaptree_rm_keyrange(
   });
 }
 
-SeaStore::base_iertr::future<>
+base_iertr::future<>
 SeaStore::Shard::omaptree_rm_key(
   Transaction& t,
   omap_root_t&& root,

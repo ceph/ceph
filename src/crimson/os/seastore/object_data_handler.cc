@@ -199,7 +199,7 @@ ObjectDataHandler::delta_based_overwrite(
     ctx.t,
     overwrite_mapping
   ).handle_error_interruptible(
-    TransactionManager::base_iertr::pass_further{},
+    base_iertr::pass_further{},
     crimson::ct_error::assert_all{
       "ObjectDataHandler::do_remapping hit invalid error"
     }
@@ -468,7 +468,7 @@ ObjectDataHandler::merge_pending_edge(
     futs, [](auto &fut) { return std::move(fut); });
 }
 
-ObjectDataHandler::base_iertr::future<LBAMapping>
+base_iertr::future<LBAMapping>
 ObjectDataHandler::delta_based_edge_overwrite(
   context_t ctx,
   overwrite_range_t &overwrite_range,
@@ -565,7 +565,7 @@ ObjectDataHandler::merge_into_mapping(
   });
 }
 
-ObjectDataHandler::base_iertr::future<LBAMapping>
+base_iertr::future<LBAMapping>
 ObjectDataHandler::merge_into_pending_edge(
   context_t ctx,
   overwrite_range_t &overwrite_range,
@@ -632,7 +632,7 @@ ObjectDataHandler::merge_into_pending_edge(
   });
 }
 
-ObjectDataHandler::base_iertr::future<LBAMapping>
+base_iertr::future<LBAMapping>
 ObjectDataHandler::do_merge_based_edge_punch(
   context_t ctx,
   overwrite_range_t &overwrite_range,
@@ -647,12 +647,12 @@ ObjectDataHandler::do_merge_based_edge_punch(
   ).si_then([edge_mapping, ctx] {
     return ctx.tm.remove(ctx.t, std::move(edge_mapping));
   }).handle_error_interruptible(
-    ObjectDataHandler::base_iertr::pass_further{},
+    base_iertr::pass_further{},
     crimson::ct_error::assert_all{"unexpected error"}
   );
 }
 
-ObjectDataHandler::base_iertr::future<LBAMapping>
+base_iertr::future<LBAMapping>
 ObjectDataHandler::do_remap_based_edge_punch(
   context_t ctx,
   overwrite_range_t &overwrite_range,
@@ -669,7 +669,7 @@ ObjectDataHandler::do_remap_based_edge_punch(
     assert(overwrite_range.is_end_in_mapping(edge_mapping));
   }
 
-  auto fut = ObjectDataHandler::base_iertr::now();
+  auto fut = base_iertr::now();
   if (((edge & edge_t::LEFT) &&
 	!overwrite_range.is_begin_aligned(ctx.tm.get_block_size())) ||
       ((edge & edge_t::RIGHT) &&
@@ -691,7 +691,7 @@ ObjectDataHandler::do_remap_based_edge_punch(
 	// this branch happens when:
 	// "overwrite.aligned_begin == edge_mapping.get_key() &&
 	//  overwrite.unaligned_begin > edge_mapping.get_key()"
-	return ObjectDataHandler::base_iertr::make_ready_future<
+	return base_iertr::make_ready_future<
 	  LBAMapping>(std::move(edge_mapping));
       }
     } else {
@@ -706,7 +706,7 @@ ObjectDataHandler::do_remap_based_edge_punch(
 	// less than that of the edge_mapping.
 	return ctx.tm.remove(ctx.t, std::move(edge_mapping)
 	).handle_error_interruptible(
-	  ObjectDataHandler::base_iertr::pass_further{},
+	  base_iertr::pass_further{},
 	  crimson::ct_error::assert_all{"unexpected error"}
 	);
       }
@@ -723,7 +723,7 @@ ObjectDataHandler::do_remap_based_edge_punch(
 //    that of the edge_mapping, remove the edge_mapping and expand the
 //    overwrite_range.
 // 3. edge_handle_policy_t::REMAP: drop the overlapped part of the edge mapping
-ObjectDataHandler::base_iertr::future<LBAMapping>
+base_iertr::future<LBAMapping>
 ObjectDataHandler::punch_mapping_on_edge(
   context_t ctx,
   overwrite_range_t &overwrite_range,
@@ -772,7 +772,7 @@ ObjectDataHandler::punch_mapping_on_edge(
 
 // The first step in a multi-mapping-hole-punching scenario: remap the
 // left mapping if it crosses the left edge of the hole's range
-ObjectDataHandler::base_iertr::future<LBAMapping>
+base_iertr::future<LBAMapping>
 ObjectDataHandler::punch_left_mapping(
   context_t ctx,
   overwrite_range_t &overwrite_range,
@@ -788,13 +788,13 @@ ObjectDataHandler::punch_left_mapping(
       ctx, overwrite_range, overwrite_data,
       std::move(left_mapping), edge_t::LEFT, op_type);
   }
-  return ObjectDataHandler::base_iertr::make_ready_future<
+  return base_iertr::make_ready_future<
     LBAMapping>(std::move(left_mapping));
 }
 
 // The second step in a multi-mapping-hole-punching scenario: remove
 // all the mappings that are strictly inside the hole's range
-ObjectDataHandler::base_iertr::future<LBAMapping>
+base_iertr::future<LBAMapping>
 ObjectDataHandler::punch_inner_mappings(
   context_t ctx,
   overwrite_range_t &overwrite_range,
@@ -809,7 +809,7 @@ ObjectDataHandler::punch_inner_mappings(
 
 // The last step in the multi-mapping-hole-punching scenario: remap
 // the right mapping if it crosses the right edge of the hole's range
-ObjectDataHandler::base_iertr::future<LBAMapping>
+base_iertr::future<LBAMapping>
 ObjectDataHandler::punch_right_mapping(
   context_t ctx,
   overwrite_range_t &overwrite_range,
@@ -819,7 +819,7 @@ ObjectDataHandler::punch_right_mapping(
 {
   if (right_mapping.is_end() ||
       overwrite_range.aligned_end <= right_mapping.get_key()) {
-    return ObjectDataHandler::base_iertr::make_ready_future<
+    return base_iertr::make_ready_future<
       LBAMapping>(std::move(right_mapping));
   }
   return punch_mapping_on_edge(
@@ -828,7 +828,7 @@ ObjectDataHandler::punch_right_mapping(
 }
 
 // punch the hole whose range is within a single pending mapping
-ObjectDataHandler::base_iertr::future<LBAMapping>
+base_iertr::future<LBAMapping>
 ObjectDataHandler::punch_hole_in_pending_mapping(
   context_t ctx,
   overwrite_range_t &overwrite_range,
@@ -839,12 +839,12 @@ ObjectDataHandler::punch_hole_in_pending_mapping(
   ).si_then([ctx, mapping=std::move(mapping)]() mutable {
     return ctx.tm.remove(ctx.t, std::move(mapping));
   }).handle_error_interruptible(
-    ObjectDataHandler::base_iertr::pass_further{},
+    base_iertr::pass_further{},
     crimson::ct_error::assert_all{"impossible"}
   );
 }
 
-ObjectDataHandler::base_iertr::future<LBAMapping>
+base_iertr::future<LBAMapping>
 ObjectDataHandler::punch_multi_mapping_hole(
   context_t ctx,
   overwrite_range_t &overwrite_range,
@@ -924,7 +924,7 @@ ObjectDataHandler::handle_single_mapping_overwrite(
     }
   case edge_handle_policy_t::REMAP:
     {
-      auto fut = ObjectDataHandler::base_iertr::now();
+      auto fut = base_iertr::now();
       edge_t edge =  edge_t::NONE;
       if (!overwrite_range.is_begin_aligned(ctx.tm.get_block_size())) {
 	edge = static_cast<edge_t>(edge | edge_t::LEFT);

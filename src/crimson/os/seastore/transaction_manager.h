@@ -407,7 +407,9 @@ public:
    * Allocates a new block of type T with the minimum lba range of size len
    * greater than laddr_hint.
    */
-  using alloc_extent_iertr = LBAManager::alloc_extent_iertr::extend<
+  using alloc_extent_ertr = base_ertr::extend<
+    crimson::ct_error::enospc>;
+  using alloc_extent_iertr = base_iertr::extend<
     crimson::ct_error::enospc>;
   template <typename T>
   using alloc_extent_ret = alloc_extent_iertr::future<TCachedExtentRef<T>>;

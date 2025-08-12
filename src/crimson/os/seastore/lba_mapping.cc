@@ -80,7 +80,7 @@ bool LBAMapping::is_data_stable() const {
     direct_cursor->key);
 }
 
-LBAMapping::next_iertr::future<LBAMapping> LBAMapping::next()
+base_iertr::future<LBAMapping> LBAMapping::next()
 {
   LOG_PREFIX(LBAMapping::next);
   auto ctx = get_effective_cursor().ctx;
@@ -104,10 +104,10 @@ LBAMapping::next_iertr::future<LBAMapping> LBAMapping::next()
   });
 }
 
-LBAMapping::refresh_iertr::future<LBAMapping> LBAMapping::refresh()
+base_iertr::future<LBAMapping> LBAMapping::refresh()
 {
   if (is_viewable()) {
-    return refresh_iertr::make_ready_future<LBAMapping>(*this);
+    return base_iertr::make_ready_future<LBAMapping>(*this);
   }
   return seastar::do_with(
     direct_cursor,
@@ -117,12 +117,12 @@ LBAMapping::refresh_iertr::future<LBAMapping> LBAMapping::refresh()
       if (direct_cursor) {
 	return direct_cursor->refresh();
       }
-      return refresh_iertr::now();
+      return base_iertr::now();
     }).si_then([&indirect_cursor] {
       if (indirect_cursor) {
 	return indirect_cursor->refresh();
       }
-      return refresh_iertr::now();
+      return base_iertr::now();
     }).si_then([&direct_cursor, &indirect_cursor] {
       return LBAMapping(direct_cursor, indirect_cursor);
     });
