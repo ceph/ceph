@@ -11,6 +11,7 @@
 
 #include "common/armor.h"
 #include "common/ceph_json.h"
+#include "common/Clock.h" // for ceph_clock_now()
 #include "common/config.h"
 #include "common/ceph_argparse.h"
 #include "common/Formatter.h"

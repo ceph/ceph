@@ -21,6 +21,7 @@
 #include "include/rados/buffer.h"
 #include "include/rados/librados.hpp"
 #include "svc_zone.h"
+#include "common/Clock.h" // for ceph_clock_now()
 #include "common/config.h"
 #include "common/Cond.h"
 #include "common/debug.h"

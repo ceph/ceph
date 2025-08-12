@@ -4,6 +4,7 @@
 #pragma once
 
 #include <string>
+#include "include/encoding.h"
 #include "common/ceph_time.h"
 #include "common/iso_8601.h"
 #include "rgw_xml.h"
