@@ -3258,9 +3258,8 @@ int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_si
     ptag = index_op->get_optag();
   }
 
-  r = target->get_state(rctx.dpp, &target->state, &target->manifest, false, rctx.y);
-  if (r < 0)
-    return r;
+  target->manifest = manifest;
+  target->state = state;
   RGWObjState* current_state = target->state;
   if (!target->obj.key.instance.empty()) {
     r = target->get_current_version_state(rctx.dpp, current_state, rctx.y);
@@ -6033,6 +6032,9 @@ int RGWRados::bucket_suspended(const DoutPrefixProvider *dpp, rgw_bucket& bucket
 
 int RGWRados::Object::complete_atomic_modification(const DoutPrefixProvider *dpp, bool keep_tail, optional_yield y)
 {
+  int r = get_state(dpp, &state, &manifest, false, y);
+  if (r < 0)
+    return r;
   if ((!manifest) || keep_tail)
     return 0;
 
