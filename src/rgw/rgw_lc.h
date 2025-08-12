@@ -674,6 +674,7 @@ public:
   int handle_multipart_expiration(rgw::sal::Bucket* target,
 				  const std::multimap<std::string, lc_op>& prefix_map,
 				  ceph::async::spawn_throttle& workpool,
+				  boost::asio::yield_context yield,
 				  LCWorker* worker, time_t stop_at, bool once);
 };
 
