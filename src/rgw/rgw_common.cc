@@ -22,6 +22,7 @@
 
 #include "global/global_init.h"
 #include "common/ceph_crypto.h"
+#include "common/openssl_opts_handler.h"
 #include "common/armor.h"
 #include "common/errno.h"
 #include "common/Clock.h"
@@ -3249,6 +3250,9 @@ rgw_global_init(const std::map<std::string,std::string> *defaults,
 {
   // Load the config from the files, but not the mon
   global_pre_init(defaults, args, module_type, code_env, flags);
+
+  // Init and load specific openssl algorithm
+  ceph::crypto::init_openssl_once();
 
   // Get the store backend
   const auto& config_store = g_conf().get_val<std::string>("rgw_backend_store");
