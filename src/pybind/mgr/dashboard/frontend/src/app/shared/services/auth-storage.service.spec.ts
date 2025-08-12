@@ -1,4 +1,5 @@
 import { AuthStorageService } from './auth-storage.service';
+import { LocalStorage } from '~/app/shared/enum/local-storage-enum';
 
 describe('AuthStorageService', () => {
   let service: AuthStorageService;
@@ -14,13 +15,13 @@ describe('AuthStorageService', () => {
 
   it('should store username', () => {
     service.set(username, '');
-    expect(localStorage.getItem('dashboard_username')).toBe(username);
+    expect(localStorage.getItem(LocalStorage.DASHBOARD_USRENAME)).toBe(username);
   });
 
   it('should remove username', () => {
     service.set(username, '');
     service.remove();
-    expect(localStorage.getItem('dashboard_username')).toBe(null);
+    expect(localStorage.getItem(LocalStorage.DASHBOARD_USRENAME)).toBe(null);
   });
 
   it('should be loggedIn', () => {
