@@ -347,6 +347,7 @@ public:
   dentry_key_map::iterator begin() { return items.begin(); }
   dentry_key_map::iterator end() { return items.end(); }
   dentry_key_map::iterator lower_bound(dentry_key_t key) { return items.lower_bound(key); }
+  dentry_key_map::iterator upper_bound(dentry_key_t key) { return items.upper_bound(key); }
 
   unsigned get_num_head_items() const { return num_head_items; }
   unsigned get_num_head_null() const { return num_head_null; }
