@@ -8,7 +8,7 @@ import _ from 'lodash';
 export class OsdSummaryPipe implements PipeTransform {
   transform(value: any): any {
     if (!value) {
-      return '';
+      return null;
     }
 
     let inCount = 0;
