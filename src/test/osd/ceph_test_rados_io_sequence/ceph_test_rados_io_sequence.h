@@ -289,6 +289,8 @@ using SelectLayers =
                           io_sequence::tester::lrc::mapping_layer_array_sizes,
                           io_sequence::tester::lrc::layer_choices>;
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wsubobject-linkage"
 class SelectMappingAndLayers {
  public:
   SelectMappingAndLayers(ceph::util::random_number_generator<int>& rng,
@@ -304,6 +306,8 @@ class SelectMappingAndLayers {
 
   SelectMapping sma;
   SelectLayers sly;
+#pragma GCC diagnostic pop
+
 };
 }  // namespace lrc
 

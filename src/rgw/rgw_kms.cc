@@ -41,7 +41,7 @@ private:
     struct element {
 	struct element *next;
 	int size;
-	char data[4];
+	char data[32];
     } *b;
     size_t left;
 public:
@@ -61,7 +61,7 @@ public:
     void * Malloc(size_t size) {
 	void *r;
 	if (!size) return 0;
-	size = (size + sizeof(ALIGNTYPE)-1)&(-sizeof(ALIGNTYPE));
+	size = ((std::max(size + 1, sizeof(element))) + sizeof(ALIGNTYPE)-1)&(-sizeof(ALIGNTYPE));
 	if (size > left) {
 		size_t ns { size };
 		if (ns < MINCHUNKSIZE) ns = MINCHUNKSIZE;
@@ -81,7 +81,7 @@ public:
     }
     void* Realloc(void* p, size_t old, size_t nw) {
         if (!nw) return 0;
-        void *r = Malloc(nw);
+        void *r = Malloc(std::max(nw + 1, sizeof(element)));
 	if (nw > old) nw = old;
 	if (r && old) memcpy(r, p, nw);
 	return r;
