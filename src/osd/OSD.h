@@ -2188,7 +2188,7 @@ private:
   }
 
 private:
-  int mon_cmd_maybe_osd_create(std::string &cmd);
+  int mon_cmd_maybe_osd_create(std::string &&cmd);
   int update_crush_device_class();
   int update_crush_location();
 

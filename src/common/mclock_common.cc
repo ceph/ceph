@@ -490,11 +490,10 @@ void MclockConfig::mclock_handle_conf_change(const ConfigProxy& conf,
               "\"who\": \"" + osd + "\", "
               "\"name\": \"" + *key + "\""
             "}";
-          std::vector<std::string> vcmd{cmd};
 
           dout(10) << __func__ << " Removing Key: " << *key
                    << " for " << osd << " from Mon db" << dendl;
-                   monc->start_mon_command(vcmd, {}, nullptr, nullptr, nullptr);
+	  monc->start_mon_command({std::move(cmd)}, {}, nullptr, nullptr, nullptr);
         }
       }
     }
