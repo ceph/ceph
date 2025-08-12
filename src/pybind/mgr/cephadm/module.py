@@ -649,8 +649,6 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
 
         self.tuned_profile_utils = TunedProfileUtils(self)
 
-        self._init_cert_mgr()
-
         # ensure the host lists are in sync
         for h in self.inventory.keys():
             if h not in self.cache.daemons:
@@ -663,9 +661,10 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         self.events = EventStore(self)
         self.offline_hosts: Set[str] = set()
 
-        self.migration = Migrations(self)
-
         service_registry.init_services(self)
+        self._init_cert_mgr()
+
+        self.migration = Migrations(self)
 
         self.mgr_service: MgrService = cast(MgrService, service_registry.get_service('mgr'))
         self.osd_service: OSDService = cast(OSDService, service_registry.get_service('osd'))
@@ -723,23 +722,13 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
 
         self.cert_mgr = CertMgr(self)
 
-        # register global certificates
-        self.cert_mgr.register_cert_key_pair('mgmt-gateway', 'mgmt_gw_cert', 'mgmt_gw_key', TLSObjectScope.GLOBAL)
-        self.cert_mgr.register_cert_key_pair('oauth2-proxy', 'oauth2_proxy_cert', 'oauth2_proxy_key', TLSObjectScope.GLOBAL)
+        for svc in service_registry.get_all_services():
+            if svc.allows_user_certificates:
+                assert svc.SCOPE != TLSObjectScope.UNKNOWN, f"Service {svc.TYPE} requieres certificates but it has not defined its svc.SCOPE field."
+                self.cert_mgr.register_cert_key_pair(svc.TYPE, svc.cert_name, svc.key_name, svc.SCOPE)
 
-        # register per-service certificates
-        self.cert_mgr.register_cert_key_pair('ingress', 'ingress_ssl_cert', 'ingress_ssl_key', TLSObjectScope.SERVICE)
-        self.cert_mgr.register_cert_key_pair('iscsi', 'iscsi_ssl_cert', 'iscsi_ssl_key', TLSObjectScope.SERVICE)
-        self.cert_mgr.register_cert_key_pair('nvmeof', 'nvmeof_server_cert', 'nvmeof_server_key', TLSObjectScope.SERVICE)
         self.cert_mgr.register_cert_key_pair('nvmeof', 'nvmeof_client_cert', 'nvmeof_client_key', TLSObjectScope.SERVICE)
-
-        # register ancilary certificates/keys
         self.cert_mgr.register_cert('nvmeof', 'nvmeof_root_ca_cert', TLSObjectScope.SERVICE)
-        self.cert_mgr.register_cert('rgw', 'rgw_frontend_ssl_cert', TLSObjectScope.SERVICE)
-        self.cert_mgr.register_key('nvmeof', 'nvmeof_encryption_key', TLSObjectScope.SERVICE)
-
-        # register per-host certificates
-        self.cert_mgr.register_cert_key_pair('grafana', 'grafana_cert', 'grafana_key', TLSObjectScope.HOST)
 
         self.cert_mgr.init_tlsobject_store()
 
@@ -3333,8 +3322,8 @@ Then run the following:
         return self.cert_mgr.cert_ls(show_details)
 
     @handle_orch_error
-    def cert_store_entity_ls(self) -> Dict[str, Dict[str, List[str]]]:
-        return self.cert_mgr.get_entities()
+    def cert_store_bindings_ls(self) -> Dict[str, Dict[str, List[str]]]:
+        return self.cert_mgr.get_consumers()
 
     @handle_orch_error
     def cert_store_reload(self) -> str:
@@ -3399,21 +3388,23 @@ Then run the following:
         force: bool = False
     ) -> str:
 
-        if entity not in self.cert_mgr.list_entities():
-            raise OrchestratorError(f"Invalid entity: {entity}. Please use 'ceph orch certmgr entity ls' to list valid entities.")
+        if consumer not in self.cert_mgr.list_consumers():
+            raise OrchestratorError(f"Invalid consumer: {consumer}. Please use 'ceph orch certmgr bindings ls' to list valid consumers.")
 
         # Check the certificate validity status
         target = service_name or hostname
-        cert_info = self.cert_mgr.check_certificate_state(entity, target, cert, key)
-        if not force and not cert_info.is_operationally_valid():
+        cert_info = self.cert_mgr.check_certificate_state(consumer, target, cert, key)
+        debug_mode = self.certificate_check_debug_mode and force
+        if not debug_mode and not cert_info.is_operationally_valid():
             raise OrchestratorError(cert_info.get_status_description())
 
-        # Obtain the certificate name (from entity)
-        cert_names = self.cert_mgr.list_entity_known_certificates(entity)
-        if len(cert_names) == 1:
-            cert_name = cert_names[0]
-        elif len(cert_names) > 1 and not cert_name:
-            raise OrchestratorError(f"Entity '{entity}' has many certificates, please use --cert-name argument to specify which one from the list: {cert_names}")
+        if not cert_name:
+            # If not provided, then obtain the certificate name by using consumer
+            cert_names = self.cert_mgr.list_consumer_known_certificates(consumer)
+            if len(cert_names) == 1:
+                cert_name = cert_names[0]
+            elif len(cert_names) > 1 and not cert_name:
+                raise OrchestratorError(f"Consumer '{consumer}' has many certificates, please use --cert-name argument to specify which one from the list: {cert_names}")
 
         # Check the certificate scope
         scope_errors = {
