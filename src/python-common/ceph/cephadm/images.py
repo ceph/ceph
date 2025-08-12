@@ -39,8 +39,12 @@ class DefaultImages(Enum):
                                      'jaeger_collector')
     JAEGER_AGENT = _create_image('quay.io/jaegertracing/jaeger-agent:1.29', 'jaeger_agent')
     JAEGER_QUERY = _create_image('quay.io/jaegertracing/jaeger-query:1.29', 'jaeger_query')
-    SAMBA = _create_image('quay.io/samba.org/samba-server:devbuilds-centos-amd64', 'samba')
-    SAMBA_METRICS = _create_image('quay.io/samba.org/samba-metrics:latest', 'samba_metrics')
+    SAMBA = _create_image(
+        'quay.io/samba.org/samba-server:ceph20-centos-amd64', 'samba'
+    )
+    SAMBA_METRICS = _create_image(
+        'quay.io/samba.org/samba-metrics:ceph20-centos-amd64', 'samba_metrics'
+    )
     NGINX = _create_image('quay.io/ceph/nginx:sclorg-nginx-126', 'nginx')
     OAUTH2_PROXY = _create_image('quay.io/oauth2-proxy/oauth2-proxy:v7.6.0', 'oauth2_proxy')
 
