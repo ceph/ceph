@@ -5,7 +5,7 @@ from typing import List, cast, Optional
 from ipaddress import ip_address, IPv6Address
 
 from mgr_module import HandleCommandResult
-from ceph.deployment.service_spec import NvmeofServiceSpec
+from ceph.deployment.service_spec import NvmeofServiceSpec, CertificateSource
 
 from orchestrator import (
     OrchestratorError,
@@ -18,6 +18,7 @@ from .service_registry import register_cephadm_service
 from .. import utils
 
 logger = logging.getLogger(__name__)
+NVMEOF_CLIENT_CERT_LABEL = 'client'
 
 
 @register_cephadm_service
@@ -43,6 +44,64 @@ class NvmeofService(CephService):
         # this may raise
         self.mgr._check_pool_exists(spec.pool, spec.service_name())
 
+    def configure_tls(self, spec: NvmeofServiceSpec, daemon_spec: CephadmDaemonDeploySpec) -> None:
+        """
+        Configure TLS and mTLS files for the NVMeoF daemon.
+
+        - Always attaches server_cert/server_key if TLS is enabled.
+        - If mTLS (enable_auth) is enabled, also attaches client_cert, client_key, and root_ca_cert.
+        - Supports both cephadm-signed and user-provided certificates.
+        """
+        svc_name = spec.service_name()
+
+        if not spec.ssl:
+            self.mgr.log.info(f"TLS for nvmeof service {svc_name} is disabled.")
+            return
+
+        host = daemon_spec.host
+
+        # Attach server-side certificates
+        tls_pair = self.get_certificates(daemon_spec)
+        daemon_spec.extra_files.update({
+            'server_cert': tls_pair.cert,
+            'server_key': tls_pair.key,
+        })
+
+        # If mTLS is not enabled, we're done
+        if not spec.enable_auth:
+            return
+
+        client_cert = client_key = root_ca_cert = None
+
+        if spec.certificate_source == CertificateSource.CEPHADM_SIGNED.value:
+            client_tls_pair = self.get_self_signed_certificates_with_label(
+                spec, daemon_spec, NVMEOF_CLIENT_CERT_LABEL
+            )
+            client_cert = client_tls_pair.cert
+            client_key = client_tls_pair.key
+            root_ca_cert = self.mgr.cert_mgr.get_root_ca()
+
+        elif spec.certificate_source == CertificateSource.REFERENCE.value:
+            client_cert = self.mgr.cert_mgr.get_cert('nvmeof_client_cert', service_name=svc_name, host=host)
+            client_key = self.mgr.cert_mgr.get_key('nvmeof_client_key', service_name=svc_name, host=host)
+            root_ca_cert = self.mgr.cert_mgr.get_cert('nvmeof_root_ca_cert', service_name=svc_name, host=host)
+
+        elif spec.certificate_source == CertificateSource.INLINE.value:
+            assert spec.client_cert and spec.client_key and spec.root_ca_cert  # for mypy
+            client_cert, client_key, root_ca_cert = spec.client_cert, spec.client_key, spec.root_ca_cert
+            self.mgr.cert_mgr.save_cert('nvmeof_client_cert', client_cert, svc_name, daemon_spec.host, user_made=True)
+            self.mgr.cert_mgr.save_key('nvmeof_client_key', client_key, svc_name, daemon_spec.host, user_made=True)
+            self.mgr.cert_mgr.save_cert('nvmeof_root_ca_cert', root_ca_cert, svc_name, daemon_spec.host, user_made=True)
+
+        if not all([client_cert, client_key, root_ca_cert]):
+            raise OrchestratorError("mTLS is enabled, but or more of client_cert, client_key, or root_ca_cert is missing or was not set correctly.")
+
+        daemon_spec.extra_files.update({
+            'client_cert': client_cert,
+            'client_key': client_key,
+            'root_ca_cert': root_ca_cert,
+        })
+
     def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
         assert self.TYPE == daemon_spec.daemon_type
 
@@ -51,15 +110,18 @@ class NvmeofService(CephService):
         host_ip = self.mgr.inventory.get_addr(daemon_spec.host)
         map_addr = spec.addr_map.get(daemon_spec.host) if spec.addr_map else None
         map_discovery_addr = spec.discovery_addr_map.get(daemon_spec.host) if spec.discovery_addr_map else None
-
         keyring = self.get_keyring_with_caps(self.get_auth_entity(nvmeof_gw_id),
                                              ['mon', 'profile rbd',
                                               'osd', 'profile rbd'])
 
+        super().register_for_certificates(daemon_spec)
+        self.mgr.cert_mgr.register_self_signed_cert_key_pair(spec.service_name(), NVMEOF_CLIENT_CERT_LABEL)
+        self.configure_tls(spec, daemon_spec)
+
         # TODO: check if we can force jinja2 to generate dicts with double quotes instead of using json.dumps
         transport_tcp_options = json.dumps(spec.transport_tcp_options) if spec.transport_tcp_options else None
         iobuf_options = json.dumps(spec.iobuf_options) if spec.iobuf_options else None
-        name = '{}.{}'.format(utils.name_to_config_section('nvmeof'), nvmeof_gw_id)
+        name = f'{utils.name_to_config_section(self.TYPE)}.{nvmeof_gw_id}'
         rados_id = name[len('client.'):] if name.startswith('client.') else name
 
         # The address is first searched in the per node address map,
@@ -85,7 +147,7 @@ class NvmeofService(CephService):
         gw_conf = self.mgr.template.render('services/nvmeof/ceph-nvmeof.conf.j2', context)
 
         daemon_spec.keyring = keyring
-        daemon_spec.extra_files = {'ceph-nvmeof.conf': gw_conf}
+        daemon_spec.extra_files.update({'ceph-nvmeof.conf': gw_conf})
 
         # Indicate to the daemon whether to utilize huge pages
         if spec.spdk_mem_size:
@@ -101,31 +163,10 @@ class NvmeofService(CephService):
         if spec.enable_dsa_acceleration:
             daemon_spec.extra_files['enable_dsa_acceleration'] = str(spec.enable_dsa_acceleration)
 
-        if spec.enable_auth:
-            if (
-                not spec.client_cert
-                or not spec.client_key
-                or not spec.server_cert
-                or not spec.server_key
-                or not spec.root_ca_cert
-            ):
-                err_msg = 'enable_auth is true but '
-                for cert_key_attr in ['server_key', 'server_cert', 'client_key', 'client_cert', 'root_ca_cert']:
-                    if not hasattr(spec, cert_key_attr):
-                        err_msg += f'{cert_key_attr}, '
-                err_msg += 'attribute(s) missing from nvmeof spec'
-                self.mgr.log.error(err_msg)
-            else:
-                daemon_spec.extra_files['server_cert'] = spec.server_cert
-                daemon_spec.extra_files['client_cert'] = spec.client_cert
-                daemon_spec.extra_files['server_key'] = spec.server_key
-                daemon_spec.extra_files['client_key'] = spec.client_key
-                daemon_spec.extra_files['root_ca_cert'] = spec.root_ca_cert
-
         if spec.encryption_key:
             daemon_spec.extra_files['encryption_key'] = spec.encryption_key
 
-        daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
+        daemon_spec.final_config, _ = self.generate_config(daemon_spec)
         daemon_spec.deps = []
         return daemon_spec
 
@@ -225,6 +266,8 @@ class NvmeofService(CephService):
         Called after the daemon is removed.
         """
         # to clean the keyring up
+        assert daemon.hostname
+
         super().post_remove(daemon, is_failed_deploy=is_failed_deploy)
         service_name = daemon.service_name()
         daemon_name = daemon.name()
@@ -257,6 +300,14 @@ class NvmeofService(CephService):
         _, _, err = self.mgr.mon_command(cmd)
         if err:
             self.mgr.log.error(f"Unable to send monitor command {cmd}, error {err}")
+
+        self.mgr.cert_mgr.rm_self_signed_cert_key_pair(service_name, daemon.hostname, label=NVMEOF_CLIENT_CERT_LABEL)
+        if spec.enable_auth and spec.certificate_source == CertificateSource.INLINE.value:
+            for entry in ['nvmeof_client_cert', 'nvmeof_client_key', 'nvmeof_root_ca_cert']:
+                if 'cert' in entry:
+                    self.mgr.cert_mgr.rm_cert(entry, spec.service_name(), daemon.hostname)
+                elif 'key' in entry:
+                    self.mgr.cert_mgr.rm_key(entry, spec.service_name(), daemon.hostname)
 
     def get_blocking_daemon_hosts(self, service_name: str) -> List[HostSpec]:
         # we should not deploy nvmeof daemons on hosts that already have nvmeof daemons
