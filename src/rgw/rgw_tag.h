@@ -3,9 +3,12 @@
 
 #pragma once
 
+#include <cstdint>
 #include <string>
 #include <include/types.h>
 #include <map>
+
+#include "include/encoding.h"
 
 class RGWObjTags
 {
