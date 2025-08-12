@@ -2138,14 +2138,14 @@ TEST(LibCephFS, SnapDiffChangedBlockWithCustomObjectSize)
   ASSERT_EQ(0, test_mount.rmsnap("snap2"));
 }
 
-TEST(LibCephFS, SnapdiffDeletionRecreation) {
-  size_t bulk_count = 1 << 12;
+TEST(LibCephFS, SnapDiffDeletionRecreation) {
+  int bulk_count = 1 << 13;
   TestMount test_mount("/SnapdiffDeletionRecreation");
 
   ASSERT_EQ(0, test_mount.mkdir("bulk"));
   ASSERT_EQ(0, test_mount.mkdir("test"));
 
-  int i, j;
+  int i;
   char path[PATH_MAX];
   for (i = 0; i < bulk_count; i++) {
     snprintf(path, PATH_MAX - 1, "bulk/%d", i);
