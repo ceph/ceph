@@ -611,8 +611,10 @@ public:
     });
   }
 
+  // clone the mappings in range base~len, returns true if there exists
+  // direct mappings that are cloned.
   using clone_iertr = base_iertr;
-  using clone_ret = clone_iertr::future<>;
+  using clone_ret = clone_iertr::future<bool>;
   clone_ret clone_range(
     Transaction &t,
     laddr_t base,
@@ -628,9 +630,11 @@ public:
       std::move(pos),
       std::move(mapping),
       (extent_len_t)0,
-      [&t, this, updateref, base, len](auto &pos, auto &mapping, auto &offset) {
+      false,
+      [&t, this, updateref, base, len]
+      (auto &pos, auto &mapping, auto &offset, auto &ret) {
       return trans_intr::repeat(
-	[&t, this, &pos, &mapping, &offset, updateref, base, len]()
+	[&t, this, &pos, &mapping, &offset, updateref, base, len, &ret]()
 	-> clone_iertr::future<seastar::stop_iteration> {
 	if (offset >= len) {
 	  return clone_iertr::make_ready_future<
@@ -657,6 +661,9 @@ public:
 	    crimson::ct_error::assert_all{"unexpected error"}
 	  );
 	}
+	if (mapping.is_real()) {
+	  ret = true;
+	}
 	return clone_pin(
 	  t, std::move(pos), std::move(mapping),
 	  (base + offset).checked_to_laddr(), updateref
@@ -671,6 +678,8 @@ public:
 	    return seastar::stop_iteration::no;
 	  });
 	});
+      }).si_then([&ret] {
+	return ret;
       });
     });
   }
