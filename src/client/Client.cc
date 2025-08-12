@@ -12296,14 +12296,14 @@ int Client::WriteEncMgr::read_modify_write(Context *_iofinish)
   end_block_ofs = fscrypt_block_start(endoff - 1);
   ofs_in_end_block = fscrypt_ofs_in_block(endoff - 1);
 
-  need_read_start = ofs_in_start_block >= 0;
+  need_read_start = ofs_in_start_block > 0 || (ofs_in_start_block == 0 && ((endoff - offset) < FSCRYPT_BLOCK_SIZE));
   need_read_end = (endoff <= in->effective_size() && ofs_in_end_block < FSCRYPT_BLOCK_SIZE && start_block != end_block);
   read_start_size = FSCRYPT_BLOCK_SIZE;
 
   bool need_read = need_read_start | need_read_end;
 
 
-  if (read_start_size > 0) {
+  if (need_read_start) {
     finish_read_start_ctx.reset(new iofinish_method_ctx<WriteEncMgr>(*this, &WriteEncMgr::finish_read_start_cb, &aioc));
 
     r = read(start_block_ofs, read_start_size, &startbl, finish_read_start_ctx.get());
