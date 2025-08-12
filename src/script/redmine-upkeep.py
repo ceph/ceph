@@ -48,9 +48,7 @@ GITHUB_RUN_ID = os.getenv("GITHUB_RUN_ID", "nil")
 GITHUB_ACTION_LOG = f"{GITHUB_SERVER_URL}/{GITHUB_REPOSITORY}/actions/runs/{GITHUB_RUN_ID}"
 
 GITHUB_USER = os.getenv("GITHUB_USER", os.getenv("GITHUB_USER", getuser()))
-GITHUB_ORG = "ceph"
-GITHUB_REPO = "ceph"
-GITHUB_API_ENDPOINT = f"https://api.github.com/repos/{GITHUB_ORG}/{GITHUB_REPO}"
+GITHUB_API_ENDPOINT = f"https://api.github.com/repos/{GITHUB_REPOSITORY}"
 
 REDMINE_CUSTOM_FIELD_ID_BACKPORT = 2
 REDMINE_CUSTOM_FIELD_ID_RELEASE = 16
@@ -1399,6 +1397,10 @@ def main():
     if not REDMINE_API_KEY:
         log.fatal("REDMINE_API_KEY not found! Please set REDMINE_API_KEY environment variable or ~/.redmine_key.")
         sys.exit(1)
+
+    if IS_GITHUB_ACTION and GITHUB_REPOSITORY != "ceph/ceph":
+        log.fatal("refusing to run ceph/ceph.git github action for repository {GITHUB_REPOSITORY}")
+        sys.exit(0)
 
     RU = None
     try:
