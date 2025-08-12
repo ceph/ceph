@@ -22,13 +22,17 @@ ARG OSD_FLAVOR="default"
 # (optional) Should be 'true' for CI builds (pull from shaman, etc.)
 ARG CI_CONTAINER="true"
 
+# (optional) ceph custom repo (pull ceph packages from the repo)
+ARG CEPH_CUSTOM_REPO=""
+
 
 RUN /bin/echo -e "\
 FROM_IMAGE: ${FROM_IMAGE}\n\
 CEPH_REF: ${CEPH_REF}\n\
 GANESHA_REPO_BASEURL: ${GANESHA_REPO_BASEURL} \n\
 OSD_FLAVOR: ${OSD_FLAVOR} \n\
-CI_CONTAINER: ${CI_CONTAINER}"
+CI_CONTAINER: ${CI_CONTAINER} \n\
+CEPH_CUSTOM_REPO: ${CEPH_CUSTOM_REPO}"
 
 # Other labels are set automatically by container/build github action
 # See: https://github.com/opencontainers/image-spec/blob/main/annotations.md
@@ -83,23 +87,26 @@ RUN set -ex && \
             ;;\
     esac
 
-# Ceph repo
 RUN --mount=type=secret,id=prerelease_creds set -ex && \
-    rpm --import 'https://download.ceph.com/keys/release.asc' && \
-    ARCH=$(arch); if [ "${ARCH}" == "aarch64" ]; then ARCH="arm64"; fi ;\
-    IS_RELEASE=0 ;\
-    if [[ "${CI_CONTAINER}" == "true" ]] ; then \
-        # TODO: this can return different ceph builds (SHA1) for x86 vs. arm runs. is it important to fix?
-        REPO_URL=$(curl -fs "https://shaman.ceph.com/api/search/?project=ceph&distros=centos/9/${ARCH}&flavor=${OSD_FLAVOR}&ref=${CEPH_REF}&sha1=latest" | jq -r .[0].url) ;\
+    if [ -z "${CEPH_CUSTOM_REPO}" ]; then \
+        rpm --import 'https://download.ceph.com/keys/release.asc' && \
+        ARCH=$(arch); if [ "${ARCH}" == "aarch64" ]; then ARCH="arm64"; fi ;\
+        IS_RELEASE=0 ;\
+        if [[ "${CI_CONTAINER}" == "true" ]] ; then \
+            # TODO: this can return different ceph builds (SHA1) for x86 vs. arm runs. is it important to fix?
+            REPO_URL=$(curl -fs "https://shaman.ceph.com/api/search/?project=ceph&distros=centos/9/${ARCH}&flavor=${OSD_FLAVOR}&ref=${CEPH_REF}&sha1=latest" | jq -r .[0].url) ;\
+        else \
+            IS_RELEASE=1 ;\
+            source /run/secrets/prerelease_creds; \
+            REPO_URL="https://${PRERELEASE_USERNAME}:${PRERELEASE_PASSWORD}@download.ceph.com/prerelease/ceph/rpm-${CEPH_REF}/el9/" ;\
+        fi && \
+        rpm -Uvh "$REPO_URL/noarch/ceph-release-1-${IS_RELEASE}.el9.noarch.rpm" ; \
+        if [[ "$IS_RELEASE" == 1 ]] ; then \
+            sed -i "s;http://download.ceph.com/;https://${PRERELEASE_USERNAME}:${PRERELEASE_PASSWORD}@download.ceph.com/prerelease/ceph/;" /etc/yum.repos.d/ceph.repo ; \
+            dnf clean expire-cache ; \
+        fi \
     else \
-        IS_RELEASE=1 ;\
-        source /run/secrets/prerelease_creds; \
-        REPO_URL="https://${PRERELEASE_USERNAME}:${PRERELEASE_PASSWORD}@download.ceph.com/prerelease/ceph/rpm-${CEPH_REF}/el9/" ;\
-    fi && \
-    rpm -Uvh "$REPO_URL/noarch/ceph-release-1-${IS_RELEASE}.el9.noarch.rpm" ; \
-    if [[ "$IS_RELEASE" == 1 ]] ; then \
-        sed -i "s;http://download.ceph.com/;https://${PRERELEASE_USERNAME}:${PRERELEASE_PASSWORD}@download.ceph.com/prerelease/ceph/;" /etc/yum.repos.d/ceph.repo ; \
-        dnf clean expire-cache ; \
+        curl -fs -L ${CEPH_CUSTOM_REPO} -o /etc/yum.repos.d/ceph.repo ;\
     fi
 
 
