@@ -8,8 +8,10 @@
 #include <vector>
 #include <iosfwd>
 
+#include "include/cephfs/types.h" // for mds_rank_t
 #include "include/denc.h"
 #include "include/stringify.h"
+#include "include/utime.h"
 #include "common/Formatter.h"
 
 #include "mds/mdstypes.h"
