@@ -4172,6 +4172,11 @@ int main(int argc, char **argv)
         }
 	if (pgidstr != "meta") {
 	  auto ch = fs->open_collection(coll_t(pgid));
+	  if (!ch) {
+	    stringstream ss;
+	    cerr << "PG '" << pgid << "' not found" << std::endl;
+	    throw std::runtime_error(ss.str());
+	  }
 	  if (!ghobj.match(fs->collection_bits(ch), pgid.ps())) {
 	    stringstream ss;
 	    ss << "object " << ghobj << " not contained by pg " << pgid;
