@@ -57,7 +57,7 @@ Create Cluster
 
    ceph smb cluster create <cluster_id> {user|active-directory} [--domain-realm=<domain_realm>] [--domain-join-user-pass=<domain_join_user_pass>] [--define-user-pass=<define_user_pass>] [--custom-dns=<custom_dns>] [--placement=<placement>] [--clustering=<clustering>] [--password-filter=<password_filter>] [--password-filter-out=<password_filter_out>]
 
-Create a new logical cluster, identified by the cluster id value. The cluster
+Create a new logical cluster, identified by the cluster ID value. The cluster
 create command must specify the authentication mode the cluster will use. This
 may either be one of:
 
@@ -278,7 +278,7 @@ password_filter
 ``resource_name`` arguments can take the following forms:
 
 - ``ceph.smb.cluster``: show all cluster resources
-- ``ceph.smb.cluster.<cluster_id>``: show specific cluster with given cluster id
+- ``ceph.smb.cluster.<cluster_id>``: show specific cluster with given cluster ID
 - ``ceph.smb.share``: show all share resources
 - ``ceph.smb.share.<cluster_id>``: show all share resources part of the given
   cluster
@@ -453,7 +453,7 @@ custom_ports
     ``smb``, ``smbmetrics``, ``ctdb``, and ``remote-control``. If a service
     name is not present in the mapping the default port will be used.
     For example, ``{"smb": 4455, "smbmetrics": 9009}`` will change the
-    ports used by smb for client access and the metrics exporter, but
+    ports used by SMB for client access and the metrics exporter, but
     not change the port used by the CTDB clustering daemon.
     Note - not all SMB clients are able to use alternate port numbers.
 bind_addrs
@@ -765,7 +765,7 @@ auth
     password
         Required string. The AD user's password
 linked_to_cluster:
-    Optional. A string containing a cluster id. If set, the resource may only
+    Optional. A string containing a cluster ID. If set, the resource may only
     be used with the linked cluster and will automatically be removed when the
     linked cluster is removed.
 
@@ -808,7 +808,7 @@ values
         name
             The name of the group
 linked_to_cluster:
-    Optional. A string containing a cluster id. If set, the resource may only
+    Optional. A string containing a cluster ID. If set, the resource may only
     be used with the linked cluster and will automatically be removed when the
     linked cluster is removed.
 
@@ -848,7 +848,7 @@ credential_type
 value:
     A string containing the TLS certificate or key value in PEM encoding.
 linked_to_cluster:
-    Optional. A string containing a cluster id. If set, the resource may only
+    Optional. A string containing a cluster ID. If set, the resource may only
     be used with the linked cluster and will automatically be removed when the
     linked cluster is removed.
 
