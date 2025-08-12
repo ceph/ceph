@@ -3263,10 +3263,7 @@ int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_si
     ptag = index_op->get_optag();
   }
 
-  r = target->get_state(rctx.dpp, &target->state, &target->manifest, false, rctx.y);
-  if (r < 0)
-    return r;
-  RGWObjState* current_state = target->state;
+  RGWObjState* current_state = state;
   if (!target->obj.key.instance.empty()) {
     r = target->get_current_version_state(rctx.dpp, current_state, rctx.y);
     if (r == -ENOENT) {
@@ -3280,7 +3277,7 @@ int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_si
   if (r < 0) {
     return r;
   }
-  bool guard = ((target->manifest) || (target->state->obj_tag.length() != 0)) && (!target->state->fake_tag);
+  bool guard = (manifest || (state->obj_tag.length() != 0)) && (!state->fake_tag);
   bool set_attr_id_tag = guard && target->obj.key.instance.empty() && (meta.if_nomatch == nullptr || meta.if_nomatch != "*"sv);
   r = target->prepare_atomic_modification(rctx.dpp, op, reset_obj, ptag, meta.modify_tail, set_attr_id_tag, rctx.y);
   if (r < 0)
@@ -6038,6 +6035,9 @@ int RGWRados::bucket_suspended(const DoutPrefixProvider *dpp, rgw_bucket& bucket
 
 int RGWRados::Object::complete_atomic_modification(const DoutPrefixProvider *dpp, bool keep_tail, optional_yield y)
 {
+  int r = get_state(dpp, &state, &manifest, false, y);
+  if (r < 0)
+    return r;
   if ((!manifest) || keep_tail)
     return 0;
 
@@ -7252,6 +7252,9 @@ int RGWRados::Object::check_preconditions(const DoutPrefixProvider *dpp, std::op
 int RGWRados::Object::prepare_atomic_modification(const DoutPrefixProvider *dpp, ObjectWriteOperation& op, bool reset_obj,
                                                   const string *ptag, bool modify_tail, bool set_attr_id_tag, optional_yield y)
 {
+  int r = get_state(dpp, &state, &manifest, false, y);
+  if (r < 0)
+    return r;
   if (!state->is_atomic) {
     ldpp_dout(dpp, 20) << "prepare_atomic_modification: state is not atomic. state=" << (void *) state << dendl;
 
