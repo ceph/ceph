@@ -88,9 +88,9 @@ TEST(LibRadosServicePP, Close) {
       ASSERT_EQ(0, cluster.conf_read_file(NULL));
       cluster.conf_parse_env(NULL);
       ASSERT_EQ(0, cluster.connect());
-      bufferlist inbl, outbl;
+      bufferlist outbl;
       ASSERT_EQ(0, cluster.mon_command("{\"prefix\": \"service dump\"}",
-				       inbl, &outbl, NULL));
+				       {}, &outbl, NULL));
       string s = outbl.to_str();
       cluster.shutdown();
 

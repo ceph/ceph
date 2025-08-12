@@ -150,25 +150,25 @@ public:
 
   int blocklist_add(const std::string& client_address, uint32_t expire_seconds);
 
-  int mon_command(const std::vector<std::string>& cmd, const bufferlist &inbl,
+  int mon_command(std::vector<std::string> &&cmd, bufferlist &&inbl,
 	          bufferlist *outbl, std::string *outs);
-  void mon_command_async(const std::vector<std::string>& cmd, const bufferlist &inbl,
+  void mon_command_async(std::vector<std::string>&& cmd, bufferlist &&inbl,
                          bufferlist *outbl, std::string *outs, Context *on_finish);
   int mon_command(int rank,
-		  const std::vector<std::string>& cmd, const bufferlist &inbl,
+		  std::vector<std::string>&& cmd, bufferlist &&inbl,
 	          bufferlist *outbl, std::string *outs);
-  int mon_command(std::string name,
-		  const std::vector<std::string>& cmd, const bufferlist &inbl,
+  int mon_command(std::string&& name,
+		  std::vector<std::string>&& cmd, bufferlist &&inbl,
 	          bufferlist *outbl, std::string *outs);
-  int mgr_command(const std::vector<std::string>& cmd, const bufferlist &inbl,
+  int mgr_command(std::vector<std::string>&& cmd, bufferlist &&inbl,
 	          bufferlist *outbl, std::string *outs);
   int mgr_command(
-    const std::string& name,
-    const std::vector<std::string>& cmd, const bufferlist &inbl,
+    std::string&& name,
+    std::vector<std::string>&& cmd, bufferlist &&inbl,
     bufferlist *outbl, std::string *outs);
-  int osd_command(int osd, std::vector<std::string>& cmd, const bufferlist& inbl,
+  int osd_command(int osd, std::vector<std::string>&& cmd, bufferlist&& inbl,
                   bufferlist *poutbl, std::string *prs);
-  int pg_command(pg_t pgid, std::vector<std::string>& cmd, const bufferlist& inbl,
+  int pg_command(pg_t pgid, std::vector<std::string>&& cmd, bufferlist&& inbl,
 	         bufferlist *poutbl, std::string *prs);
 
   void handle_log(MLog *m);

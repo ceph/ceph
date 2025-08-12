@@ -244,7 +244,7 @@ int get_config_key(librados::Rados& rados, const std::string& uri,
 
   bufferlist in_bl;
   bufferlist out_bl;
-  int r = rados.mon_command(cmd, in_bl, &out_bl, nullptr);
+  int r = rados.mon_command(std::move(cmd), std::move(in_bl), &out_bl, nullptr);
   if (r < 0) {
     lderr(cct) << "failed to retrieve MON config key " << key << ": "
                << cpp_strerror(r) << dendl;

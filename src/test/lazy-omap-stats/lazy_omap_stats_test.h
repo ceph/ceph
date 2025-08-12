@@ -73,7 +73,7 @@ class LazyOmapStatsTest
   void check_pg_dump_pools();
   void check_pg_ls();
   const std::string get_output(
-      const std::string command = R"({"prefix": "pg dump"})",
+      std::string&& command = R"({"prefix": "pg dump"})",
       const bool silent = false,
       const CommandTarget target = CommandTarget::TARGET_MGR);
   void get_pool_id(const std::string& pool);

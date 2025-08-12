@@ -27,14 +27,13 @@ using namespace librados;
 int get_primary_osd(Rados& rados, const string& pool_name,
 		    const string& oid, int *pprimary)
 {
-  bufferlist inbl;
   string cmd = string("{\"prefix\": \"osd map\",\"pool\":\"")
     + pool_name
     + string("\",\"object\": \"")
     + oid
     + string("\",\"format\": \"json\"}");
   bufferlist outbl;
-  if (int r = rados.mon_command(cmd, inbl, &outbl, nullptr);
+  if (int r = rados.mon_command(std::move(cmd), {}, &outbl, nullptr);
       r < 0) {
     return r;
   }
@@ -60,19 +59,19 @@ int get_primary_osd(Rados& rados, const string& pool_name,
 
 int fence_osd(Rados& rados, int osd)
 {
-  bufferlist inbl, outbl;
+  bufferlist outbl;
   string cmd("{\"prefix\": \"injectargs\",\"injected_args\":["
 	     "\"--ms-blackhole-osd\", "
 	     "\"--ms-blackhole-mon\"]}");
-  return rados.osd_command(osd, cmd, inbl, &outbl, NULL);
+  return rados.osd_command(osd, std::move(cmd), {}, &outbl, NULL);
 }
 
 int mark_down_osd(Rados& rados, int osd)
 {
-  bufferlist inbl, outbl;
+  bufferlist outbl;
   string cmd("{\"prefix\": \"osd down\",\"ids\":[\"" +
 	     stringify(osd) + "\"]}");
-  return rados.mon_command(cmd, inbl, &outbl, NULL);
+  return rados.mon_command(std::move(cmd), {}, &outbl, NULL);
 }
 
 TEST(OSD, StaleRead) {

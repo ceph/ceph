@@ -258,12 +258,12 @@ int parse_io_seq_options(po::variables_map& vm, int argc, char** argv) {
 
 template <typename S>
 int send_mon_command(S& s, librados::Rados& rados, const char* name,
-                     ceph::buffer::list& inbl, ceph::buffer::list* outbl,
+                     ceph::buffer::list&& inbl, ceph::buffer::list* outbl,
                      Formatter* f) {
   std::ostringstream oss;
   encode_json(name, s, f);
   f->flush(oss);
-  int rc = rados.mon_command(oss.str(), inbl, outbl, nullptr);
+  int rc = rados.mon_command(oss.str(), std::move(inbl), outbl, nullptr);
   return rc;
 }
 
@@ -715,7 +715,7 @@ ceph::io_sequence::tester::SelectErasureProfile::select() {
 
 void ceph::io_sequence::tester::SelectErasureProfile::create(
     const ceph::io_sequence::tester::Profile& profile) {
-  bufferlist inbl, outbl;
+  bufferlist outbl;
   auto formatter = std::make_unique<JSONFormatter>(false);
 
   std::vector<std::string> profile_values = {
@@ -752,7 +752,7 @@ void ceph::io_sequence::tester::SelectErasureProfile::create(
       profile.name, profile_values, force};
   int rc =
       send_mon_command(ec_profile_set_request, rados, "OSDECProfileSetRequest",
-                       inbl, &outbl, formatter.get());
+                       {}, &outbl, formatter.get());
   ceph_assert(rc == 0);
 }
 
@@ -760,13 +760,13 @@ const ceph::io_sequence::tester::Profile
 ceph::io_sequence::tester::SelectErasureProfile::selectExistingProfile(
     const std::string& profile_name) {
   int rc;
-  bufferlist inbl, outbl;
+  bufferlist outbl;
   auto formatter = std::make_shared<JSONFormatter>(false);
 
   ceph::messaging::osd::OSDECProfileGetRequest ec_profile_get_request{
       profile_name};
   rc = send_mon_command(ec_profile_get_request, rados, "OSDECProfileGetRequest",
-                        inbl, &outbl, formatter.get());
+                        {}, &outbl, formatter.get());
   ceph_assert(rc == 0);
 
   JSONParser p;
@@ -837,12 +837,12 @@ const std::string ceph::io_sequence::tester::SelectErasurePool::select() {
   if (!dry_run) {
     if (isForced()) {
       int rc;
-      bufferlist inbl, outbl;
+      bufferlist outbl;
       auto formatter = std::make_shared<JSONFormatter>(false);
 
       ceph::messaging::osd::OSDPoolGetRequest osdPoolGetRequest{*force_value,
                                                                 "all"};
-      rc = send_mon_command(osdPoolGetRequest, rados, "OSDPoolGetRequest", inbl,
+      rc = send_mon_command(osdPoolGetRequest, rados, "OSDPoolGetRequest", {},
                             &outbl, formatter.get());
       ceph_assert(rc == 0);
 
@@ -887,7 +887,7 @@ const std::string ceph::io_sequence::tester::SelectErasurePool::select() {
 
 std::string ceph::io_sequence::tester::SelectErasurePool::create() {
   int rc;
-  bufferlist inbl, outbl;
+  bufferlist outbl;
   auto formatter = std::make_shared<JSONFormatter>(false);
 
   std::string pool_name;
@@ -898,7 +898,7 @@ std::string ceph::io_sequence::tester::SelectErasurePool::create() {
   ceph::messaging::osd::OSDECPoolCreateRequest pool_create_request{
       pool_name, "erasure", 8, 8, profile->name};
   rc = send_mon_command(pool_create_request, rados, "OSDECPoolCreateRequest",
-                        inbl, &outbl, formatter.get());
+                        {}, &outbl, formatter.get());
   ceph_assert(rc == 0);
 
   return pool_name;
@@ -906,14 +906,14 @@ std::string ceph::io_sequence::tester::SelectErasurePool::create() {
 
 void ceph::io_sequence::tester::SelectErasurePool::setApplication(
     const std::string& pool_name) {
-  bufferlist inbl, outbl;
+  bufferlist outbl;
   auto formatter = std::make_shared<JSONFormatter>(false);
 
   ceph::messaging::osd::OSDEnableApplicationRequest
   enableApplicationRequest{pool_name, "rados"};
 
   int rc = send_mon_command(enableApplicationRequest, rados,
-                            "OSDEnableApplicationRequest", inbl, &outbl,
+                            "OSDEnableApplicationRequest", {}, &outbl,
                             formatter.get());
 
   ceph_assert(rc == 0);
@@ -930,26 +930,26 @@ void ceph::io_sequence::tester::SelectErasurePool::configureServices(
     bool allow_pool_ec_overwrites,
     bool test_recovery) {
   int rc;
-  bufferlist inbl, outbl;
+  bufferlist outbl;
   auto formatter = std::make_shared<JSONFormatter>(false);
 
   if (!allow_pool_autoscaling) {
     ceph::messaging::osd::OSDSetRequest no_autoscale_request{"noautoscale",
                                                               std::nullopt};
-    rc = send_mon_command(no_autoscale_request, rados, "OSDSetRequest", inbl,
+    rc = send_mon_command(no_autoscale_request, rados, "OSDSetRequest", {},
                           &outbl, formatter.get());
     ceph_assert(rc == 0);
   }
 
   if (!allow_pool_balancer) {
     ceph::messaging::balancer::BalancerOffRequest balancer_off_request;
-    rc = send_mon_command(balancer_off_request, rados, "BalancerOffRequest", inbl,
+    rc = send_mon_command(balancer_off_request, rados, "BalancerOffRequest", {},
                           &outbl, formatter.get());
     ceph_assert(rc == 0);
 
     ceph::messaging::balancer::BalancerStatusRequest balancer_status_request;
     rc = send_mon_command(balancer_status_request, rados, "BalancerStatusRequest",
-                          inbl, &outbl, formatter.get());
+                          {}, &outbl, formatter.get());
     ceph_assert(rc == 0);
 
     JSONParser p;
@@ -965,14 +965,14 @@ void ceph::io_sequence::tester::SelectErasurePool::configureServices(
     ceph::messaging::osd::OSDSetRequest no_deep_scrub_request{"nodeep-scrub",
                                                               std::nullopt};
     rc = send_mon_command(no_deep_scrub_request, rados, "setNoDeepScrubRequest",
-                          inbl, &outbl, formatter.get());
+                          {}, &outbl, formatter.get());
     ceph_assert(rc == 0);
   }
 
   if (!allow_pool_scrubbing) {
     ceph::messaging::osd::OSDSetRequest no_scrub_request{"noscrub",
                                                          std::nullopt};
-    rc = send_mon_command(no_scrub_request, rados, "OSDSetRequest", inbl,
+    rc = send_mon_command(no_scrub_request, rados, "OSDSetRequest", {},
                           &outbl, formatter.get());
     ceph_assert(rc == 0);
   }
@@ -986,7 +986,7 @@ void ceph::io_sequence::tester::SelectErasurePool::configureServices(
                                         "true",
                                         std::nullopt};
       rc = send_mon_command(allow_ec_optimisations_request, rados,
-                            "OSDPoolSetRequest", inbl, &outbl, formatter.get());
+                            "OSDPoolSetRequest", {}, &outbl, formatter.get());
       ceph_assert(rc == 0);
     }
 
@@ -997,7 +997,7 @@ void ceph::io_sequence::tester::SelectErasurePool::configureServices(
                                         "true",
                                         std::nullopt};
       rc = send_mon_command(allow_ec_optimisations_request, rados,
-                            "OSDPoolSetRequest", inbl, &outbl, formatter.get());
+                            "OSDPoolSetRequest", {}, &outbl, formatter.get());
       ceph_assert(rc == 0);
     }
   }
@@ -1006,13 +1006,13 @@ void ceph::io_sequence::tester::SelectErasurePool::configureServices(
     ceph::messaging::config::ConfigSetRequest bluestore_debug_request{
         "global", "bluestore_debug_inject_read_err", "true", std::nullopt};
     rc = send_mon_command(bluestore_debug_request, rados,
-                          "ConfigSetRequest", inbl, &outbl, formatter.get());
+                          "ConfigSetRequest", {}, &outbl, formatter.get());
     ceph_assert(rc == 0);
 
     ceph::messaging::config::ConfigSetRequest max_markdown_request{
         "global", "osd_max_markdown_count", "99999999", std::nullopt};
     rc = send_mon_command(max_markdown_request, rados,
-                          "ConfigSetRequest", inbl, &outbl, formatter.get());
+                          "ConfigSetRequest", {}, &outbl, formatter.get());
     ceph_assert(rc == 0);
   }
 }
@@ -1044,7 +1044,7 @@ ceph::io_sequence::tester::TestObject::TestObject(
 
     int threads = snt.select();
 
-    bufferlist inbl, outbl;
+    bufferlist outbl;
     auto formatter = std::make_unique<JSONFormatter>(false);
 
     exerciser_model = std::make_unique<ceph::io_exerciser::RadosIo>(

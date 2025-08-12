@@ -41,8 +41,7 @@ int RGWSI_ConfigKey_RADOS::get(const string& key, bool secure,
       "\"key\": \"" + key + "\""
     "}";
 
-  bufferlist inbl;
-  int ret = rados->mon_command(cmd, inbl, result, nullptr);
+  int ret = rados->mon_command(std::move(cmd), {}, result, nullptr);
   if (ret < 0) {
     return ret;
   }
