@@ -27,7 +27,7 @@ public:
   using TestType = T;
 };
 
-template <typename _key, typename _can_merge, template<typename, typename, typename ...> class _map = std::map>
+template <typename _key, typename _can_merge, template<typename, typename, typename ...> class _map = std::map, bool _nonconst_iterator = false>
 struct bufferlist_test_type {
   using key = _key;
   using value = bufferlist;
@@ -62,7 +62,7 @@ struct bufferlist_test_type {
   };
 
   using splitter = boost::mpl::apply<make_splitter, _can_merge>;
-  using imap = interval_map<key, value, splitter, _map>;
+  using imap = interval_map<key, value, splitter, _map, _nonconst_iterator>;
 
   struct generate_random {
     bufferlist operator()(key len) {
@@ -81,7 +81,8 @@ using IntervalMapTypes = ::testing::Types<
   bufferlist_test_type<uint64_t, std::false_type>,
   bufferlist_test_type<uint64_t, std::true_type>,
   bufferlist_test_type<uint64_t, std::false_type, boost::container::flat_map>,
-  bufferlist_test_type<uint64_t, std::true_type, boost::container::flat_map>
+  bufferlist_test_type<uint64_t, std::true_type, boost::container::flat_map>,
+  bufferlist_test_type<uint64_t, std::true_type, boost::container::flat_map, true>
 >;
 
 TYPED_TEST_SUITE(IntervalMapTest, IntervalMapTypes);
@@ -403,5 +404,29 @@ TYPED_TEST(IntervalMapTest, print) {
     out << m;
     ASSERT_EQ("{0~5(5),10~5(5)}", fmt::format("{}", m));
     EXPECT_EQ("{0~5(5),10~5(5)}", out.str() );
+  }
+}
+
+/* This test does nothing unless nonconst_iterator is set on the interval map
+ * If it is set, then the simple fact that append_zero() compiles means that
+ * the non-const iterator has been enabled and used. The test then checks that
+ * changing the size of a buffer is illegal.
+ */
+TYPED_TEST(IntervalMapTest, append_buffer_in_loop) {
+  USING_WITH_MERGE;
+  imap m;
+  if constexpr (m.nonconst_iterator_cond()) {
+    m.insert(0, 5, gen(5));
+    try {
+      for (auto && i : m) {
+        i.get_val().append_zero(10);
+      }
+      FAIL(); // Should panic
+    } catch (const std::out_of_range& exception) {
+      ASSERT_EQ("buffer length has changed"sv, exception.what());
+    } catch (const std::exception&) {
+      // Wrong exception.
+      FAIL();
+    }
   }
 }
