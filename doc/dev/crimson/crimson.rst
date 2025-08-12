@@ -43,6 +43,13 @@ use a Crimson build:
 You'll likely need to supply the ``--allow-mismatched-release`` flag to
 use a non-release branch.
 
+You can deploy ``seastore`` osd by cmd:
+
+.. prompt:: bash #
+
+   ceph orch daemon add osd node01:data_devices=/dev/ssd01,/dev/ssd02,objectstore=seastore
+
+
 Configure Crimson with Bluestore
 ================================
 
