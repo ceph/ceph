@@ -37,7 +37,11 @@ concurrency:
 jobs:
   redmine-upkeep:
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/feature/redmine-upkeep'
+    # This condition ensures the job only runs in the main ceph/ceph repository and only on the specified branches.
+    if: github.repository == 'ceph/ceph' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/feature/redmine-upkeep')
+    permissions:
+      # To allow writing comments on PRs:
+      issues: write
     steps:
       - name: Checkout main branch for pull_request_target
         if: github.event_name == 'pull_request_target'

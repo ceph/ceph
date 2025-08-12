@@ -11,6 +11,7 @@
 
 import argparse
 import copy
+import functools
 import inspect
 import itertools
 import json
@@ -39,10 +40,15 @@ except FileNotFoundError:
     pass
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN", GITHUB_TOKEN)
 
+GITHUB_ACTIONS = os.getenv("GITHUB_ACTIONS") == 'true'
+GITHUB_SERVER_URL = os.getenv("GITHUB_SERVER_URL", "https://github.com")
+GITHUB_REPOSITORY = os.getenv("GITHUB_REPOSITORY", "ceph/ceph")
+GITHUB_RUN_ID = os.getenv("GITHUB_RUN_ID", "nil")
+
+GITHUB_ACTION_LOG = f"{GITHUB_SERVER_URL}/{GITHUB_REPOSITORY}/actions/runs/{GITHUB_RUN_ID}"
+
 GITHUB_USER = os.getenv("GITHUB_USER", os.getenv("GITHUB_USER", getuser()))
-GITHUB_ORG = "ceph"
-GITHUB_REPO = "ceph"
-GITHUB_API_ENDPOINT = f"https://api.github.com/repos/{GITHUB_ORG}/{GITHUB_REPO}"
+GITHUB_API_ENDPOINT = f"https://api.github.com/repos/{GITHUB_REPOSITORY}"
 
 REDMINE_CUSTOM_FIELD_ID_BACKPORT = 2
 REDMINE_CUSTOM_FIELD_ID_RELEASE = 16
@@ -54,7 +60,12 @@ REDMINE_CUSTOM_FIELD_ID_RELEASED_IN = 35
 REDMINE_CUSTOM_FIELD_ID_UPKEEP_TIMESTAMP = 37
 
 REDMINE_STATUS_ID_RESOLVED = 3
+REDMINE_STATUS_ID_CLOSED  = 5
 REDMINE_STATUS_ID_REJECTED = 6
+REDMINE_STATUS_ID_WONTFIX = 8
+REDMINE_STATUS_ID_CANTREPRODUCE = 9
+REDMINE_STATUS_ID_DUPLICATE = 10
+REDMINE_STATUS_ID_WONTFIX_EOL = 19
 REDMINE_STATUS_ID_FIX_UNDER_REVIEW = 13
 REDMINE_STATUS_ID_PENDING_BACKPORT = 14
 
@@ -156,6 +167,43 @@ Issue #{self.issue_update.issue.id} referenced "PR #{self.pr_id}":https://github
 </pre>
 """
 
+class PRClosedException(UpkeepException):
+    def __init__(self, issue_update, pr_id, **kwargs):
+        super().__init__(issue_update, **kwargs)
+        self.pr_id = pr_id
+
+    def __str__(self):
+        return "PR is closed without merge"
+
+    def comment(self):
+        return f"""
+Issue #{self.issue_update.issue.id} with status {self.issue_update.issue.status.name} references "PR #{self.pr_id}":https://github.com/ceph/ceph/pull/{self.pr_id} which is closed but not merged.
+
+Possible resolutions:
+
+* **If the PR id is wrong, please update it.**
+* **If the issue was fixed through other means (e.g. in the kernel or Rook), please remove the PR id.**
+* **If the PR is already merged through other means (erroneous backport), mark the issue state as "Rejected".**
+* **Do nothing. This script will ignore this issue while the upkeep-failed tag is applied.**
+"""
+
+class RedmineUpdateException(UpkeepException):
+    def __init__(self, issue_update, **kwargs):
+        super().__init__(issue_update, **kwargs)
+
+    def __str__(self):
+        return "Update to Redmine failed"
+
+    def comment(self):
+        return f"""
+Redmine Update failed:
+
+<pre>
+{self.traceback.strip()}
+</pre>
+"""
+
+
 class IssueUpdate:
     def __init__(self, issue, github_session, git_repo):
         self.issue = issue
@@ -175,17 +223,20 @@ class IssueUpdate:
         self.transform = transform
         self.logger.extra['current_transform'] = transform
 
+    def get_raw_custom_field(self, field_id):
+        cf = self.issue.custom_fields.get(field_id)
+        try:
+            return cf.value if cf else None
+        except redminelib.exceptions.ResourceAttrError:
+            return None
+
     def get_custom_field(self, field_id):
         """ Get the custom field, first from update_payload otherwise issue """
         custom_fields = self.update_payload.setdefault("custom_fields", [])
         for field in custom_fields:
             if field.get('id') == field_id:
                 return field['value']
-        cf = self.issue.custom_fields.get(field_id)
-        try:
-            return cf.value if cf else None
-        except redminelib.exceptions.ResourceAttrError:
-            return None
+        return self.get_raw_custom_field(field_id)
 
     def add_or_update_custom_field(self, field_id, value):
         """Helper to add or update a custom field in the payload."""
@@ -218,6 +269,22 @@ class IssueUpdate:
             self.has_changes = True
             return True
 
+    def add_tag(self, tag):
+        current_tags_str = self.get_custom_field(REDMINE_CUSTOM_FIELD_ID_TAGS)
+        current_tags = []
+        if current_tags_str:
+            current_tags = [current_tag.strip() for current_tag in current_tags_str.split(',') if current_tag.strip()]
+
+        if tag in current_tags:
+            self.logger.debug(f"tag '{tag}' already in tags")
+            return
+        else:
+            current_tags.append(tag)
+            self.logger.info(f"Adding '{tag}' tag.")
+
+        new_tags = ", ".join(current_tags)
+        self.add_or_update_custom_field(REDMINE_CUSTOM_FIELD_ID_TAGS, new_tags)
+
     def get_update_payload(self, suppress_mail=True): # Added suppress_mail parameter
         today = datetime.now(timezone.utc).isoformat(timespec='seconds')
         self.add_or_update_custom_field(REDMINE_CUSTOM_FIELD_ID_UPKEEP_TIMESTAMP, today)
@@ -238,7 +305,7 @@ class IssueUpdate:
             payload['suppress_mail'] = "1"
         return payload
 
-    def fetch_pr(self):
+    def get_pr_id(self):
         self.logger.debug("Attempting to fetch PR data.")
         pr_id = self.get_custom_field(REDMINE_CUSTOM_FIELD_ID_PULL_REQUEST_ID)
         if not pr_id:
@@ -253,10 +320,13 @@ class IssueUpdate:
                     self.logger.info("Found PR ID #%s in issue description.", pr_id)
 
         try:
-            pr_id = int(pr_id)
+            return int(pr_id)
         except (ValueError, TypeError): # Handle None or non-integer values
             self.logger.warning(f"Invalid or missing PR ID '{pr_id}'. Cannot fetch PR.")
             return None
+
+    def fetch_pr(self):
+        pr_id = self.get_pr_id()
 
         # Check if rate limit has been hit globally
         if RedmineUpkeep.GITHUB_RATE_LIMITED:
@@ -321,6 +391,9 @@ class RedmineUpkeep:
     MAX_UPKEEP_FAILURES = 5
 
     class Filter:
+        PRIORITY = 1000
+        NAME = "undefined"
+
         @staticmethod
         def get_filters():
             raise NotImplementedError("NI")
@@ -328,6 +401,16 @@ class RedmineUpkeep:
         @staticmethod
         def requires_github_api():
             raise NotImplementedError("NI")
+
+    def transformation(priority):
+        """A decorator to assign a priority to a transformation method."""
+        def decorator(func):
+            func._priority = priority
+            @functools.wraps(func)
+            def wrapper(*args, **kwargs):
+                return func(*args, **kwargs)
+            return wrapper
+        return decorator
 
     def __init__(self, args):
         self.G = git.Repo(args.git)
@@ -339,6 +422,7 @@ class RedmineUpkeep:
         self.pull_request_id = args.pull_request
         self.merge_commit = args.merge_commit
 
+        self.remote_url = f"{GITHUB_SERVER_URL}/{GITHUB_REPOSITORY}"
         self.upkeep_failures = 0
         self.issues_inspected = 0
         self.issues_modified = 0
@@ -362,18 +446,41 @@ class RedmineUpkeep:
         log.debug(f"Discovered transformation methods: {[m.__name__ for m in self.transform_methods]}")
 
         # Sort transformations for consistent order if needed, e.g., by name
-        self.transform_methods.sort(key=lambda x: x.__name__)
+        self.transform_methods.sort(key=lambda f: f._priority, reverse=True)
         log.debug(f"Sorted transformation methods: {[m.__name__ for m in self.transform_methods]}")
 
         # Discover filters based on prefix
         self.filters = []
         for name, v in RedmineUpkeep.__dict__.items():
             if inspect.isclass(v) and issubclass(v, self.Filter) and v != self.Filter:
-                log.debug("discovered %s", v.NAME)
+                log.debug("discovered filter %s", v.NAME)
                 self.filters.append(v)
         random.shuffle(self.filters) # to shuffle equivalent PRIORITY
         self.filters.sort(key = lambda filter: filter.PRIORITY, reverse=True)
         log.debug(f"Discovered filters: {[f.__name__ for f in self.filters]}")
+
+        self._fetch_heads()
+
+    def _fetch_heads(self):
+        log.info(f"Fetching remote heads from {self.remote_url}.")
+        self.remote_heads = []
+        for line in self.G.git.ls_remote('--heads', self.remote_url).split('\n'):
+            (sha, name) = line.split('\t')
+            final_component = name.rsplit('/', 1)[-1]
+            if not final_component.isalpha():
+                log.debug(f"Head {name} is not alphabetic, skipping.")
+                continue
+            log.debug(f"Adding Head {name} with commit {sha}.")
+            try:
+                self.remote_heads.append(self.G.commit(sha))
+            except ValueError as e:
+                log.debug(f"Could not load commit {sha}, attempting to fetch.")
+                self.G.git.fetch(self.remote_url, sha)
+                try:
+                    self.remote_heads.append(self.G.commit(sha))
+                except ValueError as e:
+                    log.error(f"Error: Could not fetch commit {sha}")
+                    continue
 
     def _redmine_connect(self):
         log.info("Connecting to %s", REDMINE_ENDPOINT)
@@ -381,7 +488,26 @@ class RedmineUpkeep:
         log.info("Successfully connected to Redmine.")
         return R
 
-    # Transformations:
+    class FilterMergedBug1(Filter):
+        """
+        Filter issues with erroneous merge commits.
+        """
+
+        PRIORITY = 1100
+        NAME = "MergedBug"
+
+        @staticmethod
+        def get_filters():
+            filter_set = {
+                f"cf_{REDMINE_CUSTOM_FIELD_ID_PULL_REQUEST_ID}": '>=0',
+                f"cf_{REDMINE_CUSTOM_FIELD_ID_RELEASED_IN}": '~^',
+            }
+            yield {**filter_set, **{f"cf_{REDMINE_CUSTOM_FIELD_ID_TAGS}": "!*"}}
+            yield {**filter_set, **{f"cf_{REDMINE_CUSTOM_FIELD_ID_TAGS}": "!~upkeep-bad-parentage"}}
+
+        @staticmethod
+        def requires_github_api():
+            return True
 
     class FilterMerged(Filter):
         """
@@ -393,19 +519,146 @@ class RedmineUpkeep:
 
         @staticmethod
         def get_filters():
-            return {
+            statuses = [
+                REDMINE_STATUS_ID_PENDING_BACKPORT,
+                REDMINE_STATUS_ID_RESOLVED,
+            ]
+            yield {
                 f"cf_{REDMINE_CUSTOM_FIELD_ID_PULL_REQUEST_ID}": '>=0',
                 f"cf_{REDMINE_CUSTOM_FIELD_ID_MERGE_COMMIT}": '!*',
-                "status_id": [
-                    REDMINE_STATUS_ID_PENDING_BACKPORT,
-                    REDMINE_STATUS_ID_RESOLVED,
-                ],
+                "status_id": ",".join([str(x) for x in statuses]),
             }
 
         @staticmethod
         def requires_github_api():
             return True
 
+    def _find_merge_commit(self, issue_update, HEAD, BASE):
+        """
+        Find merge commit in revrange.
+        """
+
+        # N.B. At the time of writing, using "-1" to limit output breaks the command (returns nothing always).
+        try:
+            revrange = f"{HEAD.hexsha}^..{BASE.hexsha}"
+            merge_commit = self.G.git.log(
+                '--first-parent',
+                '--merges',
+                '--reverse',
+                f"--ancestry-path={HEAD.hexsha}",
+                '--pretty=%H',
+                revrange
+            ).splitlines()
+            if len(merge_commit) == 0:
+                issue_update.logger.debug(f"No commit found in first-parent lineage.")
+            else:
+                merge = self.G.commit(merge_commit[0])
+                m = self._confirm_merge_commit(issue_update, merge, HEAD, BASE)
+                if m:
+                    return m.hexsha
+        except git.exc.GitCommandError as e:
+            issue_update.logger.error(f"Error: Could not find merge commit")
+
+        # Try non-first parent lineage.
+        try:
+            revrange = f"{HEAD.hexsha}^..{BASE.hexsha}"
+            merge_commit = self.G.git.log(
+                '--merges',
+                '--reverse',
+                f"--ancestry-path={HEAD.hexsha}",
+                '--pretty=%H',
+                revrange
+            ).splitlines()
+            if len(merge_commit) == 0:
+                issue_update.logger.debug(f"No commit found in first-parent lineage.")
+            else:
+                merge = self.G.commit(merge_commit[0])
+                m = self._confirm_merge_commit(issue_update, merge, HEAD, BASE)
+                if m:
+                    return m.hexsha
+        except git.exc.GitCommandError as e:
+            issue_update.logger.error(f"Error: Could not find merge commit")
+
+    def _confirm_merge_commit(self, issue_update, merge, HEAD, BASE):
+        """
+        Confirm merge commit is correct.
+        """
+        issue_update.logger.debug(f"Confirming merge commit {merge}")
+
+        if len(merge.parents) <= 1:
+            # not a merge commit
+            return None
+
+        second_parent = merge.parents[1]
+        if second_parent == HEAD:
+            issue_update.logger.debug(f"Found valid merge commit against {BASE}: {merge}")
+            return merge
+        else:
+            issue_update.logger.warning(f"Merge commit second parent is not {HEAD}. Ignoring this merge.")
+            return None
+
+    def _get_merge_commit(self, issue_update):
+        """
+        Figure out the merge commit from the head reference of the PR.
+        """
+        pr_id = issue_update.get_pr_id()
+
+        ref = f"refs/pull/{pr_id}/head"
+
+        try:
+            self.G.git.fetch(self.remote_url, ref)
+            HEAD = self.G.commit('FETCH_HEAD')
+            issue_update.logger.info(f"Pull Request head is {HEAD}.")
+        except git.exc.GitCommandError as e:
+            issue_update.logger.error(f"Error: Could not fetch reference '{ref}' from {self.remote_url}.")
+            issue_update.logger.error(f"Git Error: {e}")
+            return None
+
+        for BASE in self.remote_heads:
+            issue_update.logger.info(f"Examining remote branch HEAD {BASE}.")
+
+            m = self._find_merge_commit(issue_update, HEAD, BASE)
+            if m:
+                return m
+
+        # Fall back to API query
+        pr = issue_update.fetch_pr()
+        if not pr:
+            issue_update.logger.info("No PR data found. Skipping merge check.")
+            return None
+
+        merged = pr.get('merged')
+        if not merged:
+            if pr.get('state') == "closed":
+                raise PRClosedException(issue_update, pr_id)
+            issue_update.logger.info(f"PR #{pr_id} is not merged. Skipping merge check.")
+            return None
+
+        # N.B. merge_commit_sha is sometimes wrong because of branch renames.
+
+        base = pr.get('base')
+        if not base:
+            issue_update.logger.info(f"PR #{pr_id} is merged but has no base?")
+            return None
+
+        issue_update.logger.info(f"PR #{pr_id} base is {base['ref']}")
+
+        try:
+            BASE = self.G.commit(base['sha'])
+        except git.exc.GitCommandError as e:
+            issue_update.logger.debug(f"Fetching {base['ref']}")
+            self.G.git.fetch(self.remote_url, base['ref'])
+            BASE = self.G.commit('FETCH_HEAD')
+
+        m = self._find_merge_commit(issue_update, HEAD, BASE)
+        if m:
+            return m
+
+        issue_update.logger.info(f"Could not find a merge commit for PR #{pr_id}")
+        return None
+
+
+    @transformation(1000)
     def _transform_merged(self, issue_update):
         """
         Transformation: Checks if a PR associated with an issue has been merged
@@ -414,25 +667,26 @@ class RedmineUpkeep:
         issue_update.logger.debug("Running _transform_merged")
 
         commit = issue_update.get_custom_field(REDMINE_CUSTOM_FIELD_ID_MERGE_COMMIT)
+
+        # Fixing bug: GitHub got confused by branch renames and gives the wrong
+        # merge commit. This is detectable by a "Release In" setting like:
+        # v15.2.0~1225^2. Note: sometimes this is self-inflicted because hotfix
+        # branches can mess up the first-parent line of succession.
+        released_in = issue_update.get_custom_field(REDMINE_CUSTOM_FIELD_ID_RELEASED_IN)
+        if released_in and "^" in released_in:
+            issue_update.logger.warning(f"Detected GitHub bug where past merge commit is wrong: {commit}")
+            commit = None
+
         if not commit:
-            issue_update.logger.info("Merge commit not set, will check PR status on GitHub.")
-            pr = issue_update.fetch_pr()
-            if not pr:
-                issue_update.logger.info("No PR data found. Skipping merge check.")
-                return False
+            issue_update.logger.info("Merge commit not set, will check PR status.")
 
-            merged = pr.get('merged')
-            if not merged:
-                issue_update.logger.info(f"PR #{pr['number']} is not merged. Skipping merge check.")
+            commit = self._get_merge_commit(issue_update)
+            if commit:
+                issue_update.logger.info(f"Merge commit is {commit}")
+                issue_update.add_or_update_custom_field(REDMINE_CUSTOM_FIELD_ID_MERGE_COMMIT, commit)
+            else:
+                issue_update.logger.info(f"No merge commit is known")
                 return False
-
-            commit = pr.get('merge_commit_sha')
-            if not commit:
-                issue_update.logger.info(f"PR #{pr['number']} is merged but has no merge commit SHA. Skipping merge check.")
-                return False
-
-            issue_update.logger.info(f"PR #{pr['number']} merged with commit {commit}")
-            issue_update.add_or_update_custom_field(REDMINE_CUSTOM_FIELD_ID_MERGE_COMMIT, commit)
         else:
             issue_update.logger.info(f"Merge commit {commit} is already set. Skipping PR fetch.")
 
@@ -446,6 +700,7 @@ class RedmineUpkeep:
             issue_update.logger.warning(f"Could not get git describe for commit {commit}: {e}")
         return False
 
+    @transformation(10)
     def _transform_backport_resolved(self, issue_update):
         """
         Transformation: Changes backport trackers to "Resolved" if the associated PR is merged.
@@ -460,22 +715,8 @@ class RedmineUpkeep:
 
         commit = issue_update.get_custom_field(REDMINE_CUSTOM_FIELD_ID_MERGE_COMMIT)
         if not commit:
-            issue_update.logger.info("Merge commit not set for backport tracker. Will check PR status.")
-            # Check if the current status is 'Pending Backport'
-            if issue_update.issue.status.id == REDMINE_STATUS_ID_RESOLVED:
-                issue_update.logger.info("Status is already 'Resolved'. Skipping backport resolved check.")
-                return False
-
-            pr = issue_update.fetch_pr()
-            if not pr:
-                issue_update.logger.info("No PR data found. Skipping backport resolved check.")
-                return False
-
-            merged = pr.get('merged')
-            if not merged:
-                issue_update.logger.info(f"PR #{pr['number']} not merged. Skipping backport resolved check.")
-                return False
-            issue_update.logger.info(f"PR #{pr.get('number')} for backport tracker is merged.")
+           issue_update.logger.info(f"No merge commit set, skipping.")
+           return False
 
         # If PR is merged and it's a backport tracker with 'Pending Backport' status, update to 'Resolved'
         if issue_update.issue.status.id != REDMINE_STATUS_ID_RESOLVED:
@@ -497,7 +738,7 @@ class RedmineUpkeep:
 
         @staticmethod
         def get_filters():
-            return {
+            yield {
                 "status_id": REDMINE_STATUS_ID_PENDING_BACKPORT,
             }
 
@@ -505,6 +746,7 @@ class RedmineUpkeep:
         def requires_github_api():
             return False
 
+    @transformation(10)
     def _transform_released(self, issue_update):
         """
         Transformation: Checks if a merged issue has been released and updates
@@ -521,6 +763,10 @@ class RedmineUpkeep:
         issue_update.logger.info(f"'Released In' currently '{released_in}'")
 
         release = issue_update.get_released(commit)
+
+        if release and "^" in release:
+            issue_update.logger.warning(f"Detected parentage linkage issue (first parent chain broken) by hotfix: {release}")
+            issue_update.add_tag('upkeep-bad-parentage')
 
         if release:
             issue_update.logger.info(f"Commit {commit} is part of release {release}.")
@@ -545,7 +791,7 @@ class RedmineUpkeep:
 
         @staticmethod
         def get_filters():
-            return {
+            yield {
                 "status_id": REDMINE_STATUS_ID_PENDING_BACKPORT,
             }
 
@@ -554,6 +800,7 @@ class RedmineUpkeep:
             return False
 
 
+    @transformation(10)
     def _transform_resolve_main_issue_from_backports(self, issue_update):
         """
         Transformation: Resolves a main issue if all its "Copied to" backport
@@ -665,6 +912,104 @@ class RedmineUpkeep:
             issue_update.logger.info(f"Resolved and matched backports found: {resolved_and_matched_backports}")
         return False
 
+
+    class FilterUnresolvedMerged(Filter):
+        """
+        Filters for issues that have a merge commit set but are not yet in
+        'Pending Backport' or 'Resolved' status.
+        """
+
+        PRIORITY = 100
+        NAME = "Unresolved Merge"
+
+        @staticmethod
+        def get_filters():
+            filters = {}
+            filters[f"cf_{REDMINE_CUSTOM_FIELD_ID_MERGE_COMMIT}"] = '*'
+            filter_out_statuses = [
+                REDMINE_STATUS_ID_RESOLVED,
+                REDMINE_STATUS_ID_CLOSED,
+                REDMINE_STATUS_ID_REJECTED,
+                REDMINE_STATUS_ID_WONTFIX,
+                REDMINE_STATUS_ID_CANTREPRODUCE,
+                REDMINE_STATUS_ID_DUPLICATE,
+                REDMINE_STATUS_ID_WONTFIX_EOL,
+                REDMINE_STATUS_ID_PENDING_BACKPORT,
+            ]
+            filters["status_id"] = "!" + ",".join([str(x) for x in filter_out_statuses])
+            yield filters
+
+        @staticmethod
+        def requires_github_api():
+            return False
+
+    @transformation(100)
+    def _transform_set_status_on_merge(self, issue_update):
+        """
+        Transformation: Updates the status of an issue after its associated PR is merged.
+        If the 'Backports' field contains entries, sets status to 'Pending Backport'.
+        If 'Backports' is empty, sets status to 'Resolved'.
+        """
+        issue_update.logger.debug("Running _transform_set_status_on_merge")
+
+        current_status_id = issue_update.issue.status.id
+        merge_commit = issue_update.get_custom_field(REDMINE_CUSTOM_FIELD_ID_MERGE_COMMIT)
+        if not merge_commit:
+            issue_update.logger.info("No merge commit found. Skipping status update.")
+            return False
+
+        # Only proceed if the issue is not already in a final or pending backport state
+        if issue_update.issue.status.is_closed or issue_update.issue.status.id == REDMINE_STATUS_ID_PENDING_BACKPORT:
+            issue_update.logger.info(f"Issue is already closed or 'Pending Backport'. Skipping status update on merge.")
+            return False
+
+        issue_update.logger.info(f"Issue has a merge commit ({merge_commit}) and current status is '{issue_update.issue.status.name}'.")
+
+        backports_field_value = issue_update.get_custom_field(REDMINE_CUSTOM_FIELD_ID_BACKPORT)
+        backports_list = [bp.strip() for bp in (backports_field_value or "").split(',') if bp.strip()]
+
+        if backports_list:
+            # If 'Backports' field has entries, move to PENDING_BACKPORT
+            if current_status_id != REDMINE_STATUS_ID_PENDING_BACKPORT:
+                issue_update.logger.info(f"Backports defined: {backports_list}. Setting status to 'Pending Backport'.")
+                return issue_update.change_field('status_id', REDMINE_STATUS_ID_PENDING_BACKPORT)
+            else:
+                issue_update.logger.info("Status is already 'Pending Backport'. No change needed.")
+                return False
+        else:
+            # If 'Backports' field is empty, move to RESOLVED
+            if current_status_id != REDMINE_STATUS_ID_RESOLVED:
+                issue_update.logger.info("No backports defined. Setting status to 'Resolved'.")
+
+                if self.pull_request_id:
+                    comment_body = f"""
+
+                        This is an automated message by src/script/redmine-upkeep.py.
+
+                        I have resolved the following tracker ticket due to the merge of this PR:
+
+                        * {issue_update.issue.url}
+
+                        No backports are pending for the ticket. If this is incorrect, please update the tracker
+                        ticket and reset to `Pending Backport` state.
+
+                    """
+                    if GITHUB_ACTIONS:
+                        comment_body += f"""
+                            Update Log: {GITHUB_ACTION_LOG}
+                        """
+
+                    comment_body = textwrap.dedent(comment_body)
+                    issue_update.logger.debug(f"Leaving comment:\n{comment_body}")
+
+                    post_github_comment(self.session, self.pull_request_id, comment_body)
+
+                return issue_update.change_field('status_id', REDMINE_STATUS_ID_RESOLVED)
+            else:
+                issue_update.logger.info("Status is already 'Resolved'. No change needed.")
+                return False
+
+
     def _process_issue_transformations(self, issue):
         """
         Applies all discovered transformation methods to a single Redmine issue
@@ -692,6 +1037,7 @@ class RedmineUpkeep:
                     issue_update.logger.info(f"Transformation {transform_method.__name__} resulted in a change.")
                     applied_transformations.append(transform_method.__name__)
 
+            issue_update.set_transform(None)
             if issue_update.has_changes:
                 issue_update.logger.info("Changes detected. Sending update to Redmine...")
                 try:
@@ -712,10 +1058,9 @@ class RedmineUpkeep:
                         self.modifications_made.setdefault(t_name, 0)
                         self.modifications_made[t_name] += 1
                     return True
-                except requests.exceptions.HTTPError as err:
+                except requests.exceptions.HTTPError as e:
                     issue_update.logger.error("API PUT failure during upkeep.", exc_info=True)
-                    self._handle_upkeep_failure(issue_update, err)
-                    return False
+                    raise RedmineUpdateException(issue_update, exception=e, traceback=traceback.format_exc())
             else:
                 issue_update.logger.info("No changes detected after all transformations. No Redmine update sent.")
                 return False
@@ -750,13 +1095,17 @@ class RedmineUpkeep:
         comment = f"""
 h1. Redmine Upkeep failure
 
-The "redmine-upkeep.py script":https://github.com/ceph/ceph/blob/main/src/script/redmine-upkeep.py failed to update this issue.
+The "redmine-upkeep.py script":https://github.com/ceph/ceph/blob/main/src/script/redmine-upkeep.py failed to update this issue. I have added the tag "upkeep-failed" to avoid looking at this issue again.
 
-Please manually fix the issue and remove "upkeep-failed" tag to allow future upkeep operations.
+**Please manually fix the issue and remove "upkeep-failed" tag to allow future upkeep operations.**
 
 h2. Transformation
 
 The script was in the *{issue_update.transform}* transformation.
+
+h2. Update Log
+
+{GITHUB_ACTION_LOG}
 
 h2. Error
 
@@ -770,13 +1119,14 @@ h2. Update Payload
 <pre>
 {json.dumps(issue_update.get_update_payload(suppress_mail=True), indent=4)}
 </pre>
+
 """
         comment = comment.strip()
         issue_update.logger.debug("Created update failure comment:\n%s", comment)
         failure_payload['issue']['notes'] = comment
 
         # Get existing tags or initialize if none
-        current_tags_str = issue_update.get_custom_field(REDMINE_CUSTOM_FIELD_ID_TAGS)
+        current_tags_str = issue_update.get_raw_custom_field(REDMINE_CUSTOM_FIELD_ID_TAGS)
         current_tags = []
         if current_tags_str:
             current_tags = [tag.strip() for tag in current_tags_str.split(',') if tag.strip()]
@@ -784,6 +1134,7 @@ h2. Update Payload
         new_tag = "upkeep-failed"
         if new_tag in current_tags:
             issue_update.logger.warning(f"'upkeep-failed' tag is already present")
+            return
         else:
             current_tags.append(new_tag)
             issue_update.logger.info(f"Adding '{new_tag}' tag.")
@@ -888,7 +1239,7 @@ h2. Update Payload
 
         log.info(f"Found 'Fixes:' tags for tracker(s) #{', '.join([str(x) for x in found_tracker_ids])} in commits.")
 
-        tracker_links = "\n".join([f"https://tracker.ceph.com/issues/{tid}" for tid in found_tracker_ids])
+        tracker_links = "\n".join([f"* https://tracker.ceph.com/issues/{tid}" for tid in found_tracker_ids])
         comment_body = f"""
 
             This is an automated message by src/script/redmine-upkeep.py.
@@ -905,6 +1256,8 @@ h2. Update Payload
             Pull Request merge resolves any of those tickets, please update the
             "Pull Request ID" field on each ticket. A future run of this
             script will appropriately update them.
+
+            Update Log: {GITHUB_ACTION_LOG}
 
         """
         comment_body = textwrap.dedent(comment_body)
@@ -963,8 +1316,11 @@ h2. Update Payload
             "project_id": self.project_id,
             "sort": f'cf_{REDMINE_CUSTOM_FIELD_ID_UPKEEP_TIMESTAMP}',
             "status_id": "*",
-            f"cf_{REDMINE_CUSTOM_FIELD_ID_TAGS}": "!upkeep-failed",
         }
+        upkeep_failed_filters = [
+            {f"cf_{REDMINE_CUSTOM_FIELD_ID_TAGS}": "!*",},
+            {f"cf_{REDMINE_CUSTOM_FIELD_ID_TAGS}": "!~upkeep-failed",}
+        ]
         #f"cf_{REDMINE_CUSTOM_FIELD_ID_UPKEEP_TIMESTAMP}": f"<={cutoff_date}", # Not updated recently
 
         log.info("Beginning to loop through filters.")
@@ -972,29 +1328,32 @@ h2. Update Payload
             if limit <= 0:
                 log.info("Issue processing limit reached. Stopping filter execution.")
                 break
-            issue_filter = {**common_filters, **f.get_filters()}
-            issue_filter['limit'] = limit
-            needs_github_api = f.requires_github_api()
-            try:
-                log.info(f"Running filter {f.NAME} with criteria: {issue_filter}")
-                issues = self.R.issue.filter(**issue_filter)
-                issue_count = len(issues)
-                log.info(f"Filter {f.NAME} returned {issue_count} issue(s).")
-                for issue in issues:
-                    if needs_github_api and self.GITHUB_RATE_LIMITED:
-                        log.warning(f"Stopping filter {f.NAME} due to Github rate limits.")
-                        break
-                    limit = limit - 1
-                    self._process_issue_transformations(issue)
-                    if limit <= 0:
-                        break
-            except redminelib.exceptions.ResourceAttrError as e:
-                log.warning(f"Redmine API error with filter {issue_filter}: {e}")
+            for filter_set in f.get_filters():
+                log.debug(f"Generated filter set: {filter_set}")
+                for upkeep_failed_filter in upkeep_failed_filters:
+                    issue_filter = {**common_filters, **upkeep_failed_filter, **filter_set}
+                    issue_filter['limit'] = limit
+                    needs_github_api = f.requires_github_api()
+                    try:
+                        log.info(f"Running filter {f.NAME} with criteria: {issue_filter}")
+                        issues = self.R.issue.filter(**issue_filter)
+                        issue_count = len(issues)
+                        log.info(f"Filter {f.NAME} returned {issue_count} issue(s).")
+                        for issue in issues:
+                            if needs_github_api and self.GITHUB_RATE_LIMITED:
+                                log.warning(f"Stopping filter {f.NAME} due to Github rate limits.")
+                                break
+                            limit = limit - 1
+                            self._process_issue_transformations(issue)
+                            if limit <= 0:
+                                break
+                    except redminelib.exceptions.ResourceAttrError as e:
+                        log.warning(f"Redmine API error with filter {issue_filter}: {e}")
 
 def main():
     parser = argparse.ArgumentParser(description="Ceph redmine upkeep tool")
     parser.add_argument('--debug', dest='debug', action='store_true', help='turn debugging on')
-    parser.add_argument('--github-action', dest='gha', action='store_true', help='github action output')
+    parser.add_argument('--github-action', default=GITHUB_ACTIONS, dest='gha', action='store_true', help='github action output')
     parser.add_argument('--limit', dest='limit', action='store', type=int, default=200, help='limit processed issues')
     parser.add_argument('--git-dir', dest='git', action='store', default=".", help='git directory')
 
@@ -1038,6 +1397,10 @@ def main():
     if not REDMINE_API_KEY:
         log.fatal("REDMINE_API_KEY not found! Please set REDMINE_API_KEY environment variable or ~/.redmine_key.")
         sys.exit(1)
+
+    if IS_GITHUB_ACTION and GITHUB_REPOSITORY != "ceph/ceph":
+        log.fatal("refusing to run ceph/ceph.git github action for repository {GITHUB_REPOSITORY}")
+        sys.exit(0)
 
     RU = None
     try:
