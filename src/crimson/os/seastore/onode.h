@@ -93,6 +93,15 @@ public:
   virtual const onode_layout_t &get_layout() const = 0;
   virtual ~Onode() = default;
 
+  bool is_head() const {
+    return hobj.is_head();
+  }
+  bool is_snap() const {
+    return hobj.is_snap();
+  }
+  bool need_cow() const {
+    return get_layout().need_cow;
+  }
   virtual void update_onode_size(Transaction&, uint32_t) = 0;
   virtual void update_omap_root(Transaction&, omap_root_t&) = 0;
   virtual void update_log_root(Transaction&, omap_root_t&) = 0;

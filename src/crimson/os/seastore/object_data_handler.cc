@@ -1383,17 +1383,43 @@ ObjectDataHandler::clear_ret ObjectDataHandler::clear(
     });
 }
 
+ObjectDataHandler::clone_ret
+ObjectDataHandler::do_clone(
+  context_t ctx,
+  object_data_t &object_data,
+  object_data_t &d_object_data,
+  LBAMapping first_mapping,
+  bool updateref)
+{
+  LOG_PREFIX("ObjectDataHandler::do_clone");
+  assert(d_object_data.is_null());
+  auto old_base = object_data.get_reserved_data_base();
+  auto old_len = object_data.get_reserved_data_len();
+  auto mapping = co_await prepare_data_reservation(
+    ctx, d_object_data, old_len);
+  ceph_assert(mapping.has_value());
+  DEBUGT("new obj reserve_data_base: {}, len 0x{:x}",
+    ctx.t,
+    d_object_data.get_reserved_data_base(),
+    d_object_data.get_reserved_data_len());
+  auto pos = co_await ctx.tm.remove(ctx.t, std::move(*mapping)
+  ).handle_error_interruptible(
+    clone_iertr::pass_further{},
+    crimson::ct_error::assert_all{"unexpected enoent"}
+  );
+  auto base = d_object_data.get_reserved_data_base();
+  auto len = d_object_data.get_reserved_data_len();
+  auto cr_ret = co_await ctx.tm.clone_range(
+    ctx.t, old_base, base, 0, len, std::move(pos),
+    std::move(first_mapping), updateref);
+  if (cr_ret.shared_direct_mapping) {
+    ctx.onode.set_need_cow(ctx.t);
+  }
+}
+
 ObjectDataHandler::clone_ret ObjectDataHandler::clone(
   context_t ctx)
 {
-  // the whole clone procedure can be seperated into the following steps:
-  // 	1. let clone onode(d_object_data) take the head onode's
-  // 	   object data base;
-  // 	2. reserve a new region in lba tree for the head onode;
-  // 	3. clone all extents of the clone onode, see transaction_manager.h
-  // 	   for the details of clone_pin;
-  // 	4. reserve the space between the head onode's size and its reservation
-  // 	   length.
   return with_objects_data(
     ctx,
     [ctx, this](auto &object_data, auto &d_object_data) {
@@ -1403,50 +1429,8 @@ ObjectDataHandler::clone_ret ObjectDataHandler::clone(
     }
     return ctx.tm.get_pin(ctx.t, object_data.get_reserved_data_base()
     ).si_then([this, &object_data, &d_object_data, ctx](auto mapping) {
-      auto old_base = object_data.get_reserved_data_base();
-      auto old_len = object_data.get_reserved_data_len();
-      return prepare_data_reservation(
-	ctx,
-	d_object_data,
-	object_data.get_reserved_data_len()
-      ).si_then([&object_data, &d_object_data, ctx](auto mapping) {
-	assert(!object_data.is_null());
-	assert(mapping);
-	LOG_PREFIX(ObjectDataHandler::clone);
-	DEBUGT("cloned obj reserve_data_base: {}, len 0x{:x}",
-	  ctx.t,
-	  d_object_data.get_reserved_data_base(),
-	  d_object_data.get_reserved_data_len());
-	return ctx.tm.remove(ctx.t, std::move(*mapping));
-      }).si_then([mapping, &d_object_data, ctx](auto pos) mutable {
-	auto base = d_object_data.get_reserved_data_base();
-	auto len = d_object_data.get_reserved_data_len();
-	return ctx.tm.clone_range(
-	  ctx.t, base, len, std::move(pos), std::move(mapping), true);
-      }).si_then([ctx, &object_data, &d_object_data, this] {
-	object_data.clear();
-	return prepare_data_reservation(
-	  ctx,
-	  object_data,
-	  d_object_data.get_reserved_data_len()
-	).si_then([ctx, &object_data](auto mapping) {
-	  LOG_PREFIX("ObjectDataHandler::clone");
-	  DEBUGT("head obj reserve_data_base: {}, len 0x{:x}",
-	    ctx.t,
-	    object_data.get_reserved_data_base(),
-	    object_data.get_reserved_data_len());
-	  return ctx.tm.remove(ctx.t, std::move(*mapping));
-	});
-      }).si_then([ctx, &object_data, mapping](auto pos) mutable {
-	auto base = object_data.get_reserved_data_base();
-	auto len = object_data.get_reserved_data_len();
-	return ctx.tm.clone_range(
-	  ctx.t, base, len, std::move(pos), std::move(mapping), false);
-      }).si_then([ctx, mapping, old_base, old_len] {
-	return ctx.tm.remove_mappings_in_range(
-	  ctx.t, old_base, old_len, std::move(mapping), {false, true}
-	).discard_result();
-      });
+      ceph_assert(ctx.d_onode);
+      return do_clone(ctx, object_data, d_object_data, std::move(mapping), true);
     }).handle_error_interruptible(
       clone_iertr::pass_further{},
       crimson::ct_error::assert_all{"unexpected enoent"}
