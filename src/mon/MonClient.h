@@ -721,52 +721,18 @@ public:
       }, consigned);
   }
 
-  class ContextVerter {
-    std::string* outs;
-    ceph::bufferlist* outbl;
-    Context* onfinish;
+  class ContextVerter;
 
-  public:
-    ContextVerter(std::string* outs, ceph::bufferlist* outbl, Context* onfinish)
-      : outs(outs), outbl(outbl), onfinish(onfinish) {}
-    ~ContextVerter() = default;
-    ContextVerter(const ContextVerter&) = default;
-    ContextVerter& operator =(const ContextVerter&) = default;
-    ContextVerter(ContextVerter&&) = default;
-    ContextVerter& operator =(ContextVerter&&) = default;
-
-    void operator()(boost::system::error_code e,
-		    std::string&& s,
-		    ceph::bufferlist&& bl) {
-      if (outs)
-	*outs = std::move(s);
-      if (outbl)
-	*outbl = std::move(bl);
-      if (onfinish)
-	onfinish->complete(ceph::from_error_code(e));
-    }
-  };
-
-  void start_mon_command(std::vector<std::string> cmd, bufferlist&& inbl,
+  void start_mon_command(std::vector<std::string>&& cmd, bufferlist&& inbl,
 			 bufferlist *outbl, std::string *outs,
-			 Context *onfinish) {
-    start_mon_command(std::move(cmd), std::move(inbl),
-		      ContextVerter(outs, outbl, onfinish));
-  }
+			 Context *onfinish);
   void start_mon_command(int mon_rank, std::vector<std::string>&& cmd,
 			 bufferlist&& inbl, bufferlist *outbl, std::string *outs,
-			 Context *onfinish) {
-    start_mon_command(mon_rank, std::move(cmd), std::move(inbl),
-		      ContextVerter(outs, outbl, onfinish));
-  }
+			 Context *onfinish);
   void start_mon_command(std::string&& mon_name,  ///< mon name, with mon. prefix
 			 std::vector<std::string>&& cmd, bufferlist&& inbl,
 			 bufferlist *outbl, std::string *outs,
-			 Context *onfinish) {
-    start_mon_command(std::move(mon_name), std::move(cmd), std::move(inbl),
-		      ContextVerter(outs, outbl, onfinish));
-  }
-
+			 Context *onfinish);
 
   // version requests
 public:
