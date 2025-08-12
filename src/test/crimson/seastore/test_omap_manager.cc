@@ -859,6 +859,40 @@ TEST_P(omap_manager_test_t, increasing_key_size)
   });
 }
 
+TEST_P(omap_manager_test_t, heavy_update)
+{
+  run_async([this] {
+    omap_root_t omap_root = initialize();
+
+    std::vector<std::string> inserted_keys;
+    while (omap_root.get_depth() < 2) {
+      auto t = create_mutate_transaction();
+      for (unsigned i = 0; i < 64; ++i) {
+        auto key = set_random_key(omap_root, *t);
+        inserted_keys.push_back(key);
+      }
+      submit_transaction(std::move(t));
+    }
+    check_mappings(omap_root);
+
+    for (unsigned round = 0; round < 10; ++round) {
+      // For each round, select 1024 random keys (including possible
+      // duplicates) and update their values with data of size
+      // pow(2, round) bytes. This covers a wide range of update
+      // scenarios with varying value sizes.
+      auto t = create_mutate_transaction();
+      for (unsigned batch = 0; batch < 1024; ++batch) {
+        auto key = inserted_keys[rand() % inserted_keys.size()];
+        auto val = rand_buffer(std::pow(2, round));
+        set_key(omap_root, *t, key, val);
+      }
+      check_mappings(omap_root, *t);
+      submit_transaction(std::move(t));
+      check_mappings(omap_root);
+    }
+  });
+}
+
 INSTANTIATE_TEST_SUITE_P(
   omap_manager_test,
   omap_manager_test_t,
