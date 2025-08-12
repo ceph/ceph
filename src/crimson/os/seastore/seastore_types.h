@@ -1824,6 +1824,9 @@ public:
     reserved_data_len = 0;
   }
 };
+constexpr object_data_t get_null_object_data() {
+  return object_data_t{L_ADDR_NULL, 0};
+}
 
 struct __attribute__((packed)) object_data_le_t {
   laddr_le_t reserved_data_base = laddr_le_t(L_ADDR_NULL);

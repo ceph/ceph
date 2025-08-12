@@ -323,6 +323,10 @@ public:
   clear_ret clear(context_t ctx);
 
   /// Clone data of an Onode
+  /// Note that the clone always assume that ctx.onode
+  /// is a snap onode, so, for OP_CLONE, the caller of
+  /// this method should swap the layout of the onode
+  /// and the dest_onode first.
   using clone_iertr = base_iertr;
   using clone_ret = clone_iertr::future<>;
   clone_ret clone(context_t ctx);
@@ -336,6 +340,21 @@ private:
     extent_len_t len,
     std::optional<bufferlist> &&bl,
     LBAMapping first_mapping);
+
+  /**
+   * do_clone
+   *
+   * Clone lba mappings from object_data to d_object_data.
+   * object_data must belong to ctx.onode, and d_object_data must belong to ctx.d_onode
+   * This implementation is asymmetric and optimizes for (but does not require) the case
+   * that source is not further mutated.
+   */
+  clone_ret do_clone(
+    context_t ctx,
+    object_data_t &object_data,
+    object_data_t &d_object_data,
+    LBAMapping first_mapping,
+    bool updateref);
 
   /// Ensures object_data reserved region is prepared
   write_iertr::future<std::optional<LBAMapping>>
