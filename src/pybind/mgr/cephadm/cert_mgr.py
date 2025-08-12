@@ -1,16 +1,25 @@
-from typing import TYPE_CHECKING, Tuple, Union, List, Dict, Optional, cast, Any
+from typing import TYPE_CHECKING, Tuple, Union, List, Dict, Optional, cast, Any, Callable
 import logging
+from fnmatch import fnmatch
+from enum import Enum
 
 from cephadm.ssl_cert_utils import SSLCerts, SSLConfigException
 from mgr_util import verify_tls, certificate_days_to_expire, ServerConfigException
 from cephadm.ssl_cert_utils import get_certificate_info, get_private_key_info
-from cephadm.tlsobject_types import Cert, PrivKey
-from cephadm.tlsobject_store import TLSObjectStore, TLSObjectScope, TLSObjectException
+from cephadm.tlsobject_types import Cert, PrivKey, TLSObjectScope, TLSObjectException, CertKeyPair
+from cephadm.tlsobject_store import TLSObjectStore
 
 if TYPE_CHECKING:
     from cephadm.module import CephadmOrchestrator
 
 logger = logging.getLogger(__name__)
+
+
+class CertStatus(str, Enum):
+    VALID = "valid"
+    INVALID = "invalid"
+    EXPIRED = "expired"
+    EXPIRING = "expiring"
 
 
 class CertInfo:
@@ -34,6 +43,19 @@ class CertInfo:
         self.is_close_to_expiration = is_close_to_expiration
         self.days_to_expiration = days_to_expiration
         self.error_info = error_info
+
+    @property
+    def signed_by(self) -> str:
+        return "user" if self.user_made else "cephadm"
+
+    @property
+    def status(self) -> CertStatus:
+        """Return certificate status as a CertStatus enum."""
+        if not self.is_valid:
+            return CertStatus.EXPIRED if "expired" in self.error_info.lower() else CertStatus.INVALID
+        if self.is_close_to_expiration:
+            return CertStatus.EXPIRING
+        return CertStatus.VALID
 
     def __str__(self) -> str:
         return f'{self.cert_name} ({self.target})' if self.target else f'{self.cert_name}'
@@ -74,23 +96,40 @@ class CertMgr:
     This class holds the following important mappings:
       - known_certs
       - known_keys
-      - entities
+      - consumers_by_scope   (maps *consumers* to the certificate/key names bound at each scope)
 
-    First ones holds all the known certificates and keys managed by cephadm. Each certificate/key has a
-    pre-defined scope: Global, Host, or Service.
+    The first two mappings hold all the known certificate/key *names* (logical store identifiers such
+    as "rgw_ssl_cert", "rgw_ssl_key"). These names are not X.509 subjects but certs in PEM (or similar)
+    format in the internal TLS object store.
 
-       - Global: The same certificates is used for all the service daemons (e.g mgmt-gateway).
-       - Host: Certificates specific to individual hosts within the cluster (e.g Grafana).
-       - Service: Certificates tied to specific service (e.g RGW).
+    Each certificate/key name has a pre-defined scope: Global, Host, or Service.
 
-    The entities mapping associates each scoped entity with its certificates. This information is needed
-    to trigger the corresponding service reconfiguration when updating some certificate and also when
-    setting the cert/key pair from CLI.
+       - Global: The same certificate is used cluster-wide for the consumer (e.g., mgmt-gateway).
+       - Host: Certificates specific to individual hosts where the consumer runs (e.g., grafana, oauth2-proxy).
+       - Service: Certificates tied to a specific service type (e.g., RGW) and shared by all its daemons.
+
+    The consumers_by_scope mapping associates each scoped consumer (service type or subsystem/integration such as
+    "rgw", "nfs", "nvmeof", "grafana", "oauth2-proxy") with the certificate/key *names* it uses.
+    This information is needed to trigger the corresponding service reconfiguration when updating some
+    certificate and also when setting the cert/key pair from CLI.
+
+    Notes and invariants:
+      - The cephadm root CA certificate/key are GLOBAL and unique per cluster (include fsid).
+      - Consumers are always service types or subsystems; hosts are never consumers. At HOST scope,
+        the host is the target under the consumer. It doesn't own the certificate.
+      - cephadm-signed names use a fixed prefix and are treated as HOST-scoped, e.g.:
+            cephadm-signed_<service_name>__<label>_cert
+            cephadm-signed_<service_name>__<label>_key
+        (the label is optional; separator is defined by LABEL_SEPARATOR).
+      - Each cert_name/key_name belongs to exactly one scope; SERVICE/HOST scoped names are stored
+        per target (service name or host), while GLOBAL scoped names store a single object.
     """
 
     CEPHADM_ROOT_CA_CERT = 'cephadm_root_ca_cert'
     CEPHADM_ROOT_CA_KEY = 'cephadm_root_ca_key'
     CEPHADM_CERTMGR_HEALTH_ERR = 'CEPHADM_CERT_ERROR'
+    CEPHADM_SIGNED = 'cephadm-signed'
+    LABEL_SEPARATOR = "__"
 
     def __init__(self, mgr: "CephadmOrchestrator") -> None:
         self.mgr = mgr
@@ -105,16 +144,43 @@ class CertMgr:
             TLSObjectScope.HOST: [],
             TLSObjectScope.GLOBAL: [self.CEPHADM_ROOT_CA_KEY],
         }
-        self.entities: Dict[TLSObjectScope, Dict[str, Dict[str, List[str]]]] = {
+        self.consumers_by_scope: Dict[TLSObjectScope, Dict[str, Dict[str, List[str]]]] = {
             TLSObjectScope.SERVICE: {},
             TLSObjectScope.HOST: {},
             TLSObjectScope.GLOBAL: {},
         }
 
+    def is_cephadm_signed_object(self, object_name: str) -> bool:
+        return object_name.startswith(self.CEPHADM_SIGNED)
+
+    def self_signed_cert(self, service_name: str, label: Optional[str] = None) -> str:
+        if label:
+            return f'{self.CEPHADM_SIGNED}_{service_name}{self.LABEL_SEPARATOR}{label}_cert'
+        else:
+            return f'{self.CEPHADM_SIGNED}_{service_name}_cert'
+
+    def self_signed_key(self, service_name: str, label: Optional[str] = None) -> str:
+        if label:
+            return f'{self.CEPHADM_SIGNED}_{service_name}{self.LABEL_SEPARATOR}{label}_key'
+        else:
+            return f'{self.CEPHADM_SIGNED}_{service_name}_key'
+
+    def service_name_from_cert(self, cert_name: str) -> str:
+        prefix = f'{self.CEPHADM_SIGNED}_'
+        suffix = '_cert'
+        if cert_name.startswith(prefix) and cert_name.endswith(suffix):
+            middle = cert_name[len(prefix):-len(suffix)]
+            if self.LABEL_SEPARATOR in middle:
+                service_name, _ = middle.split(self.LABEL_SEPARATOR, 1)
+            else:
+                service_name, _ = middle, None
+            return service_name
+        return 'unknown-service'
+
     def init_tlsobject_store(self) -> None:
-        self.cert_store = TLSObjectStore(self.mgr, Cert, self.known_certs)
+        self.cert_store = TLSObjectStore(self.mgr, Cert, self.known_certs, self.is_cephadm_signed_object)
         self.cert_store.load()
-        self.key_store = TLSObjectStore(self.mgr, PrivKey, self.known_keys)
+        self.key_store = TLSObjectStore(self.mgr, PrivKey, self.known_keys, self.is_cephadm_signed_object)
         self.key_store.load()
         self._initialize_root_ca(self.mgr.get_mgr_ip())
 
@@ -138,29 +204,38 @@ class CertMgr:
     def get_root_ca(self) -> str:
         return self.ssl_certs.get_root_cert()
 
-    def register_cert_key_pair(self, entity: str, cert_name: str, key_name: str, scope: TLSObjectScope) -> None:
+    def register_self_signed_cert_key_pair(self, service_name: str, label: Optional[str] = None) -> None:
         """
-        Registers a certificate/key for a given entity under a specific scope.
+        Registers a self-signed certificate/key for a given service under host scope.
 
-        :param entity: The entity (e.g., service, host) owning the certificate.
+        :param service_name: The name of the service.
+        """
+        self.cert_store.register_object_name(self.self_signed_cert(service_name, label), TLSObjectScope.HOST)
+        self.key_store.register_object_name(self.self_signed_key(service_name, label), TLSObjectScope.HOST)
+
+    def register_cert_key_pair(self, consumer: str, cert_name: str, key_name: str, scope: TLSObjectScope) -> None:
+        """
+        Registers a certificate/key for a given consumer under a specific scope.
+
+        :param consumer: The consumer of the certificate (e.g., service-type, other gobal consumer).
         :param cert_name: The name of the certificate.
         :param key_name: The name of the key.
         :param scope: The TLSObjectScope (SERVICE, HOST, GLOBAL).
         """
-        self.register_cert(entity, cert_name, scope)
-        self.register_key(entity, key_name, scope)
+        self.register_cert(consumer, cert_name, scope)
+        self.register_key(consumer, key_name, scope)
 
-    def register_cert(self, entity: str, cert_name: str, scope: TLSObjectScope) -> None:
-        self._register_tls_object(entity, cert_name, scope, "certs")
+    def register_cert(self, consumer: str, cert_name: str, scope: TLSObjectScope) -> None:
+        self._register_tls_object(consumer, cert_name, scope, "certs")
 
-    def register_key(self, entity: str, key_name: str, scope: TLSObjectScope) -> None:
-        self._register_tls_object(entity, key_name, scope, "keys")
+    def register_key(self, consumer: str, key_name: str, scope: TLSObjectScope) -> None:
+        self._register_tls_object(consumer, key_name, scope, "keys")
 
-    def _register_tls_object(self, entity: str, obj_name: str, scope: TLSObjectScope, obj_type: str) -> None:
+    def _register_tls_object(self, consumer: str, obj_name: str, scope: TLSObjectScope, obj_type: str) -> None:
         """
-        Registers a TLS-related object (certificate or key) for a given entity under a specific scope.
+        Registers a TLS-related object (certificate or key) for a given consumer under a specific scope.
 
-        :param entity: The entity (service name) owning the TLS object.
+        :param consumer: The consumer of the TLS object.
         :param obj_name: The name of the certificate or key.
         :param scope: The TLSObjectScope (SERVICE, HOST, GLOBAL).
         :param obj_type: either "certs" or "keys".
@@ -170,31 +245,45 @@ class CertMgr:
         if obj_name and obj_name not in storage[scope]:
             storage[scope].append(obj_name)
 
-        if entity not in self.entities[scope]:
-            self.entities[scope][entity] = {"certs": [], "keys": []}
+        if consumer not in self.consumers_by_scope[scope]:
+            self.consumers_by_scope[scope][consumer] = {"certs": [], "keys": []}
 
-        self.entities[scope][entity][obj_type].append(obj_name)
+        if obj_name not in self.consumers_by_scope[scope][consumer][obj_type]:
+            self.consumers_by_scope[scope][consumer][obj_type].append(obj_name)
 
-    def cert_to_entity(self, cert_name: str) -> str:
+    def get_associated_service(self, cert_info: CertInfo) -> Optional[str]:
         """
-        Retrieves the entity that owns a given certificate or key name.
-
-        :param cert_name: The certificate or key name.
-        :return: The entity name if found, otherwise None.
+        Retrieves the service associeted to the certificate
         """
-        for scope_entities in self.entities.values():
-            for entity, certs in scope_entities.items():
-                if cert_name in certs:
-                    return entity
-        return 'unkown'
+        if self.is_cephadm_signed_object(cert_info.cert_name):
+            return self.service_name_from_cert(cert_info.cert_name)
+        for scoped_consumers in self.consumers_by_scope.values():
+            for consumer, certs in scoped_consumers.items():
+                if cert_info.cert_name in certs:
+                    cert_scope = self.get_cert_scope(cert_info.cert_name)
+                    if cert_scope == TLSObjectScope.SERVICE:
+                        return cert_info.target
+                    else:
+                        return consumer
+        return None
 
     def generate_cert(
         self,
         host_fqdn: Union[str, List[str]],
         node_ip: Union[str, List[str]],
         custom_san_list: Optional[List[str]] = None,
-    ) -> Tuple[str, str]:
-        return self.ssl_certs.generate_cert(host_fqdn, node_ip, custom_san_list=custom_san_list)
+        duration_in_days: Optional[int] = None,
+    ) -> CertKeyPair:
+        cert, key = self.ssl_certs.generate_cert(host_fqdn, node_ip, custom_san_list=custom_san_list, duration_in_days=duration_in_days)
+        return CertKeyPair(cert=cert, key=key)
+
+    def cert_exists(self, cert_name: str, service_name: Optional[str] = None, host: Optional[str] = None) -> bool:
+        cert_obj = self.cert_store.get_tlsobject(cert_name, service_name, host)
+        return cert_obj is not None
+
+    def is_cert_editable(self, cert_name: str, service_name: Optional[str] = None, host: Optional[str] = None) -> bool:
+        cert_obj = cast(Cert, self.cert_store.get_tlsobject(cert_name, service_name, host))
+        return cert_obj.editable if cert_obj else True
 
     def get_cert(self, cert_name: str, service_name: Optional[str] = None, host: Optional[str] = None) -> Optional[str]:
         cert_obj = cast(Cert, self.cert_store.get_tlsobject(cert_name, service_name, host))
@@ -204,23 +293,84 @@ class CertMgr:
         key_obj = cast(PrivKey, self.key_store.get_tlsobject(key_name, service_name, host))
         return key_obj.key if key_obj else None
 
-    def save_cert(self, cert_name: str, cert: str, service_name: Optional[str] = None, host: Optional[str] = None, user_made: bool = False) -> None:
-        self.cert_store.save_tlsobject(cert_name, cert, service_name, host, user_made)
+    def get_self_signed_cert_key_pair(self, service_name: str, hostname: str, label: Optional[str] = None) -> CertKeyPair:
+        cert_obj = cast(Cert, self.cert_store.get_tlsobject(self.self_signed_cert(service_name, label), host=hostname))
+        key_obj = cast(PrivKey, self.key_store.get_tlsobject(self.self_signed_key(service_name, label), host=hostname))
+        cert = cert_obj.cert if cert_obj else ''
+        key = key_obj.key if key_obj else ''
+        return CertKeyPair(cert=cert, key=key)
 
-    def save_key(self, key_name: str, key: str, service_name: Optional[str] = None, host: Optional[str] = None, user_made: bool = False) -> None:
-        self.key_store.save_tlsobject(key_name, key, service_name, host, user_made)
+    def save_cert(self, cert_name: str, cert: str, service_name: Optional[str] = None, host: Optional[str] = None, user_made: bool = False, editable: bool = False) -> None:
+        self.cert_store.save_tlsobject(cert_name, cert, service_name, host, user_made, editable)
 
-    def rm_cert(self, cert_name: str, service_name: Optional[str] = None, host: Optional[str] = None) -> None:
-        self.cert_store.rm_tlsobject(cert_name, service_name, host)
+    def save_key(self, key_name: str, key: str, service_name: Optional[str] = None, host: Optional[str] = None, user_made: bool = False, editable: bool = False) -> None:
+        self.key_store.save_tlsobject(key_name, key, service_name, host, user_made, editable)
 
-    def rm_key(self, key_name: str, service_name: Optional[str] = None, host: Optional[str] = None) -> None:
-        self.key_store.rm_tlsobject(key_name, service_name, host)
+    def save_self_signed_cert_key_pair(self, service_name: str, tls_pair: CertKeyPair, host: str, label: Optional[str] = None) -> None:
+        ss_cert_name = self.self_signed_cert(service_name, label)
+        ss_key_name = self.self_signed_key(service_name, label)
+        self.cert_store.save_tlsobject(ss_cert_name, tls_pair.cert, host=host, user_made=False)
+        self.key_store.save_tlsobject(ss_key_name, tls_pair.key, host=host, user_made=False)
 
-    def cert_ls(self, include_datails: bool = False) -> Dict:
+    def rm_cert(self, cert_name: str, service_name: Optional[str] = None, host: Optional[str] = None) -> bool:
+        return self.cert_store.rm_tlsobject(cert_name, service_name, host)
+
+    def rm_key(self, key_name: str, service_name: Optional[str] = None, host: Optional[str] = None) -> bool:
+        return self.key_store.rm_tlsobject(key_name, service_name, host)
+
+    def rm_self_signed_cert_key_pair(self, service_name: str, host: str, label: Optional[str] = None) -> None:
+        self.rm_cert(self.self_signed_cert(service_name, label), service_name, host)
+        self.rm_key(self.self_signed_key(service_name, label), service_name, host)
+
+    def cert_ls(self, filter_by: str = '',
+                include_details: bool = False,
+                include_cephadm_signed: bool = False) -> Dict:
+
+        def build_cert_context(cert_info: CertInfo) -> Dict[str, Any]:
+            return {
+                "name": cert_info.cert_name,
+                "status": cert_info.status.value,
+                "signed_by": cert_info.signed_by,
+                "scope": self.get_cert_scope(cert_info.cert_name),
+                "service": self.get_associated_service(cert_info) or '',
+            }
+
+        def _make_filter(expr: str) -> Callable[[Dict[str, Any]], bool]:
+            key, _, value = expr.partition('=')
+            key = key.strip().lower()
+            value = value.strip()
+
+            if key == 'name':
+                return lambda ctx: fnmatch(ctx['name'], value)
+            if key == 'scope':
+                want = value.upper()
+                return lambda ctx: ctx['scope'].name == want
+            if key == 'service':
+                return lambda ctx: fnmatch(ctx['service'], value)
+            if key == 'status':
+                want = value.lower()
+                return lambda ctx: ctx['status'] == want
+            if key == 'signed-by':
+                return lambda ctx: ctx['signed_by'] == value.lower()
+            # Default: unknown field selector -> nop filter (don't exclude)
+            return lambda ctx: True
+
+        # By default: filter out cephadm-signed certs unless explicitly included
+        # with the exception of the cephadm root CA cert (CEPHADM_ROOT_CA_CERT) as
+        # technically the user may be interested in adding it to his CA trust chain
+        filters = [_make_filter(expr) for expr in filter_by.split(",") if expr.strip()]
+        if not include_cephadm_signed and not any('signed-by=' in f for f in filter_by.split(',')):
+            filters.append(lambda ctx: ctx['signed_by'] == 'user' or ctx['name'] == self.CEPHADM_ROOT_CA_CERT)
+
         cert_objects: List = self.cert_store.list_tlsobjects()
         ls: Dict = {}
         for cert_name, cert_obj, target in cert_objects:
-            cert_extended_info = get_certificate_info(cert_obj.cert, include_datails)
+
+            cert_info = self._check_certificate_state(cert_name, target, cert_obj)
+            if not all(f(build_cert_context(cert_info)) for f in filters):
+                continue
+
+            cert_extended_info = get_certificate_info(cert_obj.cert, include_details)
             cert_scope = self.get_cert_scope(cert_name)
             if cert_name not in ls:
                 ls[cert_name] = {'scope': str(cert_scope), 'certificates': {}}
@@ -231,10 +381,12 @@ class CertMgr:
 
         return ls
 
-    def key_ls(self) -> Dict:
+    def key_ls(self, include_cephadm_signed: bool = False) -> Dict:
         key_objects: List = self.key_store.list_tlsobjects()
         ls: Dict = {}
         for key_name, key_obj, target in key_objects:
+            if not include_cephadm_signed and self.is_cephadm_signed_object(key_name):
+                continue
             priv_key_info = get_private_key_info(key_obj.key)
             key_scope = self.get_key_scope(key_name)
             if key_name not in ls:
@@ -249,32 +401,34 @@ class CertMgr:
 
         return ls
 
-    def list_entity_known_certificates(self, entity: str) -> List[str]:
+    def list_consumer_known_certificates(self, consumer: str) -> List[str]:
         """
-        Retrieves all certificates associated with a given entity.
+        Retrieves all certificates associated with a given consumer.
 
-        :param entity: The entity name.
-        :return: A list of certificate names, or None if the entity is not found.
+        :param consumer: The consumer name.
+        :return: A list of certificate names, or None if the consumer is not found.
         """
-        for scope, entities in self.entities.items():
-            if entity in entities:
-                return entities[entity]['certs']  # Return certs for the entity
+        for scope, scoped_consumers in self.consumers_by_scope.items():
+            if consumer in scoped_consumers:
+                return scoped_consumers[consumer]['certs']  # Return certs for the consumer
         return []
 
-    def get_entities(self, get_scope: bool = False) -> Dict[str, Any]:
-        return {f'{scope}': entities for scope, entities in self.entities.items()}
+    def get_consumers(self, get_scope: bool = False) -> Dict[str, Any]:
+        return {f'{scope}': consumers for scope, consumers in self.consumers_by_scope.items()}
 
-    def list_entities(self) -> List[str]:
+    def list_consumers(self) -> List[str]:
         """
-        Retrieves a list of all registered entities across all scopes.
-        :return: A list of entity names.
+        Retrieves a list of all registered consumers across all scopes.
+        :return: A list of consumer names.
         """
-        entities: List[str] = []
-        for scope_entities in self.entities.values():
-            entities.extend(scope_entities.keys())
-        return entities
+        consumers: List[str] = []
+        for scoped_consumers in self.consumers_by_scope.values():
+            consumers.extend(scoped_consumers.keys())
+        return consumers
 
     def get_cert_scope(self, cert_name: str) -> TLSObjectScope:
+        if self.is_cephadm_signed_object(cert_name):
+            return TLSObjectScope.HOST
         for scope, certificates in self.known_certs.items():
             if cert_name in certificates:
                 return scope
@@ -312,11 +466,11 @@ class CertMgr:
             elif cert_info.is_close_to_expiration:
                 expiring_count += 1
 
-        # Generate a short description with a summery of all the detected issues
+        # Generate a short description with a summary of all the detected issues
         issues = [
-            f'{invalid_count} invalid' if invalid_count > 0 else '',
-            f'{expired_count} expired' if expired_count > 0 else '',
-            f'{expiring_count} expiring' if expiring_count > 0 else ''
+            f'{invalid_count} {CertStatus.INVALID.value}' if invalid_count > 0 else '',
+            f'{expired_count} {CertStatus.EXPIRED.value}' if expired_count > 0 else '',
+            f'{expiring_count} {CertStatus.EXPIRING.value}' if expiring_count > 0 else ''
         ]
         issues_description = ', '.join(filter(None, issues))  # collect only non-empty issues
         total_issues = invalid_count + expired_count + expiring_count
@@ -356,48 +510,14 @@ class CertMgr:
         except ServerConfigException as e:
             return CertInfo(cert_name, target, cert.user_made, False, False, 0, str(e))
 
-    def prepare_certificate(self,
-                            cert_name: str,
-                            key_name: str,
-                            host_fqdns: Union[str, List[str]],
-                            host_ips: Union[str, List[str]],
-                            target_host: str = '',
-                            target_service: str = '',
-                            ) -> Tuple[Optional[str], Optional[str]]:
-
-        if not cert_name or not key_name:
-            logger.error("Certificate name and key name must be provided when calling prepare_certificates.")
-            return None, None
-
-        cert_obj = cast(Cert, self.cert_store.get_tlsobject(cert_name, target_service, target_host))
-        key_obj = cast(PrivKey, self.key_store.get_tlsobject(key_name, target_service, target_host))
-        if cert_obj and key_obj:
-            target = target_host or target_service
-            cert_info = self._check_certificate_state(cert_name, target, cert_obj, key_obj)
-            if cert_info.is_operationally_valid():
-                return cert_obj.cert, key_obj.key
-            elif cert_obj.user_made:
-                self._notify_certificates_health_status([cert_info])
-                return None, None
-            else:
-                logger.warning(f'Found invalid cephadm certificate/key pair {cert_name}/{key_name}, '
-                               f'status: {cert_info.get_status_description()}, '
-                               f'error: {cert_info.error_info}')
-
-        # Reaching this point means either certificates are not present or they are
-        # invalid cephadm-signed certificates. Either way, we will just generate new ones.
-        logger.info(f'Generating cephadm-signed certificates for {cert_name}/{key_name}')
-        cert, pkey = self.generate_cert(host_fqdns, host_ips)
-        self.mgr.cert_mgr.save_cert(cert_name, cert, host=target_host, service_name=target_service)
-        self.mgr.cert_mgr.save_key(key_name, pkey, host=target_host, service_name=target_service)
-        return cert, pkey
-
     def get_problematic_certificates(self) -> List[Tuple[CertInfo, Cert]]:
 
         def get_key(cert_name: str, key_name: str, target: Optional[str]) -> Optional[PrivKey]:
             try:
-                service_name, host = self.cert_store.determine_tlsobject_target(cert_name, target)
-                key = cast(PrivKey, self.key_store.get_tlsobject(key_name, service_name=service_name, host=host))
+                tlsobj_target = self.cert_store.determine_tlsobject_target(cert_name, target)
+                key = cast(PrivKey, self.key_store.get_tlsobject(key_name,
+                                                                 service_name=tlsobj_target.service,
+                                                                 host=tlsobj_target.host))
                 return key
             except TLSObjectException:
                 return None
@@ -416,7 +536,7 @@ class CertMgr:
             if key_obj:
                 # certificate has a key, let's check the cert/key pair
                 cert_info = self._check_certificate_state(cert_name, target, cert_obj, key_obj)
-            elif key_name in self.known_keys:
+            elif key_name in self.known_keys or self.is_cephadm_signed_object(key_name):
                 # certificate is supposed to have a key but it's missing
                 logger.error(f"Key '{key_name}' is missing for certificate '{cert_name}'.")
                 cert_info = CertInfo(cert_name, target, cert_obj.user_made, False, False, 0, "missing key")
@@ -436,10 +556,10 @@ class CertMgr:
         try:
             logger.info(f'Renewing cephadm-signed certificate for {cert_info.cert_name}')
             new_cert, new_key = self.ssl_certs.renew_cert(cert_obj.cert, self.mgr.certificate_duration_days)
-            service_name, host = self.cert_store.determine_tlsobject_target(cert_info.cert_name, cert_info.target)
-            self.cert_store.save_tlsobject(cert_info.cert_name, new_cert, service_name=service_name, host=host)
+            tlsobj_target = self.cert_store.determine_tlsobject_target(cert_info.cert_name, cert_info.target)
+            self.cert_store.save_tlsobject(cert_info.cert_name, new_cert, service_name=tlsobj_target.service, host=tlsobj_target.host)
             key_name = cert_info.cert_name.replace('_cert', '_key')
-            self.key_store.save_tlsobject(key_name, new_key, service_name=service_name, host=host)
+            self.key_store.save_tlsobject(key_name, new_key, service_name=tlsobj_target.service, host=tlsobj_target.host)
             return True
         except SSLConfigException as e:
             logger.error(f'Error while trying to renew cephadm-signed certificate for {cert_info.cert_name}: {e}')
@@ -494,9 +614,13 @@ class CertMgr:
                 continue
 
             if fix_issues and trigger_auto_fix(cert_info, cert_obj):
-                services_to_reconfig.add(self.cert_to_entity(cert_info.cert_name))
+                svc = self.get_associated_service(cert_info)
+                if svc:
+                    services_to_reconfig.add(svc)
+                else:
+                    logger.error(f'Cannot find the service associated with the certificate {cert_info.cert_name}')
 
-        # Clear previously reported issues as we are newly checking all the certifiactes
+        # Clear previously reported issues as we are newly checking all the certificates
         self.certificates_health_report = []
 
         # All problematic certificates have been processed. certs_with_issues now only
