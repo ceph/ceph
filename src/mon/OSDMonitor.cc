@@ -4142,9 +4142,11 @@ bool OSDMonitor::preprocess_pgtemp(MonOpRequestRef op)
     // change?
     //  NOTE: we assume that this will clear pg_primary, so consider
     //        an existing pg_primary field to imply a change
+    std::vector<int> acting_set;
+    osdmap.pg_to_acting_osds(p->first, acting_set);
     if (p->second.size() &&
 	(osdmap.pg_temp->count(p->first) == 0 ||
-	 osdmap.pg_temp->get(p->first) != p->second ||
+	 acting_set != p->second ||
 	 osdmap.primary_temp->count(p->first)))
       return false;
   }
