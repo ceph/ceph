@@ -619,31 +619,7 @@ public:
   auto start_mon_command(std::vector<std::string>&& cmd,
                          ceph::buffer::list&& inbl,
 			 CompletionToken&& token) {
-    namespace asio = boost::asio;
-    ldout(cct,10) << __func__ << " cmd=" << cmd << dendl;
-    auto consigned = asio::consign(
-      std::forward<CompletionToken>(token), asio::make_work_guard(
-	asio::get_associated_executor(token, service.get_executor())));
-    return asio::async_initiate<decltype(consigned), CommandSig>(
-      [this, cmd = std::move(cmd),
-       inbl = std::move(inbl)](auto handler) mutable {
-	std::scoped_lock l(monc_lock);
-	if (!initialized || stopping) {
-	  asio::dispatch(
-	    asio::get_associated_immediate_executor(handler,
-						    service.get_executor()),
-	    asio::append(std::move(handler),
-			 make_error_code(monc_errc::shutting_down),
-			 std::string{}, bufferlist{}));
-	} else {
-	  auto r = new MonCommand(*this, ++last_mon_command_tid,
-				  std::move(handler));
-	  r->cmd = std::move(cmd);
-	  r->inbl = std::move(inbl);
-	  mon_commands.emplace(r->tid, r);
-	  _send_command(r);
-	}
-      }, consigned);
+    return start_mon_command(-1, std::move(cmd), std::move(inbl), std::forward<CompletionToken>(token));
   }
 
   template<typename CompletionToken>
