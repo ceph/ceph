@@ -837,6 +837,28 @@ TEST_P(omap_manager_test_t, full_range_list)
   });
 }
 
+TEST_P(omap_manager_test_t, long_key_stress_test)
+{
+  // reproduces https://tracker.ceph.com/issues/72270
+  run_async([this] {
+    omap_root_t omap_root = initialize();
+
+    size_t target_size = 10 * 1000; // 10MB
+    while (test_omap_mappings.size() < target_size) {
+      auto t = create_mutate_transaction();
+      for (unsigned i = 0; i < 64; i++) {
+        auto key = rand_name(1000);
+        set_key(omap_root, *t, key, rand_buffer(1));
+        key = rand_name(1000);
+        set_key(omap_root, *t, key, rand_buffer(1));
+        rm_key(omap_root, *t, test_omap_mappings.begin()->first);
+      }
+      submit_transaction(std::move(t));
+    }
+    check_mappings(omap_root);
+  });
+}
+
 TEST_P(omap_manager_test_t, increasing_key_size)
 {
   // reproduces https://tracker.ceph.com/issues/72303

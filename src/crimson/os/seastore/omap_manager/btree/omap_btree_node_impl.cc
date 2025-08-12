@@ -559,7 +559,7 @@ OMapInnerNode::do_balance(
   DEBUGT("balanced l {} r {} liter {} riter {}",
     oc.t, *l, *r, liter->get_key(), riter->get_key());
   return l->make_balanced(oc, r, *pivot_idx
-  ).si_then([FNAME, liter=liter, riter=riter, l=l, r=r, oc, this](auto tuple) {
+  ).si_then([FNAME, pivot_idx=*pivot_idx, liter=liter, riter=riter, l=l, r=r, oc, this](auto tuple) {
     auto [replacement_l, replacement_r, replacement_pivot] = tuple;
     replacement_l->init_range(l->get_begin(), replacement_pivot);
     replacement_r->init_range(replacement_pivot, r->get_end());
@@ -571,7 +571,7 @@ OMapInnerNode::do_balance(
       auto &rep_left = *replacement_l->template cast<OMapInnerNode>();
       auto &rep_right = *replacement_r->template cast<OMapInnerNode>();
       this->adjust_copy_src_dest_on_balance(
-	oc.t, left, right, true, rep_left, rep_right);
+	oc.t, left, right, pivot_idx, rep_left, rep_right);
     }
 
     //update operation will not cuase node overflow, so we can do it first
