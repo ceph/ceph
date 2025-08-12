@@ -296,8 +296,8 @@ public:
 					eversion_t previous_version) {});
     }
 
-    mempool::osd_pglog::list<pg_log_entry_t> rewind_from_head(eversion_t newhead) {
-      auto divergent = pg_log_t::rewind_from_head(newhead);
+    mempool::osd_pglog::list<pg_log_entry_t> rewind_from_head(eversion_t newhead, bool *dirty_log = nullptr) {
+      auto divergent = pg_log_t::rewind_from_head(newhead, dirty_log);
       index();
       reset_rollback_info_trimmed_to_riter();
       return divergent;
@@ -1404,11 +1404,7 @@ public:
       invalidate_stats = invalidate_stats || !p->is_error();
       if (log) {
 	ldpp_dout(dpp, 20) << "update missing, append " << *p << dendl;
-        // Skip the log entry if it is a partial write that did not involve
-        // this shard
-        if (!pool.is_nonprimary_shard(shard) || p->is_written_shard(shard)) {
-	  log->add(*p);
-	}
+	log->add(*p);
       }
       if (p->soid <= last_backfill &&
 	  !p->is_error()) {
@@ -1716,10 +1712,18 @@ public:
 	      if (debug_verify_stored_missing) {
 		auto miter = missing.get_items().find(i->soid);
 		ceph_assert(miter != missing.get_items().end());
-		ceph_assert(miter->second.need == i->version);
 		// the 'have' version is reset if an object is deleted,
 		// then created again
-		ceph_assert(miter->second.have == oi.version || miter->second.have == eversion_t());
+		if (ec_optimizations_enabled) {
+		  // non-primary shards in an optimized pool may not have updates
+		  // because of partial writes, which may result in oi.version being
+		  // less than have
+		  ceph_assert(miter->second.need >= i->version);
+		  ceph_assert(miter->second.have >= oi.version || miter->second.have == eversion_t());
+		} else {
+		  ceph_assert(miter->second.need == i->version);
+		  ceph_assert(miter->second.have == oi.version || miter->second.have == eversion_t());
+		}
 		checked.insert(i->soid);
 	      } else {
 		missing.add(i->soid, i->version, oi.version, i->is_delete());
