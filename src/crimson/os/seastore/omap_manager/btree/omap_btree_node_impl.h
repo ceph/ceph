@@ -285,7 +285,7 @@ private:
     OMapNodeRef l,
     OMapNodeRef r);
 
-  using get_child_node_iertr = OMapNode::base_iertr;
+  using get_child_node_iertr = base_iertr;
   using get_child_node_ret = get_child_node_iertr::future<OMapNodeRef>;
   get_child_node_ret get_child_node(
     omap_context_t oc,
@@ -499,7 +499,7 @@ struct OMapLeafNode
 };
 using OMapLeafNodeRef = OMapLeafNode::OMapLeafNodeRef;
 
-using omap_load_extent_iertr = OMapNode::base_iertr;
+using omap_load_extent_iertr = base_iertr;
 template <typename T>
 requires std::is_same_v<OMapInnerNode, T> || std::is_same_v<OMapLeafNode, T>
 omap_load_extent_iertr::future<TCachedExtentRef<T>>

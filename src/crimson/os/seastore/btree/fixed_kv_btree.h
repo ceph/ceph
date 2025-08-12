@@ -12,6 +12,7 @@
 
 #include "crimson/os/seastore/cache.h"
 #include "crimson/os/seastore/seastore_types.h"
+#include "crimson/os/seastore/transaction_interruptor.h"
 #include "crimson/os/seastore/btree/btree_types.h"
 #include "crimson/os/seastore/root_block.h"
 #include "crimson/os/seastore/linked_tree_node.h"
@@ -51,10 +52,6 @@ class FixedKVBtree {
 public:
   using InternalNodeRef = TCachedExtentRef<internal_node_t>;
   using LeafNodeRef = TCachedExtentRef<leaf_node_t>;
-
-  using base_ertr = crimson::errorator<
-    crimson::ct_error::input_output_error>;
-  using base_iertr = trans_iertr<base_ertr>;
 
   class iterator;
   using iterator_fut = base_iertr::future<iterator>;

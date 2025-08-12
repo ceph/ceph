@@ -163,15 +163,13 @@ public:
 
   LogicalChildNodeRef peek_logical_extent(Transaction &t) const;
 
-  using refresh_iertr = LBACursor::base_iertr;
   //TODO: should be changed to return future<> once all calls
   //	  to refresh are through co_await. We return LBAMapping
   //	  for now to avoid mandating the callers to make sure
   //	  the life of the lba mapping survives the refresh.
-  refresh_iertr::future<LBAMapping> refresh();
+  base_iertr::future<LBAMapping> refresh();
 
-  using next_iertr = LBACursor::base_iertr;
-  next_iertr::future<LBAMapping> next();
+  base_iertr::future<LBAMapping> next();
 
 private:
   friend lba::BtreeLBAManager;

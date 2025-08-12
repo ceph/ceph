@@ -29,8 +29,6 @@ namespace crimson::os::seastore {
  */
 class LBAManager {
 public:
-  using base_iertr = Cache::base_iertr;
-
   using mkfs_iertr = base_iertr;
   using mkfs_ret = mkfs_iertr::future<>;
   virtual mkfs_ret mkfs(

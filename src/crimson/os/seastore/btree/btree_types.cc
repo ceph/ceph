@@ -8,7 +8,7 @@
 
 namespace crimson::os::seastore {
 
-LBACursor::base_iertr::future<> LBACursor::refresh()
+base_iertr::future<> LBACursor::refresh()
 {
   LOG_PREFIX(LBACursor::refresh);
   return with_btree<lba::LBABtree>(

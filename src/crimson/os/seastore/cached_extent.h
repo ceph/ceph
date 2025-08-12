@@ -14,7 +14,7 @@
 
 #include "include/buffer.h"
 #include "crimson/os/seastore/seastore_types.h"
-#include "crimson/os/seastore/transaction_interruptor.h"
+#include "crimson/common/errorator.h"
 
 struct btree_lba_manager_test;
 struct lba_btree_test;
@@ -23,6 +23,7 @@ struct cache_test_t;
 
 namespace crimson::os::seastore {
 
+class Transaction;
 class CachedExtent;
 using CachedExtentRef = boost::intrusive_ptr<CachedExtent>;
 class SegmentedAllocator;

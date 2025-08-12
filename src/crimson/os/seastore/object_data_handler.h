@@ -268,8 +268,6 @@ using ObjectDataBlockRef = TCachedExtentRef<ObjectDataBlock>;
 
 class ObjectDataHandler {
 public:
-  using base_iertr = TransactionManager::base_iertr;
-
   ObjectDataHandler(uint32_t mos) : max_object_size(mos),
     delta_based_overwrite_max_extent_size(
       crimson::common::get_conf<Option::size_t>("seastore_data_delta_based_overwrite")) {}

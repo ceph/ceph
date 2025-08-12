@@ -634,7 +634,7 @@ struct transaction_manager_test_t :
   TestBlockRef try_read_pin(
     test_transaction_t &t,
     const LBAMapping pin) {
-    using ertr = with_trans_ertr<TransactionManager::base_iertr>;
+    using ertr = with_trans_ertr<base_iertr>;
     bool indirect = pin.is_indirect();
     auto addr = pin.get_key();
     auto im_addr = pin.get_intermediate_base();
@@ -1185,11 +1185,11 @@ struct transaction_manager_test_t :
         trans, std::move(opin), std::array{
           remap_entry_t(new_offset, new_len)}
       ).si_then([](auto ret) {
-        return TransactionManager::base_iertr::make_ready_future<
+        return base_iertr::make_ready_future<
 	  std::optional<LBAMapping>>(std::move(ret[0]));
       });
     }).handle_error(crimson::ct_error::eagain::handle([] {
-      return TransactionManager::base_iertr::make_ready_future<
+      return base_iertr::make_ready_future<
 	std::optional<LBAMapping>>();
     }), crimson::ct_error::pass_further_all{}).unsafe_get();
     if (t.t->is_conflicted()) {

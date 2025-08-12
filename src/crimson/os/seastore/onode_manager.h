@@ -22,7 +22,6 @@
 namespace crimson::os::seastore {
 
 class OnodeManager {
-  using base_iertr = TransactionManager::base_iertr;
 public:
   using mkfs_iertr = base_iertr;
   using mkfs_ret = mkfs_iertr::future<>;

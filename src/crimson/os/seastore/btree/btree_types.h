@@ -10,6 +10,7 @@
 #include "crimson/os/seastore/cached_extent.h"
 #include "crimson/os/seastore/seastore_types.h"
 #include "crimson/os/seastore/transaction.h"
+#include "crimson/os/seastore/transaction_interruptor.h"
 
 namespace crimson::os::seastore {
 class Cache;
@@ -284,9 +285,6 @@ struct LBACursor : BtreeCursor<laddr_t, lba::lba_map_val_t> {
     return val->refcount;
   }
 
-  using base_ertr = crimson::errorator<
-    crimson::ct_error::input_output_error>;
-  using base_iertr = trans_iertr<base_ertr>;
   base_iertr::future<> refresh();
 };
 using LBACursorRef = boost::intrusive_ptr<LBACursor>;
