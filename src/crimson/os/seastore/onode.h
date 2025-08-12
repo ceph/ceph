@@ -40,6 +40,14 @@ struct onode_layout_t {
 
   char oi[MAX_OI_LENGTH] = {0};
   char ss[MAX_SS_LENGTH] = {0};
+  /**
+    * needs_cow
+    *
+    * If true, all lba mappings for onode must be cloned
+    * to a new range prior to mutation. See ObjectDataHandler::copy_on_write,
+    * do_clone, do_clonerange
+    */
+  bool need_cow = false;
 
   onode_layout_t() : omap_root(omap_type_t::OMAP), log_root(omap_type_t::LOG),
     xattr_root(omap_type_t::XATTR) {}
@@ -94,6 +102,8 @@ public:
   virtual void update_snapset(Transaction&, ceph::bufferlist&) = 0;
   virtual void clear_object_info(Transaction&) = 0;
   virtual void clear_snapset(Transaction&) = 0;
+  virtual void set_need_cow(Transaction&) = 0;
+  virtual void unset_need_cow(Transaction&) = 0;
 
   laddr_t get_metadata_hint(uint64_t block_size) const {
     assert(default_metadata_offset);
