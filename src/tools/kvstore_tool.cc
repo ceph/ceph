@@ -11,7 +11,7 @@
 #include "common/pretty_binary.h"
 #include "global/global_context.h" // for g_conf()
 #include "include/buffer.h"
-#include "include/types.h" // for struct byte_u_t
+#include "include/byte_u_t.h"
 #include "kv/KeyValueHistogram.h"
 
 #ifdef WITH_BLUESTORE

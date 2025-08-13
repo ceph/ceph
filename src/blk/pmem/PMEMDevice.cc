@@ -31,6 +31,7 @@
 
 #include "PMEMDevice.h"
 #include "libpmem.h"
+#include "include/byte_u_t.h"
 #include "include/types.h"
 #include "include/compat.h"
 #include "include/stringify.h"

@@ -5,7 +5,9 @@
 #include "mon/health_check.h"
 #include "common/ceph_context.h"
 
+#include "include/byte_u_t.h"
 #include "include/rados.h"
+#include "include/si_u_t.h"
 
 #define dout_subsys ceph_subsys_mon
 #include "common/debug.h"
