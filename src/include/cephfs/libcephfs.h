@@ -133,6 +133,7 @@ struct ceph_ll_io_info {
 };
 
 struct ceph_fscrypt_key_identifier;
+struct fscrypt_get_key_status_arg;
 struct fscrypt_policy_v2;
 struct fscrypt_remove_key_arg;
 
@@ -2027,6 +2028,16 @@ int ceph_add_fscrypt_key(struct ceph_mount_info *cmount,
 int ceph_remove_fscrypt_key(struct ceph_mount_info *cmount,
                             struct fscrypt_remove_key_arg *kid,
 			    int user);
+
+/**
+ * Get fscrypt encryption key status from the in-memory key manager
+ *
+ * @param cmount the ceph mount handle to use.
+ * @param arg pointer to the key status for specified key
+ * @returns zero on success, other returns a negative error code.
+ */
+int ceph_get_fscrypt_key_status(struct ceph_mount_info *cmount,
+                                struct fscrypt_get_key_status_arg *arg);
 
 /**
  * Set encryption policy on a directory.
