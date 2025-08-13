@@ -13,6 +13,9 @@
  */
 
 #include "types.h"
+#include "si_u_t.h"
+#include "byte_u_t.h"
+#include "weightf_t.h"
 #include "ceph_fs.h"
 #include "common/Formatter.h"
 
