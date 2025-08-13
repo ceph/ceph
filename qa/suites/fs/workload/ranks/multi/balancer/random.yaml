@@ -3,6 +3,7 @@ overrides:
     conf:
       mds:
         mds_export_ephemeral_random_max: 0.20
+        mds_beacon_grace: 60
 tasks:
 - exec:
     mon.a:
