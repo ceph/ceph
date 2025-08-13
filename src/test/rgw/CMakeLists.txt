@@ -416,4 +416,5 @@ endfunction()
 
 add_catch2_test_rgw(rgw_hex)
 add_catch2_test_rgw(fdb NO_CATCH2_MAIN)
+add_catch2_test_rgw(fdb_ceph NO_CATCH2_MAIN)
 
