@@ -1510,7 +1510,7 @@ class CephFSMountBase(object):
 
     def lchown(self, fs_path, uid, gid):
         """
-        Change ownership of a link with uid and gid provided.
+        Change the ownership of a link with the provided UID and GID.
         """
 
         abs_path = os.path.join(self.hostfs_mntpt, fs_path)
@@ -1528,7 +1528,7 @@ class CephFSMountBase(object):
 
     def symlink(self, fs_path, symlink_path):
         """
-        Change ownership of a link with uid and gid provided.
+        Create a symlink to the provided file/path with the provided name.
         """
 
         src_path = os.path.join(self.hostfs_mntpt, fs_path)
@@ -1547,7 +1547,7 @@ class CephFSMountBase(object):
 
     def copy_file_range(self, src, dest, length):
         """
-        Truncate a file of certain size
+        Copy a portion of data from src file to dest file.
         """
 
         src_path = os.path.join(self.hostfs_mntpt, src)
@@ -1611,7 +1611,7 @@ class CephFSMountBase(object):
 
     def touch_os(self, fs_path):
         """
-        Create a dentry if it doesn't already exist.  Use open in os module.
+        Create a dentry if it doesn't already exist. Uses the open method in the os module.
 
         :param fs_path:
         :return:
