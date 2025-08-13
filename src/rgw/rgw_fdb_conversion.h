@@ -28,9 +28,6 @@ between FDB's types! If you have a user type to add, this is the place!
 #include <cstdint>
 #include <string_view>
 
-/* JFW:
-// JFW: for some reason, these overloads are not being picked up in this module, but it IS being seen... very strange!
-
 namespace ceph::libfdb::to {
 
 // Be aware-- c_str() on buffer::list has different semantics than on std::string--
@@ -52,6 +49,5 @@ inline void convert(const std::span<const std::uint8_t>& in, ceph::buffer::list&
 } 
 
 } // namespace ceph::libfdb::from
-*/
 
 #endif

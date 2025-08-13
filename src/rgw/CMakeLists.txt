@@ -277,9 +277,15 @@ if(WITH_RADOSGW_ARROW_FLIGHT)
 endif(WITH_RADOSGW_ARROW_FLIGHT)
 
 if(WITH_RADOSGW_D4N)
+  target_include_directories(rgw_common PRIVATE
+	driver/d4n
+        driver/cache
+	driver/redis
+	driver/ssd)
+
   list(APPEND librgw_common_srcs
-        rgw_redis_driver.cc
-        rgw_ssd_driver.cc
+        driver/redis/rgw_redis_driver.cc
+        driver/ssd/rgw_ssd_driver.cc
         driver/d4n/d4n_directory.cc
         driver/d4n/d4n_policy.cc
         driver/d4n/rgw_sal_d4n.cc)

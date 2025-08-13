@@ -21,12 +21,7 @@
 #include <catch2/generators/catch_generators_adapters.hpp>
 
 #include <catch2/matchers/catch_matchers_all.hpp>
-/*
-#include <catch2/matchers/catch_matchers_range.hpp>
-#include <catch2/matchers/catch_matchers_templated.hpp>
-#include <catch2/matchers/catch_matchers_predicate.hpp>
-#include <catch2/matchers/catch_matchers_range_equals.hpp>
-*/
+
 #define CATCH_CONFIG_MAIN
 
 #include <fmt/format.h>
@@ -34,7 +29,6 @@
 #include <fmt/ranges.h>
 
 #include "rgw/fdb/fdb.h"
-#include "rgw/rgw_fdb_conversion.h"
 
 #include "include/random.h"
 
@@ -75,7 +69,7 @@ inline std::map<std::string, std::string> make_monotonic_kvs(const unsigned N)
  return kvs;
 }
 
-constexpr const char * const msg = "Hello, World!"; 
+constexpr const char* const msg = "Hello, World!"; 
 constexpr const char msg_with_null[] = { '\0', 'H', 'i', '\0', ' ', 't', 'h', 'e', 'r', 'e', '!', '\0'};
 constexpr const char * const pearl_msg =
 "Perle, plesaunte to prynces paye"
@@ -259,42 +253,6 @@ TEST_CASE("fdb conversions (built-in)", "[fdb][rgw]") {
  }
 }
 
-/* JFW:
-TEST_CASE("fdb conversions (ceph)", "[fdb][rgw]") {
-
- const char *msg = "Hello, World!";
-
- // ceph::buffer::list -> span<uint8_t> -> std::string
- {
-  ceph::buffer::list n;
-  n.append(msg);
-
-  std::span<const std::uint8_t> x;
-  x = ceph::libfdb::to::convert(n);
-
-  std::string o;
-  ceph::libfdb::from::convert(x, o); 
-
-  REQUIRE_THAT(n, Catch::Matchers::RangeEquals(o));
- }
-
- // buffer::list -> span<uint8_t> -> buffer::list 
- {
- ceph::buffer::list n;
- n.append(msg);
-
- std::span<const std::uint8_t> x;
- x = ceph::libfdb::to::convert(n);
-
- ceph::buffer::list o;
- ceph::libfdb::from::convert(x, o);
-
- REQUIRE_THAT(n, Catch::Matchers::RangeEquals(o));
- }
-
-INFO("JFW: buffer::list <> with null characters next");
-}*/
-
 TEST_CASE("fdb conversions (round-trip)", "[fdb][rgw]") {
  // Actually store and retrieve converted data via the DB:
  auto dbh = lfdb::make_database();
@@ -329,69 +287,11 @@ TEST_CASE("fdb conversions (round-trip)", "[fdb][rgw]") {
 */
 } 
 
-/* JFW:
-TEST_CASE("fdb conversions (round-trip, ceph)", "[fdb][rgw]") {
-
-  auto dbh = lfdb::make_database();
-
-  // string_view -> buffer::list
-  {
-  const std::string_view n = "Hello, World!";
-  ceph::buffer::list o;
-
-  lfdb::set(lfdb::make_transaction(dbh), "key", n, lfdb::commit_after_op::commit);
-  lfdb::get(lfdb::make_transaction(dbh), "key", o);
-
-  REQUIRE_THAT(n, Catch::Matchers::RangeEquals(o));
-  }
-
-  // buffer::list (and buffer::list key) -> buffer::list
-  {
-  const std::string_view n { "Hello, World!" };
-
-  ceph::buffer::list o;
-  o.append(n);
-
-  lfdb::set(lfdb::make_transaction(dbh), "key", n, lfdb::commit_after_op::commit);
-  lfdb::get(lfdb::make_transaction(dbh), "key", o);
-
-  REQUIRE_THAT(n, Catch::Matchers::RangeEquals(o));
-  }
-
-  // buffer::list (and buffer::list key) -> buffer::list
-  {
-  ceph::buffer::list n;
-  n.append("Hello, World!");
-
-  ceph::buffer::list o;
-  o.append(n);
-
-  lfdb::set(lfdb::make_transaction(dbh), "key", n, lfdb::commit_after_op::commit);
-  lfdb::get(lfdb::make_transaction(dbh), "key", o);
-
-  REQUIRE_THAT(n, Catch::Matchers::RangeEquals(o));
-  }
-
-  // buffer::list (and buffer::list key) -> buffer::list
-  {
-  ceph::buffer::list n;
-  n.append("Hello, World!");
-
-  ceph::buffer::list o;
-  o.append(n);
-
-  lfdb::set(lfdb::make_transaction(dbh), "key", n, lfdb::commit_after_op::commit);
-  lfdb::get(lfdb::make_transaction(dbh), "key", o);
-
-  REQUIRE_THAT(n, Catch::Matchers::RangeEquals(o));
-  }
-}*/
-
 TEST_CASE("fdb conversions (functions)", "[fdb][rgw]")
 {
  SECTION("convert with a lambda function")
  {
-  std::string_view n { msg };
+  std::string_view n { pearl_msg };
   std::string o;
 
   std::span<const std::uint8_t> x;
