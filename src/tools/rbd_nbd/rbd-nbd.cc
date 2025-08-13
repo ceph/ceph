@@ -17,6 +17,7 @@
 */
 
 #include "acconfig.h"
+#include "include/byte_u_t.h"
 #include "include/int_types.h"
 #include "include/scope_guard.h"
 
