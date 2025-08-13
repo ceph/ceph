@@ -43,7 +43,7 @@ use a Crimson build:
 You'll likely need to supply the ``--allow-mismatched-release`` flag to
 use a non-release branch.
 
-You can deploy ``seastore`` osd by cmd:
+Deploy a Crimson OSD with a command of the following form:
 
 .. prompt:: bash #
 
