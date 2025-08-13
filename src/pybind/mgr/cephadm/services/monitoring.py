@@ -287,16 +287,10 @@ class AlertmanagerService(CephadmService):
     def needs_monitoring(self) -> bool:
         return True
 
-    def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
-        assert self.TYPE == daemon_spec.daemon_type
-        daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
-        return daemon_spec
-
-    def get_alertmanager_certificates(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[str, str]:
-        node_ip = self.mgr.inventory.get_addr(daemon_spec.host)
-        host_fqdn = self.mgr.get_fqdn(daemon_spec.host)
-        cert, key = self.mgr.cert_mgr.generate_cert([host_fqdn, "alertmanager_servers"], node_ip)
-        return cert, key
+    def get_alertmanager_certificates(self, daemon_spec: CephadmDaemonDeploySpec) -> CertKeyPair:
+        host_ips = [self.mgr.inventory.get_addr(daemon_spec.host)]
+        host_fqdns = [self.mgr.get_fqdn(daemon_spec.host), 'alertmanager_servers']
+        return self.get_certificates(daemon_spec, host_ips, host_fqdns)
 
     @classmethod
     def get_dependencies(cls, mgr: "CephadmOrchestrator",
@@ -374,7 +368,7 @@ class AlertmanagerService(CephadmService):
         deps = self.get_dependencies(self.mgr)
         if security_enabled:
             alertmanager_user, alertmanager_password = self.mgr._get_alertmanager_credentials()
-            cert, key = self.get_alertmanager_certificates(daemon_spec)
+            tls_pair = self.get_alertmanager_certificates(daemon_spec)
             context = {
                 'enable_mtls': mgmt_gw_enabled,
                 'enable_basic_auth': not oauth2_enabled,
@@ -384,8 +378,8 @@ class AlertmanagerService(CephadmService):
             return {
                 "files": {
                     "alertmanager.yml": yml,
-                    'alertmanager.crt': cert,
-                    'alertmanager.key': key,
+                    'alertmanager.crt': tls_pair.cert,
+                    'alertmanager.key': tls_pair.key,
                     'web.yml': self.mgr.template.render('services/alertmanager/web.yml.j2', context),
                     'root_cert.pem': self.mgr.cert_mgr.get_root_ca()
                 },
