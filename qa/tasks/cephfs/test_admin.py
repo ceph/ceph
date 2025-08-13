@@ -1751,8 +1751,10 @@ class TestFsAuthorize(CephFSTestCase):
         # with 'rw' would end up having 'r' caps with the multifs for
         # auth caps used as in this test above.
         if ceph_client_version != "v19.2.2":
-            captester_fs1_rw.conduct_pos_test_for_write_caps()
-            captester_fs1_rw.conduct_pos_test_for_new_file_creation()
+            # The following condition should be removed once the fix lands in kernel
+            if isinstance(self.mount_a, FuseMount):
+                captester_fs1_rw.conduct_pos_test_for_write_caps()
+                captester_fs1_rw.conduct_pos_test_for_new_file_creation()
 
 
     def test_multifs_rootsquash_nofeature(self):
