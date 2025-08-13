@@ -144,8 +144,17 @@ def test_check_access_name(value, ok, err_match):
         ({'smb': 4455, 'sbmetrics': 9009}, 'invalid service names'),
         (
             {'smb': 4455, 'smbmetrics': 9999, 'ctdb': 9999},
-            'must not be repeated',
+            'must be unique',
         ),
+        # can't use 445 it's the default smb port!
+        (
+            {'smbmetrics': 445},
+            'must be unique',
+        ),
+        # its valid to swap stuff around (don't do this please)
+        ({'smbmetrics': 4379, 'ctdb': 9922}, None),
+        # remote-control is a valid service name to modify
+        ({'remote-control': 65432}, None),
     ],
 )
 def test_check_custom_ports(value, err_match):
