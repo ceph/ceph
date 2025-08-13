@@ -45,7 +45,7 @@
 #include "osd/ECCommon.h"
 #include "osd/ECInject.h"
 
-#include "include/types.h"
+#include "include/byte_u_t.h"
 #include "include/compat.h"
 #include "include/random.h"
 #include "include/scope_guard.h"

@@ -8,7 +8,7 @@
 #include "common/errno.h"
 #include "common/strtol.h"
 #include "common/ceph_mutex.h"
-#include "include/types.h"
+#include "include/byte_u_t.h"
 #include "global/signal_handler.h"
 #include <atomic>
 #include <chrono>
