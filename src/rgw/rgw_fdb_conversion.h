@@ -28,13 +28,16 @@ between FDB's types! If you have a user type to add, this is the place!
 #include <cstdint>
 #include <string_view>
 
+/* JFW:
+// JFW: for some reason, these overloads are not being picked up in this module, but it IS being seen... very strange!
+
 namespace ceph::libfdb::to {
 
 // Be aware-- c_str() on buffer::list has different semantics than on std::string--
 // for this reason, the parameter cannot itself be const (it's entirely fine to do that
 // computation earlier and pass a span or string_view yourself if you don't want the 
 // buffer::list to potentially mutate itself):
-inline auto convert(ceph::buffer::list bl) -> std::span<const std::uint8_t> {
+inline auto convert(ceph::buffer::list& bl) -> std::span<const std::uint8_t> {
 // JFW: avoid making copy of bl in param
  return { (const std::uint8_t *)bl.c_str(), bl.length() };
 }
@@ -43,11 +46,12 @@ inline auto convert(ceph::buffer::list bl) -> std::span<const std::uint8_t> {
 
 namespace ceph::libfdb::from {
 
-inline void convert(std::span<const std::uint8_t> in, ceph::buffer::list& out) {
+inline void convert(const std::span<const std::uint8_t>& in, ceph::buffer::list& out) {
  out.clear();
  out.append((char *)in.data(), in.size());
-}
+} 
 
 } // namespace ceph::libfdb::from
+*/
 
 #endif

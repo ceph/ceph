@@ -17,7 +17,7 @@
  #define CEPH_RGW_FDB_H
 
 #include "base.h"
-#include "conversion.h"
 #include "bindings.h"
+#include "conversion.h"
 
 #endif

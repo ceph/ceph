@@ -92,8 +92,6 @@ TEST_CASE()
 
 TEST_CASE("fdb simple", "[rgw][fdb]") {
 
- const string_view missing_key = "missing_key";
-
  const string_view k = "key";
  const string v = fmt::format("value-{:%c}", std::chrono::system_clock::now());
 
@@ -102,6 +100,8 @@ TEST_CASE("fdb simple", "[rgw][fdb]") {
  REQUIRE(nullptr != dbh);
 
  SECTION("read missing key") {
+    const string_view missing_key = "missing_key";
+
     SECTION("with transaction") {
         std::string out_value;
 
@@ -259,6 +259,7 @@ TEST_CASE("fdb conversions (built-in)", "[fdb][rgw]") {
  }
 }
 
+/* JFW:
 TEST_CASE("fdb conversions (ceph)", "[fdb][rgw]") {
 
  const char *msg = "Hello, World!";
@@ -292,9 +293,8 @@ TEST_CASE("fdb conversions (ceph)", "[fdb][rgw]") {
  }
 
 INFO("JFW: buffer::list <> with null characters next");
-}
+}*/
 
-/* JFW:
 TEST_CASE("fdb conversions (round-trip)", "[fdb][rgw]") {
  // Actually store and retrieve converted data via the DB:
  auto dbh = lfdb::make_database();
@@ -310,8 +310,11 @@ TEST_CASE("fdb conversions (round-trip)", "[fdb][rgw]") {
  REQUIRE_THAT(n, Catch::Matchers::RangeEquals(o));
  }
 
-// JFW: I'm not going to support this for the prototype, but the plumbing looks like
-//it does the right thing for the most part, we need to add the encoding, etc.:
+/* JFW: I'm not going to support this for the prototype, but the plumbing looks like
+//it does the right thing for the most part, we need to add the encoding, etc.; there are
+//a few issues around decoding in particular that need close and careful attention, and
+//I want to focus on them after there are some concrete results (frankly, to take a little
+//pressure off!):
  // int64 kvs -> int64
  {
  const std::int64_t k = 1;
@@ -323,10 +326,10 @@ TEST_CASE("fdb conversions (round-trip)", "[fdb][rgw]") {
 
  REQUIRE(n == o);
  }
-}
 */
+} 
 
-/*
+/* JFW:
 TEST_CASE("fdb conversions (round-trip, ceph)", "[fdb][rgw]") {
 
   auto dbh = lfdb::make_database();
