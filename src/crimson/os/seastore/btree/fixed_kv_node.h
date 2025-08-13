@@ -440,7 +440,11 @@ struct FixedKVInternalNode
   }
 
   ceph::bufferlist get_delta() {
-    ceph::buffer::ptr bptr(delta_buffer.get_bytes());
+    auto buffer_len = delta_buffer.get_bytes();
+    if (buffer_len == 0) {
+      return ceph::bufferlist();
+    }
+    ceph::buffer::ptr bptr(buffer_len);
     delta_buffer.copy_out(bptr.c_str(), bptr.length());
     ceph::bufferlist bl;
     bl.push_back(bptr);
