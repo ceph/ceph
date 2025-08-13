@@ -1267,7 +1267,7 @@ ceph_add_mds_perf_query(BaseMgrModule *self, PyObject *args)
               Py_RETURN_NONE;
             }
             if (d.regex.mark_count() == 0) {
-              dout(20) << __func__ << " query " << query_param_name << " item " << j
+              derr << __func__ << " query " << query_param_name << " item " << j
                    << " regex " << d.regex_str << ": no capturing groups"
                    << dendl;
               Py_RETURN_NONE;
@@ -1294,7 +1294,7 @@ ceph_add_mds_perf_query(BaseMgrModule *self, PyObject *args)
       for (int j = 0; j < PyList_Size(query_param_val); j++) {
         PyObject *py_type = PyList_GET_ITEM(query_param_val, j);
         if (!PyUnicode_Check(py_type)) {
-          dout(20) << __func__ << " query " << query_param_name << " item " << j
+          derr << __func__ << " query " << query_param_name << " item " << j
                << " not a string" << dendl;
           Py_RETURN_NONE;
         }
