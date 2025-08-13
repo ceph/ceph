@@ -59,7 +59,7 @@ namespace ceph::libfdb::concepts {
 
 // Adapted from "https://en.cppreference.com/w/cpp/ranges/to.html#container_compatible_range":
 template< class Container, class Reference >
-constexpr bool appendable_container  = requires (Container& c, Reference&& ref)
+constexpr bool appendable_container  = requires(Container& c, Reference&& ref)
 {
  requires
  (
@@ -77,7 +77,11 @@ namespace ceph::libfdb::concepts {
 // There's a high likelihood that we're going to get more sophisticated selectors, 
 // so this is doing a more important job than it may appear to be:
 template <typename InputT>
-concept selector = requires { ceph::libfdb::detail::is_any_of<InputT, ceph::libfdb::select, ceph::libfdb::select_view>(); };
+concept selector = requires(InputT& x) 
+{ 
+ requires(ceph::libfdb::detail::is_any_of<InputT, 
+	   ceph::libfdb::select, ceph::libfdb::select_view>());
+};
 
 } // namespace ceph::libfdb::concepts
 
@@ -129,7 +133,10 @@ be a sensible default:
 #define     FDB_KEYSEL_FIRST_GREATER_THAN(k, l) k, l, 1, 1
 #define FDB_KEYSEL_FIRST_GREATER_OR_EQUAL(k, l) k, l, 0, 1
 
-enum struct key_selector { first_gt, first_gteq, last_lt, last_lteq }; */
+enum struct key_selector { first_gt, first_gteq, last_lt, last_lteq }; 
+
+JFW: move string_view and string to span<> and vector<>
+*/
 class select final
 {
  private:
@@ -239,8 +246,7 @@ class transaction final
  private:
  void commit();
  
-/* We need to figure out a good way to handle the combinatorics in here...
- void set(const std::int64_t k, std::int64_t& v) {
+ void set(const std::int64_t k, const std::int64_t v) {
   // ...note that if the /call/ made it to here, that's good-- the serialization layer pointed to the right place.
   static_assert("non-sequence keys aren't yet supported");
  }
@@ -248,7 +254,7 @@ class transaction final
  void set(const std::int64_t k, std::span<const std::uint8_t> v) {
   // ...note that if the /call/ made it to here, that's good-- the serialization layer pointed to the right place.
   static_assert("non-sequence keys aren't yet supported");
- }*/
+ }
 
  void set(std::span<const std::uint8_t> k, std::span<const std::uint8_t> v) {
     fdb_transaction_set(raw_handle(),

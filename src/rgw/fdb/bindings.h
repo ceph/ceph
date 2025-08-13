@@ -1,6 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab ft=cpp
-
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- // vim: ts=8 sw=2 smarttab ft=cpp
 /*
  * Ceph - scalable distributed file system
  *
@@ -73,14 +71,7 @@ struct transaction_value_result
  // JFW: this can be a variant; the data lives only as long as the future_value lives:
  // By the time we have an instance of transaction_value_result(), this must have already
  // been provided by the appropriate FDB function:
- std::span<const std::uint8_t> out_data;
-
-/*JFW:
- public:
- transaction_value_result(fdb_bool_t key_was_found_)
-  : key_was_found { key_was_found_ }
- {}
-*/
+ const std::span<const std::uint8_t> out_data;
 };
 
 // Core dispatch from internal DB value to external concrete value:
@@ -90,7 +81,8 @@ void reify_value(const uint8_t *buffer, const size_t buffer_size, auto& target)
 }
 
 // Grab a *future* and its related result from a request:
-inline transaction_value_result get_single_value_from_transaction(transaction_handle& txn, std::span<const std::uint8_t> key);
+inline transaction_value_result get_single_value_from_transaction(transaction_handle& txn, const std::uint64_t key);
+inline transaction_value_result get_single_value_from_transaction(transaction_handle& txn, const std::span<const std::uint8_t>& key);
 
 } // namespace ceph::libfdb::detail
 
@@ -282,6 +274,17 @@ inline void erase(transaction_handle h, K k, const commit_after_op commit_after)
  h->commit();
 }
 
+// Selectors: The user could get a range of values back:
+// JFW: right now, those values had best be strings... and, unfortunately, using the concept std::output_iterator
+// or std::output_iterator_tag is much trickier than it looks here, especially because of our compatibility
+// requirements and the fact that not all output_iterator sinks are written in a way that actually implements
+// the requirements:
+template <typename SelectorT> requires ceph::libfdb::concepts::selector<SelectorT>
+inline bool get(ceph::libfdb::transaction_handle txn, const SelectorT& key_range, auto out_iter)
+{
+ return ceph::libfdb::detail::get_value_range_from_transaction(txn, key_range.begin_key, key_range.end_key, out_iter);
+}
+
 /* get() is a little fun:
 
 I'm ignoring these for the moment:
@@ -320,13 +323,17 @@ simple and frankly focus on stability and getting the core mechanics right while
 
 inline bool get(ceph::libfdb::transaction_handle txn, auto key, std::int64_t& out_value)
 {
+ static_assert("JFW: I haven't implemented int64 keys yet!");
  auto result = ceph::libfdb::detail::get_single_value_from_transaction(txn, ceph::libfdb::to::convert(key));
 
  if(!result.key_was_found)
   return false;
 
+/*JFW: 
  if(auto r = fdb_future_get_int64(result.fv, out_value); 0 != r)
-  throw fdb_exception(r);
+  throw fdb_exception(r);*/
+
+ ceph::libfdb::from::convert(result.out_data, out_value);
 
  return true;
 }
@@ -377,7 +384,7 @@ inline bool get(ceph::libfdb::transaction_handle txn, auto key, auto &out_value)
 // (No function_ref() until C++26.)
 inline bool get(ceph::libfdb::transaction_handle txn, auto key, std::function<void(const char *, std::size_t)>)
 {
- auto r = ceph::libfdb::detail::get_single_value_from_transaction(txn, key);
+ auto r = ceph::libfdb::detail::get_single_value_from_transaction(txn, ceph::libfdb::to::convert(key));
 
  if(!r.key_was_found)
   return false;
@@ -385,17 +392,6 @@ inline bool get(ceph::libfdb::transaction_handle txn, auto key, std::function<vo
  fn(r.out_data.data(), r.out_data.size());
 
  return true;
-}
-
-// The user could get a range of values back:
-// JFW: right now, those values had best be strings... and, unfortunately, using the concept std::output_iterator
-// or std::output_iterator_tag is much trickier than it looks here, especially because of our compatibility
-// requirements and the fact that not all output_iterator sinks are written in a way that actually implements
-// the requirements:
-template <typename SelectorT> requires ceph::libfdb::concepts::selector<SelectorT>
-inline bool get(ceph::libfdb::transaction_handle txn, const SelectorT& key_range, auto out_iter)
-{
- return ceph::libfdb::detail::get_value_range_from_transaction(txn, key_range.begin_key, key_range.end_key, out_iter);
 }
 
 } // namespace ceph::libfdb
@@ -413,7 +409,13 @@ namespace ceph::libfdb::detail {
 // JFW: TODO: consolidate these functions-- one idea is to use lambdas or templated helpers for the fdb_xxx_get() calls-- 
 // JFW: this will let us re-use the main loop and get it right. I do not want to see this released without that happening,
 // the debugging would be a nightmare (plus it's embarassing!).
-inline transaction_value_result get_single_value_from_transaction(transaction_handle& txn, std::span<const std::uint8_t> key) 
+inline transaction_value_result get_single_value_from_transaction(transaction_handle& txn, const std::uint64_t key) 
+{
+ static_assert("JFW I'm too lazy (and time-pressured) to implement integer keys today");
+ return {};
+}
+
+inline transaction_value_result get_single_value_from_transaction(transaction_handle& txn, const std::span<const std::uint8_t>& key) 
 {
  // Try to get the FUTURE from the TRANSACTION:
  const fdb_bool_t is_snapshot = false;

@@ -138,7 +138,7 @@ non-owning targets, lest Antevorda be angered!: */
 namespace ceph::libfdb::from {
 
 // identity:
-inline void convert(std::int64_t in, std::int64_t& out) 
+inline void convert(const std::int64_t in, std::int64_t& out) 
 {
  out = in;
 }
@@ -149,19 +149,19 @@ inline void convert(std::span<const std::uint8_t> in, std::span<const std::uint8
  out = in;
 }*/
 
-inline void convert(std::span<const std::uint8_t> in, std::string& out) 
+inline void convert(const std::span<const std::uint8_t>& in, std::string& out) 
 {
  detail::reify_from_buffer(in, out);
 }
 
-inline void convert(std::span<const std::uint8_t> in, std::vector<std::uint8_t>& out)
+inline void convert(const std::span<const std::uint8_t>& in, std::vector<std::uint8_t>& out)
 {
  out.reserve(in.size());
  detail::reify_from_buffer(in, out);
 }
 
 // std::function_reference() isn't available until C++26:
-inline void convert(std::span<const std::uint8_t> in, std::function<void(const char *, std::size_t)> fn)
+inline void convert(const std::span<const std::uint8_t>& in, std::function<void(const char *, std::size_t)> fn)
 {
  fn((const char *)in.data(), in.size()); 
 }
