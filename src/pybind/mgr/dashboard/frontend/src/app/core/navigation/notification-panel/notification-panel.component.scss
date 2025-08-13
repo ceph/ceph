@@ -6,7 +6,7 @@
 .notification-panel {
   @include theme.theme(themes.$g10);
 
-  position: absolute;
+  position: fixed;
   top: spacing.$spacing-09;
   right: 0;
   width: 400px;

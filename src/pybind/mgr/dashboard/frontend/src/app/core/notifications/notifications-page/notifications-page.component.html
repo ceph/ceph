@@ -1,0 +1,100 @@
+<div class="notifications-page-container">
+  <div class="notification-section-heading">Notifications</div>
+  <p class="text-muted mb-4">All notifications</p>
+  
+  <div class="row">
+    <!-- Left Panel - Notifications List -->
+    <div class="col-md-4">
+      <div class="notification-section-heading">Notifications List</div>
+      
+      <!-- Search Bar -->
+      <div class="search-container mb-4">
+        <cds-search
+          [size]="'md'"
+          [placeholder]="'Search notifications...'"
+          [(ngModel)]="searchText"
+          (valueChange)="onSearch($event)">
+        </cds-search>
+      </div>
+
+      <!-- Notifications List using Carbon Structured List -->
+      <cds-structured-list class="notifications-list" *ngIf="filteredNotifications.length > 0">
+        <cds-list-row 
+          *ngFor="let notification of filteredNotifications"
+          [class.active]="selectedNotification === notification"
+          (click)="onNotificationSelect(notification)"
+          class="notification-row">
+          <cds-list-column>
+            <div class="notification-item-content">
+              <h6 class="notification-title">{{ notification.title }}</h6>
+              <small class="notification-meta">{{ notification.application }}</small>
+            </div>
+          </cds-list-column>
+          <cds-list-column nowrap="true">
+            <small class="notification-date">{{ formatDate(notification.timestamp) }}</small>
+          </cds-list-column>
+        </cds-list-row>
+      </cds-structured-list>
+
+      <!-- Empty state -->
+      <div *ngIf="filteredNotifications.length === 0" class="empty-state">
+        <svg cdsIcon="notification" size="48" class="empty-icon"></svg>
+        <p *ngIf="searchText">No notifications match your search</p>
+        <p *ngIf="!searchText">No notifications available</p>
+      </div>
+    </div>
+    
+    <!-- Right Panel - Notification Details -->
+    <div class="col-md-8">
+      <div class="notification-section-heading">Notification Details</div>
+      <div *ngIf="selectedNotification" class="notification-details">
+        <div class="notification-section-heading">{{ selectedNotification.title }}</div>
+        
+        <!-- Details using Carbon Structured List -->
+        <cds-structured-list class="details-list mt-4">
+          <cds-list-row>
+            <cds-list-column nowrap="true" class="detail-label">Application:</cds-list-column>
+            <cds-list-column>{{ selectedNotification.application }}</cds-list-column>
+          </cds-list-row>
+          
+          <cds-list-row>
+            <cds-list-column nowrap="true" class="detail-label">Type:</cds-list-column>
+            <cds-list-column>
+              <cds-tag 
+                [type]="selectedNotification.type === 0 ? 'red' : 
+                        selectedNotification.type === 1 ? 'blue' : 
+                        selectedNotification.type === 2 ? 'green' : 'yellow'"
+                [size]="'sm'">
+                {{ selectedNotification.type === 0 ? 'Error' : 
+                   selectedNotification.type === 1 ? 'Info' : 
+                   selectedNotification.type === 2 ? 'Success' : 'Warning' }}
+              </cds-tag>
+            </cds-list-column>
+          </cds-list-row>
+          
+          <cds-list-row>
+            <cds-list-column nowrap="true" class="detail-label">Date:</cds-list-column>
+            <cds-list-column>{{ formatDate(selectedNotification.timestamp) }}</cds-list-column>
+          </cds-list-row>
+          
+          <cds-list-row>
+            <cds-list-column nowrap="true" class="detail-label">Time:</cds-list-column>
+            <cds-list-column>{{ formatTime(selectedNotification.timestamp) }}</cds-list-column>
+          </cds-list-row>
+          
+          <cds-list-row *ngIf="selectedNotification.message">
+            <cds-list-column nowrap="true" class="detail-label">Message:</cds-list-column>
+            <cds-list-column>
+              <p class="message-content">{{ selectedNotification.message }}</p>
+            </cds-list-column>
+          </cds-list-row>
+        </cds-structured-list>
+      </div>
+      
+      <div *ngIf="!selectedNotification" class="no-selection-state">
+        <svg cdsIcon="notification" size="64" class="no-selection-icon"></svg>
+        <p>Select a notification to view details</p>
+      </div>
+    </div>
+  </div>
+</div> 
