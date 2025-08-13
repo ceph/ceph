@@ -1963,12 +1963,18 @@ SeaStore::Shard::_remove(
       ObjectDataHandler(max_object_size),
       [&onode, this, &ctx](auto &objhandler)
     {
-      return objhandler.clear(
-        ObjectDataHandler::context_t{
-          *transaction_manager,
-          *ctx.transaction,
-          *onode,
-        });
+      auto fut = ObjectDataHandler::clone_iertr::now();
+      auto objctx = ObjectDataHandler::context_t{
+	  *transaction_manager,
+	  *ctx.transaction,
+	  *onode,
+	};
+      if (onode->need_cow()) {
+	fut = objhandler.copy_on_write(objctx);
+      }
+      return fut.si_then([&objhandler, objctx] {
+	return objhandler.clear(objctx);
+      });
     });
   }).si_then([this, &ctx, &onode] {
     return onode_manager->erase_onode(*ctx.transaction, onode);
@@ -2006,14 +2012,18 @@ SeaStore::Shard::_write(
     std::move(_bl),
     ObjectDataHandler(max_object_size),
     [=, this, &ctx, &onode](auto &bl, auto &objhandler) {
-      return objhandler.write(
-        ObjectDataHandler::context_t{
-          *transaction_manager,
-          *ctx.transaction,
-          onode,
-        },
-        offset,
-        bl);
+      auto fut = ObjectDataHandler::clone_iertr::now();
+      auto objctx = ObjectDataHandler::context_t{
+	  *transaction_manager,
+	  *ctx.transaction,
+	  onode,
+	};
+      if (onode.need_cow()) {
+	fut = objhandler.copy_on_write(objctx);
+      }
+      return fut.si_then([&objhandler, objctx, offset, &bl] {
+	return objhandler.write(objctx, offset, bl);
+      });
     });
 }
 
@@ -2095,14 +2105,18 @@ SeaStore::Shard::_zero(
   return seastar::do_with(
     ObjectDataHandler(max_object_size),
     [=, this, &ctx, &onode](auto &objhandler) {
-      return objhandler.zero(
-        ObjectDataHandler::context_t{
-          *transaction_manager,
-          *ctx.transaction,
-          onode,
-        },
-        offset,
-        len);
+    auto fut = ObjectDataHandler::clone_iertr::now();
+    auto objctx = ObjectDataHandler::context_t{
+	*transaction_manager,
+	*ctx.transaction,
+	onode,
+      };
+    if (onode.need_cow()) {
+      fut = objhandler.copy_on_write(objctx);
+    }
+    return fut.si_then([&objhandler, objctx, offset, len] {
+      return objhandler.zero(objctx, offset, len);
+    });
   });
 }
 
@@ -2151,13 +2165,18 @@ SeaStore::Shard::_truncate(
   return seastar::do_with(
     ObjectDataHandler(max_object_size),
     [=, this, &ctx, &onode](auto &objhandler) {
-    return objhandler.truncate(
-      ObjectDataHandler::context_t{
-        *transaction_manager,
-        *ctx.transaction,
-        onode
-      },
-      size);
+    auto fut = ObjectDataHandler::clone_iertr::now();
+    auto objctx = ObjectDataHandler::context_t{
+	*transaction_manager,
+	*ctx.transaction,
+	onode,
+      };
+    if (onode.need_cow()) {
+      fut = objhandler.copy_on_write(objctx);
+    }
+    return fut.si_then([&objhandler, objctx, size] {
+      return objhandler.truncate(objctx, size);
+    });
   });
 }
 
