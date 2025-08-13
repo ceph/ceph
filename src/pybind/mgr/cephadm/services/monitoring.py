@@ -482,14 +482,6 @@ class PrometheusService(CephadmService):
     USER_CFG_KEY = 'prometheus/web_user'
     PASS_CFG_KEY = 'prometheus/web_password'
 
-    def prepare_create(
-            self,
-            daemon_spec: CephadmDaemonDeploySpec,
-    ) -> CephadmDaemonDeploySpec:
-        assert self.TYPE == daemon_spec.daemon_type
-        daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
-        return daemon_spec
-
     def config(self, spec: ServiceSpec) -> None:
         # make sure module is enabled
         mgr_map = self.mgr.get('mgr_map')
@@ -501,11 +493,10 @@ class PrometheusService(CephadmService):
             # we shouldn't get here (mon will tell the mgr to respawn), but no
             # harm done if we do.
 
-    def get_prometheus_certificates(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[str, str]:
-        node_ip = self.mgr.inventory.get_addr(daemon_spec.host)
-        host_fqdn = self.mgr.get_fqdn(daemon_spec.host)
-        cert, key = self.mgr.cert_mgr.generate_cert([host_fqdn, 'prometheus_servers'], node_ip)
-        return cert, key
+    def get_prometheus_certificates(self, daemon_spec: CephadmDaemonDeploySpec) -> CertKeyPair:
+        host_ips = [self.mgr.inventory.get_addr(daemon_spec.host)]
+        host_fqdns = [self.mgr.get_fqdn(daemon_spec.host), 'prometheus_servers']
+        return self.get_certificates(daemon_spec, host_ips, host_fqdns)
 
     def get_service_discovery_cfg(self, security_enabled: bool, mgmt_gw_enabled: bool) -> Dict[str, List[str]]:
         """
@@ -624,12 +615,12 @@ class PrometheusService(CephadmService):
                 'prometheus_web_user': prometheus_user,
                 'prometheus_web_password': password_hash(prometheus_password),
             }
-            cert, key = self.get_prometheus_certificates(daemon_spec)
+            tls_pair = self.get_prometheus_certificates(daemon_spec)
             files.update({
                 'root_cert.pem': self.mgr.cert_mgr.get_root_ca(),
                 'web.yml': self.mgr.template.render('services/prometheus/web.yml.j2', web_context),
-                'prometheus.crt': cert,
-                'prometheus.key': key,
+                'prometheus.crt': tls_pair.cert,
+                'prometheus.key': tls_pair.key,
                 **cluster_credentials_files['files']
             })
             r.update({'web_config': '/etc/prometheus/web.yml'})
