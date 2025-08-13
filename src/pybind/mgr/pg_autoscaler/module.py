@@ -240,12 +240,22 @@ class PgAutoscaler(MgrModule):
     def set_scaling_threshold(self, num: float) -> Tuple[int, str, str]:
         """
         set the autoscaler threshold 
-        A.K.A. the factor by which the new PG_NUM must vary from the existing PG_NUM
+        A.K.A. the factor by which the new pg_num must vary
+        from the existing pg_num before action is taken
         """
         if num < 1.0:
             return 22, "", "threshold cannot be set less than 1.0"
         self.set_module_option("threshold", num)
         return 0, "threshold updated", ""
+
+    @CLIReadCommand("osd pool get threshold")
+    def get_scaling_threshold(self) -> Tuple[int, str, str]:
+        """
+        return the autoscaler threshold value
+        A.K.A. the factor by which the new pg_num must vary
+        from the existing pg_num before action is taken
+        """
+        return 0, str(self.get_module_option('threshold')), ''
 
     def complete_all_progress_events(self) -> None:
         for pool_id in list(self._event):
