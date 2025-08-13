@@ -1384,6 +1384,36 @@ ObjectDataHandler::clear_ret ObjectDataHandler::clear(
 }
 
 ObjectDataHandler::clone_ret
+ObjectDataHandler::copy_on_write(
+  context_t ctx)
+{
+  return with_object_data(
+    ctx,
+    [ctx, this](auto &object_data) -> clone_iertr::future<> {
+    auto mapping = co_await ctx.tm.get_pin(
+      ctx.t, object_data.get_reserved_data_base()
+    ).handle_error_interruptible(
+      clone_iertr::pass_further{},
+      crimson::ct_error::assert_all{"unexpected enoent"}
+    );
+    object_data_t d_object_data = get_null_object_data();
+    co_await do_clone(ctx, object_data, d_object_data, mapping, false);
+    auto old_base = object_data.get_reserved_data_base();
+    auto old_len = object_data.get_reserved_data_len();
+    object_data.update_reserved(
+      d_object_data.get_reserved_data_base(),
+      d_object_data.get_reserved_data_len());
+    ctx.onode.unset_need_cow(ctx.t);
+    co_await ctx.tm.remove_mappings_in_range(
+      ctx.t, old_base, old_len, std::move(mapping), {false, true}
+    ).handle_error_interruptible(
+      clone_iertr::pass_further{},
+      crimson::ct_error::assert_all{"unexpected enoent"}
+    ).discard_result();
+  });
+}
+
+ObjectDataHandler::clone_ret
 ObjectDataHandler::do_clone(
   context_t ctx,
   object_data_t &object_data,
