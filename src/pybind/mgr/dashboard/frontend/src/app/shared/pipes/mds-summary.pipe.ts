@@ -1,7 +1,5 @@
 import { Pipe, PipeTransform } from '@angular/core';
 
-import _ from 'lodash';
-
 @Pipe({
   name: 'mdsSummary'
 })
@@ -11,34 +9,17 @@ export class MdsSummaryPipe implements PipeTransform {
       return null;
     }
 
-    let activeCount = 0;
-    let standbyCount = 0;
-    let standbys = 0;
-    let active = 0;
     let standbyReplay = 0;
-    _.each(value.standbys, () => {
-      standbys += 1;
+    let activeCount = 0;
+    value?.mdsmap?.forEach((mds: any) => {
+      if (mds.state === 'up:standby-replay') {
+        standbyReplay += 1;
+      } else {
+        activeCount += 1;
+      }
     });
 
-    if (value.standbys && !value.filesystems) {
-      standbyCount = standbys;
-      activeCount = 0;
-    } else if (value.filesystems.length === 0) {
-      activeCount = 0;
-    } else {
-      _.each(value.filesystems, (fs) => {
-        _.each(fs.mdsmap.info, (mds) => {
-          if (mds.state === 'up:standby-replay') {
-            standbyReplay += 1;
-          } else {
-            active += 1;
-          }
-        });
-      });
-
-      activeCount = active;
-      standbyCount = standbys + standbyReplay;
-    }
+    const standbyCount = (value.standby || 0) + standbyReplay;
     const totalCount = activeCount + standbyCount;
     const mdsSummary = {
       success: activeCount,

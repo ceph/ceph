@@ -73,22 +73,22 @@
                        [dropdownData]="(isHardwareEnabled$ | async) && (hardwareSummary$ | async)">
           </cd-card-row>
           <!-- Monitors -->
-          <cd-card-row [data]="monMap?.monmap.mons.length"
+          <cd-card-row [data]="monCount"
                        link="/monitor"
                        title="Monitor"
                        summaryType="simplified"></cd-card-row>
           <!-- Managers -->
-          <cd-card-row [data]="mgrMap | mgrSummary"
+          <cd-card-row [data]="mgrStatus"
                        title="Manager"></cd-card-row>
 
           <!-- OSDs -->
-          <cd-card-row [data]="osdMap | osdSummary"
+          <cd-card-row [data]="osdCount"
                        link="/osd"
                        title="OSD"
                        summaryType="osd"></cd-card-row>
 
           <!-- Pools -->
-          <cd-card-row [data]="poolStatus?.length"
+          <cd-card-row [data]="poolCount"
                        link="/pool"
                        title="Pool"
                        summaryType="simplified"></cd-card-row>
@@ -106,7 +106,7 @@
                        *ngIf="enabledFeature.rgw"></cd-card-row>
 
           <!-- Metadata Servers -->
-          <cd-card-row [data]="mdsMap | mdsSummary"
+          <cd-card-row [data]="mdsStatus | mdsSummary"
                        title="Metadata Server"
                        id="mds-item"
                        *ngIf="enabledFeature.cephfs"></cd-card-row>
@@ -148,14 +148,14 @@
                     [title]="healthData.status">
                 </i>
               <span class="ms-2 mt-n1 lead"
-                    *ngIf="!healthData?.checks?.length"
+                    *ngIf="!healthData?.checks"
                     i18n>Cluster</span>
               <cds-toggletip  [dropShadow]="true"
                               [autoAlign]="true">
               <div cdsToggletipButton>
                 <a class="ms-2 mt-n1 lead text-primary"
                    popoverClass="info-card-popover-cluster-status"
-                   *ngIf="healthData?.checks?.length"
+                   *ngIf="healthData?.checks"
                    i18n>Cluster
                 </a>
               </div>
@@ -227,8 +227,8 @@
                    [fullHeight]="true"
                    aria-label="Capacity card">
             <ng-container class="ms-4 me-4"
-                          *ngIf="capacity">
-              <cd-dashboard-pie [data]="{max: capacity.total_bytes, current: capacity.total_used_raw_bytes}"
+                          *ngIf="totalCapacity && usedCapacity">
+              <cd-dashboard-pie [data]="{max: totalCapacity, current: usedCapacity}"
                                 [lowThreshold]="osdSettings.nearfull_ratio"
                                 [highThreshold]="osdSettings.full_ratio">
               </cd-dashboard-pie>
@@ -244,9 +244,9 @@
           <div class="ms-4 me-4 mt-0">
             <cd-dashboard-time-selector (selectedTime)="getPrometheusData($event)">
             </cd-dashboard-time-selector>
-            <ng-container *ngIf="capacity">
+            <ng-container *ngIf="usedCapacity">
               <cd-dashboard-area-chart chartTitle="Used Capacity (RAW)"
-                                       [maxValue]="capacity.total_bytes"
+                                       [maxValue]="usedCapacity"
                                        dataUnits="B"
                                        [labelsArray]="['Used Capacity']"
                                        [dataArray]="[queriesResults.USEDCAPACITY]">

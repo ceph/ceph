@@ -27,14 +27,7 @@ import { AlertClass } from '~/app/shared/enum/health-icon.enum';
 import { HardwareService } from '~/app/shared/api/hardware.service';
 import { SettingsService } from '~/app/shared/api/settings.service';
 import { OsdSettings } from '~/app/shared/models/osd-settings';
-import {
-  IscsiMap,
-  MdsMap,
-  MgrMap,
-  MonMap,
-  OsdMap,
-  PgStatus
-} from '~/app/shared/models/health.interface';
+import { IscsiMap } from '~/app/shared/models/health.interface';
 
 @Component({
   selector: 'cd-dashboard-v3',
@@ -49,7 +42,6 @@ export class DashboardV3Component extends PrometheusListHelper implements OnInit
   enabledFeature$: FeatureTogglesMap$;
   color: string;
   capacityService: any;
-  capacity: any;
   healthData$: Observable<Object>;
   prometheusAlerts$: Observable<AlertmanagerAlert[]>;
 
@@ -90,13 +82,16 @@ export class DashboardV3Component extends PrometheusListHelper implements OnInit
   private destroy$ = new Subject<void>();
 
   hostsCount: number = null;
-  monMap: MonMap = null;
-  mgrMap: MgrMap = null;
-  osdMap: OsdMap = null;
+  monCount: number = null;
+  poolCount: number = null;
+  osdCount: any = null;
+  totalCapacity: number = null;
+  usedCapacity: number = null;
   poolStatus: Record<string, any>[] = null;
-  pgStatus: PgStatus = null;
+  pgStatus: any = null;
+  mgrStatus: any = null;
+  mdsStatus: any = null;
   rgwCount: number = null;
-  mdsMap: MdsMap = null;
   iscsiMap: IscsiMap = null;
 
   constructor(
@@ -137,18 +132,46 @@ export class DashboardV3Component extends PrometheusListHelper implements OnInit
     }
 
     this.loadInventories();
-
-    // fetch capacity to load the capacity chart
-    this.refreshIntervalObs(() => this.healthService.getClusterCapacity()).subscribe({
-      next: (capacity: any) => {
-        this.capacity = capacity;
-      }
-    });
-
+    this.getStatusData();
     this.getPrometheusData(this.prometheusService.lastHourDateObject);
     this.getDetailsCardData();
     this.getTelemetryReport();
     this.prometheusAlertService.getAlerts(true);
+  }
+
+  getStatusData() {
+    this.healthService.getStatus().subscribe((data: any) => {
+      this.detailsCardData.fsid = data.fsid;
+      this.healthData = data.health;
+      this.monCount = data?.monmap?.num_mons;
+      const osdMap = data.osdmap;
+      this.osdCount = {
+        in: osdMap.num_in_osds,
+        up: osdMap.num_up_osds,
+        down: osdMap.num_osds - osdMap.num_up_osds,
+        out: osdMap.num_osds - osdMap.num_in_osds,
+        total: osdMap.num_osds
+      };
+      const pgmap = data.pgmap;
+      this.poolCount = pgmap.num_pools;
+      this.usedCapacity = pgmap.bytes_used;
+      this.totalCapacity = pgmap.bytes_total;
+      this.pgStatus = {
+        statuses: pgmap.pgs_by_state,
+        total: pgmap.num_pgs
+      };
+      const mgrmap = data?.mgrmap;
+      const activeCount = mgrmap.available ? 1 : 0;
+      this.mgrStatus = {
+        info: mgrmap.num_standbys,
+        success: activeCount,
+        total: activeCount + mgrmap.num_standbys
+      };
+      this.mdsStatus = {
+        standbys: data.fsmap?.['up:standby'],
+        mdsmap: data.fsmap.by_rank
+      };
+    });
   }
 
   getTelemetryText(): string {
@@ -170,9 +193,6 @@ export class DashboardV3Component extends PrometheusListHelper implements OnInit
   }
 
   getDetailsCardData() {
-    this.healthService.getClusterFsid().subscribe((data: string) => {
-      this.detailsCardData.fsid = data;
-    });
     this.orchestratorService.getName().subscribe((data: string) => {
       this.detailsCardData.orchestrator = data;
     });
@@ -232,15 +252,8 @@ export class DashboardV3Component extends PrometheusListHelper implements OnInit
     this.refreshIntervalObs(() => this.healthService.getMinimalHealth()).subscribe({
       next: (result: any) => {
         this.hostsCount = result.hosts;
-        this.monMap = result.mon_status;
-        this.mgrMap = result.mgr_map;
-        this.osdMap = result.osd_map;
-        this.poolStatus = result.pools;
-        this.pgStatus = result.pg_info;
         this.rgwCount = result.rgw;
-        this.mdsMap = result.fs_map;
         this.iscsiMap = result.iscsi_daemons;
-        this.healthData = result.health;
         this.enabledFeature$ = this.featureToggles.get();
       }
     });

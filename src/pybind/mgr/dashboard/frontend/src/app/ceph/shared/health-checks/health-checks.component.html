@@ -1,20 +1,20 @@
 <ng-container *ngTemplateOutlet="logsLink"></ng-container>
 <ul>
-  <li *ngFor="let check of healthData">
-    <span [ngStyle]="check.severity | healthColor"
-          [class.health-warn-description]="check.severity === 'HEALTH_WARN'">
-    {{ check.type }}</span>: {{ check.summary.message }} <br>
-    <div *ngIf="check.type === 'CEPHADM_FAILED_DAEMON'"
+  <li *ngFor="let check of healthData |  keyvalue">
+    <span [ngStyle]="check.value.severity | healthColor"
+          [class.health-warn-description]="check.value.severity === 'HEALTH_WARN'">
+    {{ check.type }}</span>: {{ check.value.summary.message }} <br>
+    <div *ngIf="check.key === 'CEPHADM_FAILED_DAEMON'"
          class="failed-daemons">
       <cd-help-text>
         <b>Failed Daemons:</b>
-        <div *ngFor="let failedDaemons of getFailedDaemons(check.detail); let last = last">
+        <div *ngFor="let failedDaemons of getFailedDaemons(check.value?.detail); let last = last">
           {{ failedDaemons }}
           {{ !last ? ', ' : '' }}
         </div>
       </cd-help-text>
     </div>
-    <div *ngFor="let details of check?.detail">
+    <div *ngFor="let details of check.value?.detail">
       <cd-help-text>{{ details?.message }}</cd-help-text>
     </div>
   </li>
