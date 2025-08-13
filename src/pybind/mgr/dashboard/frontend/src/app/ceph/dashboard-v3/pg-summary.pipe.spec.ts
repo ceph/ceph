@@ -4,7 +4,7 @@ import { configureTestBed } from '~/testing/unit-test-helper';
 import { PgCategoryService } from '../shared/pg-category.service';
 import { PgSummaryPipe } from './pg-summary.pipe';
 
-describe('OsdSummaryPipe', () => {
+describe('PgSummaryPipe', () => {
   let pipe: PgSummaryPipe;
 
   configureTestBed({
@@ -21,16 +21,19 @@ describe('OsdSummaryPipe', () => {
 
   it('tranforms value', () => {
     const value = {
-      statuses: {
-        'active+clean': 241
-      },
-      pgs_per_osd: 241
+      statuses: [
+        {
+          state_name: 'active+clean',
+          count: 497
+        }
+      ],
+      total: 497
     };
     expect(pipe.transform(value)).toEqual({
       categoryPgAmount: {
-        clean: 241
+        clean: 497
       },
-      total: 241
+      total: 497
     });
   });
 });

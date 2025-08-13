@@ -11,7 +11,12 @@ import {
   UtilizationCardQueries
 } from '~/app/shared/enum/dashboard-promqls.enum';
 import { Icons } from '~/app/shared/enum/icons.enum';
-import { DashboardDetails } from '~/app/shared/models/cd-details';
+import {
+  CapacityCardDetails,
+  DashboardDetails,
+  InventoryCommonDetail,
+  InventoryDetails
+} from '~/app/shared/models/cd-details';
 import { Permissions } from '~/app/shared/models/permissions';
 import { AlertmanagerAlert } from '~/app/shared/models/prometheus-alerts';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
@@ -29,18 +34,11 @@ import { AlertClass } from '~/app/shared/enum/health-icon.enum';
 import { HardwareService } from '~/app/shared/api/hardware.service';
 import { SettingsService } from '~/app/shared/api/settings.service';
 import {
+  Health,
+  HealthSnapshotMap,
   IscsiMap,
-  MdsMap,
-  MgrMap,
-  MonMap,
-  OsdMap,
-  PgStatus
+  PgStateCount
 } from '~/app/shared/models/health.interface';
-
-type CapacityCardData = {
-  osdNearfull: number;
-  osdFull: number;
-};
 
 @Component({
   selector: 'cd-dashboard-v3',
@@ -48,21 +46,23 @@ type CapacityCardData = {
   styleUrls: ['./dashboard-v3.component.scss']
 })
 export class DashboardV3Component extends PrometheusListHelper implements OnInit, OnDestroy {
-  detailsCardData: DashboardDetails = {};
-  capacityCardData: CapacityCardData = {
-    osdNearfull: null,
-    osdFull: null
-  };
-  interval = new Subscription();
-  permissions: Permissions;
-  enabledFeature$: FeatureTogglesMap$;
-  color: string;
-  capacityService: any;
-  capacity: any;
-  healthData$: Observable<Object>;
-  prometheusAlerts$: Observable<AlertmanagerAlert[]>;
-
+  telemetryURL = 'https://telemetry-public.ceph.com/';
+  origin = window.location.origin;
   icons = Icons;
+
+  permissions: Permissions;
+
+  hardwareSubject = new BehaviorSubject<any>([]);
+  private subs = new Subscription();
+  private destroy$ = new Subject<void>();
+
+  enabledFeature$: FeatureTogglesMap$;
+  prometheusAlerts$: Observable<AlertmanagerAlert[]>;
+  isHardwareEnabled$: Observable<boolean>;
+  hardwareSummary$: Observable<any>;
+  managedByConfig$: Observable<any>;
+
+  color: string;
   flexHeight = true;
   simplebar = {
     autoHide: true
@@ -70,9 +70,7 @@ export class DashboardV3Component extends PrometheusListHelper implements OnInit
   borderClass: string;
   alertType: string;
   alertClass = AlertClass;
-  healthData: any;
-  categoryPgAmount: Record<string, number> = {};
-  totalPgs = 0;
+
   queriesResults: { [key: string]: [] } = {
     USEDCAPACITY: [],
     IPS: [],
@@ -85,27 +83,28 @@ export class DashboardV3Component extends PrometheusListHelper implements OnInit
     READIOPS: [],
     WRITEIOPS: []
   };
+
   telemetryEnabled: boolean;
-  telemetryURL = 'https://telemetry-public.ceph.com/';
-  origin = window.location.origin;
+  detailsCardData: DashboardDetails = {};
+  capacityCardData: CapacityCardDetails = {
+    osdNearfull: null,
+    osdFull: null
+  };
+  healthCardData: Health;
+  hasHealthChecks: boolean;
   hardwareHealth: any;
   hardwareEnabled: boolean = false;
   hasHardwareError: boolean = false;
-  isHardwareEnabled$: Observable<boolean>;
-  hardwareSummary$: Observable<any>;
-  hardwareSubject = new BehaviorSubject<any>([]);
-  managedByConfig$: Observable<any>;
-  private subs = new Subscription();
-  private destroy$ = new Subject<void>();
-
+  totalCapacity: number = null;
+  usedCapacity: number = null;
   hostsCount: number = null;
-  monMap: MonMap = null;
-  mgrMap: MgrMap = null;
-  osdMap: OsdMap = null;
-  poolStatus: Record<string, any>[] = null;
-  pgStatus: PgStatus = null;
+  monCount: number = null;
+  poolCount: number = null;
   rgwCount: number = null;
-  mdsMap: MdsMap = null;
+  osdCount: { in: number; out: number; up: number; down: number } & InventoryCommonDetail = null;
+  pgStatus: { statuses: PgStateCount[] } & InventoryCommonDetail = null;
+  mgrStatus: InventoryDetails = null;
+  mdsStatus: InventoryDetails = null;
   iscsiMap: IscsiMap = null;
 
   constructor(
@@ -144,14 +143,6 @@ export class DashboardV3Component extends PrometheusListHelper implements OnInit
     }
 
     this.loadInventories();
-
-    // fetch capacity to load the capacity chart
-    this.refreshIntervalObs(() => this.healthService.getClusterCapacity()).subscribe({
-      next: (capacity: any) => {
-        this.capacity = capacity;
-      }
-    });
-
     this.getPrometheusData(this.prometheusService.lastHourDateObject);
     this.getDetailsCardData();
     this.getTelemetryReport();
@@ -161,11 +152,12 @@ export class DashboardV3Component extends PrometheusListHelper implements OnInit
 
   getTelemetryText(): string {
     return this.telemetryEnabled
-      ? 'Cluster telemetry is active'
-      : 'Cluster telemetry is inactive. To Activate the Telemetry, \
+      ? $localize`Cluster telemetry is active`
+      : $localize`Cluster telemetry is inactive. To Activate the Telemetry, \
        click settings icon on top navigation bar and select \
-       Telemetry configration.';
+       Telemetry configration.`;
   }
+
   ngOnDestroy() {
     this.prometheusService.unsubscribe();
     this.subs?.unsubscribe();
@@ -178,9 +170,6 @@ export class DashboardV3Component extends PrometheusListHelper implements OnInit
   }
 
   getDetailsCardData() {
-    this.healthService.getClusterFsid().subscribe((data: string) => {
-      this.detailsCardData.fsid = data;
-    });
     this.orchestratorService.getName().subscribe((data: string) => {
       this.detailsCardData.orchestrator = data;
     });
@@ -251,19 +240,66 @@ export class DashboardV3Component extends PrometheusListHelper implements OnInit
     );
   }
 
+  private safeSum(a: number, b: number): number | null {
+    return a != null && b != null ? a + b : null;
+  }
+
+  private safeDifference(a: number, b: number): number | null {
+    return a != null && b != null ? a - b : null;
+  }
+
   loadInventories() {
-    this.refreshIntervalObs(() => this.healthService.getMinimalHealth()).subscribe({
-      next: (result: any) => {
-        this.hostsCount = result.hosts;
-        this.monMap = result.mon_status;
-        this.mgrMap = result.mgr_map;
-        this.osdMap = result.osd_map;
-        this.poolStatus = result.pools;
-        this.pgStatus = result.pg_info;
-        this.rgwCount = result.rgw;
-        this.mdsMap = result.fs_map;
-        this.iscsiMap = result.iscsi_daemons;
-        this.healthData = result.health;
+    this.refreshIntervalObs(() => this.healthService.getHealthSnapshot()).subscribe({
+      next: (data: HealthSnapshotMap) => {
+        this.detailsCardData.fsid = data?.fsid;
+        this.healthCardData = data?.health;
+        this.hasHealthChecks = !!Object.keys(this.healthCardData?.checks ?? {})?.length;
+        this.monCount = data?.monmap?.num_mons;
+
+        const osdMap = data?.osdmap;
+        const osdIn = osdMap?.in;
+        const osdUp = osdMap?.up;
+        const osdTotal = osdMap?.num_osds;
+
+        this.osdCount = {
+          in: osdIn,
+          up: osdUp,
+          total: osdTotal,
+          down: this.safeDifference(osdTotal, osdUp),
+          out: this.safeDifference(osdTotal, osdIn)
+        };
+
+        const pgmap = data?.pgmap;
+        this.poolCount = pgmap?.num_pools;
+        this.usedCapacity = pgmap?.bytes_used;
+        this.totalCapacity = pgmap?.bytes_total;
+        this.pgStatus = {
+          statuses: pgmap?.pgs_by_state,
+          total: pgmap?.num_pgs
+        };
+
+        const mgrmap = data?.mgrmap;
+        const mgrInfo = mgrmap?.num_standbys;
+        const mgrSuccess = mgrmap?.num_active;
+
+        this.mgrStatus = {
+          info: mgrInfo,
+          success: mgrSuccess,
+          total: this.safeSum(mgrInfo, mgrSuccess)
+        };
+
+        const mdsInfo = data?.fsmap?.num_standbys;
+        const mdsSuccess = data?.fsmap?.num_active;
+
+        this.mdsStatus = {
+          info: mdsInfo,
+          success: mdsSuccess,
+          total: this.safeSum(mdsInfo, mdsSuccess)
+        };
+
+        this.rgwCount = data?.num_rgw_gateways;
+        this.iscsiMap = data?.num_iscsi_gateways;
+        this.hostsCount = data?.num_hosts;
         this.enabledFeature$ = this.featureToggles.get();
       }
     });
