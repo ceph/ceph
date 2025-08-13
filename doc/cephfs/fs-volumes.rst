@@ -380,7 +380,7 @@ file. The case of the file name used when the file was created is preserved.
 .. note:: Setting ``--casesensitive=0`` option implicitly enables
    Unicode normalization on the subvolume.
 
-A separate encryption tag is available for use with encryption. This is to be used tagging the subvolume, with
+A separate encryption tag is available for use with encryption. This is to be used tagging the subvolume with
 an identifier that is useful for system administrators or other services. By default, the tag is empty. This tag
 is not required, but can be a useful step in setting up encrypted subvolumes.
 
