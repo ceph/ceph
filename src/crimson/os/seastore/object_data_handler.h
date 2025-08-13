@@ -331,6 +331,8 @@ public:
   using clone_ret = clone_iertr::future<>;
   clone_ret clone(context_t ctx);
 
+  clone_ret copy_on_write(context_t ctx);
+
 private:
   /// Updates region [_offset, _offset + bl.length) to bl
   write_ret overwrite(
