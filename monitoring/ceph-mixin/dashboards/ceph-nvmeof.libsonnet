@@ -133,14 +133,14 @@ local g = import 'grafonnet/grafana.libsonnet';
       interval='1m',
       color={ mode: 'thresholds' },
       thresholdsMode='',
-      noValue=null,
+      noValue='0',
     ).addThresholds([
       { color: '#808080', value: null },
       { color: 'red', value: 1.0003 },
     ])
     .addTarget(
       $.addTargetSchema(
-        expr="count(ceph_nvmeof_gateway_info) + sum(ceph_health_detail{name='NVMEOF_GATEWAY_DOWN'})",
+        expr='count(ceph_cephadm_daemon_status{service_type="nvmeof"})',
         format='time_series',
         instant=true,
         legendFormat='Total',
@@ -150,17 +150,17 @@ local g = import 'grafonnet/grafana.libsonnet';
     )
     .addTarget(
       $.addTargetSchema(
-        expr='count(ceph_nvmeof_gateway_info)',
+        expr='count(ceph_cephadm_daemon_status{service_type="nvmeof"}==1 or ceph_cephadm_daemon_status{service_type="nvmeof"}==2)',
         format='time_series',
-        instant=false,
+        instant=true,
         legendFormat='Available',
-        range=true,
+        range=false,
         datasource='$datasource',
       )
     )
     .addTarget(
       $.addTargetSchema(
-        expr="(ceph_health_detail{name='NVMEOF_GATEWAY_DOWN'})",
+        expr='count(ceph_cephadm_daemon_status{service_type="nvmeof"}==0 or ceph_cephadm_daemon_status{service_type="nvmeof"}==-1 or ceph_cephadm_daemon_status{service_type="nvmeof"} == -2)',
         format='time_series',
         instant=true,
         legendFormat='Down',
@@ -208,8 +208,8 @@ local g = import 'grafonnet/grafana.libsonnet';
     ]),
 
     $.timeSeriesPanel(
-      title='Ceph Health NVMeoF WARNING',
-      description='Ceph healthchecks NVMeoF WARNINGs',
+      title='Unhealthy Gateway Trend',
+      description='Gateways in error states',
       gridPosition={ x: 8, y: 1, w: 7, h: 8 },
       lineInterpolation='linear',
       lineWidth=1,
@@ -221,89 +221,63 @@ local g = import 'grafonnet/grafana.libsonnet';
       showPoints='auto',
       unit='none',
       displayMode='list',
-      showLegend=true,
+      showLegend=false,
       placement='bottom',
-      tooltip={ mode: 'multi', sort: 'desc' },
+      tooltip={ hideZeros: true, mode: 'multi', sort: 'desc' },
       stackingMode='normal',
       spanNulls=false,
       decimals=0,
       thresholdsMode='absolute',
-      noValue='0',
+      noValue=0,
     ).addThresholds([
       { color: 'green', value: null },
     ])
     .addTarget(
       $.addTargetSchema(
-        expr="sum(ceph_health_detail{name='NVMEOF_GATEWAY_DOWN'})",
+        expr='group by (daemon_name) (ceph_cephadm_daemon_status{service_type="nvmeof"} == 0)',
         format='',
         instant=false,
-        legendFormat='NVMEOF_GATEWAY_DOWN',
+        legendFormat='stopped - {{ daemon_name }} ',
         range=true,
         datasource='$datasource',
       )
     )
     .addTarget(
       $.addTargetSchema(
-        expr="sum(ceph_health_detail{name='NVMEOF_GATEWAY_DELETING'})",
+        expr='group by (daemon_name) (ceph_cephadm_daemon_status{service_type="nvmeof"} == -1)',
         format='',
         instant=false,
-        legendFormat='NVMEOF_GATEWAY_DELETING',
+        legendFormat='error - {{ daemon_name }}',
         range=true,
         datasource='$datasource',
       )
     )
     .addTarget(
       $.addTargetSchema(
-        expr="sum(ceph_health_detail{name='NVMEOF_SINGLE_GATEWAY'})",
+        expr='group by (daemon_name) (ceph_cephadm_daemon_status{service_type="nvmeof"} == -2)',
         format='',
         instant=false,
-        legendFormat='NVMEOF_SINGLE_GATEWAY',
+        legendFormat='unknown_state - {{ daemon_name }}',
         range=true,
         datasource='$datasource',
       )
     )
-    .addOverrides([
-      {
-        matcher: { id: 'byName', options: 'NVMEOF_GATEWAY_DOWN' },
-        properties: [
-          {
-            id: 'color',
-            value: {
-              fixedColor: 'red',
-              mode: 'fixed',
+    .addOverrides(
+      [
+        {
+          matcher: { id: 'byType', options: 'number' },
+          properties: [
+            {
+              id: 'color',
+              value: {
+                fixedColor: 'orange',
+                mode: 'shades',
+              },
             },
-          },
-        ],
-      },
-      {
-        matcher: { id: 'byName', options: 'NVMEOF_GATEWAY_DELETING' },
-        properties: [
-          {
-            id: 'color',
-            value: {
-              fixedColor: 'dark-purple',
-              mode: 'fixed',
-            },
-          },
-        ],
-      },
-      {
-        matcher: { id: 'byName', options: 'NVMEOF_SINGLE_GATEWAY' },
-        properties: [
-          {
-            id: 'custom.lineWidth',
-            value: 1,
-          },
-          {
-            id: 'color',
-            value: {
-              fixedColor: 'super-light-orange',
-              mode: 'shades',
-            },
-          },
-        ],
-      },
-    ]),
+          ],
+        },
+      ]
+    ),
 
     $.addAlertListPanel(
       title='Active Alerts',
