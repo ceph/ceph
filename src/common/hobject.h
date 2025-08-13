@@ -33,7 +33,7 @@
 #include "reverse.h"
 
 #include <cstdint>
-#include <iostream>
+#include <iosfwd>
 #include <set>
 #include <string>
 
