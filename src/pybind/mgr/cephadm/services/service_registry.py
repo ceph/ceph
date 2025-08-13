@@ -72,6 +72,10 @@ class CephadmServiceRegistry:
         services_to_monitor.append('ceph')  # this is needed for mgr-prometheus targets
         return sorted(services_to_monitor)
 
+    def get_all_services(self) -> List["CephadmService"]:
+        """Retrieves an initialized service instance by type."""
+        return list(self._services.values())
+
 
 def register_cephadm_service(cls: Type["CephadmService"]) -> Type["CephadmService"]:
     """
