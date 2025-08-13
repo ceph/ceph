@@ -531,11 +531,12 @@ class RedmineUpkeep:
                 REDMINE_STATUS_ID_PENDING_BACKPORT,
                 REDMINE_STATUS_ID_RESOLVED,
             ]
-            yield {
-                f"cf_{REDMINE_CUSTOM_FIELD_ID_PULL_REQUEST_ID}": '>=0',
-                f"cf_{REDMINE_CUSTOM_FIELD_ID_MERGE_COMMIT}": '!*',
-                "status_id": ",".join([str(x) for x in statuses]),
-            }
+            for status in statuses:
+                yield {
+                    f"cf_{REDMINE_CUSTOM_FIELD_ID_PULL_REQUEST_ID}": '>=0',
+                    f"cf_{REDMINE_CUSTOM_FIELD_ID_MERGE_COMMIT}": '!*',
+                    "status_id": str(status),
+                }
 
         @staticmethod
         def requires_github_api():
@@ -747,7 +748,9 @@ class RedmineUpkeep:
         @staticmethod
         def get_filters():
             yield {
-                "status_id": REDMINE_STATUS_ID_PENDING_BACKPORT,
+                f"cf_{REDMINE_CUSTOM_FIELD_ID_MERGE_COMMIT}": '*',
+                f"cf_{REDMINE_CUSTOM_FIELD_ID_RELEASED_IN}": '!*',
+                "status_id": "*",
             }
 
         @staticmethod
@@ -800,7 +803,8 @@ class RedmineUpkeep:
         @staticmethod
         def get_filters():
             yield {
-                "status_id": REDMINE_STATUS_ID_PENDING_BACKPORT,
+                f"cf_{REDMINE_CUSTOM_FIELD_ID_MERGE_COMMIT}": '*',
+                "status_id": str(REDMINE_STATUS_ID_PENDING_BACKPORT),
             }
 
         @staticmethod
@@ -934,18 +938,16 @@ class RedmineUpkeep:
         def get_filters():
             filters = {}
             filters[f"cf_{REDMINE_CUSTOM_FIELD_ID_MERGE_COMMIT}"] = '*'
-            filter_out_statuses = [
-                REDMINE_STATUS_ID_RESOLVED,
-                REDMINE_STATUS_ID_CLOSED,
-                REDMINE_STATUS_ID_REJECTED,
-                REDMINE_STATUS_ID_WONTFIX,
-                REDMINE_STATUS_ID_CANTREPRODUCE,
-                REDMINE_STATUS_ID_DUPLICATE,
-                REDMINE_STATUS_ID_WONTFIX_EOL,
-                REDMINE_STATUS_ID_PENDING_BACKPORT,
+            statuses = [
+                REDMINE_STATUS_ID_NEW,
+                REDMINE_STATUS_ID_INPROGRESS,
+                REDMINE_STATUS_ID_TRIAGED,
+                REDMINE_STATUS_ID_NEEDINFO,
+                REDMINE_STATUS_ID_FIX_UNDER_REVIEW,
             ]
-            filters["status_id"] = "!" + ",".join([str(x) for x in filter_out_statuses])
-            yield filters
+            for status in statuses:
+                filters["status_id"] = str(status)
+                yield filters
 
         @staticmethod
         def requires_github_api():
