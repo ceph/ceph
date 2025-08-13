@@ -64,14 +64,14 @@ public:
   tcache(_tcache),
   technique(_technique)
   {
-    flags = FLAG_EC_PLUGIN_PARTIAL_READ_OPTIMIZATION |
+    flags = FLAG_EC_PLUGIN_OPTIMIZED_SUPPORTED |
+            FLAG_EC_PLUGIN_PARTIAL_READ_OPTIMIZATION |
             FLAG_EC_PLUGIN_PARTIAL_WRITE_OPTIMIZATION |
             FLAG_EC_PLUGIN_ZERO_INPUT_ZERO_OUTPUT_OPTIMIZATION |
             FLAG_EC_PLUGIN_PARITY_DELTA_OPTIMIZATION;
 
     if (technique == "reed_sol_van"sv) {
-      flags |= FLAG_EC_PLUGIN_OPTIMIZED_SUPPORTED |
-               FLAG_EC_PLUGIN_CRC_ENCODE_DECODE_SUPPORT;
+      flags |= FLAG_EC_PLUGIN_CRC_ENCODE_DECODE_SUPPORT;
     } else if (technique == "cauchy"sv && m == 1) {
       flags |= FLAG_EC_PLUGIN_CRC_ENCODE_DECODE_SUPPORT;
     }
