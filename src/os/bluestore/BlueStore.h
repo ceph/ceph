@@ -1059,10 +1059,27 @@ public:
       bool just_after_reshard //true to indicate that update should now respect shard boundaries
     );                        //as no further resharding will be done
     decltype(BlueStore::Blob::id) allocate_spanning_blob_id();
+
+    typedef std::function<std::tuple<uint32_t, uint32_t>(
+      uint32_t /*needs_reshard_begin*/,
+      uint32_t /*needs_reshard_end*/ ,
+      unsigned /*shard_index_begin*/ ,
+      unsigned /*shard_index_end*/ ,
+      uint32_t /*segment_size*/ ,
+      std::vector<bluestore_onode_t::shard_info>& /*new_shard_info*/ )> get_new_shard_fn;
+
+    std::tuple<uint32_t, uint32_t> get_new_shards(
+      uint32_t needs_reshard_begin,
+      uint32_t needs_reshard_end,
+      unsigned shard_index_begin,
+      unsigned shard_index_end,
+      uint32_t segment_size,
+      std::vector<bluestore_onode_t::shard_info>& new_shard_info);
     void reshard(
       KeyValueDB *db,
       KeyValueDB::Transaction t,
-      uint32_t segment_size);
+      uint32_t segment_size,
+      get_new_shard_fn get_new_shard_cb = nullptr);
 
     /// initialize Shards from the onode
     void init_shards(bool loaded, bool dirty);
