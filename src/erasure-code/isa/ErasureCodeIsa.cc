@@ -577,7 +577,7 @@ int ErasureCodeIsaDefault::parse(ErasureCodeProfile &profile,
     // benchmarktool and 10*(combinatoric for maximum loss) random
     // full erasures
     if (k > MAX_K) {
-      *ss << "Vandermonde: m=" << m
+      *ss << "Vandermonde: k=" << k
         << " should be less/equal than " << MAX_K
         << " : revert to k=" << MAX_K << std::endl;
       k = MAX_K;
@@ -587,18 +587,19 @@ int ErasureCodeIsaDefault::parse(ErasureCodeProfile &profile,
     if (m > 4) {
       *ss << "Vandermonde: m=" << m
         << " should be less than 5 to guarantee an MDS codec:"
-        << " revert to m=4" << std::endl;
-      m = 4;
-      err = -EINVAL;
+        << " switching to Cauchy technique" << std::endl;
+      matrixtype = kCauchy;
+      profile["technique"] = "cauchy"sv;
     }
     switch (m) {
     case 4:
       if (k > 21) {
         *ss << "Vandermonde: k=" << k
           << " should be less than 22 to guarantee an MDS"
-          << " codec with m=4: revert to k=21" << std::endl;
-        k = 21;
-        err = -EINVAL;
+          << " codec with m=4: switching"
+          << " to Cauchy technique" << std::endl;
+        matrixtype = kCauchy;
+        profile["technique"] = "cauchy"sv;
       }
       break;
     default:
