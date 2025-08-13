@@ -42,6 +42,7 @@
 #include "bluestore_common.h"
 #include "simple_bitmap.h"
 #include "os/kv.h"
+#include "include/byte_u_t.h"
 #include "include/compat.h"
 #include "include/intarith.h"
 #include "include/stringify.h"
