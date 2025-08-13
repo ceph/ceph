@@ -1347,6 +1347,8 @@ h2. Update Payload
                                 break
                     except redminelib.exceptions.ResourceAttrError as e:
                         log.warning(f"Redmine API error with filter {issue_filter}: {e}")
+                    if limit <= 0:
+                        break
 
 def main():
     parser = argparse.ArgumentParser(description="Ceph redmine upkeep tool")
