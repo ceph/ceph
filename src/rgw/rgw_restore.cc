@@ -108,6 +108,39 @@ void RestoreEntry::generate_test_instances(std::list<RestoreEntry*>& l)
   l.push_back(new RestoreEntry);
 }
 
+static std::string restore_id = "rgw restore";
+static std::string restore_req_id = "0";
+
+void Restore::send_notification(const DoutPrefixProvider* dpp,
+                              rgw::sal::Driver* driver,
+                              rgw::sal::Object* obj,
+                              rgw::sal::Bucket* bucket,
+                              const std::string& etag,
+                              uint64_t size,
+                              const std::string& version_id,
+                              const rgw::notify::EventTypeList& event_types,
+                              optional_yield y) {
+  // notification supported only for RADOS driver for now
+  auto notify = driver->get_notification(
+      dpp, obj, nullptr, event_types, bucket, restore_id,
+      const_cast<std::string&>(bucket->get_tenant()), restore_req_id, y);
+
+  int ret = notify->publish_reserve(dpp, nullptr);
+  if (ret < 0) {
+    ldpp_dout(dpp, 1) << "ERROR: notify publish_reserve failed, with error: "
+                      << ret << " for lc object: " << obj->get_name()
+                      << " for event_types: " << event_types << dendl;
+    return;
+  }
+  ret = notify->publish_commit(dpp, size, ceph::real_clock::now(), etag,
+                               version_id);
+  if (ret < 0) {
+    ldpp_dout(dpp, 5) << "WARNING: notify publish_commit failed, with error: "
+                      << ret << " for lc object: " << obj->get_name()
+                      << " for event_types: " << event_types << dendl;
+  }
+}
+
 int Restore::initialize(CephContext *_cct, rgw::sal::Driver* _driver) {
   int ret = 0;
   cct = _cct;
@@ -451,6 +484,14 @@ int Restore::process_restore_entry(RestoreEntry& entry, optional_yield y)
   if (attr_iter != attrs.end()) {
     target_placement.storage_class = attr_iter->second.to_str();
   }
+
+  bufferlist bl;
+  string etag;
+  attr_iter = attrs.find(RGW_ATTR_ETAG);
+  if (attr_iter != attrs.end()) {
+    etag = rgw_bl_str(bl);
+  }
+
   ret = driver->get_zone()->get_zonegroup().get_placement_tier(target_placement, &tier);
 
   if (ret < 0) {
@@ -488,6 +529,11 @@ int Restore::process_restore_entry(RestoreEntry& entry, optional_yield y)
   } else {
     ldpp_dout(this, 15) << __PRETTY_FUNCTION__ << ": Restore of object " << obj->get_key() << " succeeded" << dendl;
     entry.status = rgw::sal::RGWRestoreStatus::CloudRestored;
+    
+    // send notification in case the restore is successfully completed
+    send_notification(this, driver, obj.get(), bucket.get(), etag, obj->get_size(),
+                      obj->get_key().instance,
+                      {rgw::notify::ObjectRestore, rgw::notify::ObjectRestoreCompleted}, y);
   }
 
 done:
@@ -605,11 +651,11 @@ int Restore::update_cloud_restore_exp_date(rgw::sal::Bucket* pbucket,
 }
 
 int Restore::restore_obj_from_cloud(rgw::sal::Bucket* pbucket,
-	       			       rgw::sal::Object* pobj,
-				       rgw::sal::PlacementTier* tier,
-				       std::optional<uint64_t> days,
-				       const DoutPrefixProvider* dpp,
-				       optional_yield y)
+	       			                      rgw::sal::Object* pobj,
+                       			        rgw::sal::PlacementTier* tier,
+                     				        std::optional<uint64_t> days,
+                    				        const DoutPrefixProvider* dpp,
+                    				        optional_yield y)
 {
   int ret = 0;
 
@@ -655,6 +701,18 @@ int Restore::restore_obj_from_cloud(rgw::sal::Bucket* pbucket,
   }
 
   ldpp_dout(this, 10) << __PRETTY_FUNCTION__ << ": Restore of object " << pobj->get_key() << " is in progress." << dendl;  
+
+  auto& attrs = pobj->get_attrs();
+  bufferlist bl;
+  string etag;
+  auto attr_iter = attrs.find(RGW_ATTR_ETAG);
+  if (attr_iter != attrs.end()) {
+    etag = rgw_bl_str(bl);
+  }
+
+  send_notification(this, driver, pobj, pbucket, etag, pobj->get_size(),
+                     pobj->get_key().instance,
+                     {rgw::notify::ObjectRestore, rgw::notify::ObjectRestoreInitiated}, y);
   return ret;
 }
 
