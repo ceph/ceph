@@ -12,6 +12,7 @@
 #include <seastar/core/scollectd_api.hh>
 
 #include "common/config.h"
+#include "include/byte_u_t.h"
 #include "crimson/admin/admin_socket.h"
 #include "crimson/common/log.h"
 #include "crimson/common/metrics_helpers.h"

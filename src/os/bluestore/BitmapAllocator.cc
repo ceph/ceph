@@ -2,7 +2,7 @@
 // vim: ts=8 sw=2 sts=2 expandtab
 
 #include "BitmapAllocator.h"
-#include "include/types.h" // for byte_u_t
+#include "include/byte_u_t.h"
 
 #define dout_context cct
 #define dout_subsys ceph_subsys_bluestore
