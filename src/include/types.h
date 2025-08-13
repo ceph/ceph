@@ -15,11 +15,6 @@
 #ifndef CEPH_TYPES_H
 #define CEPH_TYPES_H
 
-#include <fmt/core.h> // for FMT_VERSION
-#if FMT_VERSION >= 90000
-#include <fmt/ostream.h>
-#endif
-
 // this is needed for ceph_fs to compile in userland
 #include "int_types.h"
 #include "platform_errno.h"
@@ -89,44 +84,7 @@ typedef __u32 epoch_t;       // map epoch  (32bits -> 13 epochs/second for 10 ye
 
 // --
 
-/*
- * Use this struct to pretty print values that should be formatted with a
- * decimal unit prefix (the classic SI units). No actual unit will be added.
- */
-struct si_u_t {
-  uint64_t v;
-  explicit si_u_t(uint64_t _v) : v(_v) {};
-};
-
-std::ostream& operator<<(std::ostream& out, const si_u_t& b);
-
-/*
- * Use this struct to pretty print values that should be formatted with a
- * binary unit prefix (IEC units). Since binary unit prefixes are to be used for
- * "multiples of units in data processing, data transmission, and digital
- * information" (so bits and bytes) and so far bits are not printed, the unit
- * "B" for "byte" is added besides the multiplier.
- */
-struct byte_u_t {
-  uint64_t v;
-  explicit byte_u_t(uint64_t _v) : v(_v) {};
-};
-
-#if FMT_VERSION >= 90000
-template <> struct fmt::formatter<byte_u_t> : fmt::ostream_formatter {};
-#endif
-
-std::ostream& operator<<(std::ostream& out, const byte_u_t& b);
-
 struct ceph_mon_subscribe_item;
 std::ostream& operator<<(std::ostream& out, const ceph_mon_subscribe_item& i);
-
-struct weightf_t {
-  float v;
-  // cppcheck-suppress noExplicitConstructor
-  weightf_t(float _v) : v(_v) {}
-};
-
-std::ostream& operator<<(std::ostream& out, const weightf_t& w);
 
 #endif

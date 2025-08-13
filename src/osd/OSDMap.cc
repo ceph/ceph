@@ -33,6 +33,7 @@
 #include "common/errno.h"
 #include "common/Formatter.h"
 #include "common/TextTable.h"
+#include "include/byte_u_t.h"
 #include "include/ceph_features.h"
 #include "include/common_fwd.h"
 #include "include/str_map.h"
@@ -40,6 +41,7 @@
 #include "include/encoding_set.h"
 #include "include/encoding_unordered_map.h"
 #include "include/encoding_vector.h"
+#include "include/weightf_t.h"
 
 #include "common/code_environment.h"
 #include "mon/health_check.h"

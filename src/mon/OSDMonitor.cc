@@ -78,8 +78,10 @@
 #include "compressor/Compressor.h"
 #include "common/Checksummer.h"
 
+#include "include/byte_u_t.h"
 #include "include/compat.h"
 #include "include/ceph_assert.h"
+#include "include/si_u_t.h"
 #include "include/stringify.h"
 #include "include/util.h"
 #include "common/cmdparse.h"
