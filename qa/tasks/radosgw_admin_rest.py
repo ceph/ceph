@@ -117,10 +117,10 @@ def rgwadmin_rest(connection, cmd, params=None, headers=None, raw=False):
         log.info(' json result: %s' % result.json())
         return result.status_code, result.json()
 
-def test_cap_user_info_without_keys_get_user_info_privileged_users(ctx, client, op, op_args, uid, display_name, access_key, secret_key, user_type):
+def test_cap_user_info_without_keys_get_user_info_privileged_users(ctx, admin_client, op, op_args, uid, display_name, access_key, secret_key, user_type):
     user_caps = 'user-info-without-keys=read'
 
-    (err, out) = rgwadmin(ctx, client, [
+    (err, out) = rgwadmin(ctx, admin_client, [
             'user', 'create',
             '--uid', uid,
             '--display-name', display_name,
@@ -133,7 +133,7 @@ def test_cap_user_info_without_keys_get_user_info_privileged_users(ctx, client, 
     logging.error(err)
     assert not err
 
-    endpoint = ctx.rgw.role_endpoints.get(client)
+    endpoint = ctx.rgw.role_endpoints.get(admin_client)
 
     privileged_user_conn = boto.s3.connection.S3Connection(
         aws_access_key_id=access_key,
@@ -149,7 +149,7 @@ def test_cap_user_info_without_keys_get_user_info_privileged_users(ctx, client, 
     assert len(out['keys']) == 1
     assert out['swift_keys'] == []
 
-    (err, out) = rgwadmin(ctx, client, [
+    (err, out) = rgwadmin(ctx, admin_client, [
             'user', 'rm',
             '--uid', uid,
             ])
@@ -157,7 +157,7 @@ def test_cap_user_info_without_keys_get_user_info_privileged_users(ctx, client, 
     logging.error(err)
     assert not err
 
-def test_cap_user_info_without_keys_get_user_info(ctx, client, admin_conn, admin_user, op, op_args):
+def test_cap_user_info_without_keys_get_user_info(ctx, admin_client, admin_conn, admin_user, op, op_args):
     true_admin_uid = 'a_user'
     true_admin_display_name = 'True Admin User'
     true_admin_access_key = 'true_admin_akey'
@@ -168,11 +168,11 @@ def test_cap_user_info_without_keys_get_user_info(ctx, client, admin_conn, admin
     system_access_key = 'system_akey'
     system_secret_key = 'system_skey'
 
-    test_cap_user_info_without_keys_get_user_info_privileged_users(ctx, client, op, op_args, system_uid, system_display_name, system_access_key, system_secret_key, '--system')
-    test_cap_user_info_without_keys_get_user_info_privileged_users(ctx, client, op, op_args, true_admin_uid, true_admin_display_name, true_admin_access_key, true_admin_secret_key, '--admin')
+    test_cap_user_info_without_keys_get_user_info_privileged_users(ctx, admin_client, op, op_args, system_uid, system_display_name, system_access_key, system_secret_key, '--system')
+    test_cap_user_info_without_keys_get_user_info_privileged_users(ctx, admin_client, op, op_args, true_admin_uid, true_admin_display_name, true_admin_access_key, true_admin_secret_key, '--admin')
 
     # TESTCASE 'info-existing','user','info','existing user','returns no keys with user-info-without-keys cap set to read'
-    (err, out) = rgwadmin(ctx, client, [
+    (err, out) = rgwadmin(ctx, admin_client, [
             'caps', 'add',
             '--uid', admin_user,
             '--caps', 'user-info-without-keys=read'
@@ -186,7 +186,7 @@ def test_cap_user_info_without_keys_get_user_info(ctx, client, admin_conn, admin
     assert 'swift_keys' not in out
 
     # TESTCASE 'info-existing','user','info','existing user','returns no keys with user-info-without-keys cap set to read'
-    (err, out) = rgwadmin(ctx, client, [
+    (err, out) = rgwadmin(ctx, admin_client, [
             'caps', 'add',
             '--uid', admin_user,
             '--caps', 'user-info-without-keys=*'
@@ -200,7 +200,7 @@ def test_cap_user_info_without_keys_get_user_info(ctx, client, admin_conn, admin
     assert 'swift_keys' not in out
 
     # TESTCASE 'info-existing','user','info','existing user','returns keys with user-info-without-keys cap set to read but cap users is set to read'
-    (err, out) = rgwadmin(ctx, client, [
+    (err, out) = rgwadmin(ctx, admin_client, [
             'caps', 'add',
             '--uid', admin_user,
             '--caps', 'users=read, write'
@@ -214,7 +214,7 @@ def test_cap_user_info_without_keys_get_user_info(ctx, client, admin_conn, admin
     assert 'swift_keys' in out
 
     # TESTCASE 'info-existing','user','info','existing user','returns 403 with user-info-without-keys cap set to write'
-    (err, out) = rgwadmin(ctx, client, [
+    (err, out) = rgwadmin(ctx, admin_client, [
             'caps', 'rm',
             '--uid', admin_user,
             '--caps', 'users=read, write; user-info-without-keys=*'
@@ -223,7 +223,7 @@ def test_cap_user_info_without_keys_get_user_info(ctx, client, admin_conn, admin
     logging.error(err)
     assert not err
 
-    (err, out) = rgwadmin(ctx, client, [
+    (err, out) = rgwadmin(ctx, admin_client, [
             'caps', 'add',
             '--uid', admin_user,
             '--caps', 'user-info-without-keys=write'
@@ -236,7 +236,7 @@ def test_cap_user_info_without_keys_get_user_info(ctx, client, admin_conn, admin
     assert ret == 403
 
     # remove cap user-info-without-keys permenantly for future testing
-    (err, out) = rgwadmin(ctx, client, [
+    (err, out) = rgwadmin(ctx, admin_client, [
             'caps', 'rm',
             '--uid', admin_user,
             '--caps', 'user-info-without-keys=write'
@@ -246,7 +246,7 @@ def test_cap_user_info_without_keys_get_user_info(ctx, client, admin_conn, admin
     assert not err
 
     # reset cap users permenantly for future testing
-    (err, out) = rgwadmin(ctx, client, [
+    (err, out) = rgwadmin(ctx, admin_client, [
             'caps', 'add',
             '--uid', admin_user,
             '--caps', 'users=read, write'
@@ -255,8 +255,8 @@ def test_cap_user_info_without_keys_get_user_info(ctx, client, admin_conn, admin
     logging.error(err)
     assert not err
 
-def test_cap_user_info_without_keys(ctx, client, admin_conn, admin_user, user1):
-    (err, out) = rgwadmin(ctx, client, [
+def test_cap_user_info_without_keys(ctx, admin_client, admin_conn, admin_user, user1):
+    (err, out) = rgwadmin(ctx, admin_client, [
             'caps', 'rm',
             '--uid', admin_user,
             '--caps', 'users=read, write'
@@ -267,10 +267,10 @@ def test_cap_user_info_without_keys(ctx, client, admin_conn, admin_user, user1):
 
     op = ['user', 'info']
     op_args = {'uid' : user1}
-    test_cap_user_info_without_keys_get_user_info(ctx, client, admin_conn, admin_user, op, op_args)
+    test_cap_user_info_without_keys_get_user_info(ctx, admin_client, admin_conn, admin_user, op, op_args)
 
     # add caps that were removed earlier in the function back in
-    (err, out) = rgwadmin(ctx, client, [
+    (err, out) = rgwadmin(ctx, admin_client, [
             'caps', 'add',
             '--uid', admin_user,
             '--caps', 'users=read, write'
@@ -293,9 +293,14 @@ def task(ctx, config):
     if isinstance(config, list):
         config = dict.fromkeys(config)
     clients = config.keys()
-
     # just use the first client...
-    client = next(iter(clients))
+    rest_client = admin_client = next(iter(clients))
+    
+    if config.get('rest-client') is not None:
+        rest_client = config.get('rest-client')
+         
+    if config.get('admin-client') is not None:
+        admin_client = config.get('admin-client')
 
     ##
     admin_user = 'ada'
@@ -324,7 +329,7 @@ def task(ctx, config):
     # legend (test cases can be easily grep-ed out)
     # TESTCASE 'testname','object','method','operation','assertion'
     # TESTCASE 'create-admin-user','user','create','administrative user','succeeds'
-    (err, out) = rgwadmin(ctx, client, [
+    (err, out) = rgwadmin(ctx, admin_client, [
             'user', 'create',
             '--uid', admin_user,
             '--display-name', admin_display_name,
@@ -338,8 +343,8 @@ def task(ctx, config):
     assert not err
 
     assert hasattr(ctx, 'rgw'), 'radosgw-admin-rest must run after the rgw task'
-    endpoint = ctx.rgw.role_endpoints.get(client)
-    assert endpoint, 'no rgw endpoint for {}'.format(client)
+    endpoint = ctx.rgw.role_endpoints.get(rest_client)
+    assert endpoint, 'no rgw endpoint for {}'.format(rest_client)
 
     admin_conn = boto.s3.connection.S3Connection(
         aws_access_key_id=admin_access_key,
@@ -453,7 +458,7 @@ def task(ctx, config):
     assert out['mfa_ids'] == []
 
     # TESTCASES for cap user-info-without-keys
-    test_cap_user_info_without_keys(ctx, client, admin_conn, admin_user, user1)
+    test_cap_user_info_without_keys(ctx, admin_client, admin_conn, admin_user, user1)
 
     # TESTCASE 'suspend-ok','user','suspend','active user','succeeds'
     (ret, out) = rgwadmin_rest(admin_conn, ['user', 'modify'], {'uid' : user1, 'suspended' : True})
