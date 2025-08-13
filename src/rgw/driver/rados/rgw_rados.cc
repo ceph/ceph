@@ -5693,7 +5693,8 @@ int RGWRados::restore_obj_from_cloud(RGWLCCloudTierCtx& tier_ctx,
     return ret;
   }
 
-  return ret; 
+  // this returned size can be used to send bucket notification
+  return accounted_size; 
 }
 
 int RGWRados::check_bucket_empty(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_info, optional_yield y)
