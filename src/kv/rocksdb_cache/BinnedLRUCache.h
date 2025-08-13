@@ -182,6 +182,10 @@ enum stat_e : int {
   l_misses,       // calculated from lookups - hits
   stat_cnt
 };
+enum perf_e : int {
+  l_rebalance = stat_cnt + 1,
+  l_rebalance_free
+};
 
 struct ShardStats {
   uint64_t val[stat_cnt] = {0};
@@ -221,11 +225,15 @@ struct ShardStats {
   }
 };
 
+class BinnedLRUCache;
+
 // A single shard of sharded cache.
 class alignas(CACHE_LINE_SIZE) BinnedLRUCacheShard : public CacheShard {
  public:
-  BinnedLRUCacheShard(CephContext *c, size_t capacity, bool strict_capacity_limit,
-                double high_pri_pool_ratio);
+  BinnedLRUCacheShard(
+    BinnedLRUCache* cache,
+    CephContext *c, size_t capacity, bool strict_capacity_limit,
+    double high_pri_pool_ratio);
   virtual ~BinnedLRUCacheShard();
 
   // Separate from constructor so caller can easily make an array of BinnedLRUCache
@@ -300,6 +308,10 @@ class alignas(CACHE_LINE_SIZE) BinnedLRUCacheShard : public CacheShard {
   void print_bins(std::stringstream& out) const;
 
  private:
+   // the cache shard is part of
+  friend class BinnedLRUCache;
+  BinnedLRUCache* cache;
+
   CephContext *cct;
   void LRU_Remove(BinnedLRUHandle* e);
   void LRU_Insert(BinnedLRUHandle* e);
@@ -372,6 +384,19 @@ class alignas(CACHE_LINE_SIZE) BinnedLRUCacheShard : public CacheShard {
 
   // Circular buffer of byte counters for age binning
   boost::circular_buffer<std::shared_ptr<uint64_t>> age_bins;
+
+  // Low mark of lru elements to trigger rebalance
+  size_t low_lru_count;
+
+  // High usage spike to trigger rebalance
+  size_t high_usage_spike;
+
+  // context used by rebalance
+  struct {
+    size_t new_item_count;
+    size_t new_capacity;
+    BinnedLRUHandle* lru_end; // element in lru waiting to be evicted
+  } reb_ctx;
 };
 
 class BinnedLRUCache : public ShardedCache {
@@ -414,6 +439,8 @@ class BinnedLRUCache : public ShardedCache {
     return "RocksDB Binned LRU Cache";
   }
 
+  void rebalance(size_t new_capacity = 0);
+
  private:
   void SetupPerfCounters();
   void UpdatePerfCounters();
@@ -423,11 +450,13 @@ class BinnedLRUCache : public ShardedCache {
   std::string name;
   BinnedLRUCacheShard* shards_;
   int num_shards_ = 0;
+  bool rebalance_enabled = false;
   PerfCounters* perfstats = nullptr;
   ShardStats prev_stats;
   class SocketHook;
   friend class SocketHook;
   AdminSocketHook* asok_hook = nullptr;
+  friend BinnedLRUCacheShard;
 };
 
 }  // namespace rocksdb_cache

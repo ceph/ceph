@@ -186,12 +186,12 @@ class ShardedCache : public rocksdb::Cache, public PriorityCache::PriCache {
   uint64_t bins[PriorityCache::Priority::LAST+1] = {0};
   int64_t cache_bytes[PriorityCache::Priority::LAST+1] = {0};
   double cache_ratio = 0;
-
   int num_shard_bits_;
-  mutable std::mutex capacity_mutex_;
-  size_t capacity_;
   bool strict_capacity_limit_;
   std::atomic<uint64_t> last_id_;
+  protected:
+  mutable std::mutex capacity_mutex_;
+  size_t capacity_;
 };
 
 extern int GetDefaultCacheShardBits(size_t capacity);

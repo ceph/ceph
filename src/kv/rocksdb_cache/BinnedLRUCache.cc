@@ -107,9 +107,12 @@ void BinnedLRUHandleTable::Resize() {
   length_ = new_length;
 }
 
-BinnedLRUCacheShard::BinnedLRUCacheShard(CephContext *c, size_t capacity, bool strict_capacity_limit,
-                             double high_pri_pool_ratio)
-    : cct(c),
+BinnedLRUCacheShard::BinnedLRUCacheShard(
+  BinnedLRUCache* cache,
+  CephContext *c, size_t capacity, bool strict_capacity_limit,
+  double high_pri_pool_ratio)
+    : cache(cache),
+      cct(c),
       capacity_(0),
       high_pri_pool_usage_(0),
       strict_capacity_limit_(strict_capacity_limit),
@@ -117,13 +120,16 @@ BinnedLRUCacheShard::BinnedLRUCacheShard(CephContext *c, size_t capacity, bool s
       high_pri_pool_capacity_(0),
       usage_(0),
       lru_usage_(0),
-      age_bins(1) {
+      age_bins(1)
+{
   shift_bins();
   // Make empty circular linked list
   lru_.next = &lru_;
   lru_.prev = &lru_;
   lru_low_pri_ = &lru_;
   SetCapacity(capacity);
+  low_lru_count = 0;
+  high_usage_spike = capacity;
 }
 
 BinnedLRUCacheShard::~BinnedLRUCacheShard() {}
@@ -442,29 +448,14 @@ rocksdb::Status BinnedLRUCacheShard::Insert(const rocksdb::Slice& key, uint32_t 
   e->SetInCache(true);
   e->SetPriority(priority);
   std::copy_n(key.data(), e->key_length, e->key_data);
-
+  bool need_rebalancing = false;
   {
     std::lock_guard<std::mutex> l(mutex_);
     stats[l_elems]++;
     stats[l_inserts]++;
     // Free the space following strict LRU policy until enough space
     // is freed or the lru list is empty
-    EvictFromLRU(charge, deleted);
-
-    if (usage_ - lru_usage_ + charge > capacity_ &&
-        (strict_capacity_limit_ || handle == nullptr)) {
-      if (handle == nullptr) {
-        // Don't insert the entry but still return ok, as if the entry inserted
-        // into cache and get evicted immediately.
-        ceph_assert(!e->next);
-        e->next = deleted;
-        deleted = e;
-      } else {
-        delete e;
-        *handle = nullptr;
-        s = rocksdb::Status::Incomplete("Insert failed due to LRU cache being full.");
-      }
-    } else {
+    {
       // insert into the cache
       // note that the cache might get larger than its capacity if not enough
       // space was freed
@@ -489,8 +480,23 @@ rocksdb::Status BinnedLRUCacheShard::Insert(const rocksdb::Slice& key, uint32_t 
       }
       s = rocksdb::Status::OK();
     }
+    //if usage spiked suddenly or lru elements went below warn level, rebalance
+    need_rebalancing = cache->rebalance_enabled && (
+      (usage_ > high_usage_spike) ||
+      ((usage_ > capacity_) && (stats[l_elems] < low_lru_count)) );
+    if (!need_rebalancing) {
+      EvictFromLRU(0, deleted);
+    } else {
+      if (capacity_ < usage_) {
+        // will fix capacity with rebalancing but we need to make usage <= capacity for now
+        capacity_ = usage_;
+      }
+    }
   }
-
+  if (need_rebalancing) {
+    // rebalance must be called without shard lock
+    cache->rebalance();
+  }
   // we free the entries here outside of mutex for
   // performance reasons
   FreeDeleted(deleted);
@@ -664,8 +670,9 @@ BinnedLRUCache::BinnedLRUCache(
   size_t per_shard = (capacity + (num_shards_ - 1)) / num_shards_;
   for (int i = 0; i < num_shards_; i++) {
     new (&shards_[i])
-        BinnedLRUCacheShard(c, per_shard, strict_capacity_limit, high_pri_pool_ratio);
+        BinnedLRUCacheShard(this, c, per_shard, strict_capacity_limit, high_pri_pool_ratio);
   }
+  rebalance_enabled = cct->_conf->rocksdb_cache_rebalance;
   SetupPerfCounters();
   asok_hook = new SocketHook(*this);
 }
@@ -674,9 +681,16 @@ void BinnedLRUCache::SetupPerfCounters()
 {
   int l_first = 0;
   int l_last = l_first + 1 + stat_cnt;
+  if (rebalance_enabled) {
+    l_last += 2;
+  }
   PerfCountersBuilder b(cct, string("rocksdb-cache-") + name, l_first, l_last);
   for (uint32_t j = l_capacity; j <= l_misses; j++) {
     b.add_u64(1 + j, ShardStats::stat_name[j], ShardStats::stat_descr[j]);
+  }
+  if (rebalance_enabled) {
+    b.add_time_avg(l_rebalance, "rebalance", "execution time for shard rebalance");
+    b.add_time_avg(l_rebalance_free, "rebalance_free", "execution time for eviction of items that go over capacity");
   }
   perfstats = b.create_perf_counters();
   cct->get_perfcounters_collection()->add(perfstats);
@@ -759,6 +773,207 @@ size_t BinnedLRUCache::GetHighPriPoolUsage() const {
   return usage;
 }
 
+void BinnedLRUCache::rebalance(size_t target_capacity)
+{
+  std::lock_guard l(capacity_mutex_);
+  auto r_start = mono_clock::now();
+  // lock all, as it becomes possible
+  std::vector<bool> locked(num_shards_, false);
+  bool all_locked = true;
+  bool wait_on_first_unlocked = false;
+  do {
+    all_locked = true;
+    for (int s = 0; s < num_shards_; s++) {
+      if (!locked[s]) {
+        if (shards_[s].mutex_.try_lock()) {
+          locked[s] = true;
+        } else {
+          all_locked = false;
+          if (wait_on_first_unlocked) {
+            shards_[s].mutex_.lock();
+            locked[s] = true;
+            wait_on_first_unlocked = false;
+          }
+        }
+      }
+    }
+    wait_on_first_unlocked = true;
+  } while (!all_locked);
+
+  size_t current_usage = 0;
+  size_t current_items = 0;
+  if (target_capacity == 0) {
+    target_capacity = capacity_;
+  } else {
+    ceph_assert(target_capacity > 0);
+    capacity_ = target_capacity;
+  }
+
+  std::vector<BinnedLRUCacheShard*> ordered(num_shards_, nullptr);
+  for (int s = 0; s < num_shards_; s++) {
+    auto& shard = shards_[s];
+    shard.reb_ctx.new_capacity = shard.usage_;
+    current_usage += shard.usage_;
+    current_items += shard.stats[l_elems];
+    shard.reb_ctx.new_item_count = shard.stats[l_elems];
+    shard.reb_ctx.lru_end = shard.lru_.next;
+  }
+  size_t avg_item = current_items > 10 ? current_usage / current_items : 4200;
+
+  uint64_t max_steps = cct->_conf->rocksdb_cache_rebalance_max_steps;
+  if (max_steps == 0) {
+    // fast algorithm
+    // bonus can be negative !
+    ssize_t bonus = ssize_t(target_capacity - current_usage) / (ssize_t)avg_item;
+    ssize_t average_count = (ssize_t(current_items) + bonus) / num_shards_;
+    ceph_assert(average_count >= 0);
+
+    dout(10) << "current_usage=" << current_usage
+      << " target_capacity=" << target_capacity
+      << " avg.item=" << avg_item
+      << " bonus items=" << bonus
+      << " average_count=" << average_count << dendl;
+
+    for (int s = 0; s < num_shards_; s++) {
+      auto& shard = shards_[s];
+      ssize_t more_items = average_count - shard.reb_ctx.new_item_count;
+      shard.reb_ctx.new_capacity += more_items * avg_item;
+      shard.reb_ctx.new_item_count += more_items;
+    }
+  } else {
+    // more precise algorithm
+    dout(10) << "current_usage=" << current_usage
+      << " target_capacity=" << target_capacity
+      << " avg.item=" << avg_item << dendl;
+
+    std::vector<int> shard_order(num_shards_);
+    for (int s = 0; s < num_shards_; s++) {
+      shard_order[s] = s;
+    }
+    std::sort(shard_order.begin(), shard_order.end(), [&](int a, int b) {
+      return shards_[a].stats[l_elems] > shards_[b].stats[l_elems];
+    });
+
+    // select shard X that has most elements
+    // select shard Y that has least elements
+    // repeat:
+    // update X:
+    //   element count by -1
+    //   pop element from lru end (that is, if possible)
+    //   reduce X's capacity, reduce total capacity
+    //   elect new X
+    // if total capacity is below target capacity (less by almost_median)
+    //   if X has +-1 the same count elements as Y, STOP
+    //   update Y:
+    //     element count by +1
+    //     add capacity almost_median
+    //     and +1 elem
+    //     elect new Y
+    int last_shard = num_shards_ - 1;
+    int Xidx = 0;
+    int Yidx = last_shard;
+    uint32_t iter;
+    for (iter = 0; iter < max_steps; iter++) {
+      auto &X = shards_[shard_order[Xidx]];
+      auto &Y = shards_[shard_order[Yidx]];
+      if (Y.reb_ctx.new_item_count + 1 >= X.reb_ctx.new_item_count) {
+        // almost equal +/-1
+        break;
+      }
+      if (current_usage + avg_item <= target_capacity) {
+        Y.reb_ctx.new_item_count++;
+        Y.reb_ctx.new_capacity += avg_item;
+        current_usage += avg_item;
+        // elect new Y
+        ceph_assert(Yidx >= 1);
+        if (Y.reb_ctx.new_item_count >
+            shards_[shard_order[Yidx - 1]].reb_ctx.new_item_count) {
+          Yidx--;
+        } else {
+          Yidx = 0;
+        }
+      } else {
+        if (X.reb_ctx.new_item_count == 0)
+          break; // sanity break
+        X.reb_ctx.new_item_count--;
+        if (X.reb_ctx.lru_end != &X.lru_) {
+          // some real element to pick up from lru end
+          X.reb_ctx.new_capacity -= X.reb_ctx.lru_end->charge;
+          current_usage -= X.reb_ctx.lru_end->charge;
+          X.reb_ctx.lru_end = X.reb_ctx.lru_end->next;
+        } else {
+          // lru completely exhaused, pretend we pop something
+          size_t v = X.reb_ctx.new_capacity / X.reb_ctx.new_item_count;
+          X.reb_ctx.new_capacity -= v;
+          current_usage -= v;
+        }
+        // elect new X
+        if (Xidx == last_shard) {
+          Xidx = 0;
+        } else {
+          if (X.reb_ctx.new_item_count <
+              shards_[shard_order[Xidx + 1]].reb_ctx.new_item_count) {
+            Xidx++;
+          } else {
+            Xidx = 0;
+          }
+        }
+      }
+    }
+    if (iter == max_steps) {
+      dout(5) << "Stopped after " << iter << " steps." << dendl;
+    }
+    current_usage = 0;
+    for (int s = 0; s < num_shards_; s++) {
+      auto &shard = shards_[s];
+      current_usage += shard.reb_ctx.new_capacity;
+    }
+    size_t extra_per_shard = 0;
+    if (current_usage < target_capacity) {
+      extra_per_shard = (target_capacity - current_usage) / num_shards_;
+      for (int s = 0; s < num_shards_; s++) {
+        auto &shard = shards_[s];
+        shard.reb_ctx.new_capacity += extra_per_shard;
+      }
+    }
+    dout(10) << "planned_usage= " << current_usage
+             << "target_capacity=" << target_capacity
+             << "extra=" << extra_per_shard << dendl;
+  }
+  {
+    dout(10);
+    for (int s = 0; s < num_shards_; s++) {
+      auto& shard = shards_[s];
+      *_dout << std::endl << "shard " << s
+        << ": capacity=" << shard.capacity_
+        << "->" << shard.reb_ctx.new_capacity
+        << " elems=" << shard.stats[l_elems]
+        << "->" << shard.reb_ctx.new_item_count;
+    }
+    *_dout << dendl;
+  }
+  for (int s = 0; s < num_shards_; s++) {
+    auto& shard = shards_[s];
+    shard.capacity_ = shard.reb_ctx.new_capacity;
+    shard.high_usage_spike = shard.capacity_ * cct->_conf->rocksdb_cache_rebalance_capacity;
+    shard.low_lru_count = shard.reb_ctx.new_item_count * cct->_conf->rocksdb_cache_rebalance_items;
+    shard.reb_ctx.lru_end = nullptr;
+    shard.EvictFromLRU(0, shard.reb_ctx.lru_end);
+    shard.mutex_.unlock();
+  }
+  auto r_before_free = mono_clock::now();
+
+  for (int s = 0; s < num_shards_; s++) {
+    auto& shard = shards_[s];
+    shard.FreeDeleted(shard.reb_ctx.lru_end);
+  }
+  auto r_finish = mono_clock::now();
+  double elapsed = ceph::to_seconds<double>(r_finish - r_start);
+  dout(5) << "rebalance " << name << " took " << elapsed << "s" << dendl;
+
+  perfstats->tinc(l_rebalance_free, r_finish - r_before_free);
+  perfstats->tinc(l_rebalance, r_finish - r_start);
+}
 // PriCache
 
 int64_t BinnedLRUCache::request_cache_bytes(PriorityCache::Priority pri, uint64_t total_cache) const
@@ -807,7 +1022,14 @@ int64_t BinnedLRUCache::commit_cache_size(uint64_t total_bytes)
       get_cache_bytes(), total_bytes);
   ldout(cct, 10) << __func__ << " old: " << old_bytes
                  << " new: " << new_bytes << dendl;
-  SetCapacity((size_t) new_bytes);
+
+  if (rebalance_enabled) {
+    rebalance(new_bytes);
+  } else {
+    // evenly split capacity between shards
+    SetCapacity((size_t) new_bytes);
+
+  }
 
   double ratio = 0;
   if (new_bytes > 0) {
