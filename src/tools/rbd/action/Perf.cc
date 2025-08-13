@@ -4,6 +4,8 @@
 #include "tools/rbd/ArgumentTypes.h"
 #include "tools/rbd/Shell.h"
 #include "tools/rbd/Utils.h"
+#include "include/byte_u_t.h"
+#include "include/si_u_t.h"
 #include "include/stringify.h"
 #include "common/ceph_context.h"
 #include "common/ceph_json.h"

@@ -25,6 +25,7 @@
 #include "auth/cephx/CephxKeyServer.h"
 #include "global/global_init.h"
 #include "common/JSONFormatter.h"
+#include "include/byte_u_t.h"
 #include "include/encoding_flat_map.h"
 #include "include/scope_guard.h"
 #include "include/stringify.h"
