@@ -188,17 +188,8 @@ struct CompatSet {
 
   std::ostream& printlite(std::ostream& o) const;
 
-  void encode(ceph::buffer::list& bl) const {
-    compat.encode(bl);
-    ro_compat.encode(bl);
-    incompat.encode(bl);
-  }
-
-  void decode(ceph::buffer::list::const_iterator& bl) {
-    compat.decode(bl);
-    ro_compat.decode(bl);
-    incompat.decode(bl);
-  }
+  void encode(ceph::buffer::list& bl) const;
+  void decode(ceph::buffer::list::const_iterator& bl);
 
   void dump(ceph::Formatter *f) const;
 
