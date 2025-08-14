@@ -27,13 +27,14 @@
 
 #include "msg/msg_types.h"
 
-#include "DaemonHealthMetric.h"
 #include "DaemonKey.h"
 #include "DaemonPerfCounters.h"
 
 namespace ceph {
   class Formatter;
 }
+
+class DaemonHealthMetric;
 
 // The state that we store about one daemon
 class DaemonState
@@ -78,10 +79,9 @@ class DaemonState
   // The perf counters received in MMgrReport messages
   DaemonPerfCounters perf_counters;
 
-  explicit DaemonState(PerfCounterTypes &types_)
-    : perf_counters(types_)
-  {
-  }
+  explicit DaemonState(PerfCounterTypes &types_);
+  ~DaemonState() noexcept;
+
   void set_metadata(const std::map<std::string,std::string>& m);
   const std::map<std::string,std::string>& _get_config_defaults();
 };
