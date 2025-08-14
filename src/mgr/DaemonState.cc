@@ -21,6 +21,7 @@
 #include "common/Clock.h" // for ceph_clock_now()
 #include "common/debug.h"
 #include "common/Formatter.h"
+#include "messages/MMgrReport.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mgr
@@ -210,6 +211,9 @@ const std::map<std::string,std::string>& DaemonState::_get_config_defaults()
   }
   return config_defaults;
 }
+
+DaemonStateIndex::DaemonStateIndex() = default;
+DaemonStateIndex::~DaemonStateIndex() = default;
 
 void DaemonStateIndex::insert(DaemonStatePtr dm)
 {
