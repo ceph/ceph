@@ -19,7 +19,7 @@ options:
   default: 6
   flags:
   - startup
-- name: crimson_seastar_cpu_cores
+- name: crimson_cpu_set
   type: str
   level: advanced
   desc: CPU cores on which seastar reactor threads will run in cpuset(7) format, smp::count is deduced from this option
@@ -35,7 +35,7 @@ options:
   type: uint
   level: advanced
   default: 0
-  desc: The number of seastar reactors, overridden if crimson_seastar_cpu_cores is set
+  desc: The number of seastar reactors, overridden if crimson_cpu_set is set
   flags:
   - startup
   min: 0
