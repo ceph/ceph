@@ -45,6 +45,7 @@
 #include "messages/MGenericMessage.h"
 
 #include "include/ceph_assert.h"
+#include "include/cephfs/encoding.h" // for encode(mds_gid_t)
 #include "include/str_list.h"
 #include "include/stringify.h"
 #include "include/util.h" // for dump_services()
