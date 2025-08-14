@@ -146,11 +146,11 @@ These backends allow Crimson to interact with legacy or external object store im
 
    The default object store used by the classic ``ceph-osd``. It provides robust, production-grade storage capabilities.
 
-   The ``crimson_alien_op_num_threads`` option needs to be set according to the cpu set available.
+   The ``crimson_bluestore_num_threads`` option needs to be set according to the cpu set available.
    This defines the number of threads dedicated to serving the BlueStore ObjectStore on each OSD.
 
    If ``crimson_cpu_num`` is used from `Crimson CPU allocation`_,
-   The counterpart ``crimson_alien_thread_cpu_cores`` should also be used accordingly to
+   The counterpart ``crimson_bluestore_cpu_set`` should also be used accordingly to
    allow the two sets to be mutually exclusive.
 
 .. describe:: memstore
