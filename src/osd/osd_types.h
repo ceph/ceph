@@ -1213,14 +1213,6 @@ private:
 };
 WRITE_CLASS_ENCODER_FEATURES(pool_opts_t)
 
-template <typename T, typename... Ts>
-std::ostream& operator<<(std::ostream& out, const std::variant<T, Ts...>& v) {
-  std::visit([&out](const auto& value) {
-    out << value;
-  }, v);
-  return out;
-}
-
 struct pg_merge_meta_t {
   pg_t source_pgid;
   epoch_t ready_epoch = 0;
