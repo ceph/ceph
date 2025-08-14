@@ -445,10 +445,9 @@ seastar::future<> OSD::start()
   LOG_PREFIX(OSD::start);
   INFO("seastar::smp::count {}", seastar::smp::count);
   if (auto cpu_cores =
-        local_conf().get_val<std::string>("crimson_seastar_cpu_cores");
+        local_conf().get_val<std::string>("crimson_cpu_set");
       cpu_cores.empty()) {
-    clog->warn() << "for optimal performance please set "
-                    "crimson_seastar_cpu_cores";
+    clog->warn() << "for optimal performance please set crimson_cpu_set";
   }
   startup_time = ceph::mono_clock::now();
   ceph_assert(seastar::this_shard_id() == PRIMARY_CORE);
