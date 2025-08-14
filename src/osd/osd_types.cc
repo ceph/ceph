@@ -34,6 +34,7 @@
 #include "include/ceph_features.h"
 #include "include/encoding.h"
 #include "include/stringify.h"
+#include "include/variant_print.h"
 
 #include "crush/CrushWrapper.h"
 extern "C" {
