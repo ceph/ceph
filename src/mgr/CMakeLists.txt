@@ -12,6 +12,7 @@ if(WITH_MGR)
     BaseMgrModule.cc
     BaseMgrStandbyModule.cc
     ClusterState.cc
+    DaemonHealthMetric.cc
     DaemonHealthMetricCollector.cc
     DaemonKey.cc
     DaemonServer.cc
