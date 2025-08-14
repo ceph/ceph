@@ -84,7 +84,7 @@ For example, for deploying a node with eight CPU cores per OSD:
    ceph config set osd crimson_cpu_num 8
 
 Note that ``crimson_cpu_num`` does **not** pin threads to specific CPU cores.
-To explicitly assign CPU cores to Crimson OSDs, use the ``crimson_seastar_cpu_cores`` parameter.
+To explicitly assign CPU cores to Crimson OSDs, use the ``crimson_cpu_set`` parameter.
 This enables CPU pinning, which *may* improve performance.
 However, using this option requires manually setting the CPU set for each OSD,
 and is generally less recommended due to its complexity.

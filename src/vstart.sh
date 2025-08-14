@@ -1213,7 +1213,7 @@ do_balance_cpu() {
 
     local reactor_interval=${cpu_table[${osd}]}
     if ! [ "${reactor_interval}" == "" ]; then
-        local cmd="$CEPH_BIN/ceph -c $conf_fn config set osd.$osd crimson_seastar_cpu_cores ${reactor_interval}"
+        local cmd="$CEPH_BIN/ceph -c $conf_fn config set osd.$osd crimson_cpu_set ${reactor_interval}"
         echo $cmd
         $cmd
     else
