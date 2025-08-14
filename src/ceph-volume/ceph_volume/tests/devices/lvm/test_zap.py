@@ -12,8 +12,6 @@ from typing import Tuple, List
 
 def process_call(command, **kw):
     result: Tuple[List[str], List[str], int] = ''
-    if 'udevadm' in command:
-        result = data_zap.udevadm_property, [], 0
     if 'ceph-bluestore-tool' in command:
         result = data_zap.ceph_bluestore_tool_output, [], 0
     if 'is-active' in command:
@@ -115,7 +113,7 @@ class TestZap:
 
     @patch('ceph_volume.devices.lvm.zap.Zap.zap')
     @patch('ceph_volume.process.call', Mock(side_effect=process_call))
-    def test_lv_is_matched_id(self, mock_zap, monkeypatch, is_root):
+    def test_lv_is_matched_id(self, mock_zap, monkeypatch, is_root, patch_udevdata):
         tags = 'ceph.osd_id=0,ceph.journal_uuid=x,ceph.type=data'
         osd = api.Volume(lv_name='volume1', lv_uuid='y', vg_name='',
                          lv_path='/dev/VolGroup/lv', lv_tags=tags)
@@ -131,7 +129,7 @@ class TestZap:
     @patch('ceph_volume.devices.lvm.zap.Zap.zap')
     @patch('ceph_volume.devices.raw.list.List.filter_lvm_osd_devices', Mock(return_value='/dev/sdb'))
     @patch('ceph_volume.process.call', Mock(side_effect=process_call))
-    def test_raw_is_matched_id(self, mock_zap, monkeypatch, is_root):
+    def test_raw_is_matched_id(self, mock_zap, monkeypatch, is_root, patch_udevdata):
         volumes = []
         monkeypatch.setattr(zap.api, 'get_lvs', lambda **kw: volumes)
 
@@ -141,7 +139,7 @@ class TestZap:
         mock_zap.assert_called_once()
 
     @patch('ceph_volume.devices.lvm.zap.Zap.zap')
-    def test_lv_is_matched_fsid(self, mock_zap, monkeypatch, is_root):
+    def test_lv_is_matched_fsid(self, mock_zap, monkeypatch, is_root, patch_udevdata):
         tags = 'ceph.osd_id=0,ceph.osd_fsid=asdf-lkjh,ceph.journal_uuid=x,' +\
                'ceph.type=data'
         osd = api.Volume(lv_name='volume1', lv_uuid='y', vg_name='',
@@ -159,7 +157,7 @@ class TestZap:
     @patch('ceph_volume.devices.lvm.zap.Zap.zap')
     @patch('ceph_volume.devices.raw.list.List.filter_lvm_osd_devices', Mock(return_value='/dev/sdb'))
     @patch('ceph_volume.process.call', Mock(side_effect=process_call))
-    def test_raw_is_matched_fsid(self, mock_zap, monkeypatch, is_root):
+    def test_raw_is_matched_fsid(self, mock_zap, monkeypatch, is_root, patch_udevdata):
         volumes = []
         monkeypatch.setattr(zap.api, 'get_lvs', lambda **kw: volumes)
 
@@ -170,7 +168,7 @@ class TestZap:
         mock_zap.assert_called_once
 
     @patch('ceph_volume.devices.lvm.zap.Zap.zap')
-    def test_lv_is_matched_id_fsid(self, mock_zap, monkeypatch, is_root):
+    def test_lv_is_matched_id_fsid(self, mock_zap, monkeypatch, is_root, patch_udevdata):
         tags = 'ceph.osd_id=0,ceph.osd_fsid=asdf-lkjh,ceph.journal_uuid=x,' +\
                'ceph.type=data'
         osd = api.Volume(lv_name='volume1', lv_uuid='y', vg_name='',
@@ -189,7 +187,7 @@ class TestZap:
     @patch('ceph_volume.devices.lvm.zap.Zap.zap')
     @patch('ceph_volume.devices.raw.list.List.filter_lvm_osd_devices', Mock(return_value='/dev/sdb'))
     @patch('ceph_volume.process.call', Mock(side_effect=process_call))
-    def test_raw_is_matched_id_fsid(self, mock_zap, monkeypatch, is_root):
+    def test_raw_is_matched_id_fsid(self, mock_zap, monkeypatch, is_root, patch_udevdata):
         volumes = []
         monkeypatch.setattr(zap.api, 'get_lvs', lambda **kw: volumes)
 
@@ -202,7 +200,7 @@ class TestZap:
     @patch('ceph_volume.devices.lvm.zap.Zap.zap')
     @patch('ceph_volume.devices.raw.list.List.filter_lvm_osd_devices', Mock(side_effect=['/dev/vdx', '/dev/vdy', '/dev/vdz', None]))
     @patch('ceph_volume.process.call', Mock(side_effect=process_call))
-    def test_raw_multiple_devices(self, mock_zap, monkeypatch, is_root):
+    def test_raw_multiple_devices(self, mock_zap, monkeypatch, is_root, patch_udevdata):
         volumes = []
         monkeypatch.setattr(zap.api, 'get_lvs', lambda **kw: volumes)
         z = zap.Zap(['--osd-id', '5'])
