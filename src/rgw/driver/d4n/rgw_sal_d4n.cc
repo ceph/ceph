@@ -131,6 +131,9 @@ int D4NFilterBucket::create(const DoutPrefixProvider* dpp,
   return next->create(dpp, params, y);
 }
 
+#ifndef dout_subsys
+#define dout_subsys ceph_subsys_rgw
+#endif
 void D4NFilterBucket::d4n_init_transaction(const DoutPrefixProvider* dpp)
 {
 	//create D4NTransaction object and pass the Directory* objects to it
@@ -143,6 +146,8 @@ void D4NFilterBucket::d4n_init_transaction(const DoutPrefixProvider* dpp)
 	m_bucketDir->set_d4n_trx(m_d4n_trx.get());
 	//start transaction
 	m_d4n_trx->start_trx();
+
+	ldout(g_ceph_context, 0) << "D4NFilterBucket::d4n_init_transaction " << __func__ << " D4NTransaction = " << m_d4n_trx.get() << dendl; 
 }
 
 void D4NFilterBucket::finalize_transaction(const DoutPrefixProvider* dpp, int& result_code)
@@ -158,7 +163,9 @@ void D4NFilterBucket::finalize_transaction(const DoutPrefixProvider* dpp, int& r
 	auto rc = m_d4n_trx->end_trx(dpp, this->filter->get_connection(), null_yield);
 	if (rc < 0) {
 		result_code = rc;
+		ldout(g_ceph_context, 0) << "D4NFilterBucket:: " << m_d4n_trx.get() << __func__ << "(): had failed, returned rc: " << rc << dendl;
 	} else {
+		ldout(g_ceph_context, 0) << "D4NFilterBucket:: " << m_d4n_trx.get() << __func__ << "(): had completed successfully " << dendl; 
 		result_code = 0;
 	}
 	//delete the Directory* objects. (if driver create Directory* objects, it should delete them)
@@ -673,6 +680,7 @@ void D4NFilterObject::d4n_init_transaction(const DoutPrefixProvider* dpp)
     m_bucketDir->set_d4n_trx(m_d4n_trx.get());
     //start transaction
     m_d4n_trx->start_trx();
+    ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): " << m_d4n_trx.get() << dendl;	
 }
 
 void D4NFilterObject::finalize_transaction(const DoutPrefixProvider* dpp, int& result_code)
@@ -686,8 +694,13 @@ void D4NFilterObject::finalize_transaction(const DoutPrefixProvider* dpp, int& r
 
   //NOTE: upon end_trx failed , the rc should be set to result_code, so that the caller can decide whether to retry the transaction or not.
   auto rc = m_d4n_trx->end_trx(dpp, driver->get_connection(), null_yield);
-  ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): end_trx returned rc: " << rc << dendl;	
-  //according to rc, its possible to decide whether to retry the transaction or not(in case of failure)
+  if (rc < 0) {
+		result_code = rc;
+		ldout(g_ceph_context, 0) << "D4NFilterObject:: " << m_d4n_trx.get() << __func__ << "(): had failed, returned rc: " << rc << dendl;
+  } else {
+		ldout(g_ceph_context, 0) << "D4NFilterObject:: " << m_d4n_trx.get() << __func__ << "(): had completed successfully " << dendl; 
+		result_code = 0;
+  }
   m_objDir.reset();
   m_blockDir.reset();
   m_bucketDir.reset();
