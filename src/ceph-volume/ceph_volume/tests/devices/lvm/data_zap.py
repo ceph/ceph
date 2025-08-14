@@ -65,17 +65,3 @@ lsblk_all = ['NAME="/dev/sdb" KNAME="/dev/sdb" PKNAME="" PARTLABEL=""',
              'NAME="/dev/sdz" KNAME="/dev/sdz" PKNAME="" PARTLABEL=""']
 
 blkid_output = ['/dev/ceph-1172bba3-3e0e-45e5-ace6-31ae8401221f/osd-block-5050a85c-d1a7-4d66-b4ba-2e9b1a2970ae: TYPE="ceph_bluestore" USAGE="other"']
-
-udevadm_property = '''DEVNAME=/dev/sdb
-DEVTYPE=disk
-ID_ATA=1
-ID_BUS=ata
-ID_MODEL=SK_hynix_SC311_SATA_512GB
-ID_PART_TABLE_TYPE=gpt
-ID_PART_TABLE_UUID=c8f91d57-b26c-4de1-8884-0c9541da288c
-ID_PATH=pci-0000:00:17.0-ata-3
-ID_PATH_TAG=pci-0000_00_17_0-ata-3
-ID_REVISION=70000P10
-ID_SERIAL=SK_hynix_SC311_SATA_512GB_MS83N71801150416A
-TAGS=:systemd:
-USEC_INITIALIZED=16117769'''.split('\n')
