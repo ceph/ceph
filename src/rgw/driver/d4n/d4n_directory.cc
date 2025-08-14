@@ -160,6 +160,11 @@ void redis_exec_connection_pool(const DoutPrefixProvider* dpp,
 }
 
 int BucketDirectory::zadd(const DoutPrefixProvider* dpp, const std::string& bucket_id, double score, const std::string& member, optional_yield y, Pipeline* pipeline)
+#ifndef dout_subsys
+#define dout_subsys ceph_subsys_rgw
+#endif
+
+int BucketDirectory::zadd(const DoutPrefixProvider* dpp, const std::string& bucket_id, double score, const std::string& member, optional_yield y, bool multi)
 {
   try {
     boost::system::error_code ec;
@@ -888,13 +893,15 @@ int D4NTransaction::clone_key_for_transaction(std::string key_source, std::strin
 
 	redis_exec(conn, ec, req, resp, y);
 
-	  if (ec) {
-	    //ldpp_dout(dpp, 0) << "BlockDirectory::" << __func__ << "() ERROR: " << ec.what() << dendl;
+	// to handle the case where the source key is not exists --> no need to clone it.
+	// in case the destination key already exists, it should not happend since the key is unique for each transaction.
+	if (ec) {
+	    ldout(g_ceph_context, 0) << "D4NTransaction::" << __func__ << "() ERROR: " << ec.value() << dendl;
 	    return -ec.value();
-	  }
+	}
 
 	} catch (std::exception &e) {
-		//ldpp_dout(dpp, 0) << "BlockDirectory::" << __func__ << "() ERROR: " << e.what() << dendl;
+		ldout(g_ceph_context, 0) << "D4NTransaction::" << __func__ << "() ERROR: " << e.what() << dendl;
 		return -EINVAL;
 	}
 
@@ -922,7 +929,13 @@ bool D4NTransaction::is_trx_started(const DoutPrefixProvider* dpp,std::shared_pt
 	init_trx(dpp,conn,y);
 
 	if(op == redis_operation_type::READ_OP){
-	  clone_key_for_transaction(m_original_key, m_temp_key_read, conn, y);
+	  auto rc = clone_key_for_transaction(m_original_key, m_temp_key_read, conn, y);
+	  if (rc != 0 ) {
+	    //if the key is not exists, it should not be cloned.
+	    //TODO to handle the case where the clone key already exists.(it should not happend since the key is unique for each transaction).
+	    ldpp_dout(dpp, 0) << "Directory::is_trx_started failed to clone key for read operation" << dendl;
+	    return false;
+	  }
 
 	  //m_temp_read_keys stores the temp key that is used for read operations. a single transaction can have multiple read keys.
 	  m_temp_read_keys.insert(m_temp_key_read);
@@ -1014,6 +1027,11 @@ int save_trx_info(const DoutPrefixProvider* dpp,std::shared_ptr<connection> conn
 
 void D4NTransaction::start_trx()
 {
+	
+  if(trxState == TrxState::STARTED) {
+    ldout(g_ceph_context, 0) << "D4NTransaction::" << __func__ << "(): Transaction state should not be active (STARTED)" << dendl;
+    return;
+  }
   // NOTE: check whether at this point its better to get the transaction id from the redis server or generate a unique id.
   trxState = TrxState::STARTED;
 }
@@ -1023,12 +1041,18 @@ void D4NTransaction::start_trx()
 //in case the destination key does not exists, it should clone the source key into the destination key.
 std::string lua_script_clone_keys = R"(
 local function clone_key(key_source, key_destination)
+		local keyType_source = redis.call('TYPE', key_source).ok
+		if keyType_source == 'none' then
+				redis.log(redis.LOG_NOTICE,"key source does not exists: " .. key_source .. " cannot clone to: " .. key_destination)
+				return -2
+		end
 		local keyType = redis.call('TYPE', key_destination).ok
 		if keyType == 'none' then
 				redis.log(redis.LOG_NOTICE,"key does not exists: " .. key_destination .. " cloning key: " .. key_source)
 				redis.call('COPY', key_source, key_destination)
 				local exist_status = redis.call('EXISTS', key_destination)
 				redis.log(redis.LOG_NOTICE,"key exists: " .. key_destination .. " status: " .. exist_status)
+				return 0
 		else
 				redis.log(redis.LOG_NOTICE,"key already exists: " .. key_destination)
 				return -1
@@ -1342,12 +1366,13 @@ std::string D4NTransaction::get_end_trx_script(const DoutPrefixProvider* dpp, st
   return m_evalsha_end_trx;
 }
 
-#ifndef dout_subsys
-#define dout_subsys ceph_subsys_rgw
-#endif
-
 int D4NTransaction::end_trx(const DoutPrefixProvider* dpp, std::shared_ptr<connection> conn, optional_yield y)
 {
+  if(trxState != TrxState::STARTED) {
+    ldout(g_ceph_context, 0) << "Directory::end_trx trx is not started, skipping end_trx" << dendl;
+    return 0;
+    //TODO : it should not happen, to consider throwing an exception.
+  }
   trxState = TrxState::ENDED;
 
   
@@ -1403,27 +1428,37 @@ int D4NTransaction::end_trx(const DoutPrefixProvider* dpp, std::shared_ptr<conne
       trx_keys.push_back(key);
     }		
 
-    ldout(g_ceph_context, 0) << "Directory::end_trx running evalsha script = " << "evalsha " << m_evalsha_end_trx << "with the following keys " << debug_all_keys << dendl;
+    ldout(g_ceph_context, 0) << "Directory::end_trx running evalsha script = " << "evalsha " << m_evalsha_end_trx << " num of keys " << num_keys 
+	    << "with the following keys " << debug_all_keys << dendl;
+
+    if(num_keys == 0) {
+	    //TODO how it happens that no keys are set?
+      ldout(g_ceph_context, 0) << "Directory::end_trx no keys to compare, skipping end_trx script" << dendl;
+      return 0;
+    }
+
     req.push_range("EVALSHA",m_evalsha_end_trx, trx_keys);
 
     redis_exec(conn, ec, req, resp, y);
 
-
       if (ec) {
-	ldout(g_ceph_context, 0) << "Directory::end_trx the end-trx script had failed " << "with ec =" << ec  << dendl;
+	ldout(g_ceph_context, 0) << "Directory::end_trx the end-trx script had failed this = " << this << "with ec =" << ec  << dendl;
 	return -ec.value();
       }
 
       // the response contain whether the transaction was successful or not
       auto result = std::get<0>(resp).value();
       if (result.starts_with("ERR") || result.starts_with("NOSCRIPT")) {
+	 ldout(g_ceph_context, 0) << "Directory::end_trx the end-trx script had failed this = " << this << "with result =" << result << dendl;
          return -EINVAL;
       }
 
     } catch (std::exception &e) {
+      ldout(g_ceph_context, 0) << "Directory::end_trx the end-trx script had failed this = " << this << "with exception = " << e.what() << dendl;
       return -EINVAL;
     }
 
+    ldout(g_ceph_context, 0) << "Directory::end_trx the end-trx script had finished successfully this = " << this << dendl;
 return 0;
 }
 
