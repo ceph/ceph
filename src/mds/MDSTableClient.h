@@ -16,8 +16,7 @@
 #define CEPH_MDSTABLECLIENT_H
 
 #include "include/types.h"
-#include "mds_table_types.h"
-#include "mdstypes.h" // for mds_rank_t
+#include "include/cephfs/types.h" // for mds_rank_t
 #include "common/ref.h" // for cref_t
 #include "LogSegmentRef.h"
 
