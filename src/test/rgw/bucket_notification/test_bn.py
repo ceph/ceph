@@ -6027,25 +6027,25 @@ def create_object_and_verify_events(bucket, key_name, topic_name, receiver, expe
         for event in events:
             assert(event['Records'][0]['s3']['object']['key'] in expected_keys)
 
-@attr('manual_test')
-def test_backward_compatibility_persistent_notification_shard_config_change_http(): 
+@attr('http_test')
+def test_backward_compatibility_persistent_sharded_topic_http(): 
     conn = connection()
     persistent_notification_shard_config_change('http', conn, new_num_shards=11, old_num_shards=1)
 
-@attr('manual_test')
-def test_backward_compatibility_persistent_notification_shard_config_change_kafka(): 
+@attr('kafka_test')
+def test_backward_compatibility_persistent_sharded_topic_kafka(): 
     conn = connection()
     persistent_notification_shard_config_change('kafka', conn, new_num_shards=11, old_num_shards=1)
 
-@attr('manual_test')
-def test_persistent_notification_shard_config_change_http():
+@attr('http_test')
+def test_persistent_sharded_topic_config_change_http():
     conn = connection()
     new_num_shards = random.randint(2, 10)
     default_num_shards = 11
     persistent_notification_shard_config_change('http', conn, new_num_shards, default_num_shards)
 
-@attr('manual_test')
-def test_persistent_notification_shard_config_change_kafka():
+@attr('kafka_test')
+def test_persistent_sharded_topic_config_change_kafka():
     conn = connection()
     new_num_shards = random.randint(2, 10)
     default_num_shards = 11
