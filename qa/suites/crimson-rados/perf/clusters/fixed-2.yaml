@@ -10,7 +10,7 @@ overrides:
     conf:
       osd:
         osd shutdown pgref assert: true
-        crimson alien thread cpu cores: 6-7
+        crimson bluestore cpu set: 6-7
       osd.0:
         crimson cpu set: 0-2
       osd.1:

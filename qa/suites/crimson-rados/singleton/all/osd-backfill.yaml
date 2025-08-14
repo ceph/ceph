@@ -25,7 +25,7 @@ tasks:
     conf:
       osd:
         osd min pg log entries: 5
-        crimson alien thread cpu cores: 6-7
+        crimson bluestore cpu set: 6-7
       osd.0:
         crimson cpu set: 0-1
       osd.1:

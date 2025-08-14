@@ -1227,7 +1227,7 @@ do_balance_cpu() {
 
     local alienstore_interval=${cpu_table[${alienstore_idx}]}
     if [ ! "${alienstore_interval}" == "" ]; then
-        local cmd="$CEPH_BIN/ceph -c $conf_fn config set osd.$osd crimson_alien_thread_cpu_cores ${alienstore_interval}"
+        local cmd="$CEPH_BIN/ceph -c $conf_fn config set osd.$osd crimson_bluestore_cpu_set ${alienstore_interval}"
         echo $cmd
         $cmd
     else
@@ -1810,8 +1810,8 @@ if [ "$ceph_osd" == "crimson-osd" ]; then
     fi
     if [ "$objectstore" == "bluestore" ]; then
         if [ $crimson_alien_num_threads -gt 0 ]; then
-            echo "$CEPH_BIN/ceph -c $conf_fn config set osd crimson_alien_op_num_threads $crimson_alien_num_threads"
-            $CEPH_BIN/ceph -c $conf_fn config set osd crimson_alien_op_num_threads "$crimson_alien_num_threads"
+            echo "$CEPH_BIN/ceph -c $conf_fn config set osd crimson_bluestore_num_threads $crimson_alien_num_threads"
+            $CEPH_BIN/ceph -c $conf_fn config set osd crimson_bluestore_num_threads "$crimson_alien_num_threads"
         fi
     fi
 fi
