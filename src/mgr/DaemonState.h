@@ -25,7 +25,6 @@
 #include "common/ceph_mutex.h"
 #include "common/perf_counters.h" // for enum perfcounter_type_d
 #include "common/RefCountedObj.h"
-#include "include/str_map.h"
 #include "include/utime.h"
 
 #include "msg/msg_types.h"
