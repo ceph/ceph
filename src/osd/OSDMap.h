@@ -1720,7 +1720,21 @@ private:
     read_balance_info_t &p_rb_info) const;
 
   float rbi_round(float f) const {
-    return (f > 0.0) ? floor(f * 100 + 0.5) / 100 : ceil(f * 100 - 0.5) / 100;
+    constexpr float eps = 1e-9f;
+
+    // treat exact zero input as zero if this is the case
+    if (std::fabs(f) < eps) 
+        return 0.0f;
+
+    float result = (f > 0.0f) ? std::floor(f * 100.0 + 0.5) / 100.0
+                              : std::ceil(f * 100.0 - 0.5) / 100.0;
+
+    // If rounding produced zero but input was non-zero, bump to minimal step
+    // which will solve the issue that some scores becomes inf after rounding
+    if (std::fabs(result) < eps) 
+        result = std::copysign(0.01f, f);
+
+    return result;
   }
 
   int64_t has_zero_pa_pgs(
