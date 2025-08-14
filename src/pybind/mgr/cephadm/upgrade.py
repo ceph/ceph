@@ -1703,6 +1703,7 @@ class CephadmUpgrade:
         if self.upgrade_state.progress_id:
             self.mgr.remote('progress', 'complete',
                             self.upgrade_state.progress_id)
+        self.mgr.version_tracker.add_cluster_version(self.upgrade_state.target_name)
         self.upgrade_state = None
         self._ok_to_upgrade_osds_in_crush_bucket = None
         self._save_upgrade_state()
