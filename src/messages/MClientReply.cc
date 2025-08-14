@@ -22,6 +22,7 @@
 #include "common/errno.h"
 #include "common/strescape.h"
 #include "include/container_ios.h"
+#include "include/cephfs/encoding.h"
 #include "include/errorcode32.h"
 #include "mds/mdstypes.h" // for CDIR_AUTH_PARENT
 

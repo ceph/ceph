@@ -22,6 +22,7 @@
 #include "common/debug.h"
 #include "common/StackStringStream.h"
 #include "common/strtol.h" // for strict_strtoll()
+#include "include/cephfs/encoding.h" // for encode(mds_gid_t)
 
 #ifdef WITH_CRIMSON
 #include "crimson/common/config_proxy.h"
