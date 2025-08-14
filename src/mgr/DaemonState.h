@@ -29,14 +29,15 @@
 
 #include "msg/msg_types.h"
 
-// For PerfCounterType
-#include "messages/MMgrReport.h"
 #include "DaemonHealthMetric.h"
 #include "DaemonKey.h"
 
 namespace ceph {
   class Formatter;
 }
+
+class PerfCounterType;
+class MMgrReport;
 
 // An instance of a performance counter type, within
 // a particular daemon.
@@ -243,7 +244,8 @@ private:
   }
 
 public:
-  DaemonStateIndex() {}
+  DaemonStateIndex();
+  ~DaemonStateIndex();
 
   // FIXME: shouldn't really be public, maybe construct DaemonState
   // objects internally to avoid this.
