@@ -18,8 +18,8 @@
 #include <stdio.h>
 #include <string.h>
 #include <iomanip>
+#include <optional>
 #include <ostream>
-#include <boost/optional.hpp>
 
 /*
  * Some functions for escaping RGW responses
@@ -135,7 +135,7 @@ struct hex_formatter {
 
 std::ostream& operator<<(std::ostream& out, const xml_stream_escaper& e)
 {
-  boost::optional<hex_formatter> fmt;
+  std::optional<hex_formatter> fmt;
 
   for (unsigned char c : e.str) {
     switch (c) {
@@ -255,7 +255,7 @@ void escape_json_attr(const char *buf, size_t src_len, char *out)
 
 std::ostream& operator<<(std::ostream& out, const json_stream_escaper& e)
 {
-  boost::optional<hex_formatter> fmt;
+  std::optional<hex_formatter> fmt;
 
   for (unsigned char c : e.str) {
     switch (c) {
