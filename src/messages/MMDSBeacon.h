@@ -25,6 +25,7 @@
 #include "messages/PaxosServiceMessage.h"
 
 #include "include/types.h"
+#include "include/cephfs/encoding.h" // for encode(mds_gid_t)
 
 #include "mds/MDSMap.h"
 
