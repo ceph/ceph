@@ -28,7 +28,7 @@ options:
 - name: crimson_alien_thread_cpu_cores
   type: str
   level: advanced
-  desc: CPU cores on which alienstore threads will run in cpuset(7) format
+  desc: CPU cores on which POSIX threads alienized to seastar will run in cpuset(7) format
   flags:
   - startup
 - name: crimson_cpu_num
