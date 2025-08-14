@@ -144,9 +144,7 @@ check_group_snap_doesnt_exist ${CLUSTER2} ${POOL}/${group} ${snap}
 # this next extra mirror_group_snapshot should not be needed to remove the snap on the secondary - waiting for fix TODO
 mirror_group_snapshot ${CLUSTER2} ${POOL}/${group}
 mirror_group_snapshot_and_wait_for_sync_complete ${CLUSTER1} ${CLUSTER2} ${POOL}/${group}
-# FIXME: Issues#45 should help uncomment below
-# Context: currently there is a delay in the prune of the regular group snaps.
-#check_group_snap_doesnt_exist ${CLUSTER1} ${POOL}/${group} ${snap}
+check_group_snap_doesnt_exist ${CLUSTER1} ${POOL}/${group} ${snap}
 
 testlog "TEST: stop mirror, create group, start mirror and test replay"
 stop_mirrors ${CLUSTER1}
