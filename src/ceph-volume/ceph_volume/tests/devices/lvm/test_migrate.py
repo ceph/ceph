@@ -54,7 +54,7 @@ class TestFindAssociatedDevices(object):
         p = kwargs['filters']['lv_path']
         return self.mock_single_volumes[p]
 
-    def test_lv_is_matched_id(self, monkeypatch):
+    def test_lv_is_matched_id(self, monkeypatch, patch_udevdata):
         tags = 'ceph.osd_id=0,ceph.journal_uuid=x,ceph.type=data,ceph.osd_fsid=1234'
         vol = api.Volume(lv_name='volume1', lv_uuid='y', vg_name='',
                          lv_path='/dev/VolGroup/lv1', lv_tags=tags)
@@ -76,7 +76,7 @@ class TestFindAssociatedDevices(object):
         assert result[0][0].lvs == [vol]
         assert result[0][1] == 'block'
 
-    def test_lv_is_matched_id2(self, monkeypatch):
+    def test_lv_is_matched_id2(self, monkeypatch, patch_udevdata):
         tags = 'ceph.osd_id=0,ceph.journal_uuid=x,ceph.type=data,ceph.osd_fsid=1234'
         vol = api.Volume(lv_name='volume1', lv_uuid='y', vg_name='vg',
                          lv_path='/dev/VolGroup/lv1', lv_tags=tags)
@@ -107,7 +107,7 @@ class TestFindAssociatedDevices(object):
           else:
             assert False
 
-    def test_lv_is_matched_id3(self, monkeypatch):
+    def test_lv_is_matched_id3(self, monkeypatch, patch_udevdata):
         tags = 'ceph.osd_id=0,ceph.journal_uuid=x,ceph.type=data,ceph.osd_fsid=1234'
         vol = api.Volume(lv_name='volume1', lv_uuid='y', vg_name='vg',
                          lv_path='/dev/VolGroup/lv1', lv_tags=tags)
@@ -171,7 +171,7 @@ class TestVolumeTagTracker(object):
         self.mock_process_input.append(args[0]);
         return ('', '', 0)
 
-    def test_init(self, monkeypatch):
+    def test_init(self, monkeypatch, patch_udevdata):
         monkeypatch.setattr('ceph_volume.util.device.Device.is_lv', lambda: True)
         source_tags = 'ceph.osd_id=0,ceph.journal_uuid=x,ceph.type=data,ceph.osd_fsid=1234'
         source_db_tags = 'ceph.osd_id=0,journal_uuid=x,ceph.type=db, osd_fsid=1234'
@@ -219,7 +219,7 @@ class TestVolumeTagTracker(object):
         assert 3 == len(t.old_wal_tags)
         assert 'wal' == t.old_wal_tags['ceph.type']
 
-    def test_update_tags_when_lv_create(self, monkeypatch):
+    def test_update_tags_when_lv_create(self, monkeypatch, patch_udevdata):
         monkeypatch.setattr('ceph_volume.util.device.Device.is_lv', lambda: True)
         source_tags = \
         'ceph.osd_id=0,ceph.journal_uuid=x,' \
@@ -278,7 +278,7 @@ class TestVolumeTagTracker(object):
                 '--addtag', 'ceph.wal_device=/dev/VolGroup/lv_target',
                 '/dev/VolGroup/lv2'] == self.mock_process_input[2]
 
-    def test_remove_lvs(self, monkeypatch):
+    def test_remove_lvs(self, monkeypatch, patch_udevdata):
         monkeypatch.setattr('ceph_volume.util.device.Device.is_lv', lambda: True)
         source_tags = \
         'ceph.osd_id=0,ceph.journal_uuid=x,' \
@@ -338,7 +338,7 @@ class TestVolumeTagTracker(object):
                 '--deltag', 'ceph.wal_device=aaaaa',
                 '/dev/VolGroup/lv2'] == self.mock_process_input[2]
 
-    def test_replace_lvs(self, monkeypatch):
+    def test_replace_lvs(self, monkeypatch, patch_udevdata):
         monkeypatch.setattr('ceph_volume.util.device.Device.is_lv', lambda: True)
         source_tags = \
         'ceph.osd_id=0,ceph.type=data,ceph.osd_fsid=1234,'\
@@ -415,7 +415,7 @@ class TestVolumeTagTracker(object):
             '--addtag', 'ceph.db_device=/dev/VolGroup/lv_target',
             '/dev/VolGroup/lv_target'].sort()
 
-    def test_undo(self, monkeypatch):
+    def test_undo(self, monkeypatch, patch_udevdata):
         monkeypatch.setattr('ceph_volume.util.device.Device.is_lv', lambda: True)
         source_tags = 'ceph.osd_id=0,ceph.journal_uuid=x,ceph.type=data,ceph.osd_fsid=1234'
         source_db_tags = 'ceph.osd_id=0,journal_uuid=x,ceph.type=db, osd_fsid=1234'
@@ -573,7 +573,7 @@ class TestNew(object):
         expected = 'Target Logical Volume is already used by ceph: vgname/new_db'
         assert expected in stderr
 
-    def test_newdb(self, is_root, monkeypatch, capsys):
+    def test_newdb(self, is_root, monkeypatch, capsys, patch_udevdata):
         monkeypatch.setattr('ceph_volume.util.device.Device.is_lv', lambda: True)
         source_tags = \
         'ceph.osd_id=0,ceph.type=data,ceph.osd_fsid=1234,'\
@@ -730,7 +730,7 @@ class TestNew(object):
         assert '--> OSD ID is running, stop it with: systemctl stop ceph-osd@1' == stderr.rstrip()
         assert not stdout
 
-    def test_newdb_no_systemd(self, is_root, monkeypatch):
+    def test_newdb_no_systemd(self, is_root, monkeypatch, patch_udevdata):
         monkeypatch.setattr('ceph_volume.util.device.Device.is_lv', lambda: True)
         source_tags = \
         'ceph.osd_id=0,ceph.type=data,ceph.osd_fsid=1234,'\
@@ -820,7 +820,7 @@ class TestNew(object):
             '--dev-target', '/dev/VolGroup/target_volume',
             '--command', 'bluefs-bdev-new-db']
 
-    def test_newwal(self, is_root, monkeypatch, capsys):
+    def test_newwal(self, is_root, monkeypatch, capsys, patch_udevdata):
         monkeypatch.setattr('ceph_volume.util.device.Device.is_lv', lambda: True)
         source_tags = \
         'ceph.osd_id=0,ceph.type=data,ceph.osd_fsid=1234'
@@ -932,7 +932,7 @@ class TestNew(object):
         assert '--> OSD ID is running, stop it with: systemctl stop ceph-osd@2' == stderr.rstrip()
         assert not stdout
 
-    def test_newwal_no_systemd(self, is_root, monkeypatch):
+    def test_newwal_no_systemd(self, is_root, monkeypatch, patch_udevdata):
         monkeypatch.setattr('ceph_volume.util.device.Device.is_lv', lambda: True)
         source_tags = \
         'ceph.osd_id=0,ceph.type=data,ceph.osd_fsid=1234'
@@ -996,7 +996,7 @@ class TestNew(object):
             '--command', 'bluefs-bdev-new-wal']
 
     @patch('os.getuid')
-    def test_newwal_encrypted(self, m_getuid, monkeypatch, capsys):
+    def test_newwal_encrypted(self, m_getuid, monkeypatch, capsys, patch_udevdata):
         monkeypatch.setattr('ceph_volume.util.device.Device.is_lv', lambda: True)
         m_getuid.return_value = 0
 
@@ -1097,7 +1097,7 @@ class TestMigrate(object):
     def mock_dmcrypt_close(self, *args, **kwargs):
         self.mock_dmcrypt_close_uuid.append(kwargs['mapping'])
 
-    def test_get_source_devices(self, monkeypatch):
+    def test_get_source_devices(self, monkeypatch, patch_udevdata):
 
         source_tags = 'ceph.osd_id=2,ceph.type=data,ceph.osd_fsid=1234'
         source_db_tags = 'ceph.osd_id=2,ceph.type=db,ceph.osd_fsid=1234'
@@ -1228,7 +1228,7 @@ Example calls for supported scenarios:
 
 
     @patch.object(Zap, 'main')
-    def test_migrate_data_db_to_new_db(self, m_zap, is_root, monkeypatch):
+    def test_migrate_data_db_to_new_db(self, m_zap, is_root, monkeypatch, patch_udevdata):
         monkeypatch.setattr('ceph_volume.util.device.Device.is_lv', lambda: True)
 
         source_tags = 'ceph.osd_id=2,ceph.type=data,ceph.osd_fsid=1234,' \
@@ -1331,7 +1331,7 @@ Example calls for supported scenarios:
 
     @patch.object(Zap, 'main')
     @patch('os.getuid')
-    def test_migrate_data_db_to_new_db_encrypted(self, m_getuid, m_zap, monkeypatch):
+    def test_migrate_data_db_to_new_db_encrypted(self, m_getuid, m_zap, monkeypatch, patch_udevdata):
         monkeypatch.setattr('ceph_volume.util.device.Device.is_lv', lambda: True)
         m_getuid.return_value = 0
 
@@ -1447,7 +1447,7 @@ Example calls for supported scenarios:
 
         m_zap.assert_called_once()
 
-    def test_migrate_data_db_to_new_db_active_systemd(self, is_root, monkeypatch, capsys):
+    def test_migrate_data_db_to_new_db_active_systemd(self, is_root, monkeypatch, capsys, patch_udevdata):
         source_tags = 'ceph.osd_id=2,ceph.type=data,ceph.osd_fsid=1234,' \
         'ceph.cluster_name=ceph,ceph.db_uuid=dbuuid,ceph.db_device=db_dev'
         source_db_tags = 'ceph.osd_id=2,ceph.type=db,ceph.osd_fsid=1234,' \
@@ -1511,7 +1511,7 @@ Example calls for supported scenarios:
         assert not stdout
 
     @patch.object(Zap, 'main')
-    def test_migrate_data_db_to_new_db_no_systemd(self, m_zap, is_root, monkeypatch):
+    def test_migrate_data_db_to_new_db_no_systemd(self, m_zap, is_root, monkeypatch, patch_udevdata):
         monkeypatch.setattr('ceph_volume.util.device.Device.is_lv', lambda: True)
         source_tags = 'ceph.osd_id=2,ceph.type=data,ceph.osd_fsid=1234,' \
         'ceph.cluster_name=ceph,ceph.db_uuid=dbuuid,ceph.db_device=db_dev'
@@ -1611,7 +1611,7 @@ Example calls for supported scenarios:
         m_zap.assert_called_once()
 
     @patch.object(Zap, 'main')
-    def test_migrate_data_db_to_new_db_skip_wal(self, m_zap, is_root, monkeypatch):
+    def test_migrate_data_db_to_new_db_skip_wal(self, m_zap, is_root, monkeypatch, patch_udevdata):
         monkeypatch.setattr('ceph_volume.util.device.Device.is_lv', lambda: True)
         source_tags = 'ceph.osd_id=2,ceph.type=data,ceph.osd_fsid=1234,' \
         'ceph.cluster_name=ceph,ceph.db_uuid=dbuuid,ceph.db_device=db_dev'
@@ -1734,7 +1734,7 @@ Example calls for supported scenarios:
         m_zap.assert_called_once()
 
     @patch.object(Zap, 'main')
-    def test_migrate_data_db_wal_to_new_db(self, m_zap, is_root, monkeypatch):
+    def test_migrate_data_db_wal_to_new_db(self, m_zap, is_root, monkeypatch, patch_udevdata):
         monkeypatch.setattr('ceph_volume.util.device.Device.is_lv', lambda: True)
         source_tags = 'ceph.osd_id=2,ceph.type=data,ceph.osd_fsid=1234,' \
         'ceph.cluster_name=ceph,ceph.db_uuid=dbuuid,ceph.db_device=db_dev,' \
@@ -1863,7 +1863,7 @@ Example calls for supported scenarios:
 
     @patch.object(Zap, 'main')
     @patch('os.getuid')
-    def test_migrate_data_db_wal_to_new_db_encrypted(self, m_getuid, m_zap, monkeypatch):
+    def test_migrate_data_db_wal_to_new_db_encrypted(self, m_getuid, m_zap, monkeypatch, patch_udevdata):
         monkeypatch.setattr('ceph_volume.util.device.Device.is_lv', lambda: True)
         m_getuid.return_value = 0
 
@@ -2010,7 +2010,8 @@ Example calls for supported scenarios:
     def test_dont_migrate_data_db_wal_to_new_data(self,
                                                   m_getuid,
                                                   monkeypatch,
-                                                  capsys):
+                                                  capsys,
+                                                  patch_udevdata):
         m_getuid.return_value = 0
         source_tags = 'ceph.osd_id=2,ceph.type=data,ceph.osd_fsid=1234,' \
         'ceph.cluster_name=ceph,ceph.db_uuid=dbuuid,ceph.db_device=db_dev'
@@ -2076,7 +2077,8 @@ Example calls for supported scenarios:
     def test_dont_migrate_db_to_wal(self,
                                     is_root,
                                     monkeypatch,
-                                    capsys):
+                                    capsys,
+                                    patch_udevdata):
         source_tags = 'ceph.osd_id=2,ceph.type=data,ceph.osd_fsid=1234,' \
         'ceph.cluster_name=ceph,ceph.db_uuid=dbuuid,ceph.db_device=db_dev,' \
         'ceph.wal_uuid=waluuid,ceph.wal_device=wal_dev'
@@ -2149,7 +2151,8 @@ Example calls for supported scenarios:
     def test_migrate_data_db_to_db(self,
                                     is_root,
                                     monkeypatch,
-                                    capsys):
+                                    capsys,
+                                    patch_udevdata):
         monkeypatch.setattr('ceph_volume.util.device.Device.is_lv', lambda: True)
         source_tags = 'ceph.osd_id=2,ceph.type=data,ceph.osd_fsid=1234,' \
         'ceph.cluster_name=ceph,ceph.db_uuid=dbuuid,ceph.db_device=db_dev,' \
@@ -2226,7 +2229,7 @@ Example calls for supported scenarios:
             '--command', 'bluefs-bdev-migrate',
             '--devs-source', '/var/lib/ceph/osd/ceph-2/block']
 
-    def test_migrate_data_db_to_db_active_systemd(self, is_root, monkeypatch, capsys):
+    def test_migrate_data_db_to_db_active_systemd(self, is_root, monkeypatch, capsys, patch_udevdata):
         source_tags = 'ceph.osd_id=2,ceph.type=data,ceph.osd_fsid=1234,' \
         'ceph.cluster_name=ceph,ceph.db_uuid=dbuuid,ceph.db_device=db_dev,' \
         'ceph.wal_uuid=waluuid,ceph.wal_device=wal_dev'
@@ -2297,7 +2300,7 @@ Example calls for supported scenarios:
         assert '--> OSD is running, stop it with: systemctl stop ceph-osd@2' == stderr.rstrip()
         assert not stdout
 
-    def test_migrate_data_db_to_db_no_systemd(self, is_root, monkeypatch):
+    def test_migrate_data_db_to_db_no_systemd(self, is_root, monkeypatch, patch_udevdata):
         monkeypatch.setattr('ceph_volume.util.device.Device.is_lv', lambda: True)
         source_tags = 'ceph.osd_id=2,ceph.type=data,ceph.osd_fsid=1234,' \
         'ceph.cluster_name=ceph,ceph.db_uuid=dbuuid,ceph.db_device=db_dev,' \
@@ -2377,7 +2380,8 @@ Example calls for supported scenarios:
                                     m_zap,
                                     is_root,
                                     monkeypatch,
-                                    capsys):
+                                    capsys,
+                                    patch_udevdata):
         monkeypatch.setattr('ceph_volume.util.device.Device.is_lv', lambda: True)
         source_tags = 'ceph.osd_id=2,ceph.type=data,ceph.osd_fsid=1234,' \
         'ceph.cluster_name=ceph,ceph.db_uuid=dbuuid,ceph.db_device=db_dev,' \
@@ -2485,7 +2489,8 @@ Example calls for supported scenarios:
                                m_getuid,
                                m_zap,
                                monkeypatch,
-                               capsys):
+                               capsys,
+                               patch_udevdata):
         monkeypatch.setattr('ceph_volume.util.device.Device.is_lv', lambda: True)
         m_getuid.return_value = 0
 
@@ -2577,7 +2582,8 @@ Example calls for supported scenarios:
                                               m_getuid,
                                               m_zap,
                                               monkeypatch,
-                                              capsys):
+                                              capsys,
+                                              patch_udevdata):
         monkeypatch.setattr('ceph_volume.util.device.Device.is_lv', lambda: True)
         m_getuid.return_value = 0
 
@@ -2690,7 +2696,7 @@ Example calls for supported scenarios:
 
         m_zap.assert_called_once()
 
-    def test_migrate_data_wal_to_db_active_systemd(self, is_root, monkeypatch, capsys):
+    def test_migrate_data_wal_to_db_active_systemd(self, is_root, monkeypatch, capsys, patch_udevdata):
         source_tags = 'ceph.osd_id=2,ceph.type=data,ceph.osd_fsid=1234,' \
         'ceph.cluster_name=ceph,ceph.db_uuid=dbuuid,ceph.db_device=db_dev,' \
         'ceph.wal_uuid=waluuid,ceph.wal_device=wal_dev'
@@ -2763,7 +2769,7 @@ Example calls for supported scenarios:
         assert not stdout
 
     @patch.object(Zap, 'main')
-    def test_migrate_data_wal_to_db_no_systemd(self, m_zap, is_root, monkeypatch):
+    def test_migrate_data_wal_to_db_no_systemd(self, m_zap, is_root, monkeypatch, patch_udevdata):
         monkeypatch.setattr('ceph_volume.util.device.Device.is_lv', lambda: True)
         source_tags = 'ceph.osd_id=2,ceph.type=data,ceph.osd_fsid=1234,' \
         'ceph.cluster_name=ceph,ceph.db_uuid=dbuuid,ceph.db_device=db_dev,' \

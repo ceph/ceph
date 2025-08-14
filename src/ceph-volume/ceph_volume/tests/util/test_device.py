@@ -202,7 +202,7 @@ class TestDevice(object):
     @pytest.mark.usefixtures("lsblk_ceph_disk_member",
                              "disable_kernel_queries")
     @patch("ceph_volume.util.disk.has_bluestore_label", lambda x: False)
-    def test_is_ceph_disk_lsblk(self, fake_call, monkeypatch, patch_bluestore_label):
+    def test_is_ceph_disk_lsblk(self, patch_udevdata, fake_call, monkeypatch, patch_bluestore_label):
         disk = device.Device("/dev/sda")
         assert disk.is_ceph_disk_member
 
@@ -210,14 +210,14 @@ class TestDevice(object):
                              "lsblk_ceph_disk_member",
                              "disable_kernel_queries")
     @patch("ceph_volume.util.disk.has_bluestore_label", lambda x: False)
-    def test_is_ceph_disk_blkid(self, fake_call, monkeypatch, patch_bluestore_label):
+    def test_is_ceph_disk_blkid(self, patch_udevdata, fake_call, monkeypatch, patch_bluestore_label):
         disk = device.Device("/dev/sda")
         assert disk.is_ceph_disk_member
 
     @pytest.mark.usefixtures("lsblk_ceph_disk_member",
                              "disable_kernel_queries")
     @patch("ceph_volume.util.disk.has_bluestore_label", lambda x: False)
-    def test_is_ceph_disk_member_not_available_lsblk(self, fake_call, monkeypatch, patch_bluestore_label):
+    def test_is_ceph_disk_member_not_available_lsblk(self, patch_udevdata, fake_call, monkeypatch, patch_bluestore_label):
         disk = device.Device("/dev/sda")
         assert disk.is_ceph_disk_member
         assert not disk.available
@@ -227,7 +227,7 @@ class TestDevice(object):
                              "lsblk_ceph_disk_member",
                              "disable_kernel_queries")
     @patch("ceph_volume.util.disk.has_bluestore_label", lambda x: False)
-    def test_is_ceph_disk_member_not_available_blkid(self, fake_call, monkeypatch, patch_bluestore_label):
+    def test_is_ceph_disk_member_not_available_blkid(self, patch_udevdata, fake_call, monkeypatch, patch_bluestore_label):
         disk = device.Device("/dev/sda")
         assert disk.is_ceph_disk_member
         assert not disk.available
@@ -366,7 +366,7 @@ class TestDevice(object):
                              "device_info_not_ceph_disk_member",
                              "disable_kernel_queries")
     @patch("ceph_volume.util.disk.has_bluestore_label", lambda x: False)
-    def test_is_not_ceph_disk_member_lsblk(self, fake_call, patch_bluestore_label):
+    def test_is_not_ceph_disk_member_lsblk(self, patch_udevdata, fake_call, patch_bluestore_label):
         disk = device.Device("/dev/sda")
         assert disk.is_ceph_disk_member is False
 
@@ -456,9 +456,8 @@ class TestDevice(object):
 
     @patch("ceph_volume.util.disk.has_bluestore_label", lambda x: False)
     def test_get_device_id(self, fake_call, device_info):
-        udev = {k:k for k in ['ID_VENDOR', 'ID_MODEL', 'ID_SCSI_SERIAL']}
         lsblk = {"TYPE": "disk", "NAME": "sda"}
-        device_info(udevadm=udev,lsblk=lsblk)
+        device_info(lsblk=lsblk)
         disk = device.Device("/dev/sda")
         assert disk._get_device_id() == 'ID_VENDOR_ID_MODEL_ID_SCSI_SERIAL'
 
@@ -676,7 +675,7 @@ class TestCephDiskDevice(object):
                              "blkid_ceph_disk_member",
                              "disable_kernel_queries")
     @patch("ceph_volume.util.disk.has_bluestore_label", lambda x: False)
-    def test_is_member_blkid(self, fake_call, monkeypatch):
+    def test_is_member_blkid(self, patch_udevdata, fake_call, monkeypatch):
         disk = device.CephDiskDevice(device.Device("/dev/sda"))
 
         assert disk.is_member is True
