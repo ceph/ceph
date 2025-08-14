@@ -243,12 +243,11 @@ def _container_cmd(ctx, args, *, workdir=None, interactive=False):
         cmd.append(f"-eCCACHE_BASEDIR={ctx.cli.homedir}")
     for extra_arg in ctx.cli.extra or []:
         cmd.append(extra_arg)
-    if ctx.npm_cache_dir and "docker" in ctx.container_engine:
-        log.warning(
-            "The --volume option is not supported by docker build/buildx. Skipping npm cache mounts"
-        )
-    elif ctx.npm_cache_dir:
-        cmd.extend([f'--volume={ctx.npm_cache_dir}:/npmcache', '--env=NPM_CACHEDIR=/npmcache'])
+    if ctx.npm_cache_dir:
+        cmd.extend([
+            f'--volume={ctx.npm_cache_dir}:/npmcache',
+            '--env=NPM_CACHEDIR=/npmcache'
+        ])
     cmd.append(ctx.image_name)
     cmd.extend(args)
     return cmd
@@ -548,7 +547,6 @@ def npm_cache_dir(ctx):
     """Set up an NPM cache directory for reuse across container builds."""
     if not ctx.cli.npm_cache_path:
         return
-
     ctx.npm_cache_dir.mkdir(parents=True, exist_ok=True)
 
 
