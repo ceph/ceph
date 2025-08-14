@@ -346,6 +346,11 @@ def task(ctx, config):
                 watched_process.set_exception(e)
 
             run.wait(tests.values())
+
+            # If test has failed then don't try to clean up
+            if watched_process.exception:
+                raise watched_process.exception
+
             wait_for_all_active_clean_pgs = config.get("wait_for_all_active_clean_pgs", False)
             # usually set when we do min_size testing.
             if wait_for_all_active_clean_pgs:
@@ -353,9 +358,6 @@ def task(ctx, config):
                 # Mainly used for test_pool_min_size
                 manager.wait_for_clean()
                 manager.wait_for_all_osds_up(timeout=1800)
-
-            if watched_process.exception:
-                raise watched_process.exception
 
             for pool in created_pools:
                 manager.wait_snap_trimming_complete(pool)
