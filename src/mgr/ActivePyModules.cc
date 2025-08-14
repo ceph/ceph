@@ -35,6 +35,7 @@
 
 #include "DaemonKey.h"
 #include "DaemonServer.h"
+#include "PerfCounterInstance.h"
 #include "mgr/MgrContext.h"
 #include "PyFormatter.h"
 // For ::mgr_store_prefix
