@@ -12,6 +12,7 @@
 
 #pragma once
 #include "QuiesceDb.h"
+#include "include/cephfs/encoding.h" // for encode(mds_gid_t)
 #include "include/encoding.h"
 #include <stdint.h>
 

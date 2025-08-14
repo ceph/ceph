@@ -22,6 +22,7 @@
 #include "mds/mdstypes.h"
 #include "messages/PaxosServiceMessage.h"
 #include "include/types.h"
+#include "include/cephfs/encoding.h" // for encode(mds_gid_t)
 
 class MMDSLoadTargets final : public PaxosServiceMessage {
 public:
