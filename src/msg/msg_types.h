@@ -30,6 +30,7 @@
 #include "include/types.h"
 #include "include/blobhash.h"
 #include "include/encoding.h"
+#include "include/msgr.h" // for CEPH_ENTITY_TYPE_*
 
 #define MAX_PORT_NUMBER 65535
 
