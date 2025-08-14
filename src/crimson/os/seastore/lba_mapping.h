@@ -148,6 +148,10 @@ public:
     return direct_cursor->get_laddr();
   }
 
+  laddr_t get_end() const {
+    return (get_key() + get_length()).checked_to_laddr();
+  }
+
    // An lba pin may be indirect, see comments in lba/btree_lba_manager.h
   laddr_t get_intermediate_key() const {
     assert(is_indirect());
