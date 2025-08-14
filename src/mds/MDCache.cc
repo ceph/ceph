@@ -51,6 +51,7 @@
 #include "QuarantineManager.h"
 
 #include "include/ceph_fs.h"
+#include "include/cephfs/encoding.h"
 #include "include/filepath.h"
 #include "include/util.h"
 
