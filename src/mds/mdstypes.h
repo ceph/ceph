@@ -469,35 +469,11 @@ struct dentry_key_t {
 
   // encode into something that can be decoded as a string.
   // name_ (head) or name_%x (!head)
-  void encode(ceph::buffer::list& bl) const {
-    std::string key;
-    encode(key);
-    using ceph::encode;
-    encode(key, bl);
-  }
+  void encode(ceph::buffer::list& bl) const;
   void encode(std::string& key) const;
   static void decode_helper(ceph::buffer::list::const_iterator& bl, std::string& nm,
-			    snapid_t& sn) {
-    std::string key;
-    using ceph::decode;
-    decode(key, bl);
-    decode_helper(key, nm, sn);
-  }
-  static void decode_helper(std::string_view key, std::string& nm, snapid_t& sn) {
-    size_t i = key.find_last_of('_');
-    ceph_assert(i != std::string::npos);
-    if (key.compare(i+1, std::string_view::npos, "head") == 0) {
-      // name_head
-      sn = CEPH_NOSNAP;
-    } else {
-      // name_%x
-      long long unsigned x = 0;
-      std::string x_str(key.substr(i+1));
-      sscanf(x_str.c_str(), "%llx", &x);
-      sn = x;
-    }
-    nm = key.substr(0, i);
-  }
+			    snapid_t& sn);
+  static void decode_helper(std::string_view key, std::string& nm, snapid_t& sn);
 
   snapid_t snapid = 0;
   std::string_view name;
@@ -593,16 +569,8 @@ struct metareqid_t {
       throw std::invalid_argument("invalid format: tid is out of range");
     }
   }
-  void encode(ceph::buffer::list& bl) const {
-    using ceph::encode;
-    encode(name, bl);
-    encode(tid, bl);
-  }
-  void decode(ceph::buffer::list::const_iterator &p) {
-    using ceph::decode;
-    decode(name, p);
-    decode(tid, p);
-  }
+  void encode(ceph::buffer::list& bl) const;
+  void decode(ceph::buffer::list::const_iterator &p);
   void dump(ceph::Formatter *f) const;
   void print(std::ostream& out) const;
   static std::list<metareqid_t> generate_test_instances();
@@ -719,16 +687,8 @@ struct old_cap_reconnect_t {
     return n;
   }
 
-  void encode(ceph::buffer::list& bl) const {
-    using ceph::encode;
-    encode(path, bl);
-    encode(capinfo, bl);
-  }
-  void decode(ceph::buffer::list::const_iterator& bl) {
-    using ceph::decode;
-    decode(path, bl);
-    decode(capinfo, bl);
-  }
+  void encode(ceph::buffer::list& bl) const;
+  void decode(ceph::buffer::list::const_iterator& bl);
 
   std::string path;
   old_ceph_mds_cap_reconnect capinfo;
@@ -742,16 +702,8 @@ struct dirfrag_t {
 
   void print(std::ostream& out) const;
 
-  void encode(ceph::buffer::list& bl) const {
-    using ceph::encode;
-    encode(ino, bl);
-    encode(frag, bl);
-  }
-  void decode(ceph::buffer::list::const_iterator& bl) {
-    using ceph::decode;
-    decode(ino, bl);
-    decode(frag, bl);
-  }
+  void encode(ceph::buffer::list& bl) const;
+  void decode(ceph::buffer::list::const_iterator& bl);
   void dump(ceph::Formatter *f) const;
   static std::list<dirfrag_t> generate_test_instances();
 
@@ -837,20 +789,8 @@ public:
       vec{DecayCounter(rate), DecayCounter(rate), DecayCounter(rate), DecayCounter(rate), DecayCounter(rate)}
   {}
 
-  void encode(ceph::buffer::list &bl) const {
-    ENCODE_START(2, 2, bl);
-    for (const auto &i : vec) {
-      encode(i, bl);
-    }
-    ENCODE_FINISH(bl);
-  }
-  void decode(ceph::buffer::list::const_iterator &p) {
-    DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, p);
-    for (auto &i : vec) {
-      decode(i, p);
-    }
-    DECODE_FINISH(p);
-  }
+  void encode(ceph::buffer::list &bl) const;
+  void decode(ceph::buffer::list::const_iterator &p);
   void dump(ceph::Formatter *f) const;
   void dump(ceph::Formatter *f, const DecayRate& rate) const;
   void print(std::ostream& out) const;
