@@ -103,6 +103,7 @@ from .configchecks import CephadmConfigChecks
 from .offline_watcher import OfflineHostWatcher
 from .tuned_profiles import TunedProfileUtils
 from .ceph_volume import CephVolume
+from .version_tracker import VersionTracker
 
 try:
     import asyncssh
@@ -154,6 +155,40 @@ def host_exists(hostname_position: int = 1) -> Callable:
 
 class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
                           metaclass=CLICommandMeta):
+
+    SCHEMA = [
+        '''
+        CREATE TABLE IF NOT EXISTS ClusterVersionInfo(
+            cluster_version_id INTEGER PRIMARY KEY, 
+            cluster_version TEXT NOT NULL,
+            creation_time TEXT DEFAULT CURRENT_TIMESTAMP,
+            is_initial_version INTEGER DEFAULT 0,
+            is_current_version INTEGER DEFAULT 0
+        );
+        ''',
+        '''
+        CREATE TABLE IF NOT EXISTS VersionAssociation(
+            id INTEGER PRIMARY KEY,
+            FOREIGN KEY (cluster_version_id) REFERENCES ClusterVersionInfo(cluster_version_id) 
+        );
+        '''
+    ]
+
+    SCHEMA_VERSIONED = [
+        '''
+        CREATE TABLE IF NOT EXISTS ClusterVersionInfo(
+            cluster_version_id INTEGER PRIMARY KEY, 
+            cluster_version TEXT NOT NULL,
+            creation_time TEXT DEFAULT CURRENT_TIMESTAMP
+        );
+        ''',
+        '''
+        CREATE TABLE IF NOT EXISTS VersionAssociation(
+            id INTEGER PRIMARY KEY,
+            FOREIGN KEY (cluster_version_id) REFERENCES ClusterVersionInfo(cluster_version_id) 
+        );
+        '''
+    ]
 
     _STORE_HOST_PREFIX = "host"
 
@@ -619,6 +654,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         self.ssh._reconfig_ssh()
 
         CephadmOrchestrator.instance = self
+
+        self.version_tracker = VersionTracker(self)
 
         self.upgrade = CephadmUpgrade(self)
 
