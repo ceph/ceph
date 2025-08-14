@@ -419,7 +419,7 @@ class TestLvmBlueStore:
     @pytest.mark.parametrize("encrypted", ["ceph.encrypted=0", "ceph.encrypted=1"])
     def test__activate(self,
                        m_success, m_create_osd_path,
-                       monkeypatch, fake_run, fake_call, encrypted, conf_ceph_stub):
+                       monkeypatch, fake_run, fake_call, encrypted, conf_ceph_stub, patch_udevdata):
         conf_ceph_stub('[global]\nfsid=asdf-lkjh')
         monkeypatch.setattr(system, 'chown', lambda path: 0)
         monkeypatch.setattr('ceph_volume.configuration.load', lambda: None)
