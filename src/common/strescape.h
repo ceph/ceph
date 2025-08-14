@@ -17,7 +17,6 @@
 #define CEPH_STRESCAPE_H
 
 #include <algorithm>
-#include <ostream>
 #include <string_view>
 
 #include <ctype.h>
