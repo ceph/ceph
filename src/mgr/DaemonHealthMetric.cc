@@ -5,6 +5,7 @@
 
 #include <ostream>
 
+#include "DaemonHealthMetric.h"
 #include "common/Formatter.h"
 
 void DaemonHealthMetric::dump(Formatter *f) const {

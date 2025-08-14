@@ -37,6 +37,13 @@ using std::string;
 using std::stringstream;
 using std::unique_ptr;
 
+DaemonState::DaemonState(PerfCounterTypes &types_)
+    : perf_counters(types_)
+{
+}
+
+DaemonState::~DaemonState() noexcept = default;
+
 void DeviceState::set_metadata(map<string,string>&& m)
 {
   metadata = std::move(m);
