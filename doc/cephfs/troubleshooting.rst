@@ -283,13 +283,21 @@ stuck.
 Debug output
 ------------
 
-To get more debugging information from ceph-fuse, try running in the foreground
-with logging to the console (``-d``) and enabling client debug
-(``--debug-client=20``), enabling prints for each message sent
+To get more debugging information from ceph-fuse, list current operations in
+the foreground while logging to the console (``-d``), enabling client debug
+(``--debug-client=20``), and enabling prints for each message sent
 (``--debug-ms=1``).
 
+.. prompt:: bash #
+
+   ceph daemon -d mds.<name> dump_ops_in_flight --debug-client=20 --debug-ms=1
+
 If you suspect a potential monitor issue, enable monitor debugging as well
-(``--debug-monc=20``).
+(``--debug-monc=20``) by running a command of the following form:
+
+.. prompt:: bash #
+
+   ceph daemon -d mds.<name> dump_ops_in_flight --debug-client=20 --debug-ms=1 --debug-monc=20
 
 .. _kernel_mount_debugging:
 
