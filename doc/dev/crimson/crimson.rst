@@ -68,22 +68,22 @@ Crimson CPU allocation
    #. Allocation options **cannot** be changed after deployment.
    #. `vstart.sh`_ sets these options using the ``--crimson-smp`` flag.
 
-The ``crimson_seastar_num_threads`` parameter defines the number of threads used to serve Seastar reactors.
-Each thread is expected to run on a dedicated CPU core.
+The ``crimson_cpu_num`` parameter defines the number of CPUs used to serve Seastar reactors.
+Each reactor is expected to run on a dedicated CPU core.
 
 This parameter **does not have a default value**.
 Users must configure it at the OSD level based on system resources and cluster requirements **before** deploying the OSDs.
 
-We recommend setting a value for ``crimson_seastar_num_threads`` that is less than the host's
+We recommend setting a value for ``crimson_cpu_num`` that is less than the host's
 number of CPU cores (``nproc``) divided by the **number of OSDs on that host**.
 
 For example, for deploying a node with eight CPU cores per OSD:
 
 .. code-block:: bash #
 
-   ceph config set osd crimson_seastar_num_threads 8
+   ceph config set osd crimson_cpu_num 8
 
-Note that ``crimson_seastar_num_threads`` does **not** pin threads to specific CPU cores.
+Note that ``crimson_cpu_num`` does **not** pin threads to specific CPU cores.
 To explicitly assign CPU cores to Crimson OSDs, use the ``crimson_seastar_cpu_cores`` parameter.
 This enables CPU pinning, which *may* improve performance.
 However, using this option requires manually setting the CPU set for each OSD,
@@ -149,7 +149,7 @@ These backends allow Crimson to interact with legacy or external object store im
    The ``crimson_alien_op_num_threads`` option needs to be set according to the cpu set available.
    This defines the number of threads dedicated to serving the BlueStore ObjectStore on each OSD.
 
-   If ``crimson_seastar_num_threads`` is used from `Crimson CPU allocation`_,
+   If ``crimson_cpu_num`` is used from `Crimson CPU allocation`_,
    The counterpart ``crimson_alien_thread_cpu_cores`` should also be used accordingly to
    allow the two sets to be mutually exclusive.
 

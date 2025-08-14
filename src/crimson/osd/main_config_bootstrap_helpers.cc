@@ -212,11 +212,11 @@ _get_early_config(int argc, const char *argv[])
 	    logger().info("get_early_config: set --thread-affinity 1 --cpuset {}",
 	                  cpu_cores);
 	  } else {
-	    auto reactor_num = crimson::common::get_conf<uint64_t>("crimson_seastar_num_threads");
+	    auto reactor_num = crimson::common::get_conf<uint64_t>("crimson_cpu_num");
 	    if (!reactor_num) {
+	      // We would like to avoid seastar using all available cores.
 	      logger().error("get_early_config: crimson_seastar_cpu_cores"
-                             " or crimson_seastar_num_threads"
-                             " must be set");
+	                     " or crimson_cpu_num must be set");
 	      ceph_abort();
 	    }
 	    std::string smp = fmt::format("{}", reactor_num);
