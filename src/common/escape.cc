@@ -17,6 +17,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <iomanip>
+#include <ostream>
 #include <boost/optional.hpp>
 
 /*
