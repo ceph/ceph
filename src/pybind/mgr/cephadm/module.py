@@ -2991,6 +2991,7 @@ Then run the following:
             placement=PlacementSpec(host_pattern=host),
             data_devices=DeviceSelection(paths=devices),
             unmanaged=False,
+            method=drive_group.method,
             objectstore=drive_group.objectstore
         )
 
