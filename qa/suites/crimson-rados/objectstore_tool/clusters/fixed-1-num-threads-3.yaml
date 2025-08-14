@@ -4,7 +4,7 @@ overrides:
   ceph:
     conf:
       osd:
-        crimson seastar num threads: 3
+        crimson cpu num: 3
       global:
         ms cluster mode: crc
         ms service mode: crc
