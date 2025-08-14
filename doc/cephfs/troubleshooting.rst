@@ -453,36 +453,53 @@ To disable debug logging, run a command of the following form:
 In-memory Log Dump
 ==================
 
-In-memory logs can be dumped by setting ``mds_extraordinary_events_dump_interval``
-during a lower level debugging (log level < 10). ``mds_extraordinary_events_dump_interval``
-is the interval in seconds for dumping the recent in-memory logs when there is an Extra-Ordinary event.
+In-memory logs can be dumped by setting
+``mds_extraordinary_events_dump_interval`` when
+the log level is set to less than ``10``.
+``mds_extraordinary_events_dump_interval`` is the interval in seconds for
+dumping the recent in-memory logs when there is an extraordinary event.
 
-The Extra-Ordinary events are classified as:
+Extraordinary events include the following:
 
 * Client Eviction
 * Missed Beacon ACK from the monitors
 * Missed Internal Heartbeats
 
-In-memory Log Dump is disabled by default to prevent log file bloat in a production environment.
-The below commands consecutively enables it::
+In-memory log dump is disabled by default. This prevents production
+environments from experiencing log file bloat by default.
 
-  $ ceph config set mds debug_mds <log_level>/<gather_level>
-  $ ceph config set mds mds_extraordinary_events_dump_interval <seconds>
+Run the following two commands in order to enable in-memory log dumping: 
 
-The ``log_level`` should be < 10 and ``gather_level`` should be >= 10 to enable in-memory log dump.
-When it is enabled, the MDS checks for the extra-ordinary events every
-``mds_extraordinary_events_dump_interval`` seconds and if any of them occurs, MDS dumps the
-in-memory logs containing the relevant event details in ceph-mds log.
+#. 
+   .. prompt:: bash $
 
-.. note:: For higher log levels (log_level >= 10) there is no reason to dump the In-memory Logs and a
-          lower gather level (gather_level < 10) is insufficient to gather In-memory Logs. Thus a
-          log level >=10 or a gather level < 10 in debug_mds would prevent enabling the In-memory Log Dump.
-          In such cases, when there is a failure it's required to reset the value of
-          mds_extraordinary_events_dump_interval to 0 before enabling using the above commands.
+      ceph config set mds debug_mds <log_level>/<gather_level>
+   Set ``log_level`` to a value of less than ``10``. Set ``gather_level`` to a
+   value greater than ``10``. When those two values have been set,  in-memory
+   log dump is enabled.
+#. 
+   .. prompt:: bash #
 
-The In-memory Log Dump can be disabled using::
+      ceph config set mds mds_extraordinary_events_dump_interval <seconds>
+   When in-memory log dumping is enabled, the MDS checks for
+   extraordinary events every ``mds_extraordinary_events_dump_interval``
+   seconds. If any extraordinary event occurs, the MDS dumps the in-memory logs
+   that contain relevant event details to the Ceph MDS log.
 
-  $ ceph config set mds mds_extraordinary_events_dump_interval 0
+.. note:: When higher log levels are set (``log_level`` greater than or equal
+   to ``10``) there is no reason to dump the in-memory logs. A lower gather
+   level (``gather_level`` less than ``10``) is insufficient to gather in-
+   memory logs. This means that a log level of greater than or equal to ``10``
+   or a gather level of less than ``10`` in ``debug_mds`` prevents enabling
+   in-memory-log dumping. In such cases, if there is a failure, you must reset
+   the value of ``mds_extraordinary_events_dump_interval`` to ``0`` before
+   enabling the use of the above commands.
+
+Disable in-memory log dumping by running the following command:
+
+.. prompt:: bash #
+
+   ceph config set mds mds_extraordinary_events_dump_interval 0
 
 Filesystems Become Inaccessible After an Upgrade
 ================================================
