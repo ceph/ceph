@@ -9187,10 +9187,9 @@ void PrimaryLogPG::log_stats(hobject_t soid,
 
   ObjectStore::Transaction::iterator i = t.begin();
 
-  for (int pos = 0; i.have_op(); ++pos)
+  for ([[maybe_unused]] int pos = 0; i.have_op(); ++pos)
   {
     ObjectStore::Transaction::Op *op = i.decode_op();
-    int r = 0;
 
     if (op->op == ObjectStore::Transaction::OP_COLL_HINT) {
       uint32_t type = op->hint;
