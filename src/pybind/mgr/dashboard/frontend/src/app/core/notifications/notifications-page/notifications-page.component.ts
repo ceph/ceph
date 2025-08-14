@@ -17,17 +17,14 @@ export class NotificationsPageComponent implements OnInit, OnDestroy {
   private sub: Subscription;
 
   constructor(private notificationService: NotificationService) {
-    console.log('NotificationsPageComponent constructor called');
   }
 
   ngOnInit(): void {
-    console.log('NotificationsPageComponent ngOnInit called');
 
     // Subscribe to notifications from the service
     this.sub = this.notificationService.data$.subscribe((notifications) => {
       this.notifications = notifications;
       this.filteredNotifications = notifications;
-      console.log('Notifications loaded:', this.notifications.length);
     });
   }
 
