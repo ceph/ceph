@@ -93,6 +93,9 @@ public:
   virtual const onode_layout_t &get_layout() const = 0;
   virtual ~Onode() = default;
 
+  const hobject_t &get_hobj() const {
+    return hobj;
+  }
   bool is_head() const {
     return hobj.is_head();
   }
