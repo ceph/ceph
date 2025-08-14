@@ -1,5 +1,7 @@
 #include "DaemonKey.h"
 
+#include <ostream>
+
 std::pair<DaemonKey, bool> DaemonKey::parse(const std::string& s)
 {
   auto p = s.find('.');
