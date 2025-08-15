@@ -506,3 +506,6 @@ add_executable(unittest_async_cond test_async_cond.cc)
 target_link_libraries(unittest_async_cond GTest::GTest)
 add_ceph_unittest(unittest_async_cond)
 
+add_executable(unittest_async_redirect_error test_async_redirect_error.cc)
+target_link_libraries(unittest_async_redirect_error GTest::GTest)
+add_ceph_unittest(unittest_async_redirect_error)
