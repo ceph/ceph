@@ -15,6 +15,12 @@
 #ifndef CEPH_FINISHER_H
 #define CEPH_FINISHER_H
 
+#include <atomic>
+#include <list>
+#include <mutex>
+#include <string>
+#include <vector>
+
 #include "include/Context.h"
 #include "common/Thread.h"
 #include "common/ceph_mutex.h"
