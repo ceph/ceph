@@ -33,6 +33,7 @@
 #include "common/perf_counters.h"
 #include "common/config.h"
 #include "common/cmdparse.h"
+#include "messages/MMDSBeacon.h"
 #include "messages/MMDSMap.h"
 #include "messages/MFSMap.h"
 #include "messages/MFSMapUser.h"
