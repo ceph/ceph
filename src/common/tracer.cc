@@ -4,6 +4,7 @@
 #include "common/ceph_context.h"
 #include "tracer.h"
 #include "common/debug.h"
+#include "include/encoding.h"
 
 #ifdef HAVE_JAEGER
 #include "opentelemetry/sdk/trace/batch_span_processor.h"
@@ -84,7 +85,62 @@ bool Tracer::is_enabled() const {
   return cct->_conf->jaeger_tracing_enable;
 }
 
+void encode(const jspan_context& span_ctx, bufferlist& bl, uint64_t f) {
+  ENCODE_START(1, 1, bl);
+  using namespace opentelemetry;
+  using namespace trace;
+  auto is_valid = span_ctx.IsValid();
+  encode(is_valid, bl);
+  if (is_valid) {
+    encode_nohead(std::string_view(reinterpret_cast<const char*>(span_ctx.trace_id().Id().data()), TraceIdkSize), bl);
+    encode_nohead(std::string_view(reinterpret_cast<const char*>(span_ctx.span_id().Id().data()), SpanIdkSize), bl);
+    encode(span_ctx.trace_flags().flags(), bl);
+  }
+  ENCODE_FINISH(bl);
+}
+
+void decode(jspan_context& span_ctx, bufferlist::const_iterator& bl) {
+  using namespace opentelemetry;
+  using namespace trace;
+  DECODE_START(1, bl);
+  bool is_valid;
+  decode(is_valid, bl);
+  if (is_valid) {
+    std::array<uint8_t, TraceIdkSize> trace_id;
+    std::array<uint8_t, SpanIdkSize> span_id;
+    uint8_t flags;
+    decode(trace_id, bl);
+    decode(span_id, bl);
+    decode(flags, bl);
+    span_ctx = SpanContext(
+      TraceId(nostd::span<uint8_t, TraceIdkSize>(trace_id)),
+      SpanId(nostd::span<uint8_t, SpanIdkSize>(span_id)),
+      TraceFlags(flags),
+      true);
+  }
+  DECODE_FINISH(bl);
+}
+
 } // namespace tracing
 
-#endif // HAVE_JAEGER
+#else  // !HAVE_JAEGER
 
+namespace tracing {
+
+void encode(const jspan_context& span_ctx, bufferlist& bl, uint64_t f) {
+  ENCODE_START(1, 1, bl);
+  // jaeger is missing, set "is_valid" to false.
+  bool is_valid = false;
+  encode(is_valid, bl);
+  ENCODE_FINISH(bl);
+}
+
+void decode(jspan_context& span_ctx, bufferlist::const_iterator& bl) {
+  DECODE_START(254, bl);
+  // jaeger is missing, consume the buffer but do not decode it.
+  DECODE_FINISH(bl);
+}
+
+} // namespace tracing
+
+#endif // !HAVE_JAEGER
