@@ -5,17 +5,17 @@
 #define KEY_VALUE_DB_H
 
 #include "include/buffer.h"
-#include <ostream>
+#include <iosfwd>
 #include <set>
 #include <map>
 #include <optional>
 #include <string>
 #include <string_view>
-#include <boost/scoped_ptr.hpp>
-#include "include/encoding.h"
-#include "common/Formatter.h"
-#include "common/perf_counters.h"
+
 #include "common/PriorityCache.h"
+
+namespace TOPNSPC::common { class PerfCounters; }
+namespace ceph { class Formatter; }
 
 /**
  * Defines virtual interface to be implemented by key value store
@@ -460,7 +460,7 @@ public:
    * required to implement this, and callers must respect a null return
    * value.
    */
-  virtual PerfCounters *get_perf_counters() {
+  virtual TOPNSPC::common::PerfCounters *get_perf_counters() {
     return nullptr;
   }
 
