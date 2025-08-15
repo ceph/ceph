@@ -30,7 +30,6 @@
 
 #include "include/types.h"
 #include "include/health.h"
-#include "msg/Messenger.h"
 
 #include "common/Timer.h"
 
@@ -58,6 +57,8 @@
 
 #include "mon/MonOpRequest.h"
 #include "common/WorkQueue.h"
+
+class Messenger;
 
 using namespace TOPNSPC::common;
 
