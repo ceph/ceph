@@ -108,6 +108,39 @@ void RestoreEntry::generate_test_instances(std::list<RestoreEntry*>& l)
   l.push_back(new RestoreEntry);
 }
 
+static std::string restore_id = "rgw restore";
+static std::string restore_req_id = "0";
+
+void Restore::send_notification(const DoutPrefixProvider* dpp,
+                              rgw::sal::Driver* driver,
+                              rgw::sal::Object* obj,
+                              rgw::sal::Bucket* bucket,
+                              const std::string& etag,
+                              uint64_t size,
+                              const std::string& version_id,
+                              const rgw::notify::EventTypeList& event_types,
+                              optional_yield y) {
+  // notification supported only for RADOS driver for now
+  auto notify = driver->get_notification(
+      dpp, obj, nullptr, event_types, bucket, restore_id,
+      const_cast<std::string&>(bucket->get_tenant()), restore_req_id, y);
+
+  int ret = notify->publish_reserve(dpp, nullptr);
+  if (ret < 0) {
+    ldpp_dout(dpp, 1) << "ERROR: notify publish_reserve failed, with error: "
+                      << ret << " for lc object: " << obj->get_name()
+                      << " for event_types: " << event_types << dendl;
+    return;
+  }
+  ret = notify->publish_commit(dpp, size, ceph::real_clock::now(), etag,
+                               version_id);
+  if (ret < 0) {
+    ldpp_dout(dpp, 5) << "WARNING: notify publish_commit failed, with error: "
+                      << ret << " for lc object: " << obj->get_name()
+                      << " for event_types: " << event_types << dendl;
+  }
+}
+
 int Restore::initialize(CephContext *_cct, rgw::sal::Driver* _driver) {
   int ret = 0;
   cct = _cct;
@@ -438,8 +471,8 @@ int Restore::process_restore_entry(RestoreEntry& entry, optional_yield y)
     using ceph::decode;
     decode(restore_status, iter);
   }
+  // check if its still in Progress state
   if (restore_status != rgw::sal::RGWRestoreStatus::RestoreAlreadyInProgress) {
-    // XXX: Check if expiry-date needs to be update
     ldpp_dout(this, 5) << __PRETTY_FUNCTION__ << ": Restore of object " << obj->get_key()
 	   	       << " not in progress state" << dendl;
 
@@ -451,6 +484,14 @@ int Restore::process_restore_entry(RestoreEntry& entry, optional_yield y)
   if (attr_iter != attrs.end()) {
     target_placement.storage_class = attr_iter->second.to_str();
   }
+
+  bufferlist bl;
+  string etag;
+  attr_iter = attrs.find(RGW_ATTR_ETAG);
+  if (attr_iter != attrs.end()) {
+    etag = rgw_bl_str(bl);
+  }
+
   ret = driver->get_zone()->get_zonegroup().get_placement_tier(target_placement, &tier);
 
   if (ret < 0) {
@@ -488,6 +529,11 @@ int Restore::process_restore_entry(RestoreEntry& entry, optional_yield y)
   } else {
     ldpp_dout(this, 15) << __PRETTY_FUNCTION__ << ": Restore of object " << obj->get_key() << " succeeded" << dendl;
     entry.status = rgw::sal::RGWRestoreStatus::CloudRestored;
+    
+    // send notification in case the restore is successfully completed
+    send_notification(this, driver, obj.get(), bucket.get(), etag, obj->get_size(),
+                      obj->get_key().instance,
+                      {rgw::notify::ObjectRestore, rgw::notify::ObjectRestoreCompleted}, y);
   }
 
 done:
@@ -526,12 +572,90 @@ int Restore::set_cloud_restore_status(const DoutPrefixProvider* dpp,
   return ret;
 }
 
-int Restore::restore_obj_from_cloud(rgw::sal::Bucket* pbucket,
+void Restore::get_expiration_date(const DoutPrefixProvider* dpp,
+                               int expiry_days, ceph::real_time& exp_date) {
+  constexpr int32_t secs_in_a_day = 24 * 60 * 60;
+  ceph::real_time cur_time = real_clock::now();
+
+  ldpp_dout(dpp, 5) << "Calculating expiration date for days:" << expiry_days << dendl;
+  if (cct->_conf->rgw_restore_debug_interval > 0) {
+    exp_date = cur_time + make_timespan(double(expiry_days)*cct->_conf->rgw_restore_debug_interval);
+  } else {
+    exp_date = cur_time + make_timespan(double(expiry_days) * secs_in_a_day);
+  }
+  ldpp_dout(dpp, 5) << "expiration date: " << exp_date << " , cur_time: " << cur_time << ", restore_interval: " << cct->_conf->rgw_restore_debug_interval  << dendl;
+}
+
+/*
+ * As per AWS spec (https://docs.aws.amazon.com/AmazonS3/latest/API/API_RestoreObject.html), 
+ * After restoring an archived object, you can update the restoration period by reissuing the
+ * request with a new period. Amazon S3 updates the restoration period relative to the current time.
+ * You cannot update the restoration period when Amazon S3 is actively processing your current restore
+ * request for the object.
+ */
+int Restore::update_cloud_restore_exp_date(rgw::sal::Bucket* pbucket,
 	       			       rgw::sal::Object* pobj,
-				       rgw::sal::PlacementTier* tier,
 				       std::optional<uint64_t> days,
 				       const DoutPrefixProvider* dpp,
 				       optional_yield y)
+{
+  int ret = -1;
+  ceph::real_time cur_time = real_clock::now();
+
+  if (!pobj)
+    return ret;
+
+  if (!days) {// days should be present as we should update
+              // expiry date only for temp copies
+    return ret;
+  }
+
+  ret = pobj->get_obj_attrs(y, dpp);
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: failed to read object attrs " << cpp_strerror(-ret) << dendl;
+    return ret;
+  }
+
+  ceph::real_time expiration_date;
+  get_expiration_date(dpp, days.value(), expiration_date);
+
+  auto& attrs = pobj->get_attrs();
+  {
+    bufferlist bl;
+    using ceph::encode;
+    encode(expiration_date, bl);
+    attrs[RGW_ATTR_RESTORE_EXPIRY_DATE] = attrs[RGW_ATTR_DELETE_AT] = bl;
+  }
+  {
+    bufferlist bl;
+    using ceph::encode;
+    encode(cur_time, bl);
+    attrs[RGW_ATTR_INTERNAL_MTIME] = bl;
+  }
+
+  pobj->set_atomic(true);
+
+
+  ret = pobj->set_obj_attrs(dpp, &attrs, nullptr, y, 0);
+
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: failed to update restore expiry date ret=" << ret << dendl;
+    return ret;
+  }
+
+  ldpp_dout(dpp, 5) << "Updated Restore expiry time to: " << expiration_date << " , cur_time: " << cur_time << ", restore_interval: " << cct->_conf->rgw_restore_debug_interval  << dendl;
+  pobj->set_atomic(false);
+
+
+  return ret;
+}
+
+int Restore::restore_obj_from_cloud(rgw::sal::Bucket* pbucket,
+	       			                      rgw::sal::Object* pobj,
+                       			        rgw::sal::PlacementTier* tier,
+                     				        std::optional<uint64_t> days,
+                    				        const DoutPrefixProvider* dpp,
+                    				        optional_yield y)
 {
   int ret = 0;
 
@@ -547,52 +671,48 @@ int Restore::restore_obj_from_cloud(rgw::sal::Bucket* pbucket,
     return ret;
   }
 
-  // now go ahead with restoring object
-  bool in_progress = false;
-  ret = pobj->restore_obj_from_cloud(pbucket, tier, cct, days, in_progress, dpp, y);
+  // now add the entry to the restore list to be processed by Restore worker thread
+  // asynchronoudly
+  RestoreEntry entry;
+  entry.bucket = pbucket->get_key();
+  entry.obj_key = pobj->get_key();
+  entry.status = rgw::sal::RGWRestoreStatus::RestoreAlreadyInProgress;
+  entry.days = days;
+  entry.zone_id = driver->get_zone()->get_id(); 
+ 
+  ldpp_dout(this, 10) << "Restore:: Adding restore entry of object(" << pobj->get_key() << ") entry: " << entry << dendl;
+
+  int index = choose_oid(entry);
+  ldpp_dout(this, 10) << __PRETTY_FUNCTION__ << ": Adding restore entry of object(" << pobj->get_key() << ") entry: " << entry << ", to shard:" << obj_names[index] << dendl;
+
+  std::vector<rgw::restore::RestoreEntry> r_entries;
+  r_entries.push_back(entry);
+  ret = sal_restore->add_entries(this, y, index, r_entries);
 
   if (ret < 0) {
-   ldpp_dout(this, -1) << __PRETTY_FUNCTION__ << ": ERROR: object " << pobj->get_key() << " fetching failed" << ret << dendl;	  
-    auto reset_ret = set_cloud_restore_status(this, pobj, y, rgw::sal::RGWRestoreStatus::RestoreFailed);
+    ldpp_dout(this, -1) << __PRETTY_FUNCTION__ << ": ERROR: Adding restore entry of object(" << pobj->get_key() << ") failed" << ret << dendl;	    
 
+    auto reset_ret = set_cloud_restore_status(this, pobj, y, rgw::sal::RGWRestoreStatus::RestoreFailed);
     if (reset_ret < 0) {
-      ldpp_dout(this, -1) << __PRETTY_FUNCTION__ << ": Setting restore status to RestoreFailed failed for object(" << pobj->get_key() << ") " << reset_ret << dendl;	    
+      ldpp_dout(this, -1) << __PRETTY_FUNCTION__ << ": Setting restore status as RestoreFailed failed for object(" << pobj->get_key() << ") " << reset_ret << dendl;	      
     }
 
     return ret;
   }
 
-  if (in_progress) {
-    // add restore entry to the list
-    RestoreEntry entry;
-    entry.bucket = pbucket->get_key();
-    entry.obj_key = pobj->get_key();
-    entry.status = rgw::sal::RGWRestoreStatus::RestoreAlreadyInProgress;
-    entry.days = days;
-    entry.zone_id = driver->get_zone()->get_id(); 
+  ldpp_dout(this, 10) << __PRETTY_FUNCTION__ << ": Restore of object " << pobj->get_key() << " is in progress." << dendl;  
 
-    ldpp_dout(this, 10) << "Restore:: Adding restore entry of object(" << pobj->get_key() << ") entry: " << entry << dendl;
-
-    int index = choose_oid(entry);
-    ldpp_dout(this, 10) << __PRETTY_FUNCTION__ << ": Adding restore entry of object(" << pobj->get_key() << ") entry: " << entry << ", to shard:" << obj_names[index] << dendl;
-
-    std::vector<rgw::restore::RestoreEntry> r_entries;
-    r_entries.push_back(entry);
-    ret = sal_restore->add_entries(this, y, index, r_entries);
-
-    if (ret < 0) {
-      ldpp_dout(this, -1) << __PRETTY_FUNCTION__ << ": ERROR: Adding restore entry of object(" << pobj->get_key() << ") failed" << ret << dendl;	    
-
-      auto reset_ret = set_cloud_restore_status(this, pobj, y, rgw::sal::RGWRestoreStatus::RestoreFailed);
-      if (reset_ret < 0) {
-        ldpp_dout(this, -1) << __PRETTY_FUNCTION__ << ": Setting restore status as RestoreFailed failed for object(" << pobj->get_key() << ") " << reset_ret << dendl;	      
-      }
-
-      return ret;
-    }
+  auto& attrs = pobj->get_attrs();
+  bufferlist bl;
+  string etag;
+  auto attr_iter = attrs.find(RGW_ATTR_ETAG);
+  if (attr_iter != attrs.end()) {
+    etag = rgw_bl_str(bl);
   }
 
-  ldpp_dout(this, 10) << __PRETTY_FUNCTION__ << ": Restore of object " << pobj->get_key() << (in_progress ? " is in progress" : " succeeded") << dendl;  
+  send_notification(this, driver, pobj, pbucket, etag, pobj->get_size(),
+                     pobj->get_key().instance,
+                     {rgw::notify::ObjectRestore, rgw::notify::ObjectRestoreInitiated}, y);
   return ret;
 }
 
