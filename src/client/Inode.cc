@@ -11,6 +11,7 @@
 #include "Delegation.h"
 
 #include "mds/flock.h"
+#include "include/xlist_print.h"
 
 using std::dec;
 using std::list;
