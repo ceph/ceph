@@ -95,6 +95,7 @@ using namespace std::literals::string_view_literals;
 #include "common/admin_socket.h"
 #include "common/errno.h"
 #include "include/str_list.h"
+#include "include/xlist_print.h"
 
 #define dout_subsys ceph_subsys_client
 
