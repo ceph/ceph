@@ -39,6 +39,7 @@
 #include "MonitorDBStore.h"
 
 #include "messages/PaxosServiceMessage.h"
+#include "messages/MMonCommand.h"
 #include "messages/MMonMap.h"
 #include "messages/MMonGetMap.h"
 #include "messages/MMonGetVersion.h"
@@ -144,6 +145,42 @@ using ceph::timespan_str;
 static ostream& _prefix(std::ostream *_dout, const Monitor *mon) {
   return *_dout << "mon." << mon->name << "@" << mon->rank
 		<< "(" << mon->get_state_name() << ") e" << mon->monmap->get_epoch() << " ";
+}
+
+void Monitor::C_Command::_finish(int r) {
+  auto m = op->get_req<MMonCommand>();
+  if (r >= 0) {
+    std::ostringstream ss;
+    if (!op->get_req()->get_connection()) {
+      ss << "connection dropped for command ";
+    } else {
+      MonSession *s = op->get_session();
+
+      // if client drops we may not have a session to draw information from.
+      if (s) {
+	ss << "from='" << s->name << " " << s->addrs << "' "
+	   << "entity='" << s->entity_name << "' ";
+      } else {
+	ss << "session dropped for command ";
+      }
+    }
+    cmdmap_t cmdmap;
+    std::ostringstream ds;
+    std::string prefix;
+    cmdmap_from_json(m->cmd, &cmdmap, ds);
+    cmd_getval(cmdmap, "prefix", prefix);
+    if (prefix != "config set" && prefix != "config-key set")
+      ss << "cmd='" << m->cmd << "': finished";
+
+    mon.audit_clog->info() << ss.str();
+    mon.reply_command(op, rc, rs, rdata, version);
+  }
+  else if (r == -ECANCELED)
+    return;
+  else if (r == -EAGAIN)
+    mon.dispatch_op(op);
+  else
+    ceph_abort_msg("bad C_Command return value");
 }
 
 const string Monitor::MONITOR_NAME = "monitor";
