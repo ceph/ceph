@@ -206,16 +206,12 @@ open_ertr::future<> EphemeralRBMDevice::open(
     "Initializing test memory device {}",
     size);
 
-  void* addr = ::mmap(
-    nullptr,
-    size,
-    PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS,
-    -1,
-    0);
+  // memset 0 is not needed: anonymous mapping is zero-filled
+  void* addr = ::mmap(nullptr, size, PROT_READ | PROT_WRITE,
+    MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
 
   buf = (char*)addr;
 
-  ::memset(buf, 0, size);
   return open_ertr::now();
 }
 
