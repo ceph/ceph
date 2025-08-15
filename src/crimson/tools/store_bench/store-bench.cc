@@ -88,6 +88,7 @@ private:
   unsigned duration = 0;
 public:
   unsigned num_concurrent_io = 16;
+  bool dump_metrics = false;
   std::chrono::duration<uint64_t> get_duration() const {
     return std::chrono::seconds(duration);
   }
@@ -100,6 +101,8 @@ public:
       ("duration", po::value<unsigned>(&duration)->required(),
        "how long in seconds the actual testing loop runs "
        "for")
+      ("dump-metrics", po::bool_switch(&dump_metrics),
+       "Dump JSON formatted metrics to stdout")
       ;
     return ret;
   }
@@ -750,6 +753,14 @@ int main(int argc, char **argv) {
             f.dump_string("shard", std::to_string(i));
             f.close_section();
           }
+          f.close_section();
+        }
+        if (common_options.dump_metrics) {
+          f.open_array_section("metrics_values");
+          crimson::metrics::dump_metric_value_map(
+            seastar::scollectd::get_value_map(),
+            &f,
+            [](const auto &) { return true; });
           f.close_section();
         }
         f.close_section();
