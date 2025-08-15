@@ -3790,7 +3790,7 @@ void BlueStore::ExtentMap::reshard(
       if (e->logical_offset >= needs_reshard_end) {
 	break;
       }
-      dout(30) << " extent " << *e << dendl;
+      dout(30) << __func__ << " extent " << *e << dendl;
       while (e->logical_offset >= shard_end) {
 	shard_start = shard_end;
 	ceph_assert(sp != esp);
@@ -3805,42 +3805,18 @@ void BlueStore::ExtentMap::reshard(
       }
 
       if (e->blob_escapes_range(shard_start, shard_end - shard_start)) {
-	if (!e->blob->is_spanning()) {
+	BlobRef b = e->blob;
+	uint32_t bstart = e->blob_start();
+	uint32_t bend = e->blob_end();
+	if (!b->is_spanning()) {
 	  // We have two options: (1) split the blob into pieces at the
 	  // shard boundaries (and adjust extents accordingly), or (2)
 	  // mark it spanning.  We prefer to cut the blob if we can.  Note that
 	  // we may have to split it multiple times--potentially at every
 	  // shard boundary.
-	  bool must_span = false;
-	  BlobRef b = e->blob;
-	  if (b->can_split()) {
-	    uint32_t bstart = e->blob_start();
-	    uint32_t bend = e->blob_end();
-	    for (const auto& sh : shards) {
-	      if (bstart < sh.shard_info->offset &&
-		  bend > sh.shard_info->offset) {
-		uint32_t blob_offset = sh.shard_info->offset - bstart;
-		if (b->can_split_at(blob_offset)) {
-		  dout(20) << __func__ << "    splitting blob, bstart 0x"
-			   << std::hex << bstart << " blob_offset 0x"
-			   << blob_offset << std::dec << " " << *b << dendl;
-		  b = split_blob(b, blob_offset, sh.shard_info->offset);
-		  // switch b to the new right-hand side, in case it
-		  // *also* has to get split.
-		  bstart += blob_offset;
-		  onode->c->store->logger->inc(l_bluestore_blob_split);
-		} else {
-		  must_span = true;
-		  break;
-		}
-	      }
-	    }
-	  } else {
-	    must_span = true;
-	  }
-	  if (must_span) {
-            auto bid = allocate_spanning_blob_id();
-            b->id = bid;
+	  auto _make_spanning = [&](BlobRef& b) {
+	    auto bid = allocate_spanning_blob_id();
+	    b->id = bid;
 	    spanning_blob_map[b->id] = b;
 	    dout(20) << __func__ << "    adding spanning " << *b << dendl;
 	    if (!was_too_many_blobs_check &&
@@ -3854,9 +3830,53 @@ void BlueStore::ExtentMap::reshard(
 		  break;
 		}
 		if (!oldest_slot || (oldest_slot &&
-		    dumped_onodes[i].second < oldest_slot->second)) {
+		  dumped_onodes[i].second < oldest_slot->second)) {
 		  oldest_slot = &dumped_onodes[i];
 		}
+	      }
+	    }
+	  };
+	  if (b->can_split()) {
+	    auto bstart1 = bstart;
+	    for (const auto& sh : shards) {
+	      if (bstart1 < sh.shard_info->offset &&
+		  bend > sh.shard_info->offset) {
+		uint32_t blob_offset = sh.shard_info->offset - bstart1;
+		if (b->can_split_at(blob_offset)) {
+		  dout(20) << __func__ << "    splitting blob, bstart 0x"
+			   << std::hex << bstart1 << " blob_offset 0x"
+			   << blob_offset << std::dec << " " << *b << dendl;
+		  b = split_blob(b, blob_offset, sh.shard_info->offset);
+		  // switch b to the new right-hand side, in case it
+		  // *also* has to get split.
+		  bstart1 = sh.shard_info->offset;
+		  onode->c->store->logger->inc(l_bluestore_blob_split);
+		} else {
+		  _make_spanning(b);
+		  break;
+		}
+	      }
+	    }
+	  } else {
+	    _make_spanning(b);
+	  }
+	} // if (!extent->blob->is_spanning())
+	// Make sure extent with a spanning blob doesn't span over shard boundary
+	if (e->blob->is_spanning()) {
+	  BlobRef b = e->blob;
+	  uint32_t bstart = e->blob_start();
+	  for (const auto& sh : shards) {
+	    if (bstart < sh.shard_info->offset && bend > sh.shard_info->offset) {
+	      uint32_t blob_offset = sh.shard_info->offset - bstart;
+	      auto pos = sh.shard_info->offset;
+	      if (e->logical_offset < pos && e->logical_end() > pos) {
+		// split extent
+		size_t left = pos - e->logical_offset;
+		Extent* ne = new Extent(pos, blob_offset, e->length - left, b);
+		extent_map.insert(*ne);
+		e->length = left;
+		dout(20) << __func__ << "  split " << *e << dendl;
+		dout(20) << __func__ << "     to " << *ne << dendl;
 	      }
 	    }
 	  }
@@ -3865,7 +3885,7 @@ void BlueStore::ExtentMap::reshard(
 	if (e->blob->is_spanning()) {
 	  spanning_blob_map.erase(e->blob->id);
 	  e->blob->id = -1;
-	  dout(30) << __func__ << "    un-spanning " << *e->blob << dendl;
+	  dout(20) << __func__ << "    un-spanning " << *e->blob << dendl;
 	}
       }
     }
@@ -3907,24 +3927,22 @@ bool BlueStore::ExtentMap::encode_some(
 
   unsigned n = 0;
   size_t bound = 0;
-  bool must_reshard = false;
   for (auto p = start;
        p != extent_map.end() && p->logical_offset < end;
        ++p, ++n) {
     ceph_assert(p->logical_offset >= offset);
     p->blob->last_encoded_id = -1;
     if (!p->blob->is_spanning() && p->blob_escapes_range(offset, length)) {
-      dout(30) << __func__ << " 0x" << std::hex << offset << "~" << length
+      dout(20) << __func__ << " 0x" << std::hex << offset << "~" << length
 	       << std::dec << " hit new spanning blob " << *p << dendl;
       request_reshard(p->blob_start(), p->blob_end());
-      must_reshard = true;
+      return true;
     } else if (p->blob->is_spanning() && p->logical_end() > end) {
-      dout(30) << __func__ << std::hex << offset << "~" << length
+      dout(20) << __func__ << std::hex << offset << "~" << length
                << std::dec << " extent stands out " << *p << dendl;
       request_reshard(p->blob_start(), p->blob_end());
-      must_reshard = true;
-    }
-    if (!must_reshard) {
+      return true;
+    } else {
       denc_varint(0, bound); // blobid
       denc_varint(0, bound); // logical_offset
       denc_varint(0, bound); // len
@@ -3936,9 +3954,6 @@ bool BlueStore::ExtentMap::encode_some(
         p->blob->get_sbid(),
         false);
     }
-  }
-  if (must_reshard) {
-    return true;
   }
 
   denc(struct_v, bound);
