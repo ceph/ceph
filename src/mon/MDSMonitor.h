@@ -26,7 +26,6 @@
 #include "PaxosFSMap.h"
 #include "PaxosService.h"
 #include "mds/MDSMap.h"
-#include "msg/Messenger.h"
 #include "messages/MMDSBeacon.h"
 #include "CommandHandler.h"
 
