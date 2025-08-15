@@ -244,8 +244,9 @@ def _container_cmd(ctx, args, *, workdir=None, interactive=False):
     for extra_arg in ctx.cli.extra or []:
         cmd.append(extra_arg)
     if ctx.npm_cache_dir:
+        # use :z so that other builds can use the cache
         cmd.extend([
-            f'--volume={ctx.npm_cache_dir}:/npmcache',
+            f'--volume={ctx.npm_cache_dir}:/npmcache:z',
             '--env=NPM_CACHEDIR=/npmcache'
         ])
     cmd.append(ctx.image_name)
