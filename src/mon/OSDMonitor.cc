@@ -57,6 +57,8 @@
 #include "messages/MMonGetPurgedSnaps.h"
 #include "messages/MMonGetPurgedSnapsReply.h"
 
+#include "msg/Messenger.h"
+
 #include "common/TextTable.h"
 #include "common/Timer.h"
 #include "common/ceph_argparse.h"
