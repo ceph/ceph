@@ -371,6 +371,43 @@ static read_ertr::future<> do_read(
   });
 }
 
+static read_ertr::future<> do_readv(
+  device_id_t device_id,
+  seastar::file &device,
+  uint64_t offset,
+  std::vector<bufferptr> ptrs)
+{
+  LOG_PREFIX(block_do_readv);
+  std::vector<iovec> iov;
+  size_t len = 0;
+  for (auto &ptr : ptrs) {
+    iov.emplace_back(ptr.c_str(), ptr.length());
+    len += ptr.length();
+  }
+  TRACE("{} poffset=0x{:x}~0x{:x} {} buffers",
+    device_id_printer_t{device_id}, offset, len, vecs.size());
+  return device.dma_read(offset, std::move(iov)
+  ).handle_exception(
+    //FIXME: this is a little bit tricky, since seastar::future<T>::handle_exception
+    //	returns seastar::future<T>, to return an crimson::ct_error, we have to create
+    //	a seastar::future<T> holding that crimson::ct_error. This is not necessary
+    //	once seastar::future<T>::handle_exception() returns seastar::futurize_t<T>
+    [FNAME, device_id, offset, len](auto e) -> read_ertr::future<size_t>
+  {
+    ERROR("{} poffset=0x{:x}~0x{:x} got error -- {}",
+          device_id_printer_t{device_id}, offset, len, e);
+    return crimson::ct_error::input_output_error::make();
+  }).then([FNAME, device_id, offset, len](auto result) -> read_ertr::future<> {
+    if (result != len) {
+      ERROR("{} poffset=0x{:x}~0x{:x} read len=0x{:x} inconsistent",
+            device_id_printer_t{device_id}, offset, len, result);
+      return crimson::ct_error::input_output_error::make();
+    }
+    TRACE("{} poffset=0x{:x}~0x{:x} done", device_id_printer_t{device_id}, offset, len);
+    return read_ertr::now();
+  });
+}
+
 static
 ZBDSegmentManager::access_ertr::future<zbd_sm_metadata_t>
 read_metadata(seastar::file &device, seastar::stat_data sd)
@@ -644,6 +681,35 @@ ZBDSegmentManager::release_ertr::future<> ZBDSegmentManager::release(
     DEBUG("segment release successful");
     return release_ertr::now();
   });
+}
+
+SegmentManager::read_ertr::future<> ZBDSegmentManager::readv(
+  paddr_t addr,
+  std::vector<bufferptr> ptrs)
+{
+  LOG_PREFIX(ZBDSegmentManager::readv);
+  size_t len = 0;
+  for (auto &ptr : ptrs) {
+    len += ptr.length();
+  }
+  auto& seg_addr = addr.as_seg_paddr();
+  if (seg_addr.get_segment_id().device_segment_id() >= get_num_segments()) {
+    ERROR("invalid segment {}",
+      seg_addr.get_segment_id().device_segment_id());
+    return crimson::ct_error::invarg::make();
+  }
+  
+  if (seg_addr.get_segment_off() + len > metadata.segment_capacity) {
+    ERROR("invalid read offset {}, len 0x{:x}",
+      addr,
+      len);
+    return crimson::ct_error::invarg::make();
+  }
+  return do_readv(
+    get_device_id(),
+    device,
+    get_offset(addr),
+    std::move(ptrs));
 }
 
 SegmentManager::read_ertr::future<> ZBDSegmentManager::read(
