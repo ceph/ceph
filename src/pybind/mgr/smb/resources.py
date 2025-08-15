@@ -8,6 +8,7 @@ import yaml
 
 from ceph.deployment.service_spec import (
     PlacementSpec,
+    SMBClusterBindIPSpec,
     SMBClusterPublicIPSpec,
     SpecValidationError,
 )
@@ -404,6 +405,40 @@ class ClusterPublicIPAssignment(_RBase):
             raise ValueError(str(err)) from err
 
 
+# A resource component wrapper around the service spec class
+# SMBClusterBindIPSpec
+@resourcelib.component()
+class ClusterBindIP(_RBase):
+    """Cluster Bind IP address or network.
+    Restricts what addresses SMB services and/or containers will bind
+    to when run on a cluster node.
+    """
+
+    address: str = ''
+    network: str = ''
+
+    def to_spec(self) -> SMBClusterBindIPSpec:
+        if self.address:
+            kwargs = {'address': self.address}
+        elif self.network:
+            kwargs = {'network': self.network}
+        else:
+            raise ValueError('ClusterBindIP has no values')
+        return SMBClusterBindIPSpec(**kwargs)
+
+    def validate(self) -> None:
+        try:
+            self.to_spec().validate()
+        except SpecValidationError as err:
+            raise ValueError(str(err)) from err
+
+    @resourcelib.customize
+    def _customize_resource(rc: resourcelib.Resource) -> resourcelib.Resource:
+        rc.address.quiet = True
+        rc.network.quiet = True
+        return rc
+
+
 @resourcelib.resource('ceph.smb.cluster')
 class Cluster(_RBase):
     """Represents a cluster (instance) that is / should be present."""
@@ -421,6 +456,9 @@ class Cluster(_RBase):
     clustering: Optional[SMBClustering] = None
     public_addrs: Optional[List[ClusterPublicIPAssignment]] = None
     custom_ports: Optional[Dict[str, int]] = None
+    # bind_addrs are used to restrict what IP addresses instances of this
+    # cluster will use
+    bind_addrs: Optional[List[ClusterBindIP]] = None
 
     def validate(self) -> None:
         if not self.cluster_id:
@@ -448,6 +486,10 @@ class Cluster(_RBase):
                 )
         validation.check_custom_options(self.custom_smb_global_options)
         validation.check_custom_ports(self.custom_ports)
+        if self.bind_addrs is not None and not self.bind_addrs:
+            raise ValueError(
+                'bind_addrs must have at least one value or not be set'
+            )
 
     @resourcelib.customize
     def _customize_resource(rc: resourcelib.Resource) -> resourcelib.Resource:
@@ -482,6 +524,11 @@ class Cluster(_RBase):
         if self.public_addrs is None:
             return None
         return [a.to_spec() for a in self.public_addrs]
+
+    def service_spec_bind_addrs(self) -> Optional[List[SMBClusterBindIPSpec]]:
+        if self.bind_addrs is None:
+            return None
+        return [b.to_spec() for b in self.bind_addrs]
 
 
 @resourcelib.resource('ceph.smb.join.auth')
