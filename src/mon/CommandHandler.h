@@ -16,7 +16,7 @@
 #ifndef COMMAND_HANDLER_H_
 #define COMMAND_HANDLER_H_
 
-#include <ostream>
+#include <iosfwd>
 #include <string_view>
 
 class CommandHandler
