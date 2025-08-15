@@ -22,6 +22,7 @@
 #include <string>
 #include <ranges>
 #include <string_view>
+#include <vector>
 
 #include <errno.h>
 
