@@ -20,10 +20,12 @@
 #include <vector>
 
 #include "include/Context.h"
+#include "health_check.h"
 #include "Paxos.h"
-#include "Monitor.h"
 #include "MonitorDBStore.h"
 #include "MonOpRequest.h"
+
+class Monitor;
 
 /**
  * A Paxos Service is an abstraction that easily allows one to obtain an
@@ -133,11 +135,7 @@ public:
   public:
     C_ReplyOp(PaxosService *s, MonOpRequestRef o, MessageRef r) :
       C_MonOp(o), mon(s->mon), op(o), reply(r) { }
-    void _finish(int r) override {
-      if (r >= 0) {
-	mon.send_reply(op, reply.detach());
-      }
-    }
+    void _finish(int r) override;
   };
 
   /**
@@ -441,13 +439,7 @@ public:
   virtual void tick() {}
 
   void encode_health(const health_check_map_t& next,
-		     MonitorDBStore::TransactionRef t) {
-    using ceph::encode;
-    ceph::buffer::list bl;
-    encode(next, bl);
-    t->put("health", service_name, bl);
-    mon.log_health(next, health_checks, t);
-  }
+		     MonitorDBStore::TransactionRef t);
   void load_health();
 
   /**
@@ -786,10 +778,7 @@ public:
    * @param bl A ceph::buffer::list containing the version's value
    */
   void put_version_full(MonitorDBStore::TransactionRef t,
-			version_t ver, ceph::buffer::list& bl) {
-    std::string key = mon.store->combine_strings(full_prefix_name, ver);
-    t->put(get_service_name(), key, bl);
-  }
+			version_t ver, ceph::buffer::list& bl);
   /**
    * Put the version number in @p ver into the key pointing to the latest full
    * version of this service.
@@ -797,10 +786,7 @@ public:
    * @param t The transaction to which we will add this put operation
    * @param ver A version number
    */
-  void put_version_latest_full(MonitorDBStore::TransactionRef t, version_t ver) {
-    std::string key = mon.store->combine_strings(full_prefix_name, full_latest_name);
-    t->put(get_service_name(), key, ver);
-  }
+  void put_version_latest_full(MonitorDBStore::TransactionRef t, version_t ver);
   /**
    * Put the contents of @p bl into the key @p key.
    *
@@ -868,9 +854,7 @@ public:
    * @param bl The ceph::buffer::list to be populated
    * @return 0 on success; <0 otherwise
    */
-  virtual int get_version(version_t ver, ceph::buffer::list& bl) {
-    return mon.store->get(get_service_name(), ver, bl);
-  }
+  virtual int get_version(version_t ver, ceph::buffer::list& bl);
   /**
    * Get the contents of a given full version of this service.
    *
@@ -878,19 +862,13 @@ public:
    * @param bl The ceph::buffer::list to be populated
    * @returns 0 on success; <0 otherwise
    */
-  virtual int get_version_full(version_t ver, ceph::buffer::list& bl) {
-    std::string key = mon.store->combine_strings(full_prefix_name, ver);
-    return mon.store->get(get_service_name(), key, bl);
-  }
+  virtual int get_version_full(version_t ver, ceph::buffer::list& bl);
   /**
    * Get the latest full version number
    *
    * @returns A version number
    */
-  version_t get_version_latest_full() {
-    std::string key = mon.store->combine_strings(full_prefix_name, full_latest_name);
-    return mon.store->get(get_service_name(), key);
-  }
+  version_t get_version_latest_full();
 
   /**
    * Get a value from a given key.
@@ -898,17 +876,13 @@ public:
    * @param[in] key The key
    * @param[out] bl The ceph::buffer::list to be populated with the value
    */
-  int get_value(const std::string& key, ceph::buffer::list& bl) {
-    return mon.store->get(get_service_name(), key, bl);
-  }
+  int get_value(const std::string& key, ceph::buffer::list& bl);
   /**
    * Get an integer value from a given key.
    *
    * @param[in] key The key
    */
-  version_t get_value(const std::string& key) {
-    return mon.store->get(get_service_name(), key);
-  }
+  version_t get_value(const std::string& key);
 
   /**
    * @}
