@@ -8,15 +8,16 @@
 
 #include "crimson/common/log.h"
 #include "crimson/common/errorator-loop.h"
+#include "crimson/os/seastore/logging.h"
 
 #include "include/buffer.h"
 #include "rbm_device.h"
 #include "nvme_block_device.h"
 #include "block_rb_manager.h"
 
-namespace crimson::os::seastore::random_block_device {
-#include "crimson/os/seastore/logging.h"
 SET_SUBSYS(seastore_device);
+
+namespace crimson::os::seastore::random_block_device {
 
 RBMDevice::mkfs_ret RBMDevice::do_primary_mkfs(device_config_t config,
   int shard_num, size_t journal_size) {
@@ -116,7 +117,7 @@ read_ertr::future<rbm_superblock_t> RBMDevice::read_rbm_superblock(
     return read(
       addr,
       bptr
-    ).safe_then([length=bptr.length(), this, bptr, FNAME]()
+    ).safe_then([this, bptr, FNAME]()
       -> read_ertr::future<rbm_superblock_t> {
       bufferlist bl;
       bl.append(bptr);
