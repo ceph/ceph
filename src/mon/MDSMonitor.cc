@@ -37,6 +37,7 @@
 #include "common/cmdparse.h"
 #include "common/debug.h"
 #include "common/errno.h"
+#include "messages/MMDSBeacon.h"
 #include "messages/MMDSMap.h"
 #include "messages/MFSMap.h"
 #include "messages/MFSMapUser.h"
