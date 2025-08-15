@@ -121,6 +121,10 @@ public:
     size_t len,
     ceph::bufferptr &out) final;
 
+  read_ertr::future<> readv(
+    paddr_t addr,
+    std::vector<bufferptr> ptr) final;
+
   size_t get_available_size() const final {
     return config.size;
   }

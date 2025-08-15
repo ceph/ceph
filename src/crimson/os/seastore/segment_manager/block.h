@@ -149,6 +149,9 @@ public:
     size_t len,
     ceph::bufferptr &out) final;
 
+  read_ertr::future<> readv(
+    paddr_t addr, std::vector<bufferptr> vecs) final;
+
   device_type_t get_device_type() const final {
     return superblock.config.spec.dtype;
   }

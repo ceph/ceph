@@ -239,6 +239,24 @@ write_ertr::future<> EphemeralRBMDevice::write(
   return write_ertr::now();
 }
 
+read_ertr::future<> EphemeralRBMDevice::_readv(
+  uint64_t offset,
+  std::vector<bufferptr> ptrs) {
+  LOG_PREFIX(EphemeralRBMDevice::_readv);
+  ceph_assert(buf);
+  DEBUG(
+    "EphemeralRBMDevice: read offset {} {} buffers",
+    offset,
+    ptrs.size());
+
+  for (auto &ptr : ptrs) {
+    ptr.copy_in(0, ptr.length(), buf + offset);
+    offset += ptr.length();
+  }
+
+  return read_ertr::now();
+}
+
 read_ertr::future<> EphemeralRBMDevice::read(
   uint64_t offset,
   bufferptr &bptr) {

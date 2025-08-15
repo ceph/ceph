@@ -155,6 +155,8 @@ public:
     size_t len,
     ceph::bufferptr &out) = 0;
 
+  virtual read_ertr::future<> readv(paddr_t addr, std::vector<bufferptr> vecs) = 0;
+
   read_ertr::future<ceph::bufferptr> read(
     paddr_t addr,
     size_t len
