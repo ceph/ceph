@@ -525,10 +525,8 @@ seastar::future<> RGWIndexWorkload::run(
    * delete or randomly pick to write or delete a key
    */
   auto rgw_actual_test = [&]() -> seastar::future<results_t> {
-    int num_ops = 0;
-    std::chrono::duration<double> tot_latency =
-        std::chrono::duration<double>(0.0);
     auto start = ceph::mono_clock::now();
+    results_t results;
 
     while (ceph::mono_clock::now() - start <= common.get_duration()) {
 
@@ -543,39 +541,32 @@ seastar::future<> RGWIndexWorkload::run(
       // this case happens when the size of the bucket is min size and we choose
       // to delete
       if (size_bucket_we_choose <= min_size) {
-        results_t result = co_await write_unique_key(
+        results += co_await write_unique_key(
             local_store, coll_id, coll_ref, bucket, keys_in_that_bucket,
             key_size, value_size);
         size_per_bucket[bucket_num_we_choose] += 1;
-        tot_latency += result.tot_latency_sec;
-        num_ops += result.num_operations;
 
       } else if (size_bucket_we_choose >= max_size) {
-        results_t result = co_await delete_random_key(
+        results += co_await delete_random_key(
             local_store, coll_id, coll_ref, bucket, keys_in_that_bucket);
         size_per_bucket[bucket_num_we_choose] -= 1;
-        tot_latency += result.tot_latency_sec;
-        num_ops += result.num_operations;
       } else {
         int choice = std::rand() % 2;
         // choice 0 is write, choice 1 is delete
         if (choice == 0) {
-          results_t result = co_await write_unique_key(
+          results += co_await write_unique_key(
               local_store, coll_id, coll_ref, bucket, keys_in_that_bucket,
               key_size, value_size);
           size_per_bucket[bucket_num_we_choose] += 1;
-          tot_latency += result.tot_latency_sec;
-          num_ops += result.num_operations;
         } else {
-          results_t result = co_await delete_random_key(
+          results += co_await delete_random_key(
               local_store, coll_id, coll_ref, bucket, keys_in_that_bucket);
           size_per_bucket[bucket_num_we_choose] -= 1;
-          tot_latency += result.tot_latency_sec;
-          num_ops += result.num_operations;
         }
       };
     }
-    co_return results_t{num_ops, tot_latency, common.get_duration()};
+    results.duration = ceph::mono_clock::now() - start;
+    co_return results;
   };
 
   co_await pre_fill_buckets();
