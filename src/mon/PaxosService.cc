@@ -19,6 +19,7 @@
 #include "include/ceph_assert.h"
 #include "messages/PaxosServiceMessage.h"
 #include "mon/MonOpRequest.h"
+#include "mon/Monitor.h"
 
 using std::ostream;
 using std::string;
@@ -33,6 +34,12 @@ static ostream& _prefix(std::ostream *_dout, Monitor &mon, Paxos &paxos, string 
   return *_dout << "mon." << mon.name << "@" << mon.rank
 		<< "(" << mon.get_state_name()
 		<< ").paxosservice(" << service_name << " " << fc << ".." << lc << ") ";
+}
+
+void PaxosService::C_ReplyOp::_finish(int r) {
+  if (r >= 0) {
+    mon.send_reply(op, reply.detach());
+  }
 }
 
 bool PaxosService::dispatch(MonOpRequestRef op)
@@ -273,6 +280,39 @@ bool PaxosService::should_stash_full()
 	  (get_last_committed() - latest_full > (version_t)g_conf()->paxos_stash_full_interval));
 }
 
+void PaxosService::put_version_full(MonitorDBStore::TransactionRef t,
+				    version_t ver, ceph::buffer::list& bl) {
+  std::string key = mon.store->combine_strings(full_prefix_name, ver);
+  t->put(get_service_name(), key, bl);
+}
+
+void PaxosService::put_version_latest_full(MonitorDBStore::TransactionRef t, version_t ver) {
+  std::string key = mon.store->combine_strings(full_prefix_name, full_latest_name);
+  t->put(get_service_name(), key, ver);
+}
+
+int PaxosService::get_version(version_t ver, ceph::buffer::list& bl) {
+  return mon.store->get(get_service_name(), ver, bl);
+}
+
+int PaxosService::get_version_full(version_t ver, ceph::buffer::list& bl) {
+  std::string key = mon.store->combine_strings(full_prefix_name, ver);
+  return mon.store->get(get_service_name(), key, bl);
+}
+
+version_t PaxosService::get_version_latest_full() {
+  std::string key = mon.store->combine_strings(full_prefix_name, full_latest_name);
+  return mon.store->get(get_service_name(), key);
+}
+
+int PaxosService::get_value(const std::string& key, ceph::buffer::list& bl) {
+  return mon.store->get(get_service_name(), key, bl);
+}
+
+version_t PaxosService::get_value(const std::string& key) {
+  return mon.store->get(get_service_name(), key);
+}
+
 void PaxosService::restart()
 {
   dout(10) << __func__ << dendl;
@@ -463,6 +503,15 @@ void PaxosService::trim(MonitorDBStore::TransactionRef t,
 		     mon.store->combine_strings(full_prefix_name, from - 1),
 		     mon.store->combine_strings(full_prefix_name, to));
   }
+}
+
+void PaxosService::encode_health(const health_check_map_t& next,
+				 MonitorDBStore::TransactionRef t) {
+  using ceph::encode;
+  ceph::buffer::list bl;
+  encode(next, bl);
+  t->put("health", service_name, bl);
+  mon.log_health(next, health_checks, t);
 }
 
 void PaxosService::load_health()
