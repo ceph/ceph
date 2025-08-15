@@ -44,6 +44,12 @@ Finisher::~Finisher() {
   }
 }
 
+void Finisher::LoggerInc(int idx, uint64_t v)
+{
+    if (logger)
+      logger->inc(idx, v);
+}
+
 void Finisher::start()
 {
   ldout(cct, 10) << __func__ << dendl;
