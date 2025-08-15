@@ -1399,6 +1399,10 @@ bool MDSMonitor::fail_mds_gid(FSMap &fsmap, mds_gid_t gid)
   return blocklist_epoch != 0;
 }
 
+bool MDSMonitor::is_leader() const {
+  return mon.is_leader();
+}
+
 mds_gid_t MDSMonitor::gid_from_arg(const FSMap &fsmap, const string &arg, ostream &ss)
 {
   // Try parsing as a role
