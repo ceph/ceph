@@ -17,7 +17,7 @@
 #ifndef CEPH_COND_H
 #define CEPH_COND_H
 
-#include "common/Clock.h"
+#include "common/ceph_time.h" // for ceph::make_timespan()
 #include "common/ceph_mutex.h"
 #include "include/Context.h"
 
