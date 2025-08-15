@@ -26,7 +26,8 @@
 #include "include/Context.h"
 #include "common/Thread.h"
 #include "common/ceph_mutex.h"
-#include "common/perf_counters.h" // for class PerfCounters
+
+namespace TOPNSPC::common { class PerfCounters; }
 
 namespace TOPNSPC::common { class PerfCounters; }
 
