@@ -23,9 +23,9 @@
 #include <thread>
 
 #include "include/common_fwd.h" // for CephContext
+#include "mds/MDSHealth.h"
 #include "mds/MDSMap.h" // for MDSMap::DaemonState
 #include "msg/Dispatcher.h"
-#include "messages/MMDSBeacon.h" // for struct MDSHealth
 
 class Connection;
 class Message;
