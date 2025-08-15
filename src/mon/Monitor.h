@@ -49,7 +49,6 @@
 #include "auth/AuthMethodList.h"
 #include "auth/KeyRing.h"
 #include "include/common_fwd.h"
-#include "messages/MMonCommand.h"
 #include "mon/MonitorDBStore.h"
 #include "mgr/MgrClient.h"
 #include <boost/smart_ptr/atomic_shared_ptr.hpp>
@@ -913,41 +912,7 @@ public:
     C_Command(Monitor &_mm, MonOpRequestRef _op, int r, std::string s, ceph::buffer::list rd, version_t v) :
       C_MonOp(_op), mon(_mm), rc(r), rs(s), rdata(rd), version(v){}
 
-    void _finish(int r) override {
-      auto m = op->get_req<MMonCommand>();
-      if (r >= 0) {
-	std::ostringstream ss;
-        if (!op->get_req()->get_connection()) {
-          ss << "connection dropped for command ";
-        } else {
-          MonSession *s = op->get_session();
-
-          // if client drops we may not have a session to draw information from.
-          if (s) {
-            ss << "from='" << s->name << " " << s->addrs << "' "
-              << "entity='" << s->entity_name << "' ";
-          } else {
-            ss << "session dropped for command ";
-          }
-        }
-        cmdmap_t cmdmap;
-        std::ostringstream ds;
-        std::string prefix;
-        cmdmap_from_json(m->cmd, &cmdmap, ds);
-        cmd_getval(cmdmap, "prefix", prefix);
-        if (prefix != "config set" && prefix != "config-key set")
-          ss << "cmd='" << m->cmd << "': finished";
-
-        mon.audit_clog->info() << ss.str();
-        mon.reply_command(op, rc, rs, rdata, version);
-      }
-      else if (r == -ECANCELED)
-        return;
-      else if (r == -EAGAIN)
-        mon.dispatch_op(op);
-      else
-	ceph_abort_msg("bad C_Command return value");
-    }
+    void _finish(int r) override;
   };
 
  private:
