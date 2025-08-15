@@ -61,24 +61,25 @@ SET_SUBSYS(osd);
  * num_operations by 1 Each delete increases the number of operations by 1
  */
 struct results_t {
-  int num_operations = 0;
-  std::chrono::duration<double> tot_latency_sec = 0s;
+  uint64_t ios_completed = 0;
+  std::chrono::duration<double> total_latency = 0s;
   std::chrono::duration<double> duration = 0s;
 
   results_t &operator += (const results_t &other_result) {
-    num_operations += other_result.num_operations;
-    tot_latency_sec += other_result.tot_latency_sec;
+    ios_completed += other_result.ios_completed;
+    total_latency += other_result.total_latency;
     return *this;
   }
 
   void dump(ceph::Formatter *f) const {
     f->open_object_section("results_t");
-    f->dump_int("number of operations done", num_operations);
+    f->dump_int("ios_completed", ios_completed);
     f->dump_float(
-        "the total latency aka time for these operations",
-        tot_latency_sec.count());
-    f->dump_float("the time the workload took to run is ",
-                  duration.count());
+      "total_latency_s",
+      total_latency.count());
+    f->dump_float(
+      "total_duration_s",
+      duration.count());
     f->close_section();
   }
 };
@@ -309,7 +310,7 @@ seastar::future<> PGLogWorkload::run(
    * takes to add and remove each key
    */
   auto add_remove_entry = [&]() -> seastar::future<results_t> {
-    int num_ops = 0;
+    uint64_t num_ops = 0;
     std::chrono::duration<double> tot_latency =
         std::chrono::duration<double>(0.0);
     auto start = ceph::mono_clock::now();
