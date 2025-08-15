@@ -25,7 +25,8 @@
 #include "common/Thread.h"
 #include "common/ceph_mutex.h"
 #include "common/Cond.h"
-#include "common/perf_counters.h" // for class PerfCounters
+
+class PerfCounters;
 
 /// Finisher queue length performance counter ID.
 enum {
@@ -67,6 +68,8 @@ class Finisher {
     void* entry() override { return fin->finisher_thread_entry(); }
   } finisher_thread;
 
+  void LoggerInc(int idx, uint64_t v = 1);
+
  public:
   /// Add a context to complete, optionally specifying a parameter for the complete function.
   void queue(Context *c, int r = 0) {
@@ -79,8 +82,7 @@ class Finisher {
       }
     }
 
-    if (logger)
-      logger->inc(l_finisher_queue_len);
+    LoggerInc(l_finisher_queue_len);
   }
 
   // TODO use C++20 concept checks instead of SFINAE
@@ -96,8 +98,7 @@ class Finisher {
 	finisher_cond.notify_one();
       }
     }
-    if (logger)
-      logger->inc(l_finisher_queue_len, ls.size());
+    LoggerInc(l_finisher_queue_len, ls.size());
     ls.clear();
   }
 
