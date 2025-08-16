@@ -118,7 +118,7 @@ class TestPg : public PgScrubBeListener {
     }
 
     for (shard_id_t i; i < get_ec_sinfo().get_k(); ++i) {
-      for (int j = 0; j < get_ec_sinfo().get_chunk_size(); j++) {
+      for (int j = 0; std::cmp_less(j, get_ec_sinfo().get_chunk_size()); j++) {
         encode_map.at(i).c_str()[j] =
             chunks[j + (get_ec_sinfo().get_chunk_size() * i.id)];
         for (shard_id_t k{static_cast<int8_t>(get_ec_sinfo().get_k_plus_m())};
