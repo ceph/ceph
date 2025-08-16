@@ -227,6 +227,12 @@ private:
     blob_vec& bd,
     exmp_it after_punch_it);
 
+  void _do_write_with_blobs(
+    uint32_t location,
+    uint32_t data_end,
+    uint32_t ref_end,
+    blob_vec& blobs);
+
   std::pair<bool, uint32_t> _write_expand_l(
     uint32_t logical_offset);
 
