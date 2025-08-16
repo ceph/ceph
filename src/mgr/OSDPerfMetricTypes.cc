@@ -1,11 +1,30 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#include "common/Formatter.h"
 #include "mgr/OSDPerfMetricTypes.h"
+#include "common/Formatter.h"
+#include "common/ceph_json.h"
+#include "include/container_ios.h"
 #include <ostream>
 
 using ceph::bufferlist;
+
+void OSDPerfMetricSubKeyDescriptor::dump(ceph::Formatter *f) const {
+  f->dump_unsigned("type", static_cast<uint8_t>(type));
+  f->dump_string("regex", regex_str);
+}
+
+void OSDPerfMetricSubKeyDescriptor::generate_test_instances(std::list<OSDPerfMetricSubKeyDescriptor*>& o) {
+  o.push_back(new OSDPerfMetricSubKeyDescriptor());
+  o.push_back(new OSDPerfMetricSubKeyDescriptor(OSDPerfMetricSubKeyType::CLIENT_ID, ".*"));
+  o.push_back(new OSDPerfMetricSubKeyDescriptor(OSDPerfMetricSubKeyType::CLIENT_ADDRESS, ".*"));
+  o.push_back(new OSDPerfMetricSubKeyDescriptor(OSDPerfMetricSubKeyType::POOL_ID, ".*"));
+  o.push_back(new OSDPerfMetricSubKeyDescriptor(OSDPerfMetricSubKeyType::NAMESPACE, ".*"));
+  o.push_back(new OSDPerfMetricSubKeyDescriptor(OSDPerfMetricSubKeyType::OSD_ID, ".*"));
+  o.push_back(new OSDPerfMetricSubKeyDescriptor(OSDPerfMetricSubKeyType::PG_ID, ".*"));
+  o.push_back(new OSDPerfMetricSubKeyDescriptor(OSDPerfMetricSubKeyType::OBJECT_NAME, ".*"));
+  o.push_back(new OSDPerfMetricSubKeyDescriptor(OSDPerfMetricSubKeyType::SNAP_ID, ".*"));
+}
 
 std::ostream& operator<<(std::ostream& os,
                          const OSDPerfMetricSubKeyDescriptor &d) {
@@ -38,6 +57,50 @@ std::ostream& operator<<(std::ostream& os,
     os << "unknown (" << static_cast<int>(d.type) << ")";
   }
   return os << "~/" << d.regex_str << "/";
+}
+
+void denc_traits<OSDPerfMetricKeyDescriptor>::decode(OSDPerfMetricKeyDescriptor& v,
+						     ceph::buffer::ptr::const_iterator& p) {
+  unsigned num;
+  denc_varint(num, p);
+  v.clear();
+  v.reserve(num);
+  for (unsigned i=0; i < num; ++i) {
+    OSDPerfMetricSubKeyDescriptor d;
+    denc(d, p);
+    if (!d.is_supported()) {
+      v.clear();
+      return;
+    }
+    try {
+      d.regex = d.regex_str.c_str();
+    } catch (const std::regex_error& e) {
+      v.clear();
+      return;
+    }
+    if (d.regex.mark_count() == 0) {
+      v.clear();
+      return;
+    }
+    v.push_back(std::move(d));
+  }
+}
+
+void PerformanceCounterDescriptor::dump(ceph::Formatter *f) const {
+  f->dump_unsigned("type", static_cast<uint8_t>(type));
+}
+
+void PerformanceCounterDescriptor::generate_test_instances(std::list<PerformanceCounterDescriptor*>& o) {
+  o.push_back(new PerformanceCounterDescriptor());
+  o.push_back(new PerformanceCounterDescriptor(PerformanceCounterType::OPS));
+  o.push_back(new PerformanceCounterDescriptor(PerformanceCounterType::WRITE_OPS));
+  o.push_back(new PerformanceCounterDescriptor(PerformanceCounterType::READ_OPS));
+  o.push_back(new PerformanceCounterDescriptor(PerformanceCounterType::BYTES));
+  o.push_back(new PerformanceCounterDescriptor(PerformanceCounterType::WRITE_BYTES));
+  o.push_back(new PerformanceCounterDescriptor(PerformanceCounterType::READ_BYTES));
+  o.push_back(new PerformanceCounterDescriptor(PerformanceCounterType::LATENCY));
+  o.push_back(new PerformanceCounterDescriptor(PerformanceCounterType::WRITE_LATENCY));
+  o.push_back(new PerformanceCounterDescriptor(PerformanceCounterType::READ_LATENCY));
 }
 
 void PerformanceCounterDescriptor::pack_counter(const PerformanceCounter &c,
@@ -115,6 +178,28 @@ std::ostream& operator<<(std::ostream& os, const OSDPerfMetricLimit &limit) {
             << limit.max_count << "}";
 }
 
+void OSDPerfMetricQuery::dump(ceph::Formatter *f) const {
+  encode_json("key_descriptor", key_descriptor, f);
+  encode_json("performance_counter_descriptors",
+	      performance_counter_descriptors, f);
+}
+
+void OSDPerfMetricQuery::generate_test_instances(std::list<OSDPerfMetricQuery*> &o) {
+  o.push_back(new OSDPerfMetricQuery());
+  o.push_back(new OSDPerfMetricQuery(OSDPerfMetricKeyDescriptor(),
+				     PerformanceCounterDescriptors()));
+  o.push_back(new OSDPerfMetricQuery(OSDPerfMetricKeyDescriptor(),
+				     PerformanceCounterDescriptors{
+				       PerformanceCounterType::WRITE_OPS,
+				       PerformanceCounterType::READ_OPS,
+				       PerformanceCounterType::BYTES,
+				       PerformanceCounterType::WRITE_BYTES,
+				       PerformanceCounterType::READ_BYTES,
+				       PerformanceCounterType::LATENCY,
+				       PerformanceCounterType::WRITE_LATENCY,
+				       PerformanceCounterType::READ_LATENCY}));
+}
+
 void OSDPerfMetricQuery::pack_counters(const PerformanceCounters &counters,
                                        bufferlist *bl) const {
   auto it = counters.begin();
@@ -131,4 +216,22 @@ void OSDPerfMetricQuery::pack_counters(const PerformanceCounters &counters,
 std::ostream& operator<<(std::ostream& os, const OSDPerfMetricQuery &query) {
   return os << "{key=" << query.key_descriptor << ", counters="
             << query.performance_counter_descriptors << "}";
+}
+
+void OSDPerfMetricReport::dump(ceph::Formatter *f) const {
+  encode_json("performance_counter_descriptors",
+	      performance_counter_descriptors, f);
+  encode_json("group_packed_performance_counters",
+	      group_packed_performance_counters, f);
+}
+
+void OSDPerfMetricReport::generate_test_instances(std::list<OSDPerfMetricReport *> &o) {
+  o.push_back(new OSDPerfMetricReport);
+  o.push_back(new OSDPerfMetricReport);
+  o.back()->performance_counter_descriptors.push_back(
+    PerformanceCounterDescriptor(PerformanceCounterType::OPS));
+  o.back()->performance_counter_descriptors.push_back(
+    PerformanceCounterDescriptor(PerformanceCounterType::WRITE_OPS));
+  o.back()->performance_counter_descriptors.push_back(
+    PerformanceCounterDescriptor(PerformanceCounterType::READ_OPS));
 }

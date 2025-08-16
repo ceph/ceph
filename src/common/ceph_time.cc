@@ -18,6 +18,7 @@
 #include <fmt/chrono.h>
 #include <fmt/ostream.h>
 
+#include "include/rados.h" // for struct ceph_timespec
 #include "log/LogClock.h"
 #include "config.h"
 #include "strtol.h"

@@ -22,14 +22,18 @@
 #include "rocksdb/utilities/table_properties_collectors.h"
 #include "rocksdb/merge_operator.h"
 
+#include "common/Clock.h" // for ceph_clock_now()
 #include "common/perf_counters.h"
 #include "common/PriorityCache.h"
 #include "common/strtol.h"
+#include "include/byte_u_t.h"
 #include "include/common_fwd.h"
+#include "include/container_ios.h"
 #include "include/scope_guard.h"
 #include "include/str_list.h"
 #include "include/stringify.h"
 #include "include/str_map.h"
+#include "include/utime.h"
 #include "KeyValueDB.h"
 #include "RocksDBStore.h"
 

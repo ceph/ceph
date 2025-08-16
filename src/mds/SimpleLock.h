@@ -24,6 +24,7 @@
 #include <boost/intrusive_ptr.hpp>
 
 #include "MDSCacheObject.h"
+#include "include/encoding_set.h"
 
 // -- lock types --
 // see CEPH_LOCK_*

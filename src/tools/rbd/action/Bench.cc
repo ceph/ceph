@@ -4,10 +4,11 @@
 #include "tools/rbd/ArgumentTypes.h"
 #include "tools/rbd/Shell.h"
 #include "tools/rbd/Utils.h"
+#include "common/ceph_time.h" // for coarse_mono_time()
 #include "common/errno.h"
 #include "common/strtol.h"
 #include "common/ceph_mutex.h"
-#include "include/types.h"
+#include "include/byte_u_t.h"
 #include "global/signal_handler.h"
 #include <atomic>
 #include <chrono>

@@ -55,10 +55,9 @@ int get_config_key(librados::Rados& rados, const std::string& key,
       "\"key\": \"" + key + "\""
     "}";
 
-  bufferlist in_bl;
   bufferlist out_bl;
 
-  int r = rados.mon_command(cmd, in_bl, &out_bl, nullptr);
+  int r = rados.mon_command(std::move(cmd), {}, &out_bl, nullptr);
   if (r == -EINVAL) {
     return -EOPNOTSUPP;
   } else if (r < 0 && r != -ENOENT) {
@@ -84,10 +83,9 @@ int set_config_key(librados::Rados& rados, const std::string& key,
             "\"val\": \"" + value + "\""
           "}";
   }
-  bufferlist in_bl;
   bufferlist out_bl;
 
-  int r = rados.mon_command(cmd, in_bl, &out_bl, nullptr);
+  int r = rados.mon_command(std::move(cmd), {}, &out_bl, nullptr);
   if (r == -EINVAL) {
     return -EOPNOTSUPP;
   } else if (r < 0) {
@@ -180,10 +178,9 @@ int create_bootstrap_user(CephContext* cct, librados::Rados& rados,
     R"(  "format": "json")" \
     R"(})";
 
-  bufferlist in_bl;
   bufferlist out_bl;
 
-  r = rados.mon_command(cmd, in_bl, &out_bl, nullptr);
+  r = rados.mon_command(std::move(cmd), {}, &out_bl, nullptr);
   if (r == -EINVAL) {
     ldout(cct, 5) << "caps mismatch for existing user" << dendl;
     return -EEXIST;

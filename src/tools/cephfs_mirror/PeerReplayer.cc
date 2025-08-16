@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <sys/time.h>
 #include <sys/file.h>
+#include <boost/optional/optional_io.hpp>
 #include <boost/scope_exit.hpp>
 
 #include "common/admin_socket.h"
@@ -243,10 +244,9 @@ int PeerReplayer::init() {
       "\"key\": \"" + key + "\""
     "}";
 
-  bufferlist in_bl;
   bufferlist out_bl;
 
-  int r = m_local_cluster->mon_command(cmd, in_bl, &out_bl, nullptr);
+  int r = m_local_cluster->mon_command(std::move(cmd), {}, &out_bl, nullptr);
   dout(5) << ": mon command r=" << r << dendl;
   if (r < 0 && r != -ENOENT) {
     return r;

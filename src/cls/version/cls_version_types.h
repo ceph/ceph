@@ -9,7 +9,9 @@
 #include <list>
 #include <string>
 
+#include "common/Formatter.h"
 #include "include/encoding.h"
+#include "include/encoding_string.h"
 #include "include/types.h"
 
 

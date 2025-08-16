@@ -72,6 +72,13 @@ public:
 #undef SAFE_OPTION
 
 public:
+  ConfigValues() noexcept;
+  ConfigValues(const ConfigValues &) noexcept;
+  ConfigValues(ConfigValues &&) noexcept;
+  ~ConfigValues() noexcept;
+  ConfigValues &operator=(const ConfigValues &) noexcept;
+  ConfigValues &operator=(ConfigValues &&) noexcept;
+
   enum set_value_result_t {
     SET_NO_CHANGE,
     SET_NO_EFFECT,

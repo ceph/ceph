@@ -14,6 +14,7 @@
 #include "librbd/mirror/ImageRemoveRequest.h"
 #include "librbd/mirror/ImageStateUpdateRequest.h"
 #include "librbd/mirror/snapshot/PromoteRequest.h"
+#include "include/encoding_set.h"
 
 namespace librbd {
 

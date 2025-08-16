@@ -7,6 +7,7 @@
 #include <stdexcept>
 #include <string>
 #include <typeindex>
+#include "include/encoding.h"
 #include <include/types.h>
 #include <boost/container/flat_map.hpp>
 #include <boost/container/flat_set.hpp>
@@ -16,7 +17,7 @@
 
 #include "json_spirit/json_spirit.h"
 
-#include "Formatter.h"
+#include "JSONFormatter.h"
 
 
 

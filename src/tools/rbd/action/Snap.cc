@@ -4,7 +4,9 @@
 #include "tools/rbd/ArgumentTypes.h"
 #include "tools/rbd/Shell.h"
 #include "tools/rbd/Utils.h"
-#include "include/types.h"
+#include "include/rados.h" // for CEPH_NOSNAP
+#include "include/byte_u_t.h"
+#include "include/container_ios.h"
 #include "include/stringify.h"
 #include "common/errno.h"
 #include "common/Formatter.h"

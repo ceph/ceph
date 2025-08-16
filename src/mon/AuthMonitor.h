@@ -18,6 +18,7 @@
 #include <map>
 #include <set>
 
+#include "auth/cephx/CephxKeyServer.h"
 #include "global/global_init.h"
 #include "include/ceph_features.h"
 #include "include/types.h"

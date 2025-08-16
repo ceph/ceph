@@ -4,17 +4,18 @@
 #define KEY_VALUE_DB_H
 
 #include "include/buffer.h"
-#include <ostream>
+#include <iosfwd>
 #include <set>
 #include <map>
 #include <optional>
 #include <string>
 #include <string_view>
-#include <boost/scoped_ptr.hpp>
-#include "include/encoding.h"
-#include "common/Formatter.h"
-#include "common/perf_counters.h"
+
+#include "include/encoding_string.h"
 #include "common/PriorityCache.h"
+
+class PerfCounters;
+namespace ceph { class Formatter; }
 
 /**
  * Defines virtual interface to be implemented by key value store

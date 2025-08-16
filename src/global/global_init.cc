@@ -12,8 +12,11 @@
  *
  */
 
+#include "global/global_init.h"
+
 #include <filesystem>
 #include <memory>
+#include <sstream>
 #include "acconfig.h"
 #ifdef HAVE_BREAKPAD
 #include <breakpad/client/linux/handler/exception_handler.h>
@@ -31,11 +34,11 @@
 #include "erasure-code/ErasureCodePlugin.h"
 #include "extblkdev/ExtBlkDevPlugin.h"
 #include "global/global_context.h"
-#include "global/global_init.h"
 #include "global/pidfile.h"
 #include "global/signal_handler.h"
 #include "include/compat.h"
 #include "include/str_list.h"
+#include "log/Log.h"
 #include "mon/MonClient.h"
 
 #ifndef _WIN32

@@ -19,6 +19,7 @@
 #include <time.h>
 #include <iterator>
 
+#include "include/byte_u_t.h"
 #include "include/ceph_assert.h"
 #include "include/common_fwd.h"
 #include "include/stringify.h"
@@ -27,6 +28,7 @@
 #include "mon/HealthMonitor.h"
 #include "mon/OSDMonitor.h"
 
+#include "messages/MMonCommand.h"
 #include "messages/MMonHealthChecks.h"
 
 #include "common/Formatter.h"

@@ -4,6 +4,7 @@
 #ifndef CEPH_MGR_METRIC_TYPES_H
 #define CEPH_MGR_METRIC_TYPES_H
 
+#include <boost/variant/static_visitor.hpp>
 #include <variant>
 #include "include/denc.h"
 #include "include/ceph_features.h"

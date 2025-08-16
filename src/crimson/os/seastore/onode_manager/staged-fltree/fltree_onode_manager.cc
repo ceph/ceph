@@ -3,6 +3,7 @@
 
 #include "crimson/os/seastore/logging.h"
 
+#include "common/hobject_fmt.h"
 #include "crimson/os/seastore/onode_manager/staged-fltree/fltree_onode_manager.h"
 
 SET_SUBSYS(seastore_onode);

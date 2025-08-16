@@ -6,6 +6,7 @@
 #include <string>
 #include <ranges>
 
+#include <boost/optional.hpp>
 #include <boost/statechart/custom_reaction.hpp>
 #include <boost/statechart/deferral.hpp>
 #include <boost/statechart/event.hpp>
@@ -18,6 +19,7 @@
 
 #include "common/fmt_common.h"
 #include "common/hobject.h"
+#include "common/hobject_fmt.h"
 #include "crimson/common/log.h"
 #include "osd/osd_types_fmt.h"
 #include "scrub_validator.h"

@@ -6,6 +6,9 @@
 
 #include "LogEntry.h"
 #include "Formatter.h"
+#include "include/encoding_list.h"
+#include "include/encoding_map.h"
+#include "include/encoding_string.h"
 #include "include/stringify.h"
 
 using std::list;
@@ -356,4 +359,18 @@ void LogSummary::generate_test_instances(list<LogSummary*>& o)
 {
   o.push_back(new LogSummary);
   // more!
+}
+
+std::ostream& operator<<(std::ostream& out, const LogEntry& e)
+{
+  return out << e.stamp << " " << e.name << " (" << e.rank << ") "
+	     << e.seq << " : "
+             << e.channel << " " << e.prio << " " << e.msg;
+}
+
+auto fmt::formatter<LogEntry>::format(const LogEntry& e, format_context& ctx) const -> format_context::iterator
+{
+  return fmt::format_to(ctx.out(), "{} {} ({}) {} : {} [{}] {}",
+			e.stamp, e.name, e.rank, e.seq, e.channel,
+			LogEntry::level_to_str(e.prio), e.msg);
 }

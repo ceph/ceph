@@ -4,8 +4,11 @@
 #include "include/fs_types.h"
 #include "common/Formatter.h"
 #include "include/ceph_features.h"
+#include "include/ceph_fs_encoder.h"
 #include "common/ceph_json.h"
+#include "include/encoding_string.h"
 #include "include/denc.h"
+#include "include/denc_tuple.h"
 
 #include <iostream>
 

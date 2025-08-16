@@ -5,12 +5,15 @@
 #define CEPH_CLS_OTP_TYPES_H
 
 #include "include/encoding.h"
+#include "include/encoding_map.h"
+#include "include/encoding_string.h"
 #include "include/types.h"
 
 
 #define CLS_OTP_MAX_REPO_SIZE 100
 
 class JSONObj;
+namespace ceph { class Formatter; }
 
 namespace rados {
   namespace cls {
