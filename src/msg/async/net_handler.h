@@ -24,8 +24,9 @@ namespace ceph {
 
     CephContext *cct;
    public:
-    int create_socket(int domain, bool reuse_addr=false);
+    virtual int create_socket(int domain, bool reuse_addr=false);
     explicit NetHandler(CephContext *c): cct(c) {}
+    virtual ~NetHandler() {}
     int set_nonblock(int sd);
     int set_socket_options(int sd, bool nodelay, int size);
     int connect(const entity_addr_t &addr, const entity_addr_t& bind_addr);
