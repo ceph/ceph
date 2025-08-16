@@ -324,6 +324,10 @@ target_link_libraries(ceph_test_rgw_gc_log ${rgw_libs} radostest-cxx)
 install(TARGETS ceph_test_rgw_gc_log DESTINATION ${CMAKE_INSTALL_BINDIR})
 endif()
 
+add_executable(unittest_rgw_usage_exporter test_rgw_usage_exporter.cc)
+add_ceph_unittest(unittest_rgw_usage_exporter)
+target_link_libraries(unittest_rgw_usage_exporter ${UNITTEST_LIBS} ${rgw_libs} ${LMDB_LIBRARIES})
+
 add_executable(unittest_rgw_shard_io test_rgw_shard_io.cc)
 add_ceph_unittest(unittest_rgw_shard_io)
 target_link_libraries(unittest_rgw_shard_io ${rgw_libs} unit-main ${UNITTEST_LIBS})

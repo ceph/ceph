@@ -151,6 +151,7 @@ int main(int argc, char *argv[])
     return -r;
   }
 
+  main.init_usage_exporter();
   main.cond_init_apis();
 
   mutex.lock();
