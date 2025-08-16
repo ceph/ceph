@@ -1243,10 +1243,16 @@ int RadosBucket::commit_logging_object(const std::string& obj_name,
     const std::string& prefix,
     std::string* last_committed) {
   rgw_pool data_pool;
+  rgw_pool head_data_pool;
   const rgw_obj head_obj{get_key(), obj_name};
   const auto placement_rule = get_placement_rule();
+  bool same_pool = false;
 
-  if (!store->getRados()->get_obj_data_pool(placement_rule, head_obj, &data_pool)) {
+  rgw_placement_rule tail_placement_rule;
+  tail_placement_rule.storage_class = "BUCKET_LOGGING";
+  tail_placement_rule.inherit_from(placement_rule);
+
+  if (!store->getRados()->get_obj_data_pool(placement_rule, head_obj, &head_data_pool)) {
     ldpp_dout(dpp, 1) << "ERROR: failed to get data pool for bucket '" << get_key() <<
       "' when committing logging object"  << dendl;
     return -EIO;
@@ -1255,7 +1261,7 @@ int RadosBucket::commit_logging_object(const std::string& obj_name,
   if (last_committed) {
     if (const int ret = get_committed_logging_object(store,
           obj_name_oid,
-          data_pool,
+          head_data_pool,
           y,
           dpp,
           *last_committed); ret < 0) {
@@ -1270,6 +1276,12 @@ int RadosBucket::commit_logging_object(const std::string& obj_name,
     }
   }
 
+  if (!store->getRados()->get_obj_data_pool(tail_placement_rule, head_obj, &data_pool)) {
+    ldpp_dout(dpp, 1) << "ERROR: failed to get data pool for BUCKET_LOGGING storage class" <<
+        dendl;
+    data_pool = head_data_pool;
+    same_pool = true;
+  }
   const auto temp_obj_name = to_temp_object_name(this, obj_name);
   std::map<string, bufferlist> obj_attrs;
   ceph::real_time mtime;
@@ -1298,10 +1310,11 @@ int RadosBucket::commit_logging_object(const std::string& obj_name,
   RGWObjManifest manifest;
   manifest.set_prefix(obj_name);
   manifest.set_trivial_rule(0, max_obj_size);
+
   RGWObjManifest::generator manifest_gen;
   if (const auto ret = manifest_gen.create_begin(store->ctx(), &manifest,
                                 placement_rule,
-                                nullptr, // no special placment for tail
+                                same_pool ? nullptr: &tail_placement_rule,
                                 get_key(),
                                 head_obj); ret < 0) {
     ldpp_dout(dpp, 1) << "ERROR: failed to create manifest when committing logging object. error: " <<
@@ -1351,6 +1364,8 @@ int RadosBucket::commit_logging_object(const std::string& obj_name,
   obj_attrs.emplace(RGW_ATTR_ETAG, std::move(bl_etag));
   const req_context rctx{dpp, y, nullptr};
   jspan_context trace{false, false};
+
+//NITHYA : Here is where the manifest will be written
   if (const auto ret = head_obj_wop.write_meta(0, size, obj_attrs, rctx, trace); ret < 0) {
   ldpp_dout(dpp, 1) << "ERROR: failed to commit logging object '" << temp_obj_name <<
     "' to bucket '" << get_key() <<"'. error: " << ret << dendl;
@@ -1363,7 +1378,7 @@ int RadosBucket::commit_logging_object(const std::string& obj_name,
 
   if (const int ret = set_committed_logging_object(store,
         obj_name_oid,
-        data_pool,
+        head_data_pool,
         y,
         dpp,
         obj_name); ret < 0) {
@@ -1405,14 +1420,23 @@ int RadosBucket::write_logging_object(const std::string& obj_name,
   const auto temp_obj_name = to_temp_object_name(this, obj_name);
   rgw_pool data_pool;
   rgw_obj obj{get_key(), obj_name};
-  if (!store->getRados()->get_obj_data_pool(get_placement_rule(), obj, &data_pool)) {
-    ldpp_dout(dpp, 1) << "ERROR: failed to get data pool for bucket '" << get_key() <<
-      "' when writing logging object" << dendl;
-    return -EIO;
+
+  rgw_placement_rule tail_placement;
+  tail_placement.storage_class = "BUCKET_LOGGING";
+  tail_placement.inherit_from(get_placement_rule());
+
+  if (!store->getRados()->get_obj_data_pool(tail_placement, obj, &data_pool)) {
+    // Fallback to the log bucket placement
+    if (!store->getRados()->get_obj_data_pool(get_placement_rule(), obj, &data_pool)) {
+      ldpp_dout(dpp, 1) << "ERROR: failed to get data pool for bucket '" << get_key() <<
+	"' when writing logging object" << dendl;
+      return -EIO;
+    }
   }
+
   librados::IoCtx io_ctx;
-  if (const auto ret = rgw_init_ioctx(dpp, store->getRados()->get_rados_handle(), data_pool, io_ctx); ret < 0) {
-    ldpp_dout(dpp, 1) << "ERROR: failed to get IO context for logging object from data pool:" << data_pool.to_str() << dendl;
+  if (const auto ret = rgw_init_ioctx(dpp, store->getRados()->get_rados_handle(), data_pool, io_ctx, true); ret < 0) {
+    ldpp_dout(dpp, 1) << "ERROR: failed to get IO context for logging object from data pool:" << data_pool.to_str() << ", ret="<< ret << dendl;
     return -EIO;
   }
   bufferlist bl;
