@@ -71,7 +71,7 @@ public:
   void encode(ceph::buffer::list& bl) const;
   void decode(ceph::buffer::list::const_iterator& bl);
   void dump(ceph::Formatter *f) const;
-  static void generate_test_instances(std::list<SloppyCRCMap*>& ls);
+  static std::list<SloppyCRCMap> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(SloppyCRCMap)
 

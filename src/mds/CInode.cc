@@ -4795,22 +4795,26 @@ void InodeStoreBase::old_indoes_cb(InodeStoreBase::mempool_old_inode_map& c, JSO
   c[s] = i;
 }
 
-void InodeStore::generate_test_instances(std::list<InodeStore*> &ls)
+std::list<InodeStore> InodeStore::generate_test_instances()
 {
-  InodeStore *populated = new InodeStore;
-  populated->get_inode()->ino = 0xdeadbeef;
-  populated->get_inode()->mode = S_IFLNK | 0777;
-  populated->symlink = "rhubarb";
-  ls.push_back(populated);
+  std::list<InodeStore> ls;
+  InodeStore populated;
+  populated.get_inode()->ino = 0xdeadbeef;
+  populated.get_inode()->mode = S_IFLNK | 0777;
+  populated.symlink = "rhubarb";
+  ls.push_back(std::move(populated));
+  return ls;
 }
 
-void InodeStoreBare::generate_test_instances(std::list<InodeStoreBare*> &ls)
+std::list<InodeStoreBare> InodeStoreBare::generate_test_instances()
 {
-  InodeStoreBare *populated = new InodeStoreBare;
-  populated->get_inode()->ino = 0xdeadbeef;
-  populated->get_inode()->mode = S_IFLNK | 0777;
-  populated->symlink = "rhubarb";
-  ls.push_back(populated);
+  std::list<InodeStoreBare> ls;
+  InodeStoreBare populated;
+  populated.get_inode()->ino = 0xdeadbeef;
+  populated.get_inode()->mode = S_IFLNK | 0777;
+  populated.symlink = "rhubarb";
+  ls.push_back(std::move(populated));
+  return ls;
 }
 
 void CInode::validate_disk_state(CInode::validated_data *results,

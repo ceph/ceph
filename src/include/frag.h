@@ -149,7 +149,7 @@ public:
 
   void dump(ceph::Formatter *f) const;
 
-  static void generate_test_instances(std::list<frag_t*>& ls);
+  static std::list<frag_t> generate_test_instances() ;
 
   bool operator<(const frag_t& b) const
   {
@@ -399,7 +399,7 @@ public:
 
   void dump(ceph::Formatter *f) const;
 
-  static void generate_test_instances(std::list<fragtree_t*>& ls);
+  static std::list<fragtree_t> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(fragtree_t)
 

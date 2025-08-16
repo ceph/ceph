@@ -90,7 +90,7 @@ struct cls_user_bucket {
   }
 
   void dump(ceph::Formatter *f) const;
-  static void generate_test_instances(std::list<cls_user_bucket*>& ls);
+  static std::list<cls_user_bucket> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(cls_user_bucket)
 
@@ -154,7 +154,7 @@ struct cls_user_bucket_entry {
     DECODE_FINISH(bl);
   }
   void dump(ceph::Formatter *f) const;
-  static void generate_test_instances(std::list<cls_user_bucket_entry*>& ls);
+  static std::list<cls_user_bucket_entry> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(cls_user_bucket_entry)
 
@@ -184,7 +184,7 @@ struct cls_user_stats {
   }
 
   void dump(ceph::Formatter *f) const;
-  static void generate_test_instances(std::list<cls_user_stats*>& ls);
+  static std::list<cls_user_stats> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(cls_user_stats)
 
@@ -212,7 +212,7 @@ struct cls_user_header {
   }
 
   void dump(ceph::Formatter *f) const;
-  static void generate_test_instances(std::list<cls_user_header*>& ls);
+  static std::list<cls_user_header> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(cls_user_header)
 
@@ -231,7 +231,7 @@ struct cls_user_account_header {
     DECODE_FINISH(bl);
   }
   void dump(ceph::Formatter* f) const;
-  static void generate_test_instances(std::list<cls_user_account_header*>& ls);
+  static std::list<cls_user_account_header> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(cls_user_account_header)
 
@@ -259,7 +259,7 @@ struct cls_user_account_resource {
     DECODE_FINISH(bl);
   }
   void dump(ceph::Formatter* f) const;
-  static void generate_test_instances(std::list<cls_user_account_resource*>& ls);
+  static std::list<cls_user_account_resource> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(cls_user_account_resource)
 
