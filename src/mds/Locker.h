@@ -211,6 +211,9 @@ public:
   void revoke_client_leases(SimpleLock *lock);
   void encode_lease(bufferlist& bl, const session_info_t& info, const LeaseStat& ls);
 
+  // dump revoking caps
+  void dump_in_flight_cap_revokes(client_t client, Formatter *f);
+
 protected:
   void send_lock_message(SimpleLock *lock, int msg);
   void send_lock_message(SimpleLock *lock, int msg, const bufferlist &data);
