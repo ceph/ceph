@@ -454,6 +454,10 @@ public:
     return;
   }
 
+  virtual void get_log(ceph::bufferlist& out) {
+    return;
+  }
+
   /**
    * Return your perf counters if you have any.  Subclasses are not
    * required to implement this, and callers must respect a null return
