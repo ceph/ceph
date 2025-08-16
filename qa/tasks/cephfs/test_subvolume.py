@@ -1,5 +1,6 @@
 import logging
 from time import sleep
+import os
 
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
 from teuthology.exceptions import CommandFailedError
@@ -16,6 +17,7 @@ class TestSubvolume(CephFSTestCase):
         self.setup_test()
 
     def tearDown(self):
+        #pass
         # clean up
         self.cleanup_test()
         super().tearDown()
@@ -29,6 +31,15 @@ class TestSubvolume(CephFSTestCase):
 
     def cleanup_test(self):
         self.mount_a.run_shell(['rm', '-rf', 'group'])
+
+    def get_subvolume_metrics(self, mds_rank=0):
+        """
+        Helper to fetch current subvolume metrics from MDS counters using rank_tell.
+        """
+        mds_info = self.fs.get_rank(rank=mds_rank)
+        mds_name = mds_info['name']
+        counters = self.fs.mds_tell(["counter", "dump"], mds_id=mds_name)
+        return counters.get("mds_subvolume_metrics")
 
     def test_subvolume_move_out_file(self):
         """
@@ -185,7 +196,7 @@ class TestSubvolume(CephFSTestCase):
         self.mount_a.run_shell(['mkdir', 'group/subvol2/dir/.snap/s2'])
 
         # override subdir subvolume with parent subvolume
-        self.mount_a.run_shell(['setfattr', '-n', 'ceph.dir.subvolume',
+        (['setfattr', '-n', 'ceph.dir.subvolume',
                                 '-v', '1', 'group/subvol2/dir'])
         self.mount_a.run_shell(['setfattr', '-n', 'ceph.dir.subvolume',
                                 '-v', '1', 'group/subvol2'])
@@ -196,6 +207,7 @@ class TestSubvolume(CephFSTestCase):
 
         # clean up
         self.mount_a.run_shell(['rmdir', 'group/subvol2/dir/.snap/s2'])
+
 
     def test_subvolume_vxattr_removal_without_setting(self):
         """
@@ -208,6 +220,81 @@ class TestSubvolume(CephFSTestCase):
 
         # cleanup
         self.mount_a.run_shell(['rm', '-rf', 'group/subvol3'])
+
+
+    def test_subvolume_metrics_lifecycle(self):
+        """
+        Verify that subvolume metrics are initially absent, appear after IO,
+        and disappear after the aggregation window expires.
+        """
+        subvol_name = "metrics_subv"
+        subv_path = "/volumes/_nogroup/metrics_subv"
+
+        # no metrics initially
+        subvol_metrics = self.get_subvolume_metrics()
+        self.assertFalse(subvol_metrics, "Subvolume metrics should not be present before I/O")
+
+        # create subvolume
+        self.fs.run_ceph_cmd('fs', 'subvolume', 'create', 'cephfs', subvol_name)
+
+        # generate some I/O
+        mount_point = self.mount_a.get_mount_point()
+        suvolume_fs_path = self.fs.get_ceph_cmd_stdout('fs', 'subvolume', 'getpath', 'cephfs', subvol_name).strip()
+        suvolume_fs_path = os.path.join(mount_point, suvolume_fs_path.strip('/'))
+
+        # do some writes
+        self.mount_a.run_shell(['sudo', 'fio', '--name', 'test', '-rw=write', '--bs=4k', '--numjobs=1', '--time_based',
+                                '--runtime=30s', '--verify=0', '--size=2G', f'--filename={os.path.join(suvolume_fs_path, "file0")}'])
+
+        # allow metrics to propagate
+        sleep(10)
+
+        # verify that metrics are available
+        subvol_metrics = self.get_subvolume_metrics()
+        self.assertTrue(subvol_metrics, "Expected subvolume metrics to be reported after I/O")
+        # Extract first metric entry
+        metric = subvol_metrics[0]
+        counters = metric["counters"]
+        labels = metric["labels"]
+
+        # Label checks
+        self.assertEqual(labels["fs_name"], "cephfs", "Unexpected fs_name in subvolume metrics")
+        self.assertEqual(labels["subvolume_path"], subv_path, "Unexpected subvolume_path in subvolume metrics")
+
+        # Counter presence and value checks
+        self.assertIn("avg_read_iops", counters)
+        self.assertIn("avg_read_tp_Bps", counters)
+        self.assertIn("avg_read_lat_msec", counters)
+        self.assertIn("avg_write_iops", counters)
+        self.assertIn("avg_write_tp_Bps", counters)
+        self.assertIn("avg_write_lat_msec", counters)
+
+        # check write metrics
+        self.assertGreater(counters["avg_write_iops"], 0, "Expected avg_write_iops to be > 0")
+        self.assertGreater(counters["avg_write_tp_Bps"], 0, "Expected avg_write_tp_Bps to be > 0")
+        self.assertGreater(counters["avg_write_lat_msec"], 0, "Expected avg_write_lat_msec to be > 0")
+
+        # do some reads
+        self.mount_a.run_shell(['sudo', 'fio', '--name', 'test', '-rw=read', '--bs=4k', '--numjobs=1', '--time_based',
+                                '--runtime=30s', '--verify=0', '--size=1G', f'--filename={os.path.join(suvolume_fs_path, "file0")}'])
+
+        # allow metrics to propagate
+        sleep(5)
+        subvol_metrics = self.get_subvolume_metrics()
+        metric = subvol_metrics[0]
+        counters = metric["counters"]
+
+        # Assert expected values (example: write I/O occurred, read did not)
+        self.assertGreater(counters["avg_read_iops"], 0, "Expected avg_read_iops to be >= 0")
+        self.assertGreater(counters["avg_read_tp_Bps"], 0, "Expected avg_read_tp_Bps to be >= 0")
+        self.assertGreater(counters["avg_read_lat_msec"], 0, "Expected avg_read_lat_msec to be >= 0")
+
+        # wait for metrics to expire after inactivity
+        sleep(40)
+
+        # verify that metrics are not present anymore
+        subvolume_metrics = self.get_subvolume_metrics()
+        self.assertFalse(subvolume_metrics, "Subvolume metrics should be gone after inactivity window")
 
 
 class TestSubvolumeReplicated(CephFSTestCase):
