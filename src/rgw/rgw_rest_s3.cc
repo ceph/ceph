@@ -1611,6 +1611,37 @@ void RGWDeleteBucketReplication_ObjStore_S3::send_response()
   dump_start(s);
 }
 
+int RGWListBuckets_ObjStore_S3::get_params(optional_yield y)
+{
+  auto continuation_token = s->info.args.get_optional("continuation-token");
+  if (continuation_token) {
+    marker = *continuation_token;
+  }
+
+  auto max_buckets = s->info.args.get_optional("max-buckets");
+  if (max_buckets) {
+    std::optional value = ceph::parse<int64_t>(*max_buckets);
+    if (!value) {
+      s->err.message = "max-buckets must be an integer";
+      return -EINVAL;
+    }
+    if (*value < 1 || *value > 10000) {
+      s->err.message = "max-buckets must be between 1 and 10000 inclusive";
+      return -EINVAL;
+    }
+    limit = *value;
+  }
+  // TODO: support "prefix" and "bucket-region" params?
+
+  // a request is only considered to be "paginated" if it specifies
+  // either "max-buckets" or "continuation-token"
+  if (!continuation_token && !max_buckets) {
+    limit = -1; /* no limit */
+  }
+
+  return 0;
+}
+
 void RGWListBuckets_ObjStore_S3::send_response_begin(bool has_buckets)
 {
   if (op_ret)
@@ -1643,7 +1674,10 @@ void RGWListBuckets_ObjStore_S3::send_response_data(std::span<const RGWBucketEnt
 void RGWListBuckets_ObjStore_S3::send_response_end()
 {
   if (sent_data) {
-    s->formatter->close_section();
+    s->formatter->close_section(); // Buckets
+    if (!marker.empty()) {
+      s->formatter->dump_string("ContinuationToken", marker);
+    }
     list_all_buckets_end(s);
     rgw_flush_formatter_and_reset(s, s->formatter);
   }
