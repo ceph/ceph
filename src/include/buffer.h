@@ -129,6 +129,7 @@ struct error_code;
   class raw_claimed_char;
   class raw_unshareable; // diagnostic, unshareable char buffer
   class raw_combined;
+  class raw_zeros;
   class raw_claim_buffer;
 
 
@@ -303,6 +304,9 @@ struct error_code;
     unsigned wasted() const;
 
     int cmp(const ptr& o) const;
+    /// is_zero_fast() is a variant aware about deduplicated zeros.
+    /// In Tentacle it shall NOT be used by anybody except ECBackend.
+    bool is_zero_fast() const;
     bool is_zero() const;
 
     // modifiers
@@ -930,6 +934,8 @@ struct error_code;
       return *_carriage;
     }
 
+    ptr always_zeroed_bptr();
+
   public:
     // cons/des
     list()
@@ -1163,6 +1169,11 @@ struct error_code;
     void append(std::istream& in);
     contiguous_filler append_hole(unsigned len);
     void append_zero(unsigned len);
+    /// append_zero2() is a temporary, short-living variant that deduplicates zeros.
+    /// In Tentacle it shall NOT be used by anybody except ECBackend.
+    /// In future release it will likely replace the append_zero() variant but
+    /// other changes at the interface are needed to make the transition safe.
+    void append_zero2(unsigned len);
     void prepend_zero(unsigned len);
 
     reserve_t obtain_contiguous_space(const unsigned len);

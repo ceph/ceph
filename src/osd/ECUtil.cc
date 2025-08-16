@@ -475,19 +475,23 @@ void shard_extent_map_t::insert_parity_buffers() {
   }
 }
 
-slice_iterator<shard_id_t, extent_map> shard_extent_map_t::begin_slice_iterator(
-    const shard_id_set &out) {
-  return slice_iterator(extent_maps, out);
+slice_iterator shard_extent_map_t::begin_slice_iterator(
+    const shard_id_set &out,
+    DoutPrefixProvider *dpp,
+    const shard_id_set *dedup_zeros) {
+  return slice_iterator(extent_maps, out, dpp, dedup_zeros);
 }
 
 /* Encode parity chunks, using the encode_chunks interface into the
  * erasure coding. This generates all parity using full stripe writes.
  */
-int shard_extent_map_t::_encode(const ErasureCodeInterfaceRef &ec_impl) {
+int shard_extent_map_t::encode(const ErasureCodeInterfaceRef &ec_impl,
+    DoutPrefixProvider *dpp,
+    shard_id_set *dedup_zeros) {
   shard_id_set out_set = sinfo->get_parity_shards();
   bool rebuild_req = false;
 
-  for (auto iter = begin_slice_iterator(out_set); !iter.is_end(); ++iter) {
+  for (auto iter = begin_slice_iterator(out_set, dpp, dedup_zeros); !iter.is_end(); ++iter) {
     if (!iter.is_page_aligned()) {
       rebuild_req = true;
       break;
@@ -503,36 +507,10 @@ int shard_extent_map_t::_encode(const ErasureCodeInterfaceRef &ec_impl) {
 
   if (rebuild_req) {
     pad_and_rebuild_to_ec_align();
-    return _encode(ec_impl);
+    return encode(ec_impl, dpp, dedup_zeros);
   }
 
   return 0;
-}
-
-/* Encode parity chunks, using the encode_chunks interface into the
- * erasure coding. This generates all parity using full stripe writes.
- */
-int shard_extent_map_t::encode(const ErasureCodeInterfaceRef &ec_impl,
-                               const HashInfoRef &hinfo,
-                               uint64_t before_ro_size) {
-  int r = _encode(ec_impl);
-
-  if (!r && hinfo && ro_start >= before_ro_size) {
-    /* NEEDS REVIEW:  The following calculates the new hinfo CRCs. This is
-     *                 currently considering ALL the buffers, including the
-     *                 parity buffers.  Is this really right?
-     *                 Also, does this really belong here? Its convenient
-     *                 because have just built the buffer list...
-     */
-    shard_id_set full_set;
-    full_set.insert_range(shard_id_t(0), sinfo->get_k_plus_m());
-    for (auto iter = begin_slice_iterator(full_set); !iter.is_end(); ++iter) {
-      ceph_assert(ro_start == before_ro_size);
-      hinfo->append(iter.get_offset(), iter.get_in_bufferptrs());
-    }
-  }
-
-  return r;
 }
 
 /* Encode parity chunks, using the parity delta write interfaces on plugins
@@ -540,7 +518,8 @@ int shard_extent_map_t::encode(const ErasureCodeInterfaceRef &ec_impl,
  */
 int shard_extent_map_t::encode_parity_delta(
     const ErasureCodeInterfaceRef &ec_impl,
-    shard_extent_map_t &old_sem) {
+    shard_extent_map_t &old_sem,
+    DoutPrefixProvider *dpp) {
   shard_id_set out_set = sinfo->get_parity_shards();
 
   pad_and_rebuild_to_ec_align();
@@ -561,7 +540,7 @@ int shard_extent_map_t::encode_parity_delta(
 
     s.compute_ro_range();
 
-    for (auto iter = s.begin_slice_iterator(out_set); !iter.is_end(); ++iter) {
+    for (auto iter = s.begin_slice_iterator(out_set, dpp); !iter.is_end(); ++iter) {
       ceph_assert(iter.is_page_aligned());
       shard_id_map<bufferptr> &data_shards = iter.get_in_bufferptrs();
       shard_id_map<bufferptr> &parity_shards = iter.get_out_bufferptrs();
@@ -663,7 +642,9 @@ void shard_extent_map_t::trim(const shard_extent_set_t &trim_to) {
 
 int shard_extent_map_t::decode(const ErasureCodeInterfaceRef &ec_impl,
                                const shard_extent_set_t &want,
-                               uint64_t object_size) {
+                               uint64_t object_size,
+                               DoutPrefixProvider *dpp,
+                               bool dedup_zeros) {
   shard_id_set want_set;
   shard_id_set have_set;
   want.populate_shard_id_set(want_set);
@@ -698,11 +679,11 @@ int shard_extent_map_t::decode(const ErasureCodeInterfaceRef &ec_impl,
       decode_for_parity.intersection_of(want.at(shard), read_mask.at(shard));
       pad_on_shard(decode_for_parity, shard);
     }
-    r = _decode(ec_impl, want_set, decode_set);
+    r = _decode(ec_impl, want_set, decode_set, dpp);
   }
   if (!r && !encode_set.empty()) {
     pad_on_shards(want, encode_set);
-    r = _encode(ec_impl);
+    r = encode(ec_impl, dpp, dedup_zeros?&need_set:nullptr);
   }
 
   // If we failed to decode, then bail out, or the trimming below might fail.
@@ -721,9 +702,10 @@ int shard_extent_map_t::decode(const ErasureCodeInterfaceRef &ec_impl,
 
 int shard_extent_map_t::_decode(const ErasureCodeInterfaceRef &ec_impl,
                                 const shard_id_set &want_set,
-                                const shard_id_set &need_set) {
+                                const shard_id_set &need_set,
+                                DoutPrefixProvider *dpp) {
   bool rebuild_req = false;
-  for (auto iter = begin_slice_iterator(need_set); !iter.is_end(); ++iter) {
+  for (auto iter = begin_slice_iterator(need_set, dpp); !iter.is_end(); ++iter) {
     if (!iter.is_page_aligned()) {
       rebuild_req = true;
       break;
@@ -738,7 +720,7 @@ int shard_extent_map_t::_decode(const ErasureCodeInterfaceRef &ec_impl,
 
   if (rebuild_req) {
     pad_and_rebuild_to_ec_align();
-    return _decode(ec_impl, want_set, need_set);
+    return _decode(ec_impl, want_set, need_set, dpp);
   }
 
   compute_ro_range();
@@ -1089,57 +1071,8 @@ void shard_extent_set_t::insert(const shard_extent_set_t &other) {
 }
 }
 
-void ECUtil::HashInfo::append(uint64_t old_size,
-                              shard_id_map<bufferptr> &to_append) {
-  ceph_assert(old_size == total_chunk_size);
-  uint64_t size_to_append = to_append.begin()->second.length();
-  if (has_chunk_hash()) {
-    ceph_assert(to_append.size() == cumulative_shard_hashes.size());
-    for (auto &&[shard, ptr] : to_append) {
-      ceph_assert(size_to_append == ptr.length());
-      ceph_assert(shard < static_cast<int>(cumulative_shard_hashes.size()));
-      cumulative_shard_hashes[int(shard)] =
-          ceph_crc32c(cumulative_shard_hashes[int(shard)],
-                      (unsigned char*)ptr.c_str(), ptr.length());
-    }
-  }
-  total_chunk_size += size_to_append;
-}
-
-void ECUtil::HashInfo::encode(bufferlist &bl) const {
-  ENCODE_START(1, 1, bl);
-  encode(total_chunk_size, bl);
-  encode(cumulative_shard_hashes, bl);
-  ENCODE_FINISH(bl);
-}
-
-void ECUtil::HashInfo::decode(bufferlist::const_iterator &bl) {
-  DECODE_START(1, bl);
-  decode(total_chunk_size, bl);
-  decode(cumulative_shard_hashes, bl);
-  DECODE_FINISH(bl);
-}
-
-void ECUtil::HashInfo::dump(Formatter *f) const {
-  f->dump_unsigned("total_chunk_size", total_chunk_size);
-  f->open_array_section("cumulative_shard_hashes");
-  for (unsigned i = 0; i != cumulative_shard_hashes.size(); ++i) {
-    f->open_object_section("hash");
-    f->dump_unsigned("shard", i);
-    f->dump_unsigned("hash", cumulative_shard_hashes[i]);
-    f->close_section();
-  }
-  f->close_section();
-}
 
 namespace ECUtil {
-std::ostream &operator<<(std::ostream &out, const HashInfo &hi) {
-  ostringstream hashes;
-  for (auto hash : hi.cumulative_shard_hashes) {
-    hashes << " " << hex << hash;
-  }
-  return out << "tcs=" << hi.total_chunk_size << hashes.str();
-}
 
 std::ostream &operator<<(std::ostream &out, const shard_extent_map_t &rhs) {
   // sinfo not thought to be needed for debug, as it is constant.
@@ -1172,34 +1105,16 @@ std::ostream &operator<<(std::ostream &out, const log_entry_t &rhs) {
   }
   return out << "[" << rhs.shard << "]->" << rhs.io << "\n";
 }
-}
 
-void ECUtil::HashInfo::generate_test_instances(list<HashInfo*> &o) {
-  o.push_back(new HashInfo(3));
-  {
-    bufferlist bl;
-    bl.append_zero(20);
-
-    bufferptr bp = bl.begin().get_current_ptr();
-
-    // We don't have the k+m here, but this is not critical performance, so
-    // create an oversized map.
-    shard_id_map<bufferptr> buffers(128);
-    buffers[shard_id_t(0)] = bp;
-    buffers[shard_id_t(1)] = bp;
-    buffers[shard_id_t(2)] = bp;
-    o.back()->append(0, buffers);
-    o.back()->append(20, buffers);
-  }
-  o.push_back(new HashInfo(4));
-}
-
+// Upgraded pools can still have keys, so there are a few functions that still
+// require these keys.
 const string HINFO_KEY = "hinfo_key";
 
-bool ECUtil::is_hinfo_key_string(const string &key) {
+bool is_hinfo_key_string(const string &key) {
   return key == HINFO_KEY;
 }
 
-const string &ECUtil::get_hinfo_key() {
+const string &get_hinfo_key() {
   return HINFO_KEY;
+}
 }
