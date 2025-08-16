@@ -149,7 +149,7 @@ export class RgwOverviewDashboardComponent implements OnInit, OnDestroy {
   }
 
   getPrometheusData(selectedTime: any) {
-    this.queriesResults = this.prometheusService.getPrometheusQueriesData(
+    this.queriesResults = this.prometheusService.getRangeQueriesData(
       selectedTime,
       queries,
       this.queriesResults,

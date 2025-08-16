@@ -1,4 +1,4 @@
-export enum Promqls {
+export enum UtilizationCardQueries {
   USEDCAPACITY = 'ceph_cluster_total_used_bytes',
   WRITEIOPS = 'sum(rate(ceph_pool_wr[1m]))',
   READIOPS = 'sum(rate(ceph_pool_rd[1m]))',
@@ -7,6 +7,11 @@ export enum Promqls {
   READCLIENTTHROUGHPUT = 'sum(rate(ceph_pool_rd_bytes[1m]))',
   WRITECLIENTTHROUGHPUT = 'sum(rate(ceph_pool_wr_bytes[1m]))',
   RECOVERYBYTES = 'sum(rate(ceph_osd_recovery_bytes[1m]))'
+}
+
+export enum CapacityCardQueries {
+  OSD_NEARFULL = 'ceph_osd_nearfull_ratio',
+  OSD_FULL = 'ceph_osd_full_ratio'
 }
 
 export enum RgwPromqls {
