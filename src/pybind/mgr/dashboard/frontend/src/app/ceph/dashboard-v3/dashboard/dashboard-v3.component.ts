@@ -138,13 +138,6 @@ export class DashboardV3Component extends PrometheusListHelper implements OnInit
 
     this.loadInventories();
 
-    // fetch capacity to load the capacity chart
-    this.refreshIntervalObs(() => this.healthService.getClusterCapacity()).subscribe({
-      next: (capacity: any) => {
-        this.capacity = capacity;
-      }
-    });
-
     this.getPrometheusData(this.prometheusService.lastHourDateObject);
     this.getDetailsCardData();
     this.getTelemetryReport();
@@ -241,6 +234,7 @@ export class DashboardV3Component extends PrometheusListHelper implements OnInit
         this.mdsMap = result.fs_map;
         this.iscsiMap = result.iscsi_daemons;
         this.healthData = result.health;
+        this.capacity = result.df?.stats; // for capacity card
         this.enabledFeature$ = this.featureToggles.get();
       }
     });
