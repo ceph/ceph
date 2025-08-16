@@ -593,6 +593,9 @@ class CephadmService(metaclass=ABCMeta):
     def get_blocking_daemon_hosts(self, service_name: str) -> List[HostSpec]:
         return []
 
+    def pre_daemon_service_config(self, spec: ServiceSpec) -> None:
+        return
+
 
 class CephService(CephadmService):
 
