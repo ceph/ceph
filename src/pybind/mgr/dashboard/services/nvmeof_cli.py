@@ -267,5 +267,5 @@ class NvmeofCLICommand(CLICommand):
                 return HandleCommandResult(-errno.EINVAL, '',
                                            f"format '{out_format}' is not implemented")
             return HandleCommandResult(0, out, '')
-        except DashboardException as e:
-            return HandleCommandResult(-errno.EINVAL, '', str(e))
+        except Exception as e:
+            return HandleCommandResult(-errno.EINVAL, '', str(e)) 
