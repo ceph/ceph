@@ -17,7 +17,9 @@ import {
   RESTORE_DAYS_TEXT,
   READTHROUGH_RESTORE_DAYS_TEXT,
   RESTORE_STORAGE_CLASS_TEXT,
-  ZONEGROUP_TEXT
+  ZONEGROUP_TEXT,
+  ACL,
+  GroupedACLs
 } from '../models/rgw-storage-class.model';
 @Component({
   selector: 'cd-rgw-storage-class-details',
@@ -45,6 +47,7 @@ export class RgwStorageClassDetailsComponent implements OnChanges {
   readthroughrestoreDaysText = READTHROUGH_RESTORE_DAYS_TEXT;
   restoreStorageClassText = RESTORE_STORAGE_CLASS_TEXT;
   zoneGroupText = ZONEGROUP_TEXT;
+  groupedACLs: GroupedACLs = {};
 
   ngOnChanges() {
     if (this.selection) {
@@ -68,8 +71,24 @@ export class RgwStorageClassDetailsComponent implements OnChanges {
     }
   }
 
+  ngOnInit() {
+    this.groupedACLs = this.groupByType(this.selection.acl_mappings);
+  }
+
   isTierMatch(...types: string[]): boolean {
     const tier_type = this.selection.tier_type?.toLowerCase();
     return types.some((type) => type.toLowerCase() === tier_type);
+  }
+
+  groupByType(acls: ACL[]): GroupedACLs {
+    return acls.reduce((groupAcls: GroupedACLs, item: ACL) => {
+      const type = item.val?.type?.toUpperCase();
+      groupAcls[type] = groupAcls[type] ?? [];
+      groupAcls[type].push({
+        source_id: item.val?.source_id,
+        dest_id: item.val?.dest_id
+      });
+      return groupAcls;
+    }, {});
   }
 }

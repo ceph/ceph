@@ -48,12 +48,32 @@ export interface StorageClassDetails {
   read_through_restore_days?: number;
   restore_storage_class?: string;
   retain_head_object?: boolean;
+  acls?: ACL[];
+  acl_mappings?: ACL[];
 }
 
 export interface ZoneGroup {
   name: string;
   id: string;
   placement_targets?: Target[];
+}
+
+export interface ACL {
+  key: string;
+  val: {
+    type: string;
+    source_id: string;
+    dest_id: string;
+  };
+}
+
+export interface AclMapping {
+  source_id: string;
+  dest_id: string;
+}
+
+export interface GroupedACLs {
+  [type: string]: AclMapping[];
 }
 
 export interface S3Details {
@@ -69,6 +89,7 @@ export interface S3Details {
   host_style: boolean;
   retain_head_object?: boolean;
   allow_read_through?: boolean;
+  acl_mappings?: ACL[];
 }
 export interface S3Glacier {
   glacier_restore_days: number;
@@ -98,13 +119,14 @@ export interface PlacementTarget {
     glacier_restore_tier_type?: string;
     restore_storage_class?: string;
     read_through_restore_days?: number;
+    acls?: ACL[];
   };
   storage_class?: string;
   name?: string;
   tier_targets?: TierTarget[];
 }
 
-export interface StorageClassOption {
+export interface TypeOption {
   value: string;
   label: string;
 }
@@ -171,32 +193,32 @@ export const TIER_TYPE_DISPLAY = {
 };
 
 export const ALLOW_READ_THROUGH_TEXT =
-  'Enables fetching objects from remote cloud S3 if not found locally.';
+  $localize`Enables fetching objects from remote cloud S3 if not found locally.`;
 
 export const MULTIPART_MIN_PART_TEXT =
-  'It specifies that objects this size or larger are transitioned to the cloud using multipart upload.';
+  $localize`It specifies that objects this size or larger are transitioned to the cloud using multipart upload.`;
 
 export const MULTIPART_SYNC_THRESHOLD_TEXT =
-  'It specifies the minimum part size to use when transitioning objects using multipart upload.';
+  $localize`It specifies the minimum part size to use when transitioning objects using multipart upload.`;
 
 export const TARGET_PATH_TEXT =
-  'Target Path refers to the storage location (e.g., bucket or container) in the cloud where data will be stored.';
+  $localize`Target Path refers to the storage location (e.g., bucket or container) in the cloud where data will be stored.`;
 
 export const TARGET_REGION_TEXT =
-  'The region of the remote cloud service where storage is located.';
+  $localize`The region of the remote cloud service where storage is located.`;
 
 export const TARGET_ENDPOINT_TEXT =
-  'The URL endpoint of the remote cloud service for accessing storage.';
+  $localize`The URL endpoint of the remote cloud service for accessing storage.`;
 
 export const TARGET_ACCESS_KEY_TEXT =
-  "To view or copy your access key, go to your cloud service's user management or credentials section, find your user profile, and locate the access key. You can view and copy the key by following the instructions provided.";
+  $localize`To view or copy your access key, go to your cloud service's user management or credentials section, find your user profile, and locate the access key. You can view and copy the key by following the instructions provided.`;
 
 export const TARGET_SECRET_KEY_TEXT =
-  "To view or copy your secret key, go to your cloud service's user management or credentials section, find your user profile, and locate the secret key. You can view and copy the key by following the instructions provided.";
+  $localize`To view or copy your secret key, go to your cloud service's user management or credentials section, find your user profile, and locate the secret key. You can view and copy the key by following the instructions provided.`;
 
-export const RETAIN_HEAD_OBJECT_TEXT = 'Retain object metadata after transition to the cloud.';
+export const RETAIN_HEAD_OBJECT_TEXT = $localize`Retain object metadata after transition to the cloud.`;
 
-export const HOST_STYLE = `The URL format for accessing the remote S3 endpoint:
+export const HOST_STYLE = $localize`The URL format for accessing the remote S3 endpoint:
   - 'Path': Use for a path-based URL
   - 'Virtual': Use for a domain-based URL`;
 
@@ -223,3 +245,56 @@ export const RESTORE_STORAGE_CLASS_TEXT = $localize`The storage class to which o
 export const ZONEGROUP_TEXT = $localize`A Zone Group is a logical grouping of one or more zones that share the same data
                   and metadata, allowing for multi-site replication and geographic distribution of
                   data.`;
+
+export type AclType = 'id' | 'email' | 'uri';
+
+export interface AclLabelAndHelper {
+  source: string;
+  destination: string;
+}
+
+export interface AclMaps {
+  [key: string]: {
+    source: string;
+    destination: string;
+    [field: string]: string;
+  };
+}
+
+export const AclTypeOptions = [
+  { value: 'id', label: 'ID' },
+  { value: 'email', label: 'Email' },
+  { value: 'uri', label: 'URI' }
+] as const;
+
+export type AclFieldType = 'source' | 'destination';
+
+export const AclTypeLabel: AclMaps = {
+  id: {
+    source: $localize`Source User`,
+    destination: $localize`Destination User`
+  },
+  email: {
+    source: $localize`Source Email`,
+    destination: $localize`Destination Email`
+  },
+  uri: {
+    source: $localize`Source URI`,
+    destination: $localize`Destination URI`
+  }
+};
+
+export const AclHelperText: AclMaps = {
+  id: {
+    source: $localize`The unique user ID in the source system.`,
+    destination: $localize`The unique user ID in the destination system.`
+  },
+  email: {
+    source: $localize`The email address of the source user.`,
+    destination: $localize`The email address of the destination user.`
+  },
+  uri: {
+    source: $localize`The URI identifying the source group or user.`,
+    destination: $localize`The URI identifying the destination group or user.`
+  }
+};

@@ -80,7 +80,7 @@
             [invalid]="storageClassForm.showError('placement_target', formDir, 'required')"
             [invalidText]="placementError"
           >
-            <option [value]=""
+            <option [value]="''"
                     i18n>--Select--</option>
             <option
               *ngFor="let placementTarget of placementTargets"
@@ -165,23 +165,29 @@
           <div cdsCol>
             <!-- Target Endpoint -->
             <cds-text-label
-            labelInputID="target_endpoint"
-            i18n
-            [invalid]="storageClassForm.showError('target_endpoint', formDir, 'invalidURL') || storageClassForm.showError('target_endpoint', formDir, 'required')"
-            [invalidText]="endpointError"
-            [helperText]="helpTextLabels.targetEndpointText"
-            >Target Endpoint
-            <input
-              cdsText
-              type="text"
-              placeholder="e.g, http://ceph-node-00.com:80"
-              i18n-placeholder
-              id="target_endpoint"
-              formControlName="target_endpoint"
-              [invalid]="storageClassForm.showError('target_endpoint', formDir, 'invalidURL') || storageClassForm.showError('target_endpoint', formDir, 'required')"
+              labelInputID="target_endpoint"
+              i18n
+              [invalid]="
+                storageClassForm.showError('target_endpoint', formDir, 'invalidURL') ||
+                storageClassForm.showError('target_endpoint', formDir, 'required')
+              "
               [invalidText]="endpointError"
-            />
-          </cds-text-label>
+              [helperText]="helpTextLabels.targetEndpointText"
+              >Target Endpoint
+              <input
+                cdsText
+                type="text"
+                placeholder="e.g, http://ceph-node-00.com:80"
+                i18n-placeholder
+                id="target_endpoint"
+                formControlName="target_endpoint"
+                [invalid]="
+                  storageClassForm.showError('target_endpoint', formDir, 'invalidURL') ||
+                  storageClassForm.showError('target_endpoint', formDir, 'required')
+                "
+                [invalidText]="endpointError"
+              />
+            </cds-text-label>
             <ng-template #endpointError>
               <span
                 class="invalid-feedback"
@@ -189,9 +195,12 @@
                 i18n
                 >This field is required.</span
               >
-              <span class="invalid-feedback"
-                    *ngIf="storageClassForm.showError('target_endpoint', formDir, 'invalidURL')"
-                    i18n>Please enter a valid URL.</span>
+              <span
+                class="invalid-feedback"
+                *ngIf="storageClassForm.showError('target_endpoint', formDir, 'invalidURL')"
+                i18n
+                >Please enter a valid URL.</span
+              >
             </ng-template>
           </div>
         </div>
@@ -346,7 +355,7 @@
               [helperText]="helpTextLabels.restoreStorageClassText"
               i18n-label
             >
-              <option value=""
+              <option [value]="''"
                       i18n>-- Select the glacier restore storage class --</option>
               <option [ngValue]="standard"
                       i18n>Standard</option>
@@ -472,6 +481,100 @@
                         cdDimlessBinary
                       />
                     </cds-text-label>
+                  </div>
+                </div>
+                <!-- ACLs -->
+                <div>
+                  <legend class="cd-header"
+                          i18n>ACLs Mapping</legend>
+                  <ng-container formArrayName="acls">
+                    @for (acl of acls.controls; track i; let i = $index) {
+                    <ng-container [formGroupName]="i">
+                      <div class="form-item form-item-append"
+                           cdsRow>
+                        <div cdsCol
+                             [columnNumbers]="{ lg: 7 }">
+                          <cds-select id="type"
+                                      formControlName="type"
+                                      i18n-label
+                                      label="Type">
+                            <option [value]=""
+                                    i18n>--Select--</option>
+                            @for (type of typeOptions; track type.value) {
+                            <option [value]="type.value"
+                                    i18n>
+                              {{ type.label }}
+                            </option>
+                            }
+                          </cds-select>
+                        </div>
+                      </div>
+                      <div cdsRow
+                           class="form-item form-item-append">
+                        <div cdsCol>
+                          <cds-text-label
+                            labelInputID="source_id"
+                            i18n
+                            [helperText]="getAclHelperText(acl.get('type').value, 'source')"
+                            [invalid]="
+                              acl.get('type')?.value === 'id' &&
+                              acl.get('source_id')?.invalid &&
+                              acl.get('source_id')?.touched
+                            "
+                            [invalidText]="'This field is required.'"
+                            >{{ getAclLabel(acl.get('type').value, 'source') }}
+                            <input
+                              cdsText
+                              type="text"
+                              formControlName="source_id"
+                              [invalid]="
+                                acl.get('source_id')?.invalid && acl.get('source_id')?.touched
+                              "
+                            />
+                          </cds-text-label>
+                        </div>
+                        <div cdsCol>
+                          <cds-text-label
+                            labelInputID="dest_id"
+                            i18n
+                            [helperText]="getAclHelperText(acl.get('type').value, 'destination')"
+                            [invalid]="acl.get('dest_id')?.invalid && acl.get('dest_id')?.touched"
+                            [invalidText]="'This field is required.'"
+                            >{{ getAclLabel(acl.get('type').value, 'destination') }}
+                            <input
+                              cdsText
+                              type="text"
+                              formControlName="dest_id"
+                              [invalid]="acl.get('dest_id')?.invalid && acl.get('dest_id')?.touched"
+                            />
+                          </cds-text-label>
+                        </div>
+                        <div cdsCol
+                             [columnNumbers]="{ lg: 1 }"
+                             class="item-action-btn">
+                          <cds-icon-button kind="danger"
+                                           size="sm"
+                                           (click)="removeAcl(acls, i)">
+                            <svg cdsIcon="trash-can"
+                                 size="32"
+                                 class="cds--btn__icon"></svg>
+                          </cds-icon-button>
+                        </div>
+                      </div>
+                    </ng-container>
+                    }
+                  </ng-container>
+                  <div class="form-item">
+                    <button cdsButton="tertiary"
+                            type="button"
+                            (click)="addAcl()"
+                            i18n>
+                      Add ACL
+                      <svg cdsIcon="add"
+                           size="32"
+                           class="cds--btn__icon"
+                           icon></svg>
+                    </button>
                   </div>
                 </div>
               </cds-accordion-item>
