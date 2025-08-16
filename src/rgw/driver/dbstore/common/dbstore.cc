@@ -1381,14 +1381,22 @@ int DB::Object::Read::prepare(const DoutPrefixProvider *dpp)
 
     if (conds.if_match) {
       string if_match_str = rgw_string_unquote(conds.if_match);
-      ldpp_dout(dpp, 10) << "ETag: " << string(etag.c_str(), etag.length()) << " " << " If-Match: " << if_match_str << dendl;
-      if (if_match_str.compare(0, etag.length(), etag.c_str(), etag.length()) != 0) {
-        return -ERR_PRECONDITION_FAILED;
+      if (if_match_str.compare("*") != 0) {
+        ldpp_dout(dpp, 10) << "ETag: " << string(etag.c_str(), etag.length()) << " " << " If-Match: " << if_match_str << dendl;
+        if (if_match_str.compare(0, etag.length(), etag.c_str(), etag.length()) != 0) {
+          return -ERR_PRECONDITION_FAILED;
+        }
+      } else {
+        ldpp_dout(dpp, 10) << "If-Match: " << if_match_str << dendl;
       }
     }
 
     if (conds.if_nomatch) {
       string if_nomatch_str = rgw_string_unquote(conds.if_nomatch);
+      if (if_nomatch_str.compare("*") == 0) {
+        ldpp_dout(dpp, 10) << "If-NoMatch: " << if_nomatch_str << dendl;
+        return -ERR_NOT_MODIFIED;
+      }
       ldpp_dout(dpp, 10) << "ETag: " << string(etag.c_str(), etag.length()) << " " << " If-NoMatch: " << if_nomatch_str << dendl;
       if (if_nomatch_str.compare(0, etag.length(), etag.c_str(), etag.length()) == 0) {
         return -ERR_NOT_MODIFIED;
