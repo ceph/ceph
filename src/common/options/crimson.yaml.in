@@ -19,7 +19,7 @@ options:
   default: 6
   flags:
   - startup
-- name: crimson_seastar_cpu_cores
+- name: crimson_cpu_set
   type: str
   level: advanced
   desc: CPU cores on which seastar reactor threads will run in cpuset(7) format, smp::count is deduced from this option
@@ -28,14 +28,14 @@ options:
 - name: crimson_alien_thread_cpu_cores
   type: str
   level: advanced
-  desc: CPU cores on which alienstore threads will run in cpuset(7) format
+  desc: CPU cores on which POSIX threads alienized to seastar will run in cpuset(7) format
   flags:
   - startup
-- name: crimson_seastar_num_threads
+- name: crimson_cpu_num
   type: uint
   level: advanced
   default: 0
-  desc: The number of threads for serving seastar reactors without CPU pinning, overridden if crimson_seastar_cpu_cores is set
+  desc: The number of seastar reactors, overridden if crimson_cpu_set is set
   flags:
   - startup
   min: 0
