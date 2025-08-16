@@ -100,6 +100,16 @@ public:
   }
 
   /**
+   * relocate_logical_extent
+   *
+   * Make a new logical extent to update its laddr. The caller is
+   * responsible to update the corresponding lba mapping.
+   */
+  base_iertr::future<LogicalChildNodeRef> relocate_logical_extent(
+    Transaction &t,
+    LBAMapping mapping);
+
+  /**
    * get_pin
    *
    * Get the logical pin at offset
@@ -416,7 +426,7 @@ public:
   template <typename T>
   alloc_extent_ret<T> alloc_non_data_extent(
     Transaction &t,
-    laddr_t laddr_hint,
+    laddr_hint_t laddr_hint,
     extent_len_t len,
     placement_hint_t placement_hint = placement_hint_t::HOT) {
     static_assert(is_logical_metadata_type(T::TYPE));
@@ -456,7 +466,7 @@ public:
   template <typename T>
   alloc_extents_ret<T> alloc_data_extents(
     Transaction &t,
-    laddr_t laddr_hint,
+    laddr_hint_t laddr_hint,
     extent_len_t len,
     std::optional<LBAMapping> pos = std::nullopt,
     placement_hint_t placement_hint = placement_hint_t::HOT) {
@@ -479,7 +489,8 @@ public:
       }
       if (pos) {
 	// laddr_hint is determined
-	auto off = laddr_hint;
+	assert(laddr_hint.condition == laddr_conflict_condition_t::all_at_never);
+	auto off = laddr_hint.addr;
 	for (auto &extent : exts) {
 	  extent->set_laddr(off);
 	  off = (off + extent->get_length()).checked_to_laddr();
@@ -543,14 +554,16 @@ public:
   using reserve_extent_ret = reserve_extent_iertr::future<LBAMapping>;
   reserve_extent_ret reserve_region(
     Transaction &t,
-    laddr_t hint,
-    extent_len_t len) {
+    laddr_hint_t hint,
+    extent_len_t len,
+    extent_types_t type) {
     LOG_PREFIX(TransactionManager::reserve_region);
-    SUBDEBUGT(seastore_tm, "hint {}~0x{:x} ...", t, hint, len);
+    SUBDEBUGT(seastore_tm, "hint {}~0x{:x} {} ...", t, hint, len, type);
     return lba_manager->reserve_region(
       t,
       hint,
-      len
+      len,
+      type
     ).si_then([FNAME, &t](auto pin) {
       SUBDEBUGT(seastore_tm, "reserved {}", t, pin);
       return pin;
@@ -561,16 +574,18 @@ public:
     Transaction &t,
     LBAMapping pos,
     laddr_t hint,
-    extent_len_t len) {
+    extent_len_t len,
+    extent_types_t type) {
     LOG_PREFIX(TransactionManager::reserve_region);
-    SUBDEBUGT(seastore_tm, "hint {}~0x{:x} ...", t, hint, len);
+    SUBDEBUGT(seastore_tm, "hint {}~0x{:x} ...", t, hint, len, type);
     return pos.refresh(
-    ).si_then([FNAME, this, &t, hint, len](auto pos) {
+    ).si_then([FNAME, this, &t, hint, len, type](auto pos) {
       return lba_manager->reserve_region(
 	t,
 	std::move(pos),
 	hint,
-	len
+	len,
+	type
       ).si_then([FNAME, &t](auto pin) {
 	SUBDEBUGT(seastore_tm, "reserved {}", t, pin);
 	return pin;
@@ -593,25 +608,28 @@ public:
     LBAMapping pos,
     LBAMapping mapping,
     laddr_t hint,
-    bool updateref) {
+    extent_len_t offset,
+    extent_len_t len) {
     LOG_PREFIX(TransactionManager::clone_pin);
-    SUBDEBUGT(seastore_tm, "{} clone to hint {} ... pos={}, updateref={}",
-      t, mapping, hint, pos, updateref);
+    SUBDEBUGT(seastore_tm, "{} clone to hint {} ... pos={}",
+      t, mapping, hint, pos);
     return seastar::do_with(
       std::move(pos),
       std::move(mapping),
-      [FNAME, this, &t, hint, updateref](auto &pos, auto &mapping) {
+      [offset, len, FNAME, this, &t, hint](auto &pos, auto &mapping) {
       return pos.refresh(
       ).si_then([&pos, &mapping](auto m) {
 	pos = std::move(m);
 	return mapping.refresh();
-      }).si_then([FNAME, this, &pos, &t, hint, updateref](auto mapping) {
+      }).si_then([offset, len, FNAME, this, &pos,
+		  &t, hint](auto mapping) {
 	return lba_manager->clone_mapping(
 	  t,
 	  std::move(pos),
 	  std::move(mapping),
 	  hint,
-	  updateref
+	  offset,
+	  len
 	).si_then([FNAME, &t](auto ret) {
 	  SUBDEBUGT(seastore_tm, "cloned as {}", t, ret.cloned_mapping);
 	  return ret;
@@ -621,68 +639,174 @@ public:
   }
 
   using clone_iertr = base_iertr;
-  using clone_ret = clone_iertr::future<>;
+  using clone_ret = clone_iertr::future<LBAMapping>;
   clone_ret clone_range(
     Transaction &t,
-    laddr_t base,
+    laddr_t src_base,
+    laddr_t dst_base,
+    extent_len_t offset,
     extent_len_t len,
     LBAMapping pos,
-    LBAMapping mapping,
-    bool updateref)
+    LBAMapping mapping)
   {
     LOG_PREFIX(TransactionManager::clone_range);
-    SUBDEBUGT(seastore_tm, "object_data={}~{} mapping={} updateref={}",
-      t, base, len, mapping, updateref);
+    SUBDEBUGT(seastore_tm,
+      "src_base={}, dst_base={}, {}~{}, mapping={}, pos={}",
+      t, src_base, dst_base, offset, len, mapping, pos);
     return seastar::do_with(
       std::move(pos),
       std::move(mapping),
-      (extent_len_t)0,
-      [&t, this, updateref, base, len](auto &pos, auto &mapping, auto &offset) {
-      return trans_intr::repeat(
-	[&t, this, &pos, &mapping, &offset, updateref, base, len]()
-	-> clone_iertr::future<seastar::stop_iteration> {
-	if (offset >= len) {
-	  return clone_iertr::make_ready_future<
-	    seastar::stop_iteration>(seastar::stop_iteration::yes);
-	}
-	if (!mapping.is_indirect() && mapping.is_zero_reserved()) {
-	  return reserve_region(
-	    t,
-	    std::move(pos),
-	    (base + offset).checked_to_laddr(),
-	    mapping.get_length()
-	  ).si_then([base, &offset](auto r) {
-	    assert((base + offset).checked_to_laddr() == r.get_key());
-	    offset += r.get_length();
-	    return r.next();
-	  }).si_then([&pos, &mapping](auto r) {
-	    pos = std::move(r);
-	    return mapping.next();
-	  }).si_then([&mapping](auto p) {
-	    mapping = std::move(p);
-	    return seastar::stop_iteration::no;
-	  }).handle_error_interruptible(
-	    clone_iertr::pass_further{},
-	    crimson::ct_error::assert_all{"unexpected error"}
-	  );
-	}
-	return clone_pin(
-	  t, std::move(pos), std::move(mapping),
-	  (base + offset).checked_to_laddr(), updateref
-	).si_then([&offset, &pos, &mapping](auto ret) {
-	  offset += ret.cloned_mapping.get_length();
-	  return ret.cloned_mapping.next(
-	  ).si_then([&pos, ret=std::move(ret)](auto p) mutable {
-	    pos = std::move(p);
-	    return ret.orig_mapping.next();
-	  }).si_then([&mapping](auto p) {
-	    mapping = std::move(p);
-	    return seastar::stop_iteration::no;
-	  });
+      offset,
+      len,
+      [&t, this, src_base, dst_base]
+      (auto &pos, auto &mapping, auto &cloned_to, auto &left) {
+      return pos.refresh().si_then([&pos, &mapping](auto s) {
+        pos = std::move(s);
+        return mapping.refresh();
+      }).si_then([this, &t, &pos, &mapping, src_base,
+                  &cloned_to, &left, dst_base](auto m) {
+        mapping = std::move(m);
+        return trans_intr::repeat(
+          [&t, this, &pos, &mapping, &cloned_to, src_base, dst_base, &left]()
+          -> clone_iertr::future<seastar::stop_iteration> {
+          if (left == 0) {
+            return clone_iertr::make_ready_future<
+              seastar::stop_iteration>(seastar::stop_iteration::yes);
+          }
+          auto src_offset = src_base.template get_byte_distance<
+            extent_len_t>(mapping.get_key());
+          ceph_assert(cloned_to >= src_offset);
+          extent_len_t clone_offset = cloned_to - src_offset;
+          extent_len_t clone_len = mapping.get_length() - clone_offset;
+          clone_len = std::min(clone_len, left);
+          left -= clone_len;
+          if (!mapping.is_indirect() && mapping.get_val().is_zero()) {
+            return reserve_region(
+              t,
+              std::move(pos),
+              (dst_base + cloned_to).checked_to_laddr(),
+              clone_len,
+              extent_types_t::OBJECT_DATA_BLOCK
+            ).si_then([dst_base, &cloned_to, clone_len](auto r) {
+              assert((dst_base + cloned_to).checked_to_laddr() == r.get_key());
+              cloned_to += clone_len;
+              return r.next();
+            }).si_then([&pos, &mapping](auto r) {
+              pos = std::move(r);
+              return mapping.next();
+            }).si_then([&mapping](auto p) {
+              mapping = std::move(p);
+              return seastar::stop_iteration::no;
+            }).handle_error_interruptible(
+              clone_iertr::pass_further{},
+              crimson::ct_error::assert_all{"unexpected error"}
+            );
+          }
+          return clone_pin(
+            t, std::move(pos), std::move(mapping),
+            (dst_base + cloned_to).checked_to_laddr(),
+            clone_offset, clone_len
+          ).si_then([&cloned_to, clone_len, &pos, &mapping](auto ret) {
+            cloned_to += clone_len;
+            return ret.cloned_mapping.next(
+            ).si_then([&pos, ret=std::move(ret)](auto p) mutable {
+              pos = std::move(p);
+              return ret.orig_mapping.next();
+            }).si_then([&mapping](auto p) {
+              mapping = std::move(p);
+              return seastar::stop_iteration::no;
+            });
+          });
 	});
+      }).si_then([&pos] {
+	return std::move(pos);
       });
     });
   }
+
+  /*
+   * move_and_clone_direct_mapping
+   *
+   * move the direct mapping "src" to "dest" and clone it at the
+   * position of "src". Extents attched to "src" are reattached
+   * to the new mapping.
+   *
+   * Return: the new indirect mapping and the moved direct mapping
+   */
+  using move_mapping_iertr = LBAManager::move_mapping_iertr;
+  using move_mapping_ret = LBAManager::move_mapping_ret;
+  template <typename T>
+  move_mapping_ret move_and_clone_direct_mapping(
+    Transaction &t,
+    LBAMapping src,
+    laddr_t dest_laddr,
+    LBAMapping dest)
+  {
+    LOG_PREFIX(TransactionManager::move_and_clone_direct_mapping);
+    SUBDEBUGT(seastore_tm, "src={}, dest={}", t, src, dest);
+    assert(!src.is_indirect());
+    assert(!src.is_end());
+    return seastar::do_with(
+      std::move(src),
+      std::move(dest),
+      [&t, dest_laddr, this](auto &src, auto &dest) {
+      return src.refresh().si_then([&src, &dest](auto s) {
+	src = std::move(s);
+	return dest.refresh();
+      }).si_then([&t, this, &src, &dest](auto m) {
+	dest = std::move(m);
+	if (full_extent_integrity_check) {
+	  return read_pin<T>(t, src
+	  ).si_then([](auto maybe_indirect_extent) {
+	    assert(!maybe_indirect_extent.is_indirect());
+	    assert(!maybe_indirect_extent.is_clone);
+	    return maybe_indirect_extent.extent;
+	  });
+	} else {
+	  auto ret = get_extent_if_linked<T>(t, src);
+	  if (ret.index() == 1) {
+	    return std::move(std::get<1>(ret));
+	  } else {
+	    // absent
+	    cache->retire_absent_extent_addr(t, src.get_val(), src.get_length());
+	    return base_iertr::make_ready_future<TCachedExtentRef<T>>();
+	  }
+	}
+      }).si_then([&t, &src, dest_laddr, this, &dest](auto ext) mutable {
+	if (full_extent_integrity_check) {
+	  assert(ext && ext->is_fully_loaded());
+	}
+	std::optional<ceph::bufferptr> original_bptr;
+	// TODO: preserve the bufferspace if partially loaded
+	if (ext && ext->is_fully_loaded()) {
+	  ceph_assert(!ext->is_mutable());
+	  original_bptr = ext->get_bptr();
+	}
+	T* extent = nullptr;
+	if (ext) {
+	  cache->retire_extent(t, ext);
+	}
+	extent = cache->alloc_remapped_extent<T>(
+	  t,
+	  dest_laddr,
+	  src.get_val(),
+	  0,
+	  src.get_length(),
+	  original_bptr).get();
+	return lba_manager->move_and_clone_direct_mapping(
+	  t, std::move(src), dest_laddr,
+	  std::move(dest), *extent);
+      });
+    });
+  }
+
+  using move_region_iertr = base_iertr;
+  using move_region_ret = move_region_iertr::future<>;
+  move_region_ret move_region(
+    Transaction &t,
+    LBAMapping src,
+    LBAMapping dst,
+    laddr_t dst_prefix);
 
   /* alloc_extents
    *
@@ -692,7 +816,7 @@ public:
    alloc_extents_iertr::future<std::vector<TCachedExtentRef<T>>>
    alloc_extents(
      Transaction &t,
-     laddr_t hint,
+     laddr_hint_t hint,
      extent_len_t len,
      int num) {
      LOG_PREFIX(TransactionManager::alloc_extents);
@@ -821,7 +945,7 @@ public:
   using init_root_meta_ret = init_root_meta_iertr::future<>;
   init_root_meta_ret init_root_meta(Transaction &t) {
     return alloc_non_data_extent<RootMetaBlock>(
-      t, L_ADDR_MIN, RootMetaBlock::SIZE
+      t, laddr_hint_t::create_as_fixed(L_ADDR_MIN), RootMetaBlock::SIZE
     ).si_then([this, &t](auto meta) {
       meta->set_meta(RootMetaBlock::meta_t{});
       return cache->get_root(t
@@ -979,7 +1103,8 @@ public:
 		t,
 		std::move(pos),
 		laddr,
-		remap.len
+		remap.len,
+		extent_types_t::OBJECT_DATA_BLOCK
 	      ).si_then([&mappings](auto new_mapping) {
 		mappings.emplace_back(new_mapping);
 		return new_mapping.next();
@@ -1000,6 +1125,41 @@ public:
       return remap_pin<T, N>(
 	t, std::move(mapping), std::move(remaps));
     }
+  }
+
+  /*
+   * split_mapping
+   *
+   * split the lba mapping into two halves.
+   *
+   * Return: the two split mappings
+   */
+  using split_mapping_iertr = base_iertr;
+  using split_mapping_ret = split_mapping_iertr::future<
+    std::vector<LBAMapping>>;
+  template <typename T>
+  split_mapping_ret split_mapping(
+    Transaction &t,
+    laddr_t pivot,
+    LBAMapping mapping)
+  {
+    LOG_PREFIX(TransactionManager::split_mapping);
+    SUBDEBUGT(seastore_tm, "{} {} {}", t, pivot, mapping);
+    assert(!mapping.is_pending());
+    assert(pivot > mapping.get_key() &&
+      pivot < mapping.get_key() + mapping.get_length());
+    auto len1 = pivot.template get_byte_distance<
+      extent_len_t>(mapping.get_key());
+    auto len2 = mapping.get_length() - len1;
+    return remap_mappings<T, 2>(
+      t,
+      std::move(mapping),
+      std::array{remap_entry_t{0, len1}, remap_entry_t{len1, len2}}
+    ).si_then([] (auto ret) {
+      assert(ret.size() == 2);
+      return std::move(ret);
+    });
+
   }
 
   /*
@@ -1349,8 +1509,8 @@ private:
 	      t,
 	      remap_laddr,
 	      remap_paddr,
+	      remap_offset,
 	      remap_len,
-	      original_laddr,
 	      original_bptr);
 	    // user must initialize the logical extent themselves.
 	    extent->set_seen_by_users();
