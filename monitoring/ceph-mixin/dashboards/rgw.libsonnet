@@ -701,6 +701,44 @@ local g = import 'grafonnet/grafana.libsonnet';
           transform: 'negative-Y',
         },
       ]),
+      $.addRowSchema(false,
+                     true,
+                     'RGW Overview - Bucket Notification') +
+      {
+        gridPos: { x: 0, y: 27, w: 24, h: 1 },
+      },
+      RgwOverviewPanel(
+        'Persistent Topic Length',
+        '',
+        '',
+        'short',
+        |||
+          (
+           ceph_rgw_topic_persistent_topic_len
+          )
+        |||,
+        '{{topic}}',
+        0,
+        28,
+        12,
+        8
+      ),
+      RgwOverviewPanel(
+        'Persistent Topic Size',
+        '',
+        'deckbytes',
+        'short',
+        |||
+          (
+           ceph_rgw_topic_persistent_topic_size
+          )
+        |||,
+        '{{topic}}',
+        12,
+        28,
+        12,
+        8
+      ),
     ]),
   'radosgw-detail.json':
     local RgwDetailsPanel(aliasColors,
