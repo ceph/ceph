@@ -849,6 +849,7 @@ def list_networks(ctx):
     # j = json.loads(out)
     # for x in j:
     res = _list_ipv4_networks(ctx)
+    res.update(_list_ipv4_bgp_networks(ctx))
     res.update(_list_ipv6_networks(ctx))
     return res
 
@@ -886,6 +887,29 @@ def _parse_ipv4_route(out: str) -> Dict[str, Dict[str, Set[str]]]:
         if iface not in r[net]:
             r[net][iface] = set()
         r[net][iface].add(ip)
+    return r
+
+
+def _list_ipv4_bgp_networks(
+    ctx: CephadmContext,
+) -> Dict[str, Dict[str, Set[str]]]:
+    execstr: Optional[str] = find_executable('ip')
+    if not execstr:
+        raise FileNotFoundError("unable to find 'ip' command")
+    out, _, _ = call_throws(
+        ctx, [execstr, '-j', 'route', 'ls', 'proto', 'bgp']
+    )
+    return _parse_ipv4_bgp_route(out)
+
+
+def _parse_ipv4_bgp_route(out: str) -> Dict[str, Dict[str, Set[str]]]:
+    r = {}  # type: Dict[str, Dict[str, Set[str]]]
+    routes = json.loads(out)
+    for route in routes:
+        bgp_local_ip = route['prefsrc']
+        r[f'{bgp_local_ip}/32'] = {
+            hop['dev']: {bgp_local_ip} for hop in route['nexthops']
+        }
     return r
 
 
