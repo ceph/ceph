@@ -12,6 +12,8 @@
  *
 */
 
+JFW: TODO: randomize test keys for writes so we are sure to be actually testing them!
+
 #include <catch2/catch_config.hpp>
 
 #include <catch2/catch_test_macros.hpp>
@@ -107,6 +109,8 @@ TEST_CASE("fdb simple", "[rgw][fdb]") {
 	REQUIRE_FALSE(lfdb::get(txn_handle, missing_key, out_value));
         CHECK(v != out_value);
     }
+
+    // JFW: TODO: text explicit commit
  }
 
  SECTION("CRD single-key") {
@@ -121,7 +125,7 @@ TEST_CASE("fdb simple", "[rgw][fdb]") {
     CHECK(lfdb::get(lfdb::make_transaction(dbh), k, out_value));
     CHECK(v == out_value); 
 
-    // "erase()" is "clear" in FDB parlance:
+    // "erase()" is "clear" in FDB parlance, deleting a record:
     REQUIRE_NOTHROW(lfdb::erase(lfdb::make_transaction(dbh), k, lfdb::commit_after_op::commit));
 
     // ...as this shouldn't be updated again, make sure there isn't an accidental match:

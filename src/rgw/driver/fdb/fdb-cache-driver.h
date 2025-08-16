@@ -8,6 +8,8 @@ namespace rgw::cache {
 
 struct FDB_CacheDriver : CacheDriver
 {
+  ceph::rgw::fdb dbh;
+
   public:
     FDB_CacheDriver();
 

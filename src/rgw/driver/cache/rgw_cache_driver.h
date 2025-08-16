@@ -40,6 +40,8 @@ class CacheDriver {
     CacheDriver() = default;
     virtual ~CacheDriver() = default;
 
+    // Note: returning 0 = success; < 0 = failure (errno style):
+ 
     virtual int initialize(const DoutPrefixProvider* dpp) = 0;
     virtual int put(const DoutPrefixProvider* dpp, const std::string& key, const bufferlist& bl, uint64_t len, const rgw::sal::Attrs& attrs, optional_yield y) = 0;
     virtual int get(const DoutPrefixProvider* dpp, const std::string& key, off_t offset, uint64_t len, bufferlist& bl, rgw::sal::Attrs& attrs, optional_yield y) = 0;
