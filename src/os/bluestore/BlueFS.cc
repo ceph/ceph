@@ -457,18 +457,6 @@ void BlueFS::_init_logger()
                 "Average allocation latency for primary/shared device",
                 "bsal",
                 PerfCountersBuilder::PRIO_USEFUL);
-  b.add_time(l_bluefs_wal_alloc_max_lat, "alloc_wal_max_lat",
-             "Max allocation latency for wal device",
-             "awxt",
-             PerfCountersBuilder::PRIO_INTERESTING);
-  b.add_time(l_bluefs_db_alloc_max_lat, "alloc_db_max_lat",
-             "Max allocation latency for db device",
-             "adxt",
-             PerfCountersBuilder::PRIO_INTERESTING);
-  b.add_time(l_bluefs_slow_alloc_max_lat, "alloc_slow_max_lat",
-             "Max allocation latency for primary/shared device",
-             "asxt",
-             PerfCountersBuilder::PRIO_INTERESTING);
 
   logger = b.create_perf_counters();
   cct->get_perfcounters_collection()->add(logger);
@@ -4355,25 +4343,13 @@ void BlueFS::_update_allocate_stats(uint8_t id, const ceph::timespan& d)
 {
   switch(id) {
     case BDEV_SLOW:
-      logger->tinc(l_bluefs_slow_alloc_lat, d);
-      if (d > max_alloc_lat[id]) {
-        logger->tset(l_bluefs_slow_alloc_max_lat, utime_t(d));
-        max_alloc_lat[id] = d;
-      }
+      logger->tinc_with_max(l_bluefs_slow_alloc_lat, d);
       break;
     case BDEV_DB:
-      logger->tinc(l_bluefs_db_alloc_lat, d);
-      if (d > max_alloc_lat[id]) {
-        logger->tset(l_bluefs_db_alloc_max_lat, utime_t(d));
-        max_alloc_lat[id] = d;
-      }
+      logger->tinc_with_max(l_bluefs_db_alloc_lat, d);
       break;
     case BDEV_WAL:
-      logger->tinc(l_bluefs_wal_alloc_lat, d);
-      if (d > max_alloc_lat[id]) {
-        logger->tset(l_bluefs_wal_alloc_max_lat, utime_t(d));
-        max_alloc_lat[id] = d;
-      }
+      logger->tinc_with_max(l_bluefs_wal_alloc_lat, d);
       break;
   }
 }
