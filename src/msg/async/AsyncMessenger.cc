@@ -481,6 +481,7 @@ int AsyncMessenger::shutdown()
 {
   ldout(cct,10) << __func__ << " " << get_myaddrs() << dendl;
 
+  stack->drain();
   // done!  clean up.
   for (auto &&p : processors)
     p->stop();
@@ -493,7 +494,7 @@ int AsyncMessenger::shutdown()
   stop_cond.notify_all();
   stopped = true;
   lock.unlock();
-  stack->drain();
+
   return 0;
 }
 
