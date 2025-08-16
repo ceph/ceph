@@ -23,7 +23,7 @@
 #include "include/encoding.h"
 #include "common/dout.h"
 
-//#define FULL_DEDUP_SUPPORT
+#define FULL_DEDUP_SUPPORT
 namespace rgw::dedup {
   using work_shard_t   = uint16_t;
   using md5_shard_t    = uint16_t;
@@ -63,7 +63,7 @@ namespace rgw::dedup {
   std::ostream& operator<<(std::ostream &out, const dedup_req_type_t& dedup_type);
   struct __attribute__ ((packed)) dedup_flags_t {
   private:
-    static constexpr uint8_t RGW_DEDUP_FLAG_SHA256_CALCULATED = 0x01; // REC
+    static constexpr uint8_t RGW_DEDUP_FLAG_HASH_CALCULATED = 0x01; // REC
     static constexpr uint8_t RGW_DEDUP_FLAG_SHARED_MANIFEST   = 0x02; // REC + TAB
     static constexpr uint8_t RGW_DEDUP_FLAG_OCCUPIED          = 0x04; // TAB
     static constexpr uint8_t RGW_DEDUP_FLAG_FASTLANE          = 0x08; // REC
@@ -72,8 +72,8 @@ namespace rgw::dedup {
     dedup_flags_t() : flags(0) {}
     dedup_flags_t(uint8_t _flags) : flags(_flags) {}
     inline void clear() { this->flags = 0; }
-    inline bool sha256_calculated() const { return ((flags & RGW_DEDUP_FLAG_SHA256_CALCULATED) != 0); }
-    inline void set_sha256_calculated()  { flags |= RGW_DEDUP_FLAG_SHA256_CALCULATED; }
+    inline bool hash_calculated() const { return ((flags & RGW_DEDUP_FLAG_HASH_CALCULATED) != 0); }
+    inline void set_hash_calculated()  { flags |= RGW_DEDUP_FLAG_HASH_CALCULATED; }
     inline bool has_shared_manifest() const { return ((flags & RGW_DEDUP_FLAG_SHARED_MANIFEST) != 0); }
     inline void set_shared_manifest() { flags |= RGW_DEDUP_FLAG_SHARED_MANIFEST; }
     inline bool is_occupied() const {return ((this->flags & RGW_DEDUP_FLAG_OCCUPIED) != 0); }
@@ -158,15 +158,15 @@ namespace rgw::dedup {
     uint64_t skipped_source_record = 0;
     uint64_t duplicate_records = 0;
     uint64_t size_mismatch = 0;
-    uint64_t sha256_mismatch = 0;
+    uint64_t hash_mismatch = 0;
     uint64_t failed_src_load = 0;
     uint64_t failed_rec_load = 0;
     uint64_t failed_block_load = 0;
 
-    uint64_t valid_sha256_attrs = 0;
-    uint64_t invalid_sha256_attrs = 0;
-    uint64_t set_sha256_attrs = 0;
-    uint64_t skip_sha256_cmp = 0;
+    uint64_t valid_hash_attrs = 0;
+    uint64_t invalid_hash_attrs = 0;
+    uint64_t set_hash_attrs = 0;
+    uint64_t skip_hash_cmp = 0;
 
     uint64_t set_shared_manifest_src = 0;
     uint64_t loaded_objects = 0;
