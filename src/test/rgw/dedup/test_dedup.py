@@ -1076,7 +1076,7 @@ def exec_dedup_internal(expected_dedup_stats, dry_run, max_dedup_time):
         result = admin(['dedup', 'estimate'])
         reset_full_dedup_stats(expected_dedup_stats)
     else:
-        result = admin(['dedup', 'restart'])
+        result = admin(['dedup', 'exec'])
 
     assert result[1] == 0
     log.debug("wait for dedup to complete")
@@ -1308,7 +1308,7 @@ def check_full_dedup_state():
     global full_dedup_state_was_checked
     global full_dedup_state_disabled
     log.debug("check_full_dedup_state:: sending FULL Dedup request")
-    result = admin(['dedup', 'restart'])
+    result = admin(['dedup', 'exec'])
     if result[1] == 0:
         log.debug("full dedup is enabled!")
         full_dedup_state_disabled = False
