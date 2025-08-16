@@ -1111,7 +1111,8 @@ public:
     Transaction &t,
     laddr_t start,
     objaddr_t unaligned_len,
-    LBAMapping first_mapping)
+    LBAMapping first_mapping,
+    bool skip_direct_mapping = false)
   {
     LOG_PREFIX(TransactionManager::remove_mappings_in_range);
     SUBDEBUGT(seastore_tm, "{}~{}, first_mapping: {}",
@@ -1119,8 +1120,10 @@ public:
     // remove all middle mappings
     return seastar::do_with(
       std::move(first_mapping),
-      [&t, this, start, unaligned_len](auto &mapping) {
-      return trans_intr::repeat([&t, this, start, unaligned_len, &mapping] {
+      [&t, this, start, unaligned_len,
+      skip_direct_mapping](auto &mapping) {
+      return trans_intr::repeat([&t, this, start, unaligned_len,
+				skip_direct_mapping, &mapping] {
 	if (mapping.is_end()) {
 	  return punch_mappings_iertr::make_ready_future<
 	    seastar::stop_iteration>(seastar::stop_iteration::yes);
@@ -1131,6 +1134,12 @@ public:
 	if (mapping_end > start + unaligned_len) {
 	  return punch_mappings_iertr::make_ready_future<
 	    seastar::stop_iteration>(seastar::stop_iteration::yes);
+	}
+	if (skip_direct_mapping && mapping.is_real()) {
+	  return mapping.next().si_then([&mapping](auto next) {
+	    mapping = std::move(next);
+	    return seastar::stop_iteration::no;
+	  });
 	}
 	return remove(t, std::move(mapping)
 	).si_then([&mapping](auto next_mapping) {
