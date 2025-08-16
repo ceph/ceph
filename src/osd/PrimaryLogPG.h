@@ -342,6 +342,10 @@ public:
   void apply_stats(
     const hobject_t &soid,
     const object_stat_sum_t &delta_stats) override;
+  void log_stats(hobject_t soid,
+                 const object_stat_sum_t& stats,
+                 ObjectStore::Transaction& t,
+                 bool is_delta) override;
 
   bool primary_error(const hobject_t& soid, eversion_t v);
 
@@ -611,6 +615,13 @@ public:
   void send_message_osd_cluster(
     int peer, Message *m, epoch_t from_epoch) override {
     osd->send_message_osd_cluster(peer, m, from_epoch);
+  }
+  void send_message_osd_cluster(
+    int osd, MOSDPGPush* msg, epoch_t from_epoch) override {
+    std::vector wrapped_msg {
+      std::make_pair(osd, static_cast<Message*>(msg))
+    };
+    send_message_osd_cluster(wrapped_msg, from_epoch);
   }
   void send_message_osd_cluster(
     std::vector<std::pair<int, Message*>>& messages, epoch_t from_epoch) override {

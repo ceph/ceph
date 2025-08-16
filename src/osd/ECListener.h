@@ -18,6 +18,7 @@
 #include "OSDMap.h"
 #include "common/WorkQueue.h"
 #include "PGLog.h"
+#include "messages/MOSDPGPush.h"
 
 // ECListener -- an interface decoupling the pipelines from
 // particular implementation of ECBackendL (crimson vs cassical).
@@ -86,9 +87,11 @@ struct ECListener {
 
   virtual bool pg_is_repair() const = 0;
 
-     virtual ObjectContextRef get_obc(
-       const hobject_t &hoid,
-       const std::map<std::string, ceph::buffer::list, std::less<>> &attrs) = 0;
+#ifndef WITH_CRIMSON
+  virtual ObjectContextRef get_obc(
+    const hobject_t &hoid,
+    const std::map<std::string, ceph::buffer::list, std::less<>> &attrs) = 0;
+#endif
 
      virtual bool check_failsafe_full() = 0;
      virtual hobject_t get_temp_recovery_object(const hobject_t& target,
@@ -142,6 +145,8 @@ struct ECListener {
   // XXX
   virtual void send_message_osd_cluster(
     std::vector<std::pair<int, Message*>>& messages, epoch_t from_epoch) = 0;
+  virtual void send_message_osd_cluster(
+    int osd, MOSDPGPush* msg, epoch_t from_epoch) = 0;
 
   virtual std::ostream& gen_dbg_prefix(std::ostream& out) const = 0;
 
@@ -161,6 +166,11 @@ struct ECListener {
   virtual void apply_stats(
      const hobject_t &soid,
      const object_stat_sum_t &delta_stats) = 0;
+
+  virtual void log_stats(hobject_t soid,
+                         const object_stat_sum_t& stats,
+                         ObjectStore::Transaction& t,
+                         bool is_delta) = 0;
 
   // new batch
   virtual bool is_missing_object(const hobject_t& oid) const = 0;
