@@ -14,6 +14,7 @@
 
 #include "SnapMapper.h"
 
+#include <expected>
 #include <fmt/printf.h>
 #include <fmt/ranges.h>
 
@@ -370,17 +371,17 @@ int SnapMapper::get_snaps(const hobject_t &oid, object_snaps *out) const
   }
 }
 
-tl::expected<std::set<snapid_t>, Scrub::SnapMapReaderI::result_t>
+std::expected<std::set<snapid_t>, Scrub::SnapMapReaderI::result_t>
 SnapMapper::get_snaps(const hobject_t &oid) const
 {
   auto snaps = get_snaps_common(oid);
   if (snaps) {
     return snaps->snaps;
   }
-  return tl::unexpected(snaps.error());
+  return std::unexpected(snaps.error());
 }
 
-tl::expected<SnapMapper::object_snaps, Scrub::SnapMapReaderI::result_t>
+std::expected<SnapMapper::object_snaps, Scrub::SnapMapReaderI::result_t>
 SnapMapper::get_snaps_common(const hobject_t &oid) const
 {
   ceph_assert(check(oid));
@@ -392,11 +393,11 @@ SnapMapper::get_snaps_common(const hobject_t &oid) const
   int r = backend.get_keys(keys, &got);
   if (r < 0) {
     dout(10) << __func__ << " " << oid << " got err " << r << dendl;
-    return tl::unexpected(result_t{code_t::backend_error, r});
+    return std::unexpected(result_t{code_t::backend_error, r});
   }
   if (got.empty()) {
     dout(10) << __func__ << " " << oid << " got.empty()" << dendl;
-    return tl::unexpected(result_t{code_t::not_found, -ENOENT});
+    return std::unexpected(result_t{code_t::not_found, -ENOENT});
   }
 
   object_snaps out;
@@ -405,7 +406,7 @@ SnapMapper::get_snaps_common(const hobject_t &oid) const
     decode(out, bp);
   } catch (...) {
     dout(1) << __func__ << ": " << oid << " decode failed" << dendl;
-    return tl::unexpected(result_t{code_t::backend_error, -EIO});
+    return std::unexpected(result_t{code_t::backend_error, -EIO});
   }
 
   dout(20) << __func__ << " " << oid << " " << out.snaps << dendl;
@@ -431,7 +432,7 @@ std::set<std::string> SnapMapper::to_raw_keys(
   return keys;
 }
 
-tl::expected<std::set<snapid_t>, result_t>
+std::expected<std::set<snapid_t>, result_t>
 SnapMapper::get_snaps_check_consistency(const hobject_t &hoid) const
 {
   // derive the set of snaps from the 'OBJ_' entry
@@ -454,7 +455,7 @@ SnapMapper::get_snaps_check_consistency(const hobject_t &hoid) const
     // that's a backend error, but for the SNA_ entries. Let's treat it as an
     // internal consistency error (although a backend error would have made
     // sense too).
-    return tl::unexpected(result_t{code_t::inconsistent, r});
+    return std::unexpected(result_t{code_t::inconsistent, r});
   }
 
   std::set<snapid_t> snaps_from_mapping;
@@ -467,7 +468,7 @@ SnapMapper::get_snaps_check_consistency(const hobject_t &hoid) const
 		   "{}: unexpected object ID {} for key{} (expected {})",
 		   __func__, obj, k, hoid)
 	      << dendl;
-      return tl::unexpected(result_t{code_t::inconsistent});
+      return std::unexpected(result_t{code_t::inconsistent});
     }
     snaps_from_mapping.insert(sn);
   }
@@ -477,7 +478,7 @@ SnapMapper::get_snaps_check_consistency(const hobject_t &hoid) const
 		  "{}: hoid:{} -> mapper internal inconsistency ({} vs {})",
 		  __func__, hoid, *obj_snaps, snaps_from_mapping)
 	     << dendl;
-    return tl::unexpected(result_t{code_t::inconsistent});
+    return std::unexpected(result_t{code_t::inconsistent});
   }
   dout(10) << fmt::format(
 		"{}: snaps for {}: {}", __func__, hoid, snaps_from_mapping)
