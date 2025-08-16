@@ -68,7 +68,7 @@ public:
       ](auto &&pg) mutable {
 	if (!pg) {
 	  return seastar::make_ready_future<tell_result_t>(tell_result_t{
-	      -ENOENT, fmt::format("i don't have pgid '{}'", spg_id)});
+	      -ENOENT, fmt::format("don't have pgid '{}'", spg_id)});
 	}
 	if (!pg->is_primary()) {
 	  return seastar::make_ready_future<tell_result_t>(tell_result_t{
