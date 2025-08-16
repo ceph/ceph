@@ -1229,6 +1229,11 @@ public:
     extent_len_t offset;
   };
 
+  bool is_aligned(size_t alignment) const {
+    assert(alignment % laddr_t::UNIT_SIZE == 0);
+    return value % (alignment >> UNIT_SHIFT) == 0;
+  }
+
   template<std::unsigned_integral U>
   U get_byte_distance(const laddr_offset_t &l) const {
     if (value <= l.base) {
