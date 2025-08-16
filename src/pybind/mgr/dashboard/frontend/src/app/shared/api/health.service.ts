@@ -30,4 +30,8 @@ export class HealthService {
   getTelemetryStatus() {
     return this.http.get('api/health/get_telemetry_status');
   }
+
+  getStatus() {
+    return this.http.get('api/status');
+  }
 }

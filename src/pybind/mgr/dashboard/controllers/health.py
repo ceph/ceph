@@ -10,8 +10,9 @@ from ..services.cluster import ClusterModel
 from ..services.iscsi_cli import IscsiGatewaysConfig
 from ..services.iscsi_client import IscsiClient
 from ..tools import partial_dict
-from . import APIDoc, APIRouter, BaseController, Endpoint, EndpointDoc
+from . import APIDoc, APIRouter, BaseController, RESTController, Endpoint, EndpointDoc
 from .host import get_hosts
+
 
 HEALTH_MINIMAL_SCHEMA = ({
     'client_perf': ({
@@ -305,3 +306,9 @@ class Health(BaseController):
     @Endpoint()
     def get_telemetry_status(self):
         return mgr.get_module_option_ex('telemetry', 'enabled', False)
+    
+    @APIRouter("/status", Scope.NVME_OF)
+    @APIDoc("Ceph status", "Health")
+    class NVMeoFGateway(RESTController):
+        def list(self,):
+            return CephService.send_command('mon', 'status')

@@ -23,11 +23,9 @@ import { JoinPipe } from './join.pipe';
 import { LogPriorityPipe } from './log-priority.pipe';
 import { MapPipe } from './map.pipe';
 import { MdsSummaryPipe } from './mds-summary.pipe';
-import { MgrSummaryPipe } from './mgr-summary.pipe';
 import { MillisecondsPipe } from './milliseconds.pipe';
 import { NotAvailablePipe } from './not-available.pipe';
 import { OrdinalPipe } from './ordinal.pipe';
-import { OsdSummaryPipe } from './osd-summary.pipe';
 import { RbdConfigurationSourcePipe } from './rbd-configuration-source.pipe';
 import { RelativeDatePipe } from './relative-date.pipe';
 import { RoundPipe } from './round.pipe';
@@ -77,9 +75,7 @@ import { DimlessBinaryPerMinutePipe } from './dimless-binary-per-minute.pipe';
     SanitizeHtmlPipe,
     SearchHighlightPipe,
     HealthIconPipe,
-    MgrSummaryPipe,
     MdsSummaryPipe,
-    OsdSummaryPipe,
     OctalToHumanReadablePipe,
     PathPipe,
     PluralizePipe,
@@ -120,9 +116,7 @@ import { DimlessBinaryPerMinutePipe } from './dimless-binary-per-minute.pipe';
     SanitizeHtmlPipe,
     SearchHighlightPipe,
     HealthIconPipe,
-    MgrSummaryPipe,
     MdsSummaryPipe,
-    OsdSummaryPipe,
     OctalToHumanReadablePipe,
     PathPipe,
     PluralizePipe,
@@ -158,9 +152,7 @@ import { DimlessBinaryPerMinutePipe } from './dimless-binary-per-minute.pipe';
     TruncatePipe,
     SanitizeHtmlPipe,
     HealthIconPipe,
-    MgrSummaryPipe,
     MdsSummaryPipe,
-    OsdSummaryPipe,
     OctalToHumanReadablePipe,
     MbpersecondPipe,
     DimlessBinaryPerMinutePipe
