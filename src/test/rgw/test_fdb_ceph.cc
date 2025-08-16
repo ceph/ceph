@@ -105,7 +105,6 @@ TEST_CASE("fdb conversions (ceph)", "[fdb][rgw]") {
  }
 }
 
-/* JFW:
 TEST_CASE("fdb conversions (round-trip, ceph)", "[fdb][rgw]") {
 
   auto dbh = lfdb::make_database();
@@ -161,7 +160,7 @@ TEST_CASE("fdb conversions (round-trip, ceph)", "[fdb][rgw]") {
 
   REQUIRE_THAT(n, Catch::Matchers::RangeEquals(o));
   }
-}*/
+}
 
 // Adapted from Catch2 documentation:
 #include <catch2/catch_session.hpp>

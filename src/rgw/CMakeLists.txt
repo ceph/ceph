@@ -278,10 +278,10 @@ endif(WITH_RADOSGW_ARROW_FLIGHT)
 
 if(WITH_RADOSGW_D4N)
   target_include_directories(rgw_common PRIVATE
-	driver/d4n
-        driver/cache
-	driver/redis
-	driver/ssd)
+        rgw/driver/cache
+	rgw/driver/d4n
+	rgw/driver/redis
+	rgw/driver/ssd)
 
   list(APPEND librgw_common_srcs
         driver/redis/rgw_redis_driver.cc
@@ -319,7 +319,17 @@ if(WITH_RADOSGW_FDB)
 
  target_include_directories(radosgw PRIVATE 
   /usr/include/foundationdb)
-endif()
+endif(WITH_RADOSGW_FDB)
+
+if(D4N_USE_FDB_SINK)
+ message("Building with FDB support as D4N sink (experimental).")
+
+ target_include_directories(rgw_common PRIVATE
+	driver/fdb)
+ 
+ list(APPEND librgw_common_srcs
+	driver/fdb/fdb-cache-driver.cc)
+endif(D4N_USE_FDB_SINK)
 
 include(CheckCXXCompilerFlag)
 check_cxx_compiler_flag("-Wimplicit-const-int-float-conversion"
@@ -628,18 +638,6 @@ install(TARGETS rgw-policy-check DESTINATION bin)
 set(librgw_srcs
   librgw.cc)
 add_library(rgw SHARED ${librgw_srcs})
-
-if(D4N_USE_FDB_SINK)
- message("Building with FDB support as D4N sink (experimental).")
-
-#JFW:
-# target_link_libraries(rgw_common PRIVATE
-#  rgw_fdb)
-
-#JFW:
-# target_link_libraries(radosgw PRIVATE
-#  rgw_fdb)
-endif()
 
 target_compile_definitions(rgw PUBLIC "-DCLS_CLIENT_HIDE_IOCTX")
 target_include_directories(rgw
