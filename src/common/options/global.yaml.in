@@ -1182,6 +1182,12 @@ options:
   desc: Induce a crash/exit on various bugs (for testing purposes)
   default: false
   with_legacy: true
+- name: ms_assert_read_len_exceeded
+  type: bool
+  level: dev
+  desc: Allow toggling whether to assert when read_len exceeds the maximum integer value
+  default: false
+  with_legacy: true
 - name: ms_dispatch_throttle_bytes
   type: size
   level: advanced
