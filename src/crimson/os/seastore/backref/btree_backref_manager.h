@@ -50,7 +50,7 @@ public:
     Transaction &t,
     paddr_t offset) final;
 
-  scan_mapped_space_ret scan_mapped_space(
+  base_iertr::future<> scan_mapped_space(
     Transaction &t,
     scan_mapped_space_func_t &&f) final;
 
@@ -58,7 +58,7 @@ public:
     Transaction &t,
     CachedExtentRef e) final;
 
-  rewrite_extent_ret rewrite_extent(
+  base_iertr::future<> rewrite_extent(
     Transaction &t,
     CachedExtentRef extent) final;
 

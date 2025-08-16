@@ -1035,8 +1035,7 @@ public:
    *
    * Returns if e is live.
    */
-  using init_cached_extent_iertr = base_iertr;
-  using init_cached_extent_ret = init_cached_extent_iertr::future<bool>;
+  using init_cached_extent_ret = base_iertr::future<bool>;
   init_cached_extent_ret init_cached_extent(
     op_context_t c,
     CachedExtentRef e)
@@ -1190,9 +1189,7 @@ public:
    * Rewrites a fresh copy of extent into transaction and updates internal
    * references.
    */
-  using rewrite_extent_iertr = base_iertr;
-  using rewrite_extent_ret = rewrite_extent_iertr::future<>;
-  rewrite_extent_ret rewrite_extent(
+  base_iertr::future<> rewrite_extent(
     op_context_t c,
     CachedExtentRef e) {
     LOG_PREFIX(FixedKVBtree::rewrite_extent);

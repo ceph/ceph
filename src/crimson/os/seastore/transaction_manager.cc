@@ -343,8 +343,7 @@ TransactionManager::submit_transaction(
   });
 }
 
-TransactionManager::submit_transaction_direct_ret
-TransactionManager::submit_transaction_direct(
+base_iertr::future<> TransactionManager::submit_transaction_direct(
   Transaction &tref,
   std::optional<journal_seq_t> trim_alloc_to)
 {
@@ -432,8 +431,7 @@ TransactionManager::update_lba_mappings(
   });
 }
 
-TransactionManager::submit_transaction_direct_ret
-TransactionManager::do_submit_transaction(
+base_iertr::future<> TransactionManager::do_submit_transaction(
   Transaction &tref,
   ExtentPlacementManager::dispatch_result_t dispatch_result,
   std::optional<journal_seq_t> trim_alloc_to)
@@ -543,8 +541,7 @@ TransactionManager::get_next_dirty_extents(
   return cache->get_next_dirty_extents(t, seq, max_bytes);
 }
 
-TransactionManager::rewrite_extent_ret
-TransactionManager::rewrite_logical_extent(
+base_iertr::future<> TransactionManager::rewrite_logical_extent(
   Transaction& t,
   LogicalChildNodeRef extent)
 {
@@ -590,7 +587,7 @@ TransactionManager::rewrite_logical_extent(
         *nextent
       ).discard_result();
     }).handle_error_interruptible(
-      rewrite_extent_iertr::pass_further{},
+      base_iertr::pass_further{},
       crimson::ct_error::assert_all{"unexpected enoent"}
     );
   } else {
@@ -646,7 +643,7 @@ TransactionManager::rewrite_logical_extent(
                 refcount = c;
               });
             }).handle_error_interruptible(
-              rewrite_extent_iertr::pass_further{},
+              base_iertr::pass_further{},
               crimson::ct_error::assert_all{"unexpected enoent"}
             );
           } else {
@@ -673,7 +670,7 @@ TransactionManager::rewrite_logical_extent(
   }
 }
 
-TransactionManager::rewrite_extent_ret TransactionManager::rewrite_extent(
+base_iertr::future<> TransactionManager::rewrite_extent(
   Transaction &t,
   CachedExtentRef extent,
   rewrite_gen_t target_generation,
@@ -688,7 +685,7 @@ TransactionManager::rewrite_extent_ret TransactionManager::rewrite_extent(
              rewrite_gen_printer_t{target_generation},
              sea_time_point_printer_t{modify_time},
              *extent);
-      return rewrite_extent_iertr::now();
+      return base_iertr::now();
     }
 
     extent = updated;
@@ -715,7 +712,7 @@ TransactionManager::rewrite_extent_ret TransactionManager::rewrite_extent(
       t.add_inplace_rewrite_extent(extent);
       extent->set_inplace_rewrite_generation();
       DEBUGT("rewritten as inplace rewrite -- {}", t, *extent);
-      return rewrite_extent_iertr::now();
+      return base_iertr::now();
     }
     extent->set_target_rewrite_generation(INIT_GENERATION);
   } else {
@@ -730,10 +727,10 @@ TransactionManager::rewrite_extent_ret TransactionManager::rewrite_extent(
   if (is_root_type(extent->get_type())) {
     cache->duplicate_for_write(t, extent);
     DEBUGT("rewritten root {}", t, *extent);
-    return rewrite_extent_iertr::now();
+    return base_iertr::now();
   }
 
-  auto fut = rewrite_extent_iertr::now();
+  auto fut = base_iertr::now();
   if (extent->is_logical()) {
     assert(is_logical_type(extent->get_type()));
     fut = rewrite_logical_extent(t, extent->cast<LogicalChildNode>());
@@ -793,7 +790,7 @@ TransactionManager::get_extents_if_live(
           return trans_intr::parallel_for_each(
             pin_list,
             [this, FNAME, type, paddr_seg_id, &extent_list, &t](
-              LBAMapping& pin) -> Cache::get_extent_iertr::future<>
+              LBAMapping& pin) -> base_iertr::future<>
           {
             DEBUGT("got pin, try read in parallel ... -- {}", t, pin);
             auto pin_paddr = pin.get_val();
