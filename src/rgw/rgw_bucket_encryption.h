@@ -3,8 +3,10 @@
 
 #pragma once
 #include <include/types.h>
+#include "include/encoding.h"
 
 class XMLObj;
+namespace ceph { class Formatter; }
 
 class ApplyServerSideEncryptionByDefault
 {

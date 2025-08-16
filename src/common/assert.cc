@@ -18,6 +18,7 @@
 
 #include "include/compat.h"
 #include "include/str_list.h"
+#include "include/types.h" // for operator<<(std::list)
 #include "common/BackTrace.h"
 #include "common/Clock.h" // for ceph_clock_now()
 #include "common/debug.h"

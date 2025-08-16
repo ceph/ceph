@@ -4,6 +4,7 @@
 #include "rgw_gc.h"
 
 #include "rgw_tools.h"
+#include "common/Clock.h" // for ceph_clock_now()
 #include "include/scope_guard.h"
 #include "include/rados/librados.hpp"
 #include "cls/rgw/cls_rgw_client.h"

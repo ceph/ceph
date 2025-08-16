@@ -3,6 +3,7 @@
 
 #include "librbd/api/PoolMetadata.h"
 #include "cls/rbd/cls_rbd_client.h"
+#include "common/Clock.h" // for ceph_clock_now()
 #include "common/dout.h"
 #include "common/errno.h"
 #include "common/Cond.h"

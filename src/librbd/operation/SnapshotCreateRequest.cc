@@ -3,6 +3,7 @@
 
 #include "cls/rbd/cls_rbd_types.h"
 #include "librbd/operation/SnapshotCreateRequest.h"
+#include "common/Clock.h" // for ceph_clock_now()
 #include "common/dout.h"
 #include "common/errno.h"
 #include "librbd/ExclusiveLock.h"

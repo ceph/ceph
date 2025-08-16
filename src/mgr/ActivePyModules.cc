@@ -29,6 +29,7 @@
 #include "mgr/MgrContext.h"
 #include "mgr/TTLCache.h"
 #include "mgr/mgr_perf_counters.h"
+#include "messages/MMgrReport.h" // for class PerfCounterType
 
 #include "DaemonKey.h"
 #include "DaemonServer.h"

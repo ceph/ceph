@@ -25,6 +25,7 @@
 #include "common/cmdparse.h"
 #include "log/Log.h"
 
+#include "messages/MClientRequest.h"
 #include "messages/MClientRequestForward.h"
 #include "messages/MMDSLoadTargets.h"
 #include "messages/MMDSMap.h"
@@ -2551,7 +2552,7 @@ void MDSRankDispatcher::handle_mds_map(
   }
 
   {
-    map<epoch_t,MDSContext::vec >::iterator p = waiting_for_mdsmap.begin();
+    std::map<epoch_t,MDSContext::vec >::iterator p = waiting_for_mdsmap.begin();
     while (p != waiting_for_mdsmap.end() && p->first <= mdsmap->get_epoch()) {
       MDSContext::vec ls;
       ls.swap(p->second);
