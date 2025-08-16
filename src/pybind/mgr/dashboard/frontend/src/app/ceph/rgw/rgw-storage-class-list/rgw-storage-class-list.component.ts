@@ -75,11 +75,6 @@ export class RgwStorageClassListComponent extends ListWithDetails implements OnI
         flexGrow: 2
       },
       {
-        name: $localize`Placement Target`,
-        prop: 'placement_target',
-        flexGrow: 2
-      },
-      {
         name: $localize`Target Region`,
         prop: 'region',
         flexGrow: 2
