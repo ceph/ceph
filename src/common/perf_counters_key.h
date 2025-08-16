@@ -63,7 +63,11 @@ class label_iterator {
   reference operator*() const { return state->label; }
   pointer operator->() const { return &state->label; }
 
-  auto operator<=>(const label_iterator& rhs) const = default;
+  // Keep equality; defaulting this requires only operator== on iterator_state
+  bool operator==(const label_iterator& rhs) const = default;
+
+  // Disable three-way comparison since iterator_state doesn't support it
+  auto operator<=>(const label_iterator& rhs) const = delete;
 
  private:
   struct iterator_state {
