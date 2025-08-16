@@ -55,6 +55,16 @@ struct OSDPoolGetReply {
   void decode_json(JSONObj* obj);
 };
 
+struct OSDPoolSetRequest {
+  std::string pool;
+  std::string var;
+  std::optional<std::string> val;
+  std::optional<bool> yes_i_really_mean_it = std::nullopt;
+
+  void dump(Formatter* f) const;
+  void decode_json(JSONObj* obj);
+};
+
 struct OSDECProfileGetRequest {
   std::string name;
   std::string format = "json";

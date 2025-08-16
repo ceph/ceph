@@ -57,3 +57,17 @@ int ECEncoderSwitch::get_m()
     return encoder_legacy.get_m();
   }
 }
+
+/**
+ * Return chunksize for the stripe from the correct version of the encoder
+ *
+ * @returns int Chunksize for stripe
+ */
+int ECEncoderSwitch::get_chunk_size()
+{
+  if (optimizations_enabled) {
+    return encoder_optimized.get_chunk_size();
+  } else {
+    return encoder_legacy.get_chunk_size();
+  }
+}
