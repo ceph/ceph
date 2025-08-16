@@ -237,11 +237,21 @@ struct rgw_cls_unlink_instance_op {
   uint16_t bilog_flags;
   std::string olh_tag;
   rgw_zone_set zones_trace;
+  rgw_bucket_snap_id snap_id;
 
   rgw_cls_unlink_instance_op() : olh_epoch(0), log_op(false), bilog_flags(0) {}
 
+  enum class UnlinkFlags : uint8_t {
+    None = 0,
+    SnapRemoval = 0x1, /* Snapshotted object removal.
+                          if not set then a removal op will mark them as removed_at current
+                          snapshot and keep them around */
+  };
+
+  UnlinkFlags flags = UnlinkFlags::None;
+
   void encode(ceph::buffer::list& bl) const {
-    ENCODE_START(3, 1, bl);
+    ENCODE_START(4, 1, bl);
     encode(key, bl);
     encode(op_tag, bl);
     encode(olh_epoch, bl);
@@ -249,11 +259,13 @@ struct rgw_cls_unlink_instance_op {
     encode(bilog_flags, bl);
     encode(olh_tag, bl);
     encode(zones_trace, bl);
+    encode(snap_id, bl);
+    encode(flags, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(ceph::buffer::list::const_iterator& bl) {
-    DECODE_START(3, bl);
+    DECODE_START(4, bl);
     decode(key, bl);
     decode(op_tag, bl);
     decode(olh_epoch, bl);
@@ -264,6 +276,10 @@ struct rgw_cls_unlink_instance_op {
     }
     if (struct_v >= 3) {
       decode(zones_trace, bl);
+    }
+    if (struct_v >= 4) {
+      decode(snap_id, bl);
+      decode(flags, bl);
     }
     DECODE_FINISH(bl);
   }
@@ -384,16 +400,18 @@ struct rgw_cls_list_op
   std::string filter_prefix;
   bool list_versions;
   std::string delimiter;
+  rgw_bucket_snap_range snap_range;
 
   rgw_cls_list_op() : num_entries(0), list_versions(false) {}
 
   void encode(ceph::buffer::list &bl) const {
-    ENCODE_START(6, 4, bl);
+    ENCODE_START(7, 4, bl);
     encode(num_entries, bl);
     encode(filter_prefix, bl);
     encode(start_obj, bl);
     encode(list_versions, bl);
     encode(delimiter, bl);
+    encode(snap_range, bl);
     ENCODE_FINISH(bl);
   }
   void decode(ceph::buffer::list::const_iterator &bl) {
@@ -413,6 +431,9 @@ struct rgw_cls_list_op
     }
     if (struct_v >= 6) {
       decode(delimiter, bl);
+    }
+    if (struct_v >= 7) {
+      decode(snap_range, bl);
     }
     DECODE_FINISH(bl);
   }
@@ -667,28 +688,34 @@ WRITE_CLASS_ENCODER(rgw_cls_usage_log_add_op)
 struct rgw_cls_bi_get_op {
   cls_rgw_obj_key key;
   BIIndexType type; /* namespace: plain, instance, olh */
+  bool delete_marker{false};
 
   rgw_cls_bi_get_op() : type(BIIndexType::Plain) {}
 
   void encode(ceph::buffer::list& bl) const {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
     encode(key, bl);
     encode((uint8_t)type, bl);
+    encode(delete_marker, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(ceph::buffer::list::const_iterator& bl) {
-    DECODE_START(1, bl);
+    DECODE_START(2, bl);
     decode(key, bl);
     uint8_t c;
     decode(c, bl);
     type = (BIIndexType)c;
+    if (struct_v >= 2) {
+      decode(delete_marker, bl);
+    }
     DECODE_FINISH(bl);
   }
 
   void dump(ceph::Formatter *f) const {
     f->dump_stream("key") << key;
     f->dump_int("type", (int)type);
+    f->dump_bool("delete_marker", (bool)delete_marker);
   }
 
   static void generate_test_instances(std::list<rgw_cls_bi_get_op*>& o) {
