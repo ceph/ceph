@@ -19,25 +19,25 @@ constexpr char RGW_CACHE_ATTR_DIRTY[] = "user.rgw.dirty";
 
 constexpr char CACHE_DELIM = '#';
 
-namespace rgw { namespace cache {
+namespace rgw::cache {
 
-typedef std::function<void(const DoutPrefixProvider* dpp, const std::string& key, const std::string& version, bool deleteMarker, uint64_t size, 
+using ObjectDataCallback = std::function<void(const DoutPrefixProvider* dpp, const std::string& key, const std::string& version, bool deleteMarker, uint64_t size, 
 			    time_t creationTime, const rgw_user user, const std::string& etag, const std::string& bucket_name, const std::string& bucket_id,
-			    const rgw_obj_key& obj_key, optional_yield y, std::string& restore_val)> ObjectDataCallback;
+			    const rgw_obj_key& obj_key, optional_yield y, std::string& restore_val)>;
 
-typedef std::function<void(const DoutPrefixProvider* dpp, const std::string& key, uint64_t offset, uint64_t len, const std::string& version,
-        bool dirty, optional_yield y, std::string& restore_val)> BlockDataCallback;
+using BlockDataCallback = std::function<void(const DoutPrefixProvider* dpp, const std::string& key, uint64_t offset, uint64_t len, const std::string& version,
+        bool dirty, optional_yield y, std::string& restore_val)>;
 
 struct Partition {
   std::string name;
   std::string type;
   std::string location;
-  uint64_t size;
+  uint64_t size = 0;
 };
 
 class CacheDriver {
   public:
-    CacheDriver() {}
+    CacheDriver() = default;
     virtual ~CacheDriver() = default;
 
     virtual int initialize(const DoutPrefixProvider* dpp) = 0;
@@ -59,9 +59,12 @@ class CacheDriver {
     virtual Partition get_current_partition_info(const DoutPrefixProvider* dpp) = 0;
     virtual uint64_t get_free_space(const DoutPrefixProvider* dpp) = 0;
 
+    /* Shutdown */
+    virtual void shutdown() {}
+
     /* Data Recovery from Cache */
     virtual int restore_blocks_objects(const DoutPrefixProvider* dpp, ObjectDataCallback obj_func, BlockDataCallback block_func) = 0;
 };
 
-} } // namespace rgw::cache
+} // namespace rgw::cache
 
