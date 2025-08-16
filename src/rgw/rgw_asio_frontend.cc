@@ -6,6 +6,7 @@
 #include <iomanip>
 #include <list>
 #include <memory>
+#include <grp.h>
 
 #include <boost/asio/bind_executor.hpp>
 #include <boost/asio/bind_cancellation_slot.hpp>
@@ -613,6 +614,33 @@ static int drop_privileges(CephContext *ctx)
   gid_t gid = ctx->get_set_gid();
   std::string uid_string = ctx->get_set_uid_string();
   std::string gid_string = ctx->get_set_gid_string();
+  // if a `setuser` config specified and the 'qat' *supplemental* group exists, inherit the 'qat' group to the user
+  struct group *grp{nullptr};
+  if (uid && (grp=getgrnam("qat"))) {
+    if (initgroups(uid_string.c_str(), grp->gr_gid) != 0) {
+      int err = errno;
+      ldout(ctx, -1) << "QAT warning: unable to initialize the `qat` supplemental group (" << grp->gr_gid << ") for user '" << uid_string << "' : " << cpp_strerror(err) << dendl;
+    }
+    // log the supplemental groups list
+    gid_t groups[NGROUPS_MAX]{0};
+    int num_groups = getgroups(NGROUPS_MAX, groups);
+    if (num_groups == -1) {
+      int err = errno;
+      ldout(ctx, -1) << "QAT warning: unable to getgroups for user '" << uid_string << "' : " << cpp_strerror(err) << dendl;
+    } else {
+      ldout(ctx, 0) << "supplemental groups:" << dendl;
+      for (int i=0 ; i < num_groups ; i++) {
+        struct group *grp = getgrgid(groups[i]);
+        if (grp) {
+          ldout(ctx, 0) << "  " << grp->gr_gid << " = " << grp->gr_name << dendl;
+        } else {
+          int err = errno;
+          ldout(ctx, -1) << "  QAT warning: unable to getgrgid for group " << groups[i] << " : " << cpp_strerror(err) << dendl;
+        }
+      }
+    }
+  }
+
   if (gid && setgid(gid) != 0) {
     int err = errno;
     ldout(ctx, -1) << "unable to setgid " << gid << ": " << cpp_strerror(err) << dendl;
