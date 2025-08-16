@@ -7,12 +7,12 @@ import { ICON_TYPE, Icons, IconSize } from '../../enum/icons.enum';
   styleUrl: './icon.component.scss'
 })
 export class IconComponent implements OnInit {
-  @Input() type!: keyof typeof ICON_TYPE;
+  @Input() type!: keyof typeof ICON_TYPE | keyof typeof Icons;
   @Input() size: IconSize = IconSize.size16;
 
   icon: string;
 
   ngOnInit() {
-    this.icon = Icons[this.type];
+    this.icon = Icons[this.type] || this.type;
   }
 }

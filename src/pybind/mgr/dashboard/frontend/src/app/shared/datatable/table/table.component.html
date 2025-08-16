@@ -396,3 +396,61 @@
                               [text]="value">
   </cd-copy-2-clipboard-button>
 </ng-template>
+
+<ng-template #editingTpl
+             let-value="data.value"
+             let-row="data.row"
+             let-column="data.column">
+  @if (isCellEditing(row?.id, column?.prop)) {
+  <form [formGroup]="column?.customTemplateConfig?.formGroup"
+        #formDir="ngForm">
+    <div cdsRow>
+      <div cdsCol>
+        <cds-text-label [invalid]="column?.customTemplateConfig?.formGroup.controls[column?.prop].invalid && column?.customTemplateConfig?.formGroup.controls[column?.prop].dirty"
+                        [invalidText]="errorTpl">
+          <input type="text"
+                 cdsText
+                 size="sm"
+                 [id]="column?.prop"
+                 [formControlName]="column?.prop"
+                 [invalid]="column?.customTemplateConfig?.formGroup.controls[column?.prop].invalid && column?.customTemplateConfig?.formGroup.controls[column?.prop].dirty">
+        </cds-text-label>
+        <ng-template #errorTpl>
+          <span *ngIf="column?.customTemplateConfig?.formGroup?.showError(column?.prop, formDir, 'required')">
+            <ng-container i18n>This field is required.</ng-container>
+          </span>
+          <span *ngIf="column?.customTemplateConfig?.formGroup?.showError(column?.prop, formDir, 'pattern')">
+            <ng-container i18n>The field format is invalid.</ng-container>
+          </span>
+        </ng-template>
+      </div>
+      <div cdsCol
+           [columnNumbers]="{sm:1}"
+           class="cds-p-0 cds-pt-3">
+        <button cdsButton="ghost"
+                size="sm"
+                id="cell-inline-save-btn"
+                type="button"
+                (click)="saveCellItem(row?.id, column?.prop, column?.customTemplateConfig?.formGroup)">
+          <cd-icon [type]="icons.check"></cd-icon>
+        </button>
+      </div>
+    </div>
+  </form>
+  } @else {
+  <div cdsRow>
+    <div cdsCol
+         class="cds-pt-3">
+      {{ value }}
+    </div>
+    <div cdsCol>
+      <button cdsButton="ghost"
+              size="sm"
+              id="cell-inline-edit-btn"
+              (click)="editCellItem(row?.id, column?.prop, column?.customTemplateConfig?.formGroup, value)">
+        <cd-icon [type]="icons.edit"></cd-icon>
+      </button>
+    </div>
+  </div>
+  }
+</ng-template>
