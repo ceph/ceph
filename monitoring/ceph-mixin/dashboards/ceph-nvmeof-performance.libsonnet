@@ -119,7 +119,7 @@ local g = import 'grafonnet/grafana.libsonnet';
     ])
     .addTarget(
       $.addTargetSchema(
-        expr="avg by(instance) (rate(ceph_nvmeof_reactor_seconds_total{mode='busy',instance=~'$gateway'}[1m]))",
+        expr="avg by(instance) (rate(ceph_nvmeof_reactor_seconds_total{mode='busy',instance=~'$gateway'}[$__rate_interval]))",
         format='',
         instant=false,
         legendFormat='{{name}}',
@@ -155,7 +155,7 @@ local g = import 'grafonnet/grafana.libsonnet';
     ])
     .addTarget(
       $.addTargetSchema(
-        expr="avg by (instance) (rate(ceph_nvmeof_reactor_seconds_total{mode='busy', instance=~'$gateway.*'}[1m]))\n",
+        expr="avg by (instance) (rate(ceph_nvmeof_reactor_seconds_total{mode='busy', instance=~'$gateway.*'}[$__rate_interval]))",
         format='',
         instant=false,
         legendFormat='{{name}}',
@@ -191,7 +191,7 @@ local g = import 'grafonnet/grafana.libsonnet';
     ])
     .addTarget(
       $.addTargetSchema(
-        expr="avg((rate(ceph_nvmeof_bdev_read_seconds_total{instance=~'$gateway'}[30s]) / rate(ceph_nvmeof_bdev_reads_completed_total{instance=~'$gateway'}[30s])) > 0)\n",
+        expr="avg((rate(ceph_nvmeof_bdev_read_seconds_total{instance=~'$gateway'}[$__rate_interval]) / rate(ceph_nvmeof_bdev_reads_completed_total{instance=~'$gateway'}[$__rate_interval])) > 0)",
         format='time_series',
         instant=false,
         legendFormat='Reads',
@@ -201,7 +201,7 @@ local g = import 'grafonnet/grafana.libsonnet';
     )
     .addTarget(
       $.addTargetSchema(
-        expr="avg((rate(ceph_nvmeof_bdev_write_seconds_total{instance=~'$gateway'}[30s]) / rate(ceph_nvmeof_bdev_writes_completed_total{instance=~'$gateway'}[30s])) > 0)",
+        expr="avg((rate(ceph_nvmeof_bdev_write_seconds_total{instance=~'$gateway'}[$__rate_interval]) / rate(ceph_nvmeof_bdev_writes_completed_total{instance=~'$gateway'}[$__rate_interval])) > 0)",
         format='time_series',
         instant=false,
         legendFormat='Writes',
@@ -237,7 +237,7 @@ local g = import 'grafonnet/grafana.libsonnet';
     ])
     .addTarget(
       $.addTargetSchema(
-        expr="sum by(instance) (rate(ceph_nvmeof_bdev_reads_completed_total{instance=~'$gateway'}[1m]) + rate(ceph_nvmeof_bdev_writes_completed_total{instance=~'$gateway'}[1m]))",
+        expr="sum by(instance) (rate(ceph_nvmeof_bdev_reads_completed_total{instance=~'$gateway'}[$__rate_interval]) + rate(ceph_nvmeof_bdev_writes_completed_total{instance=~'$gateway'}[$__rate_interval]))",
         format='time_series',
         instant=false,
         legendFormat='__auto',
@@ -272,7 +272,7 @@ local g = import 'grafonnet/grafana.libsonnet';
     ])
     .addTarget(
       $.addTargetSchema(
-        expr="\nsum by(nqn) ((rate(ceph_nvmeof_bdev_reads_completed_total{instance=~'$gateway'}[1m]) + rate(ceph_nvmeof_bdev_writes_completed_total{instance=~'$gateway'}[1m])) * on(instance,bdev_name) group_right ceph_nvmeof_subsystem_namespace_metadata{instance=~'$gateway'})",
+        expr="sum by(nqn) ((rate(ceph_nvmeof_bdev_reads_completed_total{instance=~'$gateway'}[$__rate_interval]) + rate(ceph_nvmeof_bdev_writes_completed_total{instance=~'$gateway'}[$__rate_interval])) * on(instance,bdev_name) group_right ceph_nvmeof_subsystem_namespace_metadata{instance=~'$gateway'})",
         format='time_series',
         instant=false,
         legendFormat='__auto',
@@ -308,7 +308,7 @@ local g = import 'grafonnet/grafana.libsonnet';
     ])
     .addTarget(
       $.addTargetSchema(
-        expr="topk(5, (sum by(pool_name, rbd_name) (((rate(ceph_nvmeof_bdev_reads_completed_total{instance=~'$gateway'}[1m]) + rate(ceph_nvmeof_bdev_writes_completed_total{instance=~'$gateway'}[1m])) * on(instance,bdev_name) group_right ceph_nvmeof_bdev_metadata{instance=~'$gateway'}) * on(instance, bdev_name) group_left(nqn) ceph_nvmeof_subsystem_namespace_metadata{nqn=~'$subsystem',instance=~'$gateway'})))",
+        expr="topk(5, (sum by(pool_name, rbd_name) (((rate(ceph_nvmeof_bdev_reads_completed_total{instance=~'$gateway'}[$__rate_interval]) + rate(ceph_nvmeof_bdev_writes_completed_total{instance=~'$gateway'}[$__rate_interval])) * on(instance,bdev_name) group_right ceph_nvmeof_bdev_metadata{instance=~'$gateway'}) * on(instance, bdev_name) group_left(nqn) ceph_nvmeof_subsystem_namespace_metadata{nqn=~'$subsystem',instance=~'$gateway'})))",
         format='time_series',
         instant=false,
         legendFormat='{{pool_name}}/{{rbd_name}}',
@@ -344,7 +344,7 @@ local g = import 'grafonnet/grafana.libsonnet';
     ])
     .addTarget(
       $.addTargetSchema(
-        expr="sum by(instance) (rate(ceph_nvmeof_bdev_read_bytes_total{instance=~'$gateway'}[1m]) + rate(ceph_nvmeof_bdev_written_bytes_total{instance=~'$gateway'}[1m]))",
+        expr="sum by(instance) (rate(ceph_nvmeof_bdev_read_bytes_total{instance=~'$gateway'}[$__rate_interval]) + rate(ceph_nvmeof_bdev_written_bytes_total{instance=~'$gateway'}[$__rate_interval]))",
         format='time_series',
         instant=false,
         legendFormat='{{name}}',
@@ -379,7 +379,7 @@ local g = import 'grafonnet/grafana.libsonnet';
     ])
     .addTarget(
       $.addTargetSchema(
-        expr="\nsum by(nqn) ((rate(ceph_nvmeof_bdev_read_bytes_total{instance=~'$gateway'}[1m]) + rate(ceph_nvmeof_bdev_written_bytes_total{instance=~'$gateway'}[1m])) * on(instance,bdev_name) group_right ceph_nvmeof_subsystem_namespace_metadata{instance=~'$gateway'})",
+        expr="sum by(nqn) ((rate(ceph_nvmeof_bdev_read_bytes_total{instance=~'$gateway'}[$__rate_interval]) + rate(ceph_nvmeof_bdev_written_bytes_total{instance=~'$gateway'}[$__rate_interval])) * on(instance,bdev_name) group_right ceph_nvmeof_subsystem_namespace_metadata{instance=~'$gateway'})",
         format='time_series',
         instant=false,
         legendFormat='__auto',
@@ -415,7 +415,7 @@ local g = import 'grafonnet/grafana.libsonnet';
     ])
     .addTarget(
       $.addTargetSchema(
-        expr="topk(5, (sum by(pool_name, rbd_name) (((rate(ceph_nvmeof_bdev_read_bytes_total{instance=~'$gateway'}[1m]) + rate(ceph_nvmeof_bdev_written_bytes_total{instance=~'$gateway'}[1m])) * on(instance,bdev_name) group_right ceph_nvmeof_bdev_metadata{instance=~'$gateway'}) * on(instance, bdev_name) group_left(nqn) ceph_nvmeof_subsystem_namespace_metadata{nqn=~'$subsystem',instance=~'$gateway'})))",
+        expr="topk(5, (sum by(pool_name, rbd_name) (((rate(ceph_nvmeof_bdev_read_bytes_total{instance=~'$gateway'}[$__rate_interval]) + rate(ceph_nvmeof_bdev_written_bytes_total{instance=~'$gateway'}[$__rate_interval])) * on(instance,bdev_name) group_right ceph_nvmeof_bdev_metadata{instance=~'$gateway'}) * on(instance, bdev_name) group_left(nqn) ceph_nvmeof_subsystem_namespace_metadata{nqn=~'$subsystem',instance=~'$gateway'})))",
         format='time_series',
         instant=false,
         legendFormat='{{name}}',
