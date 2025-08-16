@@ -14,7 +14,36 @@
 
 
 #pragma once
+#ifdef WITH_CRIMSON
+// ---------- Crimson/Seastar version ----------
+#include <seastar/core/future.hh>
+#include <seastar/core/sleep.hh>
+#include <seastar/core/loop.hh>
+#include <atomic>
 
+namespace crimson {
+  using std::chrono::duration_cast;
+  using std::chrono::milliseconds;
+
+class RunEvery {
+  std::chrono::milliseconds wait_period;
+  std::function<void()> body;
+  seastar::timer<seastar::lowres_clock> timer;
+  void arm_timer();
+  void on_timer();
+public:
+  RunEvery(std::chrono::milliseconds _wait_period,
+           std::function<void()> _body);
+
+  ~RunEvery();
+
+  void try_update(std::chrono::milliseconds _wait_period);
+  void start();
+};
+
+}
+
+#else
 #include <chrono>
 #include <mutex>
 #include <condition_variable>
@@ -79,3 +108,5 @@ namespace crimson {
     void run();
   };
 }
+
+#endif
