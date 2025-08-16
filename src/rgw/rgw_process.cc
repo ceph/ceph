@@ -404,7 +404,13 @@ int process_request(const RGWProcessEnv& penv,
     s->trace = tracing::rgw::tracer.start_trace(op->name(), s->trace_enabled);
     s->trace->SetAttribute(tracing::rgw::TRANS_ID, s->trans_id);
 
-    ret = rgw_process_authenticated(handler, op, req, s, yield, driver);
+    try {
+      ret = rgw_process_authenticated(handler, op, req, s, yield, driver);
+    } catch (rgw::io::Exception& e) {
+      dout(0) << "rgw_process_authenticated() threw exception: "
+              << e.what() << dendl;
+      ret = -e.code().value();
+    }
     if (ret < 0) {
       abort_early(s, op, ret, handler, yield);
       goto done;
