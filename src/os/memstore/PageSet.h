@@ -80,7 +80,14 @@ struct Page {
   Page(char *data, uint64_t offset) : data(data), offset(offset), nrefs(1) {}
 
   static void operator delete(void *p) {
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
+#endif
     delete[] reinterpret_cast<Page*>(p)->data;
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC diagnostic pop
+#endif
   }
 };
 
