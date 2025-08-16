@@ -283,6 +283,24 @@ void RGWObjectExpirer::trim_chunk(const DoutPrefixProvider *dpp,
   return;
 }
 
+static int lock_shard(const DoutPrefixProvider* dpp, optional_yield y,
+                      librados::IoCtx& ioctx, const std::string& oid,
+                      rados::cls::lock::Lock& lock)
+{
+  librados::ObjectWriteOperation op;
+  lock.lock_exclusive(&op);
+  return rgw_rados_operate(dpp, ioctx, oid, std::move(op), y);
+}
+
+static int unlock_shard(const DoutPrefixProvider* dpp, optional_yield y,
+                        librados::IoCtx& ioctx, const std::string& oid,
+                        rados::cls::lock::Lock& lock)
+{
+  librados::ObjectWriteOperation op;
+  lock.unlock(&op);
+  return rgw_rados_operate(dpp, ioctx, oid, std::move(op), y);
+}
+
 bool RGWObjectExpirer::process_single_shard(const DoutPrefixProvider *dpp, 
                                             const string& shard,
                                             const utime_t& last_run,
@@ -300,12 +318,13 @@ bool RGWObjectExpirer::process_single_shard(const DoutPrefixProvider *dpp,
   utime_t end = ceph_clock_now();
   end += max_secs;
 
+  librados::IoCtx& ioctx = static_cast<rgw::sal::RadosStore*>(driver)->getRados()->objexp_pool_ctx;
   rados::cls::lock::Lock l(objexp_lock_name);
 
   utime_t time(max_secs, 0);
   l.set_duration(time);
 
-  int ret = l.lock_exclusive(&static_cast<rgw::sal::RadosStore*>(driver)->getRados()->objexp_pool_ctx, shard);
+  int ret = lock_shard(dpp, y, ioctx, shard, l);
   if (ret == -EBUSY) { /* already locked by another processor */
     ldpp_dout(dpp, 5) << __func__ << "(): failed to acquire lock on " << shard << dendl;
     return false;
@@ -341,7 +360,7 @@ bool RGWObjectExpirer::process_single_shard(const DoutPrefixProvider *dpp,
     marker = out_marker;
   } while (truncated);
 
-  l.unlock(&static_cast<rgw::sal::RadosStore*>(driver)->getRados()->objexp_pool_ctx, shard);
+  std::ignore = unlock_shard(dpp, y, ioctx, shard, l);
   return done;
 }
 
