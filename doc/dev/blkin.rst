@@ -9,6 +9,10 @@ Use -DWITH_LTTNG option (default: ON)::
 
   ./do_cmake -DWITH_LTTNG=ON
 
+or installing  devel packages taking rockylinux OS for example, otherwise service cannot start sucessfully::
+
+  dnf install -y librados-devel librbd-devel librgw-devel
+
 Config option for tracing must be set to true in ceph.conf.
 Following options are currently available::
 
