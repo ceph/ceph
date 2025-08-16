@@ -56,6 +56,7 @@
 #include "common/tracer.h"
 #include "common/Throttle.h"
 #include "crush/crush.h" // for CRUSH_ITEM_NONE
+#include "common/interval_map.h"
 
 #include "mon/MonClient.h"
 
@@ -2124,6 +2125,66 @@ public:
     }
   };
 
+  /// If someone wants these types, but not ExtentCache, move to another file
+  struct bl_split_merge {
+    ceph::buffer::list split(
+        uint64_t offset,
+        uint64_t length,
+        ceph::buffer::list &bl) const {
+      ceph::buffer::list out;
+      out.substr_of(bl, offset, length);
+      return out;
+    }
+
+    bool can_merge(const ceph::buffer::list &left, const ceph::buffer::list &right) const {
+      return true;
+    }
+
+    ceph::buffer::list merge(ceph::buffer::list &&left, ceph::buffer::list &&right) const {
+      ceph::buffer::list bl{std::move(left)};
+      bl.claim_append(right);
+      return bl;
+    }
+
+    uint64_t length(const ceph::buffer::list &b) const { return b.length(); }
+  };
+
+  using ec_extent_map = interval_map<uint64_t, ceph::buffer::list, bl_split_merge>;
+  struct ECRead {
+   private:
+    struct SubRead {
+      bufferlist bl;
+      int rc = -EIO;
+    };
+
+    // This structure self-destructs on each IO completions, using a legacy
+    // C++ pattern (no shared_ptr). We use the finish callback to record the
+    // RC, but otherwise rely on the shared_ptr destroying ec_read to deal with
+    // completion of the parent IO.
+    struct Finisher : Context {
+      std::shared_ptr<ECRead> ec_read;
+      SubRead &sub_read;
+
+      Finisher(std::shared_ptr<ECRead> ec_read, SubRead &sub_read) : ec_read(ec_read), sub_read(sub_read) {}
+      void finish(int r) override {
+        sub_read.rc = r;
+      }
+    };
+
+    Op *orig_op;
+    Objecter &objecter;
+    std::vector<SubRead> sub_reads;
+    int rc = 0;
+    CephContext *cct;
+
+
+   public:
+    ECRead(Op *op, Objecter &objecter, CephContext *cct, int count) : orig_op(op), objecter(objecter), sub_reads(count), cct(cct) {}
+    ~ECRead();
+    static std::shared_ptr<ECRead> create(Op *op, Objecter &objecter,
+      shunique_lock<ceph::shared_mutex>& sul, ceph_tid_t *ptid, int *ctx_budget, CephContext *cct);
+  };
+
   struct CB_Op_Map_Latest {
     Objecter *objecter;
     ceph_tid_t tid;
@@ -2558,7 +2619,8 @@ public:
     Op *op);
 
   bool target_should_be_paused(op_target_t *op);
-  int _calc_target(op_target_t *t, Connection *con,
+  int _calc_target(op_target_t *t,
+                   const Op *op = nullptr,
 		   bool any_change = false);
   int _map_session(op_target_t *op, OSDSession **s,
 		   ceph::shunique_lock<ceph::shared_mutex>& lc);

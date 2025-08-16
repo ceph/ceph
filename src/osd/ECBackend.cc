@@ -863,6 +863,7 @@ bool ECBackend::_handle_message(
     reply->min_epoch = get_parent()->get_interval_start_epoch();
     handle_sub_read(op->op.from, op->op, &(reply->op), _op->pg_trace);
     reply->trace = _op->pg_trace;
+    reply->pgid.reset_shard(op->op.from.shard);
     get_parent()->send_message_osd_cluster(
       reply, _op->get_req()->get_connection());
     return true;
@@ -979,7 +980,10 @@ void ECBackend::handle_sub_write(
     ceph_abort_msg("Error inject - OSD down");
   }
   if (!get_parent()->pgb_is_primary())
+  {
     get_parent()->update_stats(op.stats);
+    get_parent()->log_stats(op.soid, op.stats.stats.sum, op.t, false);
+  }
   ObjectStore::Transaction localt;
   if (!op.temp_added.empty()) {
     switcher->add_temp_objs(op.temp_added);
@@ -1280,13 +1284,10 @@ void ECBackend::handle_sub_read_reply(
     rop.debug_log.emplace_back(ECUtil::ERROR, op.from, complete.buffers_read);
     complete.buffers_read.erase_shard(from.shard);
     complete.processed_read_requests.erase(from.shard);
-    // If we are doing redundant reads, then we must take care that any failed
-    // reads are not replaced with a zero buffer. When fast_reads are disabled,
-    // the send_all_remaining_reads() call will replace the zeros_for_decode
-    // based on the recovery read.
-    if (rop.do_redundant_reads) {
-      rop.to_read.at(hoid).zeros_for_decode.erase(from.shard);
-    }
+    // If there was an error for non-zero data on this shard, then we must also
+    // ignore all zeros, or minimum_to_decode may conclude that it has enough
+    // shards available.
+    rop.to_read.at(hoid).zeros_for_decode.erase(from.shard);
     dout(20) << __func__ << " shard=" << from << " error=" << err << dendl;
   }
 
@@ -1627,7 +1628,73 @@ int ECBackend::objects_read_sync(
     uint64_t len,
     uint32_t op_flags,
     bufferlist *bl) {
-  return -EOPNOTSUPP;
+
+
+  if (!sinfo.supports_direct_reads()) {
+    return -EOPNOTSUPP;
+  }
+
+  int r = _objects_read_sync(hoid, off, len, op_flags, bl);
+
+  dout(20) << __func__ << " r=" << r
+        << " hoid=" << hoid
+        << " off=" << off
+        << " len=" << len
+        << " op_flags=" << op_flags
+        << " primary=" << switcher->is_primary()
+        << " shard=" << (off / sinfo.get_chunk_size()) % sinfo.get_k()
+        << dendl;
+
+  if (r >= 0) {
+    return r;
+  }
+
+  // The above returns errors largely only interesting for tracing. Here we
+  // simplify this down to:
+  // Primary returns EIO, which causes an async read to be executed immediately.
+  // A non-primary returns EAGAIN which forces the client to resent to the
+  // primary.
+  if (switcher->is_primary()) {
+    return -EIO;
+  }
+
+  return -EAGAIN;
+}
+
+// NOTE: Return codes from this function are largely nonsense and translated
+//       to more useful values before returning to client. 
+int ECBackend::_objects_read_sync(
+    const hobject_t &hoid,
+    uint64_t off,
+    uint64_t len,
+    uint32_t op_flags,
+    bufferlist *bl) {
+
+  // sync reads are supported for sub-chunk reads where no reconstruct is
+  // required.
+  uint64_t chunk_size = sinfo.get_chunk_size();
+  uint64_t start_chunk = off / chunk_size;
+  // This calculation is wrong for length = 0, but it doesn't matter if these reads get sent to the primary
+  uint64_t end_chunk = (off + len - 1) / chunk_size;
+  if (start_chunk != end_chunk) {
+    return -EDOM; //Math argument out of domain of func
+  }
+
+  // Normally not safe, but this assumption is requried to be true for direct reads.
+  shard_id_t shard(start_chunk % sinfo.get_k());
+
+  if (get_parent()->whoami_shard().shard != shard ) {
+    return -ENODEV; // No such device ... here
+  }
+
+  if (get_parent()->get_local_missing().is_missing(hoid)) {
+    return -EACCES;  // Permission denied (cos its missing)
+  }
+
+  return switcher->store->read(switcher->ch,
+          ghobject_t(hoid, ghobject_t::NO_GEN, shard),
+          sinfo.ro_offset_to_shard_offset(off, sinfo.get_raw_shard(shard)),
+          len, *bl, op_flags);
 }
 
 void ECBackend::objects_read_async(

@@ -5882,17 +5882,31 @@ int PrimaryLogPG::do_read(OpContext *ctx, OSDOp& osd_op) {
     if (oi.is_data_digest() && op.extent.offset == 0 &&
         op.extent.length >= oi.size)
       maybe_crc = oi.data_digest;
-    ctx->pending_async_reads.push_back(
-      make_pair(
-        boost::make_tuple(op.extent.offset, op.extent.length, op.flags),
-        make_pair(&osd_op.outdata,
-		  new FillInVerifyExtent(&op.extent.length, &osd_op.rval,
-					 &osd_op.outdata, maybe_crc, oi.size,
-					 osd, soid, op.flags))));
-    dout(10) << " async_read noted for " << soid << dendl;
 
-    ctx->op_finishers[ctx->current_osd_subop_num].reset(
-      new ReadFinisher(osd_op));
+    int r = pgbackend->objects_read_sync(
+      soid, op.extent.offset, op.extent.length, op.flags, &osd_op.outdata);
+
+    // EAGAIN here means that this OSD cannot support this IO - fail that back
+    // to the client.  Every other error case indicates either the IO was not
+    // attempted, or failed locally, either way we must attempt a recovery which
+    // must be done asynchronously.
+    if (r != -EAGAIN && r < 0) {
+      ctx->pending_async_reads.push_back(
+        make_pair(
+          boost::make_tuple(op.extent.offset, op.extent.length, op.flags),
+          make_pair(&osd_op.outdata,
+                    new FillInVerifyExtent(&op.extent.length, &osd_op.rval,
+                                           &osd_op.outdata, maybe_crc, oi.size,
+                                           osd, soid, op.flags))));
+      dout(10) << " async_read noted for " << soid << dendl;
+
+      ctx->op_finishers[ctx->current_osd_subop_num].reset(
+        new ReadFinisher(osd_op));
+    } else {
+      dout(20) << " EC sync read for " << soid << dendl;
+
+      result = r;
+    }
   } else {
     int r = pgbackend->objects_read_sync(
       soid, op.extent.offset, op.extent.length, op.flags, &osd_op.outdata);
@@ -9158,6 +9172,157 @@ void PrimaryLogPG::finish_ctx(OpContext *ctx, int log_op_type, int result)
   } else {
     ctx->obc->ssc->exists = true;
     ctx->obc->ssc->snapset = ctx->new_snapset;
+  }
+}
+
+void PrimaryLogPG::log_stats(hobject_t soid,
+                             const object_stat_sum_t& stats,
+                             ObjectStore::Transaction& t,
+                             bool is_delta)
+{
+  std::map<hobject_t, int> soid_oi_set_count_map;
+
+  dout(20) << __func__ << ", soid: " << soid << " pg_stats ";
+
+  std::string operation = "updated to ";
+  if (is_delta)
+  {
+    operation = "delta applied ";
+  }
+
+  *_dout << operation;
+
+  std::unique_ptr<Formatter> f(Formatter::create("json"));
+  f->open_object_section("stats");
+  stats.dump(f.get());
+  f->close_section();
+
+  f->flush(*_dout);
+
+  ObjectStore::Transaction::iterator i = t.begin();
+
+  for (int pos = 0; i.have_op(); ++pos)
+  {
+    ObjectStore::Transaction::Op *op = i.decode_op();
+    int r = 0;
+
+    if (op->op == ObjectStore::Transaction::OP_COLL_HINT) {
+      uint32_t type = op->hint;
+      bufferlist hint;
+      i.decode_bl(hint);
+      auto hiter = hint.cbegin();
+      if (type == ObjectStore::Transaction::COLL_HINT_EXPECTED_NUM_OBJECTS) {
+        uint32_t pg_num;
+        uint64_t num_objs;
+        decode(pg_num, hiter);
+        decode(num_objs, hiter);
+      }
+    }
+
+    switch (op->op) {
+    case ObjectStore::Transaction::OP_WRITE:
+      {
+        bufferlist bl;
+        i.decode_bl(bl);
+      }
+      break;
+
+    case ObjectStore::Transaction::OP_SETATTR:
+      {
+        string name = i.decode_string();
+        if (name == OI_ATTR)
+        {
+          bufferlist bl;
+          f->open_object_section("oi");
+          i.decode_bl(bl);
+          object_info_t oi(bl);
+          oi.dump(f.get());
+          f->close_section();
+
+          dout(20) << "\n" << __func__ << ", soid: " << soid
+                   << " setattr - OI set to ";
+          f->flush(*_dout);
+          *_dout << dendl;
+
+          soid_oi_set_count_map[soid]++;
+        }
+      }
+      break;
+
+    case ObjectStore::Transaction::OP_SETATTRS:
+      {
+        map<string, bufferptr> aset;
+        i.decode_attrset(aset);
+        for (map<string,bufferptr>::iterator p = aset.begin();
+             p != aset.end(); ++p)
+        {
+          if (p->first == OI_ATTR) {
+            bufferlist bl;
+            f->open_object_section("oi");
+            bl.append(p->second);
+            object_info_t oi_decode(bl);
+            oi_decode.dump(f.get());
+            f->close_section();
+
+            *_dout << "\n" <<__func__ << ", soid: " << soid
+                     << " setattrs - OI set to ";
+            f->flush(*_dout);
+
+            soid_oi_set_count_map[soid]++;
+          }
+        }
+      }
+      break;
+
+    case ObjectStore::Transaction::OP_RMATTR:
+      {
+        string name = i.decode_string();
+      }
+      break;
+
+    case ObjectStore::Transaction::OP_OMAP_SETKEYS:
+      {
+        bufferlist bl;
+        i.decode_attrset_bl(&bl);
+      }
+      break;
+    case ObjectStore::Transaction::OP_OMAP_RMKEYS:
+      {
+        bufferlist keys_bl;
+        i.decode_keyset_bl(&keys_bl);
+      }
+      break;
+    case ObjectStore::Transaction::OP_OMAP_RMKEYRANGE:
+      {
+        i.decode_string();
+        i.decode_string();
+      }
+      break;
+    case ObjectStore::Transaction::OP_OMAP_SETHEADER:
+      {
+        bufferlist bl;
+        i.decode_bl(bl);
+      }
+      break;
+    }
+  }
+
+  *_dout << dendl;
+
+  for (const auto&[soid, oi_set_count] : soid_oi_set_count_map)
+  {
+    if (oi_set_count > 1)
+    {
+      std::unique_ptr<Formatter> f(Formatter::create("json"));
+      f->open_object_section("t");
+      t.dump(f.get());
+      f->close_section();
+      dout(10) << __func__ << ", soid: " << soid
+               << " INFO: oi set multiple ("
+               << oi_set_count << ") times in transaction ";
+      f->flush(*_dout);
+      *_dout << dendl;
+    }
   }
 }
 
@@ -14491,9 +14656,9 @@ void PrimaryLogPG::scan_range_primary(
       bool added_default = false;
       for (auto & shard: backfill_targets) {
 	if (shard_versions.contains(shard.shard)) {
-	  version = shard_versions.at(shard.shard);
+	  auto shard_version = shard_versions.at(shard.shard);
 	  bi->objects.insert(make_pair(*p, std::make_pair(shard.shard,
-							  version)));
+							  shard_version)));
 	} else if (!added_default) {
 	  bi->objects.insert(make_pair(*p, std::make_pair(shard_id_t::NO_SHARD,
 							  version)));
