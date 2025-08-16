@@ -515,9 +515,9 @@ int MemStore::omap_get_keys(
 }
 
 int MemStore::omap_get_values(
-  CollectionHandle& ch,                    ///< [in] Collection containing oid
-  const ghobject_t &oid,       ///< [in] Object containing omap
-  const std::set<std::string> &keys,     ///< [in] Keys to get
+  CollectionHandle& ch,            ///< [in] Collection containing oid
+  const ghobject_t &oid,           ///< [in] Object containing omap
+  const std::set<std::string> &keys,             ///< [in] Keys to get
   std::map<std::string, ceph::buffer::list> *out ///< [out] Returned keys and values
   )
 {
@@ -527,10 +527,31 @@ int MemStore::omap_get_values(
   if (!o)
     return -ENOENT;
   std::lock_guard lock{o->omap_mutex};
-  for (auto p = keys.begin(); p != keys.end(); ++p) {
-    auto q = o->omap.find(*p);
+  for (auto& s : keys) {
+    auto q = o->omap.find(s);
     if (q != o->omap.end())
-      out->insert(*q);
+      out->emplace(*q);
+  }
+  return 0;
+}
+
+int MemStore::omap_get_values(
+  CollectionHandle& ch,            ///< [in] Collection containing oid
+  const ghobject_t &oid,           ///< [in] Object containing omap
+  const std::vector<std::string> &keys,          ///< [in] Keys to get
+  std::map<std::string, ceph::buffer::list> *out ///< [out] Returned keys and values
+  )
+{
+  dout(10) << __func__ << " " << ch->cid << " " << oid << dendl;
+  Collection *c = static_cast<Collection*>(ch.get());
+  ObjectRef o = c->get_object(oid);
+  if (!o)
+    return -ENOENT;
+  std::lock_guard lock{o->omap_mutex};
+  for (auto& s : keys) {
+    auto q = o->omap.find(s);
+    if (q != o->omap.end())
+      out->emplace(*q);
   }
   return 0;
 }

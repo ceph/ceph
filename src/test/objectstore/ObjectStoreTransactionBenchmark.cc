@@ -62,7 +62,7 @@ class Transaction {
     setattr_ticks.add(Cycles::rdtsc() - start_time);
   }
   void omap_setkeys(coll_t cid, const ghobject_t &oid,
-                    const map<string, bufferlist> &attrset) {
+                    const vector<pair<string, bufferlist>> &attrset) {
 
     uint64_t start_time = Cycles::rdtsc();
     t.omap_setkeys(cid, oid, attrset);
@@ -117,7 +117,7 @@ class Transaction {
       case ObjectStore::Transaction::OP_OMAP_SETKEYS:
         {
           ghobject_t oid = i.get_oid(op->oid);
-          map<string, bufferptr> aset;
+          vector<pair<string, bufferlist>> aset;
           i.decode_attrset(aset);
         }
         break;
@@ -221,11 +221,11 @@ class PerfCase {
       }
       {
         Transaction t;
-        map<string, bufferlist> pglog_attrset;
-        map<string, bufferlist> info_attrset;
-        pglog_attrset[pglog_attr] = data[pglog_attr];
-        info_attrset[info_epoch_attr] = data[info_epoch_attr];
-        info_attrset[info_info_attr] = data[info_info_attr];
+        vector<pair<string, bufferlist>> pglog_attrset(1);
+        vector<pair<string, bufferlist>> info_attrset(2);
+        pglog_attrset[0] = make_pair(pglog_attr, data[pglog_attr]);
+        info_attrset[0] = make_pair(info_epoch_attr, data[info_epoch_attr]);
+        info_attrset[1] = make_pair(info_info_attr, data[info_info_attr]);
         start_time = Cycles::rdtsc();
         t.omap_setkeys(meta_cid, pglog_oid, pglog_attrset);
         t.omap_setkeys(meta_cid, info_oid, info_attrset);

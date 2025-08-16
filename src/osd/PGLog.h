@@ -1466,14 +1466,14 @@ public:
 
   void write_log_and_missing(
     ObjectStore::Transaction& t,
-    std::map<std::string,ceph::buffer::list> *km,
+    std::vector<std::pair<std::string,ceph::buffer::list>> *km,
     const coll_t& coll,
     const ghobject_t &log_oid,
     bool require_rollback);
 
   static void write_log_and_missing_wo_missing(
     ObjectStore::Transaction& t,
-    std::map<std::string,ceph::buffer::list>* km,
+    std::vector<std::pair<std::string,ceph::buffer::list>>* km,
     pg_log_t &log,
     const coll_t& coll,
     const ghobject_t &log_oid, std::map<eversion_t, hobject_t> &divergent_priors,
@@ -1482,7 +1482,7 @@ public:
 
   static void write_log_and_missing(
     ObjectStore::Transaction& t,
-    std::map<std::string,ceph::buffer::list>* km,
+    std::vector<std::pair<std::string,ceph::buffer::list>>* km,
     pg_log_t &log,
     const coll_t& coll,
     const ghobject_t &log_oid,
@@ -1493,7 +1493,7 @@ public:
 
   static void _write_log_and_missing_wo_missing(
     ObjectStore::Transaction& t,
-    std::map<std::string,ceph::buffer::list>* km,
+    std::vector<std::pair<std::string,ceph::buffer::list>>* km,
     pg_log_t &log,
     const coll_t& coll, const ghobject_t &log_oid,
     std::map<eversion_t, hobject_t> &divergent_priors,
@@ -1512,7 +1512,7 @@ public:
 
   static void _write_log_and_missing(
     ObjectStore::Transaction& t,
-    std::map<std::string,ceph::buffer::list>* km,
+    std::vector<std::pair<std::string,ceph::buffer::list>>* km,
     pg_log_t &log,
     const coll_t& coll, const ghobject_t &log_oid,
     eversion_t dirty_to,
