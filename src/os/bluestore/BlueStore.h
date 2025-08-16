@@ -241,12 +241,15 @@ enum {
 using bptr_c_it_t = buffer::ptr::const_iterator;
 
 extern const std::vector<uint64_t> bdev_label_positions;
+class BlueStore_debug;
 
 class BlueStore : public ObjectStore,
 		  public md_config_obs_t {
   // -----------------------------------------------------
   // types
 public:
+  friend class BlueStore_debug;
+  BlueStore_debug& debug();
   // config observer
   std::vector<std::string> get_tracked_keys() const noexcept override;
   void handle_conf_change(const ConfigProxy& conf,
@@ -2859,6 +2862,7 @@ private:
   TransContext *_txc_create(Collection *c, OpSequencer *osr,
 			    std::list<Context*> *on_commits,
 			    TrackedOpRef osd_op=TrackedOpRef());
+  void _txc_exec(TransContext* txc, ThreadPool::TPHandle* handle);
   void _txc_update_store_statfs(TransContext *txc);
   void _txc_add_transaction(TransContext *txc, Transaction *t);
   void _txc_calc_cost(TransContext *txc);
@@ -3277,7 +3281,7 @@ private:
     uint32_t op_flags = 0,
     uint64_t retry_count = 0);
 
-  void _do_read_and_pad(
+  bool _do_read_and_pad(
     Collection* c,
     OnodeRef& o,
     uint32_t offset,
@@ -3436,9 +3440,6 @@ public:
   }
   KeyValueDB* get_kv() {
     return db;
-  }
-  BlockDevice* get_bdev() {
-    return bdev;
   }
 
   int queue_transactions(
