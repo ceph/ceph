@@ -529,7 +529,7 @@ class TestCloneProgressReporter(CloneProgressReporterHelper):
                     time.sleep(1)
                     continue
                 elif len(pev) > 1:
-                    raise RuntimeError('For 1 clone "ceph status" output has 2 '
+                    raise RuntimeError('For 4 clone "ceph status" output has 2 '
                                        'progress bars, it should have only 1 '
                                        f'progress bar.\npev -\n{pev}')
 
@@ -860,5 +860,10 @@ class TestOngoingClonesCounter(CloneProgressReporterHelper):
     def test_for_4_ongoing_clones(self):
         self._run_test(MAX_THREADS=4, NUM_OF_CLONES=8)
 
+    # NOTE: once in many runs with teuthology clones finish much faster than
+    # expected. causing the message on the clone progress bars to have less
+    # than 6 clones leading to failure. if this happens too often perhaps Sepia
+    # lab machines are too fast and deleting this test should be considered
+    # since other tests in this class also test this feature.
     def test_for_6_ongoing_clones(self):
-        self._run_test(MAX_THREADS=6, NUM_OF_CLONES=16)
+        self._run_test(MAX_THREADS=6, NUM_OF_CLONES=24)
