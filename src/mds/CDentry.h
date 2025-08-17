@@ -239,7 +239,8 @@ public:
   const CDentry& operator= (const CDentry& right);
 
   // misc
-  void make_path_string(std::string& s, bool projected=false) const;
+  void make_path_string(std::string& s, bool projected=false,
+		        int path_comp_count=-1) const;
   void make_path(filepath& fp, bool projected=false) const;
 
   // -- version --
