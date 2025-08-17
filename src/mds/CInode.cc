@@ -1098,12 +1098,28 @@ bool CInode::is_projected_ancestor_of(const CInode *other) const
  */
 void CInode::make_path_string(string& s, bool projected, const CDentry *use_parent) const
 {
+  /* path_comp_count = path components count
+   *
+   * Printing more than 10 components of a path not only is not useful but also it
+   * makes reading logs harder (imagine path with 2000 components). Therefore,
+   * shorten path.
+   */
+  static int path_comp_count = 1;
   if (!use_parent) {
     use_parent = projected ? get_projected_parent_dn() : parent;
   }
 
   if (use_parent) {
-    use_parent->make_path_string(s, projected);
+    if (path_comp_count <= 10) {
+      ++path_comp_count;
+      use_parent->make_path_string(s, projected);
+    } else {
+      // this indicates that path has been shortened.
+      s = "...";
+      // reset counter
+      path_comp_count = 1;
+      return;
+    }
   } else if (is_root()) {
     s = "";
   } else if (is_mdsdir()) {
