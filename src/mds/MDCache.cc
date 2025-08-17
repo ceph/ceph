@@ -6657,7 +6657,7 @@ struct C_IO_MDC_TruncateWriteFinish : public MDCacheIOContext {
   LogSegmentRef ls;
   uint32_t block_size;
   C_IO_MDC_TruncateWriteFinish(MDCache *c, CInode *i, LogSegmentRef const& l, uint32_t bs) :
-    MDCacheIOContext(c, false), in(i), ls(l), block_size(bs) {
+    MDCacheIOContext(c), in(i), ls(l), block_size(bs) {
   }
   void finish(int r) override {
     ceph_assert(r == 0 || r == -ENOENT);
@@ -6672,7 +6672,7 @@ struct C_IO_MDC_TruncateFinish : public MDCacheIOContext {
   CInode *in;
   LogSegmentRef ls;
   C_IO_MDC_TruncateFinish(MDCache *c, CInode *i, LogSegmentRef const& l) :
-    MDCacheIOContext(c, false), in(i), ls(l) {
+    MDCacheIOContext(c), in(i), ls(l) {
   }
   void finish(int r) override {
     ceph_assert(r == 0 || r == -ENOENT);

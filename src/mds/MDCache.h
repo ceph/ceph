@@ -1614,7 +1614,7 @@ private:
  * it'ls the lesser of two evils compared with introducing
  * yet another piece of (multiple) inheritance.
  */
-class MDCacheIOContext : public virtual MDSIOContextBase {
+class MDCacheIOContext : public MDSIOContextBase {
 protected:
   MDCache *mdcache;
   MDSRank *get_mds() override
