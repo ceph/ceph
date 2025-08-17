@@ -1,8 +1,8 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 
-import { Observable, Subscription, forkJoin, timer } from 'rxjs';
-import { map, switchMap } from 'rxjs/operators';
+import { Observable, Subscription, forkJoin, of, timer } from 'rxjs';
+import { catchError, map, switchMap } from 'rxjs/operators';
 
 import { AlertmanagerSilence } from '../models/alertmanager-silence';
 import {
@@ -11,6 +11,16 @@ import {
   PrometheusRuleGroup
 } from '../models/prometheus-alerts';
 import moment from 'moment';
+
+export type PromethuesGaugeMetricResult = {
+  metric: Record<string, string>; // metric metadata
+  value: [number, string]; // timestamp, value
+};
+
+export type PromqlGuageMetric = {
+  resultType: 'vector';
+  result: PromethuesGaugeMetricResult[];
+};
 
 @Injectable({
   providedIn: 'root'
@@ -38,8 +48,14 @@ export class PrometheusService {
     }
   }
 
+  // Range Queries
   getPrometheusData(params: any): any {
     return this.http.get<any>(`${this.baseURL}/data`, { params });
+  }
+
+  // Guage Queries
+  getPrometheusQueryData(params: { params: string }): Observable<PromqlGuageMetric> {
+    return this.http.get<any>(`${this.baseURL}/prometheus_query_data`, { params });
   }
 
   ifAlertmanagerConfigured(fn: (value?: string) => void, elseFn?: () => void): void {
@@ -131,12 +147,20 @@ export class PrometheusService {
     return data.value || data.instance || '';
   }
 
-  getPrometheusQueriesData(
-    selectedTime: any,
-    queries: any,
-    queriesResults: any,
-    checkNan?: boolean
-  ) {
+  getGaugeQueryData(query: string): Observable<PromqlGuageMetric> {
+    return this.getPrometheusQueryData({ params: query }).pipe(
+      map((result: PromqlGuageMetric) => result),
+      catchError(() => of({ result: [] } as PromqlGuageMetric))
+    );
+  }
+
+  formatGuageMetric(data: string): number {
+    const value: number = parseFloat(data ?? '');
+    // Guage value can be "Nan", "+inf", "-inf" in case of errors
+    return isFinite(value) ? value : null;
+  }
+
+  getRangeQueriesData(selectedTime: any, queries: any, queriesResults: any, checkNan?: boolean) {
     this.ifPrometheusConfigured(() => {
       if (this.timerGetPrometheusDataSub) {
         this.timerGetPrometheusDataSub.unsubscribe();
