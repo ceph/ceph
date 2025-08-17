@@ -300,10 +300,11 @@ void CDentry::clear_auth()
   }
 }
 
-void CDentry::make_path_string(string& s, bool projected) const
+void CDentry::make_path_string(string& s, bool projected,
+			       int path_comp_count) const
 {
   if (dir) {
-    dir->inode->make_path_string(s, projected);
+    dir->inode->make_path_string(s, projected, NULL, path_comp_count);
   } else {
     s = "???";
   }
