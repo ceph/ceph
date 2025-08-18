@@ -26,8 +26,7 @@ public:
    *
    * Future will not resolve until all pins have resolved
    */
-  using get_mappings_iertr = base_iertr;
-  using get_mappings_ret = get_mappings_iertr::future<backref_mapping_list_t>;
+  using get_mappings_ret = base_iertr::future<backref_mapping_list_t>;
   virtual get_mappings_ret get_mappings(
     Transaction &t,
     paddr_t offset,
@@ -50,17 +49,14 @@ public:
    *
    * rewrite extent into passed transaction
    */
-  using rewrite_extent_iertr = base_iertr;
-  using rewrite_extent_ret = rewrite_extent_iertr::future<>;
-  virtual rewrite_extent_ret rewrite_extent(
+  virtual base_iertr::future<> rewrite_extent(
     Transaction &t,
     CachedExtentRef extent) = 0;
 
   /**
    * Insert new paddr_t -> laddr_t mapping
    */
-  using new_mapping_iertr = base_iertr;
-  using new_mapping_ret = new_mapping_iertr::future<BackrefMapping>;
+  using new_mapping_ret = base_iertr::future<BackrefMapping>;
   virtual new_mapping_ret new_mapping(
     Transaction &t,
     paddr_t key,
@@ -74,8 +70,7 @@ public:
    *
    * @return returns whether the extent is alive
    */
-  using init_cached_extent_iertr = base_iertr;
-  using init_cached_extent_ret = init_cached_extent_iertr::future<bool>;
+  using init_cached_extent_ret = base_iertr::future<bool>;
   virtual init_cached_extent_ret init_cached_extent(
     Transaction &t,
     CachedExtentRef e) = 0;
@@ -85,9 +80,8 @@ public:
     paddr_t start,
     paddr_t end) = 0;
 
-  using retrieve_backref_extents_in_range_iertr = base_iertr;
   using retrieve_backref_extents_in_range_ret =
-    retrieve_backref_extents_in_range_iertr::future<std::vector<CachedExtentRef>>;
+    base_iertr::future<std::vector<CachedExtentRef>>;
   virtual retrieve_backref_extents_in_range_ret
   retrieve_backref_extents_in_range(
     Transaction &t,
@@ -102,8 +96,7 @@ public:
   /**
    * merge in-cache paddr_t -> laddr_t mappings to the on-disk backref tree
    */
-  using merge_cached_backrefs_iertr = base_iertr;
-  using merge_cached_backrefs_ret = merge_cached_backrefs_iertr::future<journal_seq_t>;
+  using merge_cached_backrefs_ret = base_iertr::future<journal_seq_t>;
   virtual merge_cached_backrefs_ret merge_cached_backrefs(
     Transaction &t,
     const journal_seq_t &limit,
@@ -130,11 +123,9 @@ public:
    * including backref extents, logical extents and lba extents,
    * visit them with scan_mapped_space_func_t
    */
-  using scan_mapped_space_iertr = base_iertr;
-  using scan_mapped_space_ret = scan_mapped_space_iertr::future<>;
   using scan_mapped_space_func_t = std::function<
     void(paddr_t, paddr_t, extent_len_t, extent_types_t, laddr_t)>;
-  virtual scan_mapped_space_ret scan_mapped_space(
+  virtual base_iertr::future<> scan_mapped_space(
     Transaction &t,
     scan_mapped_space_func_t &&f) = 0;
 

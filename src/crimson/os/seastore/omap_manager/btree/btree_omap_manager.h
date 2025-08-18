@@ -35,8 +35,7 @@ class BtreeOMapManager : public OMapManager {
    *
    * load omap tree root node
    */
-  using get_root_iertr = base_iertr;
-  using get_root_ret = get_root_iertr::future<OMapNodeRef>;
+  using get_root_ret = base_iertr::future<OMapNodeRef>;
   static get_root_ret get_omap_root(
     omap_context_t c,
     const omap_root_t &omap_root);

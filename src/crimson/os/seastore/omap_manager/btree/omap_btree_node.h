@@ -100,14 +100,12 @@ struct OMapNode : LogicalChildNode {
   using clear_ret = clear_iertr::future<>;
   virtual clear_ret clear(omap_context_t oc) = 0;
 
-  using full_merge_iertr = base_iertr;
-  using full_merge_ret = full_merge_iertr::future<OMapNodeRef>;
+  using full_merge_ret = base_iertr::future<OMapNodeRef>;
   virtual full_merge_ret make_full_merge(
     omap_context_t oc,
     OMapNodeRef right) = 0;
 
-  using make_balanced_iertr = base_iertr;
-  using make_balanced_ret = make_balanced_iertr::future
+  using make_balanced_ret = base_iertr::future
           <std::tuple<OMapNodeRef, OMapNodeRef, std::string>>;
   virtual make_balanced_ret make_balanced(
     omap_context_t oc,

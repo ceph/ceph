@@ -651,8 +651,7 @@ JournalTrimmerImpl::trim_alloc()
         t,
         target,
         config.max_backref_bytes_per_cycle
-      ).si_then([this, FNAME, &t](auto trim_alloc_to)
-        -> ExtentCallbackInterface::submit_transaction_direct_iertr::future<>
+      ).si_then([this, FNAME, &t](auto trim_alloc_to) -> base_iertr::future<>
       {
         DEBUGT("trim_alloc_to={}", t, trim_alloc_to);
         if (trim_alloc_to != JOURNAL_SEQ_NULL) {

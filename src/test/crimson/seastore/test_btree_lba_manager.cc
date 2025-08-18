@@ -607,7 +607,7 @@ struct btree_lba_manager_test : btree_test_base {
 	    return cache->retire_extent_addr(
 	      t, result.result.addr.get_paddr(), result.result.length);
 	  }
-	  return Cache::retire_extent_iertr::now();
+	  return base_iertr::now();
 	});
       }).unsafe_get();
     if (target->second.refcount == 0) {

@@ -88,7 +88,7 @@ class DummyNodeExtentManager final: public NodeExtentManager {
     }
   }
 
-  alloc_iertr::future<NodeExtentRef> alloc_extent(
+  base_iertr::future<NodeExtentRef> alloc_extent(
       Transaction& t, laddr_t hint, extent_len_t len) override {
     SUBTRACET(seastore_onode, "allocating {}B with hint {} ...", t, len, hint);
     if constexpr (SYNC) {
@@ -116,7 +116,7 @@ class DummyNodeExtentManager final: public NodeExtentManager {
     }
   }
 
-  getsuper_iertr::future<Super::URef> get_super(
+  base_iertr::future<Super::URef> get_super(
       Transaction& t, RootNodeTracker& tracker) override {
     SUBTRACET(seastore_onode, "get root ...", t);
     if constexpr (SYNC) {
@@ -146,7 +146,7 @@ class DummyNodeExtentManager final: public NodeExtentManager {
     return read_iertr::make_ready_future<NodeExtentRef>(extent);
   }
 
-  alloc_iertr::future<NodeExtentRef> alloc_extent_sync(
+  base_iertr::future<NodeExtentRef> alloc_extent_sync(
       Transaction& t, extent_len_t len) {
     assert(len % ALIGNMENT == 0);
     auto r = ceph::buffer::create_aligned(len, ALIGNMENT);
@@ -161,7 +161,7 @@ class DummyNodeExtentManager final: public NodeExtentManager {
         "allocated {}B at {} -- {}",
         t, extent->get_length(), extent->get_laddr(), *extent);
     assert(extent->get_length() == len);
-    return alloc_iertr::make_ready_future<NodeExtentRef>(extent);
+    return base_iertr::make_ready_future<NodeExtentRef>(extent);
   }
 
   retire_iertr::future<> retire_extent_sync(
@@ -177,10 +177,10 @@ class DummyNodeExtentManager final: public NodeExtentManager {
     return retire_iertr::now();
   }
 
-  getsuper_iertr::future<Super::URef> get_super_sync(
+  base_iertr::future<Super::URef> get_super_sync(
       Transaction& t, RootNodeTracker& tracker) {
     SUBTRACET(seastore_onode, "got root {}", t, root_laddr);
-    return getsuper_iertr::make_ready_future<Super::URef>(
+    return base_iertr::make_ready_future<Super::URef>(
         Super::URef(new DummySuper(t, tracker, &root_laddr)));
   }
 

@@ -263,7 +263,7 @@ public:
     laddr_t end,
     scan_mappings_func_t &&f) final;
 
-  rewrite_extent_ret rewrite_extent(
+  base_iertr::future<> rewrite_extent(
     Transaction &t,
     CachedExtentRef extent) final;
 
@@ -560,14 +560,14 @@ private:
     LBABtree &btree,
     laddr_t laddr);
 
-  using _get_cursors_ret = get_mappings_iertr::future<std::list<LBACursorRef>>;
+  using _get_cursors_ret = base_iertr::future<std::list<LBACursorRef>>;
   _get_cursors_ret get_cursors(
     op_context_t c,
     LBABtree& btree,
     laddr_t offset,
     extent_len_t length);
 
-  using resolve_indirect_cursor_ret = get_mappings_iertr::future<LBACursorRef>;
+  using resolve_indirect_cursor_ret = base_iertr::future<LBACursorRef>;
   resolve_indirect_cursor_ret resolve_indirect_cursor(
     op_context_t c,
     LBABtree& btree,

@@ -154,9 +154,7 @@ public:
   }
 
   /// Declare paddr retired in t
-  using retire_extent_iertr = base_iertr;
-  using retire_extent_ret = base_iertr::future<>;
-  retire_extent_ret retire_extent_addr(
+  base_iertr::future<> retire_extent_addr(
     Transaction &t, paddr_t addr, extent_len_t length);
 
   void retire_absent_extent_addr(
@@ -167,8 +165,7 @@ public:
    *
    * returns ref to current root or t.root if modified in t
    */
-  using get_root_iertr = base_iertr;
-  using get_root_ret = get_root_iertr::future<RootBlockRef>;
+  using get_root_ret = base_iertr::future<RootBlockRef>;
   get_root_ret get_root(Transaction &t);
 
   /**
@@ -188,9 +185,7 @@ public:
    *
    * Returns extent at offset if in cache
    */
-  using get_extent_if_cached_iertr = base_iertr;
-  using get_extent_if_cached_ret =
-    get_extent_if_cached_iertr::future<CachedExtentRef>;
+  using get_extent_if_cached_ret = base_iertr::future<CachedExtentRef>;
   get_extent_if_cached_ret get_extent_if_cached(
     Transaction &t,
     paddr_t paddr,
@@ -207,13 +202,13 @@ public:
       SUBDEBUGT(seastore_cache,
         "{} {}~0x{:x} is retired on t",
         t, type, paddr, len);
-      return get_extent_if_cached_iertr::make_ready_future<CachedExtentRef>();
+      return base_iertr::make_ready_future<CachedExtentRef>();
     } else if (result == Transaction::get_extent_ret::PRESENT) {
       if (ret->get_length() != len) {
         SUBDEBUGT(seastore_cache,
           "{} {}~0x{:x} is present on t with inconsistent length 0x{:x} -- {}",
           t, type, paddr, len, ret->get_length(), *ret);
-        return get_extent_if_cached_iertr::make_ready_future<CachedExtentRef>();
+        return base_iertr::make_ready_future<CachedExtentRef>();
       }
 
       ceph_assert(ret->get_type() == type);
@@ -245,7 +240,7 @@ public:
         "{} {}~0x{:x} is present on t -- {}",
         t, type, paddr, len, *ret);
       return ret->wait_io().then([ret] {
-        return get_extent_if_cached_iertr::make_ready_future<CachedExtentRef>(ret);
+        return base_iertr::make_ready_future<CachedExtentRef>(ret);
       });
     } // result == Transaction::get_extent_ret::ABSENT
 
@@ -256,7 +251,7 @@ public:
       SUBDEBUGT(seastore_cache,
         "{} {}~0x{:x} is absent in cache",
         t, type, paddr, len);
-      return get_extent_if_cached_iertr::make_ready_future<CachedExtentRef>();
+      return base_iertr::make_ready_future<CachedExtentRef>();
     }
 
     if (is_retired_placeholder_type(ret->get_type())) {
@@ -264,14 +259,14 @@ public:
       SUBDEBUGT(seastore_cache,
         "{} {}~0x{:x} ~0x{:x} is absent(placeholder) in cache",
         t, type, paddr, len, ret->get_length());
-      return get_extent_if_cached_iertr::make_ready_future<CachedExtentRef>();
+      return base_iertr::make_ready_future<CachedExtentRef>();
     }
 
     if (ret->get_length() != len) {
       SUBDEBUGT(seastore_cache,
         "{} {}~0x{:x} is present in cache with inconsistent length 0x{:x} -- {}",
         t, type, paddr, len, ret->get_length(), *ret);
-      return get_extent_if_cached_iertr::make_ready_future<CachedExtentRef>();
+      return base_iertr::make_ready_future<CachedExtentRef>();
     }
 
     ceph_assert(ret->get_type() == type);
@@ -301,7 +296,7 @@ public:
       "{} {}~0x{:x} is present in cache -- {}",
       t, type, paddr, len, *ret);
     return ret->wait_io().then([ret] {
-      return get_extent_if_cached_iertr::make_ready_future<
+      return base_iertr::make_ready_future<
         CachedExtentRef>(ret);
     });
   }
@@ -321,9 +316,8 @@ public:
    *
    * This path won't be accounted by the cache_access_stats_t.
    */
-  using get_extent_iertr = base_iertr;
   template <typename T>
-  get_extent_iertr::future<TCachedExtentRef<T>>
+  base_iertr::future<TCachedExtentRef<T>>
   get_caching_extent(
     Transaction &t,
     paddr_t offset,
@@ -372,7 +366,7 @@ public:
    * partially load buffer from partial_off~partial_len if not present.
    */
   template <typename T, typename Func>
-  get_extent_iertr::future<TCachedExtentRef<T>> get_absent_extent(
+  base_iertr::future<TCachedExtentRef<T>> get_absent_extent(
     Transaction &t,
     paddr_t offset,
     extent_len_t length,
@@ -428,7 +422,7 @@ public:
    * *atomically* prior to call this method.
    */
   template <typename T>
-  get_extent_iertr::future<TCachedExtentRef<T>> get_absent_extent(
+  base_iertr::future<TCachedExtentRef<T>> get_absent_extent(
     Transaction &t,
     paddr_t offset,
     extent_len_t length) {
@@ -436,7 +430,7 @@ public:
   }
 
   template <typename T, typename Func>
-  get_extent_iertr::future<TCachedExtentRef<T>> get_absent_extent(
+  base_iertr::future<TCachedExtentRef<T>> get_absent_extent(
     Transaction &t,
     paddr_t offset,
     extent_len_t length,
@@ -453,7 +447,7 @@ public:
     return extent->get_transactional_view(t);
   }
 
-  get_extent_iertr::future<> maybe_wait_accessible(
+  base_iertr::future<> maybe_wait_accessible(
     Transaction &t,
     CachedExtent &extent) final {
     // as of now, only lba tree nodes can go in here,
@@ -509,7 +503,7 @@ public:
 	if (needs_touch) {
 	  touch_extent_fully(*target_extent, &t_src, t.get_cache_hint());
 	}
-	return get_extent_iertr::now();
+	return base_iertr::now();
       });
     } else {
       assert(extent.is_mutable());
@@ -517,11 +511,11 @@ public:
       assert(extent.is_pending_in_trans(t.get_trans_id()));
       ++access_stats.trans_pending;
       ++stats.access.trans_pending;
-      return get_extent_iertr::now();
+      return base_iertr::now();
     }
   }
 
-  get_extent_iertr::future<CachedExtentRef>
+  base_iertr::future<CachedExtentRef>
   get_extent_viewable_by_trans(
     Transaction &t,
     CachedExtentRef extent) final
@@ -554,7 +548,7 @@ public:
         if (p_extent->is_mutable()) {
           assert(p_extent->is_fully_loaded());
           assert(!p_extent->is_pending_io());
-          return get_extent_iertr::make_ready_future<CachedExtentRef>(
+          return base_iertr::make_ready_future<CachedExtentRef>(
             CachedExtentRef(p_extent));
         } else {
           assert(p_extent->is_exist_clean());
@@ -600,7 +594,7 @@ public:
       if (extent->is_mutable()) {
         assert(extent->is_fully_loaded());
         assert(!extent->is_pending_io());
-        return get_extent_iertr::make_ready_future<CachedExtentRef>(extent);
+        return base_iertr::make_ready_future<CachedExtentRef>(extent);
       } else {
         assert(extent->is_exist_clean());
         p_extent = extent.get();
@@ -625,14 +619,14 @@ public:
       if (needs_touch) {
 	touch_extent_fully(*p_extent, &t_src, t.get_cache_hint());
       }
-      return get_extent_iertr::make_ready_future<CachedExtentRef>(
+      return base_iertr::make_ready_future<CachedExtentRef>(
         CachedExtentRef(p_extent));
     });
   }
 
   // wait extent io or do partial reads
   template <typename T>
-  get_extent_iertr::future<TCachedExtentRef<T>>
+  base_iertr::future<TCachedExtentRef<T>>
   read_extent_maybe_partial(
     Transaction &t,
     TCachedExtentRef<T> extent,
@@ -660,7 +654,7 @@ public:
       return trans_intr::make_interruptible(
         extent->wait_io()
       ).then_interruptible([extent] {
-        return get_extent_iertr::make_ready_future<TCachedExtentRef<T>>(extent);
+        return base_iertr::make_ready_future<TCachedExtentRef<T>>(extent);
       });
     }
   }
@@ -888,8 +882,7 @@ private:
    *
    * This path won't be accounted by the cache_access_stats_t.
    */
-  using get_extent_by_type_iertr = get_extent_iertr;
-  using get_extent_by_type_ret = get_extent_by_type_iertr::future<
+  using get_extent_by_type_ret = base_iertr::future<
     CachedExtentRef>;
   get_extent_by_type_ret get_caching_extent_by_type(
     Transaction &t,
@@ -1345,8 +1338,7 @@ public:
    * after replay to allow lba_manager (or w/e) to read in any ancestor
    * blocks.
    */
-  using init_cached_extents_iertr = base_iertr;
-  using init_cached_extents_ret = init_cached_extents_iertr::future<>;
+  using init_cached_extents_ret = base_iertr::future<>;
   template <typename F>
   init_cached_extents_ret init_cached_extents(
     Transaction &t,
@@ -1391,7 +1383,7 @@ public:
         });
       });
     }).handle_error_interruptible(
-      init_cached_extents_iertr::pass_further{},
+      base_iertr::pass_further{},
       crimson::ct_error::assert_all{
         "Invalid error in Cache::init_cached_extents"
       }
@@ -1453,8 +1445,7 @@ public:
    * Returns extents with get_dirty_from() < seq and adds to read set of
    * t.
    */
-  using get_next_dirty_extents_iertr = base_iertr;
-  using get_next_dirty_extents_ret = get_next_dirty_extents_iertr::future<
+  using get_next_dirty_extents_ret = base_iertr::future<
     std::vector<CachedExtentRef>>;
   get_next_dirty_extents_ret get_next_dirty_extents(
     Transaction &t,
