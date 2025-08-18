@@ -93,6 +93,7 @@ estimated time to the completion of journal replay::
 
   mds.a(mds.0): replay: 50.0446% complete - elapsed time: 582s, estimated time remaining: 581s
 
+.. _cephfs_troubleshooting_avoiding_recovery_roadblocks:
 
 Avoiding recovery roadblocks
 ----------------------------
@@ -204,17 +205,23 @@ Do the following when restoring your file system:
 Expediting MDS journal trim
 ===========================
 
-If your MDS journal grew too large (maybe your MDS was stuck in up:replay for a
-long time!), you will want to have the MDS trim its journal more frequently.
-You will know the journal is too large because of ``MDS_HEALTH_TRIM`` warnings.
+``MDS_HEALTH_TRIM`` warnings indicate that the MDS journal has grown too large.
+When the MDS journal has grown too large, use the ``mds_tick_interval`` tunable
+to modify the "MDS tick interval". The "tick" interval drives various upkeep
+activities in the MDS, and modifying the interval will decrease the size of the
+MDS journal by ensuring that it is trimmed more frequently.
 
-The main tunable available to do this is to modify the MDS tick interval. The
-"tick" interval drives several upkeep activities in the MDS. It is strongly
-recommended no significant file system load be present when modifying this tick
-interval. This setting only affects an MDS in ``up:active``. The MDS does not
+Make sure that there is no significant file-system load present when modifying
+``mds_tick_interval``. See
+:ref:`cephfs_troubleshooting_avoiding_recovery_roadblocks` for ways to reduce
+load on the CephFS.
+
+This setting affects only MDSes in the ``up:active`` state. The MDS does not
 trim its journal during recovery.
 
-.. code:: bash
+Run the following command to modify the ``mds_tick_interval`` tunable:
+
+.. prompt:: bash #
 
    ceph config set mds mds_tick_interval 2
 
