@@ -1495,6 +1495,14 @@ record_t Cache::prepare_record(
 	  extent->get_length(),
 	  extent->get_type()));
     } else if (is_backref_node(extent->get_type())) {
+      // The retire alloc deltas are used to identify the invalid backref extent
+      // deltas during replay when using CircularBoundedJournal, see
+      // build_paddr_seq_map in CBJournal::replay().
+      rel_delta.alloc_blk_ranges.emplace_back(
+	alloc_blk_t::create_retire(
+	  extent->get_paddr(),
+	  extent->get_length(),
+	  extent->get_type()));
       remove_backref_extent(extent->get_paddr());
     } else {
       ERRORT("Got unexpected extent type: {}", t, *extent);

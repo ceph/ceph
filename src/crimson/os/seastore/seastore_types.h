@@ -2565,6 +2565,7 @@ struct alloc_blk_t {
       extent_len_t len,
       extent_types_t type) {
     assert(is_backref_mapped_type(type) ||
+	   is_backref_node(type) ||
 	   is_retired_placeholder_type(type));
     return alloc_blk_t(paddr, L_ADDR_NULL, len, type);
   }
