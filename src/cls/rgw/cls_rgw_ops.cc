@@ -187,7 +187,7 @@ list<rgw_cls_link_olh_op> rgw_cls_link_olh_op::generate_test_instances()
   rgw_cls_link_olh_op op;
   op.key.name = "name";
   op.olh_tag = "olh_tag";
-  op->op = CLS_RGW_OP_LINK_OLH_DM;
+  op.op = CLS_RGW_OP_LINK_OLH_DM;
   op.op_tag = "op_tag";
   op.olh_epoch = 123;
   list<rgw_bucket_dir_entry_meta> l = rgw_bucket_dir_entry_meta::generate_test_instances();
