@@ -2113,6 +2113,14 @@ Cache::replay_delta(
     decode(alloc_delta, delta.bl);
     backref_entry_refs_t backref_entries;
     for (auto &alloc_blk : alloc_delta.alloc_blk_ranges) {
+      if (is_backref_node(alloc_blk.type)) {
+	// On startup, BackrefManager::scan_mapped_space() will scan all
+	// mappings and internal entries to rebuild the space management.
+	// It's unnecessary to apply the alloc deltas of backref extents
+	// to the cached backref entries and these deltas are only used
+	// to skip invalid deltas for RBM backends.
+	continue;
+      }
       if (alloc_blk.paddr.is_record_relative()) {
 	alloc_blk.paddr = record_base.add_relative(alloc_blk.paddr);
       } else {
