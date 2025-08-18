@@ -10833,8 +10833,11 @@ int Client::_release_fh(Fh *f)
   if (in->snapid == CEPH_NOSNAP) {
     FSCryptKeyHandlerRef kh;
     get_keyhandler(in->fscrypt_ctx, kh);
-    if (kh && kh->di) {
-      kh->di->del_inode(in->ino);
+    if (kh) {
+      auto& di = kh->get_di();
+      if (di) {
+         di->del_inode(in->ino);
+      }
     }
     if (in->put_open_ref(f->mode)) {
       _flush(in, new C_Client_FlushComplete(this, in));
@@ -10889,8 +10892,11 @@ int Client::_open(const InodeRef& in, int flags, mode_t mode, Fh **fhp,
 
   FSCryptKeyHandlerRef kh;
   get_keyhandler(in->fscrypt_ctx, kh);
-  if (kh && kh->di) {
-    kh->di->add_inode(in->ino);
+  if (kh) {
+    auto& di = kh->get_di();
+    if (di) {
+      di->add_inode(in->ino);
+    }
   }
 
   in->get_open_ref(cmode);  // make note of pending open, since it effects _wanted_ caps.
@@ -10977,8 +10983,11 @@ int Client::_open(const InodeRef& in, int flags, mode_t mode, Fh **fhp,
   } else {
     FSCryptKeyHandlerRef kh;
     get_keyhandler(in->fscrypt_ctx, kh);
-    if (kh && kh->di) {
-      kh->di->del_inode(in->ino);
+    if (kh) {
+      auto& di = kh->get_di();
+      if (di) {
+        di->del_inode(in->ino);
+      }
     }
     in->put_open_ref(cmode);
   }
@@ -15872,8 +15881,11 @@ int Client::_create(const walk_dentry_result& wdr, int flags, mode_t mode,
   if(fhp) {
     FSCryptKeyHandlerRef kh;
     get_keyhandler((*inp)->fscrypt_ctx, kh);
-    if (kh && kh->di) {
-      kh->di->add_inode((*inp)->ino);
+    if (kh) {
+      auto& di = kh->get_di();
+      if (di) {
+        di->add_inode((*inp)->ino);
+      }
     }
 
     (*inp)->get_open_ref(cmode);
@@ -16302,9 +16314,12 @@ int Client::ll_rmdir(Inode *in, const char *name, const UserPerm& perms)
 int Client::get_keyhandler(FSCryptContextRef fscrypt_ctx, FSCryptKeyHandlerRef& kh){
   if (fscrypt_ctx) {
     int r = fscrypt->get_key_store().find(fscrypt_ctx->master_key_identifier, kh);
-    if (kh)
-      if (kh && kh->di)
+    if (kh) {
+      auto& di = kh->get_di();
+      if (di) {
         return r;
+      }
+    }
   }
   return 0;
 }

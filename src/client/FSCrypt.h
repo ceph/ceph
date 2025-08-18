@@ -324,6 +324,8 @@ public:
   }
 };
 
+using FSCryptDecryptedInodesRef = std::shared_ptr<FSCryptDecryptedInodes>;
+
 class FSCryptKeyHandler {
   ceph::shared_mutex lock = ceph::make_shared_mutex("FSCryptKeyHandler");
   int64_t epoch = -1;
@@ -336,9 +338,10 @@ public:
   void reset(int64_t epoch, FSCryptKeyRef k);
 
   int64_t get_epoch();
+  FSCryptDecryptedInodesRef di;
   std::list<int>& get_users() { return users; }
   FSCryptKeyRef& get_key();
-  FSCryptDecryptedInodes* di;
+  FSCryptDecryptedInodesRef& get_di();
   bool present = false;
 };
 
