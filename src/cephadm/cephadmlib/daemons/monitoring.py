@@ -355,8 +355,10 @@ class Monitoring(ContainerDaemonForm):
             # correct ownership and permissions for Alloy to function correctly in the container.
             etc_path = os.path.join(data_dir, 'etc/alloy')
             mounts[etc_path] = '/etc/alloy:Z'
+
             # Extract UID and GID for the 'alloy' user
             uid, gid = self.extract_uid_gid(ctx, daemon_type)
+
             # Ensure the /var/log/ceph directory exists
             os.makedirs(log_dir, exist_ok=True)
             try:
@@ -365,11 +367,25 @@ class Monitoring(ContainerDaemonForm):
                 # If the ownership doesn't match the expected UID and GID, update it
                 if (stat_info.st_uid, stat_info.st_gid) != (uid, gid):
                     os.chown(log_dir, uid, gid)  # Set ownership to the 'alloy' user (UID 473, GID 473)
-                    # Set directory permissions to 0o750 (rwx for owner, r-x for group, no access for others)
-                    os.chmod(log_dir, 0o750)
+                    os.chmod(log_dir, 0o750)     # Permissions rwx for owner, r-x for group
             except Exception as e:
                 raise Error(f"Failed to fix permissions for {log_dir}: {e}")
+
+            # Mount Ceph logs inside the container
             mounts[log_dir] = '/var/log/ceph:Z'
+
+            # Ensure persistent storage for Alloy's internal state (positions, etc.)
+            state_path = os.path.join(data_dir, 'alloy/data')
+            os.makedirs(state_path, exist_ok=True)
+            try:
+                stat_info = os.stat(state_path)
+                if (stat_info.st_uid, stat_info.st_gid) != (uid, gid):
+                    os.chown(state_path, uid, gid)
+                    os.chmod(state_path, 0o750)  # rwx for alloy user, r-x for group
+            except Exception as e:
+                raise Error(f"Failed to fix permissions for {state_path}: {e}")
+
+            mounts[state_path] = '/var/lib/alloy/data:Z'
         elif daemon_type == 'node-exporter':
             mounts[
                 os.path.join(data_dir, 'etc/node-exporter')
