@@ -279,6 +279,10 @@ public:
     Onode *d_onode = nullptr; // The desination node in case of clone
   };
 
+  using touch_iertr = base_iertr;
+  using touch_ret = touch_iertr::future<>;
+  touch_ret touch(context_t ctx);
+
   /// Writes bl to [offset, offset + bl.length())
   using write_iertr = base_iertr;
   using write_ret = write_iertr::future<>;
@@ -327,6 +331,15 @@ public:
   using clone_ret = clone_iertr::future<>;
   clone_ret clone(context_t ctx);
 
+  clone_ret clone_range(
+    context_t ctx,
+    extent_len_t srcoff,
+    extent_len_t len,
+    extent_len_t destoff);
+
+  using rename_iertr = base_iertr;
+  using rename_ret = rename_iertr::future<>;
+  rename_ret rename(context_t ctx);
 private:
   /// Updates region [_offset, _offset + bl.length) to bl
   write_ret overwrite(
@@ -341,7 +354,14 @@ private:
   write_iertr::future<std::optional<LBAMapping>>
   prepare_data_reservation(
     context_t ctx,
+    Onode &onode,
     object_data_t &object_data,
+    extent_len_t size);
+
+  write_iertr::future<LBAMapping> prepare_shared_region(
+    context_t ctx,
+    Onode &onode,
+    laddr_hint_t hint,
     extent_len_t size);
 
   /// Trims data past size
@@ -359,7 +379,8 @@ private:
   enum op_type_t : uint8_t {
     OVERWRITE,
     ZERO,
-    TRIM
+    TRIM,
+    CLONE_RANGE
   };
   enum edge_handle_policy_t : uint8_t {
     DELTA_BASED_PUNCH,
@@ -381,6 +402,7 @@ private:
 
     //XXX: may need to adjust once object data partial write is available.
     if (edge_mapping.is_pending()) {
+      ceph_assert(op_type != op_type_t::CLONE_RANGE);
       // TODO: all LBAMapping::is_XXX_pending() methods search the parent
       //       lba nodes, which consumes cpu. Fortunately, this branch happens
       //       mostly in the recovery case, which is relatively rare compared
@@ -548,6 +570,83 @@ private:
     overwrite_range_t &overwrite_range,
     data_t &data,
     LBAMapping edge_mapping);
+
+  clone_ret do_rollback(
+    context_t ctx,
+    object_data_t &object_data,
+    object_data_t &d_object_data);
+
+  clone_ret do_clone(
+    context_t ctx,
+    object_data_t &object_data,
+    object_data_t &d_object_data);
+
+  struct move_mapping_params_t {
+    laddr_t begin = L_ADDR_NULL;
+    laddr_t end = L_ADDR_NULL;
+  };
+
+  /*
+   * move_and_clone_direct_mappings
+   *
+   * Move direct mappings within range [src_params.begin, src_params.end) to the
+   * corresponding positions in range [dest_params.begin, dest_params.end), and
+   * clone the moved mappings at the original position.
+   */
+  using move_mappings_iertr = LBAManager::move_mapping_iertr;
+  using move_mappings_ret = move_mappings_iertr::future<LBAMapping>;
+  move_mappings_ret move_and_clone_direct_mappings(
+    context_t ctx,
+    move_mapping_params_t src_params,
+    move_mapping_params_t dest_params,
+    LBAMapping src,
+    LBAMapping dest);
+
+  clone_ret do_clone_range(
+    context_t ctx,
+    const laddr_t &src_base,
+    const laddr_t &dest_base,
+    extent_len_t offset,
+    extent_len_t len,
+    LBAMapping &src_first_mapping,
+    LBAMapping &dest_first_mapping,
+    bufferlist &head_padding,
+    bufferlist &tail_padding);
+
+  // _clone_range first move the src mappings to the direct range,
+  // and then clone the moved mappings into the dest range
+  clone_ret _clone_range(
+    context_t ctx,
+    laddr_t &src_base,
+    laddr_t &dest_base,
+    laddr_t &direct_base,
+    extent_len_t offset,
+    extent_len_t len,
+    LBAMapping src_first_mapping,
+    LBAMapping dest_first_mapping,
+    LBAMapping first_direct_mapping);
+
+  base_iertr::future<LBAMapping> punch_single_mapping_hole(
+    context_t ctx,
+    overwrite_range_t &overwrite_range,
+    data_t &data,
+    LBAMapping left_mapping,
+    op_type_t op_type);
+
+  base_iertr::future<LBAMapping> punch_hole(
+    context_t ctx,
+    overwrite_range_t &overwrite_range,
+    data_t &data,
+    LBAMapping left_mapping,
+    op_type_t op_type) {
+    if (overwrite_range.is_range_in_mapping(left_mapping)) {
+      return punch_single_mapping_hole(
+	ctx, overwrite_range, data, std::move(left_mapping), op_type);
+    } else {
+      return punch_multi_mapping_hole(
+	ctx, overwrite_range, data, std::move(left_mapping), op_type);
+    }
+  }
 
 private:
   /**

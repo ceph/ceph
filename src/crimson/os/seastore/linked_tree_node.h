@@ -385,6 +385,10 @@ public:
     set_child_ptracker(child);
   }
 
+  void reset_child_ptr(btreenode_pos_t pos) {
+    children[pos] = get_reserved_ptr<T, node_key_t>();
+  }
+
 protected:
   ParentNode(btreenode_pos_t capacity)
     : children(capacity, nullptr) {}
@@ -864,7 +868,8 @@ protected:
 
     for (auto i : me) {
       auto child = this->children[i.get_offset()];
-      if (is_valid_child_ptr(child) && child->node_begin() != i.get_key()) {
+      if (is_valid_child_ptr(child) &&
+	  (child->node_begin() != i.get_key() || !child->_is_valid())) {
 	SUBERROR(seastore_fixedkv_tree,
 	  "stable child not valid: child {}, key {}",
 	  *dynamic_cast<CachedExtent*>(child),

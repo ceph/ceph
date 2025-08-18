@@ -113,14 +113,29 @@ base_iertr::future<LBAMapping> LBAMapping::refresh()
     direct_cursor,
     indirect_cursor,
     [](auto &direct_cursor, auto &indirect_cursor) {
-    return seastar::futurize_invoke([&direct_cursor] {
+    return seastar::futurize_invoke([&] {
       if (direct_cursor) {
-	return direct_cursor->refresh();
+	return direct_cursor->refresh().si_then([&] {
+          // the current mapping might have been turned into
+          // indirect after the refresh, we need to handle
+	  // this case. This happens in the case of move_mapping
+          if (direct_cursor->is_indirect()) {
+            assert(!indirect_cursor);
+            indirect_cursor = std::move(direct_cursor);
+          }
+        });
       }
       return base_iertr::now();
-    }).si_then([&indirect_cursor] {
+    }).si_then([&] {
       if (indirect_cursor) {
-	return indirect_cursor->refresh();
+	return indirect_cursor->refresh().si_then([&] {
+          // the current mapping might have been turned into
+          // direct after the refresh, we need to handle this
+	  // case. This happens in the case of overwrite
+          if (!indirect_cursor->is_indirect()) {
+            direct_cursor = std::move(indirect_cursor);
+          }
+        });
       }
       return base_iertr::now();
     }).si_then([&direct_cursor, &indirect_cursor] {

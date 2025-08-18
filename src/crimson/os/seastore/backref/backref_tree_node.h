@@ -33,14 +33,14 @@ constexpr size_t INTERNAL_NODE_CAPACITY = 254;
  *   checksum   : ceph_le32[1]                    4B
  *   size       : ceph_le32[1]                    4B
  *   meta       : backref_node_meta_le_t[1]       20B
- *   keys       : paddr_le_t[CAPACITY]            (193*8)B
- *   values     : backref_map_val_le_t[CAPACITY]  (193*13)B
- *                                                = 4081B
+ *   keys       : paddr_le_t[CAPACITY]            (140*8)B
+ *   values     : backref_map_val_le_t[CAPACITY]  (140*21)B
+ *                                                = 4088B
  *
  * TODO: update FixedKVNodeLayout to handle the above calculation
  * TODO: the above alignment probably isn't portable without further work
  */
-constexpr size_t LEAF_NODE_CAPACITY = 193;
+constexpr size_t LEAF_NODE_CAPACITY = 140;
 
 using BackrefNode = FixedKVNode<paddr_t>;
 

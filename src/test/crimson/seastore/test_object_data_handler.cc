@@ -12,8 +12,6 @@ using namespace crimson::os;
 using namespace crimson::os::seastore;
 
 #define MAX_OBJECT_SIZE (16<<20)
-#define DEFAULT_OBJECT_DATA_RESERVATION (16<<20)
-#define DEFAULT_OBJECT_METADATA_RESERVATION (16<<20)
 
 namespace {
   [[maybe_unused]] seastar::logger& logger() {
@@ -25,7 +23,7 @@ class TestOnode final : public Onode {
   onode_layout_t layout;
 
 public:
-  TestOnode(uint32_t ddr, uint32_t dmr) : Onode(ddr, dmr, hobject_t()) {}
+  TestOnode() : Onode(hobject_t()) {}
   const onode_layout_t &get_layout() const final {
     return layout;
   }
@@ -36,8 +34,34 @@ public:
   bool is_alive() const final {
     return true;
   }
-  laddr_t get_hint() const final {return L_ADDR_MIN; }
+  laddr_hint_t get_hint() const {
+    laddr_hint_t hint;
+    hint.addr = laddr_t::from_byte_offset(0);
+    hint.condition = laddr_conflict_condition_t::all_at_object_content;
+    hint.policy = laddr_conflict_policy_t::linear_search;
+    hint.block_size = laddr_t::UNIT_SIZE;
+    return hint;
+  }
+  laddr_hint_t init_hint(
+    extent_len_t block_size,
+    bool is_metadata) const final {
+    return get_hint();
+  }
+  laddr_hint_t generate_clone_hint(
+    local_object_id_t object_id,
+    extent_len_t block_size,
+    bool is_metadata) const final {
+    return get_hint();
+  }
   ~TestOnode() final = default;
+
+  void update_shared_clone_id(Transaction &t, local_clone_id_t id) final {
+    assert(id != LOCAL_CLONE_ID_NULL);
+    with_mutable_layout(t, [id](onode_layout_t &mlayout) {
+      assert(local_clone_id_t(mlayout.shared_clone_id) != LOCAL_CLONE_ID_NULL);
+      mlayout.shared_clone_id = id;
+    });
+  }
 
   void update_onode_size(Transaction &t, uint32_t size) final {
     with_mutable_layout(t, [size](onode_layout_t &mlayout) {
@@ -281,9 +305,7 @@ struct object_data_handler_test_t:
   }
 
   seastar::future<> set_up_fut() final {
-    onode = new TestOnode(
-      DEFAULT_OBJECT_DATA_RESERVATION,
-      DEFAULT_OBJECT_METADATA_RESERVATION);
+    onode = new TestOnode();
     known_contents = buffer::create(4<<20 /* 4MB */);
     memset(known_contents.c_str(), 0, known_contents.length());
     size = 0;

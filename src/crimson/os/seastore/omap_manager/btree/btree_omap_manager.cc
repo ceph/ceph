@@ -18,7 +18,9 @@ BtreeOMapManager::BtreeOMapManager(
   : tm(tm) {}
 
 BtreeOMapManager::initialize_omap_ret
-BtreeOMapManager::initialize_omap(Transaction &t, laddr_t hint,
+BtreeOMapManager::initialize_omap(
+  Transaction &t,
+  laddr_hint_t hint,
   omap_type_t type)
 {
   LOG_PREFIX(BtreeOMapManager::initialize_omap);
@@ -30,7 +32,10 @@ BtreeOMapManager::initialize_omap(Transaction &t, laddr_t hint,
       omap_node_meta_t meta{1};
       root_extent->set_meta(meta);
       omap_root_t omap_root;
-      omap_root.update(root_extent->get_laddr(), 1, hint, type);
+      laddr_t root_laddr = root_extent->get_laddr();
+      auto new_hint = laddr_hint_t::create_object_md_hint(
+	root_laddr.get_clone_prefix(), hint.block_size);
+      omap_root.update(root_laddr, 1, new_hint, type);
       t.get_omap_tree_stats().depth = 1u;
       t.get_omap_tree_stats().extents_num_delta++;
       return initialize_omap_iertr::make_ready_future<omap_root_t>(omap_root);
@@ -79,12 +84,12 @@ BtreeOMapManager::handle_root_split(
     nroot->insert_child_ptr(
       nroot->iter_begin().get_offset(),
       dynamic_cast<BaseChildNode<OMapInnerNode, std::string>*>(left.get()));
-    nroot->journal_inner_insert(nroot->iter_begin(), left->get_laddr(),
+    nroot->journal_inner_insert(nroot->iter_begin(), left->get_laddr().get_offset_blocks(),
                                 BEGIN_KEY, nroot->maybe_get_delta_buffer());
     nroot->insert_child_ptr(
       (nroot->iter_begin() + 1).get_offset(),
       dynamic_cast<BaseChildNode<OMapInnerNode, std::string>*>(right.get()));
-    nroot->journal_inner_insert(nroot->iter_begin() + 1, right->get_laddr(),
+    nroot->journal_inner_insert(nroot->iter_begin() + 1, right->get_laddr().get_offset_blocks(),
                                 pivot, nroot->maybe_get_delta_buffer());
     omap_root.update(nroot->get_laddr(), omap_root.get_depth() + 1, omap_root.hint,
       omap_root.get_type());
@@ -109,7 +114,7 @@ BtreeOMapManager::handle_root_merge(
   auto old_root = *(mresult.need_merge);
   auto iter = old_root->cast<OMapInnerNode>()->iter_begin();
   omap_root.update(
-    iter->get_val(),
+    omap_root.addr.with_offset_by_blocks(iter->get_val()),
     omap_root.depth -= 1,
     omap_root.hint,
     omap_root.get_type());
@@ -338,7 +343,7 @@ BtreeOMapManager::omap_clear(
     ).si_then([&omap_root] (auto ret) {
       omap_root.update(
 	L_ADDR_NULL,
-	0, L_ADDR_MIN, omap_root.get_type());
+	0, LADDR_HINT_NULL, omap_root.get_type());
       return omap_clear_iertr::now();
     });
   }).handle_error_interruptible(
