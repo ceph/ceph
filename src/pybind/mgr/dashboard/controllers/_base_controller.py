@@ -1,3 +1,4 @@
+import datetime
 import inspect
 import json
 import logging
@@ -279,9 +280,15 @@ class BaseController:
                                                              if version else 'application/xml')
                 return ret.encode('utf8')
             if json_response:
+                # convert datetime obj so json can serialize properly
+                def json_default(obj):
+                    if isinstance(obj, datetime.datetime):
+                        return obj.isoformat().replace("+00:00", "Z")
+                    return str(obj)
+
                 cherrypy.response.headers['Content-Type'] = (version.to_mime_type(subtype='json')
                                                              if version else 'application/json')
-                ret = json.dumps(ret).encode('utf8')
+                ret = json.dumps(ret, default=json_default).encode('utf8')
             return ret
         return inner
 
