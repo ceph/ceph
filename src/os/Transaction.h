@@ -195,6 +195,7 @@ public:
     TransactionData(TransactionData&& other) noexcept :
       ops(other.ops),
       fadvise_flags(other.fadvise_flags) {
+      unused1 = unused2 = unused3 = 0;
       other.ops = 0;
       other.fadvise_flags = 0;
     }
