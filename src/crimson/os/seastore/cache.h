@@ -417,9 +417,9 @@ public:
 	      PLACEMENT_HINT_NULL,
 	      NULL_GENERATION,
 	      TRANS_ID_NULL);
-    SUBDEBUG(seastore_cache,
+    SUBDEBUGT(seastore_cache,
 	"{} {}~0x{:x} is absent, add extent and reading range 0x{:x}~0x{:x} ... -- {}",
-	T::TYPE, offset, length, partial_off, partial_len, *ret);
+	t, T::TYPE, offset, length, partial_off, partial_len, *ret);
     add_extent(ret);
     extent_init_func(*ret);
     cache_access_stats_t& access_stats = get_by_ext(
@@ -1602,6 +1602,55 @@ public:
     booting = false;
     extents_index.clear();
   }
+
+  template <typename T>
+  struct read_extent_t {
+    TCachedExtentRef<T> extent;
+    const extent_len_t offset = 0;
+    const extent_len_t length = 0;
+  };
+  template <typename T>
+  get_extent_iertr::future<> read_extents_maybe_partial(
+    Transaction &t,
+    std::vector<read_extent_t<T>> &&exts)
+  {
+    LOG_PREFIX(Cache::read_extents_maybe_partial);
+    auto extents = std::move(exts);
+    std::vector<get_extent_iertr::future<>> read_extent_futs;
+    std::vector<read_extent_t<T>> absent_extents;
+    for (auto &ext : extents) {
+      auto &extent = ext.extent;
+      SUBDEBUGT(seastore_cache, "reading extent {} 0x{:x}~0x{:x} ...",
+	       t, *extent, ext.offset, ext.length);
+      assert(is_aligned(ext.offset, get_block_size()));
+      assert(is_aligned(ext.length, get_block_size()));
+      assert(extent->get_paddr().is_absolute());
+      if (extent->is_range_loaded(ext.offset, ext.length)) {
+	// the range of the extent has already been loaded, just do wait_io
+	SUBDEBUG(seastore_cache, "extent loaded");
+	read_extent_futs.emplace_back(
+	  trans_intr::make_interruptible(
+	    extent->wait_io()
+	  ).then_interruptible([] { return get_extent_iertr::now(); }));
+	continue;
+      }
+      if (extent->is_pending_io()) {
+	// the extent is pending on an outstanding io,
+	// fallback to single extent loading
+	read_extent_futs.emplace_back(
+	  read_extent_maybe_partial(t, extent, ext.offset, ext.length
+	  ).discard_result());
+	continue;
+      }
+      assert(extent->state == CachedExtent::extent_state_t::EXIST_CLEAN ||
+	     extent->state == CachedExtent::extent_state_t::CLEAN);
+      absent_extents.emplace_back(ext);
+    }
+    co_await read_absent_extents_maybe_partial(t, std::move(absent_extents));
+    co_await trans_intr::parallel_for_each(
+      read_extent_futs, [](auto &fut) { return std::move(fut); });
+  }
+
 private:
   void touch_extent_fully(
       CachedExtent &ext,
@@ -1971,6 +2020,107 @@ private:
     ).safe_then([](auto extent) {
       return extent->template cast<T>();
     });
+  }
+
+  template <typename T>
+  get_extent_ertr::future<> read_absent_extents_maybe_partial(
+    Transaction &t,
+    std::vector<read_extent_t<T>> &&exts)
+  {
+    LOG_PREFIX(Cache::read_absent_extents_maybe_partial);
+    auto extents = std::move(exts);
+    struct range_to_read_t {
+      paddr_t addr = P_ADDR_NULL;
+      load_range_t range;
+    };
+    std::vector<range_to_read_t> ranges_to_read;
+    std::vector<TCachedExtentRef<T>> extents_read;
+    std::vector<get_extent_iertr::future<>> read_extent_futs;
+    const auto t_src = t.get_src();
+    // get all the ranges of extents that are to be loaded
+    for (auto &ext : extents) {
+      auto &extent = ext.extent;
+      SUBDEBUGT(seastore_cache, "reading extent {} 0x{:x}~0x{:x} ...",
+	       t, *extent, ext.offset, ext.length);
+      assert(extent->state == CachedExtent::extent_state_t::EXIST_CLEAN ||
+	     extent->state == CachedExtent::extent_state_t::CLEAN);
+      extents_read.emplace_back(extent);
+      extent->set_io_wait(extent->state);
+      auto old_length = extent->get_loaded_length();
+      load_ranges_t to_read = extent->load_ranges(ext.offset, ext.length);
+      auto new_length = extent->get_loaded_length();
+      assert(new_length > old_length);
+      pinboard->increase_cached_size(*extent, new_length - old_length, &t_src);
+      for (auto &range : to_read.ranges) {
+	auto range_paddr = extent->get_paddr() + range.offset;
+	ranges_to_read.emplace_back(range_to_read_t{range_paddr, range});
+      }
+    }
+    paddr_t off = P_ADDR_NULL;
+    extent_len_t len = 0;
+    std::vector<ExtentPlacementManager::read_ertr::future<>> futs;
+    std::vector<bufferptr> batch;
+    // load ranges that are successive in the paddr space with
+    // a single readv request
+    for (auto &range : ranges_to_read) {
+      if (off == P_ADDR_NULL) {
+	off = range.addr;
+	len += range.range.ptr.length();
+	batch.emplace_back(std::move(range.range.ptr));
+      } else if (off + len == range.addr) {
+	len += range.range.ptr.length();
+	batch.emplace_back(std::move(range.range.ptr));
+      } else {
+	futs.emplace_back(epm.readv(off, std::move(batch)));
+	len = range.range.ptr.length();
+	off = range.addr;
+	batch.emplace_back(std::move(range.range.ptr));
+      }
+    }
+    if (!batch.empty()) {
+      futs.emplace_back(epm.readv(off, std::move(batch)));
+      len = 0;
+      off = P_ADDR_NULL;
+    }
+
+    // TODO: when_all_succeed should be utilized here, however, it doesn't
+    // 	   actually work with interruptible errorated futures for now.
+    co_await ExtentPlacementManager::read_ertr::parallel_for_each(
+      futs, [](auto &fut) { return std::move(fut);
+    }).handle_error(
+      get_extent_ertr::pass_further{},
+      crimson::ct_error::assert_all{
+	"Cache::read_extent: invalid error"
+      }
+    );
+    for (auto &extent : extents_read) {
+      ceph_assert(extent->state == CachedExtent::extent_state_t::EXIST_CLEAN
+	|| extent->state == CachedExtent::extent_state_t::CLEAN
+	|| !extent->is_valid());
+      if (extent->is_valid()) {
+	if (extent->is_fully_loaded()) {
+	  // crc will be checked against LBA leaf entry for logical extents,
+	  // or check against in-extent crc for physical extents.
+	  if (epm.get_checksum_needed(extent->get_paddr())) {
+	    extent->last_committed_crc = extent->calc_crc32c();
+	  } else {
+	    extent->last_committed_crc = CRC_NULL;
+	  }
+	  // on_clean_read() may change the content,
+	  // call after calc_crc32c()
+	  extent->on_clean_read();
+	  SUBDEBUGT(seastore_cache, "read extent done -- {}", t, *extent);
+	} else {
+	  extent->last_committed_crc = CRC_NULL;
+	  SUBDEBUGT(seastore_cache,
+	    "read extent done (partial) -- {}", t, *extent);
+	}
+      } else {
+	SUBDEBUGT(seastore_cache,
+	  "read extent done (invalidated) -- {}", t, *extent);
+      }
+      extent->complete_io();
+    }
   }
 
   // Extents in cache may contain placeholders
