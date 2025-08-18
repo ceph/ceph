@@ -130,12 +130,12 @@ void redis_exec_connection_pool(const DoutPrefixProvider* dpp,
 				boost::redis::generic_response& resp,
 				optional_yield y)
 {
-    if(redis_pool==nullptr)
+    if(!redis_pool)[[unlikely]]
     {
 	redis_exec(conn, ec, req, resp, y);
 	ldpp_dout(dpp, 0) << "Directory::" << __func__ << " not using connection-pool, it's using the shared connection " << dendl;
     }
-    else
+    else[[likely]]
     	redis_exec_cp(redis_pool, ec, req, resp, y);
 }
 
@@ -148,12 +148,12 @@ void redis_exec_connection_pool(const DoutPrefixProvider* dpp,
 				boost::redis::response<Types...>& resp,
 				optional_yield y)
 {
-    if(redis_pool==nullptr)
+    if(!redis_pool)[[unlikely]]
     {
 	redis_exec(conn, ec, req, resp, y);
 	ldpp_dout(dpp, 0) << "Directory::" << __func__ << " not using connection-pool, it's using the shared connection " << dendl;
     }
-    else
+    else[[likely]]
     	redis_exec_cp(redis_pool, ec, req, resp, y);
 }
 
