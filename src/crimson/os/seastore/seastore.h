@@ -38,7 +38,6 @@ class TransactionManager;
 enum class op_type_t : uint8_t {
     DO_TRANSACTION = 0,
     READ,
-    WRITE,
     GET_ATTR,
     GET_ATTRS,
     STAT,
