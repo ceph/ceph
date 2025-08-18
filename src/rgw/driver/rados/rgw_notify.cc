@@ -1369,7 +1369,7 @@ int get_persistent_queue_stats(const DoutPrefixProvider *dpp, librados::IoCtx &r
     stats.queue_size += shard_size; 
     stats.queue_entries += shard_entries;
     if (ret < 0) {
-      ldpp_dout(dpp, 1) << "ERROR: failed to get the shard: " << shard_name << "'s size or the number of entries: " << ret << dendl;
+      ldpp_dout(dpp, 1) << "ERROR: failed to get the size or number of entries for queue shard: " << shard_name << ret << dendl;
       return ret;
     }
   }

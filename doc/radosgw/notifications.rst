@@ -85,11 +85,11 @@ which tells the client that it may retry later.
 .. tip:: To minimize the latency added by asynchronous notification, we
    recommended placing the "log" pool on fast media.
 
-The following are the global configurations for asynchronous notifications:
+Persistent bucket notifications are managed by the following central configuration options:
 
 .. confval:: rgw_bucket_persistent_notif_num_shards
 
-.. note:: For topics created during upgrade, per-key reordering of notifications may
+.. note:: When a topic is created during a Ceph upgrade, per-key reordering of notifications may
    happen on any bucket mapped to that topic.
    
 .. note:: Persistent topics that were created on a radosgw that does not support sharding, will be treated as a single shard topics
