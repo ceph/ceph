@@ -379,20 +379,20 @@ public:
   }
 
   /*
-   * get_absent_extent
+   * prepare_absent_extent
    *
-   * The extent in query is supposed to be absent in Cache.
-   * partially load buffer from partial_off~partial_len if not present.
+   * Prepare the extent that's absent in Cache, this is for later
+   * batch reads.
    */
   template <typename T, typename Func>
-  get_extent_iertr::future<TCachedExtentRef<T>> get_absent_extent(
+  TCachedExtentRef<T> prepare_absent_extent(
     Transaction &t,
     paddr_t offset,
     extent_len_t length,
     extent_len_t partial_off,
     extent_len_t partial_len,
     Func &&extent_init_func) {
-    LOG_PREFIX(Cache::get_absent_extent);
+    LOG_PREFIX(Cached::prepare_absent_extent);
 
 #ifndef NDEBUG
     {
@@ -405,8 +405,7 @@ public:
     }
 #endif
 
-    SUBTRACET(seastore_cache, "{} {}~0x{:x} is absent on t, query cache ...",
-	      t, T::TYPE, offset, length);
+    SUBTRACET(seastore_cache, "{} {}~0x{:x}", t, T::TYPE, offset, length);
     ceph_assert(!booting);
     const auto t_src = t.get_src();
 
@@ -431,6 +430,29 @@ public:
     touch_extent_by_range(
       *ret, &t_src, t.get_cache_hint(),
       partial_off, partial_len);
+    return ret;
+  }
+
+  /*
+   * get_absent_extent
+   *
+   * The extent in query is supposed to be absent in Cache.
+   * partially load buffer from partial_off~partial_len if not present.
+   */
+  template <typename T, typename Func>
+  get_extent_iertr::future<TCachedExtentRef<T>> get_absent_extent(
+    Transaction &t,
+    paddr_t offset,
+    extent_len_t length,
+    extent_len_t partial_off,
+    extent_len_t partial_len,
+    Func &&extent_init_func) {
+    LOG_PREFIX(Cache::get_absent_extent);
+    SUBTRACET(seastore_cache, "{} {}~0x{:x}", t, T::TYPE, offset, length);
+
+    auto ret = prepare_absent_extent<T>(
+      t, offset, length, partial_off, partial_len, std::move(extent_init_func));
+    const auto t_src = t.get_src();
     return trans_intr::make_interruptible(
       read_extent<T>(std::move(ret), partial_off, partial_len, &t_src));
   }
