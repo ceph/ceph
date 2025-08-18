@@ -47,9 +47,6 @@ template <> struct fmt::formatter<crimson::os::seastore::op_type_t>
     case op_type_t::READ:
       name = "read";
       break;
-    case op_type_t::WRITE:
-      name = "write";
-      break;
     case op_type_t::GET_ATTR:
       name = "get_attr";
       break;
@@ -158,7 +155,6 @@ void SeaStore::Shard::register_metrics()
   std::pair<op_type_t, sm::label_instance> labels_by_op_type[] = {
     {op_type_t::DO_TRANSACTION,   sm::label_instance("latency", "DO_TRANSACTION")},
     {op_type_t::READ,             sm::label_instance("latency", "READ")},
-    {op_type_t::WRITE,            sm::label_instance("latency", "WRITE")},
     {op_type_t::GET_ATTR,         sm::label_instance("latency", "GET_ATTR")},
     {op_type_t::GET_ATTRS,        sm::label_instance("latency", "GET_ATTRS")},
     {op_type_t::STAT,             sm::label_instance("latency", "STAT")},
