@@ -54,8 +54,12 @@ export interface ZoneGroup {
   name: string;
   id: string;
   placement_targets?: Target[];
+  zones?: string[];
 }
-
+export interface ZoneRequest {
+  zone_name: string;
+  placement_targets: PlacementTarget[];
+}
 export interface S3Details {
   endpoint: string;
   access_key: string;
@@ -81,7 +85,7 @@ export interface RequestModel {
 }
 
 export interface PlacementTarget {
-  placement_id: string;
+  placement_id?: string;
   tags?: string[];
   tier_type?: TIER_TYPE;
   tier_config?: {
@@ -98,10 +102,13 @@ export interface PlacementTarget {
     glacier_restore_tier_type?: string;
     restore_storage_class?: string;
     read_through_restore_days?: number;
+    target_storage_class?: string;
   };
   storage_class?: string;
   name?: string;
   tier_targets?: TierTarget[];
+  data_pool?: string;
+  placement_target?: string;
 }
 
 export interface StorageClassOption {
@@ -169,6 +176,8 @@ export const TIER_TYPE_DISPLAY = {
   CLOUD_TIER: 'Cloud S3',
   GLACIER: 'Cloud S3 Glacier'
 };
+
+export const GLACIER_TARGET_STORAGE_CLASS = 'GLACIER';
 
 export const ALLOW_READ_THROUGH_TEXT =
   'Enables fetching objects from remote cloud S3 if not found locally.';

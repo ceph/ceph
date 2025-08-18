@@ -130,6 +130,69 @@
           >
         </ng-template>
       </div>
+            @if( isTierMatch( TIER_TYPE.CLOUD_TIER, TIER_TYPE.LOCAL )){
+      <div class="form-item">
+          <cds-select
+            label="Pool"
+            i18n-label
+            formControlName="pool"
+            id="pool"
+            [invalid]="storageClassForm.showError('pool', formDir, 'required')"
+            [invalidText]="poolError"
+          >
+            <option [value]="''"
+                    i18n>--Select--</option>
+            <option
+              *ngFor="let pool of rgwPools"
+              [value]="pool.pool_name"
+              i18n
+            >
+              {{ pool.pool_name }}
+            </option>
+          </cds-select>
+          <span class="invalid-feedback"
+             *ngIf="rgwPools?.length === 0"
+                i18n>The pool does not exists.
+                    To continue, <a routerLink="/pool/create"
+                                    class="btn-link">create a pool</a>.</span>
+          <ng-template #poolError>
+            <span
+              class="invalid-feedback"
+              *ngIf="storageClassForm.showError('pool', formDir, 'required')"
+              i18n
+              >This field is required.</span
+            >
+          </ng-template>
+      </div>
+      <div class="form-item">
+          <cds-select
+            label="Zone"
+            i18n-label
+            formControlName="zone"
+            id="zone"
+            [invalid]="storageClassForm.showError('zone', formDir, 'required')"
+            [invalidText]="zoneError"
+          >
+            <option [value]="''"
+                    i18n>--Select--</option>
+            <option
+              *ngFor="let zone of zones"
+              [value]="zone?.name"
+              i18n
+            >
+              {{ zone.name}}
+            </option>
+          </cds-select>
+          <ng-template #zoneError>
+            <span
+              class="invalid-feedback"
+              *ngIf="storageClassForm.showError('zone', formDir, 'required')"
+              i18n
+              >This field is required.</span
+            >
+          </ng-template>
+      </div>
+    }
       @if( isTierMatch( TIER_TYPE.CLOUD_TIER, TIER_TYPE.GLACIER )){
       <div>
         <div class="form-item form-item-append"

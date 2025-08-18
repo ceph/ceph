@@ -1493,6 +1493,51 @@ class RgwZone(RESTController):
                                                 master, zone_endpoints, access_key,
                                                 secret_key)
         return result
+    
+    @Endpoint('POST', path='storage-class')
+    @CreatePermission
+    def createStorage(self, zone_name: str, placement_targets: List[Dict[str, str]] = []):
+        if not placement_targets:
+            raise DashboardException("placement_targets list is empty", http_status_code=400, component='rgw')
+
+        target = placement_targets[0]
+
+        placement_target = target.get('placement_target')
+        storage_class = target.get('storage_class')
+        data_pool = target.get('data_pool')
+        compression = target.get('compression', '')
+
+        if not (placement_target and storage_class and data_pool):
+            raise DashboardException(
+                msg='Missing required parameters',
+                http_status_code=400,
+                component='rgw'
+            )
+        
+        multisite_instance = RgwMultisite()
+
+        try:
+            multisite_instance.add_storage_class_zone(
+                zone_name=zone_name,
+                placement_target=placement_target,
+                storage_class=storage_class,
+                data_pool=data_pool,
+                compression=compression
+            )
+            return {
+                'placement_target': placement_target,
+                'storage_class': storage_class,
+                'data_pool': data_pool,
+                'status': 'success'
+            }
+        except DashboardException as e:
+            return {
+                'placement_target': placement_target,
+                'storage_class': storage_class,
+                'data_pool': data_pool,
+                'status': 'failed',
+                'reason': str(e)
+            }
 
     @allow_empty_body
     # pylint: disable=W0613
