@@ -57,9 +57,12 @@ SegmentAllocator::do_open(bool is_mkfs)
     new_segment_seq,
     reinterpret_cast<const unsigned char *>(meta.seastore_id.bytes()),
     sizeof(meta.seastore_id.uuid));
-  auto new_segment_id = segment_provider.allocate_segment(
-      new_segment_seq, type, category, gen);
-  ceph_assert(new_segment_id != NULL_SEG_ID);
+  auto new_segment_id =
+    segment_provider.allocate_segment(new_segment_seq, type, category, gen);
+  if (new_segment_id == NULL_SEG_ID) {
+    // this should be enospc, next commits
+    return crimson::ct_error::input_output_error::make();
+  }
   return sm_group.open(new_segment_id
   ).handle_error(
     open_ertr::pass_further{},
