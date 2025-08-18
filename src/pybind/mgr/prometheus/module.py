@@ -1762,9 +1762,9 @@ class Module(MgrModule, OrchestratorClientMixin):
     def get_smb_metadata(self) -> None:
         try:
             mgr_map = self.get('mgr_map')
-            available_modules = [m['name'] for m in mgr_map['available_modules']]
-            if 'smb' not in available_modules:
-                self.log.debug("SMB module is not available, skipping SMB metadata collection")
+            enabled_modules = mgr_map['modules']
+            if 'smb' not in enabled_modules:
+                self.log.debug("SMB module is not enabled, skipping SMB metadata collection")
                 return
 
             if not self.available()[0]:
