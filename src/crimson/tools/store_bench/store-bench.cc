@@ -8,7 +8,7 @@
  *
  * Usage should be:
  *
- * crimson-store-bench --store-path <path>
+ * crimson-store-bench --store-path <path> --duration <seconds> --work-load-type <type>
  *
  * where <path> is a directory containing a file block.  block should either
  * be a symlink to an actual block device or a file truncated to an appropriate
@@ -21,7 +21,7 @@
    mkdir store_bench_dir
    touch store_bench_dir/block
    truncate -s 10G store_bench_dir/block
-   ./build/bin/crimson-store-bench --store-path store_bench_dir --smp 4 "$@"
+   ./build/bin/crimson-store-bench --store-path store_bench_dir --smp 4 --duration 10 --work-load-type pg_log --seastore_device_size 10G
  */
 
 #include <random>
@@ -786,9 +786,8 @@ int main(int argc, char **argv) {
        */
     ("store-path", po::value<std::string>(&store_path)->required(),
      "path to store, <store-path>/block should "
-     "be a symlink to the target device for bluestore or seastore")(
-       "debug", po::value<bool>(&debug)->default_value(false),
-       "enable debugging")
+     "be a symlink to the target device for bluestore or seastore")
+    ("debug", po::bool_switch(&debug), "enable debugging")
     ("work-load-type",
      po::value<std::string>(&work_load_type)->required(),
      "work load type: pg_log or rgw_index")
