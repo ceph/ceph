@@ -43,6 +43,21 @@ void ObjectDataBlock::apply_delta(const ceph::bufferlist &bl) {
 
 namespace crimson::os::seastore {
 
+struct guarded_object_data_t {
+  context_t ctx;
+  object_data_t object_data;
+  ~guarded_object_data_t() {
+    if (object_data.must_update()) {
+      ctx.onode.update_object_data(ctx.t, object_data);
+    }
+  }
+};
+
+guarded_object_data_t guard_object_data(context_t ctx)
+{
+  return guarded_object_data_t{ctx, ctx.onode.get_layout().object_data.get()};
+}
+
 template <typename F>
 auto with_object_data(
   ObjectDataHandler::context_t ctx,
@@ -1431,131 +1446,132 @@ ObjectDataHandler::read_ret ObjectDataHandler::read(
   objaddr_t obj_offset,
   extent_len_t len)
 {
-  return seastar::do_with(
-    bufferlist(),
-    [ctx, obj_offset, len](auto &ret) {
-    return with_object_data(
-      ctx,
-      [ctx, obj_offset, len, &ret](const auto &object_data) {
-      LOG_PREFIX(ObjectDataHandler::read);
-      DEBUGT("reading {}~0x{:x}",
-             ctx.t,
-             object_data.get_reserved_data_base(),
-             object_data.get_reserved_data_len());
-      /* Assumption: callers ensure that onode size is <= reserved
-       * size and that len is adjusted here prior to call */
-      ceph_assert(!object_data.is_null());
-      ceph_assert((obj_offset + len) <= object_data.get_reserved_data_len());
-      ceph_assert(len > 0);
-      laddr_offset_t l_start =
-        object_data.get_reserved_data_base() + obj_offset;
-      laddr_offset_t l_end = l_start + len;
-      laddr_t aligned_start = l_start.get_aligned_laddr(
-	ctx.tm.get_block_size());
-      loffset_t aligned_length =
-	  l_end.get_roundup_laddr(ctx.tm.get_block_size()).get_byte_distance<
-	    loffset_t>(aligned_start);
-      return ctx.tm.get_pins(
-        ctx.t,
-	aligned_start,
-	aligned_length
-      ).si_then([FNAME, ctx, l_start, l_end, &ret](auto _pins) {
-        // offset~len falls within reserved region and len > 0
-        ceph_assert(_pins.size() >= 1);
-        ceph_assert(_pins.front().get_key() <= l_start);
-        return seastar::do_with(
-          std::move(_pins),
-          l_start,
-          [FNAME, ctx, l_start, l_end, &ret](auto &pins, auto &l_current) {
-          return trans_intr::do_for_each(
-            pins,
-            [FNAME, ctx, l_start, l_end,
-             &l_current, &ret](auto &pin) -> read_iertr::future<> {
-            auto pin_start = pin.get_key();
-            extent_len_t read_start;
-            extent_len_t read_start_aligned;
-            if (l_current == l_start) { // first pin may skip head
-              ceph_assert(l_current.get_aligned_laddr(
-		ctx.tm.get_block_size()) >= pin_start);
-              read_start = l_current.template
-                get_byte_distance<extent_len_t>(pin_start);
-              read_start_aligned = p2align(read_start, ctx.tm.get_block_size());
-            } else { // non-first pin must match start
-              assert(l_current > l_start);
-              ceph_assert(l_current == pin_start);
-              read_start = 0;
-              read_start_aligned = 0;
-            }
+  LOG_PREFIX(ObjectDataHandler::read);
+  struct read_t : TransactionManager::read_pin_t<ObjectDataBlock> {
+    extent_len_t unaligned_start_offset = 0;
+    extent_len_t unaligned_len = 0;
+    read_t(
+      LBAMapping mapping,
+      extent_len_t aligned_off,
+      extent_len_t aligned_len,
+      extent_len_t unaligned_start_offset,
+      extent_len_t unaligned_len)
+      : read_pin_t(std::move(mapping), aligned_off, aligned_len),
+	unaligned_start_offset(unaligned_start_offset),
+	unaligned_len(unaligned_len) {}
+  };
+  auto ret = bufferlist();
+  auto rpins = std::vector<read_t>();
+  auto guarded_obj_data = guard_object_data(ctx);
+  auto &object_data = guarded_obj_data.object_data;
+  DEBUGT("reading {}~0x{:x}",
+	 ctx.t,
+	 object_data.get_reserved_data_base(),
+	 object_data.get_reserved_data_len());
+  /* Assumption: callers ensure that onode size is <= reserved
+   * size and that len is adjusted here prior to call */
+  ceph_assert(!object_data.is_null());
+  ceph_assert((obj_offset + len) <= object_data.get_reserved_data_len());
+  ceph_assert(len > 0);
+  laddr_offset_t l_start =
+    object_data.get_reserved_data_base() + obj_offset;
+  laddr_offset_t l_end = l_start + len;
+  laddr_t aligned_start = l_start.get_aligned_laddr(
+    ctx.tm.get_block_size());
+  loffset_t aligned_length =
+      l_end.get_roundup_laddr(ctx.tm.get_block_size()).get_byte_distance<
+	loffset_t>(aligned_start);
+  auto _pins = co_await ctx.tm.get_pins(
+    ctx.t,
+    aligned_start,
+    aligned_length);
+  // offset~len falls within reserved region and len > 0
+  ceph_assert(_pins.size() >= 1);
+  ceph_assert(_pins.front().get_key() <= l_start);
+  auto l_current = l_start;
+  for (auto &pin : _pins) {
+    auto pin_start = pin.get_key();
+    extent_len_t read_start;
+    extent_len_t read_start_aligned;
+    if (l_current == l_start) { // first pin may skip head
+      ceph_assert(l_current.get_aligned_laddr(
+	ctx.tm.get_block_size()) >= pin_start);
+      read_start = l_current.template
+	get_byte_distance<extent_len_t>(pin_start);
+      read_start_aligned = p2align(read_start, ctx.tm.get_block_size());
+    } else { // non-first pin must match start
+      assert(l_current > l_start);
+      ceph_assert(l_current == pin_start);
+      read_start = 0;
+      read_start_aligned = 0;
+    }
 
-            ceph_assert(l_current < l_end);
-            auto pin_len = pin.get_length();
-            assert(pin_len > 0);
-            laddr_offset_t pin_end = pin_start + pin_len;
-            assert(l_current < pin_end);
-            laddr_offset_t l_current_end = std::min(pin_end, l_end);
-            extent_len_t read_len =
-              l_current_end.get_byte_distance<extent_len_t>(l_current);
+    ceph_assert(l_current < l_end);
+    auto pin_len = pin.get_length();
+    assert(pin_len > 0);
+    laddr_offset_t pin_end = pin_start + pin_len;
+    assert(l_current < pin_end);
+    laddr_offset_t l_current_end = std::min(pin_end, l_end);
+    extent_len_t read_len =
+      l_current_end.get_byte_distance<extent_len_t>(l_current);
 
-            if (pin.get_val().is_zero()) {
-              DEBUGT("got {}~0x{:x} from zero-pin {}~0x{:x}",
-                ctx.t,
-                l_current,
-                read_len,
-                pin_start,
-                pin_len);
-              ret.append_zero(read_len);
-              l_current = l_current_end;
-              return seastar::now();
-            }
+    if (pin.get_val().is_zero()) {
+      DEBUGT("got {}~0x{:x} from zero-pin {}~0x{:x}",
+	ctx.t,
+	l_current,
+	read_len,
+	pin_start,
+	pin_len);
+      l_current = l_current_end;
+      rpins.emplace_back(pin, 0, 0, 0, read_len);
+      continue;
+    }
 
-            // non-zero pin
-            laddr_t l_current_end_aligned =
-	      l_current_end.get_roundup_laddr(ctx.tm.get_block_size());
-            extent_len_t read_len_aligned =
-              l_current_end_aligned.get_byte_distance<extent_len_t>(pin_start);
-            read_len_aligned -= read_start_aligned;
-            extent_len_t unalign_start_offset = read_start - read_start_aligned;
-            DEBUGT("reading {}~0x{:x} from pin {}~0x{:x}",
-              ctx.t,
-              l_current,
-              read_len,
-              pin_start,
-              pin_len);
-            return ctx.tm.read_pin<ObjectDataBlock>(
-              ctx.t,
-              std::move(pin),
-              read_start_aligned,
-              read_len_aligned
-            ).si_then([&ret, &l_current, l_current_end,
-                       read_start_aligned, read_len_aligned,
-                       unalign_start_offset, read_len](auto maybe_indirect_extent) {
-              auto aligned_bl = maybe_indirect_extent.get_range(
-                  read_start_aligned, read_len_aligned);
-              if (read_len < read_len_aligned) {
-                ceph::bufferlist unaligned_bl;
-                unaligned_bl.substr_of(
-                    aligned_bl, unalign_start_offset, read_len);
-                ret.append(std::move(unaligned_bl));
-              } else {
-                assert(read_len == read_len_aligned);
-                assert(unalign_start_offset == 0);
-                ret.append(std::move(aligned_bl));
-              }
-              l_current = l_current_end;
-              return seastar::now();
-            }).handle_error_interruptible(
-              read_iertr::pass_further{},
-              crimson::ct_error::assert_all{
-                "ObjectDataHandler::read hit invalid error"
-              }
-            );
-          }); // trans_intr::do_for_each()
-        }); // do_with()
-      });
-    }).si_then([&ret] { // with_object_data()
-      return std::move(ret);
-    });
-  }); // do_with()
+    // non-zero pin
+    laddr_t l_current_end_aligned =
+      l_current_end.get_roundup_laddr(ctx.tm.get_block_size());
+    extent_len_t read_len_aligned =
+      l_current_end_aligned.get_byte_distance<extent_len_t>(pin_start);
+    read_len_aligned -= read_start_aligned;
+    extent_len_t unalign_start_offset = read_start - read_start_aligned;
+    DEBUGT("reading {}~0x{:x} from pin {}~0x{:x}",
+      ctx.t,
+      l_current,
+      read_len,
+      pin_start,
+      pin_len);
+    rpins.emplace_back(
+      pin, read_start_aligned, read_len_aligned,
+      unalign_start_offset, read_len);
+    l_current = l_current_end;
+  }
+  co_await ctx.tm.read_pins<ObjectDataBlock>(ctx.t, rpins
+  ).handle_error_interruptible(
+    read_iertr::pass_further{},
+    crimson::ct_error::assert_all{
+      "ObjectDataHandler::read hit invalid error"
+    }
+  );
+  for (auto &pin : rpins) {
+    if (pin.mapping.is_zero_reserved()) {
+      ret.append_zero(pin.unaligned_len);
+      continue;
+    }
+    auto maybe_indirect_extent = pin.get_result();
+    auto aligned_bl = maybe_indirect_extent.get_range(
+	pin.partial_off, pin.partial_len);
+    if (pin.unaligned_len < pin.partial_len) {
+      ceph::bufferlist unaligned_bl;
+      unaligned_bl.substr_of(
+	  aligned_bl, pin.unaligned_start_offset, pin.unaligned_len);
+      ret.append(std::move(unaligned_bl));
+    } else {
+      assert(pin.unaligned_len == pin.partial_len);
+      assert(pin.unaligned_start_offset == 0);
+      ret.append(std::move(aligned_bl));
+    }
+  }
+  co_return std::move(ret);
 }
 
 ObjectDataHandler::fiemap_ret ObjectDataHandler::fiemap(
