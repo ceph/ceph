@@ -194,6 +194,40 @@ def test_create_and_rm_2000_subdir_levels_close(testdir):
             stack.append(dirpath)
             continue
 
+def test_create_and_rm_2000_subdir_levels_close_v2(testdir):
+    def _get_subdir_path(dirpath):
+        dh = cephfs.opendir(dirpath)
+        de = cephfs.readdir(dh)
+
+        while de:
+            if de.d_name not in (b'.', b'..'):
+                break
+            de = cephfs.readdir(dh)
+
+        if not de:
+            raise RuntimeError('unexpectedly "de" is None')
+
+        return os.path.join(dirpath, de.d_name)
+
+    LEVELS = 2000
+
+    for i in range(1, LEVELS + 1):
+        dirname = f'dir{i}'
+        cephfs.mkdir(dirname, 0o755)
+        cephfs.chdir(dirname)
+    cephfs.chdir('/')
+
+    stack = collections.deque([b'dir1/',])
+    while stack:
+        dirpath = stack[-1]
+
+        try:
+            cephfs.rmdir(dirpath)
+            stack.pop()
+        except libcephfs.ObjectNotEmpty:
+            stack.append(_get_subdir_path(dirpath))
+            continue
+
 def test_ceph_mirror_xattr(testdir):
     def gen_mirror_xattr():
         cluster_id = str(uuid.uuid4())
