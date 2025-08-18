@@ -435,6 +435,9 @@ public:
     tm_ret _create_collection(
       internal_context_t &ctx,
       const coll_t& cid, int bits);
+    tm_ret _split_collection(
+      internal_context_t &ctx,
+      const coll_t& cid, int bits);
     tm_ret _remove_collection(
       internal_context_t &ctx,
       const coll_t& cid);

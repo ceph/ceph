@@ -1648,6 +1648,15 @@ SeaStore::Shard::_do_transaction_step(
       i.decode_bl(hint);
       return tm_iertr::now();
     }
+    case Transaction::OP_SPLIT_COLLECTION2:
+    {
+      uint32_t bits = op->split_bits;
+      coll_t cid = i.get_cid(op->cid);
+      coll_t dest_cid = i.get_cid(op->dest_cid);
+      DEBUGT("op OP_SPLIT_COLLECTION2, cid={}, dest_cid={}, bits={}",
+	*ctx.transaction, cid, dest_cid, bits);
+      return _split_collection(ctx, cid, bits);
+    }
   }
 
   using onode_iertr = OnodeManager::get_onode_iertr::extend<
@@ -2224,6 +2233,40 @@ SeaStore::Shard::_rmattrs(
     *ctx.transaction,
     get_omap_root(omap_type_t::XATTR, onode),
     onode);
+}
+
+SeaStore::Shard::tm_ret
+SeaStore::Shard::_split_collection(
+  internal_context_t &ctx,
+  const coll_t &cid,
+  int bits)
+{
+  return transaction_manager->read_collection_root(
+    *ctx.transaction
+  ).si_then([=, this, &ctx](auto _cmroot) {
+    return seastar::do_with(
+      _cmroot,
+      [=, this, &ctx](auto &cmroot) {
+        return collection_manager->update(
+          cmroot,
+          *ctx.transaction,
+          cid,
+          bits
+        ).si_then([this, &ctx, &cmroot] {
+          if (cmroot.must_update()) {
+            transaction_manager->write_collection_root(
+              *ctx.transaction,
+              cmroot);
+          }
+        });
+      }
+    );
+  }).handle_error_interruptible(
+    tm_iertr::pass_further{},
+    crimson::ct_error::assert_all{
+      "Invalid error in SeaStoreS::_create_collection"
+    }
+  );
 }
 
 SeaStore::Shard::tm_ret
