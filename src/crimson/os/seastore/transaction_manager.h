@@ -1312,7 +1312,11 @@ private:
 	      });
 	    } else {
 	      // absent
-	      cache->retire_absent_extent_addr(t, original_paddr, original_len);
+	      auto unlinked_child = std::move(std::get<0>(ret));
+	      auto retired_placeholder = cache->retire_absent_extent_addr(
+		t, pin.get_key(), original_paddr, original_len
+	      )->template cast<RetiredExtentPlaceholder>();
+	      unlinked_child.child_pos.link_child(retired_placeholder.get());
 	      return base_iertr::make_ready_future<TCachedExtentRef<T>>();
 	    }
 	  }
@@ -1377,6 +1381,19 @@ private:
     });
   }
 
+  using _remove_mapping_result_t = LBAManager::ref_update_result_t;
+  ref_iertr::future<_remove_mapping_result_t> _remove(
+    Transaction &t,
+    LBAMapping mapping);
+  ref_iertr::future<_remove_mapping_result_t>
+  _remove_indirect_mapping(
+    Transaction &t,
+    LBAMapping mapping);
+  ref_iertr::future<_remove_mapping_result_t>
+  _remove_direct_mapping(
+    Transaction &t,
+    LBAMapping mapping);
+
   rewrite_extent_ret rewrite_logical_extent(
     Transaction& t,
     LogicalChildNodeRef extent);
@@ -1430,12 +1447,14 @@ private:
       partial_len,
       [laddr=pin.get_intermediate_base(),
        maybe_init=std::move(maybe_init),
-       child_pos=std::move(child_pos)]
+       child_pos=std::move(child_pos),
+       &t, this]
       (T &extent) mutable {
 	assert(extent.is_logical());
 	assert(!extent.has_laddr());
 	assert(!extent.has_been_invalidated());
 	child_pos.link_child(&extent);
+	child_pos.invalidate_retired_placeholder(t, *cache, extent);
 	extent.set_laddr(laddr);
 	maybe_init(extent);
 	extent.set_seen_by_users();
@@ -1502,12 +1521,14 @@ private:
       pin.get_val(),
       direct_key,
       direct_length,
-      [direct_key, child_pos=std::move(child_pos)](CachedExtent &extent) mutable {
+      [direct_key, child_pos=std::move(child_pos),
+      &t, this](CachedExtent &extent) mutable {
 	assert(extent.is_logical());
 	auto &lextent = static_cast<LogicalChildNode&>(extent);
 	assert(!lextent.has_laddr());
 	assert(!lextent.has_been_invalidated());
 	child_pos.link_child(&lextent);
+	child_pos.invalidate_retired_placeholder(t, *cache, lextent);
 	lextent.set_laddr(direct_key);
         // No change to extent::seen_by_user because this path is only
         // for background cleaning.
