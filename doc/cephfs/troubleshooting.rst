@@ -376,25 +376,32 @@ Mounting
 Mount 5 Error
 -------------
 
-A mount 5 error typically occurs if a MDS server is laggy or if it crashed.
-Ensure at least one MDS is up and running, and the cluster is ``active +
+A ``mount 5`` error indicates a lagging MDS server or a crashed MDS server.
+
+Ensure that at least one MDS is up and running, and the cluster is ``active +
 healthy``. 
 
 Mount 12 Error
 --------------
 
-A mount 12 error with ``cannot allocate memory`` usually occurs if you  have a
+A mount 12 error with a message reading ``cannot allocate memory`` indicates a
 version mismatch between the :term:`Ceph Client` version and the :term:`Ceph
-Storage Cluster` version. Check the versions using::
+Storage Cluster` version. Check the versions using the following command:
 
-	ceph -v
+.. prompt:: bash #
+
+   ceph -v
 	
-If the Ceph Client is behind the Ceph cluster, try to upgrade it::
+If the Ceph Client is of an older version than the Ceph cluster, upgrade
+the Client:
 
-	sudo apt-get update && sudo apt-get install ceph-common 
+.. prompt:: bash #
 
-You may need to uninstall, autoclean and autoremove ``ceph-common`` 
-and then reinstall it so that you have the latest version.
+   sudo apt-get update && sudo apt-get install ceph-common 
+
+If this fails to resolve the problem, uninstall, autoclean, and autoremove the
+``ceph-common`` package and then reinstall it to ensure that you have the
+latest version of it.
 
 Dynamic Debugging
 =================
