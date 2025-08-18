@@ -60,90 +60,85 @@ SegmentAllocator::do_open(bool is_mkfs)
   auto new_segment_id =
     segment_provider.allocate_segment(new_segment_seq, type, category, gen);
   if (new_segment_id == NULL_SEG_ID) {
-    // this should be enospc, next commits
-    return crimson::ct_error::input_output_error::make();
+    // TODO: this should be enospc, next commits
+    co_await open_ret(crimson::ct_error::input_output_error::make());
   }
-  return sm_group.open(new_segment_id
-  ).handle_error(
+  // TODO: SegmentManager::open_ertr is not the same as SegmentAllocator::open_ertr
+  //       This is highly confusing and doesn't allow seamless error passing
+  //       For now, handle the error here. We should keep the same errorator type
+  //       when it makes sense to.
+  auto sref = co_await sm_group.open(new_segment_id).handle_error(
     open_ertr::pass_further{},
     crimson::ct_error::assert_all{
       "Invalid error in SegmentAllocator::do_open open"
-    }
-  ).safe_then([this, is_mkfs, FNAME, new_segment_seq](auto sref) {
-    // initialize new segment
-    segment_id_t segment_id = sref->get_segment_id();
-    journal_seq_t dirty_tail;
-    journal_seq_t alloc_tail;
-    if (type == segment_type_t::JOURNAL) {
-      dirty_tail = trimmer->get_dirty_tail();
-      alloc_tail = trimmer->get_alloc_tail();
-      if (is_mkfs) {
-        ceph_assert(dirty_tail == JOURNAL_SEQ_NULL);
-        ceph_assert(alloc_tail == JOURNAL_SEQ_NULL);
-        auto mkfs_seq = journal_seq_t{
+    });
+  // initialize new segment
+  segment_id_t segment_id = sref->get_segment_id();
+  journal_seq_t dirty_tail;
+  journal_seq_t alloc_tail;
+  if (type == segment_type_t::JOURNAL) {
+  dirty_tail = trimmer->get_dirty_tail();
+  alloc_tail = trimmer->get_alloc_tail();
+  if (is_mkfs) {
+  ceph_assert(dirty_tail == JOURNAL_SEQ_NULL);
+  ceph_assert(alloc_tail == JOURNAL_SEQ_NULL);
+  auto mkfs_seq = journal_seq_t{
           new_segment_seq,
           paddr_t::make_seg_paddr(segment_id, 0)
-        };
-        dirty_tail = mkfs_seq;
-        alloc_tail = mkfs_seq;
-      } else {
-        ceph_assert(dirty_tail != JOURNAL_SEQ_NULL);
-        ceph_assert(alloc_tail != JOURNAL_SEQ_NULL);
-      }
-    } else { // OOL
-      ceph_assert(!is_mkfs);
-      dirty_tail = JOURNAL_SEQ_NULL;
-      alloc_tail = JOURNAL_SEQ_NULL;
-    }
-    auto header = segment_header_t{
-      timepoint_to_mod(seastar::lowres_system_clock::now()),
-      new_segment_seq,
-      segment_id,
-      dirty_tail,
-      alloc_tail,
-      current_segment_nonce,
-      type,
-      category,
-      gen};
-    INFO("{} writing header {}", print_name, header);
+  };
+  dirty_tail = mkfs_seq;
+  alloc_tail = mkfs_seq;
+  } else {
+  ceph_assert(dirty_tail != JOURNAL_SEQ_NULL);
+  ceph_assert(alloc_tail != JOURNAL_SEQ_NULL);
+  }
+  } else { // OOL
+  ceph_assert(!is_mkfs);
+  dirty_tail = JOURNAL_SEQ_NULL;
+  alloc_tail = JOURNAL_SEQ_NULL;
+  }
+  auto header = segment_header_t{
+  timepoint_to_mod(seastar::lowres_system_clock::now()),
+  new_segment_seq,
+  segment_id,
+  dirty_tail,
+  alloc_tail,
+  current_segment_nonce,
+  type,
+  category,
+  gen};
+  INFO("{} writing header {}", print_name, header);
 
-    auto header_length = get_block_size();
-    bufferlist bl;
-    encode(header, bl);
-    bufferptr bp(ceph::buffer::create_page_aligned(header_length));
-    bp.zero();
-    auto iter = bl.cbegin();
-    iter.copy(bl.length(), bp.c_str());
-    bl.clear();
-    bl.append(bp);
+  auto header_length = get_block_size();
+  bufferlist bl;
+  encode(header, bl);
+  bufferptr bp(ceph::buffer::create_page_aligned(header_length));
+  bp.zero();
+  auto iter = bl.cbegin();
+  iter.copy(bl.length(), bp.c_str());
+  bl.clear();
+  bl.append(bp);
 
-    ceph_assert(sref->get_write_ptr() == 0);
-    assert((unsigned)header_length == bl.length());
-    written_to = header_length;
-    auto new_journal_seq = journal_seq_t{
-      new_segment_seq,
-      paddr_t::make_seg_paddr(segment_id, written_to)};
-    segment_provider.update_segment_avail_bytes(
-        type, new_journal_seq.offset);
-    return sref->write(0, std::move(bl)
-    ).handle_error(
-      open_ertr::pass_further{},
-      crimson::ct_error::assert_all{
-        "Invalid error in SegmentAllocator::do_open write"
-      }
-    ).safe_then([this,
-                 FNAME,
-                 new_journal_seq,
-                 sref=std::move(sref)]() mutable {
-      ceph_assert(!current_segment);
-      current_segment = std::move(sref);
-      DEBUG("{} rolled new segment id={}",
-            print_name, current_segment->get_segment_id());
-      ceph_assert(new_journal_seq.segment_seq ==
-        segment_provider.get_seg_info(current_segment->get_segment_id()).seq);
-      return new_journal_seq;
+  ceph_assert(sref->get_write_ptr() == 0);
+  assert((unsigned)header_length == bl.length());
+  written_to = header_length;
+  auto new_journal_seq = journal_seq_t{
+    new_segment_seq,
+    paddr_t::make_seg_paddr(segment_id, written_to)};
+  segment_provider.update_segment_avail_bytes(
+      type, new_journal_seq.offset);
+  co_await sref->write(0, std::move(bl)).handle_error(
+    open_ertr::pass_further{},
+    crimson::ct_error::assert_all{
+      "Invalid error in SegmentAllocator::do_open write"
     });
-  });
+  ceph_assert(!current_segment);
+  current_segment = std::move(sref);
+  DEBUG("{} rolled new segment id={}",
+        print_name, current_segment->get_segment_id());
+  ceph_assert(new_journal_seq.segment_seq ==
+    segment_provider.get_seg_info(current_segment->get_segment_id()).seq);
+  co_return new_journal_seq;
 }
 
 SegmentAllocator::open_ret
