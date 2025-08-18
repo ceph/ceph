@@ -1685,11 +1685,6 @@ private:
 
   ExtentPinboardRef pinboard;
 
-  struct query_counters_t {
-    uint64_t access = 0;
-    uint64_t hit = 0;
-  };
-
   btree_cursor_stats_t cursor_stats;
   struct invalid_trans_efforts_t {
     io_stat_t read;
