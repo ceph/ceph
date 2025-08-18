@@ -385,6 +385,12 @@ FSCryptKeyRef& FSCryptKeyHandler::get_key()
   return key;
 }
 
+FSCryptDecryptedInodesRef& FSCryptKeyHandler::get_di()
+{
+  std::shared_lock rl{lock};
+  return di;
+}
+
 //taken from fs/crypto/keyring.h
 bool FSCryptKeyStore::valid_key_spec(const struct fscrypt_key_specifier& k)
 {
@@ -479,7 +485,9 @@ int FSCryptKeyStore::create(const char *k, int klen, FSCryptKeyHandlerRef& key_h
       return 0; //returns 0 regardless
     }
     key_handler->present = true;
-    key_handler->di = new FSCryptDecryptedInodes();
+
+    auto di = new FSCryptDecryptedInodes();
+    key_handler->di = std::shared_ptr<FSCryptDecryptedInodes>((FSCryptDecryptedInodes *)di);
     m[id] = key_handler;
   }
 
@@ -533,7 +541,6 @@ int FSCryptKeyStore::invalidate(struct fscrypt_remove_key_arg* arg, int user)
   //do a final clean up
   if (!kh->present && kh->di->get_inodes().empty()) {
     kh->reset(++epoch, nullptr);
-    free(kh->di);
     m.erase(id);
   } else {
     r = 0;
