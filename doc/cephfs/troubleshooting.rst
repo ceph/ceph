@@ -393,9 +393,29 @@ and then reinstall it so that you have the latest version.
 Dynamic Debugging
 =================
 
-You can enable dynamic debug against the CephFS module.
+Dynamic debugging for CephFS kernel driver allows to enable or disable debug
+logging. The kernel driver logs are written to the kernel ring buffer and can
+be examined using ``dmesg(1)`` utility. Debug logging is disabled by default
+because enabling debug logging can result in system slowness and a drop in I/O
+throughput.
 
-Please see: https://github.com/ceph/ceph/blob/master/src/script/kcon_all.sh
+Enable dynamic debug against the CephFS module.
+
+See: https://github.com/ceph/ceph/blob/master/src/script/kcon_all.sh
+
+Note: Running the above script enables debug logging for the CephFS kernel
+driver, libceph, and the kernel RBD module. To enable debug logging for a
+specific component (for example, for the CephFS kernel driver), run a command of the following form:
+
+.. prompt:: bash #
+
+   echo 'module ceph +p' > /sys/kernel/debug/dynamic_debug/control
+
+To disable debug logging, run a command of the following form: 
+
+.. prompt:: bash #
+
+   echo 'module ceph -p' > /sys/kernel/debug/dynamic_debug/control
 
 In-memory Log Dump
 ==================
