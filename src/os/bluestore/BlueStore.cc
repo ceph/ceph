@@ -73,6 +73,12 @@
 #define tracepoint(...)
 #endif
 
+#ifdef OBJSTORE_NAME_PREFIX
+#define BLUESTORE_FLAVOR_NAME OBJSTORE_NAME_PREFIX "bluestore"
+#else
+#define BLUESTORE_FLAVOR_NAME "bluestore"
+#endif
+
 #define dout_context cct
 #define dout_subsys ceph_subsys_bluestore
 
@@ -7831,8 +7837,8 @@ int BlueStore::_open_db_and_around(bool read_only, bool to_repair)
       return r;
     }
 
-    if (type != "bluestore") {
-      derr << __func__ << " expected bluestore, but type is " << type << dendl;
+    if (type != BLUESTORE_FLAVOR_NAME) {
+      derr << __func__ << " expected " BLUESTORE_FLAVOR_NAME ", but type is " << type << dendl;
       return -EIO;
     }
   }
@@ -8600,12 +8606,12 @@ int BlueStore::mkfs()
     string type;
     r = read_meta("type", &type);
     if (r == 0) {
-      if (type != "bluestore") {
-	derr << __func__ << " expected bluestore, but type is " << type << dendl;
+      if (type != BLUESTORE_FLAVOR_NAME) {
+	derr << __func__ << " expected " BLUESTORE_FLAVOR_NAME ", but type is " << type << dendl;
 	return -EIO;
       }
     } else {
-      r = write_meta("type", "bluestore");
+      r = write_meta("type", BLUESTORE_FLAVOR_NAME);
       if (r < 0)
         return r;
     }
@@ -9300,8 +9306,8 @@ int BlueStore::_mount_readonly()
       return r;
      }
 
-     if (type != "bluestore") {
-       derr << __func__ << " expected bluestore, but type is " << type << dendl;
+     if (type != BLUESTORE_FLAVOR_NAME) {
+       derr << __func__ << " expected " BLUESTORE_FLAVOR_NAME ", but type is " << type << dendl;
        return -EIO;
      }
    }
