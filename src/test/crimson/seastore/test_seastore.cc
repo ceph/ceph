@@ -700,6 +700,28 @@ TEST_P(seastore_test_t, collection_create_list_remove)
   });
 }
 
+TEST_P(seastore_test_t, collection_split)
+{
+  run_async([this] {
+    coll_t test_coll{spg_t{pg_t{1, 0}}};
+    {
+      sharded_seastore->create_new_collection(test_coll).get();
+      {
+	CTransaction t;
+	t.create_collection(test_coll, 4);
+	do_transaction(std::move(t));
+      }
+      {
+	coll_t test_coll2{spg_t{pg_t{17, 0}}};
+	sharded_seastore->create_new_collection(test_coll2).get();
+	CTransaction t;
+	t.split_collection(test_coll, 5, 5, test_coll2);
+	do_transaction(std::move(t));
+      }
+    }
+  });
+}
+
 TEST_P(seastore_test_t, meta) {
   run_async([this] {
     set_meta("key1", "value1");
