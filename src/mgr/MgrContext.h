@@ -16,7 +16,6 @@
 
 #include <memory>
 
-#include "common/ceph_json.h"
 #include "common/Cond.h"
 #include "mon/MonClient.h"
 
@@ -47,26 +46,6 @@ public:
   }
 
   virtual ~Command() {}
-};
-
-
-class JSONCommand : public Command
-{
-public:
-  json_spirit::mValue json_result;
-
-  void wait() override
-  {
-    Command::wait();
-
-    if (r == 0) {
-      bool read_ok = json_spirit::read(
-          outbl.to_str(), json_result);
-      if (!read_ok) {
-        r = -EINVAL;
-      }
-    }
-  }
 };
 
 #endif
