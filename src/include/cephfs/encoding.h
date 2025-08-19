@@ -15,6 +15,8 @@
 
 #include "include/ceph_fs_encoder.h"
 #include "include/cephfs/types.h"
+#include "include/cephfs/gid.h"
+#include "include/cephfs/vinodeno.h"
 #include "include/encoding_map.h"
 #include "include/encoding_string.h"
 #include "include/encoding_vector.h"
