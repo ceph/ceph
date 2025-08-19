@@ -22,8 +22,6 @@
 #include <string>
 #include <vector>
 
-#include "mdstypes.h"
-
 #include "common/config_proxy.h" // for class ConfigProxy
 #include "global/global_context.h" // for g_conf()
 #include "include/buffer_fwd.h"
