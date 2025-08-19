@@ -640,6 +640,22 @@ paths:
               operationId: DeleteBucket
               parameters:
                 Bucket: $request.path.Bucket
+            PutObject:
+              operationId: PutObject
+              parameters:
+                Bucket: $request.path.Bucket
+            DeleteObject:
+              operationId: DeleteObject
+              parameters:
+                Bucket: $request.path.Bucket
+            GetObject:
+              operationId: GetObject
+              parameters:
+                Bucket: $request.path.Bucket
+            HeadObject:
+              operationId: HeadObject
+              parameters:
+                Bucket: $request.path.Bucket
         '480':
           description: BucketAlreadyExists
           content:
