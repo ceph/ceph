@@ -210,10 +210,13 @@ class GlobalRecoveryEvent(Event):
             # possible that some pgs might not have any movement
             # even before the start of the event.
             if pg['reported_epoch'] < self._start_epoch:
-                log.debug("Skipping pg {0} since reported_epoch {1} < start_epoch {2}"
-                             .format(pg['pgid'], pg['reported_epoch'], self._start_epoch))
                 skipped_pgs += 1
                 continue
+
+        # Log skipped PGs
+        if skipped_pgs > 0:
+            log.debug("Skipped {0} PGs with reported_epoch < start_epoch {1}"
+                 .format(skipped_pgs, self._start_epoch))
 
         if self._active_clean_num != new_active_clean_num:
             # Have this case to know when need to update
@@ -492,8 +495,8 @@ class Module(MgrModule):
                     self.get_module_option(opt['name']))
             self.log.debug(' %s = %s', opt['name'], getattr(self, opt['name']))
 
-    def _osd_in_out(self, old_map, old_dump, new_map, osd_id, marked):
-        # type: (OSDMap, Dict, OSDMap, str, str) -> None
+    def _osd_in_out(self, old_map: OSDMap, old_dump: Dict,
+                    new_map: OSDMap, osd_id: str, marked: str) -> None:
         # A function that will create or complete an event when an
         # OSD is marked in or out according to the affected PGs
         affected_pgs = []
@@ -501,47 +504,29 @@ class Module(MgrModule):
             pool_id = pool['pool']  # type: str
             for ps in range(0, pool['pg_num']):
 
-                # Was this OSD affected by the OSD coming in/out?
-                # Compare old and new osds using
-                # data from the json dump
+                # Was this pg affected by the OSD coming in/out?
+                # Compare old and new OSDs using
+                # data from the old/new acting and up sets.
                 old_up_acting = old_map.pg_to_up_acting_osds(pool['pool'], ps)
-                old_osds = set(old_up_acting['acting'])
+                old_acting_osds = old_up_acting['acting']
+                old_up_set_osds = old_up_acting['up']
                 new_up_acting = new_map.pg_to_up_acting_osds(pool['pool'], ps)
-                new_osds = set(new_up_acting['acting'])
+                new_acting_osds = new_up_acting['acting']
+                new_up_set_osds = new_up_acting['up']
 
-                # Check the osd_id being in the acting set for both old
-                # and new maps to cover both out and in cases
-                was_on_out_or_in_osd = osd_id in old_osds or osd_id in new_osds
-                if not was_on_out_or_in_osd:
+                # Check if this PG involves the OSD that was marked in/out
+                osd_affected = osd_id in old_up_set_osds or osd_id in new_up_set_osds
+                if not osd_affected:
                     continue
-
-                self.log.debug("pool_id, ps = {0}, {1}".format(
-                    pool_id, ps
-                ))
-
-                self.log.debug(
-                    "old_up_acting: {0}".format(json.dumps(old_up_acting, indent=4, sort_keys=True)))
-
-                # Has this OSD been assigned a new location?
-                # (it might not be if there is no suitable place to move
-                #  after an OSD is marked in/out)
                 
-                is_relocated = old_osds != new_osds
-                
-                self.log.debug(
-                    "new_up_acting: {0}".format(json.dumps(new_up_acting,
-                                                           indent=4,
-                                                           sort_keys=True)))
+                up_set_changed = old_up_set_osds != new_up_set_osds
 
-                if was_on_out_or_in_osd and is_relocated:
+                if osd_affected and up_set_changed:
+                    self.log.debug("PG %s.%x: acting %s->%s up %s->%s (relocated=%s)",
+                            pool_id, ps, old_acting_osds, new_acting_osds, old_up_set_osds,
+                            new_up_set_osds, up_set_changed)
                     # This PG is now in motion, track its progress
                     affected_pgs.append(PgId(pool_id, ps))
-
-        # In the case that we ignored some PGs, log the reason why (we may
-        # not end up creating a progress event)
-
-        self.log.warning("{0} PGs affected by osd.{1} being marked {2}".format(
-            len(affected_pgs), osd_id, marked))
 
         # In the case of the osd coming back in, we might need to cancel
         # previous recovery event for that osd
@@ -556,8 +541,17 @@ class Module(MgrModule):
                         self._complete(ev)
                 except KeyError:
                     self.log.warning("_osd_in_out: ev {0} does not exist".format(ev_id))
+        
+        # In the case that we ignored some PGs, log the reason why (we may
+        # not end up creating a progress event)
 
-        if len(affected_pgs) > 0:
+        if (len(affected_pgs) == 0):
+            self.log.warning("No PGs affected by osd.{0} being marked {1}, no recovery event created".format(
+                osd_id, marked))
+        else:
+            self.log.warning("{0} PGs affected by osd.{1} being marked {2}".format(
+                len(affected_pgs), osd_id, marked))
+
             r_ev = PgRecoveryEvent(
                     "Rebalancing after osd.{0} marked {1}".format(osd_id, marked),
                     refs=[("osd", osd_id)],
@@ -580,6 +574,7 @@ class Module(MgrModule):
             osd_id = osd['osd']
             new_weight = osd['in']
             if osd_id in old_osds:
+                self.log.debug("Processing osd.{0}: {1} -> {2}".format(osd_id, old_osds[osd_id]['weight'], osd['weight']))
                 old_weight = old_osds[osd_id]['in']
 
                 if new_weight == 0.0 and old_weight > new_weight:
