@@ -15,11 +15,19 @@
 #ifndef CEPH_KEYSSERVER_H
 #define CEPH_KEYSSERVER_H
 
+#include <cstdint>
+#include <list>
+#include <map>
+#include <string>
+
 #include "auth/KeyRing.h"
 #include "CephxProtocol.h"
 #include "common/ceph_json.h"
 #include "common/ceph_mutex.h"
+#include "common/Formatter.h"
 #include "include/common_fwd.h"
+#include "include/encoding.h"
+#include "include/types.h" // for version_t
 
 struct KeyServerData {
   version_t version{0};
