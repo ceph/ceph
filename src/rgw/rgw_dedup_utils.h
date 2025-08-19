@@ -107,6 +107,7 @@ namespace rgw::dedup {
     uint64_t egress_records = 0;
     uint64_t egress_blocks = 0;
     uint64_t egress_slabs = 0;
+    uint64_t write_slab_failure = 0;
 
     uint64_t single_part_objs = 0;
     uint64_t multipart_objs = 0;
