@@ -19,21 +19,19 @@
 #include "include/elist.h"
 #include "include/interval_set.h"
 #include "include/Context.h"
-#include "include/fs_types.h" // for inodeno_t
 #include "include/types.h" // for version_t
-#include "mdstypes.h" // for dirfrag_t, metareqid_t
-#include "CInode.h"
-#include "CDentry.h"
-#include "CDir.h"
 
 #include <unordered_set>
 
 #include <cstdint>
 #include <map>
-#include <ostream>
+#include <iosfwd>
 #include <set>
 #include <vector>
 
+struct inodeno_t;
+struct dirfrag_t;
+struct metareqid_t;
 class CDir;
 class CInode;
 class CDentry;
@@ -48,18 +46,8 @@ class LogSegment {
  public:
   using seq_t = uint64_t;
 
-  LogSegment(uint64_t _seq, loff_t off=-1) :
-    seq(_seq), offset(off), end(off),
-    dirty_dirfrags(member_offset(CDir, item_dirty)),
-    new_dirfrags(member_offset(CDir, item_new)),
-    dirty_inodes(member_offset(CInode, item_dirty)),
-    dirty_dentries(member_offset(CDentry, item_dirty)),
-    open_files(member_offset(CInode, item_open_file)),
-    dirty_parent_inodes(member_offset(CInode, item_dirty_parent)),
-    dirty_dirfrag_dir(member_offset(CInode, item_dirty_dirfrag_dir)),
-    dirty_dirfrag_nest(member_offset(CInode, item_dirty_dirfrag_nest)),
-    dirty_dirfrag_dirfragtree(member_offset(CInode, item_dirty_dirfrag_dirfragtree))
-  {}
+  LogSegment(uint64_t _seq, loff_t off=-1);
+  ~LogSegment() noexcept;
 
   void try_to_expire(MDSRank *mds, MDSGatherBuilder &gather_bld, int op_prio);
   void purge_inodes_finish(interval_set<inodeno_t>& inos);
@@ -111,9 +99,6 @@ class LogSegment {
   std::vector<MDSContext*> expiry_waiters;
 };
 
-static inline std::ostream& operator<<(std::ostream& out, const LogSegment& ls) {
-  return out << "LogSegment(" << ls.seq << "/0x" << std::hex << ls.offset
-             << "~" << ls.end << std::dec << " events=" << ls.num_events << ")";
-}
+std::ostream& operator<<(std::ostream& out, const LogSegment& ls);
 
 #endif
