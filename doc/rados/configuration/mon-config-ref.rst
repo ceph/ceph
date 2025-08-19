@@ -630,7 +630,7 @@ Miscellaneous
 .. confval:: enable_availability_tracking
 
 NVMe-oF Monitor Client
-=====================
+======================
 
 .. confval:: nvmeof_mon_client_disconnect_panic
 .. confval:: nvmeof_mon_client_connect_panic
