@@ -239,24 +239,16 @@ BuildRequires:  cmake > 3.5
 BuildRequires:	fuse-devel
 BuildRequires:	git
 BuildRequires:	grpc-devel
-%if 0%{?fedora} || 0%{?suse_version} > 1500 || 0%{?rhel} == 9 || 0%{?openEuler}
-BuildRequires:	gcc-c++ >= 11
-%endif
-%if 0%{?suse_version} == 1500
-BuildRequires: gcc11-c++
-%endif
-%if 0%{?gts_version} > 0
-%if 0%{?gts_version} == 13
 # Before 13.3, an lto bug resulted in a segfault in SafeTimer and perhaps
 # elsewhere. Require the fixed version so we can reenable lto. See
 # ceph bug https://tracker.ceph.com/issues/63867
 # and
 # gcc bug https://bugzilla.redhat.com/show_bug.cgi?id=2241339
 # for details.
-BuildRequires:	gcc-toolset-%{gts_version}-gcc-c++ >= 13.3
+%if 0%{?gts_version} == 0
+BuildRequires:	gcc-c++ >= 13.3
 %else
-BuildRequires:	gcc-toolset-%{gts_version}-gcc-c++
-%endif
+BuildRequires:	gcc-toolset-%{gts_version}-gcc-c++ >= 13.3
 BuildRequires:	gcc-toolset-%{gts_version}-runtime
 BuildRequires:	gcc-toolset-%{gts_version}-libatomic-devel
 %endif
