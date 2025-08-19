@@ -7,7 +7,7 @@ Routes
 -e ../../../python-common
 prettytable
 pytest==7.0.1
-pyyaml
+pyyaml==6.0.2
 natsort
 setuptools
 jsonpatch
