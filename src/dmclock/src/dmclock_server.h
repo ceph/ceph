@@ -826,7 +826,7 @@ namespace crimson {
 
       // NB: All threads declared at end, so they're destructed first!
 
-      std::unique_ptr<RunEvery> cleaning_job;
+      RunEvery cleaning_job;
 
       // helper function to return the value of a variant if it matches the
       // given type T, or a default value of T otherwise
@@ -852,16 +852,13 @@ namespace crimson {
 	idle_age(std::chrono::duration_cast<Duration>(_idle_age)),
 	erase_age(std::chrono::duration_cast<Duration>(_erase_age)),
 	check_time(std::chrono::duration_cast<Duration>(_check_time)),
-	erase_max(standard_erase_max)
+	erase_max(standard_erase_max),
+	cleaning_job(check_time, std::bind(&PriorityQueueBase::do_clean, this))
       {
 	assert(_erase_age >= _idle_age);
 	assert(_check_time < _idle_age);
 	// AtLimit::Reject depends on ImmediateTagCalc
 	assert(at_limit != AtLimit::Reject || !IsDelayed);
-	cleaning_job =
-	  std::unique_ptr<RunEvery>(
-	    new RunEvery(check_time,
-			 std::bind(&PriorityQueueBase::do_clean, this)));
       }
 
       inline const ClientInfo* get_cli_info(ClientRec& client) const {
@@ -1248,7 +1245,7 @@ namespace crimson {
 	    // clean finished, refresh
 	    last_erase_point = 0;
 	  }
-	  cleaning_job->try_update(wperiod);
+	  cleaning_job.try_update(wperiod);
 	} // if
       } // do_clean
 
