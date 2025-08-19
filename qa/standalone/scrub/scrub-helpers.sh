@@ -411,19 +411,121 @@ function find_disjoint_but_primary {
 }
 
 
-
 # A debug flag is set for the PG specified, causing the 'pg query' command to display
 # an additional 'scrub sessions counter' field.
 #
 # $1: PG id
 #
 function set_query_debug() {
-    local pgid=$1
-    local prim_osd=`ceph pg dump pgs_brief | \
-      awk -v pg="^$pgid" -n -e '$0 ~ pg { print(gensub(/[^0-9]*([0-9]+).*/,"\\\\1","g",$5)); }' `
+  local pgid=$1
+  local prim_osd=`ceph pg dump pgs_brief | \
+    awk -v pg="^$pgid" -n -e '$0 ~ pg { print(gensub(/[^0-9]*([0-9]+).*/,"\\\\1","g",$5)); }' `
+  echo "Setting scrub debug data. Primary for $pgid is $prim_osd"
+  CEPH_ARGS='' ceph --format=json daemon $(get_asok_path osd.$prim_osd) \
+        scrubdebug $pgid set sessions
+}
 
-    echo "Setting scrub debug data. Primary for $pgid is $prim_osd"
-    CEPH_ARGS='' ceph --format=json daemon $(get_asok_path osd.$prim_osd) \
-          scrubdebug $pgid set sessions
+
+# For a set of objects named <basename><i>, where i is a number from 1 to obj_num,
+# query the cluster for their PGs, primary OSDs and acting sets.
+# The results are stored in the following dictionaries:
+# - obj_pgid_dict: object name -> pgid
+# - obj_prim_dict: object name -> primary OSD
+# - obj_acting_dict: object name -> acting set
+function objs_to_prim_dict_fast()
+{
+  local dir=$1
+  local poolname=$2
+  local basename=$3
+  local obj_num=$4
+  local -n obj_pgid_dict=$5
+  local -n obj_prim_dict=$6
+  local -n obj_acting_dict=$7
+  #turn off '-x' (but remember previous state)
+  local saved_echo_flag=${-//[^x]/}
+  set +x
+  local extr_dbg=0
+
+  # Read the Python output and populate the dictionaries
+  while IFS=$'\t' read -r obj pgid primary acting; do
+    (( extr_dbg >= 3 )) && printf "Processing object: %s, PGID: %s, Primary: %s, Acting: %s\n" \
+                                "$obj" "$pgid" "$primary" "$acting"
+    if [[ -n "$obj" && -n "$pgid" ]]; then
+      obj_pgid_dict["$obj"]=$pgid
+      obj_prim_dict["$obj"]=$primary
+      obj_acting_dict["$obj"]=$acting
+    fi
+  done < <(python3 << EOF
+import subprocess
+import json
+import sys
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
+def get_object_mapping(obj_name, pool_name):
+    """Get PG mapping for a single object."""
+    try:
+        cmd = ['ceph', '--format=json', 'osd', 'map', pool_name, obj_name]
+        result = subprocess.run(cmd, stdout=subprocess.PIPE, text=True, stderr=subprocess.DEVNULL)
+        if result.returncode == 0:
+            data = json.loads(result.stdout)
+            pgid = data.get('pgid', '')
+            primary = data.get('acting_primary', '')
+            acting = ' '.join(map(str, data.get('acting', [])))
+            return obj_name, pgid, primary, acting
+        else:
+            return obj_name, '', '', ''
+    except Exception:
+        return obj_name, '', '', ''
+
+# Parameters from bash variables
+pool_name = "$poolname"
+base_name = "$basename"
+obj_count = $obj_num
+
+# Generate object names
+objects = [f"{base_name}{i}" for i in range(1, obj_count + 1)]
+
+# Use ThreadPoolExecutor for parallel execution
+max_workers = min(16, len(objects))
+
+with ThreadPoolExecutor(max_workers=max_workers) as executor:
+    future_to_obj = {
+        executor.submit(get_object_mapping, obj, pool_name): obj 
+        for obj in objects
+    }
+
+    for future in as_completed(future_to_obj):
+        obj_name, pgid, primary, acting = future.result()
+        if pgid:
+            print(f"{obj_name}\t{pgid}\t{primary}\t{acting}")
+EOF
+)
+
+  if [[ $saved_echo_flag ]]; then
+    set -x
+  fi
+}
+
+# a version of 'objs_to_prim_dict_fast' that does not use Python.
+function objs_to_prim_dict()
+{
+  {
+    local dir=$1
+    local poolname=$2
+    local basename=$3
+    local obj_num=$4
+    local -n obj_pgid_dict=$5
+    local -n obj_prim_dict=$6
+    local -n obj_acting_dict=$7
+
+    for i in $(seq 1 $obj_num ); do
+        local obj="${basename}${i}"
+        IFS=$'\t' read -r pgid primary_osd acting <<<$(ceph --format=json osd map $poolname $obj |\
+          jq -r '"\(.pgid)\t\(.acting_primary)\t\(.acting | join(" "))"')
+        obj_pgid_dict["$obj"]=$pgid
+        obj_prim_dict["$obj"]=$primary_osd
+        obj_acting_dict["$obj"]=$acting
+    done
+  } 2> /dev/null
 }
 
