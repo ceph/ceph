@@ -1,3 +1,5 @@
+.. _cephfs_mount_using_fuse:
+
 ========================
  Mount CephFS using FUSE
 ========================
