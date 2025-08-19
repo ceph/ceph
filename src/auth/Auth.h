@@ -254,7 +254,7 @@ WRITE_CLASS_ENCODER(RotatingSecrets)
 
 class KeyStore {
 public:
-  virtual ~KeyStore() {}
+  virtual ~KeyStore() = default;
   virtual bool get_secret(const EntityName& name, CryptoKey& secret) const = 0;
   virtual bool get_service_secret(uint32_t service_id, uint64_t secret_id,
 				  CryptoKey& secret) const = 0;
