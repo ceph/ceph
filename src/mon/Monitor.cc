@@ -4367,9 +4367,6 @@ void Monitor::forward_request_leader(MonOpRequestRef op)
 struct AnonConnection : public Connection {
   entity_addr_t socket_addr;
 
-  int send_message(Message *m) override {
-    ceph_abort_msg("send_message on anonymous connection");
-  }
   void send_keepalive() override {
     ceph_abort_msg("send_keepalive on anonymous connection");
   }
@@ -4385,6 +4382,11 @@ struct AnonConnection : public Connection {
   bool is_connected() override { return false; }
   entity_addr_t get_peer_socket_addr() const override {
     return socket_addr;
+  }
+
+protected:
+  int send_msg(MessageRef&& m) override {
+    ceph_abort_msg("send_message on anonymous connection");
   }
 
 private:
