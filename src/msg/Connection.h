@@ -113,15 +113,19 @@ public:
    * on the Connection policy.
    *
    * @param m The Message to send. The Messenger consumes a single reference
-   * when you pass it in.
+   * (if a stupid pointer) when you pass it in.
    *
    * @return 0 on success, or -errno on failure.
    */
-  virtual int send_message(Message *m) = 0;
-
-  virtual int send_message2(MessageRef m)
-  {
-    return send_message(m.detach()); /* send_message(Message *m) consumes a reference */
+  int send_message(Message* _m) {
+    auto m = ceph::ref_t<Message>(_m, false); /* consume ref */
+    return send_msg(std::move(m));
+  }
+  int send_message2(const MessageRef& m) {
+    return send_msg(MessageRef(m));
+  }
+  int send_message2(MessageRef&& m) {
+    return send_msg(std::move(m));
   }
 
   /**
@@ -253,6 +257,8 @@ protected:
   {}
 
   ~Connection() override;
+
+  virtual int send_msg(MessageRef&& m) = 0;
 };
 
 using ConnectionRef = ceph::ref_t<Connection>;

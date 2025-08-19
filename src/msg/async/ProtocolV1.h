@@ -7,6 +7,8 @@
 #include "Protocol.h"
 #include "AsyncConnection.h"
 
+#include <deque>
+
 struct AuthSessionHandler;
 class ProtocolV1;
 using CtPtr = Ct<ProtocolV1>*;
@@ -106,11 +108,11 @@ protected:
 
   enum class WriteStatus { NOWRITE, REPLACING, CANWRITE, CLOSED };
   std::atomic<WriteStatus> can_write;
-  std::list<Message *> sent;  // the first ceph::buffer::list need to inject seq
+  std::deque<MessageRef> sent;  // the first ceph::buffer::list need to inject seq
   //struct for outbound msgs
   struct out_q_entry_t {
     ceph::buffer::list bl;
-    Message* m {nullptr};
+    MessageRef m;
     bool is_prepared {false};
   };
   // priority queue for outbound msgs
@@ -118,7 +120,7 @@ protected:
   /**
    * A queue for each priority value, highest priority first.
    */
-  std::map<int, std::list<out_q_entry_t>, std::greater<int>> out_q;
+  std::map<int, std::deque<out_q_entry_t>, std::greater<int>> out_q;
 
   bool keepalive;
   bool write_in_progress = false;
@@ -209,8 +211,8 @@ protected:
 
   out_q_entry_t _get_next_outgoing();
 
-  void prepare_send_message(uint64_t features, Message *m, ceph::buffer::list &bl);
-  ssize_t write_message(Message *m, ceph::buffer::list &bl, bool more);
+  void prepare_send_message(uint64_t features, const MessageRef& m, ceph::buffer::list &bl);
+  ssize_t write_message(const MessageRef& m, ceph::buffer::list &bl, bool more);
 
   void requeue_sent();
   uint64_t discard_requeued_up_to(uint64_t out_seq, uint64_t seq);
@@ -230,7 +232,7 @@ public:
   virtual bool is_connected() override;
   virtual void stop() override;
   virtual void fault() override;
-  virtual void send_message(Message *m) override;
+  virtual void send_message(MessageRef&& m) override;
   virtual void send_keepalive() override;
 
   virtual void read_event() override;

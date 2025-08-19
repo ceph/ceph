@@ -542,9 +542,10 @@ void AsyncConnection::accept(ConnectedSocket socket,
   center->dispatch_event_external(read_handler);
 }
 
-int AsyncConnection::send_message(Message *m)
+int AsyncConnection::send_msg(MessageRef&& m)
 {
   FUNCTRACE(async_msgr->cct);
+
   lgeneric_subdout(async_msgr->cct, ms,
 		   1) << "-- " << async_msgr->get_myaddrs() << " --> "
 		      << get_peer_addrs() << " -- "
@@ -555,7 +556,6 @@ int AsyncConnection::send_message(Message *m)
   if (is_blackhole()) {
     lgeneric_subdout(async_msgr->cct, ms, 0) << __func__ << ceph_entity_type_name(peer_type)
       << " blackhole " << *m << dendl;
-    m->put();
     return 0;
   }
 
@@ -577,11 +577,10 @@ int AsyncConnection::send_message(Message *m)
     ldout(async_msgr->cct, 20) << __func__ << " " << *m << " local" << dendl;
     std::lock_guard<std::mutex> l(write_lock);
     if (protocol->is_connected()) {
-      dispatch_queue->local_delivery(m, m->get_priority());
+      dispatch_queue->local_delivery(std::move(m), m->get_priority());
     } else {
       ldout(async_msgr->cct, 10) << __func__ << " loopback connection closed."
                                  << " Drop message " << m << dendl;
-      m->put();
     }
     return 0;
   }
@@ -590,7 +589,7 @@ int AsyncConnection::send_message(Message *m)
   // may disturb users
   logger->inc(l_msgr_send_messages);
 
-  protocol->send_message(m);
+  protocol->send_message(std::move(m));
   return 0;
 }
 
@@ -660,21 +659,22 @@ void AsyncConnection::shutdown_socket() {
 
 void AsyncConnection::DelayedDelivery::do_request(uint64_t id)
 {
-  Message *m = nullptr;
+  MessageRef m;
   {
     std::lock_guard<std::mutex> l(delay_lock);
     register_time_events.erase(id);
     if (stop_dispatch)
-      return ;
+      return;
     if (delay_queue.empty())
-      return ;
-    m = delay_queue.front();
+      return;
+    m = std::move(delay_queue.front());
     delay_queue.pop_front();
   }
-  if (msgr->ms_can_fast_dispatch(m)) {
+  if (msgr->ms_can_fast_dispatch(*m)) {
     dispatch_queue->fast_dispatch(m);
   } else {
-    dispatch_queue->enqueue(m, m->get_priority(), conn_id);
+    auto p = m->get_priority();
+    dispatch_queue->enqueue(std::move(m), p, conn_id);
   }
 }
 
@@ -684,10 +684,11 @@ void AsyncConnection::DelayedDelivery::discard() {
                     [this]() mutable {
                       std::lock_guard<std::mutex> l(delay_lock);
                       while (!delay_queue.empty()) {
-                        Message *m = delay_queue.front();
-                        dispatch_queue->dispatch_throttle_release(
+                        {
+                          auto& m = delay_queue.front();
+                          dispatch_queue->dispatch_throttle_release(
                             m->get_dispatch_throttle_size());
-                        m->put();
+                        }
                         delay_queue.pop_front();
                       }
                       for (auto i : register_time_events)
@@ -703,14 +704,14 @@ void AsyncConnection::DelayedDelivery::flush() {
   center->submit_to(
       center->get_id(), [this] () mutable {
     std::lock_guard<std::mutex> l(delay_lock);
-    while (!delay_queue.empty()) {
-      Message *m = delay_queue.front();
-      if (msgr->ms_can_fast_dispatch(m)) {
+    for (; !delay_queue.empty(); delay_queue.pop_front()) {
+      auto& m = delay_queue.front();
+      if (msgr->ms_can_fast_dispatch(*m)) {
         dispatch_queue->fast_dispatch(m);
       } else {
-        dispatch_queue->enqueue(m, m->get_priority(), conn_id);
+        auto p = m->get_priority();
+        dispatch_queue->enqueue(std::move(m), p, conn_id);
       }
-      delay_queue.pop_front();
     }
     for (auto i : register_time_events)
       center->delete_time_event(i);
