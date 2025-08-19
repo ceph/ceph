@@ -1,6 +1,7 @@
 #pragma once
 
 #include "rgw_common.h"
+#include "rgw_asio_thread.h"
 
 #include <boost/asio/detached.hpp>
 #include <boost/redis/connection.hpp>
@@ -35,6 +36,7 @@ public:
 	}
 
         if (m_pool.empty()) {
+		maybe_warn_about_blocking(nullptr);
 		//wait until m_pool is not empty
 		m_cond_var.wait(lock, [this] { return !m_pool.empty(); });
         } 
