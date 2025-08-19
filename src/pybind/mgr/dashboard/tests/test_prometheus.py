@@ -1,9 +1,11 @@
 # -*- coding: utf-8 -*-
 # pylint: disable=protected-access
 try:
-    from mock import patch
+    from mock import Mock, patch
 except ImportError:
-    from unittest.mock import patch
+    from unittest.mock import Mock, patch
+
+from requests import Response
 
 from .. import mgr
 from ..controllers.prometheus import Prometheus, PrometheusNotifications, PrometheusReceiver
@@ -27,20 +29,53 @@ class PrometheusControllerTest(ControllerTestCase):
         cls.setup_controllers([Prometheus, PrometheusNotifications, PrometheusReceiver])
 
     @patch("dashboard.controllers.prometheus.mgr.get_module_option_ex", return_value='cephadm')
-    @patch("dashboard.controllers.prometheus.mgr.mon_command", return_value=(1, {}, None))
+    @patch('dashboard.controllers.prometheus.PrometheusRESTController.balancer_status',
+           return_value={'active': False, 'no_optimization_needed': False})
+    @patch('dashboard.controllers.prometheus.mgr.get_localized_store', return_value=None)
+    @patch('dashboard.services.orchestrator.OrchClient.instance')
+    @patch('dashboard.services.orchestrator.OrchClient.status', return_value={'available': True})
+    @patch('dashboard.services.orchestrator.OrchClient.available', return_value=True)
     @patch('requests.request')
-    def test_rules_cephadm(self, mock_request, mock_mon_command, mock_get_module_option_ex):
+    def test_rules_cephadm(self, mock_request, _mock_available, _mock_status, mock_instance,
+                           _mock_get_localized_store, _mock_balancer_status,
+                           mock_get_module_option_ex):
+
         # in this test we use:
         # in the first call to get_module_option_ex we return 'cephadm' as backend
         # in the second call we return 'True' for 'secure_monitoring_stack' option
-        mock_get_module_option_ex.side_effect = lambda module, key, default=None: 'cephadm' \
-            if module == 'orchestrator' else True
+        def _opt(module, key, default=None):
+            if module == 'orchestrator' and key == 'orchestrator':
+                return 'cephadm'
+            if module == 'cephadm' and key == 'secure_monitoring_stack':
+                return True
+            return default
+        mock_get_module_option_ex.side_effect = _opt
+
+        # OrchClient.instance().monitoring.get_prometheus_access_info()
+        fake_orch = Mock()
+        fake_orch.monitoring.get_prometheus_access_info.return_value = {
+            'user': None,
+            'password': None,
+            'certificate': None,
+        }
+        mock_instance.return_value = fake_orch
+
+        # requests.request must return a real Response with bytes content
+        r = Response()
+        r.status_code = 200
+        r._content = b'{"status":"success","data":{}}'
+        mock_request.return_value = r
+
         self._get('/api/prometheus/rules')
-        mock_request.assert_called_with('GET',
-                                        self.prometheus_host_api + '/rules',
-                                        json=None, params={},
-                                        verify=True, cert=None, auth=None)
-        assert mock_mon_command.called
+        mock_request.assert_called_with(
+            'GET',
+            self.prometheus_host_api + '/rules',
+            json=None,
+            params={},
+            verify=True,
+            cert=None,
+            auth=None)
+        self.assertStatus(200)
 
     @patch("dashboard.controllers.prometheus.mgr.get_module_option_ex", return_value='cephadm')
     @patch("dashboard.controllers.prometheus.mgr.mon_command", return_value=(1, {}, None))
