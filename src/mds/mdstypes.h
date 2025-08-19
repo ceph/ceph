@@ -25,7 +25,12 @@
 #include "include/ceph_assert.h"
 #include "include/client_t.h"
 #include "include/cephfs/dump.h"
-#include "include/cephfs/types.h"
+#include "include/cephfs/types.h" // for MAX_MDS
+#include "include/cephfs/cluster_id.h"
+#include "include/cephfs/rank.h"
+#include "include/cephfs/vinodeno.h"
+#include "include/cephfs/frag_info.h"
+#include "include/cephfs/nest_info.h"
 #include "include/encoding_string.h"
 
 #define MDS_PORT_CACHE   0x200

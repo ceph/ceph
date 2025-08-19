@@ -31,7 +31,8 @@
 #include "msg/Message.h"
 #include "include/ceph_features.h"
 #include "include/cephfs/encoding.h"
-#include "include/cephfs/types.h" // for frag_info_t, nest_info_t, optmetadata_client_t, quota_info_t, vinodeno_t
+#include "include/cephfs/types.h" // for frag_info_t, nest_info_t, optmetadata_client_t, quota_info_t
+#include "include/cephfs/vinodeno.h"
 #include "include/frag.h" // for frag_t, fragtree_t
 #include "include/interval_set.h"
 
