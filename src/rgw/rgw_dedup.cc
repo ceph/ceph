@@ -344,7 +344,7 @@ namespace rgw::dedup {
       return ret;
     }
 
-    ret = ioctx.application_enable("rgw_dedup", false);
+    ret = ioctx.application_enable("rgw", false);
     if (ret == 0) {
       ldpp_dout(dpp, 10) << __func__ << "::pool " << dedup_pool.name
                          << " was associated with dedup app" << dendl;

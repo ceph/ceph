@@ -266,6 +266,7 @@ namespace rgw::dedup {
     this->egress_records += other.egress_records;
     this->egress_blocks += other.egress_blocks;
     this->egress_slabs += other.egress_slabs;
+    this->write_slab_failure += other.write_slab_failure;
     this->single_part_objs += other.single_part_objs;
     this->multipart_objs += other.multipart_objs;
     this->small_multipart_obj += other.small_multipart_obj;
@@ -334,6 +335,9 @@ namespace rgw::dedup {
 
     {
       Formatter::ObjectSection failed(*f, "failed");
+      if (this->write_slab_failure) {
+        f->dump_unsigned("Write SLAB failures", this->write_slab_failure);
+      }
       if(this->ingress_corrupted_etag) {
         f->dump_unsigned("Corrupted ETAG", this->ingress_corrupted_etag);
       }
@@ -360,6 +364,7 @@ namespace rgw::dedup {
     encode(w.egress_records, bl);
     encode(w.egress_blocks, bl);
     encode(w.egress_slabs, bl);
+    encode(w.write_slab_failure, bl);
 
     encode(w.single_part_objs, bl);
     encode(w.multipart_objs, bl);
@@ -391,6 +396,7 @@ namespace rgw::dedup {
     decode(w.egress_records, bl);
     decode(w.egress_blocks, bl);
     decode(w.egress_slabs, bl);
+    decode(w.write_slab_failure, bl);
     decode(w.single_part_objs, bl);
     decode(w.multipart_objs, bl);
     decode(w.small_multipart_obj, bl);
