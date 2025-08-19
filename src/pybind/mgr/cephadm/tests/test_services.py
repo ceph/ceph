@@ -3895,7 +3895,7 @@ class TestSMB:
                 'config': '',
                 'keyring': '[client.smb.config.tango.briskly]\nkey = None\n',
                 'config_auth_entity': 'client.smb.config.tango.briskly',
-                'metrics_image': 'quay.io/samba.org/samba-metrics:latest',
+                'metrics_image': 'quay.io/samba.org/samba-metrics:ceph20-centos-amd64',
                 'service_ports': {'smb': 445, 'smbmetrics': 9922, 'ctdb': 4379},
             },
         }
@@ -3970,7 +3970,7 @@ class TestSMB:
                     '[client.smb.fs.fs2.share3]\nkey = None\n'
                 ),
                 'config_auth_entity': 'client.smb.config.tango.briskly',
-                'metrics_image': 'quay.io/samba.org/samba-metrics:latest',
+                'metrics_image': 'quay.io/samba.org/samba-metrics:ceph20-centos-amd64',
                 'service_ports': {'smb': 445, 'smbmetrics': 9922, 'ctdb': 4379},
             },
         }
