@@ -1,11 +1,6 @@
 #pragma once
 
-#include <boost/asio/io_context.hpp>
-#include <boost/program_options.hpp>
-#include "common/ceph_json.h"
-#include "librados/librados_asio.h"
-#include "global/global_init.h"
-#include "global/global_context.h"
+#include "common/JSONFormatter.h"
 #include "erasure-code/ErasureCodePlugin.h"
 
 #define dout_context g_ceph_context
