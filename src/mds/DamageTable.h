@@ -24,7 +24,7 @@
 #include <string>
 #include <string_view>
 
-#include "include/cephfs/types.h" // for mds_rank_t
+#include "include/cephfs/rank.h" // for mds_rank_t
 #include "include/frag.h"
 #include "include/fs_types.h" // for inodeno_t
 #include "include/object.h" // for snapid_t

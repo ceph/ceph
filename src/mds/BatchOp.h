@@ -20,7 +20,7 @@
 #include <iosfwd>
 
 #include "common/ref.h"
-#include "include/cephfs/types.h" // for mds_rank_t
+#include "include/cephfs/rank.h" // for mds_rank_t
 
 class BatchOp {
 public:

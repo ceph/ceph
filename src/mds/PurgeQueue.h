@@ -18,7 +18,7 @@
 
 #include "common/Finisher.h"
 #include "common/snap_types.h" // for class SnapContext
-#include "include/cephfs/types.h" // for mds_rank_t
+#include "include/cephfs/rank.h" // for mds_rank_t
 #include "osdc/Journaler.h"
 #include "include/frag.h"
 
