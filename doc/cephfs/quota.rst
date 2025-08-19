@@ -29,6 +29,12 @@ value::
 .. note:: Values will be strictly cast to IEC units even when SI units
    are input, e.g. 1K to 1024 bytes.
 
+.. note:: To enable a client to set a quota by modifying the corresponding
+   extended attribute, in the client's authentication capabilities the ``p``
+   flag needs to be set in addition to ``rw``. See :ref:`CephFS Client
+   Capabilities - Layout and Quota restriction (the 'p'
+   flag)<cephfs-layout-and-quota-restriction>` for more details.
+
 To view quota limit::
 
   $ getfattr -n ceph.quota.max_bytes /some/dir
