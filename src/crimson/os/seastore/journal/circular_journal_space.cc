@@ -57,8 +57,6 @@ CircularJournalSpace::write(ceph::bufferlist&& to_write) {
   if (encoded_size > get_records_available_size()) {
     ceph_abort_msg("should be impossible with EPM reservation");
   }
-  assert(encoded_size + get_rbm_addr(get_written_to())
-	 < get_journal_end());
 
   auto target = get_rbm_addr(get_written_to());
   auto new_written_to = target + encoded_size;
@@ -162,7 +160,7 @@ CircularJournalSpace::device_write_bl(
 {
   LOG_PREFIX(CircularJournalSpace::device_write_bl);
   auto length = bl.length();
-  if (offset + length > get_journal_end()) {
+  if (offset + length >= get_journal_end()) {
     return crimson::ct_error::erange::make();
   }
   DEBUG(
