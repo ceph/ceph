@@ -42,7 +42,6 @@ class mClockScheduler : public OpScheduler {
 
   CephContext *cct;
   const unsigned cutoff_priority;
-  MonClient *monc;
 
   ClientRegistry client_registry;
   MclockConfig mclock_conf;
@@ -81,11 +80,9 @@ public:
     std::chrono::duration<Rep,Per> idle_age,
     std::chrono::duration<Rep,Per> erase_age,
     std::chrono::duration<Rep,Per> check_time,
-    MonClient *monc,
     bool init_perfcounter=true)
     : cct(cct),
       cutoff_priority(cutoff_priority),
-      monc(monc),
       mclock_conf(cct, client_registry, num_shards,
 	          is_rotational, shard_id, whoami),
       scheduler(
@@ -104,14 +101,13 @@ public:
   mClockScheduler(
     CephContext *cct, int whoami, uint32_t num_shards,
     int shard_id, bool is_rotational, unsigned cutoff_priority,
-    MonClient *monc,
     bool init_perfcounter=true) :
     mClockScheduler(
       cct, whoami, num_shards, shard_id, is_rotational, cutoff_priority,
       crimson::dmclock::standard_idle_age,
       crimson::dmclock::standard_erase_age,
       crimson::dmclock::standard_check_time,
-      monc, init_perfcounter) {}
+      init_perfcounter) {}
 
   /// Calculate scaled cost per item
   uint32_t calc_scaled_cost(int cost);

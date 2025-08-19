@@ -34,7 +34,6 @@ public:
   int shard_id;
   bool is_rotational;
   unsigned cutoff_priority;
-  MonClient *monc;
   bool init_perfcounter;
   mClockScheduler q;
 
@@ -48,12 +47,11 @@ public:
     shard_id(0),
     is_rotational(false),
     cutoff_priority(12),
-    monc(nullptr),
     init_perfcounter(true),
     q(g_ceph_context, whoami, num_shards, shard_id, is_rotational,
       cutoff_priority,
       2ms, 2ms, 1ms,
-      monc, init_perfcounter),
+      init_perfcounter),
     client1(1001),
     client2(9999),
     client3(100000001)
