@@ -24,6 +24,10 @@
 #include <variant>
 #include <vector>
 
+#include "rank.h"
+#include "frag_info.h"
+#include "nest_info.h"
+
 #include "include/client_t.h"
 #include "include/compact_set.h"
 #include "include/encoding.h"
@@ -34,191 +38,12 @@
 #include "include/utime.h"
 
 #include "include/ceph_assert.h"
-#include <boost/serialization/strong_typedef.hpp>
 
 #define CEPH_FS_ONDISK_MAGIC "ceph fs volume v011"
 #define MAX_MDS                   0x100
 
 namespace ceph { class Formatter; }
 class JSONObj;
-
-BOOST_STRONG_TYPEDEF(uint64_t, mds_gid_t)
-extern const mds_gid_t MDS_GID_NONE;
-
-template <>
-struct std::hash<mds_gid_t> {
-  size_t operator()(const mds_gid_t& gid) const
-  {
-    return hash<uint64_t> {}(gid);
-  }
-};
-
-typedef int32_t fs_cluster_id_t;
-constexpr fs_cluster_id_t FS_CLUSTER_ID_NONE = -1;
-
-// The namespace ID of the anonymous default filesystem from legacy systems
-constexpr fs_cluster_id_t FS_CLUSTER_ID_ANONYMOUS = 0;
-
-typedef int32_t mds_rank_t;
-constexpr mds_rank_t MDS_RANK_NONE		= -1;
-constexpr mds_rank_t MDS_RANK_EPHEMERAL_DIST	= -2;
-constexpr mds_rank_t MDS_RANK_EPHEMERAL_RAND	= -3;
-
-struct scatter_info_t {
-  version_t version = 0;
-};
-
-struct frag_info_t : public scatter_info_t {
-  int64_t size() const { return nfiles + nsubdirs; }
-
-  void zero() {
-    *this = frag_info_t();
-  }
-
-  // *this += cur - acc;
-  void add_delta(const frag_info_t &cur, const frag_info_t &acc, bool *touched_mtime=0, bool *touched_chattr=0) {
-    if (cur.mtime > mtime) {
-      mtime = cur.mtime;
-      if (touched_mtime)
-	*touched_mtime = true;
-    }
-    if (cur.change_attr > change_attr) {
-      change_attr = cur.change_attr;
-      if (touched_chattr)
-	*touched_chattr = true;
-    }
-    nfiles += cur.nfiles - acc.nfiles;
-    nsubdirs += cur.nsubdirs - acc.nsubdirs;
-  }
-
-  void add(const frag_info_t& other) {
-    if (other.mtime > mtime)
-      mtime = other.mtime;
-    if (other.change_attr > change_attr)
-      change_attr = other.change_attr;
-    nfiles += other.nfiles;
-    nsubdirs += other.nsubdirs;
-  }
-
-  bool same_sums(const frag_info_t &o) const {
-    return mtime <= o.mtime &&
-	nfiles == o.nfiles &&
-	nsubdirs == o.nsubdirs;
-  }
-
-  void encode(ceph::buffer::list &bl) const;
-  void decode(ceph::buffer::list::const_iterator& bl);
-  void dump(ceph::Formatter *f) const;
-  void decode_json(JSONObj *obj);
-  static std::list<frag_info_t>  generate_test_instances();
-
-  // this frag
-  utime_t mtime;
-  uint64_t change_attr = 0;
-  int64_t nfiles = 0;        // files
-  int64_t nsubdirs = 0;      // subdirs
-};
-WRITE_CLASS_ENCODER(frag_info_t)
-
-inline bool operator==(const frag_info_t &l, const frag_info_t &r) {
-  return memcmp(&l, &r, sizeof(l)) == 0;
-}
-inline bool operator!=(const frag_info_t &l, const frag_info_t &r) {
-  return !(l == r);
-}
-
-std::ostream& operator<<(std::ostream &out, const frag_info_t &f);
-
-struct nest_info_t : public scatter_info_t {
-  int64_t rsize() const { return rfiles + rsubdirs; }
-
-  void zero() {
-    *this = nest_info_t();
-  }
-
-  void sub(const nest_info_t &other) {
-    add(other, -1);
-  }
-  void add(const nest_info_t &other, int fac=1) {
-    if (other.rctime > rctime)
-      rctime = other.rctime;
-    rbytes += fac*other.rbytes;
-    rfiles += fac*other.rfiles;
-    rsubdirs += fac*other.rsubdirs;
-    rsnaps += fac*other.rsnaps;
-  }
-
-  // *this += cur - acc;
-  void add_delta(const nest_info_t &cur, const nest_info_t &acc) {
-    if (cur.rctime > rctime)
-      rctime = cur.rctime;
-    rbytes += cur.rbytes - acc.rbytes;
-    rfiles += cur.rfiles - acc.rfiles;
-    rsubdirs += cur.rsubdirs - acc.rsubdirs;
-    rsnaps += cur.rsnaps - acc.rsnaps;
-  }
-
-  bool same_sums(const nest_info_t &o) const {
-    return rctime <= o.rctime &&
-        rbytes == o.rbytes &&
-        rfiles == o.rfiles &&
-        rsubdirs == o.rsubdirs &&
-        rsnaps == o.rsnaps;
-  }
-
-  void encode(ceph::buffer::list &bl) const;
-  void decode(ceph::buffer::list::const_iterator& bl);
-  void dump(ceph::Formatter *f) const;
-  void decode_json(JSONObj *obj);
-  static std::list<nest_info_t> generate_test_instances();
-
-  // this frag + children
-  utime_t rctime;
-  int64_t rbytes = 0;
-  int64_t rfiles = 0;
-  int64_t rsubdirs = 0;
-  int64_t rsnaps = 0;
-};
-WRITE_CLASS_ENCODER(nest_info_t)
-
-inline bool operator==(const nest_info_t &l, const nest_info_t &r) {
-  return memcmp(&l, &r, sizeof(l)) == 0;
-}
-inline bool operator!=(const nest_info_t &l, const nest_info_t &r) {
-  return !(l == r);
-}
-
-std::ostream& operator<<(std::ostream &out, const nest_info_t &n);
-
-struct vinodeno_t {
-  vinodeno_t() {}
-  vinodeno_t(inodeno_t i, snapid_t s) : ino(i), snapid(s) {}
-
-  void encode(ceph::buffer::list& bl) const;
-  void decode(ceph::buffer::list::const_iterator& p);
-  void dump(ceph::Formatter *f) const;
-  static std::list<vinodeno_t> generate_test_instances() {
-    std::list<vinodeno_t> ls;
-    ls.emplace_back();
-    ls.push_back(vinodeno_t(1, 2));
-    return ls;
-  }
-  inodeno_t ino;
-  snapid_t snapid;
-};
-WRITE_CLASS_ENCODER(vinodeno_t)
-
-inline bool operator==(const vinodeno_t &l, const vinodeno_t &r) {
-  return l.ino == r.ino && l.snapid == r.snapid;
-}
-inline bool operator!=(const vinodeno_t &l, const vinodeno_t &r) {
-  return !(l == r);
-}
-inline bool operator<(const vinodeno_t &l, const vinodeno_t &r) {
-  return
-    l.ino < r.ino ||
-    (l.ino == r.ino && l.snapid < r.snapid);
-}
 
 template<template<typename> class Allocator>
 class charmap_md_t {
