@@ -1,4 +1,6 @@
-#pragma once
+#define CPUTRACE_H
+#ifdef CPUTRACE_H
+
 #include <pthread.h>
 #include <stdint.h>
 #include <string>
@@ -26,17 +28,12 @@ struct results {
     uint64_t ins;
 };
 
-struct cputrace_anchor {
-    const char* name;
-    pthread_mutex_t lock;
-    results global_results;
-    uint64_t flags;
-};
-
-struct cputrace_profiler {
-    cputrace_anchor* anchors;
-    bool profiling;
-    pthread_mutex_t global_lock;
+struct sample_t {
+    uint64_t swi  = 0;
+    uint64_t cyc  = 0;
+    uint64_t cmiss = 0;
+    uint64_t bmiss = 0;
+    uint64_t ins  = 0;
 };
 
 struct HW_ctx {
@@ -58,14 +55,24 @@ constexpr HW_ctx HW_ctx_empty = {
     0,  0,  0,  0,  0
 };
 
-struct sample_t {
-    uint64_t swi  = 0;
-    uint64_t cyc  = 0;
-    uint64_t cmiss = 0;
-    uint64_t bmiss = 0;
-    uint64_t ins  = 0;
+struct cputrace_anchor {
+    const char* name;
+    pthread_mutex_t lock;
+    results global_results;
+    uint64_t flags;
+    HW_ctx per_thread_ctx[CPUTRACE_MAX_THREADS];
+    HW_ctx* active_contexts[CPUTRACE_MAX_THREADS] = {nullptr};
+    sample_t start[CPUTRACE_MAX_THREADS];
+    sample_t end[CPUTRACE_MAX_THREADS];
+    bool is_capturing[CPUTRACE_MAX_THREADS] = {false};
+    uint32_t nest_level[CPUTRACE_MAX_THREADS] = {0};
 };
 
+struct cputrace_profiler {
+    cputrace_anchor* anchors;
+    bool profiling;
+    pthread_mutex_t global_lock;
+};
 
 class HW_profile {
 public:
@@ -76,7 +83,7 @@ private:
     const char* function;
     uint64_t index;
     uint64_t flags;
-    struct HW_ctx ctx;
+    struct HW_ctx* ctx;
 };
 
 void HW_init(HW_ctx* ctx, uint64_t flags);
@@ -91,3 +98,5 @@ void cputrace_stop(ceph::Formatter* f);
 void cputrace_reset(ceph::Formatter* f);
 void cputrace_dump(ceph::Formatter* f, const std::string& logger = "", const std::string& counter = "");
 void cputrace_print_to_stringstream(std::stringstream& ss);
+
+#endif
