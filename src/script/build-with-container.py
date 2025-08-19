@@ -297,6 +297,7 @@ class Steps(StrEnum):
     TESTS = "tests"
     CUSTOM = "custom"
     SOURCE_RPM = "source-rpm"
+    FIND_SRPM = "find-srpm"
     RPM = "rpm"
     DEBS = "debs"
     PACKAGES = "packages"
@@ -330,6 +331,7 @@ class Context:
         self.cli = cli
         self._engine = None
         self.distro_cache_name = ""
+        self.current_srpm = None
 
     @property
     def container_engine(self):
@@ -456,7 +458,7 @@ class Builder:
         if ctx.cli.no_prereqs and not top:
             log.info("Running prerequisite steps disabled")
             return
-        if step in self._did_steps:
+        if step in self._did_steps and not force:
             log.info("step already done: %s", step)
             return
         if not self._did_steps:
@@ -720,11 +722,59 @@ def _glob_search(ctx, pattern):
     return result
 
 
-@Builder.set(Steps.RPM)
-def bc_build_rpm(ctx):
-    """Build RPMs from SRPM."""
-    srpm_glob = "ceph*.src.rpm"
-    if ctx.cli.rpm_match_sha:
+def _find_srpm_glob(ctx, pattern):
+    paths = _glob_search(ctx, pattern)
+    if len(paths) > 1:
+        raise RuntimeError(
+            "too many matching source rpms"
+            f" (rename or remove unwanted files matching {pattern} in the"
+            " ceph dir and try again)"
+        )
+    if not paths:
+        log.info("No SRPM found for pattern: %s", pattern)
+        return None
+    return paths[0]
+
+
+def _find_srpm_by_rpm_query(ctx):
+    log.info("Querying spec file for rpm versions")  # XXX: DEBUG
+    rpmquery_args = [
+        "rpm", "--qf", "%{version}-%{release}\n", "--specfile", "ceph.spec"
+    ]
+    rpmquery_cmd = ' '.join(shlex.quote(cmd) for cmd in rpmquery_args)
+    cmd = _container_cmd(
+        ctx,
+        [
+            "bash",
+            "-c",
+            f"cd {ctx.cli.homedir} && {rpmquery_cmd}",
+        ],
+    )
+    res = _run(cmd, check=False, capture_output=True)
+    if res.returncode != 0:
+        log.warning("Failed to list rpm versions")
+        return None
+    versions = set(l.strip() for l in res.stdout.decode().splitlines())
+    if len(versions) > 1:
+        raise RuntimeError("too many versions in rpm query")
+    version = list(versions)[0]
+    filename = f'ceph-{version}.src.rpm'
+    # lazily reuse the glob match function to detect file presence even tho
+    # it's not got any wildcard chars
+    return _find_srpm_glob(ctx, filename)
+
+
+@Builder.set(Steps.FIND_SRPM)
+def bc_find_srpm(ctx):
+    """Find the current/matching Source RPM."""
+    # side effects ctx setting current_srpm to a string when match is found.
+    if ctx.cli.srpm_match == 'any':
+        ctx.current_srpm = _find_srpm_glob(ctx, "ceph*.src.rpm")
+    elif ctx.cli.srpm_match == 'versionglob':
+        # in theory we could probably drop this method now that
+        # _find_srpm_by_rpm_query exists, but this is retained in case I missed
+        # something and that this is noticeably faster since it doesn't need to
+        # start a container
         if not ctx.cli.ceph_version:
             head_sha = _git_current_sha(ctx)
             srpm_glob = f"ceph*.g{head_sha}.*.src.rpm"
@@ -740,22 +790,24 @@ def bc_build_rpm(ctx):
                 ctx.cli.ceph_version
             )
             srpm_glob = f"ceph-{srpm_version}.*.src.rpm"
-    paths = _glob_search(ctx, srpm_glob)
-    if len(paths) > 1:
-        raise RuntimeError(
-            "too many matching source rpms"
-            f" (rename or remove unwanted files matching {srpm_glob} in the"
-            " ceph dir and try again)"
-        )
-    if not paths:
+        ctx.current_srpm = _find_srpm_glob(ctx, srpm_glob)
+    else:
+        ctx.current_srpm = _find_srpm_by_rpm_query(ctx)
+    if ctx.current_srpm:
+        log.info("Found SRPM: %s", ctx.current_srpm)
+
+
+@Builder.set(Steps.RPM)
+def bc_build_rpm(ctx):
+    """Build RPMs from SRPM."""
+    ctx.build.wants(Steps.FIND_SRPM, ctx, force=True)
+    if not ctx.current_srpm:
         # no matches. build a new srpm
         ctx.build.wants(Steps.SOURCE_RPM, ctx)
-        paths = _glob_search(ctx, srpm_glob)
-        if not paths:
-            raise RuntimeError(
-                f"unable to find source rpm(s) matching {srpm_glob}"
-            )
-    srpm_path = pathlib.Path(ctx.cli.homedir) / paths[0]
+        ctx.build.wants(Steps.FIND_SRPM, ctx, force=True)
+        if not ctx.current_srpm:
+            raise RuntimeError("unable to find source rpm(s)")
+    srpm_path = pathlib.Path(ctx.cli.homedir) / ctx.current_srpm
     topdir = pathlib.Path(ctx.cli.homedir) / "rpmbuild"
     if ctx.cli.build_dir:
         topdir = (
@@ -991,11 +1043,25 @@ def parse_cli(build_step_names):
     )
     parser.add_argument(
         "--rpm-no-match-sha",
-        dest="rpm_match_sha",
-        action="store_false",
+        dest="srpm_match",
+        action="store_const",
+        const='any',
         help=(
             "Do not try to build RPM packages that match the SHA of the current"
             " git checkout. Use any source RPM available."
+            " [DEPRECATED] Use --rpm-match=any"
+        ),
+    )
+    parser.add_argument(
+        "--srpm-match",
+        dest="srpm_match",
+        choices=("any", "versionglob", "auto"),
+        default="auto",
+        help=(
+            "Method used to detect what Source RPM (SRPM) to build:"
+            " 'any' looks for any ceph source rpms."
+            " 'versionglob' uses a glob matching against version/git id."
+            " 'auto' (the default) uses a version derived from ceph.spec."
         ),
     )
     parser.add_argument(
