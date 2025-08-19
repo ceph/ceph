@@ -9,6 +9,7 @@ local.file_match "system" {
 loki.source.file "system" {
 	targets               = local.file_match.system.targets
 	forward_to            = [loki.write.default.receiver]
+	legacy_positions_file = "/var/lib/alloy/data/positions.yaml"
 }
 
 loki.write "default" {

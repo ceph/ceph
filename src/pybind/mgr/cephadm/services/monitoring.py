@@ -891,7 +891,7 @@ class AlloyService(CephadmService):
         alloy_config = self.mgr.template.render('services/alloy.j2', context)
         return {
             "files": {
-                "alloy": alloy_config
+                "config.alloy": alloy_config
             }
         }, self.get_dependencies(self.mgr)
         

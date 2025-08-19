@@ -78,7 +78,12 @@ class Monitoring(ContainerDaemonForm):
             'image': DefaultImages.ALLOY.image_ref,
             'cpus': '1',
             'memory': '1GB',
-            'args': ["run", "/etc/alloy/alloy", "--storage.path=/var/lib/alloy/data"],
+            'args': [
+                'run',
+                '/etc/alloy/config.alloy',
+                '--storage.path=/var/lib/alloy/data'
+            ],
+            'config-json-files': ['config.alloy'],
         },
         'node-exporter': {
             'image': DefaultImages.NODE_EXPORTER.image_ref,
@@ -344,48 +349,9 @@ class Monitoring(ContainerDaemonForm):
             mounts[log_dir] = '/var/log/ceph:z'
             mounts[os.path.join(data_dir, 'data')] = '/promtail:Z'
         elif daemon_type == 'alloy':
-            # Ensure proper permissions and ownership for the /var/log/ceph directory
-            # when setting up the Alloy daemon.
-            # This step ensures that:
-            # 1. The /var/log/ceph directory is created if it doesn't exist.
-            # 2. The directory's ownership is set to the 'alloy' user (UID 473) and group (GID 473).
-            # 3. The permissions are set to 0o750 to allow the 'alloy' user full access,
-            #    group members to have read and execute access, and others no access.
-            # This is necessary because the container should have access to /var/log/ceph with the
-            # correct ownership and permissions for Alloy to function correctly in the container.
-            etc_path = os.path.join(data_dir, 'etc/alloy')
-            mounts[etc_path] = '/etc/alloy:Z'
-
-            # Extract UID and GID for the 'alloy' user
-            uid, gid = self.extract_uid_gid(ctx, daemon_type)
-
-            # Ensure the /var/log/ceph directory exists
-            os.makedirs(log_dir, exist_ok=True)
-            try:
-                # Get the current ownership and permissions of the /var/log/ceph directory
-                stat_info = os.stat(log_dir)
-                # If the ownership doesn't match the expected UID and GID, update it
-                if (stat_info.st_uid, stat_info.st_gid) != (uid, gid):
-                    os.chown(log_dir, uid, gid)  # Set ownership to the 'alloy' user (UID 473, GID 473)
-                    os.chmod(log_dir, 0o750)     # Permissions rwx for owner, r-x for group
-            except Exception as e:
-                raise Error(f"Failed to fix permissions for {log_dir}: {e}")
-
-            # Mount Ceph logs inside the container
-            mounts[log_dir] = '/var/log/ceph:Z'
-
-            # Ensure persistent storage for Alloy's internal state (positions, etc.)
-            state_path = os.path.join(data_dir, 'alloy/data')
-            os.makedirs(state_path, exist_ok=True)
-            try:
-                stat_info = os.stat(state_path)
-                if (stat_info.st_uid, stat_info.st_gid) != (uid, gid):
-                    os.chown(state_path, uid, gid)
-                    os.chmod(state_path, 0o750)  # rwx for alloy user, r-x for group
-            except Exception as e:
-                raise Error(f"Failed to fix permissions for {state_path}: {e}")
-
-            mounts[state_path] = '/var/lib/alloy/data:Z'
+            mounts[os.path.join(data_dir, 'etc/alloy')] = '/etc/alloy:Z'
+            mounts[log_dir] = '/var/log/ceph:z'
+            mounts[os.path.join(data_dir, 'data')] = '/var/lib/alloy/data:Z'
         elif daemon_type == 'node-exporter':
             mounts[
                 os.path.join(data_dir, 'etc/node-exporter')
@@ -432,6 +398,10 @@ class Monitoring(ContainerDaemonForm):
             # by ubuntu 18.04 kernel!)
         ]
         args.extend(monitoring_args)
+        if self.identity.daemon_type == 'alloy':
+            args.extend(
+            ['--user=root']
+        )
         if self.identity.daemon_type == 'node-exporter':
             # in order to support setting '--path.procfs=/host/proc','--path.sysfs=/host/sys',
             # '--path.rootfs=/rootfs' for node-exporter we need to disable selinux separation
