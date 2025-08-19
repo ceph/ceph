@@ -281,7 +281,8 @@ namespace crimson {
     //   recent values of rho and delta.
     // U1 determines whether to use client information function dynamically,
     // B is heap branching factor
-    template<typename C, typename R, bool IsDelayed, bool U1, unsigned B>
+    template<typename C, typename R, bool IsDelayed, bool U1, unsigned B,
+	     typename BackgroundJob=RunEvery>
     class PriorityQueueBase {
       // we don't want to include gtest.h just for FRIEND_TEST
       friend class dmclock_server_client_idle_erase_Test;
@@ -354,7 +355,7 @@ namespace crimson {
       // ClientRec could be "protected" with no issue. [See comments
       // associated with function submit_top_request.]
       class ClientRec {
-	friend PriorityQueueBase<C,R,IsDelayed,U1,B>;
+	friend PriorityQueueBase<C,R,IsDelayed,U1,B,BackgroundJob>;
 
 	C                     client;
 	RequestTag            prev_tag;
@@ -826,7 +827,7 @@ namespace crimson {
 
       // NB: All threads declared at end, so they're destructed first!
 
-      RunEvery cleaning_job;
+      BackgroundJob cleaning_job;
 
       // helper function to return the value of a variant if it matches the
       // given type T, or a default value of T otherwise
@@ -1190,7 +1191,7 @@ namespace crimson {
 
 
       /*
-       * This is being called regularly by RunEvery. Every time it's
+       * This is being called regularly by cleaning_job. Every time it's
        * called it notes the time and delta counter (mark point) in a
        * deque. It also looks at the deque to find the most recent
        * mark point that is older than clean_age. It then walks the
@@ -1271,9 +1272,11 @@ namespace crimson {
     }; // class PriorityQueueBase
 
 
-    template<typename C, typename R, bool IsDelayed=false, bool U1=false, unsigned B=2>
-    class PullPriorityQueue : public PriorityQueueBase<C,R,IsDelayed,U1,B> {
-      using super = PriorityQueueBase<C,R,IsDelayed,U1,B>;
+    template<typename C, typename R, bool IsDelayed=false, bool U1=false,
+	     unsigned B=2, typename BackgroundJob=RunEvery>
+    class PullPriorityQueue : public PriorityQueueBase<
+      C,R,IsDelayed,U1,B,BackgroundJob> {
+      using super = PriorityQueueBase<C,R,IsDelayed,U1,B,BackgroundJob>;
 
     public:
 
