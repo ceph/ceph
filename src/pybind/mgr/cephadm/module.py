@@ -60,6 +60,9 @@ from mgr_module import (
     OptionLevel,
     NotifyType,
     MonCommandFailed,
+    MgrModuleRecoverDB,
+    CLIRequiresDB,
+    CLIReadCommand,
 )
 from mgr_util import build_url
 import orchestrator
@@ -4286,3 +4289,12 @@ Then run the following:
     def trigger_connect_dashboard_rgw(self) -> None:
         self.need_connect_dashboard_rgw = True
         self.event.set()
+
+    @CLIRequiresDB
+    @CLIReadCommand('cephadm get-cluster-version-history')
+    @MgrModuleRecoverDB
+    def do_get_cluster_version_history(self) -> Tuple[int, str, str]:
+        '''
+        Shows all previous and current cluster versions ordered chronologically
+        '''
+        return self.version_tracker._do_get_cluster_version_history()
