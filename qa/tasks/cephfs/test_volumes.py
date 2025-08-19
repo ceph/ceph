@@ -649,8 +649,14 @@ class TestRenameCmd(TestVolumesHelper):
         oldvolname = self.volname
         newvolname = self._gen_vol_name()
         new_data_pool, new_metadata_pool = f"cephfs.{newvolname}.data", f"cephfs.{newvolname}.meta"
+
+        self.run_ceph_cmd(f'fs fail {oldvolname}')
+        self.run_ceph_cmd(f'fs set {oldvolname} refuse_client_session true')
         self._fs_cmd("volume", "rename", oldvolname, newvolname,
                      "--yes-i-really-mean-it")
+        self.run_ceph_cmd(f'fs set {newvolname} joinable true')
+        self.run_ceph_cmd(f'fs set {newvolname} refuse_client_session false')
+
         volumels = json.loads(self._fs_cmd('volume', 'ls'))
         volnames = [volume['name'] for volume in volumels]
         # volume name changed
@@ -670,10 +676,16 @@ class TestRenameCmd(TestVolumesHelper):
         oldvolname = self.volname
         newvolname = self._gen_vol_name()
         new_data_pool, new_metadata_pool = f"cephfs.{newvolname}.data", f"cephfs.{newvolname}.meta"
+
+        self.run_ceph_cmd(f'fs fail {oldvolname}')
+        self.run_ceph_cmd(f'fs set {oldvolname} refuse_client_session true')
         self._fs_cmd("volume", "rename", oldvolname, newvolname,
                      "--yes-i-really-mean-it")
         self._fs_cmd("volume", "rename", oldvolname, newvolname,
                      "--yes-i-really-mean-it")
+        self.run_ceph_cmd(f'fs set {newvolname} joinable true')
+        self.run_ceph_cmd(f'fs set {newvolname} refuse_client_session false')
+
         volumels = json.loads(self._fs_cmd('volume', 'ls'))
         volnames = [volume['name'] for volume in volumels]
         self.assertIn(newvolname, volnames)
@@ -688,6 +700,8 @@ class TestRenameCmd(TestVolumesHelper):
         """
         newvolname = self._gen_vol_name()
 
+        self.run_ceph_cmd(f'fs fail {self.volname}')
+        self.run_ceph_cmd(f'fs set {self.volname} refuse_client_session true')
         try:
             self._fs_cmd("volume", "rename", self.volname, newvolname)
         except CommandFailedError as ce:
@@ -697,6 +711,8 @@ class TestRenameCmd(TestVolumesHelper):
         else:
             self.fail("expected renaming of FS volume to fail without the "
                       "'--yes-i-really-mean-it' flag")
+        self.run_ceph_cmd(f'fs set {self.volname} joinable true')
+        self.run_ceph_cmd(f'fs set {self.volname} refuse_client_session false')
 
     def test_volume_rename_for_more_than_one_data_pool(self):
         """
@@ -711,8 +727,14 @@ class TestRenameCmd(TestVolumesHelper):
         self.fs.get_pool_names(refresh=True)
         orig_data_pool_names = list(self.fs.data_pools.values())
         new_metadata_pool = f"cephfs.{newvolname}.meta"
-        self._fs_cmd("volume", "rename", self.volname, newvolname,
+
+        self.run_ceph_cmd(f'fs fail {oldvolname}')
+        self.run_ceph_cmd(f'fs set {oldvolname} refuse_client_session true')
+        self._fs_cmd("volume", "rename", oldvolname, newvolname,
                      "--yes-i-really-mean-it")
+        self.run_ceph_cmd(f'fs set {newvolname} joinable true')
+        self.run_ceph_cmd(f'fs set {newvolname} refuse_client_session false')
+
         volumels = json.loads(self._fs_cmd('volume', 'ls'))
         volnames = [volume['name'] for volume in volumels]
         # volume name changed
@@ -724,99 +746,35 @@ class TestRenameCmd(TestVolumesHelper):
         # data pool names unchanged
         self.assertCountEqual(orig_data_pool_names, list(self.fs.data_pools.values()))
 
-    def test_volume_info(self):
-        """
-        Tests the 'fs volume info' command
-        """
-        vol_fields = ["pools", "used_size", "pending_subvolume_deletions", "mon_addrs"]
-        group = self._gen_subvol_grp_name()
-        # create subvolumegroup
-        self._fs_cmd("subvolumegroup", "create", self.volname, group)
-        # get volume metadata
-        vol_info = json.loads(self._get_volume_info(self.volname))
-        for md in vol_fields:
-            self.assertIn(md, vol_info,
-                          f"'{md}' key not present in metadata of volume")
-        self.assertEqual(vol_info["used_size"], 0,
-                         "Size should be zero when volumes directory is empty")
+    def test_rename_when_fs_is_online(self):
+        for m in self.mounts:
+            m.umount_wait()
+        newvolname = self._gen_vol_name()
 
-    def test_volume_info_pending_subvol_deletions(self):
-        """
-        Tests the pending_subvolume_deletions in 'fs volume info' command
-        """
-        subvolname = self._gen_subvol_name()
-        # create subvolume
-        self._fs_cmd("subvolume", "create", self.volname, subvolname, "--mode=777")
-        # create 3K zero byte files
-        self._do_subvolume_io(subvolname, number_of_files=3000, file_size=0)
-        # Delete the subvolume
-        self._fs_cmd("subvolume", "rm", self.volname, subvolname)
-        # get volume metadata
-        vol_info = json.loads(self._get_volume_info(self.volname))
-        self.assertNotEqual(vol_info['pending_subvolume_deletions'], 0,
-                            "pending_subvolume_deletions should be 1")
-        # verify trash dir is clean
-        self._wait_for_trash_empty()
+        self.run_ceph_cmd(f'fs set {self.volname} refuse_client_session true')
+        self.negtest_ceph_cmd(
+            args=(f'fs volume rename {self.volname} {newvolname} '
+                   '--yes-i-really-mean-it'),
+            errmsgs=(f"CephFS '{self.volname}' is not offline. Before "
+                      "renaming a CephFS, it must be marked as down. See "
+                      "`ceph fs fail`."),
+            retval=errno.EPERM)
+        self.run_ceph_cmd(f'fs set {self.volname} refuse_client_session false')
 
-    def test_volume_info_without_subvolumegroup(self):
-        """
-        Tests the 'fs volume info' command without subvolume group
-        """
-        vol_fields = ["pools", "mon_addrs"]
-        # get volume metadata
-        vol_info = json.loads(self._get_volume_info(self.volname))
-        for md in vol_fields:
-            self.assertIn(md, vol_info,
-                          f"'{md}' key not present in metadata of volume")
-        self.assertNotIn("used_size", vol_info,
-                         "'used_size' should not be present in absence of subvolumegroup")
-        self.assertNotIn("pending_subvolume_deletions", vol_info,
-                         "'pending_subvolume_deletions' should not be present in absence"
-                         " of subvolumegroup")
+    def test_rename_when_clients_arent_refused(self):
+        newvolname = self._gen_vol_name()
+        for m in self.mounts:
+            m.umount_wait()
 
-    def test_volume_info_with_human_readable_flag(self):
-        """
-        Tests the 'fs volume info --human_readable' command
-        """
-        vol_fields = ["pools", "used_size", "pending_subvolume_deletions", "mon_addrs"]
-        group = self._gen_subvol_grp_name()
-        # create subvolumegroup
-        self._fs_cmd("subvolumegroup", "create", self.volname, group)
-        # get volume metadata
-        vol_info = json.loads(self._get_volume_info(self.volname, "--human_readable"))
-        for md in vol_fields:
-            self.assertIn(md, vol_info,
-                          f"'{md}' key not present in metadata of volume")
-        units = [' ', 'k', 'M', 'G', 'T', 'P', 'E']
-        assert vol_info["used_size"][-1] in units, "unit suffix in used_size is absent"
-        assert vol_info["pools"]["data"][0]["avail"][-1] in units, "unit suffix in avail data is absent"
-        assert vol_info["pools"]["data"][0]["used"][-1] in units, "unit suffix in used data is absent"
-        assert vol_info["pools"]["metadata"][0]["avail"][-1] in units, "unit suffix in avail metadata is absent"
-        assert vol_info["pools"]["metadata"][0]["used"][-1] in units, "unit suffix in used metadata is absent"
-        self.assertEqual(int(vol_info["used_size"]), 0,
-                         "Size should be zero when volumes directory is empty")
-
-    def test_volume_info_with_human_readable_flag_without_subvolumegroup(self):
-        """
-        Tests the 'fs volume info --human_readable' command without subvolume group
-        """
-        vol_fields = ["pools", "mon_addrs"]
-        # get volume metadata
-        vol_info = json.loads(self._get_volume_info(self.volname, "--human_readable"))
-        for md in vol_fields:
-            self.assertIn(md, vol_info,
-                          f"'{md}' key not present in metadata of volume")
-        units = [' ', 'k', 'M', 'G', 'T', 'P', 'E']
-        assert vol_info["pools"]["data"][0]["avail"][-1] in units, "unit suffix in avail data is absent"
-        assert vol_info["pools"]["data"][0]["used"][-1] in units, "unit suffix in used data is absent"
-        assert vol_info["pools"]["metadata"][0]["avail"][-1] in units, "unit suffix in avail metadata is absent"
-        assert vol_info["pools"]["metadata"][0]["used"][-1] in units, "unit suffix in used metadata is absent"
-        self.assertNotIn("used_size", vol_info,
-                         "'used_size' should not be present in absence of subvolumegroup")
-        self.assertNotIn("pending_subvolume_deletions", vol_info,
-                         "'pending_subvolume_deletions' should not be present in absence"
-                         " of subvolumegroup")
-
+        self.run_ceph_cmd(f'fs fail {self.volname}')
+        self.negtest_ceph_cmd(
+            args=(f'fs volume rename {self.volname} {newvolname} '
+                   '--yes-i-really-mean-it'),
+            errmsgs=(f"CephFS '{self.volname}' doesn't refuse clients. "
+                      "Before renaming a CephFS, flag "
+                      "'refuse_client_session' must be set. See "
+                      "`ceph fs set`."),
+            retval=errno.EPERM)
 
 class TestSubvolumeGroups(TestVolumesHelper):
     """Tests for FS subvolume group operations."""
