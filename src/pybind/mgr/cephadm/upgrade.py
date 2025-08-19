@@ -955,7 +955,7 @@ class CephadmUpgrade:
             if self.upgrade_state.remaining_count is not None and not d_entry[1]:
                 self.upgrade_state.remaining_count -= 1
                 self._save_upgrade_state()
-    
+
     def _deploy_alloy(self, promtail_hosts: set) -> None:
         daemons = self.mgr.cache.get_daemons()
         remaining_promtails = [d for d in daemons if d.daemon_type == 'promtail']

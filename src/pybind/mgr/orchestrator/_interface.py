@@ -939,7 +939,7 @@ class Orchestrator(object):
     def apply_loki(self, spec: ServiceSpec) -> OrchResult[str]:
         """Update existing a Loki daemon(s)"""
         raise NotImplementedError()
-    
+
     def apply_promtail(self, spec: ServiceSpec) -> OrchResult[str]:
         """Update existing a Promtail daemon(s)"""
         raise NotImplementedError()

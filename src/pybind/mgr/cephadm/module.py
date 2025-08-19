@@ -3855,7 +3855,7 @@ Then run the following:
     @handle_orch_error
     def apply_loki(self, spec: ServiceSpec) -> str:
         return self._apply(spec)
-    
+
     @handle_orch_error
     def apply_promtail(self, spec: ServiceSpec) -> str:
         return self._apply(spec)

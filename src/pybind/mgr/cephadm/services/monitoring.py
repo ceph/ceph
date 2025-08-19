@@ -894,7 +894,8 @@ class AlloyService(CephadmService):
                 "config.alloy": alloy_config
             }
         }, self.get_dependencies(self.mgr)
-        
+
+
 @register_cephadm_service
 class PromtailService(CephadmService):
     TYPE = 'promtail'
