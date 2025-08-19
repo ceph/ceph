@@ -70,18 +70,28 @@ static void copy_from_local(
   assert(tgt->node == from_src->node);
   assert(to_src->node == from_src->node);
 
+  auto end = to_src->get_right_ptr_end();
+  auto key_end = to_src->get_node_key_ptr();
+  auto key_len = from_src->get_node_key_ptr() - tgt->get_node_key_ptr();
+
   auto to_copy = from_src->get_right_ptr_end() - to_src->get_right_ptr_end();
-  assert(to_copy > 0);
+  assert(to_copy >= 0);
   int adjust_offset = tgt > from_src? -len : len;
   memmove(to_src->get_right_ptr_end() + adjust_offset,
           to_src->get_right_ptr_end(),
           to_copy);
 
+  if (from_src > tgt) {   //keep same content for rm_key and rm_keyrange in case replay has crc error
+    memset(end, 0, len);
+  }
   for ( auto ite = from_src; ite < to_src; ite++) {
       ite->update_offset(-adjust_offset);
   }
   memmove(tgt->get_node_key_ptr(), from_src->get_node_key_ptr(),
           to_src->get_node_key_ptr() - from_src->get_node_key_ptr());
+  if (from_src > tgt) {
+    memset(key_end - key_len, 0, key_len);
+  }
 }
 
 struct delta_inner_t {
@@ -1137,6 +1147,21 @@ public:
     }
     leaf_remove(iter);
   }
+  void journal_leaf_remove_range(
+    const_iterator _fiter,
+    const_iterator _liter,
+    delta_leaf_buffer_t *recorder) {
+    assert(_fiter != iter_end());
+    assert(_fiter != _liter);
+    auto fiter = iterator(this, _fiter.index);
+    auto liter = iterator(this, _liter.index);
+    if (recorder) {
+      for(auto iter = fiter; iter != liter; iter++) {
+        recorder->remove(iter->get_key());
+      }
+    }
+    leaf_remove_range(fiter, liter);
+  }
 
   StringKVLeafNodeLayout() : buf(nullptr) {}
 
@@ -1517,13 +1542,21 @@ private:
 
   void leaf_remove(iterator iter) {
     assert(iter != iter_end());
-    if ((iter + 1) != iter_end()) {
-      omap_leaf_key_t key = iter->get_node_key();
-      copy_from_local(key.key_len + key.val_len, iter, iter + 1, iter_end());
-    }
+
+    omap_leaf_key_t key = iter->get_node_key();
+    copy_from_local(key.key_len + key.val_len, iter, iter + 1, iter_end());
+
     set_size(get_size() - 1);
   }
+  void leaf_remove_range(iterator fiter, iterator liter) {
+    assert(fiter != iter_end());
 
+    auto adjust_len = fiter->get_right_ptr_end() - liter->get_right_ptr_end();
+    copy_from_local(adjust_len, fiter, liter, iter_end());
+
+
+    set_size(get_size() - (liter - fiter));
+  }
   /**
    * get_key_ptr
    *
