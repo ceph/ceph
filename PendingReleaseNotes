@@ -53,6 +53,20 @@
 
 >=18.2.2
 --------
+* CephFS: It is now possible to pause the threads that asynchronously purge
+  the deleted subvolumes by using the config option
+  "mgr/volumes/pause_purging".
+* CephFS: It is now possible to pause the threads that asynchronously clone
+  the subvolume snapshots by using the config option
+  "mgr/volumes/pause_cloning".
+
+* CephFS: Modifying the setting "max_mds" when a cluster is
+  unhealthy now requires users to pass the confirmation flag
+  (--yes-i-really-mean-it). This has been added as a precaution to tell the
+  users that modifying "max_mds" may not help with troubleshooting or recovery
+  effort. Instead, it might further destabilize the cluster.
+* RADOS: Added convenience function `librados::AioCompletion::cancel()` with
+  the same behavior as `librados::IoCtx::aio_cancel()`.
 
 * RBD: When diffing against the beginning of time (`fromsnapname == NULL`) in
   fast-diff mode (`whole_object == true` with `fast-diff` image feature enabled
