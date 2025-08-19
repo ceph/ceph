@@ -8,4 +8,4 @@
 #
 
 test -f "ceph-$1.tar.bz2" || ./make-dist $1
-rpmbuild -D"_sourcedir `pwd`" -D"_specdir `pwd`" -D"_srcrpmdir `pwd`" -bs ceph.spec
+rpmbuild -D"_sourcedir ${PWD}" -D"_specdir ${PWD}" -D"_srcrpmdir ${PWD}" -bs ceph.spec
