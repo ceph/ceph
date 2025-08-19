@@ -124,7 +124,7 @@ public:
   // signal and handle connection failure
   virtual void fault() = 0;
   // send message
-  virtual void send_message(Message *m) = 0;
+  virtual void send_message(MessageRef&& m) = 0;
   // send keepalive
   virtual void send_keepalive() = 0;
 
