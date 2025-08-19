@@ -77,7 +77,7 @@ class AsyncConnection : public Connection {
    */
   class DelayedDelivery : public EventCallback {
     std::set<uint64_t> register_time_events; // need to delete it if stop
-    std::deque<Message*> delay_queue;
+    std::deque<MessageRef> delay_queue;
     std::mutex delay_lock;
     AsyncMessenger *msgr;
     EventCenter *center;
@@ -96,9 +96,9 @@ class AsyncConnection : public Connection {
     }
     void set_center(EventCenter *c) { center = c; }
     void do_request(uint64_t id) override;
-    void queue(double delay_period, Message *m) {
+    void queue(double delay_period, MessageRef&& m) {
       std::lock_guard<std::mutex> l(delay_lock);
-      delay_queue.push_back(m);
+      delay_queue.push_back(std::move(m));
       register_time_events.insert(center->create_time_event(delay_period*1000000, this));
     }
     void discard();
@@ -126,7 +126,6 @@ public:
   void accept(ConnectedSocket socket,
 	      const entity_addr_t &listen_addr,
 	      const entity_addr_t &peer_addr);
-  int send_message(Message *m) override;
 
   void send_keepalive() override;
   void mark_down() override;
@@ -179,6 +178,8 @@ public:
   int port;
 public:
   Messenger::Policy policy;
+protected:
+  int send_msg(MessageRef&& m) override;
 private:
 
   DispatchQueue *dispatch_queue;

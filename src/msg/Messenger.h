@@ -696,7 +696,7 @@ public:
    *
    * @param m The Message we are testing.
    */
-  bool ms_can_fast_dispatch(const ceph::cref_t<Message>& m) {
+  bool ms_can_fast_dispatch(const Message& m) {
     for ([[maybe_unused]] const auto& [priority, dispatcher] : fast_dispatchers) {
       if (dispatcher->ms_can_fast_dispatch2(m)) {
         return true;
@@ -714,7 +714,7 @@ public:
   void ms_fast_dispatch(const ceph::ref_t<Message> &m) {
     m->set_dispatch_stamp(ceph_clock_now());
     for ([[maybe_unused]] const auto& [priority, dispatcher] : fast_dispatchers) {
-      if (dispatcher->ms_can_fast_dispatch2(m)) {
+      if (dispatcher->ms_can_fast_dispatch2(*m)) {
         dispatcher->ms_fast_dispatch2(m);
         return;
       }
@@ -755,9 +755,6 @@ public:
     lsubdout(cct, ms, 0) << "ms_deliver_dispatch: unhandled message " << m << " " << *m << " from "
 			 << m->get_source_inst() << dendl;
     ceph_assert(!cct->_conf->ms_die_on_unhandled_msg);
-  }
-  void ms_deliver_dispatch(Message *m) {
-    return ms_deliver_dispatch(ceph::ref_t<Message>(m, false)); /* consume ref */
   }
   /**
    * Notify each Dispatcher of a new Connection. Call
