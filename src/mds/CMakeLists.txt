@@ -20,6 +20,7 @@ set(mds_srcs
   CDir.cc
   CInode.cc
   LogEvent.cc
+  LogSegment.cc
   MDSTable.cc
   InoTable.cc
   JournalPointer.cc
