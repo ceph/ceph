@@ -4,7 +4,6 @@
 #ifndef KEY_VALUE_DB_H
 #define KEY_VALUE_DB_H
 
-#include "include/buffer.h"
 #include <iosfwd>
 #include <set>
 #include <map>
@@ -13,6 +12,7 @@
 #include <string_view>
 
 #include "common/PriorityCache.h"
+#include "include/buffer_fwd.h"
 
 namespace TOPNSPC::common { class PerfCounters; }
 namespace ceph { class Formatter; }
@@ -36,28 +36,13 @@ public:
     void set(
       const std::string &prefix,                      ///< [in] Prefix for keys, or CF name
       const std::map<std::string, ceph::buffer::list> &to_set ///< [in] keys/values to set
-    ) {
-      for (auto it = to_set.cbegin(); it != to_set.cend(); ++it)
-	set(prefix, it->first, it->second);
-    }
+    );
 
     /// Set Keys (via encoded ceph::buffer::list)
     void set(
       const std::string &prefix,      ///< [in] prefix, or CF name
       ceph::buffer::list& to_set_bl           ///< [in] encoded key/values to set
-      ) {
-      using ceph::decode;
-      auto p = std::cbegin(to_set_bl);
-      uint32_t num;
-      decode(num, p);
-      while (num--) {
-	std::string key;
-	ceph::buffer::list value;
-	decode(key, p);
-	decode(value, p);
-	set(prefix, key, value);
-      }
-    }
+    );
 
     /// Set Key
     virtual void set(
@@ -77,26 +62,13 @@ public:
     void rmkeys(
       const std::string &prefix,     ///< [in] Prefix or CF to search for
       ceph::buffer::list &keys_bl            ///< [in] Keys to remove
-    ) {
-      using ceph::decode;
-      auto p = std::cbegin(keys_bl);
-      uint32_t num;
-      decode(num, p);
-      while (num--) {
-	std::string key;
-	decode(key, p);
-	rmkey(prefix, key);
-      }
-    }
+    );
 
     /// Removes Keys
     void rmkeys(
       const std::string &prefix,        ///< [in] Prefix/CF to search for
       const std::set<std::string> &keys ///< [in] Keys to remove
-    ) {
-      for (auto it = keys.cbegin(); it != keys.cend(); ++it)
-	rmkey(prefix, *it);
-    }
+    );
 
     /// Remove Key
     virtual void rmkey(
@@ -179,24 +151,10 @@ public:
     ) = 0;
   virtual int get(const std::string &prefix, ///< [in] prefix or CF name
 		  const std::string &key,    ///< [in] key
-		  ceph::buffer::list *value) {       ///< [out] value
-    std::set<std::string> ks;
-    ks.insert(key);
-    std::map<std::string,ceph::buffer::list> om;
-    int r = get(prefix, ks, &om);
-    if (om.find(key) != om.end()) {
-      *value = std::move(om[key]);
-    } else {
-      *value = ceph::buffer::list();
-      r = -ENOENT;
-    }
-    return r;
-  }
+		  ceph::buffer::list *value);       ///< [out] value
   virtual int get(const std::string &prefix,
 		  const char *key, size_t keylen,
-		  ceph::buffer::list *value) {
-    return get(prefix, std::string(key, keylen), value);
-  }
+		  ceph::buffer::list *value);
 
   // This superclass is used both by kv iterators *and* by the ObjectMap
   // omap iterator.  The class hierarchies are unfortunately tied together
@@ -232,16 +190,7 @@ public:
     virtual std::string_view key_as_sv() = 0;
     virtual std::pair<std::string, std::string> raw_key() = 0;
     virtual std::pair<std::string_view, std::string_view> raw_key_as_sv() = 0;
-    virtual ceph::buffer::ptr value_as_ptr() {
-      ceph::buffer::list bl = value();
-      if (bl.length() == 1) {
-        return *bl.buffers().begin();
-      } else if (bl.length() == 0) {
-        return ceph::buffer::ptr();
-      } else {
-	ceph_abort();
-      }
-    }
+    virtual ceph::buffer::ptr value_as_ptr();
   };
   typedef std::shared_ptr< IteratorImpl > Iterator;
 
@@ -263,14 +212,7 @@ public:
     virtual std::pair<std::string_view, std::string_view> raw_key_as_sv() = 0;
     virtual bool raw_key_is_prefixed(const std::string &prefix) = 0;
     virtual ceph::buffer::list value() = 0;
-    virtual ceph::buffer::ptr value_as_ptr() {
-      ceph::buffer::list bl = value();
-      if (bl.length()) {
-        return *bl.buffers().begin();
-      } else {
-        return ceph::buffer::ptr();
-      }
-    }
+    virtual ceph::buffer::ptr value_as_ptr();
     virtual std::string_view value_as_sv() = 0;
     virtual int status() = 0;
     virtual size_t key_size() {
@@ -338,12 +280,8 @@ private:
     std::pair<std::string_view, std::string_view> raw_key_as_sv() override {
       return generic_iter->raw_key_as_sv();
     }
-    ceph::buffer::list value() override {
-      return generic_iter->value();
-    }
-    ceph::buffer::ptr value_as_ptr() override {
-      return generic_iter->value_as_ptr();
-    }
+    ceph::buffer::list value() override;
+    ceph::buffer::ptr value_as_ptr() override;
     std::string_view value_as_sv() override {
       return generic_iter->value_as_sv();
     }
