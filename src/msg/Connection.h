@@ -252,9 +252,7 @@ protected:
       msgr(m)
   {}
 
-  ~Connection() override {
-    //generic_dout(0) << "~Connection " << this << dendl;
-  }
+  ~Connection() override;
 };
 
 using ConnectionRef = ceph::ref_t<Connection>;
