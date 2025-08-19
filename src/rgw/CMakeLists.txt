@@ -328,6 +328,7 @@ if(D4N_USE_FDB_SINK)
 	driver/fdb)
  
  list(APPEND librgw_common_srcs
+        driver/fdb/sal_d4n_fdb.cc
 	driver/fdb/fdb-cache-driver.cc)
 endif(D4N_USE_FDB_SINK)
 

@@ -38,17 +38,21 @@ namespace rgw::d4n {
   class PolicyDriver;
 }
 
-namespace rgw { namespace sal {
+namespace rgw::sal {
 
 inline std::string get_cache_block_prefix(rgw::sal::Object* object, const std::string& version)
-{
+{ 
   return fmt::format("{}{}{}{}{}", url_encode(object->get_bucket()->get_bucket_id(), true), CACHE_DELIM, url_encode(version, true), CACHE_DELIM, url_encode(object->get_name(), true));
 }
-
+  
 inline std::string get_key_in_cache(const std::string& prefix, const std::string& offset, const std::string& len)
 {
   return fmt::format("{}{}{}{}{}", prefix, CACHE_DELIM, offset, CACHE_DELIM, len);
-}
+} 
+  
+} // namespace rgw::sal
+
+namespace rgw::sal {
 
 using boost::redis::connection;
 
@@ -359,4 +363,4 @@ public:
             prefix_map_t& processed_prefixes) override;
 };
 
-} } // namespace rgw::sal
+} // namespace rgw::sal
