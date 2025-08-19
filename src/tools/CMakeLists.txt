@@ -54,6 +54,7 @@ target_link_libraries(ceph-monstore-tool os global Boost::program_options)
 install(TARGETS ceph-monstore-tool DESTINATION bin)
 
 add_executable(ceph-objectstore-tool
+  ${CMAKE_SOURCE_DIR}/src/auth/cephx/CephxKeyServer.cc
   ceph_objectstore_tool.cc
   rebuild_mondb.cc
   RadosDump.cc)
