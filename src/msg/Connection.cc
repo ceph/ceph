@@ -4,6 +4,7 @@
 #include "msg/Connection.h"
 #include "msg/Messenger.h"
 
+Connection::~Connection() = default;
 
 bool Connection::is_blackhole() const {
   auto& conf = msgr->cct->_conf;
