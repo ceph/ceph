@@ -20,15 +20,6 @@ MetricsHandler::MetricsHandler(CephContext *cct, MDSRank *mds)
     mds(mds) {
 }
 
-bool MetricsHandler::ms_can_fast_dispatch2(const cref_t<Message> &m) const {
-  return m->get_type() == CEPH_MSG_CLIENT_METRICS || m->get_type() == MSG_MDS_PING;
-}
-
-void MetricsHandler::ms_fast_dispatch2(const ref_t<Message> &m) {
-  bool handled = ms_dispatch2(m);
-  ceph_assert(handled);
-}
-
 bool MetricsHandler::ms_dispatch2(const ref_t<Message> &m) {
   if (m->get_type() == CEPH_MSG_CLIENT_METRICS &&
       m->get_connection()->get_peer_type() == CEPH_ENTITY_TYPE_CLIENT) {
