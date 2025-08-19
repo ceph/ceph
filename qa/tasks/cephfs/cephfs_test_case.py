@@ -252,8 +252,8 @@ class CephFSTestCase(CephTestCase):
     def get_session_data(self, client_id):
         return self._session_by_id(client_id)
 
-    def _session_list(self):
-        ls_data = self.fs.mds_asok(['session', 'ls'])
+    def _session_list(self, rank=None, status=None):
+        ls_data = self.fs.rank_asok(['session', 'ls'], rank=rank, status=status)
         ls_data = [s for s in ls_data if s['state'] not in ['stale', 'closed']]
         return ls_data
 
@@ -269,9 +269,9 @@ class CephFSTestCase(CephTestCase):
     def perf_dump(self, rank=None, status=None):
         return self.fs.rank_asok(['perf', 'dump'], rank=rank, status=status)
 
-    def wait_until_evicted(self, client_id, timeout=30):
+    def wait_until_evicted(self, client_id, rank=None, timeout=30):
         def is_client_evicted():
-            ls = self._session_list()
+            ls = self._session_list(rank=rank)
             for s in ls:
                 if s['id'] == client_id:
                     return False
