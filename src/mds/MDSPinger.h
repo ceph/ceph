@@ -6,12 +6,12 @@
 
 #include <map>
 
-#include "mdstypes.h" // for mds_rank_t
 #include "common/ceph_mutex.h"
 #include "common/ceph_time.h"
+#include "include/cephfs/rank.h" // for mds_rank_t
 #include "include/types.h" // for version_t
-#include "msg/msg_types.h" // for entity_addrvec_t
 
+struct entity_addrvec_t;
 class MDSRank;
 
 class MDSPinger {
