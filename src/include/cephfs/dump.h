@@ -15,6 +15,7 @@
 #pragma once
 
 #include "types.h"
+#include "vinodeno.h"
 
 #include "common/Formatter.h"
 

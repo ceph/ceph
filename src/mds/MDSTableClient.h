@@ -18,7 +18,7 @@
 
 #include "include/buffer.h"
 #include "include/types.h"
-#include "include/cephfs/types.h" // for mds_rank_t
+#include "include/cephfs/rank.h" // for mds_rank_t
 #include "common/ref.h" // for cref_t
 #include "LogSegmentRef.h"
 

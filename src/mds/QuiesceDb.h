@@ -22,7 +22,7 @@
 
 #include "metareqid_t.h"
 #include "common/ceph_time.h"
-#include "include/cephfs/types.h" // for mds_gid_t
+#include "include/cephfs/gid.h" // for mds_gid_t
 
 class Context;
 
