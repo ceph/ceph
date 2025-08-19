@@ -1369,6 +1369,7 @@ record_t Cache::prepare_record(
 	  stype,
 	  std::move(delta_bl)
 	});
+      DEBUGT("prepared delta -- {} for extent {}", t, record.deltas.back(), *i);
       i->last_committed_crc = final_crc;
     }
 
