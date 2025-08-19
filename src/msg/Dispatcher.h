@@ -67,9 +67,11 @@ public:
    * @param m The message we want to fast dispatch.
    * @returns True if the message can be fast dispatched; false otherwise.
    */
-  virtual bool ms_can_fast_dispatch(const Message *m) const { return false; }
-  virtual bool ms_can_fast_dispatch2(const MessageConstRef& m) const {
-    return ms_can_fast_dispatch(m.get());
+  virtual bool ms_can_fast_dispatch(const Message* m) const {
+    return false;
+  }
+  virtual bool ms_can_fast_dispatch2(const Message& m) const {
+    return ms_can_fast_dispatch(&m);
   }
   /**
    * This function determines if a dispatcher is included in the

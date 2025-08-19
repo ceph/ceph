@@ -11,6 +11,8 @@
 #include "compression_onwire.h"
 #include "frames_v2.h"
 
+#include <deque>
+
 class ProtocolV2 : public Protocol {
 private:
   enum State {
@@ -92,15 +94,15 @@ private:
   bool can_write;
   struct out_queue_entry_t {
     bool is_prepared {false};
-    Message* m {nullptr};
+    MessageRef m;
   };
 
   /**
    * A queue for each priority value, highest priority first.
    */
-  std::map<int, std::list<out_queue_entry_t>, std::greater<int>> out_queue;
+  std::map<int, std::deque<out_queue_entry_t>, std::greater<int>> out_queue;
 
-  std::list<Message *> sent;
+  std::deque<MessageRef> sent;
   std::atomic<uint64_t> out_seq{0};
   std::atomic<uint64_t> in_seq{0};
   std::atomic<uint64_t> ack_left{0};
@@ -154,9 +156,9 @@ private:
   Ct<ProtocolV2> *_fault();
   void discard_out_queue();
   void reset_session();
-  void prepare_send_message(uint64_t features, Message *m);
+  void prepare_send_message(uint64_t features, const MessageRef& m);
   out_queue_entry_t _get_next_outgoing();
-  ssize_t write_message(Message *m, bool more);
+  ssize_t write_message(const MessageRef& m, bool more);
   void handle_message_ack(uint64_t seq);
   void reset_compression();
 
@@ -217,7 +219,7 @@ public:
   virtual bool is_connected() override;
   virtual void stop() override;
   virtual void fault() override;
-  virtual void send_message(Message *m) override;
+  virtual void send_message(MessageRef&& m) override;
   virtual void send_keepalive() override;
 
   virtual void read_event() override;
