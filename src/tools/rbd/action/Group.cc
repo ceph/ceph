@@ -70,18 +70,6 @@ void add_group_spec_options(po::options_description *pos,
   }
 }
 
-std::string get_group_snap_state_name(rbd_group_snap_state_t state)
-{
-  switch (state) {
-  case RBD_GROUP_SNAP_STATE_INCOMPLETE:
-    return "incomplete";
-  case RBD_GROUP_SNAP_STATE_COMPLETE:
-    return "complete";
-  default:
-    return "unknown (" + stringify(state) + ")";
-  }
-}
-
 std::string get_group_snap_namespace_name(
     librbd::group_snap_namespace_type_t type)
 {
@@ -777,9 +765,8 @@ int execute_group_snap_list(const po::variables_map &vm,
   }
 
   for (const auto& snap : snaps) {
-    auto state_string = get_group_snap_state_name(snap.state);
+    auto state_string = utils::group_snap_state(snap.state);
     auto type_string = get_group_snap_namespace_name(snap.namespace_type);
-
     int get_mirror_res = -ENOENT;
     librbd::group_snap_mirror_namespace_t mirror_snap;
     std::string mirror_snap_state = "unknown";
@@ -816,6 +803,7 @@ int execute_group_snap_list(const po::variables_map &vm,
           f->dump_string("peer_uuid", uuid);
         }
         f->close_section();
+        f->dump_bool("complete", mirror_snap.complete);
         if (mirror_snap.state == RBD_SNAP_MIRROR_STATE_NON_PRIMARY ||
             mirror_snap.state == RBD_SNAP_MIRROR_STATE_NON_PRIMARY_DEMOTED) {
           f->dump_string("primary_mirror_uuid",
@@ -835,7 +823,11 @@ int execute_group_snap_list(const po::variables_map &vm,
         if (mirror_snap.state == RBD_SNAP_MIRROR_STATE_NON_PRIMARY ||
             mirror_snap.state == RBD_SNAP_MIRROR_STATE_NON_PRIMARY_DEMOTED) {
           oss << " " << mirror_snap.primary_mirror_uuid << ":"
-              << mirror_snap.primary_snap_id;
+              << mirror_snap.primary_snap_id << " ";
+          if (!mirror_snap.complete) {
+            oss << "not ";
+          }
+          oss << "copied";
         }
         oss << ")";
       }
@@ -894,7 +886,7 @@ int execute_group_snap_info(const po::variables_map &vm,
     return r;
   }
 
-  auto state_string = get_group_snap_state_name(group_snap.state);
+  auto state_string = utils::group_snap_state(group_snap.state);
   if (f) {
     f->open_object_section("group_snapshot");
     f->dump_string("id", group_snap.id);

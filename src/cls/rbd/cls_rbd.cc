@@ -8685,7 +8685,7 @@ int group_snap_set(cls_method_context_t hctx,
   }
 
   std::string key = group::snap_key(group_snap.id);
-  if (group_snap.state == cls::rbd::GROUP_SNAPSHOT_STATE_INCOMPLETE) {
+  if (group_snap.state == cls::rbd::GROUP_SNAPSHOT_STATE_CREATING) {
     bufferlist snap_bl;
     r = cls_cxx_map_get_val(hctx, key, &snap_bl);
     if (r < 0 && r != -ENOENT) {
@@ -8818,8 +8818,8 @@ int group_snap_unlink(cls_method_context_t hctx,
     CLS_ERR("error decoding snapshot: %s", group_snap_id.c_str());
     return -EIO;
   }
-  if (group_snap.state != cls::rbd::GROUP_SNAPSHOT_STATE_COMPLETE) {
-    CLS_LOG(20, "snap %s not complete", group_snap_id.c_str());
+  if (group_snap.state != cls::rbd::GROUP_SNAPSHOT_STATE_CREATED) {
+    CLS_LOG(20, "snap %s is not created", group_snap_id.c_str());
     return -ENOENT;
   }
 

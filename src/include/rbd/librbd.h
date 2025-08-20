@@ -300,8 +300,11 @@ typedef struct {
 } rbd_group_spec_t;
 
 typedef enum {
-  RBD_GROUP_SNAP_STATE_INCOMPLETE,
-  RBD_GROUP_SNAP_STATE_COMPLETE
+  RBD_GROUP_SNAP_STATE_INCOMPLETE = 0, /* deprecated */
+  RBD_GROUP_SNAP_STATE_COMPLETE   = 1, /* deprecated */
+
+  RBD_GROUP_SNAP_STATE_CREATING   = 0,
+  RBD_GROUP_SNAP_STATE_CREATED    = 1
 } rbd_group_snap_state_t;
 
 typedef enum {

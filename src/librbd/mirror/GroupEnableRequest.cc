@@ -431,11 +431,21 @@ void GroupEnableRequest<I>::create_primary_group_snapshot() {
                 + "." + m_group_snap.id;
   m_group_snap.name = snap_name;
 
-  cls::rbd::MirrorSnapshotState state = cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY;
+  librados::Rados rados(m_group_ioctx);
+  int8_t require_osd_release;
+  int r = rados.get_min_compatible_osd(&require_osd_release);
+  if (r < 0) {
+    lderr(m_cct) << "failed to retrieve min OSD release: " << cpp_strerror(r)
+                 << dendl;
+    m_ret_val = r;
+    disable_mirror_group();
+    return;
+  }
 
-  // Create incomplete group snap
+  auto complete = cls::rbd::get_mirror_group_snapshot_complete_initial(require_osd_release);
   m_group_snap.snapshot_namespace = cls::rbd::GroupSnapshotNamespaceMirror{
-    state, m_mirror_peer_uuids, {}, {}};
+    cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY, m_mirror_peer_uuids, {}, {},
+    complete};
 
   for (auto image_ctx: m_image_ctxs) {
     m_group_snap.snaps.emplace_back(image_ctx->md_ctx.get_id(), image_ctx->id,
@@ -448,8 +458,8 @@ void GroupEnableRequest<I>::create_primary_group_snapshot() {
   auto aio_comp = create_rados_callback<
     GroupEnableRequest<I>,
     &GroupEnableRequest<I>::handle_create_primary_group_snapshot>(this);
-  int r = m_group_ioctx.aio_operate(librbd::util::group_header_name(m_group_id),
-                                    aio_comp, &op);
+  r = m_group_ioctx.aio_operate(librbd::util::group_header_name(m_group_id),
+                                aio_comp, &op);
   ceph_assert(r == 0);
   aio_comp->release();
 }
@@ -532,7 +542,9 @@ void GroupEnableRequest<I>::update_primary_group_snapshot() {
     m_group_snap.snaps[i].snap_id = m_snap_ids[i];
   }
 
-  m_group_snap.state = cls::rbd::GROUP_SNAPSHOT_STATE_COMPLETE;
+  m_group_snap.state = cls::rbd::GROUP_SNAPSHOT_STATE_CREATED;
+  cls::rbd::set_mirror_group_snapshot_complete(m_group_snap);
+
   librados::ObjectWriteOperation op;
   cls_client::group_snap_set(&op, m_group_snap);
 
