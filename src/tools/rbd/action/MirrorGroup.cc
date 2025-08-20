@@ -460,12 +460,7 @@ int execute_status(const po::variables_map &vm,
     if (!snaps.empty()) {
       formatter->open_array_section("snapshots");
       for (auto &snap : snaps) {
-        std::string state_string;
-        if (snap.state == RBD_GROUP_SNAP_STATE_INCOMPLETE) {
-          state_string = "incomplete";
-        } else {
-          state_string = "ok";
-        }
+        auto state_string = utils::group_snap_state(snap.state);
         formatter->open_object_section("snapshot");
         formatter->dump_string("name", snap.name);
         formatter->dump_string("state", state_string);

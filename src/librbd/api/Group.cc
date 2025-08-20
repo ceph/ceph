@@ -87,9 +87,11 @@ std::string calc_ind_image_snap_name(uint64_t pool_id,
 class GetGroupMirrorVisitor {
 public:
   group_snap_mirror_namespace_t *mirror_snap;
+  cls::rbd::GroupSnapshotState group_snap_state;
 
-  explicit GetGroupMirrorVisitor(group_snap_mirror_namespace_t *mirror_snap)
-      : mirror_snap(mirror_snap) {}
+  explicit GetGroupMirrorVisitor(group_snap_mirror_namespace_t *mirror_snap,
+                                 cls::rbd::GroupSnapshotState group_snap_state)
+      : mirror_snap(mirror_snap), group_snap_state(group_snap_state) {}
 
   template <typename T>
   inline int operator()(const T&) const {
@@ -99,7 +101,8 @@ public:
   inline int operator()(
                 const cls::rbd::GroupSnapshotNamespaceMirror& snap_namespace) {
     mirror_snap->state = static_cast<snap_mirror_state_t>(snap_namespace.state);
-    mirror_snap->complete = snap_namespace.complete;
+    mirror_snap->complete = is_mirror_group_snapshot_complete(group_snap_state,
+                                                              snap_namespace.complete);
     mirror_snap->mirror_peer_uuids = snap_namespace.mirror_peer_uuids;
     mirror_snap->primary_mirror_uuid = snap_namespace.primary_mirror_uuid;
     mirror_snap->primary_snap_id = snap_namespace.primary_snap_id;
@@ -918,7 +921,7 @@ int Group<I>::snap_create(librados::IoCtx& group_ioctx,
 
   group_snap.id = librbd::util::generate_image_id(group_ioctx);
   group_snap.name = string(snap_name);
-  group_snap.state = cls::rbd::GROUP_SNAPSHOT_STATE_INCOMPLETE;
+  group_snap.state = cls::rbd::GROUP_SNAPSHOT_STATE_CREATING;
   group_snap.snaps = image_snaps;
 
   cls::rbd::ImageSnapshotNamespaceGroup ne{group_ioctx.get_id(), group_id,
@@ -1062,7 +1065,7 @@ int Group<I>::snap_create(librados::IoCtx& group_ioctx,
   }
 
   group_snap.snaps = image_snaps;
-  group_snap.state = cls::rbd::GROUP_SNAPSHOT_STATE_COMPLETE;
+  group_snap.state = cls::rbd::GROUP_SNAPSHOT_STATE_CREATED;
 
   r = cls_client::group_snap_set(&group_ioctx, group_header_oid, group_snap);
   if (r < 0) {
@@ -1366,8 +1369,8 @@ int Group<I>::snap_rollback(librados::IoCtx& group_ioctx,
     return -ENOENT;
   }
 
-  if (group_snap->state != cls::rbd::GROUP_SNAPSHOT_STATE_COMPLETE) {
-    lderr(cct) << "group snapshot is not complete" << dendl;
+  if (group_snap->state != cls::rbd::GROUP_SNAPSHOT_STATE_CREATED) {
+    lderr(cct) << "group snapshot is not created" << dendl;
     return -EINVAL;
   }
 
@@ -1461,7 +1464,7 @@ int Group<I>::snap_get_mirror_namespace(
     return r;
   }
 
-  GetGroupMirrorVisitor visitor(mirror_namespace);
+  GetGroupMirrorVisitor visitor(mirror_namespace, group_snap.state);
   r = group_snap.snapshot_namespace.visit(visitor);
   if (r < 0) {
     return r;

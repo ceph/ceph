@@ -520,7 +520,7 @@ TEST_F(TestGroup, snap_get_info)
   ASSERT_EQ(0, rbd_group_snap_get_info(ioctx2, gp_name, gp_snap_name,
                                        &gp_snap_info));
   ASSERT_STREQ(gp_snap_name, gp_snap_info.name);
-  ASSERT_EQ(RBD_GROUP_SNAP_STATE_COMPLETE, gp_snap_info.state);
+  ASSERT_EQ(RBD_GROUP_SNAP_STATE_CREATED, gp_snap_info.state);
   ASSERT_EQ(RBD_GROUP_SNAP_NAMESPACE_TYPE_USER, gp_snap_info.namespace_type);
   ASSERT_STREQ("", gp_snap_info.image_snap_name);
   ASSERT_EQ(0U, gp_snap_info.image_snaps_count);
@@ -535,7 +535,7 @@ TEST_F(TestGroup, snap_get_info)
   ASSERT_EQ(0, rbd_group_snap_get_info(ioctx2, gp_name, gp_snap_name,
                                        &gp_snap_info));
   ASSERT_STREQ(gp_snap_name, gp_snap_info.name);
-  ASSERT_EQ(RBD_GROUP_SNAP_STATE_COMPLETE, gp_snap_info.state);
+  ASSERT_EQ(RBD_GROUP_SNAP_STATE_CREATED, gp_snap_info.state);
   ASSERT_EQ(RBD_GROUP_SNAP_NAMESPACE_TYPE_USER, gp_snap_info.namespace_type);
   ASSERT_EQ(1U, gp_snap_info.image_snaps_count);
   ASSERT_EQ(m_image_name, gp_snap_info.image_snaps[0].image_name);
@@ -573,7 +573,7 @@ TEST_F(TestGroup, snap_get_infoPP)
   ASSERT_EQ(0, m_rbd.group_snap_get_info(ioctx2, gp_name, gp_snap_name,
                                          &gp_snap_info));
   ASSERT_EQ(gp_snap_name, gp_snap_info.name);
-  ASSERT_EQ(RBD_GROUP_SNAP_STATE_COMPLETE, gp_snap_info.state);
+  ASSERT_EQ(RBD_GROUP_SNAP_STATE_CREATED, gp_snap_info.state);
   ASSERT_EQ(RBD_GROUP_SNAP_NAMESPACE_TYPE_USER, gp_snap_info.namespace_type);
   ASSERT_EQ("", gp_snap_info.image_snap_name);
   ASSERT_EQ(0U, gp_snap_info.image_snaps.size());
@@ -587,7 +587,7 @@ TEST_F(TestGroup, snap_get_infoPP)
   ASSERT_EQ(0, m_rbd.group_snap_get_info(ioctx2, gp_name, gp_snap_name,
                                          &gp_snap_info));
   ASSERT_EQ(gp_snap_name, gp_snap_info.name);
-  ASSERT_EQ(RBD_GROUP_SNAP_STATE_COMPLETE, gp_snap_info.state);
+  ASSERT_EQ(RBD_GROUP_SNAP_STATE_CREATED, gp_snap_info.state);
   ASSERT_EQ(RBD_GROUP_SNAP_NAMESPACE_TYPE_USER, gp_snap_info.namespace_type);
   ASSERT_EQ(1U, gp_snap_info.image_snaps.size());
   ASSERT_EQ(m_image_name, gp_snap_info.image_snaps[0].image_name);
@@ -653,7 +653,7 @@ TEST_F(TestGroup, snap_list2)
   ASSERT_EQ(4U, num_snaps);
 
   for (int i = 0; i < 4; i++) {
-    ASSERT_EQ(RBD_GROUP_SNAP_STATE_COMPLETE, gp_snaps[i].state);
+    ASSERT_EQ(RBD_GROUP_SNAP_STATE_CREATED, gp_snaps[i].state);
     ASSERT_EQ(RBD_GROUP_SNAP_NAMESPACE_TYPE_USER, gp_snaps[i].namespace_type);
     if (!strcmp(gp_snaps[i].name, gp_snap_names[0])) {
       ASSERT_EQ(0U, gp_snaps[i].image_snaps_count);
@@ -741,7 +741,7 @@ TEST_F(TestGroup, snap_list2PP)
   ASSERT_EQ(4U, gp_snaps.size());
 
   for (const auto& gp_snap : gp_snaps) {
-    ASSERT_EQ(RBD_GROUP_SNAP_STATE_COMPLETE, gp_snap.state);
+    ASSERT_EQ(RBD_GROUP_SNAP_STATE_CREATED, gp_snap.state);
     ASSERT_EQ(RBD_GROUP_SNAP_NAMESPACE_TYPE_USER, gp_snap.namespace_type);
     if (gp_snap.name == gp_snap_names[0]) {
       ASSERT_EQ(0U, gp_snap.image_snaps.size());

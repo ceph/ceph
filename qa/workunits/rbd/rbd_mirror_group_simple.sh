@@ -1670,7 +1670,7 @@ test_create_group_with_regular_snapshots_then_mirror()
   group_snap_create "${primary_cluster}" "${pool}/${group}" "${snap}"
   check_group_snap_exists "${primary_cluster}" "${pool}/${group}" "${snap}"
   local group_snap_id
-  get_newest_group_snapshot_id "${primary_cluster}" "${pool}/${group}" group_snap_id
+  get_newest_created_group_snapshot_id "${primary_cluster}" "${pool}/${group}" group_snap_id
 
   mirror_group_enable "${primary_cluster}" "${pool}/${group}"
   wait_for_group_present "${secondary_cluster}" "${pool}" "${group}" "${group_image_count}"
@@ -1681,10 +1681,9 @@ test_create_group_with_regular_snapshots_then_mirror()
     wait_for_group_status_in_pool_dir "${primary_cluster}" "${pool}"/"${group}" 'down+unknown' 0
   fi
 
-  check_group_snap_exists "${secondary_cluster}" "${pool}/${group}" "${snap}"
-  wait_for_group_snap_sync_complete "${secondary_cluster}" "${pool}/${group}" "${group_snap_id}"
-
   wait_for_group_synced "${primary_cluster}" "${pool}/${group}" "${secondary_cluster}" "${pool}/${group}"
+  check_group_snap_exists "${secondary_cluster}" "${pool}/${group}" "${snap}"
+
   mirror_group_snapshot_and_wait_for_sync_complete "${secondary_cluster}" "${primary_cluster}" "${pool}"/"${group}"
 
   group_snap_remove "${primary_cluster}" "${pool}/${group}" "${snap}"
@@ -1952,9 +1951,9 @@ test_stopped_daemon()
   wait_for_group_synced "${primary_cluster}" "${pool}"/"${group}" "${secondary_cluster}" "${pool}"/"${group}" 
 
   local primary_group_snap_id
-  get_newest_group_snapshot_id "${primary_cluster}" "${pool}"/"${group}" primary_group_snap_id
+  get_newest_complete_mirror_group_snapshot_id "${primary_cluster}" "${pool}"/"${group}" primary_group_snap_id
   local secondary_group_snap_id
-  get_newest_group_snapshot_id "${secondary_cluster}" "${pool}"/"${group}" secondary_group_snap_id
+  get_newest_complete_mirror_group_snapshot_id "${secondary_cluster}" "${pool}"/"${group}" secondary_group_snap_id
   test "${primary_group_snap_id}" = "${secondary_group_snap_id}" ||  { fail "mismatched ids"; return 1; }
 
   # Add image to synced group (whilst daemon is stopped)
@@ -1979,7 +1978,7 @@ test_stopped_daemon()
     wait_for_group_present "${secondary_cluster}" "${pool}" "${group}" "${group_image_count}"
   fi
 
-  get_newest_group_snapshot_id "${primary_cluster}" "${pool}"/"${group}" primary_group_snap_id
+  get_newest_complete_mirror_group_snapshot_id "${primary_cluster}" "${pool}"/"${group}" primary_group_snap_id
   test "${primary_group_snap_id}" != "${secondary_group_snap_id}" ||  { fail "matched ids"; return 1; }
 
   echo "starting daemon"
@@ -1988,7 +1987,7 @@ test_stopped_daemon()
   wait_for_group_status_in_pool_dir "${secondary_cluster}" "${pool}"/"${group}" 'up+replaying' $(("${group_image_count}"+1))
   wait_for_group_synced "${primary_cluster}" "${pool}"/"${group}" "${secondary_cluster}" "${pool}"/"${group}" 
 
-  get_newest_group_snapshot_id "${secondary_cluster}" "${pool}"/"${group}" secondary_group_snap_id
+  get_newest_complete_mirror_group_snapshot_id "${secondary_cluster}" "${pool}"/"${group}" secondary_group_snap_id
   test "${primary_group_snap_id}" = "${secondary_group_snap_id}" ||  { fail "mismatched ids"; return 1; }
 
   # removed image from synced group (whilst daemon is stopped)
@@ -2008,7 +2007,7 @@ test_stopped_daemon()
     mirror_group_enable "${primary_cluster}" "${pool}/${group}"
   fi
 
-  get_newest_group_snapshot_id "${primary_cluster}" "${pool}"/"${group}" primary_group_snap_id
+  get_newest_complete_mirror_group_snapshot_id "${primary_cluster}" "${pool}"/"${group}" primary_group_snap_id
   test "${primary_group_snap_id}" != "${secondary_group_snap_id}" ||  { fail "matched ids"; return 1; }
 
   echo "starting daemon"
@@ -2018,7 +2017,7 @@ test_stopped_daemon()
   wait_for_group_status_in_pool_dir "${secondary_cluster}" "${pool}"/"${group}" 'up+replaying' "${group_image_count}"
   wait_for_group_synced "${primary_cluster}" "${pool}"/"${group}" "${secondary_cluster}" "${pool}"/"${group}" 
 
-  get_newest_group_snapshot_id "${secondary_cluster}" "${pool}"/"${group}" secondary_group_snap_id
+  get_newest_complete_mirror_group_snapshot_id "${secondary_cluster}" "${pool}"/"${group}" secondary_group_snap_id
   test "${primary_group_snap_id}" = "${secondary_group_snap_id}" ||  { fail "mismatched ids"; return 1; }
 
   # TODO When dynamic groups are support this test could be extended with more actions whilst daemon is stopped.
@@ -2641,7 +2640,7 @@ test_force_promote()
   fi
 
   local group_snap_id
-  get_newest_group_snapshot_id "${primary_cluster}" "${pool}/${group0}" group_snap_id
+  get_newest_complete_mirror_group_snapshot_id "${primary_cluster}" "${pool}/${group0}" group_snap_id
   echo "id = ${group_snap_id}"
   wait_for_test_group_snap_present "${secondary_cluster}" "${pool}/${group0}" "${group_snap_id}" 1
 
@@ -2890,7 +2889,7 @@ test_force_promote_before_initial_sync()
     mirror_group_enable "${primary_cluster}" "${pool}/${group0}"
     wait_for_group_present "${secondary_cluster}" "${pool}" "${group0}" "${image_count}"
     local group_snap_id
-    get_newest_group_snapshot_id "${primary_cluster}" "${pool}/${group0}" group_snap_id
+    get_newest_complete_mirror_group_snapshot_id "${primary_cluster}" "${pool}/${group0}" group_snap_id
     wait_for_test_group_snap_present "${secondary_cluster}" "${pool}/${group0}" "${group_snap_id}" 1
 
     # stop the daemon to prevent further syncing of snapshots
@@ -3281,8 +3280,8 @@ test_odf_failover_failback()
 
   # failback to original primary (cluster2)
   local group_snap_id_a group_snap_id_b
-  get_newest_group_snapshot_id "${secondary_cluster}" "${pool}"/"${group0}" group_snap_id_a
-  get_newest_group_snapshot_id "${primary_cluster}" "${pool}"/"${group0}" group_snap_id_b
+  get_newest_complete_mirror_group_snapshot_id "${secondary_cluster}" "${pool}"/"${group0}" group_snap_id_a
+  get_newest_complete_mirror_group_snapshot_id "${primary_cluster}" "${pool}"/"${group0}" group_snap_id_b
   test "${group_snap_id_a}" = "${group_snap_id_b}" || fail "group not synced"
 
   # demote - neither site is primary
@@ -3291,7 +3290,7 @@ test_odf_failover_failback()
 
   # confirm that a new snapshot was taken by the demote operation
   local group_snap_id_c
-  get_newest_group_snapshot_id "${secondary_cluster}" "${pool}"/"${group0}" group_snap_id_c
+  get_newest_complete_mirror_group_snapshot_id "${secondary_cluster}" "${pool}"/"${group0}" group_snap_id_c
   test "${group_snap_id_a}" != "${group_snap_id_c}" || fail "new snap not taken by demote"
 
   local group_id_before group_id_after
@@ -3314,8 +3313,8 @@ test_odf_failover_failback()
     wait_for_group_synced "${secondary_cluster}" "${pool}"/"${group0}" "${primary_cluster}" "${pool}/${group0}" 
 
     local group_snap_id_e group_snap_id_f
-    get_newest_group_snapshot_id "${secondary_cluster}" "${pool}"/"${group0}" group_snap_id_e
-    get_newest_group_snapshot_id "${primary_cluster}" "${pool}"/"${group0}" group_snap_id_f
+    get_newest_complete_mirror_group_snapshot_id "${secondary_cluster}" "${pool}"/"${group0}" group_snap_id_e
+    get_newest_complete_mirror_group_snapshot_id "${primary_cluster}" "${pool}"/"${group0}" group_snap_id_f
     test "${group_snap_id_c}" = "${group_snap_id_e}" || fail "new snap on original secondary"
     test "${group_snap_id_c}" = "${group_snap_id_f}" || fail "group not synced"
 
@@ -3510,7 +3509,7 @@ test_resync()
   compare_image_with_snapshot "${secondary_cluster}" "${pool}/${image_prefix}0" "${primary_cluster}" "${pool}/${image_prefix}0@${snap0}"
 
   local group_snap_id secondary_group_snap_id primary_group_snap_id
-  get_newest_group_snapshot_id "${primary_cluster}" "${pool}/${group0}" primary_group_snap_id
+  get_newest_complete_mirror_group_snapshot_id "${primary_cluster}" "${pool}/${group0}" primary_group_snap_id
   echo "id = ${primary_group_snap_id}"
 
   # stop the daemon to prevent further syncing of snapshots
@@ -3644,12 +3643,12 @@ test_demote_snap_sync()
   stop_mirrors "${secondary_cluster}" 
   wait_for_group_status_in_pool_dir "${secondary_cluster}" "${pool}"/"${group0}" 'down+stopped'
   local group_snap_id
-  get_newest_group_snapshot_id "${primary_cluster}" "${pool}/${group0}" group_snap_id
+  get_newest_complete_mirror_group_snapshot_id "${primary_cluster}" "${pool}/${group0}" group_snap_id
 
   mirror_group_demote "${primary_cluster}" "${pool}/${group0}"
 
   local primary_demote_snap_id
-  get_newest_group_snapshot_id "${primary_cluster}" "${pool}/${group0}" primary_demote_snap_id
+  get_newest_complete_mirror_group_snapshot_id "${primary_cluster}" "${pool}/${group0}" primary_demote_snap_id
 
   test "${group_snap_id}" != "${primary_demote_snap_id}" ||  { fail "no new snapshot after demote"; return 1; }
 
@@ -3659,7 +3658,7 @@ test_demote_snap_sync()
   wait_for_group_status_in_pool_dir "${primary_cluster}" "${pool}/${group0}" 'up+unknown'
 
   local secondary_snap_id
-  get_newest_group_snapshot_id "${secondary_cluster}" "${pool}/${group0}" secondary_snap_id
+  get_newest_complete_mirror_group_snapshot_id "${secondary_cluster}" "${pool}/${group0}" secondary_snap_id
 
   test "${primary_demote_snap_id}" = "${secondary_snap_id}" ||  { fail "demote snapshot ${primary_demote_snap_id} not synced"; return 1; }
 
@@ -3705,7 +3704,7 @@ test_demote_snap_sync_after_restart()
   write_image "${primary_cluster}" "${pool}" "${image_prefix}1" 256 4194304
   mirror_group_demote "${primary_cluster}" "${pool}/${group0}"
   local group_snap_id
-  get_newest_group_snapshot_id "${primary_cluster}" "${pool}/${group0}" group_snap_id
+  get_newest_complete_mirror_group_snapshot_id "${primary_cluster}" "${pool}/${group0}" group_snap_id
   wait_for_test_group_snap_present "${secondary_cluster}" "${pool}/${group0}" "${group_snap_id}" 1
 
   stop_mirrors "${secondary_cluster}" '-9'
