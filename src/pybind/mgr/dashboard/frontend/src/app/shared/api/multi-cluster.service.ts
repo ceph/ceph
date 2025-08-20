@@ -33,12 +33,12 @@ export class MultiClusterService {
   }
 
   startClusterTokenStatusPolling() {
-    this.checkAndStartTimer();
+    return this.checkAndStartTimer();
   }
 
   private checkAndStartTimer() {
     this.checkTokenStatus().subscribe(this.getClusterTokenStatusObserver());
-    this.timerService
+    return this.timerService
       .get(() => this.checkTokenStatus(), this.TOKEN_CHECK_INTERVAL)
       .subscribe(this.getClusterTokenStatusObserver());
   }
