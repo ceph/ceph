@@ -31,7 +31,8 @@
 #include "include/xlist.h"
 #include "include/elist.h"
 #include "include/interval_set.h"
-#include "mdstypes.h" // for metareqid_t, session_info_t
+#include "mdstypes.h" // for session_info_t
+#include "metareqid_t.h"
 #include "mds/MDSAuthCaps.h"
 #include "common/ceph_time.h" // for ceph::coarse_mono_{clock,time}
 #include "common/DecayCounter.h"
