@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "mdstypes.h"
+#include "metareqid_t.h"
 #include "include/cephfs/types.h"
 #include "MDSContext.h"
 #include "common/ceph_json.h"
