@@ -1,5 +1,17 @@
+/*
+ * CpuTrace: lightweight hardware performance counter profiling
+ *
+ * Implementation details.
+ *
+ * See detailed documentation and usage examples in:
+ *   doc/dev/cputrace.rst
+ *
+ * This file contains the low-level implementation of CpuTrace,
+ * including perf_event setup, context management, and RAII
+ * profiling helpers.
+ */
+
 #include "cputrace.h"
-#include "common/Formatter.h"
 
 #include <linux/perf_event.h>
 #include <asm/unistd.h>
@@ -10,7 +22,6 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
-#include <cstring>
 #include <thread>
 
 #define PROFILE_ASSERT(x) if (!(x)) { fprintf(stderr, "Assert failed %s:%d\n", __FILE__, __LINE__); exit(1); }
@@ -18,6 +29,8 @@
 static thread_local uint64_t thread_id_hash;
 static thread_local bool thread_id_initialized;
 static cputrace_profiler g_profiler;
+static std::unordered_map<std::string, measurement_t> g_named_measurements;
+static std::mutex g_named_measurements_lock;
 
 struct read_format {
     uint64_t nr;
@@ -76,7 +89,12 @@ static void close_perf_fd(int& fd) {
     }
 }
 
-void HW_init(HW_ctx* ctx, uint64_t flags) {
+HW_ctx HW_ctx_empty = {
+    -1, -1, -1, -1, -1, -1,
+     0,  0,  0,  0,  0
+};
+
+void HW_init(HW_ctx* ctx, cputrace_flags flags) {
     struct perf_event_attr pe;
     int parent_fd = -1;
 
@@ -84,11 +102,14 @@ void HW_init(HW_ctx* ctx, uint64_t flags) {
         setup_perf_event(&pe, PERF_TYPE_SOFTWARE, PERF_COUNT_SW_CONTEXT_SWITCHES);
         open_perf_fd(ctx->fd_swi, ctx->id_swi, &pe, "SWI", -1);
         parent_fd = ctx->fd_swi;
-    }
-    else if (flags & HW_PROFILE_CYC) {
+    } else if (flags & HW_PROFILE_CYC) {
         setup_perf_event(&pe, PERF_TYPE_HARDWARE, PERF_COUNT_HW_CPU_CYCLES);
         open_perf_fd(ctx->fd_cyc, ctx->id_cyc, &pe, "CYC", -1);
         parent_fd = ctx->fd_cyc;
+    } else if (flags & HW_PROFILE_INS) {
+        setup_perf_event(&pe, PERF_TYPE_HARDWARE, PERF_COUNT_HW_INSTRUCTIONS);
+        open_perf_fd(ctx->fd_ins, ctx->id_ins, &pe, "INS", -1);
+        parent_fd = ctx->fd_ins;
     } else if (flags & HW_PROFILE_CMISS) {
         setup_perf_event(&pe, PERF_TYPE_HARDWARE, PERF_COUNT_HW_CACHE_MISSES);
         open_perf_fd(ctx->fd_cmiss, ctx->id_cmiss, &pe, "CMISS", -1);
@@ -97,10 +118,6 @@ void HW_init(HW_ctx* ctx, uint64_t flags) {
         setup_perf_event(&pe, PERF_TYPE_HARDWARE, PERF_COUNT_HW_BRANCH_MISSES);
         open_perf_fd(ctx->fd_bmiss, ctx->id_bmiss, &pe, "BMISS", -1);
         parent_fd = ctx->fd_bmiss;
-    } else if (flags & HW_PROFILE_INS) {
-        setup_perf_event(&pe, PERF_TYPE_HARDWARE, PERF_COUNT_HW_INSTRUCTIONS);
-        open_perf_fd(ctx->fd_ins, ctx->id_ins, &pe, "INS", -1);
-        parent_fd = ctx->fd_ins;
     }
 
     ctx->parent_fd = parent_fd;
@@ -165,30 +182,19 @@ void HW_read(HW_ctx* ctx, sample_t* measure) {
 }
 
 static void collect_samples(sample_t* start, sample_t* end, cputrace_anchor* anchor) {
-    if (end->swi) {
-        anchor->global_results.swi += end->swi - start->swi;
-    }
-    if (end->cyc) {
-        anchor->global_results.cyc += end->cyc - start->cyc;
-    }
-    if (end->cmiss) {
-        anchor->global_results.cmiss += end->cmiss - start->cmiss;
-    }
-    if (end->bmiss) {
-        anchor->global_results.bmiss += end->bmiss - start->bmiss;
-    }
-    if (end->ins) {
-        anchor->global_results.ins += end->ins - start->ins;
-    }
+    sample_t elapsed = *end - *start;
+    anchor->global_results.sample(elapsed);
 }
 
-HW_profile::HW_profile(const char* function, uint64_t index, uint64_t flags)
+HW_profile::HW_profile(const char* function, uint64_t index, cputrace_flags flags)
     : function(function), index(index), flags(flags) {
-    if (index >= CPUTRACE_MAX_ANCHORS || !g_profiler.profiling)
+    pthread_mutex_lock(&g_profiler.global_lock);
+    if (index >= CPUTRACE_MAX_ANCHORS || !g_profiler.profiling) {
+        pthread_mutex_unlock(&g_profiler.global_lock);
         return;
-
+    }
+    pthread_mutex_unlock(&g_profiler.global_lock);
     uint64_t tid = get_thread_id();
-
     cputrace_anchor& anchor = g_profiler.anchors[index];
     pthread_mutex_lock(&anchor.lock);
     anchor.name = function;
@@ -213,21 +219,42 @@ HW_profile::HW_profile(const char* function, uint64_t index, uint64_t flags)
 }
 
 HW_profile::~HW_profile() {
-    if (!g_profiler.profiling || index >= CPUTRACE_MAX_ANCHORS)
-        return;
-
     cputrace_anchor& anchor = g_profiler.anchors[index];
     uint64_t tid = get_thread_id();
-
+    pthread_mutex_lock(&g_profiler.global_lock);
+    if (!g_profiler.profiling || index >= CPUTRACE_MAX_ANCHORS){
+        pthread_mutex_lock(&anchor.lock);
+        anchor.is_capturing[tid] = false;
+        pthread_mutex_unlock(&anchor.lock);
+        pthread_mutex_unlock(&g_profiler.global_lock);
+        return;
+    }
+    pthread_mutex_unlock(&g_profiler.global_lock);
     pthread_mutex_lock(&anchor.lock);
     anchor.nest_level[tid]--;
     if (anchor.nest_level[tid] == 0) {
         HW_read(ctx, &anchor.end[tid]);
         collect_samples(&anchor.start[tid], &anchor.end[tid], &anchor);
-        std::memcpy(&anchor.start[tid], &anchor.end[tid], sizeof(anchor.start[tid]));
+        anchor.start[tid] = anchor.end[tid];
         anchor.is_capturing[tid] = false;
     }
     pthread_mutex_unlock(&anchor.lock);
+}
+
+measurement_t* get_named_measurement(const std::string& name) {
+    std::lock_guard<std::mutex> g(g_named_measurements_lock);
+    return &g_named_measurements[name];
+}
+
+HW_named_guard::HW_named_guard(const char* name, HW_ctx* ctx)
+    : name(name) 
+{
+    measurement_t* meas = get_named_measurement(name);
+    guard = new HW_guard(ctx, meas);
+}
+
+HW_named_guard::~HW_named_guard() {
+    delete guard;
 }
 
 void cputrace_start() {
@@ -287,7 +314,7 @@ void cputrace_reset() {
     for (int i = 0; i < CPUTRACE_MAX_ANCHORS; ++i) {
         if (!g_profiler.anchors[i].name) continue;
         pthread_mutex_lock(&g_profiler.anchors[i].lock);
-        g_profiler.anchors[i].global_results = results{};
+        g_profiler.anchors[i].global_results.reset();
         pthread_mutex_unlock(&g_profiler.anchors[i].lock);
     }
     pthread_mutex_unlock(&g_profiler.global_lock);
@@ -298,7 +325,7 @@ void cputrace_reset(ceph::Formatter* f) {
     for (int i = 0; i < CPUTRACE_MAX_ANCHORS; ++i) {
         if (!g_profiler.anchors[i].name) continue;
         pthread_mutex_lock(&g_profiler.anchors[i].lock);
-        g_profiler.anchors[i].global_results = results{};
+        g_profiler.anchors[i].global_results.reset();
         pthread_mutex_unlock(&g_profiler.anchors[i].lock);
     }
     f->open_object_section("cputrace_reset");
@@ -320,42 +347,16 @@ void cputrace_dump(ceph::Formatter* f, const std::string& logger, const std::str
 
         pthread_mutex_lock(&anchor.lock);
         for (int j = 0; j < CPUTRACE_MAX_THREADS; ++j) {
-            if (anchor.is_capturing[j]) {
+            if (anchor.is_capturing[j] && g_profiler.profiling) {
                 HW_read(anchor.active_contexts[j], &anchor.end[j]);
                 collect_samples(&anchor.start[j], &anchor.end[j], &anchor);
-                std::memcpy(&anchor.start[j], &anchor.end[j], sizeof(anchor.start[j]));
+                anchor.start[j] = anchor.end[j];
             }
         }
         pthread_mutex_unlock(&anchor.lock);
 
         f->open_object_section(anchor.name);
-        f->dump_unsigned("call_count", anchor.global_results.call_count);
-
-        if (anchor.flags & HW_PROFILE_SWI && (counter.empty() || counter == "context_switches")) {
-            f->dump_unsigned("context_switches", anchor.global_results.swi);
-            if (anchor.global_results.call_count)
-                f->dump_float("avg_context_switches", (double)anchor.global_results.swi / anchor.global_results.call_count);
-        }
-        if (anchor.flags & HW_PROFILE_CYC && (counter.empty() || counter == "cpu_cycles")) {
-            f->dump_unsigned("cpu_cycles", anchor.global_results.cyc);
-            if (anchor.global_results.call_count)
-                f->dump_float("avg_cpu_cycles", (double)anchor.global_results.cyc / anchor.global_results.call_count);
-        }
-        if (anchor.flags & HW_PROFILE_CMISS && (counter.empty() || counter == "cache_misses")) {
-            f->dump_unsigned("cache_misses", anchor.global_results.cmiss);
-            if (anchor.global_results.call_count)
-                f->dump_float("avg_cache_misses", (double)anchor.global_results.cmiss / anchor.global_results.call_count);
-        }
-        if (anchor.flags & HW_PROFILE_BMISS && (counter.empty() || counter == "branch_misses")) {
-            f->dump_unsigned("branch_misses", anchor.global_results.bmiss);
-            if (anchor.global_results.call_count)
-                f->dump_float("avg_branch_misses", (double)anchor.global_results.bmiss / anchor.global_results.call_count);
-        }
-        if (anchor.flags & HW_PROFILE_INS && (counter.empty() || counter == "instructions")) {
-            f->dump_unsigned("instructions", anchor.global_results.ins);
-            if (anchor.global_results.call_count)
-                f->dump_float("avg_instructions", (double)anchor.global_results.ins / anchor.global_results.call_count);
-        }
+        anchor.global_results.dump(f, anchor.flags, counter);
         f->close_section();
         dumped = true;
     }
@@ -381,49 +382,13 @@ void cputrace_print_to_stringstream(std::stringstream& ss) {
             if (anchor.is_capturing[j]) {
                 HW_read(anchor.active_contexts[j], &anchor.end[j]);
                 collect_samples(&anchor.start[j], &anchor.end[j], &anchor);
-                std::memcpy(&anchor.start[j], &anchor.end[j], sizeof(anchor.start[j]));
+                anchor.start[j] = anchor.end[j];
             }
         }
         pthread_mutex_unlock(&anchor.lock);
 
         ss << "  " << anchor.name << ":\n";
-        ss << "    call_count: " << anchor.global_results.call_count << "\n";
-
-        if (anchor.flags & HW_PROFILE_SWI) {
-            ss << "    context_switches: " << anchor.global_results.swi;
-            if (anchor.global_results.call_count) {
-                ss << "\n    avg_context_switches: " << (double)anchor.global_results.swi / anchor.global_results.call_count;
-            }
-            ss << "\n";
-        }
-        if (anchor.flags & HW_PROFILE_CYC) {
-            ss << "    cpu_cycles: " << anchor.global_results.cyc;
-            if (anchor.global_results.call_count) {
-                ss << "\n    avg_cpu_cycles: " << (double)anchor.global_results.cyc / anchor.global_results.call_count;
-            }
-            ss << "\n";
-        }
-        if (anchor.flags & HW_PROFILE_CMISS) {
-            ss << "    cache_misses: " << anchor.global_results.cmiss;
-            if (anchor.global_results.call_count) {
-                ss << "\n    avg_cache_misses: " << (double)anchor.global_results.cmiss / anchor.global_results.call_count;
-            }
-            ss << "\n";
-        }
-        if (anchor.flags & HW_PROFILE_BMISS) {
-            ss << "    branch_misses: " << anchor.global_results.bmiss;
-            if (anchor.global_results.call_count) {
-                ss << "\n    avg_branch_misses: " << (double)anchor.global_results.bmiss / anchor.global_results.call_count;
-            }
-            ss << "\n";
-        }
-        if (anchor.flags & HW_PROFILE_INS) {
-            ss << "    instructions: " << anchor.global_results.ins;
-            if (anchor.global_results.call_count) {
-                ss << "\n    avg_instructions: " << (double)anchor.global_results.ins / anchor.global_results.call_count;
-            }
-            ss << "\n";
-        }
+        anchor.global_results.dump_to_stringstream(ss, anchor.flags);
         dumped = true;
     }
 
