@@ -41,6 +41,9 @@ class VersionTracker:
             for row in cursor:
                 res[row['creation_time']] = row['cluster_version']
 
+        if not res:
+            return 0, 'No Cluster Version History', ''
+        
         return 0, json.dumps(res, indent=4), ''
     
 
@@ -65,7 +68,7 @@ class VersionTracker:
                 else:
                     self.db.execute(SQL_QUERY_OPTION, (time_stamp,))
         
-        return 0, 'Cluster History Deletion Successful', ''
+        return 0, 'Cluster Version History Deletion Successful', ''
 
 
 
