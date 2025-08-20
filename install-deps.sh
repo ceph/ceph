@@ -400,6 +400,8 @@ else
             curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
             . "$HOME/.cargo/env"
             rustup set default-host riscv64gc-unknown-linux-gnu
+
+            apt-get install sudo libopenblas-dev libgoogle-perftools-dev libjemalloc-dev zip libicu-dev python3 python3-pip build-essential doxygen  -y
         fi
         # update the local package index before installing any packages from the
         # official repo
