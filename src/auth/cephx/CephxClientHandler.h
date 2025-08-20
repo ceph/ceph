@@ -24,30 +24,20 @@
 class KeyRing;
 
 class CephxClientHandler : public AuthClientHandler {
-  bool starting;
+  bool starting = false;
 
   /* envelope protocol parameters */
-  uint64_t server_challenge;
+  uint64_t server_challenge = 0;
 
   CephXTicketManager tickets;
-  CephXTicketHandler* ticket_handler;
+  CephXTicketHandler* ticket_handler = nullptr;
 
-  RotatingKeyRing* rotating_secrets;
-  KeyRing *keyring;
+  RotatingKeyRing* rotating_secrets = nullptr;
+  KeyRing *keyring = nullptr;
 
 public:
-  CephxClientHandler(CephContext *cct_,
-		     RotatingKeyRing *rsecrets)
-    : AuthClientHandler(cct_),
-      starting(false),
-      server_challenge(0),
-      tickets(cct_),
-      ticket_handler(NULL),
-      rotating_secrets(rsecrets),
-      keyring(rsecrets->get_keyring())
-  {
-    reset();
-  }
+  CephxClientHandler(CephContext *cct_, RotatingKeyRing *rsecrets);
+  ~CephxClientHandler();
 
   CephxClientHandler* clone() const override {
     return new CephxClientHandler(*this);
