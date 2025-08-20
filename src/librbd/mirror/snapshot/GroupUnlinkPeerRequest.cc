@@ -55,7 +55,7 @@ void GroupUnlinkPeerRequest<I>::unlink_peer() {
       if (ns->mirror_peer_uuids.empty() ||
 	(ns->mirror_peer_uuids.count(peer) != 0 &&
 	 ns->is_primary() &&
-         it->state == cls::rbd::GROUP_SNAPSHOT_STATE_INCOMPLETE)){
+         ns->complete == cls::rbd::MIRROR_GROUP_SNAP_SYNC_INCOMPLETE)){
 	unlink_snap = it;
 	process_snapshot(*unlink_snap, peer);
 	return;
@@ -211,9 +211,11 @@ void GroupUnlinkPeerRequest<I>::remove_group_snapshot(
       &GroupUnlinkPeerRequest<I>::handle_remove_group_snapshot>(this);
 
   m_group_snap_id = group_snap.id;
+  auto &ns = std::get<cls::rbd::GroupSnapshotNamespaceMirror>(
+    group_snap.snapshot_namespace);
 
   C_Gather *gather_ctx = new C_Gather(m_cct, ctx);
-  if (group_snap.state == cls::rbd::GROUP_SNAPSHOT_STATE_INCOMPLETE) {
+  if (ns.complete == cls::rbd::MIRROR_GROUP_SNAP_SYNC_INCOMPLETE) {
     for (size_t i = 0; i < m_image_ctxs->size(); ++i) {
       ImageCtx *ictx = (*m_image_ctxs)[i];
       for (auto it = ictx->snap_info.rbegin();

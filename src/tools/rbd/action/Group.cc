@@ -73,10 +73,10 @@ void add_group_spec_options(po::options_description *pos,
 std::string get_group_snap_state_name(rbd_group_snap_state_t state)
 {
   switch (state) {
-  case RBD_GROUP_SNAP_STATE_INCOMPLETE:
-    return "incomplete";
-  case RBD_GROUP_SNAP_STATE_COMPLETE:
-    return "complete";
+  case RBD_GROUP_SNAP_STATE_CREATING:
+    return "creating";
+  case RBD_GROUP_SNAP_STATE_CREATED:
+    return "created";
   default:
     return "unknown (" + stringify(state) + ")";
   }
@@ -778,6 +778,7 @@ int execute_group_snap_list(const po::variables_map &vm,
 
   for (const auto& snap : snaps) {
     auto state_string = get_group_snap_state_name(snap.state);
+    std::string snaps_synced = "incomplete";
     auto type_string = get_group_snap_namespace_name(snap.namespace_type);
 
     int get_mirror_res = -ENOENT;
@@ -787,6 +788,10 @@ int execute_group_snap_list(const po::variables_map &vm,
       get_mirror_res = rbd.group_snap_get_mirror_namespace(
         io_ctx, group_name.c_str(), snap.id.c_str(), &mirror_snap);
       if (get_mirror_res == 0) {
+        if (state_string == "created" &&
+            mirror_snap.complete != RBD_MIRROR_GROUP_SNAP_SYNC_INCOMPLETE) {
+          snaps_synced = "complete";
+        }
         switch (mirror_snap.state) {
           case RBD_SNAP_MIRROR_STATE_PRIMARY:
               mirror_snap_state = "primary";
@@ -821,6 +826,7 @@ int execute_group_snap_list(const po::variables_map &vm,
           f->dump_string("primary_mirror_uuid",
                          mirror_snap.primary_mirror_uuid);
           f->dump_string("primary_snap_id", mirror_snap.primary_snap_id);
+          f->dump_string("snaps_synced", snaps_synced);
         }
       }
       f->close_section(); // namespace
@@ -835,7 +841,7 @@ int execute_group_snap_list(const po::variables_map &vm,
         if (mirror_snap.state == RBD_SNAP_MIRROR_STATE_NON_PRIMARY ||
             mirror_snap.state == RBD_SNAP_MIRROR_STATE_NON_PRIMARY_DEMOTED) {
           oss << " " << mirror_snap.primary_mirror_uuid << ":"
-              << mirror_snap.primary_snap_id;
+              << mirror_snap.primary_snap_id << ": " << snaps_synced;
         }
         oss << ")";
       }

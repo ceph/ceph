@@ -185,17 +185,22 @@ private:
   void mirror_snapshot_complete(
     const std::string &group_snap_id, Context *on_finish);
   void handle_mirror_snapshot_image_list(
-    const std::string &group_snap_id, cls::rbd::GroupSnapshot &local_snap,
-    cls::rbd::GroupSnapshot &remote_snap,
+    const std::string &group_snap_id,
+    const cls::rbd::GroupSnapshot &local_snap,
+    const cls::rbd::GroupSnapshot &remote_snap,
     const std::vector<cls::rbd::GroupImageStatus>& local_images,
     Context *on_finish);
   void post_mirror_snapshot_complete(
     const std::string &group_snap_id,
-    cls::rbd::GroupSnapshot &local_snap,
-    cls::rbd::GroupSnapshot &remote_snap,
+    const cls::rbd::GroupSnapshot &local_snap,
+    const cls::rbd::GroupSnapshot &remote_snap,
     const std::vector<cls::rbd::GroupImageStatus>& local_images,
     Context *on_finish);
   void handle_post_mirror_snapshot_complete(
+    int r, const std::string &group_snap_id,
+    const cls::rbd::GroupSnapshot &local_snap,
+    Context *on_finish);
+  void handle_mirror_snapshot_complete_field(
     int r, const std::string &group_snap_id, Context *on_finish);
 
   void create_regular_snapshot(
@@ -209,14 +214,14 @@ private:
     Context *on_finish);
   void handle_regular_snapshot_image_list(
     const std::string &group_snap_id,
-    cls::rbd::GroupSnapshot &local_snap,
-    cls::rbd::GroupSnapshot &remote_snap,
+    const cls::rbd::GroupSnapshot &local_snap,
+    const cls::rbd::GroupSnapshot &remote_snap,
     const std::vector<cls::rbd::GroupImageStatus>& local_images,
     Context *on_finish);
   void post_regular_snapshot_complete(
     const std::string &group_snap_id,
-    cls::rbd::GroupSnapshot &local_snap,
-    cls::rbd::GroupSnapshot &remote_snap,
+    const cls::rbd::GroupSnapshot &local_snap,
+    const cls::rbd::GroupSnapshot &remote_snap,
     const std::vector<cls::rbd::GroupImageStatus>& local_images,
     Context *on_finish);
   void handle_post_regular_snapshot_complete(
@@ -234,7 +239,7 @@ private:
   void prune_group_snapshots(std::unique_lock<ceph::mutex>* locker);
 
   void set_image_replayer_limits(const std::string &image_id,
-                                 cls::rbd::GroupSnapshot *remote_snap,
+                                 const cls::rbd::GroupSnapshot *remote_snap,
                                  std::unique_lock<ceph::mutex>* locker);
 };
 
