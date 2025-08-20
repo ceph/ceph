@@ -991,10 +991,11 @@ struct GroupSnapshotNamespaceMirror {
   GroupSnapshotNamespaceMirror() {
   }
   GroupSnapshotNamespaceMirror(MirrorSnapshotState state,
+                               bool complete,
                                const std::set<std::string> &mirror_peer_uuids,
                                const std::string &primary_mirror_uuid,
                                const std::string &primary_snap_id)
-    : state(state), mirror_peer_uuids(mirror_peer_uuids),
+    : state(state), complete(complete), mirror_peer_uuids(mirror_peer_uuids),
       primary_mirror_uuid(primary_mirror_uuid),
       primary_snap_id(primary_snap_id) {
   }

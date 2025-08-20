@@ -773,11 +773,13 @@ int execute_group_snap_list(const po::variables_map &vm,
     t.define_column("ID", TextTable::LEFT, TextTable::LEFT);
     t.define_column("NAME", TextTable::LEFT, TextTable::LEFT);
     t.define_column("STATE", TextTable::LEFT, TextTable::RIGHT);
+    t.define_column("SYNCED", TextTable::LEFT, TextTable::RIGHT);
     t.define_column("NAMESPACE", TextTable::LEFT, TextTable::LEFT);
   }
 
   for (const auto& snap : snaps) {
     auto state_string = get_group_snap_state_name(snap.state);
+    std::string snaps_synced = "incomplete";
     auto type_string = get_group_snap_namespace_name(snap.namespace_type);
 
     int get_mirror_res = -ENOENT;
@@ -787,6 +789,9 @@ int execute_group_snap_list(const po::variables_map &vm,
       get_mirror_res = rbd.group_snap_get_mirror_namespace(
         io_ctx, group_name.c_str(), snap.id.c_str(), &mirror_snap);
       if (get_mirror_res == 0) {
+        if(mirror_snap.complete) {
+          snaps_synced = "complete";
+        }
         switch (mirror_snap.state) {
           case RBD_SNAP_MIRROR_STATE_PRIMARY:
               mirror_snap_state = "primary";
@@ -800,6 +805,8 @@ int execute_group_snap_list(const po::variables_map &vm,
               break;
         }
       }
+    } else {
+      snaps_synced = state_string;
     }
 
     if (f) {
@@ -807,6 +814,7 @@ int execute_group_snap_list(const po::variables_map &vm,
       f->dump_string("id", snap.id);
       f->dump_string("snapshot", snap.name);
       f->dump_string("state", state_string);
+      f->dump_string("synced", snaps_synced);
       f->open_object_section("namespace");
       f->dump_string("type", type_string);
       if (get_mirror_res == 0) {
@@ -826,7 +834,7 @@ int execute_group_snap_list(const po::variables_map &vm,
       f->close_section(); // namespace
       f->close_section();
     } else {
-      t << snap.id << snap.name << state_string;
+      t << snap.id << snap.name << state_string << snaps_synced;
       std::ostringstream oss;
       oss << type_string;
       if (get_mirror_res == 0) {

@@ -197,6 +197,10 @@ private:
     const std::vector<cls::rbd::GroupImageStatus>& local_images,
     Context *on_finish);
   void handle_post_mirror_snapshot_complete(
+    int r, const std::string &group_snap_id,
+    cls::rbd::GroupSnapshot &remote_snap, cls::rbd::GroupSnapshot &local_snap,
+    Context *on_finish);
+  void handle_mirror_snapshot_complete_field(
     int r, const std::string &group_snap_id, Context *on_finish);
 
   void create_regular_snapshot(

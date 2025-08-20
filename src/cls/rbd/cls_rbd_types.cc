@@ -1599,7 +1599,7 @@ void GroupSnapshotNamespace::generate_test_instances(
   o.push_back(new GroupSnapshotNamespace(GroupSnapshotNamespaceUser()));
   o.push_back(new GroupSnapshotNamespace(GroupSnapshotNamespaceMirror(
                                              MIRROR_SNAPSHOT_STATE_PRIMARY,
-                                             {"peer uuid"}, "", "")));
+                                             true, {"peer uuid"}, "", "")));
 }
 
 std::ostream& operator<<(std::ostream& os, const GroupSnapshotNamespaceType& type) {
@@ -1730,7 +1730,7 @@ void GroupSnapshot::generate_test_instances(std::list<GroupSnapshot *> &o) {
                                 GROUP_SNAPSHOT_STATE_INCOMPLETE));
   o.push_back(new GroupSnapshot("1018643c9869",
                                 GroupSnapshotNamespaceMirror{
-                                    MIRROR_SNAPSHOT_STATE_NON_PRIMARY, {},
+                                    MIRROR_SNAPSHOT_STATE_NON_PRIMARY, true, {},
                                     "uuid", "id"},
                                 "groupsnapshot2",
                                 GROUP_SNAPSHOT_STATE_COMPLETE));

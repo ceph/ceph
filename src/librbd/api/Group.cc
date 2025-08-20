@@ -1225,7 +1225,14 @@ int Group<I>::snap_rollback(librados::IoCtx& group_ioctx,
     return -ENOENT;
   }
 
-  if (group_snap->state != cls::rbd::GROUP_SNAPSHOT_STATE_COMPLETE) {
+  auto ns = std::get_if<cls::rbd::GroupSnapshotNamespaceMirror>(
+      &group_snap->snapshot_namespace);
+  if (ns == nullptr) {
+    if (group_snap->state != cls::rbd::GROUP_SNAPSHOT_STATE_COMPLETE) {
+      lderr(cct) << "group snapshot is not complete" << dendl;
+      return -EINVAL;
+    }
+  } else if(!ns->complete) {
     lderr(cct) << "group snapshot is not complete" << dendl;
     return -EINVAL;
   }
