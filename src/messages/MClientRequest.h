@@ -41,7 +41,7 @@
 #include <vector>
 
 #include "include/filepath.h"
-#include "mds/mdstypes.h"
+#include "mds/metareqid_t.h"
 #include "common/Formatter.h"
 #include "include/ceph_features.h"
 #include "include/ceph_fs_encoder.h"
