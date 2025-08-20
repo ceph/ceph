@@ -8,6 +8,7 @@ import re
 import threading
 import time
 import enum
+import gzip
 from collections import namedtuple
 from tempfile import NamedTemporaryFile
 
@@ -165,8 +166,24 @@ class HealthHistory:
     def __init__(self, mgr: MgrModule):
         self.mgr = mgr
         self.lock = threading.Lock()
+        self.max_entries = cast(int, self.mgr.get_localized_module_option('healthcheck_history_max_entries', 1000))
+        self.stale_ttl = cast(int, self.mgr.get_localized_module_option('healthcheck_history_stale_ttl', 3600))
         self.healthcheck: Dict[str, HealthCheckEvent] = {}
         self._load()
+
+    def _prune(self, now: float) -> None:
+        """Drop stale/inactive entries and enforce max_entries limit."""
+        stale_keys = [k for k, v in self.healthcheck.items()
+                    if not v.active and (now - v.last_seen) > self.stale_ttl]
+        for k in stale_keys:
+            self.healthcheck.pop(k, None)
+
+        # Enforce max_entries limit
+        if len(self.healthcheck) > self.max_entries:
+            # Sort by last_seen and remove oldest entries
+            sorted_checks = sorted(self.healthcheck.values(), key=lambda x: x.last_seen)
+            for check in sorted_checks[:len(self.healthcheck) - self.max_entries]:
+                self.healthcheck.pop(check.name, None)
 
     def _load(self) -> None:
         """Load the current state from the mons KV store."""
@@ -199,8 +216,7 @@ class HealthHistory:
 
     def save(self) -> None:
         """Save the current in-memory healthcheck history to the KV store."""
-        with self.lock:
-            self.mgr.set_store(self.kv_name, self.as_json())
+        self.mgr.set_store(self.kv_name, self.as_json())
 
     def check(self, health_checks: Dict[str, Any]) -> None:
         """Look at the current health checks and compare existing the history.
@@ -210,43 +226,45 @@ class HealthHistory:
         """
 
         current_checks = health_checks.get('checks', {})
-        changes_made = False
-
-        # first turn off any active states we're tracking
-        for seen_check in self.healthcheck:
-            check = self.healthcheck[seen_check]
-            if check.active and seen_check not in current_checks:
-                check.active = False
-                changes_made = True
-
-        # now look for any additions to track
         now = time.time()
-        for name, info in current_checks.items():
-            if name not in self.healthcheck:
-                # this healthcheck is new, so start tracking it
-                changes_made = True
-                self.healthcheck[name] = HealthCheckEvent(
-                    name=name,
-                    severity=info.get('severity'),
-                    first_seen=now,
-                    last_seen=now,
-                    count=1,
-                    active=True
-                )
-            else:
-                # seen it before, so update its metadata
-                check = self.healthcheck[name]
-                if check.active:
-                    # check has been registered as active already, so skip
-                    continue
-                else:
-                    check.last_seen = now
-                    check.count += 1
-                    check.active = True
-                    changes_made = True
+        with self.lock:
+            changes_made = False
+            names = set(self.healthcheck) | set(current_checks)
 
-        if changes_made:
-            self.save()
+            for name in names:
+                present = name in current_checks
+                check = self.healthcheck.get(name)
+
+                if check is None:
+                    if present:
+                        info = current_checks[name]
+                        self.healthcheck[name] = HealthCheckEvent(
+                            name=name,
+                            severity=info.get('severity'),
+                            first_seen=now,
+                            last_seen=now,
+                            count=1,
+                            active=True
+                        )
+                        changes_made = True
+        
+                    continue
+
+                if present:
+                    if not check.active:
+                        check.count += 1
+                        changes_made = True
+                    
+                    check.last_seen = now
+                    check.active = True
+                else:
+                    if check.active:
+                        check.active = False
+                        changes_made = True
+
+            if changes_made:
+                self._prune(now)
+                self.save()
 
     def __str__(self) -> str:
         """Print the healthcheck history.
@@ -536,7 +554,8 @@ class MetricCollectionThread(threading.Thread):
                     sleep_time = 0
 
                 with self.mod.collect_lock:
-                    self.mod.collect_cache = data
+                    self.mod.collect_cache = gzip.compress(data.encode("utf-8"))
+                    del data
                     self.mod.collect_time = duration
 
                 self.event.wait(sleep_time)
@@ -608,7 +627,21 @@ class Module(MgrModule, OrchestratorClientMixin):
             desc='Do not include perf-counters in the metrics output',
             long_desc='Gathering perf-counters from a single Prometheus exporter can degrade ceph-mgr performance, especially in large clusters. Instead, Ceph-exporter daemons are now used by default for perf-counter gathering. This should only be disabled when no ceph-exporters are deployed.',
             runtime=True
-        )
+        ),
+        Option(
+            name='healthcheck_history_max_entries',
+            type='int',
+            default=1000,
+            desc='Maximum number of health check history entries to keep',
+            runtime=True
+        ),
+        Option(
+            name='healthcheck_history_stale_ttl',
+            type='int',
+            default=3600,
+            desc='Time-to-live (in seconds) for stale health check history entries',
+            runtime=True
+        ),
     ]
 
     STALE_CACHE_FAIL = 'fail'
@@ -1980,8 +2013,8 @@ class Module(MgrModule, OrchestratorClientMixin):
 
             @staticmethod
             def _metrics(instance: 'Module') -> Optional[str]:
-                if not self.cache:
-                    self.log.debug('Cache disabled, collecting and returning without cache')
+                if not instance.cache:
+                    instance.log.debug('Cache disabled, collecting and returning without cache')
                     cherrypy.response.headers['Content-Type'] = 'text/plain'
                     return self.collect()
 
