@@ -21,6 +21,25 @@ namespace mirror {
 
 using librbd::util::create_rados_callback;
 
+bool is_mirror_group_snapshot_complete(
+    const cls::rbd::GroupSnapshotState &group_snap_state,
+    const cls::rbd::MirrorGroupSnapshotCompleteState &complete) {
+
+  // complete -- mirror_ns->complete is used
+  if (complete == cls::rbd::MIRROR_GROUP_SNAPSHOT_COMPLETE) {
+    ceph_assert(group_snap_state == cls::rbd::GROUP_SNAPSHOT_STATE_CREATED);
+    return true;
+  }
+
+  // complete -- mirror_ns->complete is not used (backwards compatibility)
+  if (complete == cls::rbd::MIRROR_GROUP_SNAPSHOT_COMPLETE_IF_CREATED &&
+      group_snap_state == cls::rbd::GROUP_SNAPSHOT_STATE_CREATED) {
+    return true;
+  }
+
+  return false;
+}
+
 template <typename I>
 void GroupGetInfoRequest<I>::send() {
   auto cct = reinterpret_cast<CephContext *>(m_group_ioctx.cct());
@@ -172,7 +191,7 @@ void GroupGetInfoRequest<I>::handle_get_last_mirror_snapshot_state(int r) {
       // XXXMG: check primary_mirror_uuid matches?
       switch (ns->state) {
       case cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY:
-        if (it->state == cls::rbd::GROUP_SNAPSHOT_STATE_INCOMPLETE) {
+        if (!is_mirror_group_snapshot_complete(it->state, ns->complete)) {
           continue;
         }
         *m_promotion_state = PROMOTION_STATE_PRIMARY;
@@ -181,7 +200,7 @@ void GroupGetInfoRequest<I>::handle_get_last_mirror_snapshot_state(int r) {
         *m_promotion_state = PROMOTION_STATE_NON_PRIMARY;
         break;
       case cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY_DEMOTED:
-        if (it->state == cls::rbd::GROUP_SNAPSHOT_STATE_INCOMPLETE) {
+        if (!is_mirror_group_snapshot_complete(it->state, ns->complete)) {
           continue;
         }
         [[fallthrough]];

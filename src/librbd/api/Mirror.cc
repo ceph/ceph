@@ -553,8 +553,9 @@ std::string prepare_non_primary_mirror_snap_name(CephContext *cct,
 
 int get_last_mirror_snapshot_state(librados::IoCtx &group_ioctx,
                                    const std::string &group_id,
+                                   cls::rbd::GroupSnapshotState &group_snap_state,
                                    cls::rbd::MirrorSnapshotState *state,
-                                   cls::rbd::GroupSnapshotState *sync) {
+                                   cls::rbd::MirrorGroupSnapshotCompleteState *sync) {
   std::vector<cls::rbd::GroupSnapshot> snaps;
 
   C_SaferCond cond;
@@ -572,15 +573,33 @@ int get_last_mirror_snapshot_state(librados::IoCtx &group_ioctx,
         &it->snapshot_namespace);
     if (ns != nullptr) {
       // XXXMG: check primary_mirror_uuid matches?
+      group_snap_state = it->state;
       *state = ns->state;
-      if (sync != nullptr) {
-        *sync = it->state;
-      }
+      *sync = ns->complete;
       return 0;
     }
   }
 
   return -ENOENT;
+}
+
+bool is_mirror_group_snapshot_complete(
+    const cls::rbd::GroupSnapshotState &group_snap_state,
+    const cls::rbd::MirrorGroupSnapshotCompleteState &complete) {
+
+  // complete -- mirror_ns->complete is used
+  if (complete == cls::rbd::MIRROR_GROUP_SNAPSHOT_COMPLETE) {
+    ceph_assert(group_snap_state == cls::rbd::GROUP_SNAPSHOT_STATE_CREATED);
+    return true;
+  }
+
+  // complete -- mirror_ns->complete is not used (backwards compatibility)
+  if (complete == cls::rbd::MIRROR_GROUP_SNAPSHOT_COMPLETE_IF_CREATED &&
+      group_snap_state == cls::rbd::GROUP_SNAPSHOT_STATE_CREATED) {
+    return true;
+  }
+
+  return false;
 }
 
 struct C_GroupGetInfo : public Context {
@@ -2596,9 +2615,29 @@ int prepare_group_images(IoCtx& group_ioctx,
       return r;
     }
   }
+  librados::Rados rados(group_ioctx);
+  int8_t require_osd_release;
+  r = rados.get_min_compatible_osd(&require_osd_release);
+  if (r < 0) {
+    lderr(cct) << "failed to retrieve min OSD release: " << cpp_strerror(r)
+               << dendl;
+    return r;
+  }
+  if (require_osd_release >= CEPH_RELEASE_TENTACLE) {
+    // create a new-style mirror group snapshot (i.e. first
+    // MIRROR_GROUP_SNAPSHOT_INCOMPLETE, later transition to
+    // MIRROR_GROUP_SNAPSHOT_COMPLETE)
+    group_snap->snapshot_namespace = cls::rbd::GroupSnapshotNamespaceMirror{
+                                     snap_state, *mirror_peer_uuids, {}, {},
+                                     cls::rbd::MIRROR_GROUP_SNAPSHOT_INCOMPLETE};
 
-  group_snap->snapshot_namespace = cls::rbd::GroupSnapshotNamespaceMirror{
-                                     snap_state, *mirror_peer_uuids, {}, {}};
+  } else {
+    // create an old-style mirror group snapshot (i.e. stay
+    // on MIRROR_GROUP_SNAPSHOT_COMPLETE_IF_CREATED)
+    group_snap->snapshot_namespace = cls::rbd::GroupSnapshotNamespaceMirror{
+                                     snap_state, *mirror_peer_uuids, {}, {},
+                                     cls::rbd::MIRROR_GROUP_SNAPSHOT_COMPLETE_IF_CREATED};
+  }
 
   for (auto image_ctx: *image_ctxs) {
     group_snap->snaps.emplace_back(image_ctx->md_ctx.get_id(), image_ctx->id,
@@ -2976,23 +3015,53 @@ int create_orphan_group_snapshot(IoCtx& group_ioctx,
                  << ", group_snap_id=" << group_snap_id
                  << dendl;
 
+  librados::Rados rados(group_ioctx);
+  int8_t require_osd_release;
+  bool osds_upgraded = false;
+  int r = rados.get_min_compatible_osd(&require_osd_release);
+  if (r < 0) {
+    lderr(cct) << "failed to retrieve min OSD release: " << cpp_strerror(r)
+               << dendl;
+    return r;
+  }
+
+  cls::rbd::GroupSnapshotNamespaceMirror mirror_namespace;
+  if (require_osd_release >= CEPH_RELEASE_TENTACLE) {
+    osds_upgraded = true;
+    // create a new-style mirror group snapshot (i.e. first
+    // MIRROR_GROUP_SNAPSHOT_INCOMPLETE, later transition to
+    // MIRROR_GROUP_SNAPSHOT_COMPLETE)
+    mirror_namespace = cls::rbd::GroupSnapshotNamespaceMirror(
+      cls::rbd::MIRROR_SNAPSHOT_STATE_NON_PRIMARY, {}, {} , {},
+      cls::rbd::MIRROR_GROUP_SNAPSHOT_INCOMPLETE);
+  } else {
+    // create an old-style mirror group snapshot (i.e. stay
+    // on MIRROR_GROUP_SNAPSHOT_COMPLETE_IF_CREATED)
+    mirror_namespace = cls::rbd::GroupSnapshotNamespaceMirror(
+      cls::rbd::MIRROR_SNAPSHOT_STATE_NON_PRIMARY, {}, {} , {},
+      cls::rbd::MIRROR_GROUP_SNAPSHOT_COMPLETE_IF_CREATED);
+  }
   cls::rbd::GroupSnapshot group_snap{
-      group_snap_id,
-      cls::rbd::GroupSnapshotNamespaceMirror{
-        cls::rbd::MIRROR_SNAPSHOT_STATE_NON_PRIMARY, {}, {} , {}},
+      group_snap_id, mirror_namespace,
       prepare_non_primary_mirror_snap_name(cct, global_group_id, group_snap_id),
-      cls::rbd::GROUP_SNAPSHOT_STATE_INCOMPLETE};
+      cls::rbd::GROUP_SNAPSHOT_STATE_CREATING};
 
   std::string group_header_oid = librbd::util::group_header_name(group_id);
-  int r = cls_client::group_snap_set(&group_ioctx,
-                                     group_header_oid, group_snap);
+  r = cls_client::group_snap_set(&group_ioctx,
+                                 group_header_oid, group_snap);
   if (r < 0) {
     lderr(cct) << "failed to create group snapshot: " << cpp_strerror(r)
                << dendl;
     return r;
   }
 
-  group_snap.state = cls::rbd::GROUP_SNAPSHOT_STATE_COMPLETE;
+  group_snap.state = cls::rbd::GROUP_SNAPSHOT_STATE_CREATED;
+  if (osds_upgraded) {
+    auto &mirror_namespace = std::get<cls::rbd::GroupSnapshotNamespaceMirror>(
+            group_snap.snapshot_namespace);
+    mirror_namespace.complete = cls::rbd::MIRROR_GROUP_SNAPSHOT_COMPLETE;
+  }
+
   r = cls_client::group_snap_set(&group_ioctx, group_header_oid, group_snap);
   if (r < 0) {
     lderr(cct) << "failed to mark snapshot complete: " << cpp_strerror(r)
@@ -3032,10 +3101,11 @@ int Mirror<I>::group_promote(IoCtx& group_ioctx, const char *group_name,
   }
 
   cls::rbd::MirrorSnapshotState state;
-  cls::rbd::GroupSnapshotState sync;
-  r = get_last_mirror_snapshot_state(group_ioctx, group_id, &state, &sync);
+  cls::rbd::MirrorGroupSnapshotCompleteState sync;
+  cls::rbd::GroupSnapshotState group_snap_state;
+  r = get_last_mirror_snapshot_state(group_ioctx, group_id, group_snap_state, &state, &sync);
   if (r == -ENOENT) {
-    sync = cls::rbd::GROUP_SNAPSHOT_STATE_INCOMPLETE;
+    sync = cls::rbd::MIRROR_GROUP_SNAPSHOT_INCOMPLETE;
     state = cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY_DEMOTED; // XXXMG?
     r = 0;
   }
@@ -3049,7 +3119,7 @@ int Mirror<I>::group_promote(IoCtx& group_ioctx, const char *group_name,
     lderr(cct) << "group " << group_name << " is already primary" << dendl;
     return -EINVAL;
   } else if (!force && (state == cls::rbd::MIRROR_SNAPSHOT_STATE_NON_PRIMARY ||
-                        sync != cls::rbd::GROUP_SNAPSHOT_STATE_COMPLETE)) {
+                        !is_mirror_group_snapshot_complete(group_snap_state, sync))) {
     lderr(cct) << "group " << group_name
                << " is primary within a remote cluster or demotion is not propagated yet"
                << dendl;
@@ -3117,8 +3187,7 @@ int Mirror<I>::group_promote(IoCtx& group_ioctx, const char *group_name,
       if (mirror_ns == nullptr || mirror_ns->is_orphan()) {
         continue;
       }
-
-      if (snap->state != cls::rbd::GROUP_SNAPSHOT_STATE_COMPLETE) {
+      if (!is_mirror_group_snapshot_complete(snap->state, mirror_ns->complete)) {
         need_rollback = true;
         continue;
       }
@@ -3174,7 +3243,7 @@ int Mirror<I>::group_promote(IoCtx& group_ioctx, const char *group_name,
       cls::rbd::GroupSnapshotNamespaceMirror{},
       prepare_primary_mirror_snap_name(cct, mirror_group.global_group_id,
                                        group_snap_id),
-      cls::rbd::GROUP_SNAPSHOT_STATE_INCOMPLETE};
+      cls::rbd::GROUP_SNAPSHOT_STATE_CREATING};
 
   std::vector<I *> image_ctxs;
   std::vector<uint64_t> quiesce_requests;
@@ -3219,7 +3288,14 @@ int Mirror<I>::group_promote(IoCtx& group_ioctx, const char *group_name,
     ldout(cct, 20) << "undoing group promote: " << ret_code << dendl;
     remove_group_snap(group_ioctx, group_id, &group_snap, &image_ctxs);
   } else if (!ret_code) {
-    group_snap.state = cls::rbd::GROUP_SNAPSHOT_STATE_COMPLETE;
+    group_snap.state = cls::rbd::GROUP_SNAPSHOT_STATE_CREATED;
+
+    auto &mirror_namespace = std::get<cls::rbd::GroupSnapshotNamespaceMirror>(
+            group_snap.snapshot_namespace);
+    if (mirror_namespace.complete != cls::rbd::MIRROR_GROUP_SNAPSHOT_COMPLETE_IF_CREATED) {
+      mirror_namespace.complete = cls::rbd::MIRROR_GROUP_SNAPSHOT_COMPLETE;
+    }
+
     r = cls_client::group_snap_set(&group_ioctx, group_header_oid, group_snap);
     if (r < 0) {
       lderr(cct) << "failed to update group snapshot metadata: "
@@ -3277,7 +3353,7 @@ int Mirror<I>::group_demote(IoCtx& group_ioctx,
       cls::rbd::GroupSnapshotNamespaceMirror{},
       prepare_primary_mirror_snap_name(cct, mirror_group.global_group_id,
                                        group_snap_id),
-      cls::rbd::GROUP_SNAPSHOT_STATE_INCOMPLETE};
+      cls::rbd::GROUP_SNAPSHOT_STATE_CREATING};
 
   std::vector<uint64_t> quiesce_requests;
   std::vector<I *> image_ctxs;
@@ -3317,7 +3393,14 @@ int Mirror<I>::group_demote(IoCtx& group_ioctx,
 
   std::string group_header_oid = librbd::util::group_header_name(group_id);
   if (!ret_code) {
-    group_snap.state = cls::rbd::GROUP_SNAPSHOT_STATE_COMPLETE;
+    group_snap.state = cls::rbd::GROUP_SNAPSHOT_STATE_CREATED;
+
+    auto &mirror_namespace = std::get<cls::rbd::GroupSnapshotNamespaceMirror>(
+            group_snap.snapshot_namespace);
+    if (mirror_namespace.complete != cls::rbd::MIRROR_GROUP_SNAPSHOT_COMPLETE_IF_CREATED) {
+      mirror_namespace.complete = cls::rbd::MIRROR_GROUP_SNAPSHOT_COMPLETE;
+    }
+
     r = cls_client::group_snap_set(&group_ioctx, group_header_oid, group_snap);
     if (r < 0) {
       lderr(cct) << "failed to update group snapshot metadata: "
