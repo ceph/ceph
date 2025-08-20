@@ -1507,6 +1507,8 @@ public:
   eversion_t  last_update_applied;  ///< last_update readable
   /// last version to which rollback_info trimming has been applied
   eversion_t  last_rollback_info_trimmed_to_applied;
+  // last version in which the stats for a shard were updated
+  std::map<pg_shard_t,eversion_t> stats_last_update;
 
   /// Counter to determine when pending flushes have completed
   unsigned flushes_in_progress = 0;
