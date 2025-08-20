@@ -6,30 +6,50 @@
 
 #define dout_subsys ceph_subsys_auth
 #undef dout_prefix
-#define dout_prefix *_dout << "auth: "
+#define dout_prefix *_dout << "RKR(" << this << ")." << __func__ << " "
 
+RotatingKeyRing::RotatingKeyRing(CephContext *cct_, uint32_t s, KeyRing *kr)
+  :
+    cct(cct_),
+    service_id(s),
+    keyring(kr),
+    lock{ceph::make_mutex("RotatingKeyRing::lock")}
+{
+  ldout(cct, 10) << "con" << dendl;
+}
+
+RotatingKeyRing::~RotatingKeyRing()
+{
+  ldout(cct, 10) << "des" << dendl;
+}
 
 bool RotatingKeyRing::need_new_secrets() const
 {
   std::lock_guard l{lock};
-  return secrets.need_new_secrets();
+  auto answer = secrets.need_new_secrets();
+  ldout(cct, 10) << "need_new_secrets: " << answer << dendl;
+  return answer;
 }
 
 bool RotatingKeyRing::need_new_secrets(utime_t now) const
 {
   std::lock_guard l{lock};
-  return secrets.need_new_secrets(now);
+  auto answer = secrets.need_new_secrets(now);
+  ldout(cct, 10) << " now=" << now << ": " << answer << dendl;
+  return answer;
 }
 
 void RotatingKeyRing::set_secrets(RotatingSecrets&& s)
 {
   std::lock_guard l{lock};
+  ldout(cct, 10) << dendl;
   secrets = std::move(s);
   dump_rotating();
 }
 
 void RotatingKeyRing::wipe()
 {
+  ldout(cct, 10) << dendl;
   secrets.wipe();
 }
 
@@ -45,6 +65,7 @@ void RotatingKeyRing::dump_rotating() const
 bool RotatingKeyRing::get_secret(const EntityName& name, CryptoKey& secret) const
 {
   std::lock_guard l{lock};
+  ldout(cct, 10) << name << dendl;
   return keyring->get_secret(name, secret);
 }
 
@@ -74,5 +95,6 @@ bool RotatingKeyRing::get_service_secret(uint32_t service_id_, uint64_t secret_i
 
 KeyRing* RotatingKeyRing::get_keyring()
 {
+  ldout(cct, 10) << dendl;
   return keyring;
 }
