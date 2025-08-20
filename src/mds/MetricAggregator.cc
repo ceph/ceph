@@ -5,6 +5,7 @@
 #include "MDSMap.h"
 #include "MDSRank.h"
 #include "mgr/MgrClient.h"
+#include "msg/msg_types.h" // for entity_inst_t
 
 #include "common/ceph_context.h"
 #include "common/debug.h"
