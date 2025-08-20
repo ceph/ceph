@@ -243,6 +243,12 @@ def _container_cmd(ctx, args, *, workdir=None, interactive=False):
         cmd.append(f"-eCCACHE_BASEDIR={ctx.cli.homedir}")
     for extra_arg in ctx.cli.extra or []:
         cmd.append(extra_arg)
+    if ctx.npm_cache_dir:
+        # use :z so that other builds can use the cache
+        cmd.extend([
+            f'--volume={ctx.npm_cache_dir}:/npmcache:z',
+            '--env=NPM_CACHEDIR=/npmcache'
+        ])
     cmd.append(ctx.image_name)
     cmd.extend(args)
     return cmd
@@ -292,6 +298,7 @@ class Steps(StrEnum):
     BUILD_CONTAINER = "build-container"
     CONTAINER = "container"
     CONFIGURE = "configure"
+    NPM_CACHE = "npmcache"
     BUILD = "build"
     BUILD_TESTS = "buildtests"
     TESTS = "tests"
@@ -391,6 +398,14 @@ class Context:
             path = (
                 pathlib.Path(self.cli.dnf_cache_path) / self.distro_cache_name
             )
+            path = path.expanduser()
+            return path.resolve()
+        return None
+
+    @property
+    def npm_cache_dir(self):
+        if self.cli.npm_cache_path:
+            path = pathlib.Path(self.cli.npm_cache_path)
             path = path.expanduser()
             return path.resolve()
         return None
@@ -528,6 +543,14 @@ def dnf_cache_dir(ctx):
     (cache_dir / ".DNF_CACHE").touch(exist_ok=True)
 
 
+@Builder.set(Steps.NPM_CACHE)
+def npm_cache_dir(ctx):
+    """Set up an NPM cache directory for reuse across container builds."""
+    if not ctx.cli.npm_cache_path:
+        return
+    ctx.npm_cache_dir.mkdir(parents=True, exist_ok=True)
+
+
 @Builder.set(Steps.BUILD_CONTAINER)
 def build_container(ctx):
     """Generate a build environment container image."""
@@ -545,7 +568,7 @@ def build_container(ctx):
         cmd.append(f"--build-arg=DISTRO={ctx.from_image}")
     if ctx.dnf_cache_dir and "docker" in ctx.container_engine:
         log.warning(
-            "The --volume option is not supported by docker. Skipping dnf cache dir mounts"
+            "The --volume option is not supported by docker build/buildx. Skipping dnf cache dir mounts"
         )
     elif ctx.dnf_cache_dir:
         cmd += [
@@ -638,6 +661,7 @@ def bc_configure(ctx):
 @Builder.set(Steps.BUILD)
 def bc_build(ctx):
     """Execute a standard build."""
+    ctx.build.wants(Steps.NPM_CACHE, ctx)
     ctx.build.wants(Steps.CONFIGURE, ctx)
     cmd = _container_cmd(
         ctx,
@@ -654,6 +678,7 @@ def bc_build(ctx):
 @Builder.set(Steps.BUILD_TESTS)
 def bc_build_tests(ctx):
     """Build the tests."""
+    ctx.build.wants(Steps.NPM_CACHE, ctx)
     ctx.build.wants(Steps.CONFIGURE, ctx)
     cmd = _container_cmd(
         ctx,
@@ -670,6 +695,7 @@ def bc_build_tests(ctx):
 @Builder.set(Steps.TESTS)
 def bc_run_tests(ctx):
     """Execute the tests."""
+    ctx.build.wants(Steps.NPM_CACHE, ctx)
     ctx.build.wants(Steps.BUILD_TESTS, ctx)
     cmd = _container_cmd(
         ctx,
@@ -685,7 +711,8 @@ def bc_run_tests(ctx):
 
 @Builder.set(Steps.SOURCE_RPM)
 def bc_make_source_rpm(ctx):
-    """Build SPRMs."""
+    """Build SRPMs."""
+    ctx.build.wants(Steps.NPM_CACHE, ctx)
     ctx.build.wants(Steps.CONTAINER, ctx)
     make_srpm_cmd = f"cd {ctx.cli.homedir} && ./make-srpm.sh"
     if ctx.cli.ceph_version:
@@ -927,7 +954,11 @@ def parse_cli(build_step_names):
     )
     parser.add_argument(
         "--dnf-cache-path",
-        help="DNF caching using provided base dir",
+        help="DNF caching using provided base dir (during build-container build)",
+    )
+    parser.add_argument(
+        "--npm-cache-path",
+        help="NPM caching using provided base dir (during build)",
     )
     parser.add_argument(
         "--build-dir",
