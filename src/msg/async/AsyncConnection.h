@@ -20,9 +20,11 @@
 #include <atomic>
 #include <pthread.h>
 #include <climits>
+#include <deque>
 #include <list>
 #include <mutex>
 #include <map>
+#include <set>
 #include <functional>
 #include <optional>
 
