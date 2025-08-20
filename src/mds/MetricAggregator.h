@@ -5,31 +5,30 @@
 #define CEPH_MDS_METRIC_AGGREGATOR_H
 
 #include <map>
-#include <set>
 #include <thread>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
-#include "msg/msg_types.h" // for entity_inst_t
 #include "msg/Dispatcher.h"
 #include "common/ceph_mutex.h"
-#include "common/perf_counters.h"
 #include "include/common_fwd.h"
 
 #include "mgr/Types.h" // for PerformanceCounters
 #include "mgr/MetricTypes.h" // for MetricPayload
 #include "mgr/MDSPerfMetricTypes.h"
 
-#include "mdstypes.h"
 #include "MDSPinger.h"
 #include "mdstypes.h" // for struct SubvolumeMetric
 
+struct entity_inst_t;
 class MDSMap;
 class MDSRank;
 class MMDSMetrics;
 struct Metrics;
 class MgrClient;
+struct MDSPerfMetricQuery;
+namespace TOPNSPC::common { class PerfCounters; }
 
 class MetricAggregator : public Dispatcher {
 public:
@@ -75,8 +74,8 @@ private:
 
   bool stopping = false;
 
-  PerfCounters *m_perf_counters;
-  std::map<std::pair<entity_inst_t, mds_rank_t>, PerfCounters*> client_perf_counters;
+  TOPNSPC::common::PerfCounters *m_perf_counters;
+  std::map<std::pair<entity_inst_t, mds_rank_t>, TOPNSPC::common::PerfCounters*> client_perf_counters;
   uint64_t subv_window_sec;
   std::unordered_map<std::string, SlidingWindowTracker<SubvolumeMetric>> subvolume_aggregated_metrics;
   std::map<std::string, PerfCounters*> subvolume_perf_counters;
