@@ -162,6 +162,36 @@ class TestReferentInode(CephFSTestCase):
         with self.assertRaises(ObjectNotFound):
             self.fs.read_meta_inode(dir_ino, "hardlink_file1")
 
+    def test_reintegration_limit_with_referent(self):
+        """
+        That the reintegration with referent would block by full directories
+        and the space required in the stray directory is at least two times the
+        the number of hardlink entries being reintegrated.
+        """
+
+        LOW_LIMIT = 100 # 2 times the number of hardlink entries being reintegrated
+        self.config_set('mds', 'mds_bal_fragment_size_max', str(LOW_LIMIT))
+        time.sleep(10) # for config to reach MDS; async create is fast!!
+
+        last_reintegrated = self.get_mdc_stat("strays_reintegrated")
+        self.mount_a.run_shell_payload("""
+        mkdir a b
+        for i in `seq 1 50`; do
+           touch a/"$i"
+           ln a/"$i" b/"$i"
+        done
+        sync -f a b
+        rm a/*
+        """)
+
+        self.wait_until_equal(
+            lambda: self.get_mdc_stat("num_strays"),
+            expect_val=0,
+            timeout=60
+        )
+        curr_reintegrated = self.get_mdc_stat("strays_reintegrated")
+        self.assertGreater(curr_reintegrated, last_reintegrated)
+
     def test_hardlink_reintegration_with_referent(self):
         """
         test_hardlink_reintegration_with_referent - That removal of primary dentry
