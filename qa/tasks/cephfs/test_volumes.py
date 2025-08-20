@@ -3052,6 +3052,11 @@ class TestSubvolumes(TestVolumesHelper):
     def test_subvolume_create_with_enctag(self):
         # create subvolume with enctag
         subvolume = self._gen_subvol_name()
+        enctag_error = "a" * 256 #expect a failure since length is too long
+
+        with self.assertRaises(CommandFailedError):
+            self._fs_cmd("subvolume", "create", self.volname, subvolume, "--enctag", enctag_error)
+
         enctag = "tag1"
         self._fs_cmd("subvolume", "create", self.volname, subvolume, "--enctag", enctag)
 
@@ -3069,6 +3074,10 @@ class TestSubvolumes(TestVolumesHelper):
         self._fs_cmd("subvolume", "create", self.volname, subvolume)
 
         # set enctag
+        enctag_error = "b" * 256 #expect a failure since lenght is too long
+        with self.assertRaises(CommandFailedError):
+            self._fs_cmd("subvolume", "enctag", "set", self.volname, subvolume, "--enctag", enctag_error)
+
         enctag = "tag2"
         self._fs_cmd("subvolume", "enctag", "set", self.volname, subvolume, "--enctag", enctag)
 
