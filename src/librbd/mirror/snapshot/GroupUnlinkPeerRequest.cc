@@ -27,6 +27,21 @@ namespace snapshot {
 using util::create_rados_callback;
 using util::create_context_callback;
 
+bool is_group_snapshot_complete(const cls::rbd::GroupSnapshotState &group_snap_state,
+                                const cls::rbd::MirrorGroupSnapshotCompleteState &complete) {
+  if (complete == cls::rbd::MIRROR_GROUP_SNAPSHOT_COMPLETE) {
+    ceph_assert(group_snap_state == cls::rbd::GROUP_SNAPSHOT_STATE_CREATED);
+    return true;
+  }
+
+  if (complete == cls::rbd::MIRROR_GROUP_SNAPSHOT_COMPLETE_IF_CREATED &&
+      group_snap_state == cls::rbd::GROUP_SNAPSHOT_STATE_CREATED) {
+    return true;
+  }
+
+  return false;
+}
+
 template <typename I>
 void GroupUnlinkPeerRequest<I>::send() {
   ldout(m_cct, 10) << dendl;
@@ -53,7 +68,7 @@ void GroupUnlinkPeerRequest<I>::unlink_peer() {
       if (ns->mirror_peer_uuids.empty() ||
 	(ns->mirror_peer_uuids.count(peer) != 0 &&
 	 ns->is_primary() &&
-         it->state == cls::rbd::GROUP_SNAPSHOT_STATE_INCOMPLETE)){
+         !is_group_snapshot_complete(it->state, ns->complete))){
 	process_snapshot(*it, peer);
 	return;
       }
@@ -221,7 +236,7 @@ void GroupUnlinkPeerRequest<I>::remove_group_snapshot(
   m_group_snap_id = group_snap.id;
 
   C_Gather *gather_ctx = new C_Gather(m_cct, ctx);
-  if (group_snap.state == cls::rbd::GROUP_SNAPSHOT_STATE_INCOMPLETE) {
+  if (group_snap.state == cls::rbd::GROUP_SNAPSHOT_STATE_CREATING) {
     for (size_t i = 0; i < m_image_ctxs->size(); ++i) {
       ImageCtx *ictx = (*m_image_ctxs)[i];
       for (auto it = ictx->snap_info.rbegin();
