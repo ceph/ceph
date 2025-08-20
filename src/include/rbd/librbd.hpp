@@ -210,11 +210,12 @@ namespace librbd {
   } group_snap_info2_t;
 
   typedef rbd_image_info_t image_info_t;
+  typedef rbd_snap_mirror_sync_state_t snap_mirror_sync_state_t;
 
   typedef struct {
     snap_mirror_state_t state;
     std::set<std::string> mirror_peer_uuids;
-    bool complete;
+    snap_mirror_sync_state_t complete;
     std::string primary_mirror_uuid;
     std::string primary_snap_id;
   } group_snap_mirror_namespace_t;
