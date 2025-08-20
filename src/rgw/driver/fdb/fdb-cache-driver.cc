@@ -1,13 +1,15 @@
 
-#include "fdb/fdb.h"
+#include "rgw/rgw_fdb.h"
 
 #include "rgw/driver/fdb/fdb-cache-driver.h"
 
+#include "common/dout.h"
+
 namespace {
 
-void msg(const DoutPrefixProvider *dpp, std::string_view msg, const std::source_location& sl = std::source_location::current())
+void msg(const DoutPrefixProvider *dpp, const std::string msg = "", const std::source_location& sl = std::source_location::current())
 {
- ldpp_dout(dpp, 0) << fmt::format("FDB_CacheDriver: " << sl << ": " << msg << dendl;
+ ldpp_dout(dpp, 0) << fmt::format("FDB_CacheDriver [{} ({}, {})]: {}\n", sl.file_name(), sl.line(), sl.function_name(), msg) << dendl;
 }
 
 } // namespace
@@ -40,7 +42,7 @@ int FDB_CacheDriver::initialize(const DoutPrefixProvider* dpp)
 int FDB_CacheDriver::put(const DoutPrefixProvider* dpp, const std::string& key, const bufferlist& bl, uint64_t len, const rgw::sal::Attrs& attrs, optional_yield y)
 {
  msg(dpp, fmt::format("set() \"{}\"...", key));
-  dbh.set(key, bl, lfdb::commit_after_op::commit);
+  lfdb::set(lfdb::make_transaction(dbh), key, bl, lfdb::commit_after_op::commit);
  msg(dpp, "Ok!");
 
  // JFW: TODO: not sure what to make of attrs
@@ -50,9 +52,9 @@ int FDB_CacheDriver::put(const DoutPrefixProvider* dpp, const std::string& key, 
 
 int FDB_CacheDriver::get(const DoutPrefixProvider* dpp, const std::string& key, off_t offset, uint64_t len, bufferlist& bl, rgw::sal::Attrs& attrs, optional_yield y)
 {
- msg(dpp);
+ msg(dpp, fmt::format("get() \"{}\"", key));
 
- dbh.get(key, bl);
+ lfdb::get(lfdb::make_transaction(dbh), key, bl);
 
  // JFW: TODO: not sure what to make of attrs
 
@@ -86,9 +88,13 @@ int FDB_CacheDriver::append_data(const DoutPrefixProvider* dpp, const::std::stri
 
  lfdb::get(txn, key, value);
 
- value.append((std::uint8_t *)bl_data.c_str(), bl_data.size());
+ // Using, for example, buffer::list::c_str() is non-const:
+ const std::string data = bl_data.to_str();
 
- lfdb::put(txn, key, value, lfdb::commit_after_op::commit); 
+ const auto& buffer = (const std::uint8_t *)data.data();
+ value.insert(value.end(), buffer, data.size() + buffer);
+
+ lfdb::set(txn, key, value, lfdb::commit_after_op::commit); 
  
  return 0;
 }
@@ -97,12 +103,12 @@ int FDB_CacheDriver::delete_data(const DoutPrefixProvider* dpp, const::std::stri
 {
  msg(dpp);
 
- lfdb::erase(lfdb::make_transaction(dbh), k, lfdb::commit_after_op::commit);
+ lfdb::erase(lfdb::make_transaction(dbh), key, lfdb::commit_after_op::commit);
 
  return 0;
 }
 
-int FDB_CacheDriver::rename(const DoutPrefixProvider* dpp, const::std::string& oldKey, const::std::string& newKey, optional_yield y)
+int FDB_CacheDriver::rename(const DoutPrefixProvider* dpp, const std::string& oldKey, const std::string& newKey, optional_yield y)
 {
  msg(dpp);
 
@@ -110,11 +116,11 @@ int FDB_CacheDriver::rename(const DoutPrefixProvider* dpp, const::std::string& o
  
  std::vector<std::uint8_t> data;
  
- auto txn = lfdb::make_transaction(fdb);
+ auto txn = lfdb::make_transaction(dbh);
 
- lfdb::get(txn, k, data);
- lfdb::put(txn, k, data);
- lfdb::erase(txn, k, lfdb::commit_after_op::commit); 
+ lfdb::get(txn, oldKey, data);
+ lfdb::set(txn, newKey, data, lfdb::commit_after_op::no_commit);
+ lfdb::erase(txn, oldKey, lfdb::commit_after_op::commit); 
 
  return 0;
 }
@@ -179,10 +185,9 @@ uint64_t FDB_CacheDriver::get_free_space(const DoutPrefixProvider* dpp)
 
 void FDB_CacheDriver::shutdown()
 {
- msg(dpp);
-
  // JFW: I don't think this requires any special action from us, but if the FDB_CacheDriver object is meant
  // to destroy underlying handles we may need to change that-- I doubt it.
+ // Unfortunately, without the "dpp" parameter I guess we don't get to write a log message...
 }
 
 int FDB_CacheDriver::restore_blocks_objects(const DoutPrefixProvider* dpp, ObjectDataCallback obj_func, BlockDataCallback block_func)

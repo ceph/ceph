@@ -24,7 +24,7 @@
 
 #define CATCH_CONFIG_MAIN
 
-#include "rgw/rgw_fdb_conversion.h"
+#include "rgw/rgw_fdb.h"
 
 #include <fmt/format.h>
 #include <fmt/chrono.h>
