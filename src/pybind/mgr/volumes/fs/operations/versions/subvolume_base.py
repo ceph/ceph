@@ -346,7 +346,12 @@ class SubvolumeBase(object):
         enctag = attrs.get("enctag", None)
         if enctag is not None:
             fs_enctag = CephFSVolumeEncryptionTag(self.fs, path)
-            fs_enctag.set_tag(enctag)
+            try:
+                fs_enctag.set_tag(enctag)
+            except EncryptionTagException:
+                raise VolumeException(-errno.EINVAL,
+                                      "invalid enctag specified: length '{0} > {1}'".format(len(enctag), fs_enctag.ENCTAG_MAX))
+
 
         fscrypt_auth = attrs.get("fscrypt_auth")
         if fscrypt_auth is not None:
