@@ -2671,7 +2671,7 @@ test_group_snap_sync_state()
 
     run_cmd "rbd --cluster ${cluster} group snap list ${group_spec} --format xml --pretty-format" 
 
-    test "${expected_state}" = "$(xmlstarlet sel -t -v "//group_snaps/group_snap[id='${group_snap_id}']/state" < "$CMD_STDOUT")" || { fail; return 1; }
+    test "${expected_state}" = "$(xmlstarlet sel -t -v "//group_snaps/group_snap[id='${group_snap_id}']/namespace/snaps_synced" < "$CMD_STDOUT")" || { fail; return 1; }
 }
 
 test_group_snap_sync_complete()
@@ -2857,7 +2857,7 @@ get_newest_group_snapshot_id()
     local -n _group_snap_id=$3
 
     run_cmd "rbd --cluster ${cluster} group snap list ${group_spec} --format xml --pretty-format" 
-    _group_snap_id=$(xmlstarlet sel -t -v "(//group_snaps/group_snap[state='complete']/id)[last()]" "$CMD_STDOUT" ) && return 0
+    _group_snap_id=$(xmlstarlet sel -t -v "(//group_snaps/group_snap[state='created']/id)[last()]" "$CMD_STDOUT" ) && return 0
 
     fail "Failed to get snapshot id"
     return 1

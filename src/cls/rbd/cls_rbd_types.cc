@@ -1465,6 +1465,21 @@ std::ostream& operator<<(std::ostream& os, MirrorSnapshotState state) {
   return os;
 }
 
+std::ostream& operator<<(std::ostream& os, MirrorSnapshotSyncState state) {
+  switch (state) {
+  case MIRROR_GROUP_SNAP_SYNC_UNKNOWN:
+    os << "unknown";
+    break;
+  case MIRROR_GROUP_SNAP_SYNC_INCOMPLETE:
+    os << "incomplete";
+    break;
+  case MIRROR_GROUP_SNAP_SYNC_COMPLETE:
+    os << "complete";
+    break;
+  }
+  return os;
+}
+
 void GroupSnapshotNamespaceMirror::encode(bufferlist& bl) const {
   using ceph::encode;
   encode(state, bl);
@@ -1486,7 +1501,7 @@ void GroupSnapshotNamespaceMirror::decode(uint8_t version,
 
 void GroupSnapshotNamespaceMirror::dump(Formatter *f) const {
   f->dump_stream("state") << state;
-  f->dump_bool("complete", complete);
+  f->dump_stream("complete") << complete;
   f->open_array_section("mirror_peer_uuids");
   for (auto &peer : mirror_peer_uuids) {
     f->dump_string("mirror_peer_uuid", peer);
@@ -1599,7 +1614,8 @@ void GroupSnapshotNamespace::generate_test_instances(
   o.push_back(new GroupSnapshotNamespace(GroupSnapshotNamespaceUser()));
   o.push_back(new GroupSnapshotNamespace(GroupSnapshotNamespaceMirror(
                                              MIRROR_SNAPSHOT_STATE_PRIMARY,
-                                             {"peer uuid"}, "", "")));
+                                             {"peer uuid"}, "", "",
+                                             MIRROR_GROUP_SNAP_SYNC_COMPLETE)));
 }
 
 std::ostream& operator<<(std::ostream& os, const GroupSnapshotNamespaceType& type) {
@@ -1731,7 +1747,7 @@ void GroupSnapshot::generate_test_instances(std::list<GroupSnapshot *> &o) {
   o.push_back(new GroupSnapshot("1018643c9869",
                                 GroupSnapshotNamespaceMirror{
                                     MIRROR_SNAPSHOT_STATE_NON_PRIMARY, {},
-                                    "uuid", "id"},
+                                    "uuid", "id", MIRROR_GROUP_SNAP_SYNC_COMPLETE},
                                 "groupsnapshot2",
                                 GROUP_SNAPSHOT_STATE_COMPLETE));
 }

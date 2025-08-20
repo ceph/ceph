@@ -977,12 +977,35 @@ struct GroupSnapshotNamespaceUser {
   }
 };
 
+enum MirrorSnapshotSyncState {
+  MIRROR_GROUP_SNAP_SYNC_UNKNOWN    = 0,
+  MIRROR_GROUP_SNAP_SYNC_INCOMPLETE = 1,
+  MIRROR_GROUP_SNAP_SYNC_COMPLETE   = 2,
+};
+
+inline void encode(const MirrorSnapshotSyncState &state, ceph::buffer::list& bl)
+{
+  using ceph::encode;
+  encode(static_cast<uint8_t>(state), bl);
+}
+
+inline void decode(MirrorSnapshotSyncState &state,
+                   ceph::buffer::list::const_iterator& it)
+{
+  uint8_t int_state;
+  using ceph::decode;
+  decode(int_state, it);
+  state = static_cast<MirrorSnapshotSyncState>(int_state);
+}
+
+std::ostream& operator<<(std::ostream& os, MirrorSnapshotSyncState state);
+
 struct GroupSnapshotNamespaceMirror {
   static const GroupSnapshotNamespaceType GROUP_SNAPSHOT_NAMESPACE_TYPE =
     GROUP_SNAPSHOT_NAMESPACE_TYPE_MIRROR;
 
   MirrorSnapshotState state = MIRROR_SNAPSHOT_STATE_NON_PRIMARY;
-  bool complete = false; // TODO: modify methods to handle this field
+  MirrorSnapshotSyncState complete = MIRROR_GROUP_SNAP_SYNC_UNKNOWN;
   std::set<std::string> mirror_peer_uuids;
 
   std::string primary_mirror_uuid;
@@ -993,8 +1016,9 @@ struct GroupSnapshotNamespaceMirror {
   GroupSnapshotNamespaceMirror(MirrorSnapshotState state,
                                const std::set<std::string> &mirror_peer_uuids,
                                const std::string &primary_mirror_uuid,
-                               const std::string &primary_snap_id)
-    : state(state), mirror_peer_uuids(mirror_peer_uuids),
+                               const std::string &primary_snap_id,
+                               MirrorSnapshotSyncState complete)
+    : state(state), complete(complete), mirror_peer_uuids(mirror_peer_uuids),
       primary_mirror_uuid(primary_mirror_uuid),
       primary_snap_id(primary_snap_id) {
   }
