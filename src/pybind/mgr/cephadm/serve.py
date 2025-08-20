@@ -248,6 +248,13 @@ class CephadmServe:
         bad_hosts = []
         failures = []
         agents_down: List[str] = []
+        
+        # Pre-calculate common time cutoffs to reduce datetime operations
+        current_time = datetime_now()
+        daemon_cutoff = current_time - datetime.timedelta(seconds=self.mgr.daemon_cache_timeout)
+        facts_cutoff = current_time - datetime.timedelta(seconds=self.mgr.facts_cache_timeout)
+        device_cutoff = current_time - datetime.timedelta(seconds=self.mgr.device_cache_timeout)
+        autotune_cutoff = current_time - datetime.timedelta(seconds=self.mgr.autotune_interval)
 
         @forall_hosts
         def refresh(host: str) -> None:
@@ -255,6 +262,9 @@ class CephadmServe:
             # skip hosts that are in maintenance - they could be powered off
             if self.mgr.inventory._inventory[host].get("status", "").lower() == "maintenance":
                 return
+
+            # Early exit for offline hosts - avoid redundant checks
+            is_offline = host in self.mgr.offline_hosts
 
             if self.mgr.use_agent:
                 if self.mgr.agent_helpers._check_agent(host):
@@ -265,44 +275,54 @@ class CephadmServe:
                 if r is not None:
                     bad_hosts.append(r)
 
+            # Batch common checks to reduce redundant calls
+            needs_metadata_refresh = False
+            metadata_up_to_date = self.mgr.cache.host_metadata_up_to_date(host)
+            
             if (
                 not self.mgr.use_agent
                 or self.mgr.cache.is_host_draining(host)
                 or host in agents_down
             ):
-                if self.mgr.cache.host_needs_daemon_refresh(host):
+                if self._host_needs_daemon_refresh_optimized(host, is_offline, metadata_up_to_date, daemon_cutoff):
                     self.log.debug('refreshing %s daemons' % host)
                     r = self._refresh_host_daemons(host)
                     if r:
                         failures.append(r)
+                    needs_metadata_refresh = True
 
-                if self.mgr.cache.host_needs_facts_refresh(host):
+                if self._host_needs_facts_refresh_optimized(host, is_offline, metadata_up_to_date, facts_cutoff):
                     self.log.debug(('Refreshing %s facts' % host))
                     r = self._refresh_facts(host)
                     if r:
                         failures.append(r)
+                    needs_metadata_refresh = True
 
-                if self.mgr.cache.host_needs_network_refresh(host):
+                if self._host_needs_network_refresh_optimized(host, is_offline, metadata_up_to_date, device_cutoff):
                     self.log.debug(('Refreshing %s networks' % host))
                     r = self._refresh_host_networks(host)
                     if r:
                         failures.append(r)
+                    needs_metadata_refresh = True
 
-                if self.mgr.cache.host_needs_device_refresh(host):
+                if self._host_needs_device_refresh_optimized(host, is_offline, metadata_up_to_date, device_cutoff):
                     self.log.debug('refreshing %s devices' % host)
                     r = self._refresh_host_devices(host)
                     if r:
                         failures.append(r)
-                self.mgr.cache.metadata_up_to_date[host] = True
+                    needs_metadata_refresh = True
+                    
+                if needs_metadata_refresh:
+                    self.mgr.cache.metadata_up_to_date[host] = True
             elif not self.mgr.cache.get_daemons_by_type('agent', host=host):
-                if self.mgr.cache.host_needs_daemon_refresh(host):
+                if self._host_needs_daemon_refresh_optimized(host, is_offline, metadata_up_to_date, daemon_cutoff):
                     self.log.debug('refreshing %s daemons' % host)
                     r = self._refresh_host_daemons(host)
                     if r:
                         failures.append(r)
                 self.mgr.cache.metadata_up_to_date[host] = True
 
-            if self.mgr.cache.host_needs_registry_login(host) and self.mgr.get_store('registry_credentials'):
+            if self._host_needs_registry_login_optimized(host, is_offline) and self.mgr.get_store('registry_credentials'):
                 self.log.debug(f"Logging `{host}` into custom registry")
                 with self.mgr.async_timeout_handler(host, 'cephadm registry-login'):
                     r = self.mgr.wait_async(self._registry_login(
@@ -310,14 +330,14 @@ class CephadmServe:
                 if r:
                     bad_hosts.append(r)
 
-            if self.mgr.cache.host_needs_osdspec_preview_refresh(host):
+            if self._host_needs_osdspec_preview_refresh_optimized(host, is_offline):
                 self.log.debug(f"refreshing OSDSpec previews for {host}")
                 r = self._refresh_host_osdspec_previews(host)
                 if r:
                     failures.append(r)
 
             if (
-                    self.mgr.cache.host_needs_autotune_memory(host)
+                    self._host_needs_autotune_memory_optimized(host, is_offline, autotune_cutoff)
                     and not self.mgr.inventory.has_label(host, SpecialHostLabels.NO_MEMORY_AUTOTUNE)
             ):
                 self.log.debug(f"autotuning memory for {host}")
@@ -346,6 +366,79 @@ class CephadmServe:
             self.mgr.set_health_warning(
                 'CEPHADM_REFRESH_FAILED', 'failed to probe daemons or devices', len(failures), failures)
         self.mgr.update_failed_daemon_health_check()
+
+    def _host_needs_daemon_refresh_optimized(self, host: str, is_offline: bool, metadata_up_to_date: bool, cutoff: datetime.datetime) -> bool:
+        """Optimized version of host_needs_daemon_refresh with batched checks"""
+        if is_offline:
+            self.log.debug(f'Host "{host}" marked as offline. Skipping daemon refresh')
+            return False
+        if host in self.mgr.cache.daemon_refresh_queue:
+            self.mgr.cache.daemon_refresh_queue.discard(host)
+            return True
+        if host not in self.mgr.cache.last_daemon_update or self.mgr.cache.last_daemon_update[host] < cutoff:
+            return True
+        return not metadata_up_to_date
+
+    def _host_needs_facts_refresh_optimized(self, host: str, is_offline: bool, metadata_up_to_date: bool, cutoff: datetime.datetime) -> bool:
+        """Optimized version of host_needs_facts_refresh with batched checks"""
+        if is_offline:
+            self.log.debug(f'Host "{host}" marked as offline. Skipping gather facts refresh')
+            return False
+        if host not in self.mgr.cache.last_facts_update or self.mgr.cache.last_facts_update[host] < cutoff:
+            return True
+        return not metadata_up_to_date
+
+    def _host_needs_network_refresh_optimized(self, host: str, is_offline: bool, metadata_up_to_date: bool, cutoff: datetime.datetime) -> bool:
+        """Optimized version of host_needs_network_refresh with batched checks"""
+        if is_offline:
+            self.log.debug(f'Host "{host}" marked as offline. Skipping network refresh')
+            return False
+        if host in self.mgr.cache.network_refresh_queue:
+            self.mgr.cache.network_refresh_queue.discard(host)
+            return True
+        if host not in self.mgr.cache.last_network_update or self.mgr.cache.last_network_update[host] < cutoff:
+            return True
+        return not metadata_up_to_date
+
+    def _host_needs_device_refresh_optimized(self, host: str, is_offline: bool, metadata_up_to_date: bool, cutoff: datetime.datetime) -> bool:
+        """Optimized version of host_needs_device_refresh with batched checks"""
+        if is_offline:
+            self.log.debug(f'Host "{host}" marked as offline. Skipping device refresh')
+            return False
+        if host in self.mgr.cache.device_refresh_queue:
+            self.mgr.cache.device_refresh_queue.discard(host)
+            return True
+        if host not in self.mgr.cache.last_device_update or self.mgr.cache.last_device_update[host] < cutoff:
+            return True
+        return not metadata_up_to_date
+
+    def _host_needs_registry_login_optimized(self, host: str, is_offline: bool) -> bool:
+        """Optimized version of host_needs_registry_login with batched checks"""
+        if is_offline:
+            return False
+        if host in self.mgr.cache.registry_login_queue:
+            self.mgr.cache.registry_login_queue.discard(host)
+            return True
+        return False
+
+    def _host_needs_osdspec_preview_refresh_optimized(self, host: str, is_offline: bool) -> bool:
+        """Optimized version of host_needs_osdspec_preview_refresh with batched checks"""
+        if is_offline:
+            self.log.debug(f'Host "{host}" marked as offline. Skipping osdspec preview refresh')
+            return False
+        if host in self.mgr.cache.osdspec_previews_refresh_queue:
+            self.mgr.cache.osdspec_previews_refresh_queue.discard(host)
+            return True
+        return False
+
+    def _host_needs_autotune_memory_optimized(self, host: str, is_offline: bool, cutoff: datetime.datetime) -> bool:
+        """Optimized version of host_needs_autotune_memory with batched checks"""
+        if is_offline:
+            self.log.debug(f'Host "{host}" marked as offline. Skipping autotune')
+            return False
+        if host not in self.mgr.cache.last_autotune or self.mgr.cache.last_autotune[host] < cutoff:
+            return True
+        return False
 
     def _check_host(self, host: str) -> Optional[str]:
         if host not in self.mgr.inventory:

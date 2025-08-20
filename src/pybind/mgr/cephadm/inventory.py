@@ -781,10 +781,10 @@ class HostCache():
         self.last_device_update = {}   # type: Dict[str, datetime.datetime]
         self.last_device_change = {}   # type: Dict[str, datetime.datetime]
         self.last_tuned_profile_update = {}  # type: Dict[str, datetime.datetime]
-        self.daemon_refresh_queue = []  # type: List[str]
-        self.device_refresh_queue = []  # type: List[str]
-        self.network_refresh_queue = []  # type: List[str]
-        self.osdspec_previews_refresh_queue = []  # type: List[str]
+        self.daemon_refresh_queue: Set[str] = set()
+        self.device_refresh_queue: Set[str] = set() 
+        self.network_refresh_queue: Set[str] = set()
+        self.osdspec_previews_refresh_queue: Set[str] = set()
 
         # host -> daemon name -> dict
         self.daemon_config_deps = {}   # type: Dict[str, Dict[str, Dict[str,Any]]]
@@ -812,13 +812,13 @@ class HostCache():
                 if 'last_device_update' in j:
                     self.last_device_update[host] = str_to_datetime(j['last_device_update'])
                 else:
-                    self.device_refresh_queue.append(host)
+                    self.device_refresh_queue.add(host)
                 if 'last_device_change' in j:
                     self.last_device_change[host] = str_to_datetime(j['last_device_change'])
                 # for services, we ignore the persisted last_*_update
                 # and always trigger a new scrape on mgr restart.
-                self.daemon_refresh_queue.append(host)
-                self.network_refresh_queue.append(host)
+                self.daemon_refresh_queue.add(host)
+                self.network_refresh_queue.add(host)
                 self.daemons[host] = {}
                 self.osdspec_previews[host] = []
                 self.osdspec_last_applied[host] = {}
@@ -985,10 +985,10 @@ class HostCache():
         self.osdspec_previews[host] = []
         self.osdspec_last_applied[host] = {}
         self.daemon_config_deps[host] = {}
-        self.daemon_refresh_queue.append(host)
-        self.device_refresh_queue.append(host)
-        self.network_refresh_queue.append(host)
-        self.osdspec_previews_refresh_queue.append(host)
+        self.daemon_refresh_queue.add(host)
+        self.device_refresh_queue.add(host)
+        self.network_refresh_queue.add(host)
+        self.osdspec_previews_refresh_queue.add(host)
         self.registry_login_queue.add(host)
         self.last_client_files[host] = {}
 
@@ -996,30 +996,30 @@ class HostCache():
         # type: (str) -> None
 
         self.last_host_check.pop(host, None)
-        self.daemon_refresh_queue.append(host)
+        self.daemon_refresh_queue.add(host)
         self.registry_login_queue.add(host)
-        self.device_refresh_queue.append(host)
+        self.device_refresh_queue.add(host)
         self.last_facts_update.pop(host, None)
-        self.osdspec_previews_refresh_queue.append(host)
+        self.osdspec_previews_refresh_queue.add(host)
         self.last_autotune.pop(host, None)
 
     def invalidate_host_daemons(self, host):
         # type: (str) -> None
-        self.daemon_refresh_queue.append(host)
+        self.daemon_refresh_queue.add(host)
         if host in self.last_daemon_update:
             del self.last_daemon_update[host]
         self.mgr.event.set()
 
     def invalidate_host_devices(self, host):
         # type: (str) -> None
-        self.device_refresh_queue.append(host)
+        self.device_refresh_queue.add(host)
         if host in self.last_device_update:
             del self.last_device_update[host]
         self.mgr.event.set()
 
     def invalidate_host_networks(self, host):
         # type: (str) -> None
-        self.network_refresh_queue.append(host)
+        self.network_refresh_queue.add(host)
         if host in self.last_network_update:
             del self.last_network_update[host]
         self.mgr.event.set()
@@ -1391,7 +1391,7 @@ class HostCache():
             logger.debug(f'Host "{host}" marked as offline. Skipping daemon refresh')
             return False
         if host in self.daemon_refresh_queue:
-            self.daemon_refresh_queue.remove(host)
+            self.daemon_refresh_queue.discard(host)
             return True
         cutoff = datetime_now() - datetime.timedelta(
             seconds=self.mgr.daemon_cache_timeout)
@@ -1459,7 +1459,7 @@ class HostCache():
             logger.debug(f'Host "{host}" marked as offline. Skipping device refresh')
             return False
         if host in self.device_refresh_queue:
-            self.device_refresh_queue.remove(host)
+            self.device_refresh_queue.discard(host)
             return True
         cutoff = datetime_now() - datetime.timedelta(
             seconds=self.mgr.device_cache_timeout)
@@ -1475,7 +1475,7 @@ class HostCache():
             logger.debug(f'Host "{host}" marked as offline. Skipping network refresh')
             return False
         if host in self.network_refresh_queue:
-            self.network_refresh_queue.remove(host)
+            self.network_refresh_queue.discard(host)
             return True
         cutoff = datetime_now() - datetime.timedelta(
             seconds=self.mgr.device_cache_timeout)
@@ -1490,7 +1490,7 @@ class HostCache():
             logger.debug(f'Host "{host}" marked as offline. Skipping osdspec preview refresh')
             return False
         if host in self.osdspec_previews_refresh_queue:
-            self.osdspec_previews_refresh_queue.remove(host)
+            self.osdspec_previews_refresh_queue.discard(host)
             return True
         #  Since this is dependent on other factors (device and spec) this does not  need
         #  to be updated periodically.
