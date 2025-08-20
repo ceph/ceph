@@ -158,9 +158,14 @@ class NvmeofService(CephService):
 
     def config_dashboard(self, daemon_descrs: List[DaemonDescription]) -> None:
         def get_set_cmd_dicts(out: str) -> List[dict]:
-            gateways = json.loads(out)['gateways']
-            cmd_dicts = []
 
+            try:
+                gateways = json.loads(out).get('gateways', [])
+            except json.decoder.JSONDecodeError as e:
+                logger.error(f'Error while trying to parse gateways JSON: {e}')
+                return []
+
+            cmd_dicts = []
             for dd in daemon_descrs:
                 spec = cast(NvmeofServiceSpec,
                             self.mgr.spec_store.all_specs.get(dd.service_name(), None))
