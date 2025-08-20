@@ -215,15 +215,20 @@ void DispatchQueue::entry()
 }
 
 void DispatchQueue::discard_queue(uint64_t id) {
+  uint64_t dropped = 0;
+  ldout(cct,10) << __func__ << " discarding id=" << id << dendl;
   std::lock_guard l{lock};
   std::list<QueueItem> removed;
   mqueue.remove_by_class(id, &removed);
   for (auto i = removed.begin(); i != removed.end(); ++i) {
     ceph_assert(!(i->is_code())); // We don't discard id 0, ever!
     const ref_t<Message>& m = i->get_message();
+    ldout(cct,15) << __func__ << " removing " << *m << dendl;
     remove_arrival(*i);
     dispatch_throttle_release(m->get_dispatch_throttle_size());
+    ++dropped;
   }
+  ldout(cct,10) << __func__ << " dropped " << dropped << " messages" << dendl;
 }
 
 void DispatchQueue::start()
