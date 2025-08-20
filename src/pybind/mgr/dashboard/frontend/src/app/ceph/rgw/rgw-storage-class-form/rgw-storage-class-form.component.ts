@@ -184,26 +184,29 @@ export class RgwStorageClassFormComponent extends CdForm implements OnInit {
             secret_key: response?.secret,
             target_path: response?.target_path,
             retain_head_object: this.tierTargetInfo?.val?.retain_head_object || false,
-            multipart_sync_threshold: response?.multipart_sync_threshold || '',
-            multipart_min_part_size: response?.multipart_min_part_size || '',
             allow_read_through: this.tierTargetInfo?.val?.allow_read_through || false,
             restore_storage_class: this.tierTargetInfo?.val?.restore_storage_class,
             read_through_restore_days: this.tierTargetInfo?.val?.read_through_restore_days,
             acl_mappings: this.tierTargetInfo?.val?.s3?.acl_mappings || []
           });
-          this.acls?.clear();
-          if (aclMappings.length > 0) {
-            aclMappings.forEach((acl) => {
-              this.acls?.push(
-                this.formBuilder.group({
-                  source_id: [acl.val?.source_id || ''],
-                  dest_id: [acl.val?.dest_id || ''],
-                  type: [acl.val?.type || AclTypeConst.ID, Validators.required]
-                })
-              );
-            });
-          } else {
-            this.addAcls();
+          if (
+            this.storageClassForm.get('storageClassType')?.value === TIER_TYPE.CLOUD_TIER ||
+            this.storageClassForm.get('storageClassType')?.value === TIER_TYPE.GLACIER
+          ) {
+            this.acls?.clear();
+            if (aclMappings.length > 0) {
+              aclMappings.forEach((acl) => {
+                this.acls?.push(
+                  this.formBuilder.group({
+                    source_id: [acl.val?.source_id || ''],
+                    dest_id: [acl.val?.dest_id || ''],
+                    type: [acl.val?.type || AclTypeConst.ID, Validators.required]
+                  })
+                );
+              });
+            } else {
+              this.addAcls();
+            }
           }
           if (this.tierTargetInfo?.val?.tier_type == TIER_TYPE.GLACIER) {
             let glacierResponse = this.tierTargetInfo?.val['s3-glacier'];
@@ -221,7 +224,6 @@ export class RgwStorageClassFormComponent extends CdForm implements OnInit {
       this.onAllowReadThroughChange(value);
     });
   }
-
   createForm() {
     const self = this;
 
@@ -288,7 +290,13 @@ export class RgwStorageClassFormComponent extends CdForm implements OnInit {
       ),
       allow_read_through: new FormControl(false),
       storageClassType: new FormControl(TIER_TYPE.LOCAL, Validators.required),
-      acls: new FormArray([this.createAcls()])
+      acls: new FormArray([])
+    });
+    this.storageClassForm.get('storageClassType')?.valueChanges.subscribe((type: string) => {
+      if (type === TIER_TYPE.CLOUD_TIER) {
+        const aclsArray = this.storageClassForm.get('acls') as FormArray;
+        aclsArray.push(this.createAcls());
+      }
     });
   }
 
@@ -541,7 +549,6 @@ export class RgwStorageClassFormComponent extends CdForm implements OnInit {
 
   buildRequest() {
     if (this.storageClassForm.errors) return null;
-
     const rawFormValue = _.cloneDeep(this.storageClassForm.value);
     const zoneGroup = this.storageClassForm.get('zonegroup').value;
     const storageClass = this.storageClassForm.get('storage_class').value;
@@ -560,8 +567,8 @@ export class RgwStorageClassFormComponent extends CdForm implements OnInit {
     this.removedAclSourceIds.forEach((sourceId: string, index: number) => {
       tier_config_rm[`acls[${index}].source_id`] = sourceId;
     });
-    if (this.aclList.length > rawFormValue.acls.length) {
-      this.aclList.forEach((acl: ACL, index: number) => {
+    if (this.aclList?.length > rawFormValue.acls?.length) {
+      this.aclList?.forEach((acl: ACL, index: number) => {
         const sourceId = acl?.val?.source_id;
         const ifExist = removeAclList.find((acl: ACLVal) => acl?.source_id === sourceId);
 
