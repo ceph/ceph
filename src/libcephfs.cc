@@ -17,6 +17,8 @@
 #include <string.h>
 #include <string>
 
+#include "include/types.h"
+
 #include "include/Context.h"
 #include "auth/Crypto.h"
 #include "client/Client.h"
@@ -165,7 +167,7 @@ public:
   int select_filesystem(const std::string &fs_name_)
   {
     if (mounted) {
-      return -EISCONN;
+      return ceph_to_hostos_errno(-EISCONN);
     }
 
     fs_name = fs_name_;
@@ -182,7 +184,7 @@ public:
     int ret;
     
     if (mounted)
-      return -EISCONN;
+      return ceph_to_hostos_errno(-EISCONN);
 
     if (!inited) {
       ret = init();
@@ -204,7 +206,7 @@ public:
   int unmount()
   {
     if (!mounted)
-      return -ENOTCONN;
+      return ceph_to_hostos_errno(-ENOTCONN);
     shutdown();
     return 0;
   }
@@ -441,18 +443,28 @@ extern "C" int ceph_create(struct ceph_mount_info **cmount, const char * const i
 
 extern "C" int ceph_unmount(struct ceph_mount_info *cmount)
 {
-  return cmount->unmount();
+  int retval = cmount->unmount();
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 extern "C" int ceph_abort_conn(struct ceph_mount_info *cmount)
 {
-  return cmount->abort_conn();
+  int retval = cmount->abort_conn();
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 extern "C" int ceph_release(struct ceph_mount_info *cmount)
 {
   if (cmount->is_mounted())
-    return -EISCONN;
+    return ceph_to_hostos_errno(-EISCONN);
   delete cmount;
   cmount = nullptr;
   return 0;
@@ -475,7 +487,7 @@ extern "C" uint64_t ceph_get_instance_id(struct ceph_mount_info *cmount)
 extern "C" int ceph_getaddrs(struct ceph_mount_info *cmount, char** addrs)
 {
   if (!cmount->is_initialized())
-    return -ENOTCONN;
+    return ceph_to_hostos_errno(-ENOTCONN);
   auto s = cmount->getaddrs();
   *addrs = strdup(s.c_str());
   return 0;
@@ -483,7 +495,12 @@ extern "C" int ceph_getaddrs(struct ceph_mount_info *cmount, char** addrs)
 
 extern "C" int ceph_conf_read_file(struct ceph_mount_info *cmount, const char *path)
 {
-  return cmount->conf_read_file(path);
+  int retval = cmount->conf_read_file(path);
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 extern "C" mode_t ceph_umask(struct ceph_mount_info *cmount, mode_t mode)
@@ -494,36 +511,62 @@ extern "C" mode_t ceph_umask(struct ceph_mount_info *cmount, mode_t mode)
 extern "C" int ceph_conf_parse_argv(struct ceph_mount_info *cmount, int argc,
 				     const char **argv)
 {
-  return cmount->conf_parse_argv(argc, argv);
+  int retval = cmount->conf_parse_argv(argc, argv);
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 extern "C" int ceph_conf_parse_env(struct ceph_mount_info *cmount, const char *name)
 {
-  return cmount->conf_parse_env(name);
+  int retval = cmount->conf_parse_env(name);
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 extern "C" int ceph_conf_set(struct ceph_mount_info *cmount, const char *option,
 			     const char *value)
 {
-  return cmount->conf_set(option, value);
+  int retval = cmount->conf_set(option, value);
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 extern "C" int ceph_conf_get(struct ceph_mount_info *cmount, const char *option,
 			     char *buf, size_t len)
 {
   if (!buf) {
-    return -EINVAL;
+    return ceph_to_hostos_errno(-EINVAL);
   }
-  return cmount->conf_get(option, buf, len);
+
+  int retval = cmount->conf_get(option, buf, len);
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 extern "C" int ceph_set_mount_timeout(struct ceph_mount_info *cmount, uint32_t timeout) {
   if (cmount->is_mounted()) {
-    return -EINVAL;
+    return ceph_to_hostos_errno(-EINVAL);
   }
 
   auto timeout_str = stringify(timeout);
-  return ceph_conf_set(cmount, "client_mount_timeout", timeout_str.c_str());
+  int retval = ceph_conf_set(cmount, "client_mount_timeout", timeout_str.c_str());
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 class CommandCContext : public Context {
@@ -553,7 +596,7 @@ extern "C" int ceph_mds_command2(struct ceph_mount_info *cmount,
   std::vector<string> cmdv;
 
   if (!cmount->is_initialized()) {
-    return -ENOTCONN;
+    return ceph_to_hostos_errno(-ENOTCONN);
   }
 
   // Construct inputs
@@ -568,6 +611,10 @@ extern "C" int ceph_mds_command2(struct ceph_mount_info *cmount,
 
   if (r != 0) {
     delete ctx;
+
+    if (r < 0) {
+      return ceph_to_hostos_errno(r);
+    }
     return r;
   }
 
@@ -589,7 +636,7 @@ extern "C" int ceph_mds_command(struct ceph_mount_info *cmount,
   std::string outs;
 
   if (!cmount->is_initialized()) {
-    return -ENOTCONN;
+    return ceph_to_hostos_errno(-ENOTCONN);
   }
 
   // Construct inputs
@@ -618,22 +665,35 @@ extern "C" int ceph_mds_command(struct ceph_mount_info *cmount,
   do_out_buffer(outs, outsbuf, outsbuflen);
 
 out:
+  if (r < 0) {
+    return ceph_to_hostos_errno(r);
+  }
   return r;
 }
 
 extern "C" int ceph_init(struct ceph_mount_info *cmount)
 {
-  return cmount->init();
+  int retval = cmount->init();
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 extern "C" int ceph_select_filesystem(struct ceph_mount_info *cmount,
                                       const char *fs_name)
 {
   if (fs_name == nullptr) {
-    return -EINVAL;
+    return ceph_to_hostos_errno(-EINVAL);
   }
 
-  return cmount->select_filesystem(fs_name);
+  int retval = cmount->select_filesystem(fs_name);
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 extern "C" int ceph_mount(struct ceph_mount_info *cmount, const char *root)
@@ -641,7 +701,13 @@ extern "C" int ceph_mount(struct ceph_mount_info *cmount, const char *root)
   std::string mount_root;
   if (root)
     mount_root = root;
-  return cmount->mount(mount_root, cmount->default_perms);
+
+  int retval = cmount->mount(mount_root, cmount->default_perms);
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 extern "C" int ceph_is_mounted(struct ceph_mount_info *cmount)
@@ -657,15 +723,21 @@ extern "C" struct UserPerm *ceph_mount_perms(struct ceph_mount_info *cmount)
 extern "C" int64_t ceph_get_fs_cid(struct ceph_mount_info *cmount)
 {
   if (!cmount->is_mounted())
-    return -ENOTCONN;
-  return cmount->get_client()->get_fs_cid();
+    return ceph_to_hostos_errno(-ENOTCONN);
+
+  int retval = cmount->get_client()->get_fs_cid();
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 extern "C" int ceph_mount_perms_set(struct ceph_mount_info *cmount,
 				    struct UserPerm *perms)
 {
   if (cmount->is_mounted())
-    return -EISCONN;
+    return ceph_to_hostos_errno(-EISCONN);
   cmount->default_perms = *perms;
   return 0;
 }
@@ -674,15 +746,27 @@ extern "C" int ceph_statfs(struct ceph_mount_info *cmount, const char *path,
 			   struct statvfs *stbuf)
 {
   if (!cmount->is_mounted())
-    return -ENOTCONN;
-  return cmount->get_client()->statfs(path, stbuf, cmount->default_perms);
+    return ceph_to_hostos_errno(-ENOTCONN);
+
+  int retval = cmount->get_client()->statfs(path, stbuf, cmount->default_perms);
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 extern "C" int ceph_get_local_osd(struct ceph_mount_info *cmount)
 {
   if (!cmount->is_mounted())
-    return -ENOTCONN;
-  return cmount->get_client()->get_local_osd();
+    return ceph_to_hostos_errno(-ENOTCONN);
+
+  int retval = cmount->get_client()->get_local_osd();
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 extern "C" const char* ceph_getcwd(struct ceph_mount_info *cmount)
@@ -693,31 +777,55 @@ extern "C" const char* ceph_getcwd(struct ceph_mount_info *cmount)
 extern "C" int ceph_chdir (struct ceph_mount_info *cmount, const char *s)
 {
   if (!cmount->is_mounted())
-    return -ENOTCONN;
-  return cmount->chdir(s, cmount->default_perms);
+    return ceph_to_hostos_errno(-ENOTCONN);
+
+  int retval = cmount->chdir(s, cmount->default_perms);
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 extern "C" int ceph_opendir(struct ceph_mount_info *cmount,
 			    const char *name, struct ceph_dir_result **dirpp)
 {
   if (!cmount->is_mounted())
-    return -ENOTCONN;
-  return cmount->get_client()->opendir(name, (dir_result_t **)dirpp, cmount->default_perms);
+    return ceph_to_hostos_errno(-ENOTCONN);
+
+  int retval = cmount->get_client()->opendir(name, (dir_result_t **)dirpp, cmount->default_perms);
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 extern "C" int ceph_fdopendir(struct ceph_mount_info *cmount, int dirfd,
                               struct ceph_dir_result **dirpp)
 {
   if (!cmount->is_mounted())
-    return -ENOTCONN;
-  return cmount->get_client()->fdopendir(dirfd, (dir_result_t **)dirpp, cmount->default_perms);
+    return ceph_to_hostos_errno(-ENOTCONN);
+
+  int retval = cmount->get_client()->fdopendir(dirfd, (dir_result_t **)dirpp, cmount->default_perms);
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 extern "C" int ceph_closedir(struct ceph_mount_info *cmount, struct ceph_dir_result *dirp)
 {
   if (!cmount->is_mounted())
-    return -ENOTCONN;
-  return cmount->get_client()->closedir(reinterpret_cast<dir_result_t*>(dirp));
+    return ceph_to_hostos_errno(-ENOTCONN);
+
+  int retval = cmount->get_client()->closedir(reinterpret_cast<dir_result_t*>(dirp));
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 extern "C" struct dirent * ceph_readdir(struct ceph_mount_info *cmount, struct ceph_dir_result *dirp)
@@ -733,8 +841,14 @@ extern "C" struct dirent * ceph_readdir(struct ceph_mount_info *cmount, struct c
 extern "C" int ceph_readdir_r(struct ceph_mount_info *cmount, struct ceph_dir_result *dirp, struct dirent *de)
 {
   if (!cmount->is_mounted())
-    return -ENOTCONN;
-  return cmount->get_client()->readdir_r(reinterpret_cast<dir_result_t*>(dirp), de);
+    return ceph_to_hostos_errno(-ENOTCONN);
+
+  int retval = cmount->get_client()->readdir_r(reinterpret_cast<dir_result_t*>(dirp), de);
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 extern "C" int ceph_readdirplus_r(struct ceph_mount_info *cmount, struct ceph_dir_result *dirp,
@@ -742,10 +856,16 @@ extern "C" int ceph_readdirplus_r(struct ceph_mount_info *cmount, struct ceph_di
 				  unsigned flags, struct Inode **out)
 {
   if (!cmount->is_mounted())
-    return -ENOTCONN;
+    return ceph_to_hostos_errno(-ENOTCONN);
   if (flags & ~CEPH_REQ_FLAG_MASK)
-    return -EINVAL;
-  return cmount->get_client()->readdirplus_r(reinterpret_cast<dir_result_t*>(dirp), de, stx, want, flags, out);
+    return ceph_to_hostos_errno(-EINVAL);
+
+  int retval = cmount->get_client()->readdirplus_r(reinterpret_cast<dir_result_t*>(dirp), de, stx, want, flags, out);
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 extern "C" int ceph_file_blockdiff_init(struct ceph_mount_info* cmount,
@@ -756,11 +876,11 @@ extern "C" int ceph_file_blockdiff_init(struct ceph_mount_info* cmount,
 					struct ceph_file_blockdiff_info* out_info)
 {
   if (!cmount->is_mounted()) {
-    return -ENOTCONN;
+    return ceph_to_hostos_errno(-ENOTCONN);
   }
   if (!out_info || !root_path || !rel_path ||
       !snap1 || !*snap1 || !snap2 || !*snap2) {
-    return -EINVAL;
+    return ceph_to_hostos_errno(-EINVAL);
   }
 
   char snapdir[PATH_MAX];
@@ -771,21 +891,22 @@ extern "C" int ceph_file_blockdiff_init(struct ceph_mount_info* cmount,
   // construct snapshot paths for the files
   int n = snprintf(path1, PATH_MAX, "%s/%s/%s/%s",
 		   root_path, snapdir, snap1, rel_path);
+
   if (n < 0 || n == PATH_MAX) {
     errno = ENAMETOOLONG;
-    return -errno;
+    return ceph_to_hostos_errno(-errno);
   }
   n = snprintf(path2, PATH_MAX, "%s/%s/%s/%s",
 	       root_path, snapdir, snap2, rel_path);
   if (n < 0 || n == PATH_MAX) {
-    return -ENAMETOOLONG;
+    return ceph_to_hostos_errno(-ENAMETOOLONG);
   }
 
   int r = cmount->get_client()->file_blockdiff_init_state(path1, path2,
 							  cmount->default_perms,
 							  (struct scan_state_t **)&(out_info->blockp));
   if (r < 0) {
-    return r;
+    return ceph_to_hostos_errno(r);
   }
 
   out_info->cmount = cmount;
@@ -796,7 +917,7 @@ extern "C" int ceph_file_blockdiff(struct ceph_file_blockdiff_info* info,
 				   struct ceph_file_blockdiff_changedblocks* blocks)
 {
   if (!info->cmount->is_mounted()) {
-    return -ENOTCONN;
+    return ceph_to_hostos_errno(-ENOTCONN);
   }
 
   std::vector<std::pair<uint64_t,uint64_t>> _blocks;
@@ -804,7 +925,7 @@ extern "C" int ceph_file_blockdiff(struct ceph_file_blockdiff_info* info,
 
   int r = info->cmount->get_client()->file_blockdiff(state, info->cmount->default_perms, &_blocks);
   if (r < 0) {
-    return r;
+    return ceph_to_hostos_errno(r);
   }
 
   blocks->b = NULL;
@@ -812,7 +933,7 @@ extern "C" int ceph_file_blockdiff(struct ceph_file_blockdiff_info* info,
   if (blocks->num_blocks) {
     struct cblock *b = (struct cblock *)calloc(blocks->num_blocks, sizeof(struct cblock));
     if (!b) {
-      return -ENOMEM;
+      return ceph_to_hostos_errno(-ENOMEM);
     }
 
     struct cblock *_b = b;
@@ -840,11 +961,16 @@ extern "C" void ceph_free_file_blockdiff_buffer(struct ceph_file_blockdiff_chang
 extern "C" int ceph_file_blockdiff_finish(struct ceph_file_blockdiff_info* info)
 {
   if (!info->cmount->is_mounted()) {
-    return -ENOTCONN;
+    return ceph_to_hostos_errno(-ENOTCONN);
   }
 
   struct scan_state_t *state = reinterpret_cast<scan_state_t *>(info->blockp);
-  return info->cmount->get_client()->file_blockdiff_finish(state);
+  int retval = info->cmount->get_client()->file_blockdiff_finish(state);
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 extern "C" int ceph_open_snapdiff(struct ceph_mount_info* cmount,
@@ -856,14 +982,13 @@ extern "C" int ceph_open_snapdiff(struct ceph_mount_info* cmount,
 {
   if (!cmount->is_mounted()) {
     /* we set errno to signal errors. */
-    errno = ENOTCONN;
-    return -errno;
+    return ceph_to_hostos_errno(-ENOTCONN);
   }
   if (!out || !root_path || !rel_path ||
       !snap1 || !*snap1 || !snap2 || !*snap2) {
-    errno = EINVAL;
-    return -errno;
+    return ceph_to_hostos_errno(-EINVAL);
   }
+
   out->cmount = cmount;
   out->dir1 = out->dir_aux = nullptr;
 
@@ -873,15 +998,13 @@ extern "C" int ceph_open_snapdiff(struct ceph_mount_info* cmount,
   int n = snprintf(full_path1, PATH_MAX,
     "%s/%s/%s/%s", root_path, snapdir, snap1, rel_path);
   if (n < 0 || n == PATH_MAX) {
-    errno = ENAMETOOLONG;
-    return -errno;
+    return ceph_to_hostos_errno(-ENAMETOOLONG);
   }
   char full_path2[PATH_MAX];
   n = snprintf(full_path2, PATH_MAX,
     "%s/%s/%s/%s", root_path, snapdir, snap2, rel_path);
   if (n < 0 || n == PATH_MAX) {
-    errno = ENAMETOOLONG;
-    return -errno;
+    return ceph_to_hostos_errno(-ENAMETOOLONG);
   }
 
   int r = ceph_opendir(cmount, full_path1, &(out->dir1));
@@ -890,8 +1013,7 @@ extern "C" int ceph_open_snapdiff(struct ceph_mount_info* cmount,
     r = ceph_opendir(cmount, full_path2, &(out->dir1));
     if (r != 0) {
       // both snaps are absent, giving up
-      errno = ENOENT;
-      return -errno;
+      return ceph_to_hostos_errno(-ENOENT);
     }
     std::swap(snap1, snap2); // will use snap1 to learn snap_other below
   } else {
@@ -917,6 +1039,10 @@ extern "C" int ceph_open_snapdiff(struct ceph_mount_info* cmount,
 
 close_err:
   ceph_close_snapdiff(out);
+
+  if (r < 0) {
+    r = ceph_to_hostos_errno(r);
+  }
   return r;
 }
 
@@ -926,13 +1052,13 @@ extern "C" int ceph_readdir_snapdiff(struct ceph_snapdiff_info* snapdiff,
   if (!snapdiff->cmount->is_mounted()) {
     /* also sets errno to signal errors. */
     errno = ENOTCONN;
-    return -errno;
+    return ceph_to_hostos_errno(-errno);
   }
   dir_result_t* d1 = reinterpret_cast<dir_result_t*>(snapdiff->dir1);
   dir_result_t* d2 = reinterpret_cast<dir_result_t*>(snapdiff->dir_aux);
   if (!d1 || !d2 || !d1->inode || !d2->inode) {
     errno = EINVAL;
-    return -errno;
+    return ceph_to_hostos_errno(-errno);
   }
   snapid_t snapid;
   int r = snapdiff->cmount->get_client()->readdir_snapdiff(
@@ -943,8 +1069,10 @@ extern "C" int ceph_readdir_snapdiff(struct ceph_snapdiff_info* snapdiff,
   if (r >= 0) {
     // converting snapid_t to uint64_t to avoid snapid_t exposure
     out->snapid = snapid;
+    return r;
+  } else {
+    return ceph_to_hostos_errno(r);
   }
-  return r;
 }
 
 extern "C" int ceph_close_snapdiff(struct ceph_snapdiff_info* snapdiff)
@@ -952,7 +1080,7 @@ extern "C" int ceph_close_snapdiff(struct ceph_snapdiff_info* snapdiff)
   if (!snapdiff->cmount || !snapdiff->cmount->is_mounted()) {
     /* also sets errno to signal errors. */
     errno = ENOTCONN;
-    return -errno;
+    return ceph_to_hostos_errno(-errno);
   }
   if (snapdiff->dir_aux) {
     ceph_closedir(snapdiff->cmount, snapdiff->dir_aux);
@@ -969,16 +1097,28 @@ extern "C" int ceph_getdents(struct ceph_mount_info *cmount, struct ceph_dir_res
 			     char *buf, int buflen)
 {
   if (!cmount->is_mounted())
-    return -ENOTCONN;
-  return cmount->get_client()->getdents(reinterpret_cast<dir_result_t*>(dirp), buf, buflen);
+    return ceph_to_hostos_errno(-ENOTCONN);
+
+  int retval = cmount->get_client()->getdents(reinterpret_cast<dir_result_t*>(dirp), buf, buflen);
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 extern "C" int ceph_getdnames(struct ceph_mount_info *cmount, struct ceph_dir_result *dirp,
 			      char *buf, int buflen)
 {
   if (!cmount->is_mounted())
-    return -ENOTCONN;
-  return cmount->get_client()->getdnames(reinterpret_cast<dir_result_t*>(dirp), buf, buflen);
+    return ceph_to_hostos_errno(-ENOTCONN);
+
+  int retval = cmount->get_client()->getdnames(reinterpret_cast<dir_result_t*>(dirp), buf, buflen);
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 extern "C" void ceph_rewinddir(struct ceph_mount_info *cmount, struct ceph_dir_result *dirp)
@@ -991,8 +1131,14 @@ extern "C" void ceph_rewinddir(struct ceph_mount_info *cmount, struct ceph_dir_r
 extern "C" int64_t ceph_telldir(struct ceph_mount_info *cmount, struct ceph_dir_result *dirp)
 {
   if (!cmount->is_mounted())
-    return -ENOTCONN;
-  return cmount->get_client()->telldir(reinterpret_cast<dir_result_t*>(dirp));
+    return ceph_to_hostos_errno(-ENOTCONN);
+
+  int retval = cmount->get_client()->telldir(reinterpret_cast<dir_result_t*>(dirp));
+
+  if (retval < 0) {
+    return ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 extern "C" void ceph_seekdir(struct ceph_mount_info *cmount, struct ceph_dir_result *dirp, int64_t offset)
@@ -1005,89 +1151,156 @@ extern "C" void ceph_seekdir(struct ceph_mount_info *cmount, struct ceph_dir_res
 extern "C" int ceph_may_delete(struct ceph_mount_info *cmount, const char *path)
 {
   if (!cmount->is_mounted())
-    return -ENOTCONN;
-  return cmount->get_client()->may_delete(path, cmount->default_perms);
+    return ceph_to_hostos_errno(-ENOTCONN);
+
+  int retval = cmount->get_client()->may_delete(path, cmount->default_perms);
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 extern "C" int ceph_link (struct ceph_mount_info *cmount, const char *existing,
 			  const char *newname)
 {
   if (!cmount->is_mounted())
-    return -ENOTCONN;
-  return cmount->get_client()->link(existing, newname, cmount->default_perms);
+    return ceph_to_hostos_errno(-ENOTCONN);
+
+  int retval = cmount->get_client()->link(existing, newname, cmount->default_perms);
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 extern "C" int ceph_unlink(struct ceph_mount_info *cmount, const char *path)
 {
   if (!cmount->is_mounted())
-    return -ENOTCONN;
-  return cmount->get_client()->unlink(path, cmount->default_perms);
+    return ceph_to_hostos_errno(-ENOTCONN);
+
+  int retval = cmount->get_client()->unlink(path, cmount->default_perms);
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 extern "C" int ceph_unlinkat(struct ceph_mount_info *cmount, int dirfd, const char *relpath, int flags)
 {
   if (!cmount->is_mounted())
-    return -ENOTCONN;
-  return cmount->get_client()->unlinkat(dirfd, relpath, flags, cmount->default_perms);
+    return ceph_to_hostos_errno(-ENOTCONN);
+
+  int retval = cmount->get_client()->unlinkat(dirfd, relpath, flags, cmount->default_perms);
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 extern "C" int ceph_rename(struct ceph_mount_info *cmount, const char *from,
 			   const char *to)
 {
   if (!cmount->is_mounted())
-    return -ENOTCONN;
-  return cmount->get_client()->rename(from, to, cmount->default_perms);
+    return ceph_to_hostos_errno(-ENOTCONN);
+
+  int retval = cmount->get_client()->rename(from, to, cmount->default_perms);
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 // dirs
 extern "C" int ceph_mkdir(struct ceph_mount_info *cmount, const char *path, mode_t mode)
 {
   if (!cmount->is_mounted())
-    return -ENOTCONN;
-  return cmount->get_client()->mkdir(path, mode, cmount->default_perms);
+    return ceph_to_hostos_errno(-ENOTCONN);
+
+  int retval = cmount->get_client()->mkdir(path, mode, cmount->default_perms);
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 extern "C" int ceph_mkdirat(struct ceph_mount_info *cmount, int dirfd, const char *relpath,
                             mode_t mode)
 {
   if (!cmount->is_mounted())
-    return -ENOTCONN;
-  return cmount->get_client()->mkdirat(dirfd, relpath, mode, cmount->default_perms);
+    return ceph_to_hostos_errno(-ENOTCONN);
+
+  int retval = cmount->get_client()->mkdirat(dirfd, relpath, mode, cmount->default_perms);
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 extern "C" int ceph_mksnap(struct ceph_mount_info *cmount, const char *path, const char *name,
                            mode_t mode, struct snap_metadata *snap_metadata, size_t nr_snap_metadata)
 {
   if (!cmount->is_mounted())
-    return -ENOTCONN;
+    return ceph_to_hostos_errno(-ENOTCONN);
+
   size_t i = 0;
   std::map<std::string, std::string> metadata;
   while (i < nr_snap_metadata) {
     metadata.emplace(snap_metadata[i].key, snap_metadata[i].value);
     ++i;
   }
-  return cmount->get_client()->mksnap(path, name, cmount->default_perms, mode, metadata);
+
+  int retval = cmount->get_client()->mksnap(path, name, cmount->default_perms, mode, metadata);
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 extern "C" int ceph_rmsnap(struct ceph_mount_info *cmount, const char *path, const char *name)
 {
   if (!cmount->is_mounted())
-    return -ENOTCONN;
-  return cmount->get_client()->rmsnap(path, name, cmount->default_perms, true);
+    return ceph_to_hostos_errno(-ENOTCONN);
+
+  int retval = cmount->get_client()->rmsnap(path, name, cmount->default_perms, true);
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 extern "C" int ceph_mkdirs(struct ceph_mount_info *cmount, const char *path, mode_t mode)
 {
   if (!cmount->is_mounted())
-    return -ENOTCONN;
-  return cmount->get_client()->mkdirs(path, mode, cmount->default_perms);
+    return ceph_to_hostos_errno(-ENOTCONN);
+
+  int retval = cmount->get_client()->mkdirs(path, mode, cmount->default_perms);
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 extern "C" int ceph_rmdir(struct ceph_mount_info *cmount, const char *path)
 {
   if (!cmount->is_mounted())
-    return -ENOTCONN;
-  return cmount->get_client()->rmdir(path, cmount->default_perms);
+    return ceph_to_hostos_errno(-ENOTCONN);
+
+  int retval = cmount->get_client()->rmdir(path, cmount->default_perms);
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 // symlinks
@@ -1095,339 +1308,596 @@ extern "C" int ceph_readlink(struct ceph_mount_info *cmount, const char *path,
 			     char *buf, int64_t size)
 {
   if (!cmount->is_mounted())
-    return -ENOTCONN;
-  return cmount->get_client()->readlink(path, buf, size, cmount->default_perms);
+    return ceph_to_hostos_errno(-ENOTCONN);
+
+  int retval = cmount->get_client()->readlink(path, buf, size, cmount->default_perms);
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 extern "C" int ceph_readlinkat(struct ceph_mount_info *cmount, int dirfd,
                                const char *relpath, char *buf, int64_t size)
 {
   if (!cmount->is_mounted())
-    return -ENOTCONN;
-  return cmount->get_client()->readlinkat(dirfd, relpath, buf, size, cmount->default_perms);
+    return ceph_to_hostos_errno(-ENOTCONN);
+
+  int retval = cmount->get_client()->readlinkat(dirfd, relpath, buf, size, cmount->default_perms);
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 extern "C" int ceph_symlink(struct ceph_mount_info *cmount, const char *existing,
 			    const char *newname)
 {
   if (!cmount->is_mounted())
-    return -ENOTCONN;
-  return cmount->get_client()->symlink(existing, newname, cmount->default_perms);
+    return ceph_to_hostos_errno(-ENOTCONN);
+
+  int retval = cmount->get_client()->symlink(existing, newname, cmount->default_perms);
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 extern "C" int ceph_symlinkat(struct ceph_mount_info *cmount, const char *existing, int dirfd,
                             const char *newname)
 {
   if (!cmount->is_mounted())
-    return -ENOTCONN;
-  return cmount->get_client()->symlinkat(existing, dirfd, newname, cmount->default_perms);
+    return ceph_to_hostos_errno(-ENOTCONN);
+
+  int retval = cmount->get_client()->symlinkat(existing, dirfd, newname, cmount->default_perms);
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 extern "C" int ceph_fstatx(struct ceph_mount_info *cmount, int fd, struct ceph_statx *stx,
                             unsigned int want, unsigned int flags)
 {
   if (!cmount->is_mounted())
-    return -ENOTCONN;
+    return ceph_to_hostos_errno(-ENOTCONN);
   if (flags & ~CEPH_REQ_FLAG_MASK)
-    return -EINVAL;
-  return cmount->get_client()->fstatx(fd, stx, cmount->default_perms,
-                                      want, flags);
+    return ceph_to_hostos_errno(-EINVAL);
+
+  int retval = cmount->get_client()->fstatx(fd, stx, cmount->default_perms,
+					want, flags);
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 extern "C" int ceph_statxat(struct ceph_mount_info *cmount, int dirfd, const char *relpath,
                             struct ceph_statx *stx, unsigned int want, unsigned int flags)
 {
   if (!cmount->is_mounted())
-    return -ENOTCONN;
+    return ceph_to_hostos_errno(-ENOTCONN);
 #ifdef CEPH_AT_EMPTY_PATH
   if (flags & ~CEPH_AT_EMPTY_PATH)
 #else
   if (flags & ~CEPH_REQ_FLAG_MASK)
 #endif
-    return -EINVAL;
-  return cmount->get_client()->statxat(dirfd, relpath, stx, cmount->default_perms,
-                                       want, flags);
+    return ceph_to_hostos_errno(-EINVAL);
+
+  int retval = cmount->get_client()->statxat(dirfd, relpath, stx, cmount->default_perms,
+					     want, flags);
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 extern "C" int ceph_statx(struct ceph_mount_info *cmount, const char *path,
 			  struct ceph_statx *stx, unsigned int want, unsigned int flags)
 {
   if (!cmount->is_mounted())
-    return -ENOTCONN;
+    return ceph_to_hostos_errno(-ENOTCONN);
   if (flags & ~CEPH_REQ_FLAG_MASK)
-    return -EINVAL;
-  return cmount->get_client()->statx(path, stx, cmount->default_perms,
-				     want, flags);
+    return ceph_to_hostos_errno(-EINVAL);
+
+  int retval = cmount->get_client()->statx(path, stx, cmount->default_perms,
+					   want, flags);
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 extern "C" int ceph_fsetattrx(struct ceph_mount_info *cmount, int fd,
 			      struct ceph_statx *stx, int mask)
 {
   if (!cmount->is_mounted())
-    return -ENOTCONN;
-  return cmount->get_client()->fsetattrx(fd, stx, mask, cmount->default_perms);
+    return ceph_to_hostos_errno(-ENOTCONN);
+
+  int retval = cmount->get_client()->fsetattrx(fd, stx, mask, cmount->default_perms);
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 extern "C" int ceph_setattrx(struct ceph_mount_info *cmount, const char *relpath,
 			    struct ceph_statx *stx, int mask, int flags)
 {
   if (!cmount->is_mounted())
-    return -ENOTCONN;
+    return ceph_to_hostos_errno(-ENOTCONN);
   if (flags & ~CEPH_REQ_FLAG_MASK)
-    return -EINVAL;
-  return cmount->get_client()->setattrx(relpath, stx, mask,
-					cmount->default_perms, flags);
+    return ceph_to_hostos_errno(-EINVAL);
+
+  int retval = cmount->get_client()->setattrx(relpath, stx, mask,
+					    cmount->default_perms, flags);
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 // *xattr() calls supporting samba/vfs
 extern "C" int ceph_getxattr(struct ceph_mount_info *cmount, const char *path, const char *name, void *value, size_t size)
 {
   if (!cmount->is_mounted())
-    return -ENOTCONN;
+    return ceph_to_hostos_errno(-ENOTCONN);
 
-  return cmount->get_client()->getxattr(path, name, value, size, cmount->default_perms);
+  int retval = cmount->get_client()->getxattr(path, name, value, size, cmount->default_perms);
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 extern "C" int ceph_lgetxattr(struct ceph_mount_info *cmount, const char *path, const char *name, void *value, size_t size)
 {
   if (!cmount->is_mounted())
-    return -ENOTCONN;
-  return cmount->get_client()->lgetxattr(path, name, value, size, cmount->default_perms);
+    return ceph_to_hostos_errno(-ENOTCONN);
+
+  int retval = cmount->get_client()->lgetxattr(path, name, value, size, cmount->default_perms);
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 extern "C" int ceph_fgetxattr(struct ceph_mount_info *cmount, int fd, const char *name, void *value, size_t size)
 {
   if (!cmount->is_mounted())
-    return -ENOTCONN;
-  return cmount->get_client()->fgetxattr(fd, name, value, size, cmount->default_perms);
+    return ceph_to_hostos_errno(-ENOTCONN);
+
+  int retval = cmount->get_client()->fgetxattr(fd, name, value, size, cmount->default_perms);
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 
 extern "C" int ceph_listxattr(struct ceph_mount_info *cmount, const char *path, char *list, size_t size)
 {
   if (!cmount->is_mounted())
-    return -ENOTCONN;
-  return cmount->get_client()->listxattr(path, list, size, cmount->default_perms);
+    return ceph_to_hostos_errno(-ENOTCONN);
+
+  int retval = cmount->get_client()->listxattr(path, list, size, cmount->default_perms);
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 extern "C" int ceph_llistxattr(struct ceph_mount_info *cmount, const char *path, char *list, size_t size)
 {
   if (!cmount->is_mounted())
-    return -ENOTCONN;
-  return cmount->get_client()->llistxattr(path, list, size, cmount->default_perms);
+    return ceph_to_hostos_errno(-ENOTCONN);
+
+  int retval = cmount->get_client()->llistxattr(path, list, size, cmount->default_perms);
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 extern "C" int ceph_flistxattr(struct ceph_mount_info *cmount, int fd, char *list, size_t size)
 {
   if (!cmount->is_mounted())
-    return -ENOTCONN;
-  return cmount->get_client()->flistxattr(fd, list, size, cmount->default_perms);
+    return ceph_to_hostos_errno(-ENOTCONN);
+
+  int retval = cmount->get_client()->flistxattr(fd, list, size, cmount->default_perms);
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 extern "C" int ceph_removexattr(struct ceph_mount_info *cmount, const char *path, const char *name)
 {
   if (!cmount->is_mounted())
-    return -ENOTCONN;
-  return cmount->get_client()->removexattr(path, name, cmount->default_perms);
+    return ceph_to_hostos_errno(-ENOTCONN);
+
+  int retval = cmount->get_client()->removexattr(path, name, cmount->default_perms);
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 extern "C" int ceph_lremovexattr(struct ceph_mount_info *cmount, const char *path, const char *name)
 {
   if (!cmount->is_mounted())
-    return -ENOTCONN;
-  return cmount->get_client()->lremovexattr(path, name, cmount->default_perms);
+    return ceph_to_hostos_errno(-ENOTCONN);
+
+  int retval = cmount->get_client()->lremovexattr(path, name, cmount->default_perms);
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 extern "C" int ceph_fremovexattr(struct ceph_mount_info *cmount, int fd, const char *name)
 {
   if (!cmount->is_mounted())
-    return -ENOTCONN;
-  return cmount->get_client()->fremovexattr(fd, name, cmount->default_perms);
+    return ceph_to_hostos_errno(-ENOTCONN);
+
+  int retval = cmount->get_client()->fremovexattr(fd, name, cmount->default_perms);
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 extern "C" int ceph_setxattr(struct ceph_mount_info *cmount, const char *path, const char *name, const void *value, size_t size, int flags)
 {
   if (!cmount->is_mounted())
-    return -ENOTCONN;
-  return cmount->get_client()->setxattr(path, name, value, size, flags, cmount->default_perms);
+    return ceph_to_hostos_errno(-ENOTCONN);
+
+  int retval = cmount->get_client()->setxattr(path, name, value, size, flags, cmount->default_perms);
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 extern "C" int ceph_lsetxattr(struct ceph_mount_info *cmount, const char *path, const char *name, const void *value, size_t size, int flags)
 {
   if (!cmount->is_mounted())
-    return -ENOTCONN;
-  return cmount->get_client()->lsetxattr(path, name, value, size, flags, cmount->default_perms);
+    return ceph_to_hostos_errno(-ENOTCONN);
+
+  int retval = cmount->get_client()->lsetxattr(path, name, value, size, flags, cmount->default_perms);
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 extern "C" int ceph_fsetxattr(struct ceph_mount_info *cmount, int fd, const char *name, const void *value, size_t size, int flags)
 {
   if (!cmount->is_mounted())
-    return -ENOTCONN;
-  return cmount->get_client()->fsetxattr(fd, name, value, size, flags, cmount->default_perms);
+    return ceph_to_hostos_errno(-ENOTCONN);
+
+  int retval = cmount->get_client()->fsetxattr(fd, name, value, size, flags, cmount->default_perms);
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 /* end xattr support */
 
 extern "C" int ceph_stat(struct ceph_mount_info *cmount, const char *path, struct stat *stbuf)
 {
   if (!cmount->is_mounted())
-    return -ENOTCONN;
-  return cmount->get_client()->stat(path, stbuf, cmount->default_perms);
+    return ceph_to_hostos_errno(-ENOTCONN);
+
+  int retval = cmount->get_client()->stat(path, stbuf, cmount->default_perms);
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 extern "C" int ceph_fstat(struct ceph_mount_info *cmount, int fd, struct stat *stbuf)
 {
   if (!cmount->is_mounted())
-    return -ENOTCONN;
-  return cmount->get_client()->fstat(fd, stbuf, cmount->default_perms);
+    return ceph_to_hostos_errno(-ENOTCONN);
+
+  int retval = cmount->get_client()->fstat(fd, stbuf, cmount->default_perms);
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 extern int ceph_lstat(struct ceph_mount_info *cmount, const char *path, struct stat *stbuf)
 {
    if (!cmount->is_mounted())
-    return -ENOTCONN;
-  return cmount->get_client()->lstat(path, stbuf, cmount->default_perms);
+    return ceph_to_hostos_errno(-ENOTCONN);
+
+  int retval = cmount->get_client()->lstat(path, stbuf, cmount->default_perms);
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 extern "C" int ceph_chmod(struct ceph_mount_info *cmount, const char *path, mode_t mode)
 {
   if (!cmount->is_mounted())
-    return -ENOTCONN;
-  return cmount->get_client()->chmod(path, mode, cmount->default_perms);
+    return ceph_to_hostos_errno(-ENOTCONN);
+
+  int retval = cmount->get_client()->chmod(path, mode, cmount->default_perms);
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 extern "C" int ceph_lchmod(struct ceph_mount_info *cmount, const char *path, mode_t mode)
 {
   if (!cmount->is_mounted())
-    return -ENOTCONN;
-  return cmount->get_client()->lchmod(path, mode, cmount->default_perms);
+    return ceph_to_hostos_errno(-ENOTCONN);
+
+  int retval = cmount->get_client()->lchmod(path, mode, cmount->default_perms);
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 extern "C" int ceph_fchmod(struct ceph_mount_info *cmount, int fd, mode_t mode)
 {
   if (!cmount->is_mounted())
-    return -ENOTCONN;
-  return cmount->get_client()->fchmod(fd, mode, cmount->default_perms);
+    return ceph_to_hostos_errno(-ENOTCONN);
+
+  int retval = cmount->get_client()->fchmod(fd, mode, cmount->default_perms);
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 extern "C" int ceph_chmodat(struct ceph_mount_info *cmount, int dirfd, const char *relpath,
                             mode_t mode, int flags) {
   if (!cmount->is_mounted())
-    return -ENOTCONN;
-  return cmount->get_client()->chmodat(dirfd, relpath, mode, flags, cmount->default_perms);
+    return ceph_to_hostos_errno(-ENOTCONN);
+
+  int retval = cmount->get_client()->chmodat(dirfd, relpath, mode, flags, cmount->default_perms);
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 extern "C" int ceph_chown(struct ceph_mount_info *cmount, const char *path,
 			  uid_t uid, gid_t gid)
 {
   if (!cmount->is_mounted())
-    return -ENOTCONN;
-  return cmount->get_client()->chown(path, uid, gid, cmount->default_perms);
+    return ceph_to_hostos_errno(-ENOTCONN);
+
+  int retval = cmount->get_client()->chown(path, uid, gid, cmount->default_perms);
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 extern "C" int ceph_fchown(struct ceph_mount_info *cmount, int fd,
 			   uid_t uid, gid_t gid)
 {
   if (!cmount->is_mounted())
-    return -ENOTCONN;
-  return cmount->get_client()->fchown(fd, uid, gid, cmount->default_perms);
+    return ceph_to_hostos_errno(-ENOTCONN);
+
+  int retval = cmount->get_client()->fchown(fd, uid, gid, cmount->default_perms);
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 extern "C" int ceph_lchown(struct ceph_mount_info *cmount, const char *path,
 			   uid_t uid, gid_t gid)
 {
   if (!cmount->is_mounted())
-    return -ENOTCONN;
-  return cmount->get_client()->lchown(path, uid, gid, cmount->default_perms);
+    return ceph_to_hostos_errno(-ENOTCONN);
+
+  int retval = cmount->get_client()->lchown(path, uid, gid, cmount->default_perms);
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 extern "C" int ceph_chownat(struct ceph_mount_info *cmount, int dirfd, const char *relpath,
                             uid_t uid, gid_t gid, int flags) {
   if (!cmount->is_mounted())
-    return -ENOTCONN;
-  return cmount->get_client()->chownat(dirfd, relpath, uid, gid, flags, cmount->default_perms);
+    return ceph_to_hostos_errno(-ENOTCONN);
+
+  int retval = cmount->get_client()->chownat(dirfd, relpath, uid, gid, flags, cmount->default_perms);
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 extern "C" int ceph_utime(struct ceph_mount_info *cmount, const char *path,
 			  struct utimbuf *buf)
 {
   if (!cmount->is_mounted())
-    return -ENOTCONN;
-  return cmount->get_client()->utime(path, buf, cmount->default_perms);
+    return ceph_to_hostos_errno(-ENOTCONN);
+
+  int retval = cmount->get_client()->utime(path, buf, cmount->default_perms);
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 extern "C" int ceph_futime(struct ceph_mount_info *cmount, int fd,
                            struct utimbuf *buf)
 {
   if (!cmount->is_mounted())
-    return -ENOTCONN;
-  return cmount->get_client()->futime(fd, buf, cmount->default_perms);
+    return ceph_to_hostos_errno(-ENOTCONN);
+
+  int retval = cmount->get_client()->futime(fd, buf, cmount->default_perms);
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 extern "C" int ceph_utimes(struct ceph_mount_info *cmount, const char *path,
                            struct timeval times[2])
 {
   if (!cmount->is_mounted())
-    return -ENOTCONN;
-  return cmount->get_client()->utimes(path, times, cmount->default_perms);
+    return ceph_to_hostos_errno(-ENOTCONN);
+
+  int retval = cmount->get_client()->utimes(path, times, cmount->default_perms);
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 extern "C" int ceph_lutimes(struct ceph_mount_info *cmount, const char *path,
                             struct timeval times[2])
 {
   if (!cmount->is_mounted())
-    return -ENOTCONN;
-  return cmount->get_client()->lutimes(path, times, cmount->default_perms);
+    return ceph_to_hostos_errno(-ENOTCONN);
+
+  int retval = cmount->get_client()->lutimes(path, times, cmount->default_perms);
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 extern "C" int ceph_futimes(struct ceph_mount_info *cmount, int fd,
                             struct timeval times[2])
 {
   if (!cmount->is_mounted())
-    return -ENOTCONN;
-  return cmount->get_client()->futimes(fd, times, cmount->default_perms);
+    return ceph_to_hostos_errno(-ENOTCONN);
+
+  int retval = cmount->get_client()->futimes(fd, times, cmount->default_perms);
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 extern "C" int ceph_futimens(struct ceph_mount_info *cmount, int fd,
                             struct timespec times[2])
 {
   if (!cmount->is_mounted())
-    return -ENOTCONN;
-  return cmount->get_client()->futimens(fd, times, cmount->default_perms);
+    return ceph_to_hostos_errno(-ENOTCONN);
+
+  int retval = cmount->get_client()->futimens(fd, times, cmount->default_perms);
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 extern "C" int ceph_utimensat(struct ceph_mount_info *cmount, int dirfd, const char *relpath,
                               struct timespec times[2], int flags) {
   if (!cmount->is_mounted())
-    return -ENOTCONN;
-  return cmount->get_client()->utimensat(dirfd, relpath, times, flags, cmount->default_perms);
+    return ceph_to_hostos_errno(-ENOTCONN);
+
+  int retval = cmount->get_client()->utimensat(dirfd, relpath, times, flags, cmount->default_perms);
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 extern "C" int ceph_flock(struct ceph_mount_info *cmount, int fd, int operation,
 			  uint64_t owner)
 {
   if (!cmount->is_mounted())
-    return -ENOTCONN;
-  return cmount->get_client()->flock(fd, operation, owner);
+    return ceph_to_hostos_errno(-ENOTCONN);
+
+  int retval = cmount->get_client()->flock(fd, operation, owner);
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 extern "C" int ceph_getlk(struct ceph_mount_info *cmount, int fd, struct flock *fl,
 			  uint64_t owner)
 {
   if (!cmount->is_mounted())
-    return -ENOTCONN;
-  return cmount->get_client()->getlk(fd, fl, owner);
+    return ceph_to_hostos_errno(-ENOTCONN);
+
+  int retval = cmount->get_client()->getlk(fd, fl, owner);
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 extern "C" int ceph_setlk(struct ceph_mount_info *cmount, int fd, struct flock *fl,
 			  uint64_t owner, int sleep)
 {
   if (!cmount->is_mounted())
-    return -ENOTCONN;
-  return cmount->get_client()->setlk(fd, fl, owner, sleep);
+    return ceph_to_hostos_errno(-ENOTCONN);
+
+  int retval = cmount->get_client()->setlk(fd, fl, owner, sleep);
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 extern "C" int ceph_truncate(struct ceph_mount_info *cmount, const char *path,
 			     int64_t size)
 {
   if (!cmount->is_mounted())
-    return -ENOTCONN;
-  return cmount->get_client()->truncate(path, size, cmount->default_perms);
+    return ceph_to_hostos_errno(-ENOTCONN);
+
+  int retval = cmount->get_client()->truncate(path, size, cmount->default_perms);
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 // file ops
@@ -1435,133 +1905,234 @@ extern "C" int ceph_mknod(struct ceph_mount_info *cmount, const char *path,
 			  mode_t mode, dev_t rdev)
 {
   if (!cmount->is_mounted())
-    return -ENOTCONN;
-  return cmount->get_client()->mknod(path, mode, cmount->default_perms, rdev);
+    return ceph_to_hostos_errno(-ENOTCONN);
+
+  int retval = cmount->get_client()->mknod(path, mode, cmount->default_perms, rdev);
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 extern "C" int ceph_open(struct ceph_mount_info *cmount, const char *path,
 			 int flags, mode_t mode)
 {
   if (!cmount->is_mounted())
-    return -ENOTCONN;
-  return cmount->get_client()->open(path, flags, cmount->default_perms, mode);
+    return ceph_to_hostos_errno(-ENOTCONN);
+
+  int retval = cmount->get_client()->open(path, flags, cmount->default_perms, mode);
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 extern "C" int ceph_openat(struct ceph_mount_info *cmount, int dirfd, const char *relpath,
                            int flags, mode_t mode)
 {
   if (!cmount->is_mounted())
-    return -ENOTCONN;
-  return cmount->get_client()->openat(dirfd, relpath, flags, cmount->default_perms, mode);
+    return ceph_to_hostos_errno(-ENOTCONN);
+
+  int retval = cmount->get_client()->openat(dirfd, relpath, flags, cmount->default_perms, mode);
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 extern "C" int ceph_open_layout(struct ceph_mount_info *cmount, const char *path, int flags,
     mode_t mode, int stripe_unit, int stripe_count, int object_size, const char *data_pool)
 {
   if (!cmount->is_mounted())
-    return -ENOTCONN;
-  return cmount->get_client()->open(path, flags, cmount->default_perms, mode,
-				    stripe_unit, stripe_count,
-				    object_size, data_pool);
+    return ceph_to_hostos_errno(-ENOTCONN);
+
+  int retval = cmount->get_client()->open(path, flags, cmount->default_perms, mode,
+				      stripe_unit, stripe_count, object_size,
+				      data_pool);
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 extern "C" int ceph_close(struct ceph_mount_info *cmount, int fd)
 {
   if (!cmount->is_mounted())
-    return -ENOTCONN;
-  return cmount->get_client()->close(fd);
+    return ceph_to_hostos_errno(-ENOTCONN);
+
+  int retval = cmount->get_client()->close(fd);
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 extern "C" int64_t ceph_lseek(struct ceph_mount_info *cmount, int fd,
 			     int64_t offset, int whence)
 {
   if (!cmount->is_mounted())
-    return -ENOTCONN;
-  return cmount->get_client()->lseek(fd, offset, whence);
+    return ceph_to_hostos_errno(-ENOTCONN);
+
+  int retval = cmount->get_client()->lseek(fd, offset, whence);
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 extern "C" int ceph_read(struct ceph_mount_info *cmount, int fd, char *buf,
 			 int64_t size, int64_t offset)
 {
   if (!cmount->is_mounted())
-    return -ENOTCONN;
-  return cmount->get_client()->read(fd, buf, size, offset);
+    return ceph_to_hostos_errno(-ENOTCONN);
+
+  int retval = cmount->get_client()->read(fd, buf, size, offset);
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 extern "C" int ceph_preadv(struct ceph_mount_info *cmount, int fd,
               const struct iovec *iov, int iovcnt, int64_t offset)
 {
   if (!cmount->is_mounted())
-      return -ENOTCONN;
-  return cmount->get_client()->preadv(fd, iov, iovcnt, offset);
+      return ceph_to_hostos_errno(-ENOTCONN);
+
+  int retval = cmount->get_client()->preadv(fd, iov, iovcnt, offset);
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 extern "C" int ceph_write(struct ceph_mount_info *cmount, int fd, const char *buf,
 			  int64_t size, int64_t offset)
 {
   if (!cmount->is_mounted())
-    return -ENOTCONN;
-  return cmount->get_client()->write(fd, buf, size, offset);
+    return ceph_to_hostos_errno(-ENOTCONN);
+
+  int retval = cmount->get_client()->write(fd, buf, size, offset);
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 extern "C" int ceph_pwritev(struct ceph_mount_info *cmount, int fd,
               const struct iovec *iov, int iovcnt, int64_t offset)
 {
   if (!cmount->is_mounted())
-    return -ENOTCONN;
-  return cmount->get_client()->pwritev(fd, iov, iovcnt, offset);
+    return ceph_to_hostos_errno(-ENOTCONN);
+
+  int retval = cmount->get_client()->pwritev(fd, iov, iovcnt, offset);
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 extern "C" int ceph_ftruncate(struct ceph_mount_info *cmount, int fd, int64_t size)
 {
   if (!cmount->is_mounted())
-    return -ENOTCONN;
-  return cmount->get_client()->ftruncate(fd, size, cmount->default_perms);
+    return ceph_to_hostos_errno(-ENOTCONN);
+
+  int retval = cmount->get_client()->ftruncate(fd, size, cmount->default_perms);
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 extern "C" int ceph_fsync(struct ceph_mount_info *cmount, int fd, int syncdataonly)
 {
   if (!cmount->is_mounted())
-    return -ENOTCONN;
-  return cmount->get_client()->fsync(fd, syncdataonly);
+    return ceph_to_hostos_errno(-ENOTCONN);
+
+  int retval = cmount->get_client()->fsync(fd, syncdataonly);
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 extern "C" int ceph_fallocate(struct ceph_mount_info *cmount, int fd, int mode,
 	                      int64_t offset, int64_t length)
 {
   if (!cmount->is_mounted())
-    return -ENOTCONN;
-  return cmount->get_client()->fallocate(fd, mode, offset, length);
+    return ceph_to_hostos_errno(-ENOTCONN);
+
+  int retval = cmount->get_client()->fallocate(fd, mode, offset, length);
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 extern "C" int ceph_lazyio(class ceph_mount_info *cmount,
                            int fd, int enable)
 {
-  return (cmount->get_client()->lazyio(fd, enable));
+  int retval = (cmount->get_client()->lazyio(fd, enable));
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 extern "C" int ceph_lazyio_propagate(class ceph_mount_info *cmount,
                            int fd, int64_t offset, size_t count)
 {
   if (!cmount->is_mounted())
-    return -ENOTCONN;
-  return (cmount->get_client()->lazyio_propagate(fd, offset, count));
+    return ceph_to_hostos_errno(-ENOTCONN);
+
+  int retval = (cmount->get_client()->lazyio_propagate(fd, offset, count));
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 extern "C" int ceph_lazyio_synchronize(class ceph_mount_info *cmount,
                            int fd, int64_t offset, size_t count)
 {
   if (!cmount->is_mounted())
-    return -ENOTCONN;
-  return (cmount->get_client()->lazyio_synchronize(fd, offset, count));
+    return ceph_to_hostos_errno(-ENOTCONN);
+
+  int retval = (cmount->get_client()->lazyio_synchronize(fd, offset, count));
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 
 extern "C" int ceph_sync_fs(struct ceph_mount_info *cmount)
 {
   if (!cmount->is_mounted())
-    return -ENOTCONN;
-  return cmount->get_client()->sync_fs();
+    return ceph_to_hostos_errno(-ENOTCONN);
+
+  int retval = cmount->get_client()->sync_fs();
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 extern "C" int ceph_get_file_stripe_unit(struct ceph_mount_info *cmount, int fh)
@@ -1570,10 +2141,10 @@ extern "C" int ceph_get_file_stripe_unit(struct ceph_mount_info *cmount, int fh)
   int r;
 
   if (!cmount->is_mounted())
-    return -ENOTCONN;
+    return ceph_to_hostos_errno(-ENOTCONN);
   r = cmount->get_client()->fdescribe_layout(fh, &l);
   if (r < 0)
-    return r;
+    return ceph_to_hostos_errno(r);
   return l.stripe_unit;
 }
 
@@ -1583,23 +2154,24 @@ extern "C" int ceph_get_path_stripe_unit(struct ceph_mount_info *cmount, const c
   int r;
 
   if (!cmount->is_mounted())
-    return -ENOTCONN;
+    return ceph_to_hostos_errno(-ENOTCONN);
   r = cmount->get_client()->describe_layout(path, &l, cmount->default_perms);
   if (r < 0)
-    return r;
+    return ceph_to_hostos_errno(r);
   return l.stripe_unit;
 }
 
 extern "C" int ceph_get_file_stripe_count(struct ceph_mount_info *cmount, int fh)
 {
+  if (!cmount->is_mounted())
+    return ceph_to_hostos_errno(-ENOTCONN);
+
   file_layout_t l;
   int r;
 
-  if (!cmount->is_mounted())
-    return -ENOTCONN;
   r = cmount->get_client()->fdescribe_layout(fh, &l);
   if (r < 0)
-    return r;
+    return ceph_to_hostos_errno(r);
   return l.stripe_count;
 }
 
@@ -1609,10 +2181,11 @@ extern "C" int ceph_get_path_stripe_count(struct ceph_mount_info *cmount, const 
   int r;
 
   if (!cmount->is_mounted())
-    return -ENOTCONN;
+    return ceph_to_hostos_errno(-ENOTCONN);
+
   r = cmount->get_client()->describe_layout(path, &l, cmount->default_perms);
   if (r < 0)
-    return r;
+    return ceph_to_hostos_errno(r);
   return l.stripe_count;
 }
 
@@ -1622,10 +2195,11 @@ extern "C" int ceph_get_file_object_size(struct ceph_mount_info *cmount, int fh)
   int r;
 
   if (!cmount->is_mounted())
-    return -ENOTCONN;
+    return ceph_to_hostos_errno(-ENOTCONN);
+
   r = cmount->get_client()->fdescribe_layout(fh, &l);
   if (r < 0)
-    return r;
+    return ceph_to_hostos_errno(r);
   return l.object_size;
 }
 
@@ -1635,10 +2209,10 @@ extern "C" int ceph_get_path_object_size(struct ceph_mount_info *cmount, const c
   int r;
 
   if (!cmount->is_mounted())
-    return -ENOTCONN;
+    return ceph_to_hostos_errno(-ENOTCONN);
   r = cmount->get_client()->describe_layout(path, &l, cmount->default_perms);
   if (r < 0)
-    return r;
+    return ceph_to_hostos_errno(r);
   return l.object_size;
 }
 
@@ -1648,10 +2222,10 @@ extern "C" int ceph_get_file_pool(struct ceph_mount_info *cmount, int fh)
   int r;
 
   if (!cmount->is_mounted())
-    return -ENOTCONN;
+    return ceph_to_hostos_errno(-ENOTCONN);
   r = cmount->get_client()->fdescribe_layout(fh, &l);
   if (r < 0)
-    return r;
+    return ceph_to_hostos_errno(r);
   return l.pool_id;
 }
 
@@ -1661,10 +2235,10 @@ extern "C" int ceph_get_path_pool(struct ceph_mount_info *cmount, const char *pa
   int r;
 
   if (!cmount->is_mounted())
-    return -ENOTCONN;
+    return ceph_to_hostos_errno(-ENOTCONN);
   r = cmount->get_client()->describe_layout(path, &l, cmount->default_perms);
   if (r < 0)
-    return r;
+    return ceph_to_hostos_errno(r);
   return l.pool_id;
 }
 
@@ -1674,15 +2248,15 @@ extern "C" int ceph_get_file_pool_name(struct ceph_mount_info *cmount, int fh, c
   int r;
 
   if (!cmount->is_mounted())
-    return -ENOTCONN;
+    return ceph_to_hostos_errno(-ENOTCONN);
   r = cmount->get_client()->fdescribe_layout(fh, &l);
   if (r < 0)
-    return r;
+    return ceph_to_hostos_errno(r);
   string name = cmount->get_client()->get_pool_name(l.pool_id);
   if (len == 0)
     return name.length();
   if (name.length() > len)
-    return -ERANGE;
+    return ceph_to_hostos_errno(-ERANGE);
   strncpy(buf, name.c_str(), len);
   return name.length();
 }
@@ -1690,12 +2264,14 @@ extern "C" int ceph_get_file_pool_name(struct ceph_mount_info *cmount, int fh, c
 extern "C" int ceph_get_pool_name(struct ceph_mount_info *cmount, int pool, char *buf, size_t len)
 {
   if (!cmount->is_mounted())
-    return -ENOTCONN;
+    return ceph_to_hostos_errno(-ENOTCONN);
+
   string name = cmount->get_client()->get_pool_name(pool);
   if (len == 0)
     return name.length();
   if (name.length() > len)
-    return -ERANGE;
+    return ceph_to_hostos_errno(-ERANGE);
+
   strncpy(buf, name.c_str(), len);
   return name.length();
 }
@@ -1706,15 +2282,18 @@ extern "C" int ceph_get_path_pool_name(struct ceph_mount_info *cmount, const cha
   int r;
 
   if (!cmount->is_mounted())
-    return -ENOTCONN;
+    return ceph_to_hostos_errno(-ENOTCONN);
+
   r = cmount->get_client()->describe_layout(path, &l, cmount->default_perms);
   if (r < 0)
-    return r;
+    return ceph_to_hostos_errno(r);
+
   string name = cmount->get_client()->get_pool_name(l.pool_id);
   if (len == 0)
     return name.length();
   if (name.length() > len)
-    return -ERANGE;
+    return ceph_to_hostos_errno(-ERANGE);
+
   strncpy(buf, name.c_str(), len);
   return name.length();
 }
@@ -1722,16 +2301,18 @@ extern "C" int ceph_get_path_pool_name(struct ceph_mount_info *cmount, const cha
 extern "C" int ceph_get_default_data_pool_name(struct ceph_mount_info *cmount, char *buf, size_t len)
 {
   if (!cmount->is_mounted())
-    return -ENOTCONN;
+    return ceph_to_hostos_errno(-ENOTCONN);
+
   int64_t pool_id = cmount->get_client()->get_default_pool_id();
- 
+
   string name = cmount->get_client()->get_pool_name(pool_id);
   if (len == 0)
     return name.length();
   if (name.length() > len)
-    return -ERANGE;
+    return ceph_to_hostos_errno(-ERANGE);
+
   strncpy(buf, name.c_str(), len);
-  return name.length(); 
+  return name.length();
 }
 
 extern "C" int ceph_get_file_layout(struct ceph_mount_info *cmount, int fh, int *stripe_unit, int *stripe_count, int *object_size, int *pg_pool)
@@ -1740,10 +2321,12 @@ extern "C" int ceph_get_file_layout(struct ceph_mount_info *cmount, int fh, int 
   int r;
 
   if (!cmount->is_mounted())
-    return -ENOTCONN;
+    return ceph_to_hostos_errno(-ENOTCONN);
+
   r = cmount->get_client()->fdescribe_layout(fh, &l);
   if (r < 0)
-    return r;
+    return ceph_to_hostos_errno(r);
+
   if (stripe_unit)
     *stripe_unit = l.stripe_unit;
   if (stripe_count)
@@ -1752,6 +2335,7 @@ extern "C" int ceph_get_file_layout(struct ceph_mount_info *cmount, int fh, int 
     *object_size = l.object_size;
   if (pg_pool)
     *pg_pool = l.pool_id;
+
   return 0;
 }
 
@@ -1761,10 +2345,12 @@ extern "C" int ceph_get_path_layout(struct ceph_mount_info *cmount, const char *
   int r;
 
   if (!cmount->is_mounted())
-    return -ENOTCONN;
+    return ceph_to_hostos_errno(-ENOTCONN);
+
   r = cmount->get_client()->describe_layout(path, &l, cmount->default_perms);
   if (r < 0)
-    return r;
+    return ceph_to_hostos_errno(r);
+
   if (stripe_unit)
     *stripe_unit = l.stripe_unit;
   if (stripe_count)
@@ -1773,6 +2359,7 @@ extern "C" int ceph_get_path_layout(struct ceph_mount_info *cmount, const char *
     *object_size = l.object_size;
   if (pg_pool)
     *pg_pool = l.pool_id;
+
   return 0;
 }
 
@@ -1782,11 +2369,18 @@ extern "C" int ceph_get_file_replication(struct ceph_mount_info *cmount, int fh)
   int r;
 
   if (!cmount->is_mounted())
-    return -ENOTCONN;
+    return ceph_to_hostos_errno(-ENOTCONN);
+
   r = cmount->get_client()->fdescribe_layout(fh, &l);
-  if (r < 0)
-    return r;
+  if (r < 0) {
+    return ceph_to_hostos_errno(r);
+  }
+
   int rep = cmount->get_client()->get_pool_replication(l.pool_id);
+
+  if (rep < 0) {
+    rep = ceph_to_hostos_errno(rep);
+  }
   return rep;
 }
 
@@ -1796,11 +2390,16 @@ extern "C" int ceph_get_path_replication(struct ceph_mount_info *cmount, const c
   int r;
 
   if (!cmount->is_mounted())
-    return -ENOTCONN;
+    return ceph_to_hostos_errno(-ENOTCONN);
+
   r = cmount->get_client()->describe_layout(path, &l, cmount->default_perms);
   if (r < 0)
-    return r;
+    r = ceph_to_hostos_errno(r);
+
   int rep = cmount->get_client()->get_pool_replication(l.pool_id);
+  if (rep < 0) {
+    rep = ceph_to_hostos_errno(rep);
+  }
   return rep;
 }
 
@@ -1808,54 +2407,54 @@ extern "C" int ceph_set_default_file_stripe_unit(struct ceph_mount_info *cmount,
 						 int stripe)
 {
   // this option no longer exists
-  return -EOPNOTSUPP;
+  return ceph_to_hostos_errno(-EOPNOTSUPP);
 }
 
 extern "C" int ceph_set_default_file_stripe_count(struct ceph_mount_info *cmount,
 						  int count)
 {
   // this option no longer exists
-  return -EOPNOTSUPP;
+  return ceph_to_hostos_errno(-EOPNOTSUPP);
 }
 
 extern "C" int ceph_set_default_object_size(struct ceph_mount_info *cmount, int size)
 {
   // this option no longer exists
-  return -EOPNOTSUPP;
+  return ceph_to_hostos_errno(-EOPNOTSUPP);
 }
 
 extern "C" int ceph_set_default_file_replication(struct ceph_mount_info *cmount,
 						 int replication)
 {
   // this option no longer exists
-  return -EOPNOTSUPP;
+  return ceph_to_hostos_errno(-EOPNOTSUPP);
 }
 
 extern "C" int ceph_set_default_preferred_pg(struct ceph_mount_info *cmount, int osd)
 {
   // this option no longer exists
-  return -EOPNOTSUPP;
+  return ceph_to_hostos_errno(-EOPNOTSUPP);
 }
 
 extern "C" int ceph_get_file_extent_osds(struct ceph_mount_info *cmount, int fh,
     int64_t offset, int64_t *length, int *osds, int nosds)
 {
   if (nosds < 0)
-    return -EINVAL;
+    return ceph_to_hostos_errno(-EINVAL);
 
   if (!cmount->is_mounted())
-    return -ENOTCONN;
+    return ceph_to_hostos_errno(-ENOTCONN);
 
   vector<int> vosds;
   int ret = cmount->get_client()->get_file_extent_osds(fh, offset, length, vosds);
   if (ret < 0)
-    return ret;
+    return ceph_to_hostos_errno(ret);
 
   if (!nosds)
     return vosds.size();
 
   if ((int)vosds.size() > nosds)
-    return -ERANGE;
+    return ceph_to_hostos_errno(-ERANGE);
 
   for (int i = 0; i < (int)vosds.size(); i++)
     osds[i] = vosds[i];
@@ -1867,15 +2466,18 @@ extern "C" int ceph_get_osd_crush_location(struct ceph_mount_info *cmount,
     int osd, char *path, size_t len)
 {
   if (!cmount->is_mounted())
-    return -ENOTCONN;
+    return ceph_to_hostos_errno(-ENOTCONN);
 
   if (!path && len)
-    return -EINVAL;
+    return ceph_to_hostos_errno(-EINVAL);
 
   vector<pair<string, string> > loc;
   int ret = cmount->get_client()->get_osd_crush_location(osd, loc);
-  if (ret)
+  if (ret) {
+    if (ret < 0)
+      return ceph_to_hostos_errno(ret);
     return ret;
+  }
 
   size_t needed = 0;
   size_t cur = 0;
@@ -1898,7 +2500,7 @@ extern "C" int ceph_get_osd_crush_location(struct ceph_mount_info *cmount,
     return needed;
 
   if (needed > len)
-    return -ERANGE;
+    return ceph_to_hostos_errno(-ERANGE);
 
   return needed;
 }
@@ -1907,15 +2509,15 @@ extern "C" int ceph_get_osd_addr(struct ceph_mount_info *cmount, int osd,
     struct sockaddr_storage *addr)
 {
   if (!cmount->is_mounted())
-    return -ENOTCONN;
+    return ceph_to_hostos_errno(-ENOTCONN);
 
   if (!addr)
-    return -EINVAL;
+    return ceph_to_hostos_errno(-EINVAL);
 
   entity_addr_t address;
   int ret = cmount->get_client()->get_osd_addr(osd, address);
   if (ret < 0)
-    return ret;
+    return ceph_to_hostos_errno(ret);
 
   *addr = address.get_sockaddr_storage();
 
@@ -1930,21 +2532,21 @@ extern "C" int ceph_get_file_stripe_address(struct ceph_mount_info *cmount, int 
   int r;
 
   if (naddr < 0)
-    return -EINVAL;
+    return ceph_to_hostos_errno(-EINVAL);
 
   if (!cmount->is_mounted())
-    return -ENOTCONN;
+    return ceph_to_hostos_errno(-ENOTCONN);
 
   r = cmount->get_client()->get_file_stripe_address(fh, offset, address);
   if (r < 0)
-    return r;
+    return ceph_to_hostos_errno(r);
 
   for (i = 0; i < (unsigned)naddr && i < address.size(); i++)
     addr[i] = address[i].get_sockaddr_storage();
 
   /* naddr == 0: drop through and return actual size */
   if (naddr && (address.size() > (unsigned)naddr))
-    return -ERANGE;
+    return ceph_to_hostos_errno(-ERANGE);
 
   return address.size();
 }
@@ -1952,12 +2554,13 @@ extern "C" int ceph_get_file_stripe_address(struct ceph_mount_info *cmount, int 
 extern "C" int ceph_localize_reads(struct ceph_mount_info *cmount, int val)
 {
   if (!cmount->is_mounted())
-    return -ENOTCONN;
+    return ceph_to_hostos_errno(-ENOTCONN);
   if (!val)
     cmount->get_client()->clear_filer_flags(CEPH_OSD_FLAG_LOCALIZE_READS);
   else
     cmount->get_client()->set_filer_flags(CEPH_OSD_FLAG_LOCALIZE_READS);
   return 0;
+
 }
 
 extern "C" CephContext *ceph_get_mount_context(struct ceph_mount_info *cmount)
@@ -1968,47 +2571,71 @@ extern "C" CephContext *ceph_get_mount_context(struct ceph_mount_info *cmount)
 extern "C" int ceph_debug_get_fd_caps(struct ceph_mount_info *cmount, int fd)
 {
   if (!cmount->is_mounted())
-    return -ENOTCONN;
-  return cmount->get_client()->get_caps_issued(fd);
+    return ceph_to_hostos_errno(-ENOTCONN);
+
+  int retval = cmount->get_client()->get_caps_issued(fd);
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 extern "C" int ceph_debug_get_file_caps(struct ceph_mount_info *cmount, const char *path)
 {
   if (!cmount->is_mounted())
-    return -ENOTCONN;
-  return cmount->get_client()->get_caps_issued(path, cmount->default_perms);
+    return ceph_to_hostos_errno(-ENOTCONN);
+
+  int retval = cmount->get_client()->get_caps_issued(path, cmount->default_perms);
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 extern "C" int ceph_get_stripe_unit_granularity(struct ceph_mount_info *cmount)
 {
   if (!cmount->is_mounted())
-    return -ENOTCONN;
+    return ceph_to_hostos_errno(-ENOTCONN);
+
   return CEPH_MIN_STRIPE_UNIT;
 }
 
 extern "C" int ceph_get_pool_id(struct ceph_mount_info *cmount, const char *pool_name)
 {
   if (!cmount->is_mounted())
-    return -ENOTCONN;
+    return ceph_to_hostos_errno(-ENOTCONN);
 
   if (!pool_name || !pool_name[0])
-    return -EINVAL;
+    return ceph_to_hostos_errno(-EINVAL);
 
   /* negative range reserved for errors */
   int64_t pool_id = cmount->get_client()->get_pool_id(pool_name);
   if (pool_id > 0x7fffffff)
-    return -ERANGE;
+    return ceph_to_hostos_errno(-ERANGE);
 
   /* get_pool_id error codes fit in int */
-  return (int)pool_id;
+  int retval = (int)pool_id;
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 extern "C" int ceph_get_pool_replication(struct ceph_mount_info *cmount,
 					 int pool_id)
 {
   if (!cmount->is_mounted())
-    return -ENOTCONN;
-  return cmount->get_client()->get_pool_replication(pool_id);
+    return ceph_to_hostos_errno(-ENOTCONN);
+
+  int retval = cmount->get_client()->get_pool_replication(pool_id);
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 /* Low-level exports */
 
@@ -2018,7 +2645,8 @@ extern "C" int ceph_ll_lookup_root(struct ceph_mount_info *cmount,
   *parent = cmount->get_client()->get_root();
   if (*parent)
     return 0;
-  return -EFAULT;
+  else
+    return ceph_to_hostos_errno(-EFAULT);
 }
 
 extern "C" struct Inode *ceph_ll_get_inode(class ceph_mount_info *cmount,
@@ -2033,7 +2661,12 @@ extern "C" int ceph_ll_lookup_vino(
     vinodeno_t vino,
     Inode **inode)
 {
-  return (cmount->get_client())->ll_lookup_vino(vino, cmount->default_perms, inode);
+  int retval = (cmount->get_client())->ll_lookup_vino(vino, cmount->default_perms, inode);
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 /**
@@ -2045,7 +2678,12 @@ extern "C" int ceph_ll_lookup_inode(
     struct inodeno_t ino,
     Inode **inode)
 {
-  return (cmount->get_client())->ll_lookup_inode(ino, cmount->default_perms, inode);
+  int retval = (cmount->get_client())->ll_lookup_inode(ino, cmount->default_perms, inode);
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 extern "C" int ceph_ll_lookup(struct ceph_mount_info *cmount,
@@ -2054,9 +2692,14 @@ extern "C" int ceph_ll_lookup(struct ceph_mount_info *cmount,
 			      unsigned flags, const UserPerm *perms)
 {
   if (flags & ~CEPH_REQ_FLAG_MASK)
-    return -EINVAL;
-  return (cmount->get_client())->ll_lookupx(parent, name, out, stx, want,
-					    flags, *perms);
+    return ceph_to_hostos_errno(-EINVAL);
+  int retval = (cmount->get_client())->ll_lookupx(parent, name, out, stx, want,
+						  flags, *perms);
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 extern "C" void ceph_ll_get(class ceph_mount_info *cmount, Inode *in)
@@ -2066,22 +2709,38 @@ extern "C" void ceph_ll_get(class ceph_mount_info *cmount, Inode *in)
 
 extern "C" int ceph_ll_put(class ceph_mount_info *cmount, Inode *in)
 {
-  return (cmount->get_client()->ll_put(in));
+  int retval = (cmount->get_client()->ll_put(in));
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 extern "C" int ceph_ll_forget(class ceph_mount_info *cmount, Inode *in,
 			      int count)
 {
-  return (cmount->get_client()->ll_forget(in, count));
+  int retval = (cmount->get_client()->ll_forget(in, count));
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 extern "C" int ceph_ll_walk(struct ceph_mount_info *cmount, const char* name, Inode **i,
 		 struct ceph_statx *stx, unsigned int want, unsigned int flags,
 		 const UserPerm *perms)
 {
-  if (flags & ~CEPH_REQ_FLAG_MASK)
-    return -EINVAL;
-  return(cmount->get_client()->ll_walk(name, i, stx, want, flags, *perms));
+  if (flags & ~CEPH_REQ_FLAG_MASK) {
+    return ceph_to_hostos_errno(-EINVAL);
+  }
+  int retval = (cmount->get_client()->ll_walk(name, i, stx, want, flags, *perms));
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 extern "C" int ceph_ll_getattr(class ceph_mount_info *cmount,
@@ -2090,36 +2749,54 @@ extern "C" int ceph_ll_getattr(class ceph_mount_info *cmount,
 			       const UserPerm *perms)
 {
   if (flags & ~CEPH_REQ_FLAG_MASK)
-    return -EINVAL;
-  return (cmount->get_client()->ll_getattrx(in, stx, want, flags, *perms));
+    return ceph_to_hostos_errno(-EINVAL);
+
+  int retval = (cmount->get_client()->ll_getattrx(in, stx, want, flags, *perms));
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 extern "C" int ceph_ll_setattr(class ceph_mount_info *cmount,
 			       Inode *in, struct ceph_statx *stx,
 			       int mask, const UserPerm *perms)
 {
-  return (cmount->get_client()->ll_setattrx(in, stx, mask, *perms));
+  int retval = (cmount->get_client()->ll_setattrx(in, stx, mask, *perms));
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 extern "C" int ceph_ll_open(class ceph_mount_info *cmount, Inode *in,
 			    int flags, Fh **fh, const UserPerm *perms)
 {
-  return (cmount->get_client()->ll_open(in, flags, fh, *perms));
+  int retval = (cmount->get_client()->ll_open(in, flags, fh, *perms));
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 extern "C" int ceph_ll_read(class ceph_mount_info *cmount, Fh* filehandle,
 			    int64_t off, uint64_t len, char* buf)
 {
   bufferlist bl;
-  int r = 0;
 
-  r = cmount->get_client()->ll_read(filehandle, off, len, &bl);
-  if (r >= 0)
-    {
+
+  int retval = cmount->get_client()->ll_read(filehandle, off, len, &bl);
+  if (retval >= 0) {
       bl.begin().copy(bl.length(), buf);
-      r = bl.length();
-    }
-  return r;
+      return bl.length();
+  } else {
+    retval = ceph_to_hostos_errno(retval);
+  }
+
+  return retval;
 }
 
 extern "C" int ceph_ll_read_block(class ceph_mount_info *cmount,
@@ -2129,10 +2806,14 @@ extern "C" int ceph_ll_read_block(class ceph_mount_info *cmount,
 				  struct ceph_file_layout* layout)
 {
   file_layout_t l;
-  int r = (cmount->get_client()->ll_read_block(in, blockid, buf, offset,
-					       length, &l));
+  int retval = (cmount->get_client()->ll_read_block(in, blockid, buf, offset,
+						length, &l));
   l.to_legacy(layout);
-  return r;
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 extern "C" int ceph_ll_write_block(class ceph_mount_info *cmount,
@@ -2143,62 +2824,108 @@ extern "C" int ceph_ll_write_block(class ceph_mount_info *cmount,
 				   uint64_t snapseq, uint32_t sync)
 {
   file_layout_t l;
-  int r = (cmount->get_client()->ll_write_block(in, blockid, buf, offset,
-						length, &l, snapseq, sync));
+  int retval = (cmount->get_client()->ll_write_block(in, blockid, buf, offset,
+						 length, &l, snapseq, sync));
   l.to_legacy(layout);
-  return r;
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 extern "C" int ceph_ll_commit_blocks(class ceph_mount_info *cmount,
 				     Inode *in, uint64_t offset,
 				     uint64_t range)
 {
-  return (cmount->get_client()->ll_commit_blocks(in, offset, range));
+  int retval = (cmount->get_client()->ll_commit_blocks(in, offset, range));
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 extern "C" int ceph_ll_fsync(class ceph_mount_info *cmount,
 			     Fh *fh, int syncdataonly)
 {
-  return (cmount->get_client()->ll_fsync(fh, syncdataonly));
+  int retval = (cmount->get_client()->ll_fsync(fh, syncdataonly));
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 extern "C" int ceph_ll_sync_inode(class ceph_mount_info *cmount,
 			     Inode *in, int syncdataonly)
 {
-  return (cmount->get_client()->ll_sync_inode(in, syncdataonly));
+  int retval = (cmount->get_client()->ll_sync_inode(in, syncdataonly));
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 extern "C" int ceph_ll_fallocate(class ceph_mount_info *cmount, Fh *fh,
 				 int mode, int64_t offset, int64_t length)
 {
-  return cmount->get_client()->ll_fallocate(fh, mode, offset, length);
+
+  int retval = cmount->get_client()->ll_fallocate(fh, mode, offset, length);
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 extern "C" off_t ceph_ll_lseek(class ceph_mount_info *cmount,
 				Fh *fh, off_t offset, int whence)
 {
-  return (cmount->get_client()->ll_lseek(fh, offset, whence));
+  off_t offset_ = (cmount->get_client()->ll_lseek(fh, offset, whence));
+
+  if (offset_ >= 0) {
+    return offset_;
+  } else {
+    return ceph_to_hostos_errno(offset_);
+  }
 }
 
 extern "C" int ceph_ll_write(class ceph_mount_info *cmount,
 			     Fh *fh, int64_t off, uint64_t len,
 			     const char *data)
 {
-  return (cmount->get_client()->ll_write(fh, off, len, data));
+  int retval = (cmount->get_client()->ll_write(fh, off, len, data));
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 extern "C" int64_t ceph_ll_readv(class ceph_mount_info *cmount,
 				 struct Fh *fh, const struct iovec *iov,
 				 int iovcnt, int64_t off)
 {
-  return (cmount->get_client()->ll_readv(fh, iov, iovcnt, off));
+  int retval = (cmount->get_client()->ll_readv(fh, iov, iovcnt, off));
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 extern "C" int64_t ceph_ll_writev(class ceph_mount_info *cmount,
 				  struct Fh *fh, const struct iovec *iov,
 				  int iovcnt, int64_t off)
 {
-  return (cmount->get_client()->ll_writev(fh, iov, iovcnt, off));
+  int retval = (cmount->get_client()->ll_writev(fh, iov, iovcnt, off));
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 class LL_Onfinish : public Context {
@@ -2222,15 +2949,25 @@ extern "C" int64_t ceph_ll_nonblocking_readv_writev(class ceph_mount_info *cmoun
 {
   LL_Onfinish *onfinish = new LL_Onfinish(io_info);
 
-  return (cmount->get_client()->ll_preadv_pwritev(
+  int retval = (cmount->get_client()->ll_preadv_pwritev(
 			io_info->fh, io_info->iov, io_info->iovcnt,
 			io_info->off, io_info->write, onfinish, &onfinish->bl,
 			io_info->fsync, io_info->syncdataonly));
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 extern "C" int ceph_ll_close(class ceph_mount_info *cmount, Fh* fh)
 {
-  return (cmount->get_client()->ll_release(fh));
+  int retval = (cmount->get_client()->ll_release(fh));
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 extern "C" int ceph_ll_create(class ceph_mount_info *cmount,
@@ -2240,9 +2977,15 @@ extern "C" int ceph_ll_create(class ceph_mount_info *cmount,
 			      unsigned lflags, const UserPerm *perms)
 {
   if (lflags & ~CEPH_REQ_FLAG_MASK)
-    return -EINVAL;
-  return (cmount->get_client())->ll_createx(parent, name, mode, oflags, outp,
-					    fhp, stx, want, lflags, *perms);
+    return ceph_to_hostos_errno(-EINVAL);
+
+  int retval = (cmount->get_client())->ll_createx(parent, name, mode, oflags, outp,
+						  fhp, stx, want, lflags, *perms);
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 extern "C" int ceph_ll_mknod(class ceph_mount_info *cmount, Inode *parent,
@@ -2252,9 +2995,15 @@ extern "C" int ceph_ll_mknod(class ceph_mount_info *cmount, Inode *parent,
 			     const UserPerm *perms)
 {
   if (flags & ~CEPH_REQ_FLAG_MASK)
-    return -EINVAL;
-  return (cmount->get_client())->ll_mknodx(parent, name, mode, rdev,
-					   out, stx, want, flags, *perms);
+    return ceph_to_hostos_errno(-EINVAL);
+
+  int retval = (cmount->get_client())->ll_mknodx(parent, name, mode, rdev,
+						 out, stx, want, flags, *perms);
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 extern "C" int ceph_ll_mkdir(class ceph_mount_info *cmount, Inode *parent,
@@ -2263,16 +3012,28 @@ extern "C" int ceph_ll_mkdir(class ceph_mount_info *cmount, Inode *parent,
 			     unsigned flags, const UserPerm *perms)
 {
   if (flags & ~CEPH_REQ_FLAG_MASK)
-    return -EINVAL;
-  return cmount->get_client()->ll_mkdirx(parent, name, mode, out, stx, want,
-					 flags, *perms);
+    return ceph_to_hostos_errno(-EINVAL);
+
+  int retval = cmount->get_client()->ll_mkdirx(parent, name, mode, out, stx, want,
+					       flags, *perms);
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 extern "C" int ceph_ll_link(class ceph_mount_info *cmount,
 			    Inode *in, Inode *newparent,
 			    const char *name, const UserPerm *perms)
 {
-  return cmount->get_client()->ll_link(in, newparent, name, *perms);
+
+  int retval = cmount->get_client()->ll_link(in, newparent, name, *perms);
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 extern "C" int ceph_ll_opendir(class ceph_mount_info *cmount,
@@ -2280,14 +3041,25 @@ extern "C" int ceph_ll_opendir(class ceph_mount_info *cmount,
 			       struct ceph_dir_result **dirpp,
 			       const UserPerm *perms)
 {
-  return (cmount->get_client()->ll_opendir(in, O_RDONLY, (dir_result_t**) dirpp,
-					   *perms));
+  int retval = (cmount->get_client()->ll_opendir(in, O_RDONLY, (dir_result_t**) dirpp,
+						 *perms));
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 extern "C" int ceph_ll_releasedir(class ceph_mount_info *cmount,
 				  ceph_dir_result *dir)
 {
-  return cmount->get_client()->ll_releasedir(reinterpret_cast<dir_result_t*>(dir));
+
+  int retval = cmount->get_client()->ll_releasedir(reinterpret_cast<dir_result_t*>(dir));
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 extern "C" int ceph_ll_rename(class ceph_mount_info *cmount,
@@ -2295,27 +3067,50 @@ extern "C" int ceph_ll_rename(class ceph_mount_info *cmount,
 			      Inode *newparent, const char *newname,
 			      const UserPerm *perms)
 {
-  return cmount->get_client()->ll_rename(parent, name, newparent,
-					 newname, *perms);
+
+  int retval = cmount->get_client()->ll_rename(parent, name, newparent,
+					   newname, *perms);
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 extern "C" int ceph_ll_unlink(class ceph_mount_info *cmount, Inode *in,
 			      const char *name, const UserPerm *perms)
 {
-  return cmount->get_client()->ll_unlink(in, name, *perms);
+
+  int retval = cmount->get_client()->ll_unlink(in, name, *perms);
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 extern "C" int ceph_ll_statfs(class ceph_mount_info *cmount,
 			      Inode *in, struct statvfs *stbuf)
 {
-  return (cmount->get_client()->ll_statfs(in, stbuf, cmount->default_perms));
+  int retval = (cmount->get_client()->ll_statfs(in, stbuf, cmount->default_perms));
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 extern "C" int ceph_ll_readlink(class ceph_mount_info *cmount, Inode *in,
 				char *buf, size_t bufsiz,
 				const UserPerm *perms)
 {
-  return cmount->get_client()->ll_readlink(in, buf, bufsiz, *perms);
+
+  int retval = cmount->get_client()->ll_readlink(in, buf, bufsiz, *perms);
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 extern "C" int ceph_ll_symlink(class ceph_mount_info *cmount,
@@ -2325,23 +3120,40 @@ extern "C" int ceph_ll_symlink(class ceph_mount_info *cmount,
 			       unsigned flags, const UserPerm *perms)
 {
   if (flags & ~CEPH_REQ_FLAG_MASK)
-    return -EINVAL;
-  return (cmount->get_client()->ll_symlinkx(in, name, value, out, stx, want,
-					    flags, *perms));
+    return ceph_to_hostos_errno(-EINVAL);
+
+  int retval = (cmount->get_client()->ll_symlinkx(in, name, value, out, stx, want,
+					      flags, *perms));
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 extern "C" int ceph_ll_rmdir(class ceph_mount_info *cmount,
 			     Inode *in, const char *name,
 			     const UserPerm *perms)
 {
-  return cmount->get_client()->ll_rmdir(in, name, *perms);
+
+  int retval = cmount->get_client()->ll_rmdir(in, name, *perms);
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 extern "C" int ceph_ll_getxattr(class ceph_mount_info *cmount,
 				Inode *in, const char *name, void *value,
 				size_t size, const UserPerm *perms)
 {
-  return (cmount->get_client()->ll_getxattr(in, name, value, size, *perms));
+  int retval = (cmount->get_client()->ll_getxattr(in, name, value, size, *perms));
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 extern "C" int ceph_ll_listxattr(struct ceph_mount_info *cmount,
@@ -2349,12 +3161,14 @@ extern "C" int ceph_ll_listxattr(struct ceph_mount_info *cmount,
                               size_t buf_size, size_t *list_size,
 			      const UserPerm *perms)
 {
-  int res = cmount->get_client()->ll_listxattr(in, list, buf_size, *perms);
-  if (res >= 0) {
-    *list_size = (size_t)res;
+
+  int retval = cmount->get_client()->ll_listxattr(in, list, buf_size, *perms);
+  if (retval >= 0) {
+    *list_size = (size_t)retval;
     return 0;
+  } else {
+    return ceph_to_hostos_errno(retval);
   }
-  return res;
 }
 
 extern "C" int ceph_ll_setxattr(class ceph_mount_info *cmount,
@@ -2362,45 +3176,80 @@ extern "C" int ceph_ll_setxattr(class ceph_mount_info *cmount,
 				const void *value, size_t size,
 				int flags, const UserPerm *perms)
 {
-  return (cmount->get_client()->ll_setxattr(in, name, value, size, flags, *perms));
+  int retval = (cmount->get_client()->ll_setxattr(in, name, value, size, flags, *perms));
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 extern "C" int ceph_ll_removexattr(class ceph_mount_info *cmount,
 				   Inode *in, const char *name,
 				   const UserPerm *perms)
 {
-  return (cmount->get_client()->ll_removexattr(in, name, *perms));
+  int retval = (cmount->get_client()->ll_removexattr(in, name, *perms));
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 extern "C" int ceph_ll_getlk(struct ceph_mount_info *cmount,
 			     Fh *fh, struct flock *fl, uint64_t owner)
 {
-  return (cmount->get_client()->ll_getlk(fh, fl, owner));
+  int retval = (cmount->get_client()->ll_getlk(fh, fl, owner));
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 extern "C" int ceph_ll_setlk(struct ceph_mount_info *cmount,
 			     Fh *fh, struct flock *fl, uint64_t owner,
 			     int sleep)
 {
-  return (cmount->get_client()->ll_setlk(fh, fl, owner, sleep));
+  int retval = (cmount->get_client()->ll_setlk(fh, fl, owner, sleep));
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 extern "C" int ceph_ll_lazyio(class ceph_mount_info *cmount,
 			      Fh *fh, int enable)
 {
-  return (cmount->get_client()->ll_lazyio(fh, enable));
+  int retval = (cmount->get_client()->ll_lazyio(fh, enable));
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 extern "C" int ceph_ll_delegation(struct ceph_mount_info *cmount, Fh *fh,
 				  unsigned cmd, ceph_deleg_cb_t cb, void *priv)
 {
-  return (cmount->get_client()->ll_delegation(fh, cmd, cb, priv));
+  int retval = (cmount->get_client()->ll_delegation(fh, cmd, cb, priv));
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 extern "C" uint32_t ceph_ll_stripe_unit(class ceph_mount_info *cmount,
 					Inode *in)
 {
-  return (cmount->get_client()->ll_stripe_unit(in));
+  int retval = (cmount->get_client()->ll_stripe_unit(in));
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 extern "C" uint32_t ceph_ll_file_layout(class ceph_mount_info *cmount,
@@ -2408,14 +3257,23 @@ extern "C" uint32_t ceph_ll_file_layout(class ceph_mount_info *cmount,
 					struct ceph_file_layout *layout)
 {
   file_layout_t l;
-  int r = (cmount->get_client()->ll_file_layout(in, &l));
+  int retval = (cmount->get_client()->ll_file_layout(in, &l));
   l.to_legacy(layout);
-  return r;
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 uint64_t ceph_ll_snap_seq(class ceph_mount_info *cmount, Inode *in)
 {
-  return (cmount->get_client()->ll_snap_seq(in));
+  int retval = (cmount->get_client()->ll_snap_seq(in));
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 extern "C" int ceph_ll_get_stripe_osd(class ceph_mount_info *cmount,
@@ -2423,20 +3281,34 @@ extern "C" int ceph_ll_get_stripe_osd(class ceph_mount_info *cmount,
 				      struct ceph_file_layout* layout)
 {
   file_layout_t l;
-  int r = (cmount->get_client()->ll_get_stripe_osd(in, blockno, &l));
+  int retval = (cmount->get_client()->ll_get_stripe_osd(in, blockno, &l));
   l.to_legacy(layout);
-  return r;
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 extern "C" int ceph_ll_num_osds(class ceph_mount_info *cmount)
 {
-  return (cmount->get_client()->ll_num_osds());
+  int retval = (cmount->get_client()->ll_num_osds());
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 extern "C" int ceph_ll_osdaddr(class ceph_mount_info *cmount,
 			       int osd, uint32_t *addr)
 {
-  return (cmount->get_client()->ll_osdaddr(osd, addr));
+  int retval = (cmount->get_client()->ll_osdaddr(osd, addr));
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 extern "C" uint64_t ceph_ll_get_internal_offset(class ceph_mount_info *cmount,
@@ -2457,14 +3329,21 @@ extern "C" uint32_t ceph_get_cap_return_timeout(class ceph_mount_info *cmount)
 {
   if (!cmount->is_mounted())
     return 0;
+
   return cmount->get_client()->mdsmap->get_session_autoclose().sec();
 }
 
 extern "C" int ceph_set_deleg_timeout(class ceph_mount_info *cmount, uint32_t timeout)
 {
   if (!cmount->is_mounted())
-    return -ENOTCONN;
-  return cmount->get_client()->set_deleg_timeout(timeout);
+    return ceph_to_hostos_errno(-ENOTCONN);
+
+  int retval = cmount->get_client()->set_deleg_timeout(timeout);
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 extern "C" void ceph_set_session_timeout(class ceph_mount_info *cmount, unsigned timeout)
@@ -2482,11 +3361,20 @@ extern "C" int ceph_start_reclaim(class ceph_mount_info *cmount,
 {
   if (!cmount->is_initialized()) {
     int ret = cmount->init();
-    if (ret != 0)
+    if (ret != 0) {
+      if (ret < 0)
+	return ceph_to_hostos_errno(ret);
       return ret;
+    }
   }
-  return cmount->get_client()->start_reclaim(std::string(uuid), flags,
-					     cmount->get_filesystem());
+
+  int retval = cmount->get_client()->start_reclaim(std::string(uuid), flags,
+						   cmount->get_filesystem());
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 extern "C" void ceph_finish_reclaim(class ceph_mount_info *cmount)
@@ -2504,7 +3392,13 @@ extern "C" void ceph_ll_register_callbacks(class ceph_mount_info *cmount,
 extern "C" int ceph_ll_register_callbacks2(class ceph_mount_info *cmount,
 					    struct ceph_client_callback_args *args)
 {
-  return cmount->get_client()->ll_register_callbacks2(args);
+
+  int retval = cmount->get_client()->ll_register_callbacks2(args);
+
+  if (retval < 0) {
+    retval = ceph_to_hostos_errno(retval);
+  }
+  return retval;
 }
 
 
@@ -2513,7 +3407,7 @@ extern "C" int ceph_get_snap_info(struct ceph_mount_info *cmount,
   Client::SnapInfo info;
   int r = cmount->get_client()->get_snap_info(path, cmount->default_perms, &info);
   if (r < 0) {
-    return r;
+    return ceph_to_hostos_errno(r);
   }
 
   size_t i = 0;
@@ -2524,7 +3418,7 @@ extern "C" int ceph_get_snap_info(struct ceph_mount_info *cmount,
   if (nr_metadata) {
     snap_info->snap_metadata = (struct snap_metadata *)calloc(nr_metadata, sizeof(struct snap_metadata));
     if (!snap_info->snap_metadata) {
-      return -ENOMEM;
+      return ceph_to_hostos_errno(-ENOMEM);
     }
 
     // fill with key, value pairs
@@ -2550,7 +3444,7 @@ extern "C" int ceph_get_snap_info(struct ceph_mount_info *cmount,
 
   if (nr_metadata && i != nr_metadata) {
     ceph_free_snap_info_buffer(snap_info);
-    return -ENOMEM;
+    return ceph_to_hostos_errno(-ENOMEM);
   }
 
   return 0;
@@ -2567,6 +3461,8 @@ extern "C" int ceph_get_perf_counters(struct ceph_mount_info *cmount, char **per
   bufferlist outbl;
   int r = cmount->get_client()->get_perf_counters(&outbl);
   if (r != 0) {
+    if (r < 0)
+      return ceph_to_hostos_errno(r);
     return r;
   }
 
