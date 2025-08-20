@@ -50,7 +50,7 @@ from rbd import (RBD, Group, Image, ImageNotFound, InvalidArgument, ImageExists,
                  RBD_SNAP_CREATE_IGNORE_QUIESCE_ERROR,
                  RBD_WRITE_ZEROES_FLAG_THICK_PROVISION,
                  RBD_ENCRYPTION_FORMAT_LUKS1, RBD_ENCRYPTION_FORMAT_LUKS2,
-                 RBD_ENCRYPTION_FORMAT_LUKS, RBD_GROUP_SNAP_STATE_COMPLETE,
+                 RBD_ENCRYPTION_FORMAT_LUKS, RBD_GROUP_SNAP_STATE_CREATED,
                  RBD_GROUP_SNAP_NAMESPACE_TYPE_USER)
 
 rados = None
@@ -3156,7 +3156,7 @@ class TestGroups(object):
         image_names = []
         assert sorted(snap_info_dict.keys()) == self.gp_snap_keys
         assert snap_info_dict['name'] == snap_name
-        assert snap_info_dict['state'] == RBD_GROUP_SNAP_STATE_COMPLETE
+        assert snap_info_dict['state'] == RBD_GROUP_SNAP_STATE_CREATED
         assert snap_info_dict['namespace_type'] == RBD_GROUP_SNAP_NAMESPACE_TYPE_USER
         for image_snap in snap_info_dict['image_snaps']:
             assert sorted(image_snap.keys()) == self.img_snap_keys
@@ -3178,7 +3178,7 @@ class TestGroups(object):
         snap_info_dict = self.group.get_snap_info(snap_name)
         assert sorted(snap_info_dict.keys()) == self.gp_snap_keys
         assert snap_info_dict['name'] == snap_name
-        assert snap_info_dict['state'] == RBD_GROUP_SNAP_STATE_COMPLETE
+        assert snap_info_dict['state'] == RBD_GROUP_SNAP_STATE_CREATED
         assert snap_info_dict['namespace_type'] == RBD_GROUP_SNAP_NAMESPACE_TYPE_USER
         assert snap_info_dict['image_snap_name'] == ""
         assert snap_info_dict['image_snaps'] == []
