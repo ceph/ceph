@@ -27,11 +27,26 @@
 
 #define dout_subsys ceph_subsys_auth
 #undef dout_prefix
-#define dout_prefix *_dout << "cephx client: "
+#define dout_prefix *_dout << "cephx_client(" << this << "): "
 
 using std::string;
 
 using ceph::bufferlist;
+
+CephxClientHandler::CephxClientHandler(CephContext *cct_, RotatingKeyRing *rsecrets)
+    : AuthClientHandler(cct_),
+      tickets(cct_),
+      rotating_secrets(rsecrets),
+      keyring(rsecrets->get_keyring())
+{
+  ldout(cct, 20) << "con" << dendl;
+  reset();
+}
+
+CephxClientHandler::~CephxClientHandler()
+{
+  ldout(cct, 20) << "des" << dendl;
+}
 
 void CephxClientHandler::reset()
 {
