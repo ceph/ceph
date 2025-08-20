@@ -4995,7 +4995,7 @@ int RGWHandler_REST_S3::init(rgw::sal::Driver* driver, req_state *s,
   s->has_acl_header = s->info.env->exists_prefix("HTTP_X_AMZ_GRANT");
 
   const char *copy_source = s->info.env->get("HTTP_X_AMZ_COPY_SOURCE");
-  if (copy_source &&
+  if (copy_source && copy_source[0] != '\0' &&
       (! s->info.env->get("HTTP_X_AMZ_COPY_SOURCE_RANGE")) &&
       (! s->info.args.exists("uploadId"))) {
     rgw_obj_key key;
