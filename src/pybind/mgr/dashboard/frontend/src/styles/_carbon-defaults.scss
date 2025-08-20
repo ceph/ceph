@@ -176,6 +176,7 @@ Carbon Popover
 
 .cds--popover-content {
   background-color: theme.$background;
+  padding: layout.$spacing-05;
 }
 
 // inner container class for overflow
