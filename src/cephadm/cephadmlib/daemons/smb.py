@@ -17,6 +17,8 @@ from typing import (
     Tuple,
 )
 
+import ceph.smb.constants
+
 from .. import context_getters
 from .. import daemon_form
 from .. import data_utils
@@ -104,19 +106,34 @@ class BindInterface(NamedTuple):
 
 
 class Ports(enum.Enum):
-    SMB = 445
-    SMBMETRICS = 9922
-    CTDB = 4379
-    REMOTE_CONTROL = 54445
+    SMB = ceph.smb.constants.SMB_PORT
+    SMBMETRICS = ceph.smb.constants.SMBMETRICS_PORT
+    CTDB = ceph.smb.constants.CTDB_PORT
+    REMOTE_CONTROL = ceph.smb.constants.REMOTE_CONTROL_PORT
 
     def customized(self, service_ports: Dict[str, int]) -> int:
         """Return a custom port value if it is present in service_ports or the
         default port value if it is not present.
         """
-        port = service_ports.get(self.name.lower())
+        port = service_ports.get(str(self))
         if port:
             return int(port)
         return int(self.value)
+
+    def __str__(self) -> str:
+        # NOTE: mypy is getting the key type below wrong. using reveal_type:
+        # >>> reveal_type(self.SMB)
+        # > note: Revealed type is "builtins.int"
+        # >>> reveal_type(self)
+        # > note: Revealed type is "cephadmlib.daemons.smb.Ports"
+        # maybe newer versions would not hit this issue?
+        names: Dict[Any, str] = {
+            self.SMB: ceph.smb.constants.SMB,
+            self.SMBMETRICS: ceph.smb.constants.SMBMETRICS,
+            self.CTDB: ceph.smb.constants.CTDB,
+            self.REMOTE_CONTROL: ceph.smb.constants.REMOTE_CONTROL,
+        }
+        return names[self]
 
 
 @dataclasses.dataclass(frozen=True)
