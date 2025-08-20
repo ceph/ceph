@@ -223,17 +223,19 @@ public:
   template <typename T>
   seastar::future<> run_with_pg_maybe_create(
     typename T::IRef op,
-    ShardServices &target_shard_services
+    ShardServices &target_shard_services,
+    unsigned int store_index
   ) {
     static_assert(T::can_create());
     auto &logger = crimson::get_logger(ceph_subsys_osd);
     auto &opref = *op;
     return opref.template with_blocking_event<
       PGMap::PGCreationBlockingEvent
-    >([&target_shard_services, &opref](auto &&trigger) {
+    >([&target_shard_services, &opref, store_index](auto &&trigger) {
       return target_shard_services.get_or_create_pg(
         std::move(trigger),
         opref.get_pgid(),
+        store_index,
         opref.get_create_info()
       );
     }).safe_then([&logger, &target_shard_services, &opref](Ref<PG> pgref) {
@@ -407,23 +409,24 @@ public:
         return seastar::make_exception_future<>(fut.get_exception());
       }
 
-      auto core = fut.get();
+      auto core_store = fut.get();
       logger.debug("{}: can_create={}, target-core={}",
-                   *op, T::can_create(), core);
+                   *op, T::can_create(), core_store.first);
       return this->template with_remote_shard_state_and_op<T>(
-        core, std::move(op),
-        [this](ShardServices &target_shard_services,
+        core_store.first, std::move(op),
+        [this, core_store](ShardServices &target_shard_services,
                typename T::IRef op) {
         auto &opref = *op;
         auto &logger = crimson::get_logger(ceph_subsys_osd);
         logger.debug("{}: entering create_or_wait_pg", opref);
         return opref.template enter_stage<>(
           opref.get_pershard_pipeline(target_shard_services).create_or_wait_pg
-        ).then([this, &target_shard_services, op=std::move(op)]() mutable {
+        ).then([this, &target_shard_services, op=std::move(op), core_store]() mutable {
           if constexpr (T::can_create()) {
             return this->template run_with_pg_maybe_create<T>(
-                std::move(op), target_shard_services);
+                std::move(op), target_shard_services, core_store.second);
           } else {
+            (void)core_store; // silence unused capture warning
             return this->template run_with_pg_maybe_wait<T>(
                 std::move(op), target_shard_services);
           }
@@ -469,6 +472,7 @@ public:
 	    opref, opref.get_pgid());
 	  return seastar::now();
 	}
+  SUBDEBUG(osd, "{}: have_pg", opref);
 	return op->with_pg(
 	  target_shard_services, pg
 	).finally([op] {});
