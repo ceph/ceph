@@ -51,7 +51,8 @@ public:
   MonConnection(CephContext *cct,
 		ConnectionRef conn,
 		uint64_t global_id,
-		AuthRegistry *auth_registry);
+		AuthRegistry *auth_registry,
+                ceph::mutex& m);
   ~MonConnection();
   MonConnection(MonConnection&& rhs) = default;
   MonConnection& operator=(MonConnection&&) = default;
@@ -135,6 +136,7 @@ private:
   MessageRef pending_tell_command;
 
   AuthRegistry *auth_registry;
+  ceph::mutex& monc_lock;
 };
 
 
