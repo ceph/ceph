@@ -15,9 +15,9 @@
  
 #include "sal_d4n_fdb.h"
 
-#include "common/dout.h" 
+#include "common/dout_fmt.h" 
 
-#include "rgw/rgw_fdb_conversion.h"
+#include "rgw/rgw_fdb.h"
 
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/detached.hpp>
@@ -33,28 +33,31 @@ extern "C" {
 
 rgw::sal::Driver *newD4N_FDB_Filter(rgw::sal::Driver *next, void *io_context, bool admin)
 {
- return new rgw::sal::D4N_FDB_FilterDriver(next, io_context, admin);
+ return new rgw::sal::D4N_FDB_FilterDriver(next, *static_cast<boost::asio::io_context *>(io_context), admin);
 }
 
 } // extern "C"
 
 namespace {
 
-void msg(const DoutPrefixProvider *dpp, std::string_view msg, const std::source_location& sl = std::source_location::current())
+void msg(const DoutPrefixProvider *dpp, const std::string msg = "", const std::source_location& sl = std::source_location::current())
 {
- ldpp_dout(dpp, 0) << fmt::format("D4N-fdb: " << sl << ": " << msg << dendl;
+ ldpp_dout_fmt(dpp, 0, "D4N-FDB [{} ({}, {})]: {}\n", sl.file_name(), sl.line(), sl.function_name(), msg);
 }
 
 } // namespace
 
 namespace rgw::sal {
 
-D4N_FDB_Filter(Driver* _next, boost::asio::io_context& io_context, bool /*JFW: admin*/) 
+D4N_FDB_FilterDriver::D4N_FDB_FilterDriver(Driver* next_, boost::asio::io_context& io_context, bool /*JFW: admin*/) 
  : FilterDriver(next_),
    io_context { io_context },
    y { null_yield }
 {
- // cacheDriver ? JFW
+ /* JFW:
+ FilterDrier
+ cacheDriver
+ policyDriver */
 }
 
 int D4N_FDB_FilterDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
@@ -66,17 +69,26 @@ int D4N_FDB_FilterDriver::initialize(CephContext *cct, const DoutPrefixProvider 
 
 std::unique_ptr<User> D4N_FDB_FilterDriver::get_user(const rgw_user& u)
 {
- return {};
+ // JFW: Unclear why this isn't implemented in the base class. I'm going to pretty much just follow
+ // along with the Redis D4N driver, which just calls the extant "Filter" approach:
+ 
+ std::unique_ptr<User> user = next->get_user(u);
+
+ return std::make_unique<D4NFilterUser>(std::move(next->get_user(u)), this);
 }
 
 std::unique_ptr<Object> D4N_FDB_FilterDriver::get_object(const rgw_obj_key& k)
 {
- return {};
+ return std::make_unique<D4NFilterObject>(std::move(next->get_object(k)), this, filter);
 }
 
 std::unique_ptr<Bucket> D4N_FDB_FilterDriver::get_bucket(const RGWBucketInfo& i)
 {
- return {};
+ // JFW: the original implementation does NOT move() this, I don't know why-- I have
+ // moved to move:
+ // return std::make_unique<D4NFilterBucket>(next->get_bucket(i), this);
+ 
+ return std::make_unique<D4NFilterBucket>(std::move(next->get_bucket(i)), this);
 }
 
 int D4N_FDB_FilterDriver::load_bucket(const DoutPrefixProvider* dpp, 
@@ -84,7 +96,11 @@ int D4N_FDB_FilterDriver::load_bucket(const DoutPrefixProvider* dpp,
       std::unique_ptr<Bucket>* bucket, 
       optional_yield y)
 {
- return {};
+// JFW: copied wholesale from sal_d4n
+ std::unique_ptr<Bucket> nb;
+ const int ret = next->load_bucket(dpp, b, &nb, y);
+ *bucket = std::make_unique<D4NFilterBucket>(std::move(nb), this);
+ return ret;
 }
 
 std::unique_ptr<Writer> D4N_FDB_FilterDriver::get_atomic_writer(const DoutPrefixProvider *dpp,
@@ -95,13 +111,17 @@ std::unique_ptr<Writer> D4N_FDB_FilterDriver::get_atomic_writer(const DoutPrefix
       uint64_t olh_epoch,
       const std::string& unique_tag)
 {
- return {};
+ std::unique_ptr<Writer> writer = next->get_atomic_writer(dpp, y, nextObject(obj),
+							   owner, ptail_placement_rule,
+							   olh_epoch, unique_tag);
+
+ return std::make_unique<D4NFilterWriter>(std::move(writer), this, obj, dpp, true, y);
 }
 
 void D4N_FDB_FilterDriver::shutdown()
 {
+ // Without a dout, not much to do here... but it would be nice to be able to log something. :-/
 }
 
 } // namespace rgw::sal
-
-#endif
+          

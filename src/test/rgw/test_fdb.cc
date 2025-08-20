@@ -272,6 +272,17 @@ TEST_CASE("fdb conversions (round-trip)", "[fdb][rgw]") {
  REQUIRE_THAT(n, Catch::Matchers::RangeEquals(o));
  }
 
+ // vector<uint8_t> -> vector<uint8_t>
+ {
+ const std::vector<uint8_t> n = { 1, 2, 3, 4, 5 };
+ std::vector<uint8_t> o;
+
+ lfdb::set(lfdb::make_transaction(dbh), "key", n, lfdb::commit_after_op::commit);
+ lfdb::get(lfdb::make_transaction(dbh), "key", o);
+
+ REQUIRE_THAT(n, Catch::Matchers::RangeEquals(o));
+ }
+
 /* JFW: I'm not going to support this for the prototype, but the plumbing looks like
 //it does the right thing for the most part, we need to add the encoding, etc.; there are
 //a few issues around decoding in particular that need close and careful attention, and

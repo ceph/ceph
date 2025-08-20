@@ -1,14 +1,18 @@
 #ifndef RGW_D4N_FDB_CACHE_DRIVER
  #define RGW_D4N_FDB_CACHE_DRIVER
 
+#include "rgw_fdb.h"
 #include "fdb/fdb.h"
+
 #include "driver/cache/rgw_cache_driver.h"
 
 namespace rgw::cache {
 
+namespace lfdb = ceph::libfdb;
+
 struct FDB_CacheDriver : CacheDriver
 {
-  ceph::rgw::fdb dbh;
+  lfdb::database_handle dbh;
 
   public:
     FDB_CacheDriver();

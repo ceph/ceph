@@ -32,7 +32,7 @@
 
 #include "common/dout.h" 
 
-#include "rgw/rgw_fdb_conversion.h"
+#include "rgw/rgw_fdb.h"
 
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/detached.hpp>
@@ -44,7 +44,7 @@
 #include <chrono>
 #include <vector>
 
-namespace rgw:sal {
+namespace rgw::sal {
 
 /* JFW: it's a little unclear to me what to actually implement from FilterDriver, so I'm
  * implementing whatever I see from the Redis D4N driver, at least "more or less": */
@@ -62,7 +62,7 @@ struct D4N_FDB_FilterDriver : FilterDriver
   optional_yield y;
 
   public:
-  D4N_FDB_FilterDriver(Driver* _next, boost::asio::io_context& io_context, bool admin);
+  D4N_FDB_FilterDriver(Driver* next_, boost::asio::io_context& io_context, bool admin);
 
   public:
   int initialize(CephContext *cct, const DoutPrefixProvider *dpp) override;
