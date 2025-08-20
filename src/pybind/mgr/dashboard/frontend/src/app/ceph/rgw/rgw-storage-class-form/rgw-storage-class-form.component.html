@@ -31,20 +31,45 @@
           </option>
         </cds-select>
         <ng-template #storageError>
-          <span
-            class="invalid-feedback"
-            *ngIf="storageClassForm.showError('storageClassType', formDir, 'required')"
-            i18n
-            >This field is required.</span
-          >
+          @if (storageClassForm.showError('storageClassType', formDir, 'required')) {
+          <span class="invalid-feedback"
+                i18n> This field is required. </span>
+          }
         </ng-template>
       </div>
       <div class="form-item form-item-append"
            cdsRow>
+        <!-- Storage Class Name -->
         <div cdsCol>
-          <!-- Zone Group -->
+          <cds-text-label
+            labelInputID="storage_class"
+            i18n
+            [disabled]="editing"
+            [invalid]="
+              storageClassForm.controls.storage_class.invalid &&
+              storageClassForm.controls.storage_class.dirty
+            "
+            [invalidText]="storageClassError"
+          >
+            Storage Class name
+            <input
+              cdsText
+              type="text"
+              formControlName="storage_class"
+              [invalid]="storageClassForm.showError('storage_class', formDir, 'required')"
+            />
+          </cds-text-label>
+          <ng-template #storageClassError>
+            @if (storageClassForm.showError('storage_class', formDir, 'required')) {
+            <span class="invalid-feedback"
+                  i18n>This field is required.</span>
+            }
+          </ng-template>
+        </div>
+        <!-- Zone Group / Region -->
+        <div cdsCol>
           <cds-select
-            label="Zone Group Name"
+            label="Zone Group / Region"
             i18n-label
             formControlName="zonegroup"
             id="zonegroup"
@@ -62,73 +87,12 @@
             </option>
           </cds-select>
           <ng-template #zonegroupError>
-            <span
-              class="invalid-feedback"
-              *ngIf="storageClassForm.showError('zonegroup', formDir, 'required')"
-              i18n
-              >This field is required.</span
-            >
+            @if (storageClassForm.showError('zonegroup', formDir, 'required')) {
+            <span class="invalid-feedback"
+                  i18n>This field is required.</span>
+            }
           </ng-template>
         </div>
-        <div cdsCol>
-          <!-- Placement Target -->
-          <cds-select
-            label="Placement Target"
-            i18n-label
-            formControlName="placement_target"
-            id="placement_target"
-            [invalid]="storageClassForm.showError('placement_target', formDir, 'required')"
-            [invalidText]="placementError"
-          >
-            <option [value]="''"
-                    i18n>--Select--</option>
-            <option
-              *ngFor="let placementTarget of placementTargets"
-              [value]="placementTarget"
-              [selected]="placementTarget === storageClassForm.getValue('placement_target')"
-              i18n
-            >
-              {{ placementTarget }}
-            </option>
-          </cds-select>
-          <ng-template #placementError>
-            <span
-              class="invalid-feedback"
-              *ngIf="storageClassForm.showError('placement_target', formDir, 'required')"
-              i18n
-              >This field is required.</span
-            >
-          </ng-template>
-        </div>
-      </div>
-      <!-- Storage Class -->
-      <div class="form-item">
-        <cds-text-label
-          labelInputID="storage_class"
-          i18n
-          [disabled]="editing"
-          [invalid]="
-            storageClassForm.controls.storage_class.invalid &&
-            storageClassForm.controls.storage_class.dirty
-          "
-          [invalidText]="storageClassError"
-          >Name
-          <input
-            cdsText
-            type="text"
-            id="storage_class"
-            formControlName="storage_class"
-            [invalid]="storageClassForm.showError('storage_class', formDir, 'required')"
-          />
-        </cds-text-label>
-        <ng-template #storageClassError>
-          <span
-            class="invalid-feedback"
-            *ngIf="storageClassForm.showError('storage_class', formDir, 'required')"
-            i18n
-            >This field is required.</span
-          >
-        </ng-template>
       </div>
       @if( isTierMatch( TIER_TYPE.CLOUD_TIER, TIER_TYPE.GLACIER )){
       <div>
@@ -154,33 +118,47 @@
               />
             </cds-text-label>
             <ng-template #regionError>
-              <span
-                class="invalid-feedback"
-                *ngIf="storageClassForm.showError('region', formDir, 'required')"
-                i18n
-                >This field is required.</span
-              >
+              @if (storageClassForm.showError('region', formDir, 'required')) {
+              <span class="invalid-feedback"
+                    i18n>This field is required.</span>
+              }
             </ng-template>
           </div>
           <div cdsCol>
             <!-- Target Endpoint -->
             <cds-text-label
+              labelInputID="target_endpoint"
               i18n
-              [invalid]="storageClassForm.showError('target_endpoint', formDir, 'required') || storageClassForm.showError('target_endpoint', formDir, 'invalidUrl')"
-
-              [invalidText]="
-                            storageClassForm.controls['target_endpoint'].errors?.['required'] ? 'This field is required.' :
-                            storageClassForm.controls['target_endpoint'].errors?.['invalidUrl'] ? 'Please enter a valid URL.' : ''
-                          "
-              i18n-invalidText
+              [invalid]="
+                storageClassForm.showError('target_endpoint', formDir, 'invalidURL') ||
+                storageClassForm.showError('target_endpoint', formDir, 'required')
+              "
+              [invalidText]="endpointError"
+              [helperText]="helpTextLabels.targetEndpointText"
               >Target Endpoint
               <input
                 cdsText
+                type="text"
+                placeholder="http://ceph-node-00.com:80"
+                i18n-placeholder
+                id="target_endpoint"
                 formControlName="target_endpoint"
-                placeholder="e.g. 192.168.0.10, 192.168.1.0/8"
-                 [invalid]="storageClassForm.showError('target_endpoint', formDir, 'required') || storageClassForm.showError('target_endpoint', formDir, 'invalidUrl')"
+                [invalid]="
+                  storageClassForm.showError('target_endpoint', formDir, 'invalidURL') ||
+                  storageClassForm.showError('target_endpoint', formDir, 'required')
+                "
+                [invalidText]="endpointError"
               />
             </cds-text-label>
+            <ng-template #endpointError>
+              @if (storageClassForm.showError('target_endpoint', formDir, 'required')) {
+              <span class="invalid-feedback"
+                    i18n> This field is required. </span>
+              } @else if (storageClassForm.showError('target_endpoint', formDir, 'invalidURL')) {
+              <span class="invalid-feedback"
+                    i18n> Please enter a valid URL.</span>
+              }
+            </ng-template>
           </div>
         </div>
         <!-- Access Key  -->
@@ -203,14 +181,12 @@
                 [invalid]="storageClassForm.showError('access_key', formDir, 'required')"
               />
             </cds-password-label>
-            <cd-copy-2-clipboard-button class="clipboard"> </cd-copy-2-clipboard-button>
+            <cd-copy-2-clipboard-button class="clipboard"></cd-copy-2-clipboard-button>
             <ng-template #accessError>
-              <span
-                class="invalid-feedback"
-                *ngIf="storageClassForm.showError('access_key', formDir, 'required')"
-                i18n
-                >This field is required.</span
-              >
+              @if (storageClassForm.showError('access_key', formDir, 'required')) {
+              <span class="invalid-feedback"
+                    i18n> This field is required. </span>
+              }
             </ng-template>
           </div>
         </div>
@@ -236,12 +212,10 @@
             </cds-password-label>
             <cd-copy-2-clipboard-button class="clipboard"> </cd-copy-2-clipboard-button>
             <ng-template #secretError>
-              <span
-                class="invalid-feedback"
-                *ngIf="storageClassForm.showError('secret_key', formDir, 'required')"
-                i18n
-                >This field is required.</span
-              >
+              @if (storageClassForm.showError('secret_key', formDir, 'required')) {
+              <span class="invalid-feedback"
+                    i18n> This field is required. </span>
+              }
             </ng-template>
           </div>
         </div>
@@ -263,12 +237,10 @@
             />
           </cds-text-label>
           <ng-template #targetError>
-            <span
-              class="invalid-feedback"
-              *ngIf="storageClassForm.showError('target_path', formDir, 'required')"
-              i18n
-              >This field is required.</span
-            >
+            @if (storageClassForm.showError('target_path', formDir, 'required')) {
+            <span class="invalid-feedback"
+                  i18n> This field is required. </span>
+            }
           </ng-template>
         </div>
         <div class="form-item">
@@ -312,18 +284,12 @@
               [invalidText]="readThroughError"
             ></cds-number>
             <ng-template #readThroughError>
-              <span
-                class="invalid-feedback"
-                *ngIf="storageClassForm.showError('read_through_restore_days', formDir, 'pattern')"
-                i18n
-                >The entered value must be a positive integer.</span
-              >
-              <span
-                class="invalid-feedback"
-                *ngIf="storageClassForm.showError('read_through_restore_days', formDir, 'lockDays')"
-                i18n
-                >ReadThrough Restore Days must be positive.</span
-              >
+              @if (storageClassForm.showError('read_through_restore_days', formDir, 'pattern')) {
+              <span class="invalid-feedback"
+                    i18n>
+                ReadThrough Restore Days must be positive.
+              </span>
+              }
             </ng-template>
           </div>
           <div cdsCol>
@@ -370,12 +336,10 @@
                       i18n>Expedited</option>
             </cds-select>
             <ng-template #glacierError>
-              <span
-                class="invalid-feedback"
-                *ngIf="storageClassForm.showError('glacier_restore_tier_type', formDir, 'required')"
-                i18n
-                >This field is required.</span
-              >
+              @if (storageClassForm.showError('glacier_restore_tier_type', formDir, 'required')) {
+              <span class="invalid-feedback"
+                    i18n> This field is required. </span>
+              }
             </ng-template>
           </div>
           <div cdsCol>
@@ -396,23 +360,17 @@
             >
             </cds-number>
             <ng-template #glacierRestoreError>
-              <span
-                class="invalid-feedback"
-                *ngIf="storageClassForm.showError('glacier_restore_days', formDir, 'pattern')"
-                i18n
-                >The entered value must be a positive integer.</span
-              >
-              <span
-                class="invalid-feedback"
-                *ngIf="storageClassForm.showError('glacier_restore_days', formDir, 'lockDays')"
-                i18n
-                >Glacier Restore Days must be positive.</span
-              >
+              @if (storageClassForm.showError('glacier_restore_days', formDir, 'pattern')) {
+              <span class="invalid-feedback"
+                    i18n>
+                The entered value must be a positive integer.
+              </span>
+              }
             </ng-template>
           </div>
         </div>
       </div>
-      } @if( isTierMatch( TIER_TYPE.CLOUD_TIER, TIER_TYPE.GLACIER )){
+      }
       <fieldset>
         <div>
           <ng-template #title>
@@ -426,6 +384,7 @@
                 id="advanced-fieldset"
                 (selected)="showAdvanced = !showAdvanced"
               >
+                @if( isTierMatch( TIER_TYPE.CLOUD_TIER, TIER_TYPE.GLACIER )){
                 <!-- Multi Part Sync Threshold -->
                 <div class="form-item form-item-append"
                      cdsRow>
@@ -570,12 +529,48 @@
                     }
                   </ng-container>
                 </div>
+                }
+                <div class="form-item form-item-append"
+                     cdsRow>
+                  <div cdsCol>
+                    <!-- Placement Target -->
+                    <cds-select
+                      label="Placement Target"
+                      i18n-label
+                      formControlName="placement_target"
+                      [invalid]="
+                        storageClassForm.showError('placement_target', formDir, 'required')
+                      "
+                      [invalidText]="placementError"
+                    >
+                      <option [value]="''"
+                              i18n>--Select--</option>
+                      @for (placementTarget of placementTargets; track placementTarget) {
+                      <option
+                        [value]="placementTarget"
+                        [selected]="
+                          placementTarget === storageClassForm.getValue('placement_target')
+                        "
+                        i18n
+                      >
+                        {{ placementTarget }}
+                      </option>
+                      }
+                    </cds-select>
+                    <ng-template #placementError>
+                      @if (storageClassForm.showError('placement_target', formDir, 'required')) {
+                      <span class="invalid-feedback"
+                            i18n> This field is required. </span>
+                      }
+                    </ng-template>
+                  </div>
+                </div>
               </cds-accordion-item>
             </cds-accordion>
           </fieldset>
         </div>
       </fieldset>
-      } @if( isTierMatch( TIER_TYPE.CLOUD_TIER, TIER_TYPE.GLACIER )){
+      @if( isTierMatch( TIER_TYPE.CLOUD_TIER, TIER_TYPE.GLACIER )){
       <cd-alert-panel type="warning"
                       spacingClass="mb-2">
         <span i18n>RGW service would be restarted after creating the storage class.</span>
