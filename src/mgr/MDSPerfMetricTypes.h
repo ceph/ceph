@@ -15,7 +15,6 @@
 #include "include/utime.h"
 #include "common/Formatter.h"
 
-#include "mds/mdstypes.h"
 #include "mgr/Types.h"
 
 typedef std::vector<std::string> MDSPerfMetricSubKey; // array of regex match
