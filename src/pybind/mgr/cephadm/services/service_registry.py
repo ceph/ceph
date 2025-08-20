@@ -69,7 +69,6 @@ class CephadmServiceRegistry:
     def get_services_requiring_monitoring(self) -> List[str]:
         """Return a list with service types that requiere monitoring."""
         services_to_monitor = [svc for svc in self._services if self._services[svc].needs_monitoring]
-        services_to_monitor.append('ceph')  # this is needed for mgr-prometheus targets
         return sorted(services_to_monitor)
 
 
