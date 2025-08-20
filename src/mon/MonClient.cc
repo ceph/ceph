@@ -288,7 +288,7 @@ int MonClient::ping_monitor(const string &mon_id, string *result_reply)
   ldout(cct, 10) << __func__ << " ping mon." << new_mon_id
                  << " " << con->get_peer_addr() << dendl;
 
-  pinger->mc.reset(new MonConnection(cct, con, 0, &auth_registry));
+  pinger->mc.reset(new MonConnection(cct, con, 0, &auth_registry, monc_lock));
   pinger->mc->start(monmap.get_epoch(), entity_name);
   con->send_message(new MPing);
 
@@ -646,6 +646,7 @@ int MonClient::authenticate(double timeout)
 
 void MonClient::_wipe_secrets_and_tickets()
 {
+  ceph_assert(ceph_mutex_is_locked_by_me(monc_lock));
   ldout(cct, 5) << " wiping rotating secrets and invalidating tickets" << dendl;
   rotating_secrets->wipe();
   auth->invalidate_all_tickets();
@@ -833,9 +834,10 @@ void MonClient::_reopen_session(int rank)
 
 void MonClient::_add_conn(unsigned rank)
 {
+  ceph_assert(ceph_mutex_is_locked_by_me(monc_lock));
   auto peer = monmap.get_addrs(rank);
   auto conn = messenger->connect_to_mon(peer);
-  MonConnection mc(cct, conn, global_id, &auth_registry);
+  MonConnection mc(cct, conn, global_id, &auth_registry, monc_lock);
   if (auth) {
     mc.get_auth().reset(auth->clone());
   }
@@ -1277,7 +1279,7 @@ void MonClient::_send_command(MonCommand *r)
       }
 
       r->target_session.reset(new MonConnection(cct, r->target_con, 0,
-						&auth_registry));
+						&auth_registry, monc_lock));
       r->target_session->start(monmap.get_epoch(), entity_name);
       r->last_send_attempt = ceph_clock_now();
 
@@ -1865,8 +1867,8 @@ AuthAuthorizer* MonClient::build_authorizer(int service_id) const {
 
 MonConnection::MonConnection(
   CephContext *cct, ConnectionRef con, uint64_t global_id,
-  AuthRegistry *ar)
-  : cct(cct), con(con), global_id(global_id), auth_registry(ar)
+  AuthRegistry *ar, ceph::mutex& m)
+  : cct(cct), con(con), global_id(global_id), auth_registry(ar), monc_lock(m)
 {}
 
 MonConnection::~MonConnection()
@@ -1924,6 +1926,7 @@ int MonConnection::get_auth_request(
   uint32_t want_keys,
   RotatingKeyRing* keyring)
 {
+  ceph_assert(ceph_mutex_is_locked_by_me(monc_lock));
   using ceph::encode;
   // choose method
   if (auth_method < 0) {
@@ -1962,6 +1965,7 @@ int MonConnection::handle_auth_reply_more(
   const ceph::buffer::list& bl,
   ceph::buffer::list *reply)
 {
+  ceph_assert(ceph_mutex_is_locked_by_me(monc_lock));
   ldout(cct, 10) << __func__ << " payload " << bl.length() << dendl;
   ldout(cct, 30) << __func__ << " got\n";
   bl.hexdump(*_dout);
@@ -1994,6 +1998,7 @@ int MonConnection::handle_auth_done(
   CryptoKey *session_key,
   std::string *connection_secret)
 {
+  ceph_assert(ceph_mutex_is_locked_by_me(monc_lock));
   ldout(cct,10) << __func__ << " global_id " << new_global_id
 		<< " payload " << bl.length()
 		<< dendl;
@@ -2019,6 +2024,7 @@ int MonConnection::handle_auth_bad_method(
   const std::vector<uint32_t>& allowed_methods,
   const std::vector<uint32_t>& allowed_modes)
 {
+  ceph_assert(ceph_mutex_is_locked_by_me(monc_lock));
   ldout(cct,10) << __func__ << " old_auth_method " << old_auth_method
 		<< " result " << cpp_strerror(result)
 		<< " allowed_methods " << allowed_methods << dendl;
@@ -2052,6 +2058,7 @@ int MonConnection::handle_auth(MAuthReply* m,
 			       uint32_t want_keys,
 			       RotatingKeyRing* keyring)
 {
+  ceph_assert(ceph_mutex_is_locked_by_me(monc_lock));
   if (state == State::NEGOTIATING) {
     int r = _negotiate(m, entity_name, want_keys, keyring);
     if (r) {
@@ -2090,6 +2097,7 @@ int MonConnection::_init_auth(
   RotatingKeyRing* keyring,
   bool msgr2)
 {
+  ceph_assert(ceph_mutex_is_locked_by_me(monc_lock));
   ldout(cct, 10) << __func__ << " method " << method << dendl;
   if (auth && auth->get_protocol() == (int)method) {
     ldout(cct, 10) << __func__ << " already have auth, reseting" << dendl;
@@ -2124,6 +2132,7 @@ int MonConnection::_init_auth(
 
 int MonConnection::authenticate(MAuthReply *m)
 {
+  ceph_assert(ceph_mutex_is_locked_by_me(monc_lock));
   ceph_assert(auth);
   if (!m->global_id) {
     ldout(cct, 1) << "peer sent an invalid global_id" << dendl;
