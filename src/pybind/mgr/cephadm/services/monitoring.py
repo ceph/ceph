@@ -522,10 +522,16 @@ class PrometheusService(CephadmService):
         """
         Retrieves the service discovery URLs for the services that require monitoring
 
+        Note: we always add the 'ceph' Prometheus target as it corresponds to the prometheus-mgr module target
+
         Returns:
             Dict[str, List[str]]: A dictionary where the keys represent service categories (e.g., "nfs", "node-exporterr") and
                                   the values are a list of service-discovery URLs used to get the corresponding service targets.
         """
+
+        def sd_urls(svc: str, prefixes: List[str]) -> list[str]:
+            return [f'{p}/sd/prometheus/sd-config?service={svc}' for p in prefixes]
+
         if mgmt_gw_enabled:
             service_discovery_url_prefixes = [f'{self.mgr.get_mgmt_gw_internal_endpoint()}']
         else:
@@ -533,13 +539,13 @@ class PrometheusService(CephadmService):
             protocol = 'https' if security_enabled else 'http'
             service_discovery_url_prefixes = [f'{protocol}://{wrap_ipv6(ip)}:{port}'
                                               for ip in self.mgr._get_mgr_ips()]
-        return {
-            service: [f'{prefix}/sd/prometheus/sd-config?service={service}' for prefix in service_discovery_url_prefixes]
-            for service in service_registry.get_services_requiring_monitoring()
-            if service == 'ceph'
-            or bool(self.mgr.cache.get_daemons_by_service(service))
-            or bool(self.mgr.cache.get_daemons_by_type(service))
-        }
+
+        services_to_monitor = ['ceph', *(
+            s for s in service_registry.get_services_requiring_monitoring()
+            if self.mgr.cache.get_daemons_by_service(s) or self.mgr.cache.get_daemons_by_type(s)
+        )]
+
+        return {s: sd_urls(s, service_discovery_url_prefixes) for s in services_to_monitor}
 
     def configure_alerts(self, r: Dict) -> None:
         # include alerts, if present in the container
@@ -666,14 +672,12 @@ class PrometheusService(CephadmService):
                 deps.append(f'alert-cred:{utils.md5_hash(alertmanager_user + alertmanager_password)}')
 
         # Adding other services as deps (with corresponding justification):
-        # ceph-exporter: scraping target
-        # node-exporter: scraping target
-        # ingress      : scraping target
-        # alert-manager: part of prometheus configuration
-        # mgmt-gateway : since url_prefix depends on the existence of mgmt-gateway
+        # mgmt-gateway : url_prefix depends on the existence of mgmt-gateway
         # oauth2-proxy : enbling basic-auth (or not) depends on the existence of 'oauth2-proxy'
-        for svc in ['mgmt-gateway', 'oauth2-proxy', 'alertmanager', 'node-exporter', 'ceph-exporter', 'ingress']:
-            deps.append(f'{svc}_configured:{bool(mgr.cache.get_daemons_by_service(svc))}')
+        prometheus_svc_deps = service_registry.get_services_requiring_monitoring() + ['mgmt-gateway', 'oauth2-proxy']
+        for svc in prometheus_svc_deps:
+            configured = bool(mgr.cache.get_daemons_by_service(svc)) or bool(mgr.cache.get_daemons_by_type(svc))
+            deps.append(f'{svc}_configured:{configured}')
 
         if not mgmt_gw_enabled:
             # Ceph mgrs are dependency because when mgmt-gateway is not enabled the service-discovery depends on mgrs ips
