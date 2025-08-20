@@ -193,7 +193,3 @@ TYPE(ConnectionTracker);
 #include "mon/health_check.h"
 TYPE(health_check_t)
 TYPE(health_check_map_t)
-
-#include "os/kstore/kstore_types.h"
-TYPE(kstore_cnode_t)
-TYPE(kstore_onode_t)
