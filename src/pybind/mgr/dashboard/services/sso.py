@@ -33,7 +33,7 @@ try:
     from onelogin.saml2.settings import OneLogin_Saml2_Settings as Saml2Settings
 
     python_saml_imported = True
-except ImportError:
+except Exception:
     python_saml_imported = False
 
 
