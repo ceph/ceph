@@ -1004,6 +1004,17 @@ std::string image_id(librbd::Image& image) {
   return id;
 }
 
+std::string group_snap_state(librbd::group_snap_state_t state) {
+  switch (state) {
+  case RBD_GROUP_SNAP_STATE_CREATING:
+    return "creating";
+  case RBD_GROUP_SNAP_STATE_CREATED:
+    return "created";
+  default:
+    return "unknown (" + stringify(state) + ")";
+  }
+}
+
 std::string mirror_image_mode(librbd::mirror_image_mode_t mode) {
   switch (mode) {
     case RBD_MIRROR_IMAGE_MODE_JOURNAL:

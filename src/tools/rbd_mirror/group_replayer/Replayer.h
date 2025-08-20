@@ -186,13 +186,25 @@ private:
     const cls::rbd::GroupSnapshot &remote_snap,
     const std::vector<cls::rbd::GroupImageStatus>& local_images,
     Context *on_finish);
-  void post_mirror_snapshot_complete(
+  void post_mirror_snapshot_created(
     const std::string &group_snap_id,
     const cls::rbd::GroupSnapshot &local_snap,
     const cls::rbd::GroupSnapshot &remote_snap,
     const std::vector<cls::rbd::GroupImageStatus>& local_images,
     Context *on_finish);
-  void handle_post_mirror_snapshot_complete(
+  void handle_post_mirror_snapshot_created(
+    int r, const std::string &group_snap_id,
+    const cls::rbd::GroupSnapshot &local_snap,
+    Context *on_finish);
+  void check_mirror_snapshot_sync_complete(
+    const std::string &group_snap_id,
+    const cls::rbd::GroupSnapshot &local_snap,
+    Context *on_finish);
+  void set_mirror_snapshot_complete(
+    const std::string &group_snap_id,
+    const cls::rbd::GroupSnapshot &local_snap,
+    Context *on_finish);
+  void handle_set_mirror_snapshot_complete(
     int r, const std::string &group_snap_id, Context *on_finish);
 
   void create_user_snapshot(
@@ -210,13 +222,13 @@ private:
     const cls::rbd::GroupSnapshot &remote_snap,
     const std::vector<cls::rbd::GroupImageStatus>& local_images,
     Context *on_finish);
-  void post_user_snapshot_complete(
+  void post_user_snapshot_created(
     const std::string &group_snap_id,
     const cls::rbd::GroupSnapshot &local_snap,
     const cls::rbd::GroupSnapshot &remote_snap,
     const std::vector<cls::rbd::GroupImageStatus>& local_images,
     Context *on_finish);
-  void handle_post_user_snapshot_complete(
+  void handle_post_user_snapshot_created(
     int r, const std::string &group_snap_id, Context *on_finish);
 
   void mirror_group_snapshot_unlink_peer(const std::string &snap_id);

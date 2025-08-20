@@ -448,9 +448,20 @@ void GroupCreatePrimaryRequest<I>::generate_group_snap() {
   // TODO: Fix this to handle primary demoted snaps
   cls::rbd::MirrorSnapshotState state = cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY;
 
-  // Create incomplete group snap
+  librados::Rados rados(m_group_ioctx);
+  int8_t require_osd_release;
+  int r = rados.get_min_compatible_osd(&require_osd_release);
+  if (r < 0) {
+    lderr(m_cct) << "failed to retrieve min OSD release: " << cpp_strerror(r)
+                 << dendl;
+    m_ret_code = r;
+    close_images();
+    return;
+  }
+
+  auto complete = cls::rbd::get_mirror_group_snapshot_complete_initial(require_osd_release);
   m_group_snap.snapshot_namespace = cls::rbd::GroupSnapshotNamespaceMirror{
-    state, m_mirror_peer_uuids, {}, {}};
+    state, m_mirror_peer_uuids, {}, {}, complete};
 
   for (auto image_ctx: m_image_ctxs) {
     m_group_snap.snaps.emplace_back(image_ctx->md_ctx.get_id(), image_ctx->id,
@@ -483,7 +494,7 @@ void GroupCreatePrimaryRequest<I>::handle_set_snap_metadata(int r) {
     lderr(m_cct) << "failed to set group snapshot metadata: " << cpp_strerror(r)
                  << dendl;
     m_ret_code = r;
-    if (m_group_snap.state == cls::rbd::GROUP_SNAPSHOT_STATE_COMPLETE) {
+    if (m_group_snap.state == cls::rbd::GROUP_SNAPSHOT_STATE_CREATED) {
       remove_incomplete_group_snap();
     } else {
       close_images();
@@ -491,7 +502,7 @@ void GroupCreatePrimaryRequest<I>::handle_set_snap_metadata(int r) {
     return;
   }
 
-  if (m_group_snap.state == cls::rbd::GROUP_SNAPSHOT_STATE_COMPLETE) {
+  if (m_group_snap.state == cls::rbd::GROUP_SNAPSHOT_STATE_CREATED) {
       release_image_exclusive_locks();
   } else {
     notify_quiesce();
@@ -646,7 +657,9 @@ void GroupCreatePrimaryRequest<I>::handle_create_image_snaps(int r) {
     remove_incomplete_group_snap();
     return;
   } else {
-    m_group_snap.state = cls::rbd::GROUP_SNAPSHOT_STATE_COMPLETE;
+    m_group_snap.state = cls::rbd::GROUP_SNAPSHOT_STATE_CREATED;
+    cls::rbd::set_mirror_group_snapshot_complete(m_group_snap);
+
     *m_snap_id = m_group_snap.id;
 
     set_snap_metadata();

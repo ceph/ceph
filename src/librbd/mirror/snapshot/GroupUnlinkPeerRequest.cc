@@ -53,7 +53,7 @@ void GroupUnlinkPeerRequest<I>::unlink_peer() {
       if (ns->mirror_peer_uuids.empty() ||
 	(ns->mirror_peer_uuids.count(peer) != 0 &&
 	 ns->is_primary() &&
-         it->state == cls::rbd::GROUP_SNAPSHOT_STATE_INCOMPLETE)){
+         !is_mirror_group_snapshot_complete(it->state, ns->complete))) {
 	process_snapshot(*it, peer);
 	return;
       }
@@ -158,10 +158,10 @@ void GroupUnlinkPeerRequest<I>::process_snapshot(cls::rbd::GroupSnapshot group_s
   const auto& ns = std::get<cls::rbd::GroupSnapshotNamespaceMirror>(
       group_snap.snapshot_namespace);
   if (ns.mirror_peer_uuids.empty() ||
-      group_snap.state == cls::rbd::GROUP_SNAPSHOT_STATE_INCOMPLETE) {
+      !is_mirror_group_snapshot_complete(group_snap.state, ns.complete)) {
     remove_group_snapshot(group_snap);
   } else {
-    // Note: avoid calling remove_peer_uuid() for INCOMPLETE snapshots as
+    // Note: avoid calling remove_peer_uuid() for CREATING snapshots as
     // group_snap_set() returns EEXIST error
     remove_peer_uuid(group_snap, mirror_peer_uuid);
   }
@@ -224,7 +224,7 @@ void GroupUnlinkPeerRequest<I>::remove_group_snapshot(
   m_group_snap_id = group_snap.id;
 
   C_Gather *gather_ctx = new C_Gather(m_cct, ctx);
-  if (group_snap.state == cls::rbd::GROUP_SNAPSHOT_STATE_INCOMPLETE) {
+  if (group_snap.state == cls::rbd::GROUP_SNAPSHOT_STATE_CREATING) {
     for (size_t i = 0; i < m_image_ctxs->size(); ++i) {
       ImageCtx *ictx = (*m_image_ctxs)[i];
       for (auto it = ictx->snap_info.rbegin();
