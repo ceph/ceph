@@ -807,7 +807,7 @@ CephContext::CephContext(uint32_t module_type_,
   _admin_socket->register_command("cputrace start", _admin_hook, "start cpu profiling");
   _admin_socket->register_command("cputrace stop", _admin_hook, "stop cpu profiling");
   _admin_socket->register_command("cputrace reset", _admin_hook, "reset cpu profiling");
-  _admin_socket->register_command("cputrace dump name=logger,type=CephString,req=false name=counter,type=CephString,req=false", _admin_hook, "dump cpu profiling results");
+  _admin_socket->register_command("cputrace dump name=logger,type=CephString,req=false name=counter,type=CephString,req=false", _admin_hook, "dump CPU profiling results");
 #endif
   _crypto_none = CryptoHandler::create(CEPH_CRYPTO_NONE);
   _crypto_aes = CryptoHandler::create(CEPH_CRYPTO_AES);
