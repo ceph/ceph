@@ -42,6 +42,11 @@ CONTAINERS = {
         'base_image': 'docker.io/library/ubuntu:22.04',
         'script': 'apt update && apt install -y python3-venv',
     },
+    'ubuntu-24.04': {
+        'name': 'cephadm-build-test:ubuntu-24-04-py3',
+        'base_image': 'docker.io/library/ubuntu:24.04',
+        'script': 'apt update && apt install -y python3-venv',
+    },
 }
 
 BUILD_PY = 'src/cephadm/build.py'
@@ -99,6 +104,7 @@ def source_dir():
         'centos-10',
         'ubuntu-20.04',
         'ubuntu-22.04',
+        'ubuntu-24.04',
     ],
 )
 def test_cephadm_build(env, source_dir, tmp_path):
