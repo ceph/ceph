@@ -12,20 +12,10 @@ import sys
 
 
 CONTAINERS = {
-    'centos-8': {
-        'name': 'cephadm-build-test:centos8-py36',
-        'base_image': 'quay.io/centos/centos:stream8',
-        'script': 'dnf install -y python36',
-    },
     'centos-9': {
         'name': 'cephadm-build-test:centos9-py3',
         'base_image': 'quay.io/centos/centos:stream9',
         'script': 'dnf install -y python3',
-    },
-    'centos-8-plusdeps': {
-        'name': 'cephadm-build-test:centos8-py36-deps',
-        'base_image': 'quay.io/centos/centos:stream8',
-        'script': 'dnf install -y python36 python3-jinja2 python3-pyyaml',
     },
     'centos-9-plusdeps': {
         'name': 'cephadm-build-test:centos9-py3-deps',
@@ -95,7 +85,6 @@ def source_dir():
 @pytest.mark.parametrize(
     'env',
     [
-        'centos-8',
         'centos-9',
         'ubuntu-20.04',
         'ubuntu-22.04',
@@ -139,7 +128,6 @@ def test_cephadm_build(env, source_dir, tmp_path):
 @pytest.mark.parametrize(
     'env',
     [
-        'centos-8-plusdeps',
         'centos-9-plusdeps',
         'centos-9',
     ],
@@ -155,11 +143,6 @@ def test_cephadm_build_from_rpms(env, source_dir, tmp_path):
         assert res.returncode != 0
         return
     binary = tmp_path / 'cephadm'
-    if 'centos-8' in env and sys.version_info[:2] >= (3, 10):
-        # The version of markupsafe in centos 8 is incompatible with
-        # python>=3.10 due to changes in the stdlib therefore we can't execute
-        # the cephadm binary, so we quit the test early.
-        return
     assert binary.is_file()
     res = subprocess.run(
         [sys.executable, str(binary), 'version'],
