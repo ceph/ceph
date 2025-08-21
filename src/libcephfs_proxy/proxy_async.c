@@ -18,13 +18,13 @@ static int32_t libcephfsd_cbk_nonblocking_rw(proxy_async_t *async,
 	const struct iovec *iov;
 	int32_t err, count;
 
-	err = ptr_check(&async->random, cbk->ll_nonblocking_rw.info,
+	err = ptr_check(&async->random, cbk->ll_nonblocking_rw.v0.info,
 			(void **)&info);
 	if (err < 0) {
 		return err;
 	}
 
-	info->result = cbk->ll_nonblocking_rw.res;
+	info->result = cbk->ll_nonblocking_rw.v0.res;
 
 	if (!info->write) {
 		iov = info->iov;
@@ -40,7 +40,7 @@ static int32_t libcephfsd_cbk_nonblocking_rw(proxy_async_t *async,
 			}
 
 			memcpy(iov->iov_base, data, iov->iov_len);
-			data += iov->iov_len;
+			data = (char*)data + iov->iov_len;
 			size -= iov->iov_len;
 			iov++;
 			count--;

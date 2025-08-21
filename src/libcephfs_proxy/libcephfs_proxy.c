@@ -8,6 +8,16 @@
 #include "proxy_requests.h"
 #include "proxy_async.h"
 
+/* We override the definition of UserPerm structure to contain internal user
+ * credentials. This is already a black box for libcephfs users, so this won't
+ * be noticed. */
+struct UserPerm {
+	uid_t uid;
+	gid_t gid;
+	uint32_t count;
+	gid_t groups[];
+};
+
 /* We override the definition of the ceph_mount_info structure to contain
  * internal proxy information. This is already a black box for libcephfs users,
  * so this won't be noticed. */
@@ -15,6 +25,7 @@ struct ceph_mount_info {
 	proxy_link_t link;
 	proxy_link_negotiate_t neg;
 	proxy_async_t async;
+	char *cwd_path;
 	uint64_t cmount;
 };
 
@@ -33,7 +44,8 @@ static bool client_stop(proxy_link_t *link)
 
 static int32_t proxy_negotiation_check(proxy_link_negotiate_t *neg)
 {
-	proxy_log(LOG_INFO, 0, "Features enabled: %08x", neg->v1.enabled);
+	proxy_log(LOG_INFO, 0, "Features enabled: %08x, protocol: %u",
+		  neg->v1.enabled, neg->v2.protocol);
 
 	return 0;
 }
@@ -75,7 +87,9 @@ static int32_t proxy_global_connect(void)
 		}
 
 		proxy_link_negotiate_init(&global_cmount.neg, 0, PROXY_FEAT_ALL,
-					  0, 0);
+					  0,
+					  PROXY_FEAT_EMBEDDED_PERMS,
+					  PROXY_LINK_PROTOCOL_VERSION);
 
 		err = proxy_link_handshake_client(&global_cmount.link, err,
 						  &global_cmount.neg,
@@ -114,19 +128,62 @@ static int32_t proxy_check(struct ceph_mount_info *cmount, int32_t err,
 	({                                                          \
 		int32_t __err = -ENOTCONN;                          \
 		if (proxy_link_is_connected(&(_cmount)->link)) {    \
-			(_req).cmount = (_cmount)->cmount;          \
+			(_req).v0.cmount = (_cmount)->cmount;       \
 			__err = CEPH_RUN(_cmount, _op, _req, _ans); \
 		}                                                   \
 		__err;                                              \
 	})
 
+#define PROXY_EMBED_PERMS(_client, _req, _perms) \
+	do { \
+		if (proxy_embed_perms(_client, &_req.v0.userperm, _perms)) { \
+			_req.v1.ngroups = _perms->count; \
+			CEPH_BUFF_ADD(_req, _perms->groups, \
+				      sizeof(gid_t) * _perms->count); \
+		} else { \
+			_req.v1.ngroups = 0; \
+		} \
+	} while (false)
+
+static bool proxy_embed_perms(struct ceph_mount_info *cmount,
+			      embedded_perms_t *embed, const UserPerm *perms)
+{
+	if ((cmount->neg.v1.enabled & PROXY_FEAT_EMBEDDED_PERMS) != 0) {
+		embed->uid = perms->uid;
+		embed->gid = perms->gid;
+		return true;
+	}
+
+	embed->ptr = ptr_value(perms);
+
+	return false;
+}
+
 __public int ceph_chdir(struct ceph_mount_info *cmount, const char *path)
 {
 	CEPH_REQ(ceph_chdir, req, 1, ans, 0);
+	char *new_path;
+	int32_t err;
 
-	CEPH_STR_ADD(req, path, path);
+	if (strcmp(path, cmount->cwd_path) == 0) {
+		return 0;
+	}
 
-	return CEPH_PROCESS(cmount, LIBCEPHFSD_OP_CHDIR, req, ans);
+	new_path = proxy_strdup(path);
+	if (new_path == NULL) {
+		return -ENOMEM;
+	}
+
+	CEPH_STR_ADD(req, v0.path, path);
+
+	err = CEPH_PROCESS(cmount, LIBCEPHFSD_OP_CHDIR, req, ans);
+	if (err >= 0) {
+		new_path = __atomic_exchange_n(&cmount->cwd_path, new_path,
+					       __ATOMIC_SEQ_CST);
+	}
+	proxy_free(new_path);
+
+	return err;
 }
 
 __public int ceph_conf_get(struct ceph_mount_info *cmount, const char *option,
@@ -134,9 +191,9 @@ __public int ceph_conf_get(struct ceph_mount_info *cmount, const char *option,
 {
 	CEPH_REQ(ceph_conf_get, req, 1, ans, 1);
 
-	req.size = len;
+	req.v0.size = len;
 
-	CEPH_STR_ADD(req, option, option);
+	CEPH_STR_ADD(req, v0.option, option);
 	CEPH_BUFF_ADD(ans, buf, len);
 
 	return CEPH_PROCESS(cmount, LIBCEPHFSD_OP_CONF_GET, req, ans);
@@ -147,7 +204,7 @@ __public int ceph_conf_read_file(struct ceph_mount_info *cmount,
 {
 	CEPH_REQ(ceph_conf_read_file, req, 1, ans, 0);
 
-	CEPH_STR_ADD(req, path, path_list);
+	CEPH_STR_ADD(req, v0.path, path_list);
 
 	return CEPH_PROCESS(cmount, LIBCEPHFSD_OP_CONF_READ_FILE, req, ans);
 }
@@ -157,8 +214,8 @@ __public int ceph_conf_set(struct ceph_mount_info *cmount, const char *option,
 {
 	CEPH_REQ(ceph_conf_set, req, 2, ans, 0);
 
-	CEPH_STR_ADD(req, option, option);
-	CEPH_STR_ADD(req, value, value);
+	CEPH_STR_ADD(req, v0.option, option);
+	CEPH_STR_ADD(req, v0.value, value);
 
 	return CEPH_PROCESS(cmount, LIBCEPHFSD_OP_CONF_SET, req, ans);
 }
@@ -173,6 +230,11 @@ __public int ceph_create(struct ceph_mount_info **cmount, const char *const id)
 	if (ceph_mount == NULL) {
 		return -ENOMEM;
 	}
+	ceph_mount->cwd_path = proxy_strdup("/");
+	if (ceph_mount->cwd_path == NULL) {
+		err = -ENOMEM;
+		goto failed;
+	}
 
 	err = proxy_connect(&ceph_mount->link);
 	if (err < 0) {
@@ -181,7 +243,9 @@ __public int ceph_create(struct ceph_mount_info **cmount, const char *const id)
 	sd = err;
 
 	proxy_link_negotiate_init(&ceph_mount->neg, 0, PROXY_FEAT_ALL, 0,
-				  PROXY_FEAT_ASYNC_IO);
+				  PROXY_FEAT_ASYNC_IO |
+				  PROXY_FEAT_EMBEDDED_PERMS,
+				  PROXY_LINK_PROTOCOL_VERSION);
 
 	err = proxy_link_handshake_client(&ceph_mount->link, sd,
 					  &ceph_mount->neg,
@@ -198,14 +262,14 @@ __public int ceph_create(struct ceph_mount_info **cmount, const char *const id)
 		}
 	}
 
-	CEPH_STR_ADD(req, id, id);
+	CEPH_STR_ADD(req, v0.id, id);
 
 	err = CEPH_CALL(sd, LIBCEPHFSD_OP_CREATE, req, ans);
 	if ((err < 0) || ((err = ans.header.result) < 0)) {
 		goto failed_link;
 	}
 
-	ceph_mount->cmount = ans.cmount;
+	ceph_mount->cmount = ans.v0.cmount;
 
 	*cmount = ceph_mount;
 
@@ -222,21 +286,7 @@ failed:
 
 __public const char *ceph_getcwd(struct ceph_mount_info *cmount)
 {
-	static char cwd[PATH_MAX];
-	int32_t err;
-
-	CEPH_REQ(ceph_getcwd, req, 0, ans, 1);
-
-	CEPH_BUFF_ADD(ans, cwd, sizeof(cwd));
-
-	err = CEPH_PROCESS(cmount, LIBCEPHFSD_OP_GETCWD, req, ans);
-	if (err >= 0) {
-		return cwd;
-	}
-
-	errno = -err;
-
-	return NULL;
+	return cmount->cwd_path;
 }
 
 __public int ceph_init(struct ceph_mount_info *cmount)
@@ -251,7 +301,7 @@ __public int ceph_ll_close(struct ceph_mount_info *cmount,
 {
 	CEPH_REQ(ceph_ll_close, req, 0, ans, 0);
 
-	req.fh = ptr_value(filehandle);
+	req.v0.fh = ptr_value(filehandle);
 
 	return CEPH_PROCESS(cmount, LIBCEPHFSD_OP_LL_CLOSE, req, ans);
 }
@@ -262,23 +312,26 @@ __public int ceph_ll_create(struct ceph_mount_info *cmount, Inode *parent,
 			    unsigned want, unsigned lflags,
 			    const UserPerm *perms)
 {
-	CEPH_REQ(ceph_ll_create, req, 1, ans, 1);
+	CEPH_REQ(ceph_ll_create, req, 2, ans, 1);
 	int32_t err;
 
-	req.userperm = ptr_value(perms);
-	req.parent = ptr_value(parent);
-	req.mode = mode;
-	req.oflags = oflags;
-	req.want = want;
-	req.flags = lflags;
+	PROTO_VERSION(&cmount->neg, req, PROXY_PROTOCOL_V1);
 
-	CEPH_STR_ADD(req, name, name);
+	req.v0.parent = ptr_value(parent);
+	req.v0.mode = mode;
+	req.v0.oflags = oflags;
+	req.v0.want = want;
+	req.v0.flags = lflags;
+
+	CEPH_STR_ADD(req, v0.name, name);
+	PROXY_EMBED_PERMS(cmount, req, perms);
+
 	CEPH_BUFF_ADD(ans, stx, sizeof(*stx));
 
 	err = CEPH_PROCESS(cmount, LIBCEPHFSD_OP_LL_CREATE, req, ans);
 	if (err >= 0) {
-		*outp = value_ptr(ans.inode);
-		*fhp = value_ptr(ans.fh);
+		*outp = value_ptr(ans.v0.inode);
+		*fhp = value_ptr(ans.v0.fh);
 	}
 
 	return err;
@@ -289,10 +342,10 @@ __public int ceph_ll_fallocate(struct ceph_mount_info *cmount, struct Fh *fh,
 {
 	CEPH_REQ(ceph_ll_fallocate, req, 0, ans, 0);
 
-	req.fh = ptr_value(fh);
-	req.mode = mode;
-	req.offset = offset;
-	req.length = length;
+	req.v0.fh = ptr_value(fh);
+	req.v0.mode = mode;
+	req.v0.offset = offset;
+	req.v0.length = length;
 
 	return CEPH_PROCESS(cmount, LIBCEPHFSD_OP_LL_FALLOCATE, req, ans);
 }
@@ -302,8 +355,8 @@ __public int ceph_ll_fsync(struct ceph_mount_info *cmount, struct Fh *fh,
 {
 	CEPH_REQ(ceph_ll_fsync, req, 0, ans, 0);
 
-	req.fh = ptr_value(fh);
-	req.dataonly = syncdataonly;
+	req.v0.fh = ptr_value(fh);
+	req.v0.dataonly = syncdataonly;
 
 	return CEPH_PROCESS(cmount, LIBCEPHFSD_OP_LL_FSYNC, req, ans);
 }
@@ -312,12 +365,15 @@ __public int ceph_ll_getattr(struct ceph_mount_info *cmount, struct Inode *in,
 			     struct ceph_statx *stx, unsigned int want,
 			     unsigned int flags, const UserPerm *perms)
 {
-	CEPH_REQ(ceph_ll_getattr, req, 0, ans, 1);
+	CEPH_REQ(ceph_ll_getattr, req, 1, ans, 1);
 
-	req.userperm = ptr_value(perms);
-	req.inode = ptr_value(in);
-	req.want = want;
-	req.flags = flags;
+	PROTO_VERSION(&cmount->neg, req, PROXY_PROTOCOL_V1);
+
+	req.v0.inode = ptr_value(in);
+	req.v0.want = want;
+	req.v0.flags = flags;
+
+	PROXY_EMBED_PERMS(cmount, req, perms);
 
 	CEPH_BUFF_ADD(ans, stx, sizeof(*stx));
 
@@ -328,12 +384,15 @@ __public int ceph_ll_getxattr(struct ceph_mount_info *cmount, struct Inode *in,
 			      const char *name, void *value, size_t size,
 			      const UserPerm *perms)
 {
-	CEPH_REQ(ceph_ll_getxattr, req, 1, ans, 1);
+	CEPH_REQ(ceph_ll_getxattr, req, 2, ans, 1);
 
-	req.userperm = ptr_value(perms);
-	req.inode = ptr_value(in);
-	req.size = size;
-	CEPH_STR_ADD(req, name, name);
+	PROTO_VERSION(&cmount->neg, req, PROXY_PROTOCOL_V1);
+
+	req.v0.inode = ptr_value(in);
+	req.v0.size = size;
+
+	CEPH_STR_ADD(req, v0.name, name);
+	PROXY_EMBED_PERMS(cmount, req, perms);
 
 	CEPH_BUFF_ADD(ans, value, size);
 
@@ -344,12 +403,15 @@ __public int ceph_ll_link(struct ceph_mount_info *cmount, struct Inode *in,
 			  struct Inode *newparent, const char *name,
 			  const UserPerm *perms)
 {
-	CEPH_REQ(ceph_ll_link, req, 1, ans, 0);
+	CEPH_REQ(ceph_ll_link, req, 2, ans, 0);
 
-	req.userperm = ptr_value(perms);
-	req.inode = ptr_value(in);
-	req.parent = ptr_value(newparent);
-	CEPH_STR_ADD(req, name, name);
+	PROTO_VERSION(&cmount->neg, req, PROXY_PROTOCOL_V1);
+
+	req.v0.inode = ptr_value(in);
+	req.v0.parent = ptr_value(newparent);
+
+	CEPH_STR_ADD(req, v0.name, name);
+	PROXY_EMBED_PERMS(cmount, req, perms);
 
 	return CEPH_PROCESS(cmount, LIBCEPHFSD_OP_LL_LINK, req, ans);
 }
@@ -358,18 +420,21 @@ __public int ceph_ll_listxattr(struct ceph_mount_info *cmount, struct Inode *in,
 			       char *list, size_t buf_size, size_t *list_size,
 			       const UserPerm *perms)
 {
-	CEPH_REQ(ceph_ll_listxattr, req, 0, ans, 1);
+	CEPH_REQ(ceph_ll_listxattr, req, 1, ans, 1);
 	int32_t err;
 
-	req.userperm = ptr_value(perms);
-	req.inode = ptr_value(in);
-	req.size = buf_size;
+	PROTO_VERSION(&cmount->neg, req, PROXY_PROTOCOL_V1);
+
+	req.v0.inode = ptr_value(in);
+	req.v0.size = buf_size;
+
+	PROXY_EMBED_PERMS(cmount, req, perms);
 
 	CEPH_BUFF_ADD(ans, list, buf_size);
 
 	err = CEPH_PROCESS(cmount, LIBCEPHFSD_OP_LL_LISTXATTR, req, ans);
 	if (err >= 0) {
-		*list_size = ans.size;
+		*list_size = ans.v0.size;
 	}
 
 	return err;
@@ -380,20 +445,23 @@ __public int ceph_ll_lookup(struct ceph_mount_info *cmount, Inode *parent,
 			    struct ceph_statx *stx, unsigned want,
 			    unsigned flags, const UserPerm *perms)
 {
-	CEPH_REQ(ceph_ll_lookup, req, 1, ans, 1);
+	CEPH_REQ(ceph_ll_lookup, req, 2, ans, 1);
 	int32_t err;
 
-	req.userperm = ptr_value(perms);
-	req.parent = ptr_value(parent);
-	req.want = want;
-	req.flags = flags;
-	CEPH_STR_ADD(req, name, name);
+	PROTO_VERSION(&cmount->neg, req, PROXY_PROTOCOL_V1);
+
+	req.v0.parent = ptr_value(parent);
+	req.v0.want = want;
+	req.v0.flags = flags;
+
+	CEPH_STR_ADD(req, v0.name, name);
+	PROXY_EMBED_PERMS(cmount, req, perms);
 
 	CEPH_BUFF_ADD(ans, stx, sizeof(*stx));
 
 	err = CEPH_PROCESS(cmount, LIBCEPHFSD_OP_LL_LOOKUP, req, ans);
 	if (err >= 0) {
-		*out = value_ptr(ans.inode);
+		*out = value_ptr(ans.v0.inode);
 	}
 
 	return err;
@@ -405,11 +473,11 @@ __public int ceph_ll_lookup_inode(struct ceph_mount_info *cmount,
 	CEPH_REQ(ceph_ll_lookup_inode, req, 0, ans, 0);
 	int32_t err;
 
-	req.ino = ino;
+	req.v0.ino = ino;
 
 	err = CEPH_PROCESS(cmount, LIBCEPHFSD_OP_LL_LOOKUP_INODE, req, ans);
 	if (err >= 0) {
-		*inode = value_ptr(ans.inode);
+		*inode = value_ptr(ans.v0.inode);
 	}
 
 	return err;
@@ -422,7 +490,7 @@ __public int ceph_ll_lookup_root(struct ceph_mount_info *cmount, Inode **parent)
 
 	err = CEPH_PROCESS(cmount, LIBCEPHFSD_OP_LL_LOOKUP_ROOT, req, ans);
 	if (err >= 0) {
-		*parent = value_ptr(ans.inode);
+		*parent = value_ptr(ans.v0.inode);
 	}
 
 	return err;
@@ -434,13 +502,13 @@ __public off_t ceph_ll_lseek(struct ceph_mount_info *cmount,
 	CEPH_REQ(ceph_ll_lseek, req, 0, ans, 0);
 	int32_t err;
 
-	req.fh = ptr_value(filehandle);
-	req.offset = offset;
-	req.whence = whence;
+	req.v0.fh = ptr_value(filehandle);
+	req.v0.offset = offset;
+	req.v0.whence = whence;
 
 	err = CEPH_PROCESS(cmount, LIBCEPHFSD_OP_LL_LSEEK, req, ans);
 	if (err >= 0) {
-		return ans.offset;
+		return ans.v0.offset;
 	}
 
 	return err;
@@ -451,21 +519,24 @@ __public int ceph_ll_mkdir(struct ceph_mount_info *cmount, Inode *parent,
 			   struct ceph_statx *stx, unsigned want,
 			   unsigned flags, const UserPerm *perms)
 {
-	CEPH_REQ(ceph_ll_mkdir, req, 1, ans, 1);
+	CEPH_REQ(ceph_ll_mkdir, req, 2, ans, 1);
 	int32_t err;
 
-	req.userperm = ptr_value(perms);
-	req.parent = ptr_value(parent);
-	req.mode = mode;
-	req.want = want;
-	req.flags = flags;
-	CEPH_STR_ADD(req, name, name);
+	PROTO_VERSION(&cmount->neg, req, PROXY_PROTOCOL_V1);
+
+	req.v0.parent = ptr_value(parent);
+	req.v0.mode = mode;
+	req.v0.want = want;
+	req.v0.flags = flags;
+
+	CEPH_STR_ADD(req, v0.name, name);
+	PROXY_EMBED_PERMS(cmount, req, perms);
 
 	CEPH_BUFF_ADD(ans, stx, sizeof(*stx));
 
 	err = CEPH_PROCESS(cmount, LIBCEPHFSD_OP_LL_MKDIR, req, ans);
 	if (err >= 0) {
-		*out = value_ptr(ans.inode);
+		*out = value_ptr(ans.v0.inode);
 	}
 
 	return err;
@@ -476,22 +547,25 @@ __public int ceph_ll_mknod(struct ceph_mount_info *cmount, Inode *parent,
 			   Inode **out, struct ceph_statx *stx, unsigned want,
 			   unsigned flags, const UserPerm *perms)
 {
-	CEPH_REQ(ceph_ll_mknod, req, 1, ans, 1);
+	CEPH_REQ(ceph_ll_mknod, req, 2, ans, 1);
 	int32_t err;
 
-	req.userperm = ptr_value(perms);
-	req.parent = ptr_value(parent);
-	req.mode = mode;
-	req.rdev = rdev;
-	req.want = want;
-	req.flags = flags;
-	CEPH_STR_ADD(req, name, name);
+	PROTO_VERSION(&cmount->neg, req, PROXY_PROTOCOL_V1);
+
+	req.v0.parent = ptr_value(parent);
+	req.v0.mode = mode;
+	req.v0.rdev = rdev;
+	req.v0.want = want;
+	req.v0.flags = flags;
+
+	CEPH_STR_ADD(req, v0.name, name);
+	PROXY_EMBED_PERMS(cmount, req, perms);
 
 	CEPH_BUFF_ADD(ans, stx, sizeof(*stx));
 
 	err = CEPH_PROCESS(cmount, LIBCEPHFSD_OP_LL_MKNOD, req, ans);
 	if (err >= 0) {
-		*out = value_ptr(ans.inode);
+		*out = value_ptr(ans.v0.inode);
 	}
 
 	return err;
@@ -500,16 +574,19 @@ __public int ceph_ll_mknod(struct ceph_mount_info *cmount, Inode *parent,
 __public int ceph_ll_open(struct ceph_mount_info *cmount, struct Inode *in,
 			  int flags, struct Fh **fh, const UserPerm *perms)
 {
-	CEPH_REQ(ceph_ll_open, req, 0, ans, 0);
+	CEPH_REQ(ceph_ll_open, req, 1, ans, 0);
 	int32_t err;
 
-	req.userperm = ptr_value(perms);
-	req.inode = ptr_value(in);
-	req.flags = flags;
+	PROTO_VERSION(&cmount->neg, req, PROXY_PROTOCOL_V1);
+
+	req.v0.inode = ptr_value(in);
+	req.v0.flags = flags;
+
+	PROXY_EMBED_PERMS(cmount, req, perms);
 
 	err = CEPH_PROCESS(cmount, LIBCEPHFSD_OP_LL_OPEN, req, ans);
 	if (err >= 0) {
-		*fh = value_ptr(ans.fh);
+		*fh = value_ptr(ans.v0.fh);
 	}
 
 	return err;
@@ -519,15 +596,18 @@ __public int ceph_ll_opendir(struct ceph_mount_info *cmount, struct Inode *in,
 			     struct ceph_dir_result **dirpp,
 			     const UserPerm *perms)
 {
-	CEPH_REQ(ceph_ll_opendir, req, 0, ans, 0);
+	CEPH_REQ(ceph_ll_opendir, req, 1, ans, 0);
 	int32_t err;
 
-	req.userperm = ptr_value(perms);
-	req.inode = ptr_value(in);
+	PROTO_VERSION(&cmount->neg, req, PROXY_PROTOCOL_V1);
+
+	req.v0.inode = ptr_value(in);
+
+	PROXY_EMBED_PERMS(cmount, req, perms);
 
 	err = CEPH_PROCESS(cmount, LIBCEPHFSD_OP_LL_OPENDIR, req, ans);
 	if (err >= 0) {
-		*dirpp = value_ptr(ans.dir);
+		*dirpp = value_ptr(ans.v0.dir);
 	}
 
 	return err;
@@ -537,7 +617,7 @@ __public int ceph_ll_put(struct ceph_mount_info *cmount, struct Inode *in)
 {
 	CEPH_REQ(ceph_ll_put, req, 0, ans, 0);
 
-	req.inode = ptr_value(in);
+	req.v0.inode = ptr_value(in);
 
 	return CEPH_PROCESS(cmount, LIBCEPHFSD_OP_LL_PUT, req, ans);
 }
@@ -547,9 +627,9 @@ __public int ceph_ll_read(struct ceph_mount_info *cmount, struct Fh *filehandle,
 {
 	CEPH_REQ(ceph_ll_read, req, 0, ans, 1);
 
-	req.fh = ptr_value(filehandle);
-	req.offset = off;
-	req.len = len;
+	req.v0.fh = ptr_value(filehandle);
+	req.v0.offset = off;
+	req.v0.len = len;
 
 	CEPH_BUFF_ADD(ans, buf, len);
 
@@ -559,11 +639,14 @@ __public int ceph_ll_read(struct ceph_mount_info *cmount, struct Fh *filehandle,
 __public int ceph_ll_readlink(struct ceph_mount_info *cmount, struct Inode *in,
 			      char *buf, size_t bufsize, const UserPerm *perms)
 {
-	CEPH_REQ(ceph_ll_readlink, req, 0, ans, 1);
+	CEPH_REQ(ceph_ll_readlink, req, 1, ans, 1);
 
-	req.userperm = ptr_value(perms);
-	req.inode = ptr_value(in);
-	req.size = bufsize;
+	PROTO_VERSION(&cmount->neg, req, PROXY_PROTOCOL_V1);
+
+	req.v0.inode = ptr_value(in);
+	req.v0.size = bufsize;
+
+	PROXY_EMBED_PERMS(cmount, req, perms);
 
 	CEPH_BUFF_ADD(ans, buf, bufsize);
 
@@ -575,7 +658,7 @@ __public int ceph_ll_releasedir(struct ceph_mount_info *cmount,
 {
 	CEPH_REQ(ceph_ll_releasedir, req, 0, ans, 0);
 
-	req.dir = ptr_value(dir);
+	req.v0.dir = ptr_value(dir);
 
 	return CEPH_PROCESS(cmount, LIBCEPHFSD_OP_LL_RELEASEDIR, req, ans);
 }
@@ -584,11 +667,14 @@ __public int ceph_ll_removexattr(struct ceph_mount_info *cmount,
 				 struct Inode *in, const char *name,
 				 const UserPerm *perms)
 {
-	CEPH_REQ(ceph_ll_removexattr, req, 1, ans, 0);
+	CEPH_REQ(ceph_ll_removexattr, req, 2, ans, 0);
 
-	req.userperm = ptr_value(perms);
-	req.inode = ptr_value(in);
-	CEPH_STR_ADD(req, name, name);
+	PROTO_VERSION(&cmount->neg, req, PROXY_PROTOCOL_V1);
+
+	req.v0.inode = ptr_value(in);
+
+	CEPH_STR_ADD(req, v0.name, name);
+	PROXY_EMBED_PERMS(cmount, req, perms);
 
 	return CEPH_PROCESS(cmount, LIBCEPHFSD_OP_LL_REMOVEXATTR, req, ans);
 }
@@ -598,13 +684,16 @@ __public int ceph_ll_rename(struct ceph_mount_info *cmount,
 			    struct Inode *newparent, const char *newname,
 			    const UserPerm *perms)
 {
-	CEPH_REQ(ceph_ll_rename, req, 2, ans, 0);
+	CEPH_REQ(ceph_ll_rename, req, 3, ans, 0);
 
-	req.userperm = ptr_value(perms);
-	req.old_parent = ptr_value(parent);
-	req.new_parent = ptr_value(newparent);
-	CEPH_STR_ADD(req, old_name, name);
-	CEPH_STR_ADD(req, new_name, newname);
+	PROTO_VERSION(&cmount->neg, req, PROXY_PROTOCOL_V1);
+
+	req.v0.old_parent = ptr_value(parent);
+	req.v0.new_parent = ptr_value(newparent);
+
+	CEPH_STR_ADD(req, v0.old_name, name);
+	CEPH_STR_ADD(req, v0.new_name, newname);
+	PROXY_EMBED_PERMS(cmount, req, perms);
 
 	return CEPH_PROCESS(cmount, LIBCEPHFSD_OP_LL_RENAME, req, ans);
 }
@@ -614,7 +703,7 @@ __public void ceph_rewinddir(struct ceph_mount_info *cmount,
 {
 	CEPH_REQ(ceph_rewinddir, req, 0, ans, 0);
 
-	req.dir = ptr_value(dirp);
+	req.v0.dir = ptr_value(dirp);
 
 	CEPH_PROCESS(cmount, LIBCEPHFSD_OP_REWINDDIR, req, ans);
 }
@@ -622,11 +711,14 @@ __public void ceph_rewinddir(struct ceph_mount_info *cmount,
 __public int ceph_ll_rmdir(struct ceph_mount_info *cmount, struct Inode *in,
 			   const char *name, const UserPerm *perms)
 {
-	CEPH_REQ(ceph_ll_rmdir, req, 1, ans, 0);
+	CEPH_REQ(ceph_ll_rmdir, req, 2, ans, 0);
 
-	req.userperm = ptr_value(perms);
-	req.parent = ptr_value(in);
-	CEPH_STR_ADD(req, name, name);
+	PROTO_VERSION(&cmount->neg, req, PROXY_PROTOCOL_V1);
+
+	req.v0.parent = ptr_value(in);
+
+	CEPH_STR_ADD(req, v0.name, name);
+	PROXY_EMBED_PERMS(cmount, req, perms);
 
 	return CEPH_PROCESS(cmount, LIBCEPHFSD_OP_LL_RMDIR, req, ans);
 }
@@ -635,12 +727,15 @@ __public int ceph_ll_setattr(struct ceph_mount_info *cmount, struct Inode *in,
 			     struct ceph_statx *stx, int mask,
 			     const UserPerm *perms)
 {
-	CEPH_REQ(ceph_ll_setattr, req, 1, ans, 0);
+	CEPH_REQ(ceph_ll_setattr, req, 2, ans, 0);
 
-	req.userperm = ptr_value(perms);
-	req.inode = ptr_value(in);
-	req.mask = mask;
+	PROTO_VERSION(&cmount->neg, req, PROXY_PROTOCOL_V1);
+
+	req.v0.inode = ptr_value(in);
+	req.v0.mask = mask;
+
 	CEPH_BUFF_ADD(req, stx, sizeof(*stx));
+	PROXY_EMBED_PERMS(cmount, req, perms);
 
 	return CEPH_PROCESS(cmount, LIBCEPHFSD_OP_LL_SETATTR, req, ans);
 }
@@ -649,14 +744,17 @@ __public int ceph_ll_setxattr(struct ceph_mount_info *cmount, struct Inode *in,
 			      const char *name, const void *value, size_t size,
 			      int flags, const UserPerm *perms)
 {
-	CEPH_REQ(ceph_ll_setxattr, req, 2, ans, 0);
+	CEPH_REQ(ceph_ll_setxattr, req, 3, ans, 0);
 
-	req.userperm = ptr_value(perms);
-	req.inode = ptr_value(in);
-	req.size = size;
-	req.flags = flags;
-	CEPH_STR_ADD(req, name, name);
+	PROTO_VERSION(&cmount->neg, req, PROXY_PROTOCOL_V1);
+
+	req.v0.inode = ptr_value(in);
+	req.v0.size = size;
+	req.v0.flags = flags;
+
+	CEPH_STR_ADD(req, v0.name, name);
 	CEPH_BUFF_ADD(req, value, size);
+	PROXY_EMBED_PERMS(cmount, req, perms);
 
 	return CEPH_PROCESS(cmount, LIBCEPHFSD_OP_LL_SETXATTR, req, ans);
 }
@@ -666,7 +764,7 @@ __public int ceph_ll_statfs(struct ceph_mount_info *cmount, struct Inode *in,
 {
 	CEPH_REQ(ceph_ll_statfs, req, 0, ans, 1);
 
-	req.inode = ptr_value(in);
+	req.v0.inode = ptr_value(in);
 
 	CEPH_BUFF_ADD(ans, stbuf, sizeof(*stbuf));
 
@@ -678,21 +776,24 @@ __public int ceph_ll_symlink(struct ceph_mount_info *cmount, Inode *in,
 			     struct ceph_statx *stx, unsigned want,
 			     unsigned flags, const UserPerm *perms)
 {
-	CEPH_REQ(ceph_ll_symlink, req, 2, ans, 1);
+	CEPH_REQ(ceph_ll_symlink, req, 3, ans, 1);
 	int32_t err;
 
-	req.userperm = ptr_value(perms);
-	req.parent = ptr_value(in);
-	req.want = want;
-	req.flags = flags;
-	CEPH_STR_ADD(req, name, name);
-	CEPH_STR_ADD(req, target, value);
+	PROTO_VERSION(&cmount->neg, req, PROXY_PROTOCOL_V1);
+
+	req.v0.parent = ptr_value(in);
+	req.v0.want = want;
+	req.v0.flags = flags;
+
+	CEPH_STR_ADD(req, v0.name, name);
+	CEPH_STR_ADD(req, v0.target, value);
+	PROXY_EMBED_PERMS(cmount, req, perms);
 
 	CEPH_BUFF_ADD(req, stx, sizeof(*stx));
 
 	err = CEPH_PROCESS(cmount, LIBCEPHFSD_OP_LL_SYMLINK, req, ans);
 	if (err >= 0) {
-		*out = value_ptr(ans.inode);
+		*out = value_ptr(ans.v0.inode);
 	}
 
 	return err;
@@ -701,11 +802,14 @@ __public int ceph_ll_symlink(struct ceph_mount_info *cmount, Inode *in,
 __public int ceph_ll_unlink(struct ceph_mount_info *cmount, struct Inode *in,
 			    const char *name, const UserPerm *perms)
 {
-	CEPH_REQ(ceph_ll_unlink, req, 1, ans, 0);
+	CEPH_REQ(ceph_ll_unlink, req, 2, ans, 0);
 
-	req.userperm = ptr_value(perms);
-	req.parent = ptr_value(in);
-	CEPH_STR_ADD(req, name, name);
+	PROTO_VERSION(&cmount->neg, req, PROXY_PROTOCOL_V1);
+
+	req.v0.parent = ptr_value(in);
+
+	CEPH_STR_ADD(req, v0.name, name);
+	PROXY_EMBED_PERMS(cmount, req, perms);
 
 	return CEPH_PROCESS(cmount, LIBCEPHFSD_OP_LL_UNLINK, req, ans);
 }
@@ -714,19 +818,22 @@ __public int ceph_ll_walk(struct ceph_mount_info *cmount, const char *name,
 			  Inode **i, struct ceph_statx *stx, unsigned int want,
 			  unsigned int flags, const UserPerm *perms)
 {
-	CEPH_REQ(ceph_ll_walk, req, 1, ans, 1);
+	CEPH_REQ(ceph_ll_walk, req, 2, ans, 1);
 	int32_t err;
 
-	req.userperm = ptr_value(perms);
-	req.want = want;
-	req.flags = flags;
-	CEPH_STR_ADD(req, path, name);
+	PROTO_VERSION(&cmount->neg, req, PROXY_PROTOCOL_V1);
+
+	req.v0.want = want;
+	req.v0.flags = flags;
+
+	CEPH_STR_ADD(req, v0.path, name);
+	PROXY_EMBED_PERMS(cmount, req, perms);
 
 	CEPH_BUFF_ADD(ans, stx, sizeof(*stx));
 
 	err = CEPH_PROCESS(cmount, LIBCEPHFSD_OP_LL_WALK, req, ans);
 	if (err >= 0) {
-		*i = value_ptr(ans.inode);
+		*i = value_ptr(ans.v0.inode);
 	}
 
 	return err;
@@ -738,9 +845,9 @@ __public int ceph_ll_write(struct ceph_mount_info *cmount,
 {
 	CEPH_REQ(ceph_ll_write, req, 1, ans, 0);
 
-	req.fh = ptr_value(filehandle);
-	req.offset = off;
-	req.len = len;
+	req.v0.fh = ptr_value(filehandle);
+	req.v0.offset = off;
+	req.v0.len = len;
 	CEPH_BUFF_ADD(req, data, len);
 
 	return CEPH_PROCESS(cmount, LIBCEPHFSD_OP_LL_WRITE, req, ans);
@@ -750,7 +857,7 @@ __public int ceph_mount(struct ceph_mount_info *cmount, const char *root)
 {
 	CEPH_REQ(ceph_mount, req, 1, ans, 0);
 
-	CEPH_STR_ADD(req, root, root);
+	CEPH_STR_ADD(req, v0.root, root);
 
 	return CEPH_PROCESS(cmount, LIBCEPHFSD_OP_MOUNT, req, ans);
 }
@@ -771,7 +878,7 @@ __public int ceph_readdir_r(struct ceph_mount_info *cmount,
 
 	CEPH_REQ(ceph_readdir, req, 0, ans, 1);
 
-	req.dir = ptr_value(dirp);
+	req.v0.dir = ptr_value(dirp);
 
 	CEPH_BUFF_ADD(ans, de, sizeof(struct dirent));
 
@@ -779,7 +886,7 @@ __public int ceph_readdir_r(struct ceph_mount_info *cmount,
 	if (err < 0) {
 		return err;
 	}
-	if (ans.eod) {
+	if (ans.v0.eod) {
 		return 0;
 	}
 
@@ -815,7 +922,7 @@ __public int ceph_select_filesystem(struct ceph_mount_info *cmount,
 {
 	CEPH_REQ(ceph_select_filesystem, req, 1, ans, 0);
 
-	CEPH_STR_ADD(req, fs, fs_name);
+	CEPH_STR_ADD(req, v0.fs, fs_name);
 
 	return CEPH_PROCESS(cmount, LIBCEPHFSD_OP_SELECT_FILESYSTEM, req, ans);
 }
@@ -831,29 +938,58 @@ __public void ceph_userperm_destroy(UserPerm *perms)
 {
 	CEPH_REQ(ceph_userperm_destroy, req, 0, ans, 0);
 
-	req.userperm = ptr_value(perms);
+	/* We need to make use of the negotiation of the global mount since we
+	 * don't have access to cmount here. Both negotiations should have
+	 * the same setting for the embedded perms feature. */
+	if ((global_cmount.neg.v1.enabled & PROXY_FEAT_EMBEDDED_PERMS) != 0) {
+		proxy_free(perms);
+	} else {
+		req.v0.userperm = ptr_value(perms);
 
-	CEPH_RUN(&global_cmount, LIBCEPHFSD_OP_USERPERM_DESTROY, req, ans);
+		CEPH_RUN(&global_cmount, LIBCEPHFSD_OP_USERPERM_DESTROY, req,
+			 ans);
+	}
 }
 
 __public UserPerm *ceph_userperm_new(uid_t uid, gid_t gid, int ngids,
 				     gid_t *gidlist)
 {
 	CEPH_REQ(ceph_userperm_new, req, 1, ans, 0);
+	UserPerm *perms;
 	int32_t err;
 
-	req.uid = uid;
-	req.gid = gid;
-	req.groups = ngids;
+	err = proxy_global_connect();
+	if (err < 0) {
+		errno = -err;
+		return NULL;
+	}
+
+	/* We need to make use of the negotiation of the global mount since we
+	 * don't have access to cmount here. Both negotiations should have
+	 * the same setting for the embedded perms feature. */
+	if ((global_cmount.neg.v1.enabled & PROXY_FEAT_EMBEDDED_PERMS) != 0) {
+		perms = proxy_malloc(sizeof(UserPerm) + sizeof(gid_t) * ngids);
+		if (perms == NULL) {
+			errno = -ENOMEM;
+			return NULL;
+		}
+
+		perms->uid = uid;
+		perms->gid = gid;
+		perms->count = ngids;
+		memcpy(perms->groups, gidlist, sizeof(gid_t) * ngids);
+
+		return perms;
+	}
+
+	req.v0.uid = uid;
+	req.v0.gid = gid;
+	req.v0.groups = ngids;
 	CEPH_BUFF_ADD(req, gidlist, sizeof(gid_t) * ngids);
 
-	err = proxy_global_connect();
+	err = CEPH_RUN(&global_cmount, LIBCEPHFSD_OP_USERPERM_NEW, req, ans);
 	if (err >= 0) {
-		err = CEPH_RUN(&global_cmount, LIBCEPHFSD_OP_USERPERM_NEW, req,
-			       ans);
-	}
-	if (err >= 0) {
-		return value_ptr(ans.userperm);
+		return value_ptr(ans.v0.userperm);
 	}
 
 	errno = -err;
@@ -886,9 +1022,9 @@ __public const char *ceph_version(int *major, int *minor, int *patch)
 			return "Unknown";
 		}
 
-		cached_major = ans.major;
-		cached_minor = ans.minor;
-		cached_patch = ans.patch;
+		cached_major = ans.v0.major;
+		cached_minor = ans.v0.minor;
+		cached_patch = ans.v0.patch;
 	}
 
 	*major = cached_major;
@@ -903,13 +1039,18 @@ __public UserPerm *ceph_mount_perms(struct ceph_mount_info *cmount)
 	CEPH_REQ(ceph_mount_perms, req, 0, ans, 0);
 	int32_t err;
 
+	if ((cmount->neg.v1.enabled & PROXY_FEAT_EMBEDDED_PERMS) != 0) {
+		errno = -EOPNOTSUPP;
+		return NULL;
+	}
+
 	err = CEPH_PROCESS(cmount, LIBCEPHFSD_OP_MOUNT_PERMS, req, ans);
 	if (err < 0) {
 		errno = -err;
 		return NULL;
 	}
 
-	return value_ptr(ans.userperm);
+	return value_ptr(ans.v0.userperm);
 }
 
 __public int64_t ceph_ll_nonblocking_readv_writev(
@@ -923,20 +1064,20 @@ __public int64_t ceph_ll_nonblocking_readv_writev(
 		return -EOPNOTSUPP;
 	}
 
-	req.info = ptr_checksum(&cmount->async.random, io_info);
-	req.fh = (uintptr_t)io_info->fh;
-	req.off = io_info->off;
-	req.size = 0;
-	req.write = io_info->write;
-	req.fsync = io_info->fsync;
-	req.syncdataonly = io_info->syncdataonly;
+	req.v0.info = ptr_checksum(&cmount->async.random, io_info);
+	req.v0.fh = (uintptr_t)io_info->fh;
+	req.v0.off = io_info->off;
+	req.v0.size = 0;
+	req.v0.write = io_info->write;
+	req.v0.fsync = io_info->fsync;
+	req.v0.syncdataonly = io_info->syncdataonly;
 
 	for (i = 0; i < io_info->iovcnt; i++) {
 		if (io_info->write) {
 			CEPH_BUFF_ADD(req, io_info->iov[i].iov_base,
 				      io_info->iov[i].iov_len);
 		}
-		req.size += io_info->iov[i].iov_len;
+		req.v0.size += io_info->iov[i].iov_len;
 	}
 
 	err = CEPH_PROCESS(cmount, LIBCEPHFSD_OP_LL_NONBLOCKING_RW, req, ans);
@@ -944,5 +1085,5 @@ __public int64_t ceph_ll_nonblocking_readv_writev(
 		return err;
 	}
 
-	return ans.res;
+	return ans.v0.res;
 }
