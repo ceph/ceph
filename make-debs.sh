@@ -46,19 +46,22 @@ fi
 
 test -f "ceph-$vers.tar.bz2" || ./make-dist $vers
 #
-# rename the tarbal to match debian conventions and extract it
+# rename the tarball to match debian conventions and extract it
 #
 mkdir -p $releasedir
 mv ceph-$vers.tar.bz2 $releasedir/ceph_$vers.orig.tar.bz2
 tar -C $releasedir -jxf $releasedir/ceph_$vers.orig.tar.bz2
+
 #
-# copy the debian directory over and remove -dbg packages
+# Optionally disable -dbg package builds
 # because they are large and take time to build
 #
 cp -a debian $releasedir/ceph-$vers/debian
 cd $releasedir
-perl -ni -e 'print if(!(/^Package: .*-dbg$/../^$/))' ceph-$vers/debian/control
-perl -pi -e 's/--dbg-package.*//' ceph-$vers/debian/rules
+if [[ -n "$SKIP_DEBUG_PACKAGES" ]] ; then
+	perl -ni -e 'print if(!(/^Package: .*-dbg$/../^$/))' ceph-$vers/debian/control
+	perl -pi -e 's/--dbg-package.*//' ceph-$vers/debian/rules
+fi
 
 #
 # update the changelog to match the desired version
