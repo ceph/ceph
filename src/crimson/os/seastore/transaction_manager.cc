@@ -978,6 +978,7 @@ TransactionManagerRef make_transaction_manager(
     Device *primary_device,
     const std::vector<Device*> &secondary_devices,
     shard_stats_t& shard_stats,
+    unsigned int store_index,
     bool is_test)
 {
   rewrite_gen_t hot_tier_generations = crimson::common::get_conf<uint64_t>(
@@ -985,9 +986,9 @@ TransactionManagerRef make_transaction_manager(
   rewrite_gen_t cold_tier_generations = crimson::common::get_conf<uint64_t>(
     "seastore_cold_tier_generations");
   auto epm = std::make_unique<ExtentPlacementManager>(
-    hot_tier_generations, cold_tier_generations);
-  auto cache = std::make_unique<Cache>(*epm);
-  auto lba_manager = lba::create_lba_manager(*cache);
+    hot_tier_generations, cold_tier_generations, store_index);
+  auto cache = std::make_unique<Cache>(*epm, store_index);
+  auto lba_manager = lba::create_lba_manager(*cache, store_index);
   auto sms = std::make_unique<SegmentManagerGroup>();
   auto rbs = std::make_unique<RBMDeviceGroup>();
   auto backref_manager = create_backref_manager(*cache);
@@ -1059,6 +1060,7 @@ TransactionManagerRef make_transaction_manager(
   }
 
   auto journal_trimmer = JournalTrimmerImpl::create(
+      store_index,
       *backref_manager, trimmer_config,
       backend_type, roll_start, roll_size);
 
@@ -1069,6 +1071,7 @@ TransactionManagerRef make_transaction_manager(
 
   if (cold_sms) {
     cold_segment_cleaner = SegmentCleaner::create(
+      store_index,
       cleaner_config,
       std::move(cold_sms),
       *backref_manager,
@@ -1086,6 +1089,7 @@ TransactionManagerRef make_transaction_manager(
 
   if (backend_type == backend_type_t::SEGMENTED) {
     cleaner = SegmentCleaner::create(
+      store_index,
       cleaner_config,
       std::move(sms),
       *backref_manager,
@@ -1099,14 +1103,17 @@ TransactionManagerRef make_transaction_manager(
     }
     segment_cleaner->set_journal_trimmer(*journal_trimmer);
     journal = journal::make_segmented(
+      store_index,
       *segment_cleaner,
       *journal_trimmer);
   } else {
     cleaner = RBMCleaner::create(
+      store_index,
       std::move(rbs),
       *backref_manager,
       cleaner_is_detailed);
     journal = journal::make_circularbounded(
+      store_index,
       *journal_trimmer,
       static_cast<random_block_device::RBMDevice*>(primary_device),
       "");
