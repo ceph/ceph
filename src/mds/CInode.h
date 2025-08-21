@@ -720,7 +720,6 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   void make_path_string(std::string& s, bool projected=false,
 		        const CDentry *use_parent=NULL,
 		        int path_comp_count=-1) const;
-  void make_path(filepath& s, bool projected=false) const;
   void make_trimmed_path_string(std::string& s, bool projected=false,
 				const CDentry *use_parent=NULL,
 				int path_comp_count=10) const;
