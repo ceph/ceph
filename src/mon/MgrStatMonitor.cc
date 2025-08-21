@@ -130,6 +130,18 @@ void MgrStatMonitor::clear_pool_availability(int64_t poolid)
   dout(20) << __func__ << " cleared availability score for pool: " << poolid << dendl;
 }
 
+bool MgrStatMonitor::should_calc_pool_availability() 
+{
+  dout(20) << __func__ << dendl;
+  std::scoped_lock l(lock); 
+
+  utime_t now = ceph_clock_now();
+  if ((now  - pool_availability_last_updated) >= pool_availability_update_interval) {
+    return true; 
+  }
+  return false; 
+}
+
 void MgrStatMonitor::calc_pool_availability()
 {
   dout(20) << __func__ << dendl;
@@ -249,7 +261,8 @@ void MgrStatMonitor::update_from_paxos(bool *need_bootstrap)
   mon.osdmon()->notify_new_pg_digest();
 
   // only calculate pool_availability within leader mon
-  if (mon.is_leader()) {
+  // and if configured interval has elapsed
+  if (mon.is_leader() && should_calc_pool_availability()) {
       calc_pool_availability();
   }
 }
