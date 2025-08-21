@@ -160,6 +160,9 @@ seastar::future<> PGAdvanceMap::split_pg(
   auto pg_epoch = next_map->get_epoch();
   DEBUG("{}: epoch: {}", *this, pg_epoch);
 
+  unsigned new_pg_num = next_map->get_pg_num(pg->get_pgid().pool());
+  pg->update_snap_mapper_bits(pg->get_pgid().get_split_bits(new_pg_num));
+
   co_await seastar::coroutine::parallel_for_each(split_children, [this, &next_map,
   pg_epoch, FNAME] (auto child_pgid) -> seastar::future<> {
     children_pgids.insert(child_pgid);
