@@ -31,35 +31,35 @@ which should now include a mgr status line::
 
     mgr active: $name
 
-Interpreting Ceph-Mgr Statuses
-==============================
+Interpreting Manager Daemon Status
+==================================
 
 A cluster's health status will show each ``ceph-mgr`` daemon in one of three states:
 
 1. **active**
 
-   This mgr daemon has been fully initialized, which means it is ready to receive
-   and execute commands. Only one mgr will be in this state at a time.
+   This manager daemon has been fully initialized, which means it is ready to receive
+   and execute commands. Only one manager will be in this state at a time.
 
 2. **active (starting)**
 
-   This mgr daemon has been chosen to be ``active``, but it is not done initializing.
+   This manager daemon has been chosen to be ``active``, but it is not done initializing.
    Although it is not yet ready to execute commands, an operator may still issue commands,
-   which will be held and executed once the manager becomes ``active``. Only one mgr will
-   be in this state at a time.
+   which will be held and executed once the manager becomes ``active``. Only one manager
+   will be in this state at a time.
 
 3. **standby**
 
-   This mgr daemon is not currently receiving or executing commands, but it is there to
-   take over if the current active mgr becomes unavailable. An operator may also manually
-   promote standby manager to active via ``ceph mgr fail`` if desired. All other mgr daemons
-   which are not ``active`` or ``active (starting)`` will be in this state.
+   This manager daemon is not currently receiving or executing commands, but it is ready to
+   take over if the current active manager becomes unavailable. An administrator may also
+   manually promote a standby to become active via ``ceph mgr fail`` if desired. All other
+   manager daemons which are not ``active`` or ``active (starting)`` will be in this state.
 
-Each of these states are visible in the output of the ``ceph -s``. For example:
+Each of these states are visible in the output of the ``ceph status`` command. For example:
 
 .. code-block:: console
 
-   $ ceph -s
+   $ ceph status
      cluster:
        id:     b150f540-745a-460c-a566-376b28b95ac3
        health: HEALTH_OK

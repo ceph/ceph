@@ -329,7 +329,8 @@ To troubleshoot, you may try running ``ceph mgr fail`` to reboot
 module initialization.
 
 If the modules are still failing to initialize, please file a bug
-report for further assistance.
+report under the `"mgr" project <https://tracker.ceph.com/projects/mgr>`_
+for further assistance.
 
 OSDs
 ----
