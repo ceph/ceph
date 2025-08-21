@@ -55,10 +55,7 @@ static void dump_subusers_info(Formatter *f, RGWUserInfo &info)
     f->open_object_section("user");
     string s;
     info.user_id.to_str(s);
-    f->dump_format("id", "%s:%s", s.c_str(), u.name.c_str());
-    char buf[256];
-    rgw_perm_to_str(u.perm_mask, buf, sizeof(buf));
-    f->dump_string("permissions", buf);
+    u.dump(f, s);
     f->close_section();
   }
   f->close_section();
@@ -70,19 +67,24 @@ static void dump_access_keys_info(Formatter *f, RGWUserInfo &info)
   f->open_array_section("keys");
   for (kiter = info.access_keys.begin(); kiter != info.access_keys.end(); ++kiter) {
     RGWAccessKey& k = kiter->second;
-    const char *sep = (k.subuser.empty() ? "" : ":");
-    const char *subuser = (k.subuser.empty() ? "" : k.subuser.c_str());
     f->open_object_section("key");
     string s;
     info.user_id.to_str(s);
-    f->dump_format("user", "%s%s%s", s.c_str(), sep, subuser);
-    f->dump_string("access_key", k.id);
-    f->dump_string("secret_key", k.key);
-    f->dump_bool("active", k.active);
+    k.dump(f, s, false);
     f->close_section();
   }
   f->close_section();
 }
+
+static void dump_master_key(Formatter *f, RGWUserInfo& info, RGWAccessKey& k)
+{
+  f->open_object_section("key");
+  string s;
+  info.user_id.to_str(s);
+  k.dump(f, s, false);
+  f->close_section();
+}
+
 
 static void dump_swift_keys_info(Formatter *f, RGWUserInfo &info)
 {
@@ -462,7 +464,7 @@ int RGWAccessKeyPool::check_op(RGWUserAdminOpState& op_state,
 
   /* see if the access key was specified */
   if (key_type == KEY_TYPE_S3 && !op_state.will_gen_access() && 
-      op_state.get_access_key().empty()) {
+      op_state.get_access_key().empty() && op_state.get_master_access_key().empty()) {
     set_err_msg(err_msg, "empty access key");
     return -ERR_INVALID_ACCESS_KEY;
   }
@@ -529,7 +531,7 @@ int RGWAccessKeyPool::generate_key(const DoutPrefixProvider *dpp, RGWUserAdminOp
 
   //Secret key
   if (!gen_secret) {
-    if (op_state.get_secret_key().empty()) {
+    if (op_state.get_secret_key().empty() && op_state.get_master_secret_key().empty()) {
       set_err_msg(err_msg, "empty secret key");
       return -ERR_INVALID_SECRET_KEY;
     }
@@ -563,8 +565,6 @@ int RGWAccessKeyPool::generate_key(const DoutPrefixProvider *dpp, RGWUserAdminOp
   }
 
   // finally create the new key
-  new_key.id = id;
-  new_key.key = key;
 
   if (op_state.create_date) {
     new_key.create_date = *op_state.create_date;
@@ -573,7 +573,16 @@ int RGWAccessKeyPool::generate_key(const DoutPrefixProvider *dpp, RGWUserAdminOp
   }
 
   if (key_type == KEY_TYPE_S3) {
-    access_keys->emplace(id, new_key);
+    if (!op_state.get_master_access_key().empty()) {
+      // use the key fetched from master
+      new_key = op_state.op_master_key;
+      access_keys->emplace(new_key.id, new_key);
+    } else {
+      new_key.id = id;
+      new_key.key = key;
+      access_keys->emplace(id, new_key);
+      op_state.op_master_key = new_key;
+    }
   } else if (key_type == KEY_TYPE_SWIFT) {
     swift_keys->emplace(id, new_key);
   }
@@ -2360,6 +2369,7 @@ int RGWUserAdminOp_User::create(const DoutPrefixProvider *dpp,
     return ret;
   }
 
+
   ret = user.info(info, NULL);
   if (ret < 0)
     return ret;
@@ -2548,8 +2558,9 @@ int RGWUserAdminOp_Key::create(const DoutPrefixProvider *dpp,
     if (key_type == KEY_TYPE_SWIFT)
       dump_swift_keys_info(formatter, info);
 
-    else if (key_type == KEY_TYPE_S3)
-      dump_access_keys_info(formatter, info);
+    else if (key_type == KEY_TYPE_S3) {
+      dump_master_key(formatter, info, op_state.op_master_key);
+    }
 
     flusher.flush();
   }
