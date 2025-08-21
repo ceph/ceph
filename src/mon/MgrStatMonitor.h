@@ -57,8 +57,10 @@ public:
   void calc_pool_availability();
   bool enable_availability_tracking = g_conf().get_val<bool>("enable_availability_tracking"); ///< tracking availability score feature 
   double pool_availability_update_interval = g_conf().get_val<double>("pool_availability_update_interval");
+  utime_t pool_availability_last_updated = ceph_clock_now(); 
 
   void clear_pool_availability(int64_t poolid);
+  bool should_calc_pool_availability();
 
   void check_sub(Subscription *sub);
   void check_subs();
