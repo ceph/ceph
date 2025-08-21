@@ -34,12 +34,12 @@ CONTAINERS = {
     },
     'ubuntu-20.04': {
         'name': 'cephadm-build-test:ubuntu-20-04-py3',
-        'base_image': 'quay.io/library/ubuntu:20.04',
+        'base_image': 'docker.io/library/ubuntu:20.04',
         'script': 'apt update && apt install -y python3-venv',
     },
     'ubuntu-22.04': {
         'name': 'cephadm-build-test:ubuntu-22-04-py3',
-        'base_image': 'quay.io/library/ubuntu:22.04',
+        'base_image': 'docker.io/library/ubuntu:22.04',
         'script': 'apt update && apt install -y python3-venv',
     },
 }
@@ -128,8 +128,8 @@ def test_cephadm_build(env, source_dir, tmp_path):
     assert all('requirements_entry' in v for v in data['bundled_packages'])
     assert 'zip_root_entries' in data
     zre = data['zip_root_entries']
-    assert any(e.startswith('Jinja2') for e in zre)
-    assert any(e.startswith('MarkupSafe') for e in zre)
+    assert any(_dist_info(e, 'Jinja2') for e in zre)
+    assert any(_dist_info(e, 'MarkupSafe') for e in zre)
     assert any(e.startswith('jinja2') for e in zre)
     assert any(e.startswith('markupsafe') for e in zre)
     assert any(e.startswith('cephadmlib') for e in zre)
@@ -184,9 +184,15 @@ def test_cephadm_build_from_rpms(env, source_dir, tmp_path):
     assert all('requirements_entry' in v for v in data['bundled_packages'])
     assert 'zip_root_entries' in data
     zre = data['zip_root_entries']
-    assert any(e.startswith('Jinja2') for e in zre)
-    assert any(e.startswith('MarkupSafe') for e in zre)
+    assert any(_dist_info(e, 'Jinja2') for e in zre)
+    assert any(_dist_info(e, 'MarkupSafe') for e in zre)
     assert any(e.startswith('jinja2') for e in zre)
     assert any(e.startswith('markupsafe') for e in zre)
     assert any(e.startswith('cephadmlib') for e in zre)
     assert any(e.startswith('_cephadmmeta') for e in zre)
+
+
+def _dist_info(entry, name):
+    return (
+        entry.startswith(entry) or entry.startswith(entry.lower())
+    ) and (entry.endswith('.dist-info') or entry.endswith('.egg-info'))
