@@ -1153,12 +1153,12 @@ void CInode::make_trimmed_path_string(string& s, bool projected,
   make_path_string(s, projected, use_parent, path_comp_count);
 }
 
-void CInode::make_path(filepath& fp, bool projected) const
+void CInode::make_path(filepath& fp, bool projected, int path_comp_count) const
 {
   const CDentry *use_parent = projected ? get_projected_parent_dn() : parent;
   if (use_parent) {
     ceph_assert(!is_base());
-    use_parent->make_path(fp, projected);
+    use_parent->make_path(fp, projected, path_comp_count);
   } else {
     fp = filepath(ino());
   }
