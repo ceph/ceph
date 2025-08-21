@@ -1685,7 +1685,7 @@ TEST(LibCephFS, HugeSnapDiffLargeDelta)
 }
 
 TEST(LibCephFS, SnapDiffDeletionRecreation) {
-  int bulk_count = 1 << 13;
+  int bulk_count = 1 << 15;
   TestMount test_mount("/SnapdiffDeletionRecreation");
 
   ASSERT_EQ(0, test_mount.mkdir("bulk"));
