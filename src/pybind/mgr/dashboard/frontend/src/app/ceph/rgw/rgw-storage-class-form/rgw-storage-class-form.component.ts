@@ -68,6 +68,7 @@ import { NotificationService } from '~/app/shared/services/notification.service'
 import { CdValidators } from '~/app/shared/forms/cd-validators';
 import { FormatterService } from '~/app/shared/services/formatter.service';
 import validator from 'validator';
+import { DimlessBinaryPipe } from '~/app/shared/pipes/dimless-binary.pipe';
 
 @Component({
   selector: 'cd-rgw-storage-class-form',
@@ -112,7 +113,8 @@ export class RgwStorageClassFormComponent extends CdForm implements OnInit {
     private router: Router,
     private route: ActivatedRoute,
     public formatter: FormatterService,
-    private cdRef: ChangeDetectorRef
+    private cdRef: ChangeDetectorRef,
+    private dimlessBinary: DimlessBinaryPipe
   ) {
     super();
     this.resource = $localize`Tiering Storage Class`;
@@ -184,6 +186,10 @@ export class RgwStorageClassFormComponent extends CdForm implements OnInit {
             secret_key: response?.secret,
             target_path: response?.target_path,
             retain_head_object: this.tierTargetInfo?.val?.retain_head_object || false,
+            multipart_sync_threshold:
+              this.dimlessBinary.transform(response?.multipart_sync_threshold) || '',
+            multipart_min_part_size:
+              this.dimlessBinary.transform(response?.multipart_min_part_size) || '',
             allow_read_through: this.tierTargetInfo?.val?.allow_read_through || false,
             restore_storage_class: this.tierTargetInfo?.val?.restore_storage_class,
             read_through_restore_days: this.tierTargetInfo?.val?.read_through_restore_days,
