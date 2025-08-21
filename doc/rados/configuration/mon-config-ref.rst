@@ -628,6 +628,7 @@ Miscellaneous
 .. confval:: mon_memory_target
 .. confval:: mon_memory_autotune
 .. confval:: enable_availability_tracking
+.. confval:: pool_availability_update_interval
 
 NVMe-oF Monitor Client
 ======================
