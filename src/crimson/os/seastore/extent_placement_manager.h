@@ -195,6 +195,17 @@ private:
     ceph::bufferptr bp;
     RandomBlockManager* rbm;
     std::list<ceph::bufferptr> mergeable_bps;
+
+    extent_len_t get_mergeable_length() const {
+      if (mergeable_bps.size() == 0) {
+	return bp.length();
+      }
+      extent_len_t len = 0;
+      for (auto &p : mergeable_bps) {
+	len += p.length();
+      }
+      return len;
+    }
   };
   alloc_write_iertr::future<> do_write(
     Transaction& t,
