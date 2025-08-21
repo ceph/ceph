@@ -14,6 +14,7 @@
 #include <boost/smart_ptr/intrusive_ref_counter.hpp>
 
 #include <seastar/core/future.hh>
+#include <seastar/util/defer.hh>
 
 #include "include/ceph_assert.h"
 #include "include/buffer.h"
