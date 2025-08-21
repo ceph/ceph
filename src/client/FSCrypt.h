@@ -125,6 +125,19 @@ public:
 
   virtual ~FSCryptPolicy() {}
 
+  bool is_supported_policy(fscrypt_policy_v2 policy) {
+    if (policy.version != 2) {
+      return false;
+    }
+
+    if (policy.contents_encryption_mode != FSCRYPT_MODE_AES_256_XTS ||
+	policy.filenames_encryption_mode != FSCRYPT_MODE_AES_256_CTS) {
+      return false;
+    }
+
+    return true;
+  }
+
   void init(const struct fscrypt_policy_v2& policy) {
     version = policy.version;
     contents_encryption_mode = policy.contents_encryption_mode;
