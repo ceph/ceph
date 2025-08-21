@@ -137,7 +137,7 @@ configuration option.
 
 .. tip:: Configuring the operating system with swap to provide additional
 	 virtual memory for daemons is not advised for modern systems.  Doing
-	 may result in lower performance, and your Ceph cluster may well be
+	 so may result in lower performance, and your Ceph cluster may well be
 	 happier with a daemon that crashes vs one that slows to a crawl.
 
 When using the legacy FileStore back end, the OS page cache was used for caching
