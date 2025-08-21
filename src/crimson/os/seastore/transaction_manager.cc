@@ -445,21 +445,24 @@ TransactionManager::submit_transaction(
 {
   LOG_PREFIX(TransactionManager::submit_transaction);
   SUBDEBUGT(seastore_t, "start, entering reserve_projected_usage", t);
-  return trans_intr::make_interruptible(
+  co_await trans_intr::make_interruptible(
     t.get_handle().enter(write_pipeline.reserve_projected_usage)
-  ).then_interruptible([this, FNAME, &t] {
-    auto dispatch_result = epm->dispatch_delayed_extents(t);
-    auto projected_usage = dispatch_result.usage;
-    SUBTRACET(seastore_t, "waiting for projected_usage: {}", t, projected_usage);
-    return trans_intr::make_interruptible(
-      epm->reserve_projected_usage(projected_usage)
-    ).then_interruptible([this, &t, dispatch_result = std::move(dispatch_result)] {
-      return do_submit_transaction(t, std::move(dispatch_result));
-    }).finally([this, FNAME, projected_usage, &t] {
-      SUBTRACET(seastore_t, "releasing projected_usage: {}", t, projected_usage);
-      epm->release_projected_usage(projected_usage);
-    });
+  );
+
+  auto dispatch_result = epm->dispatch_delayed_extents(t);
+  auto projected_usage = dispatch_result.usage;
+  SUBTRACET(seastore_t, "waiting for projected_usage: {}", t, projected_usage);
+  co_await trans_intr::make_interruptible(
+    epm->reserve_projected_usage(
+      projected_usage
+    )
+  );
+  auto release_usage = seastar::defer([this, FNAME, projected_usage, &t] {
+    SUBTRACET(seastore_t, "releasing projected_usage: {}", t, projected_usage);
+    epm->release_projected_usage(projected_usage);
   });
+
+  co_await do_submit_transaction(t, std::move(dispatch_result));
 }
 
 TransactionManager::submit_transaction_direct_ret
