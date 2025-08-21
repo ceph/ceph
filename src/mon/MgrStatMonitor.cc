@@ -64,6 +64,7 @@ std::vector<std::string> MgrStatMonitor::get_tracked_keys() const noexcept
 {
   return {
     "enable_availability_tracking",
+    "pool_availability_update_interval",
   };
 }
 
@@ -92,6 +93,16 @@ void MgrStatMonitor::handle_conf_change(
                << now << dendl;
     }
     enable_availability_tracking = newval;
+  }
+
+  if (changed.count("pool_availability_update_interval")) {
+      std::scoped_lock l(lock);
+      dout(10) << __func__ << " pool_availability_update_interval config changed from " 
+             << pool_availability_update_interval << " to " 
+             << g_conf().get_val<double>("pool_availability_update_interval")
+             << dendl;
+      
+      pool_availability_update_interval = g_conf().get_val<double>("pool_availability_update_interval"); 
   }
 }
 

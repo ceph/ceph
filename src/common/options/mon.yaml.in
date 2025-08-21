@@ -1420,3 +1420,13 @@ options:
   default: 30
   services:
   - mon
+- name: pool_availability_update_interval
+  type: float
+  level: advanced
+  desc: Update data availability score at this interval. By default the interval 
+    is same as paxos_propose_interval configuration.  
+  default: 1
+  services :
+  - mon
+  flags:
+  - runtime
