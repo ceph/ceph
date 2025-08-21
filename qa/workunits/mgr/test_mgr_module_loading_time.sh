@@ -29,6 +29,12 @@ echo "Checking cluster status..."
 # ------ Test 1 ------
 echo "Test 1: Test normal module loading behavior without any injected delays"
 
+echo "Ensure that no module is set for a load delay..."
+"$ceph" config set mgr mgr_module_load_delay_name ""
+
+echo "Test 1: Ensure that there is no injected load delay..."
+"$ceph" config set mgr mgr_module_load_delay 0
+
 "$ceph" mgr fail
 orch_status_output=$("$ceph" orch status 2>&1)
 
@@ -105,6 +111,23 @@ if [[ "$health" == *"Module failed to initialize"* ]]; then
     echo "$health"
 else
     echo "FAIL: Cluster did not properly issue error about modules that failed to initialize."
+    echo "$health"
+    exit 1
+fi
+
+# ----- Test 4 -----
+echo "Test 4: Disable the problematic module and confirm that the health error goes away"
+
+echo "Disabling the balancer module..."
+"$ceph" mgr module force disable balancer --yes-i-really-mean-it
+
+echo "Sleeping for 10 seconds to allow the health error to clear up..."
+sleep 10
+
+echo "Ensure health detail no longer warns about any modules that failed initialization..."
+health=$("$ceph" health detail 2>&1)
+if [[ "$health" == *"Module failed to initialize"* ]]; then
+    echo "FAIL: One or more modules failed to initialize despite problem module being disabled."
     echo "$health"
     exit 1
 fi
