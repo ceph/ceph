@@ -122,8 +122,8 @@ bool ConsistencyChecker::check_object_consistency(const std::string& oid,
   ceph_assert(outbl->length() >= data_and_parity.second.length());
   // We check the difference is not larger than the page size multipled by the
   //    number of parities
-  ceph_assert(outbl->length() - data_and_parity.second.length()
-                <= (encoder.get_m() * encoder.get_chunk_size()) - encoder.get_m());
+  ceph_assert(std::cmp_less_equal(outbl->length() - data_and_parity.second.length(),
+                (encoder.get_m() * encoder.get_chunk_size()) - encoder.get_m()));
   // We truncate the encoded parity to the size of the client read for comparison
   if (outbl->length() != data_and_parity.second.length())
   {
