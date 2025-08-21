@@ -8,11 +8,7 @@ import _ from 'lodash';
 export class MgrSummaryPipe implements PipeTransform {
   transform(value: any): any {
     if (!value) {
-      return {
-        success: 0,
-        info: 0,
-        total: 0
-      };
+      return null;
     }
 
     let activeCount: number;

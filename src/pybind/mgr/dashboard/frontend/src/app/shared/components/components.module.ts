@@ -35,7 +35,8 @@ import {
   DropdownModule,
   SelectModule,
   ComboBoxModule,
-  ProgressIndicatorModule
+  ProgressIndicatorModule,
+  InlineLoadingModule
 } from 'carbon-components-angular';
 
 import { MotdComponent } from '~/app/shared/components/motd/motd.component';
@@ -122,7 +123,8 @@ import CopyIcon from '@carbon/icons/es/copy/32';
     SelectModule,
     ComboBoxModule,
     ProgressIndicatorModule,
-    BaseChartDirective
+    BaseChartDirective,
+    InlineLoadingModule
   ],
   declarations: [
     SparklineComponent,

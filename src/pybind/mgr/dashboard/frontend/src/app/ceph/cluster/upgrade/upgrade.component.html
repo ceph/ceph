@@ -81,9 +81,9 @@
         <h5>
           <i class="text-success"
              [ngClass]="[icons.success]"
-             *ngIf="(healthData.mgr_map | mgrSummary).total > 1; else warningIcon">
+             *ngIf="(healthData.mgr_map | mgrSummary)?.total > 1; else warningIcon">
           </i>
-          {{ (healthData.mgr_map | mgrSummary).total }}
+          {{ (healthData.mgr_map | mgrSummary)?.total }}
         </h5>
       </div>
     </cd-card>
@@ -137,12 +137,12 @@
            *ngIf="info$ | async as info; else checkingForUpgradeStatus">
         <ng-container *ngIf="info.versions.length > 0; else noUpgradesAvailable">
           <div i18n-ngbTooltip
-               [ngbTooltip]="(healthData.mgr_map | mgrSummary).total <= 1 ? 'To upgrade, you need minimum 2 mgr daemons.' : ''">
+               [ngbTooltip]="(healthData.mgr_map | mgrSummary)?.total <= 1 ? 'To upgrade, you need minimum 2 mgr daemons.' : ''">
             <button class="btn btn-accent mt-2"
                     id="upgrade"
                     aria-label="Upgrade now"
                     (click)="upgradeNow(info.versions[info.versions.length - 1])"
-                    [disabled]="(healthData.mgr_map | mgrSummary).total <= 1"
+                    [disabled]="(healthData.mgr_map | mgrSummary)?.total <= 1"
                     i18n>Upgrade to {{ info.versions[info.versions.length - 1] }}</button>
           </div>
           <a class="mt-2 link-primary mb-2"
