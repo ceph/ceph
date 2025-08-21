@@ -185,6 +185,9 @@ seastar::future<> PGAdvanceMap::split_pg(
     DEBUG(" {} split collection done", child_pg->get_pgid());
     // Update the child PG's info from the parent PG
     pg->split_into(child_pg->get_pgid().pgid, child_pg, split_bits);
+    // Make SnapMapper OID for the child PG
+    auto child_coll_ref = child_pg->get_collection_ref();
+    rctx.transaction.touch(child_coll_ref->get_cid(), child_pg->get_pgid().make_snapmapper_oid());
 
     co_await handle_split_pg_creation(child_pg, next_map);
     split_pgs.insert(child_pg);
