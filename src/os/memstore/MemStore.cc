@@ -212,7 +212,11 @@ int MemStore::mkfs()
   if (r < 0)
     return r;
 
+#ifdef BLUESTORE_FLAVOR_NAME
+  r = write_meta("type", BLUESTORE_FLAVOR_NAME "memstore");
+#else
   r = write_meta("type", "memstore");
+#endif
   if (r < 0)
     return r;
 
