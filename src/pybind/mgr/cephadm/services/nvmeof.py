@@ -52,12 +52,12 @@ class NvmeofService(CephService):
         - If mTLS (enable_auth) is enabled, also attaches client_cert, client_key, and root_ca_cert.
         - Supports both cephadm-signed and user-provided certificates.
         """
+        svc_name = spec.service_name()
 
         if not spec.ssl:
-            self.mgr.log.info("TLS for nvmeof gw is disabled.")
+            self.mgr.log.info(f"TLS for nvmeof service {svc_name} is disabled.")
             return
 
-        svc_name = spec.service_name()
         host = daemon_spec.host
 
         # Attach server-side certificates

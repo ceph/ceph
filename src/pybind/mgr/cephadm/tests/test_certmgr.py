@@ -5,7 +5,7 @@ import json
 from tests import mock
 import logging
 
-from cephadm.tlsobject_types import Cert, PrivKey, TLSObjectException, TLSObjectProtocol
+from cephadm.tlsobject_types import Cert, PrivKey, TLSObjectException, TLSObjectProtocol, CertKeyPair
 from cephadm.tlsobject_store import TLSOBJECT_STORE_PREFIX, TLSObjectStore, TLSObjectScope
 from cephadm.module import CephadmOrchestrator
 from cephadm.cert_mgr import CertInfo, CertMgr
@@ -475,6 +475,51 @@ class TestCertMgr(object):
             }
         )
         compare_certls_dicts(expected_ls)
+
+    def test_cephadm_signed_with_label_host_scope(self, cephadm_module):
+        """
+        Ensure cephadm-signed <service>__<label> names work end-to-end
+        (stored under HOST scope automatically, retrievable, and visible in cert_ls).
+        """
+        cm: CertMgr = cephadm_module.cert_mgr
+
+        svc = "mgmt-gateway"
+        cert_label = "internal"
+        host = "host-1"
+
+        # Register the self-signed pair for this (service,label)
+        cm.register_self_signed_cert_key_pair(svc, label=cert_label)
+
+        # Save (simulate cephadm-generated) cert/key at host target
+        cm.save_self_signed_cert_key_pair(
+            svc,
+            CertKeyPair(CEPHADM_SELF_GENERATED_CERT_1, CEPHADM_SELF_GENERATED_KEY_2048),
+            host=host,
+            label=cert_label,
+        )
+
+        cert_name = cm.self_signed_cert(svc, cert_label)
+        key_name = cm.self_signed_key(svc, cert_label)
+
+        # Stored under HOST scope and retrievable by (host)
+        assert cm.cert_exists(cert_name, host=host) is True
+        assert cm.get_cert(cert_name, host=host) == CEPHADM_SELF_GENERATED_CERT_1
+        assert cm.get_key(key_name, host=host) == CEPHADM_SELF_GENERATED_KEY_2048
+
+        # Scope detection for cephadm-signed objects should be HOST
+        assert cm.get_cert_scope(cert_name) == TLSObjectScope.HOST
+        assert cm.get_key_scope(key_name) == TLSObjectScope.HOST
+
+        # Parsing back the service name from the cert name should ignore the label
+        assert cm.service_name_from_cert(cert_name) == svc
+
+        # Verify listing includes the cephadm-signed entry when requested
+        ls = cm.cert_ls(include_details=True, include_cephadm_signed=True)
+        assert cert_name in ls
+        assert ls[cert_name]["scope"] == "host"
+        assert host in ls[cert_name]["certificates"]
+        # sanity on validity fields (already exercised elsewhere; just presence here)
+        assert "validity" in ls[cert_name]["certificates"][host]
 
     @mock.patch("cephadm.module.CephadmOrchestrator.set_store")
     def test_tlsobject_store_save_key(self, _set_store, cephadm_module: CephadmOrchestrator):

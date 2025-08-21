@@ -23,16 +23,13 @@ class TLSObjectException(OrchestratorError):
     pass
 
 
-class TLSObjectScope(Enum):
-    HOST = "host"
-    SERVICE = "service"
-    GLOBAL = "global"
-    UNKNOWN = "unknown"
+class TLSObjectScope(str, Enum):
+    HOST = 'host'
+    SERVICE = 'service'
+    GLOBAL = 'global'
+    UNKNOWN = 'unknown'
 
     def __str__(self) -> str:
-        return self.value
-
-    def __repr__(self) -> str:
         return self.value
 
 

@@ -725,7 +725,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
 
         for svc in service_registry.get_all_services():
             if svc.allows_user_certificates:
-                assert svc.SCOPE != TLSObjectScope.UNKNOWN, f"Service {svc.TYPE} requieres certificates but it has not defined its svc.SCOPE field."
+                if svc.SCOPE == TLSObjectScope.UNKNOWN:
+                    OrchestratorError(f"Service {svc.TYPE} requieres certificates but it has not defined its svc.SCOPE field.")
                 self.cert_mgr.register_cert_key_pair(svc.TYPE, svc.cert_name, svc.key_name, svc.SCOPE)
 
         self.cert_mgr.register_cert_key_pair('nvmeof', 'nvmeof_client_cert', 'nvmeof_client_key', TLSObjectScope.SERVICE)
@@ -3346,8 +3347,8 @@ Then run the following:
         return report
 
     @handle_orch_error
-    def cert_store_key_ls(self, include_cephadm_signed: bool = False) -> Dict[str, Any]:
-        return self.cert_mgr.key_ls(include_cephadm_signed)
+    def cert_store_key_ls(self, include_cephadm_generated_keys: bool = False) -> Dict[str, Any]:
+        return self.cert_mgr.key_ls(include_cephadm_generated_keys)
 
     @handle_orch_error
     def cert_store_get_cert(
@@ -3710,6 +3711,29 @@ Then run the following:
             results.append(self._plan(cast(ServiceSpec, spec)))
         return results
 
+    def _check_cert_source(self, spec: ServiceSpec) -> str:
+        cert_warning = ''
+        if spec.is_using_certificates_source(CertificateSource.REFERENCE):
+            svc = service_registry.get_service(spec.service_type)
+            if svc.SCOPE == TLSObjectScope.SERVICE:
+                if not self.cert_mgr.cert_exists(svc.cert_name, service_name=spec.service_name(), host=None):
+                    raise OrchestratorError(
+                        f"\n\nSSL is configured with '{CertificateSource.REFERENCE.value}', but cannot find an entry for the service '{spec.service_name()}'"
+                        f"\nunder the certificate '{svc.cert_name}' within the certmgr store. To set the certificate, use:\n"
+                        f"\n  > ceph orch certmgr cert set --cert-name {svc.cert_name} --service-name {spec.service_name()} -i <cert-key-pem-file> \n"
+                    )
+            else:
+                cert_warning = (
+                    f"\n\n\nWarning: SSL is configured with '{CertificateSource.REFERENCE.value}', and this service uses per-host certificates.\n\n"
+                    f"To configure keys/certificates, run the following commands for each host daemons are deployed on:\n"
+                    f"  > ceph orch certmgr cert set --cert-name {svc.cert_name} --service-name {spec.service_name()} --hostname <host>  -i <cert-file>\n"
+                    f"  > ceph orch certmgr key set --key-name {svc.cert_name} --service-name {spec.service_name()} --hostname <host> -i <key-file>\n\n"
+                    f"Once all certificates are provisioned, run:\n"
+                    f"  > ceph orch reconfig {spec.service_name()}\n"
+                    f"to reconfigure the service with the certificates."
+                )
+        return cert_warning
+
     def _apply_service_spec(self, spec: ServiceSpec) -> str:
         if spec.placement.is_empty():
             # fill in default placement
@@ -3752,26 +3776,7 @@ Then run the following:
         host_count = len(self.inventory.keys())
         max_count = self.max_count_per_host
 
-        cert_warning = ''
-        if spec.is_using_certificates_source(CertificateSource.REFERENCE):
-            svc = service_registry.get_service(spec.service_type)
-            if svc.SCOPE == TLSObjectScope.SERVICE:
-                if not self.cert_mgr.cert_exists(svc.cert_name, service_name=spec.service_name(), host=None):
-                    raise OrchestratorError(
-                        f"\n\nSSL is configured with '{CertificateSource.REFERENCE.value}', but cannot find an entry for the service '{spec.service_name()}'"
-                        f"\nunder the certificate '{svc.cert_name}' within the certmgr store. To set the certificate, use:\n"
-                        f"\n  > ceph orch certmgr cert set --cert-name {svc.cert_name} --service-name {spec.service_name()} -i <cert-key-pem-file> \n"
-                    )
-            else:
-                cert_warning = (
-                    f"\n\n\nWarning: SSL is configured with '{CertificateSource.REFERENCE.value}', and this service uses per-host certificates.\n\n"
-                    f"To configure keys/certificates, run the following commands for each host daemons are deployed on:\n"
-                    f"  > ceph orch certmgr cert set --cert-name {svc.cert_name} --service-name {spec.service_name()} --hostname <host>  -i <cert-file>\n"
-                    f"  > ceph orch certmgr key set --key-name {svc.cert_name} --service-name {spec.service_name()} --hostname <host> -i <key-file>\n\n"
-                    f"Once all certificates are provisioned, run:\n"
-                    f"  > ceph orch reconfig {spec.service_name()}\n"
-                    f"to reconfigure the service with the certificates."
-                )
+        cert_warning = self._check_cert_source(spec)
 
         if spec.service_type == 'nvmeof':
             nvmeof_spec = cast(NvmeofServiceSpec, spec)

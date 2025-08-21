@@ -88,9 +88,9 @@ administrators so they can take timely action. This proactive monitoring helps e
 uninterrupted service operation while giving users control over their certificate policies.
 
 Spec Fields for SSL Configuration
-=============================
+=================================
 
-All service specs support and may optionally define the following fields:
+All service specs that support SSL/TLS may optionally define the following fields:
 
 - ``ssl``: Boolean to enable/disable SSL.
 - ``ssl_cert``: Certificate content (for ``inline``) or name (for ``reference``).
@@ -162,7 +162,8 @@ Displays all entities that are associated with managed certificates.
 
    ceph orch certmgr bindings ls
 
-List services that utilize managed certificates.
+List all current certificate bindings between consumers (services) and
+the certificates/keys managed by certmgr.
 
 Checking Certificate Status
 ===========================

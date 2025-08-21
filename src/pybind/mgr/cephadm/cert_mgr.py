@@ -15,11 +15,25 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+class CertFilterOption(str, Enum):
+    NAME = 'name'
+    STATUS = 'status'
+    SIGNED_BY = 'signed-by'
+    SCOPE = 'scope'
+    SERVICE = 'service'
+
+    def __str__(self) -> str:
+        return self.value
+
+
 class CertStatus(str, Enum):
-    VALID = "valid"
-    INVALID = "invalid"
-    EXPIRED = "expired"
-    EXPIRING = "expiring"
+    VALID = 'valid'
+    INVALID = 'invalid'
+    EXPIRED = 'expired'
+    EXPIRING = 'expiring'
+
+    def __str__(self) -> str:
+        return self.value
 
 
 class CertInfo:
@@ -52,7 +66,7 @@ class CertInfo:
     def status(self) -> CertStatus:
         """Return certificate status as a CertStatus enum."""
         if not self.is_valid:
-            return CertStatus.EXPIRED if "expired" in self.error_info.lower() else CertStatus.INVALID
+            return CertStatus.EXPIRED if 'expired' in self.error_info.lower() else CertStatus.INVALID
         if self.is_close_to_expiration:
             return CertStatus.EXPIRING
         return CertStatus.VALID
@@ -108,6 +122,24 @@ class CertMgr:
        - Host: Certificates specific to individual hosts where the consumer runs (e.g., grafana, oauth2-proxy).
        - Service: Certificates tied to a specific service type (e.g., RGW) and shared by all its daemons.
 
+    In addition to the scope, every scoped certificate/key object may have an associated *target*.
+    A target is the concrete identifier within a given scope:
+
+       - For HOST-scoped objects: the target is the host FQDN or inventory-ip name where the certificate is bound.
+       - For SERVICE-scoped objects: the target is the service instance name (e.g. "rgw.myzone").
+       - For GLOBAL objects, the target is always None because the object applies cluster-wide.
+
+    Scopes define *where* in the system an object conceptually lives, while targets specify the
+    *which one* within that scope. The TLSObjectStore uses both pieces of information when saving,
+    retrieving, or removing certificates/keys, ensuring that a single logical object name can have
+    multiple per-target instances when required.
+
+    Examples:
+
+      - cephadm_root_ca_cert --> scope=GLOBAL, target=None
+      - rgw_ssl_cert for rgw.myzone --> scope=SERVICE, target="rgw.myzone"
+      - cephadm-signed_grafana_cert on host node12 --> scope=HOST, target="node12"
+
     The consumers_by_scope mapping associates each scoped consumer (service type or subsystem/integration such as
     "rgw", "nfs", "nvmeof", "grafana", "oauth2-proxy") with the certificate/key *names* it uses.
     This information is needed to trigger the corresponding service reconfiguration when updating some
@@ -129,7 +161,7 @@ class CertMgr:
     CEPHADM_ROOT_CA_KEY = 'cephadm_root_ca_key'
     CEPHADM_CERTMGR_HEALTH_ERR = 'CEPHADM_CERT_ERROR'
     CEPHADM_SIGNED = 'cephadm-signed'
-    LABEL_SEPARATOR = "__"
+    LABEL_SEPARATOR = "__lbl__"
 
     def __init__(self, mgr: "CephadmOrchestrator") -> None:
         self.mgr = mgr
@@ -258,8 +290,8 @@ class CertMgr:
         if self.is_cephadm_signed_object(cert_info.cert_name):
             return self.service_name_from_cert(cert_info.cert_name)
         for scoped_consumers in self.consumers_by_scope.values():
-            for consumer, certs in scoped_consumers.items():
-                if cert_info.cert_name in certs:
+            for consumer, bundles in scoped_consumers.items():
+                if cert_info.cert_name in bundles.get('certs', []):
                     cert_scope = self.get_cert_scope(cert_info.cert_name)
                     if cert_scope == TLSObjectScope.SERVICE:
                         return cert_info.target
@@ -325,55 +357,87 @@ class CertMgr:
     def cert_ls(self, filter_by: str = '',
                 include_details: bool = False,
                 include_cephadm_signed: bool = False) -> Dict:
+        """
+        signed-by filtering behavior in `cert_ls`:
 
-        def build_cert_context(cert_info: CertInfo) -> Dict[str, Any]:
+        Defaults:
+        - If `include_cephadm_signed` is False and no explicit `signed-by=` is provided,
+          we auto-filter to show only user-made certs (and always include the root CA).
+        - If the caller explicitly filters by `signed-by=...`, that explicit filter wins.
+
+        Behavior matrix:
+          +------------------------+-----------------------------+----------------------------------------------+
+          | include_cephadm_signed | 'signed-by=' in filter_by?  | Effective behavior on signed-by               |
+          +------------------------+-----------------------------+----------------------------------------------+
+          | False                  | No                          | Auto-filter: signed-by=user  + root CA        |
+          | False                  | Yes                         | Use user's explicit selector                  |
+          | True                   | No                          | No auto filter (include user + cephadm)       |
+          | True                   | Yes                         | Use user's explicit selector                  |
+          +------------------------+-----------------------------+----------------------------------------------+
+        """
+
+        def _lhs(expr: str) -> str:
+            return expr.partition('=')[0].strip().lower()
+
+        def _build_cert_context(cert_info: CertInfo) -> Dict[CertFilterOption, Any]:
+            scope = self.get_cert_scope(cert_info.cert_name)
+            svc = self.get_associated_service(cert_info) or ''
             return {
-                "name": cert_info.cert_name,
-                "status": cert_info.status.value,
-                "signed_by": cert_info.signed_by,
-                "scope": self.get_cert_scope(cert_info.cert_name),
-                "service": self.get_associated_service(cert_info) or '',
+                CertFilterOption.NAME: cert_info.cert_name,
+                CertFilterOption.STATUS: cert_info.status,
+                CertFilterOption.SIGNED_BY: cert_info.signed_by,
+                CertFilterOption.SCOPE: scope,
+                CertFilterOption.SERVICE: svc,
             }
 
-        def _make_filter(expr: str) -> Callable[[Dict[str, Any]], bool]:
-            key, _, value = expr.partition('=')
-            key = key.strip().lower()
+        def _field_filter(expr: str) -> Callable[[Dict[CertFilterOption, Any]], bool]:
+            key_str, _, value = expr.partition('=')
+            key_str = key_str.strip().lower()
             value = value.strip()
 
-            if key == 'name':
-                return lambda ctx: fnmatch(ctx['name'], value)
-            if key == 'scope':
-                want = value.upper()
-                return lambda ctx: ctx['scope'].name == want
-            if key == 'service':
-                return lambda ctx: fnmatch(ctx['service'], value)
-            if key == 'status':
-                want = value.lower()
-                return lambda ctx: ctx['status'] == want
-            if key == 'signed-by':
-                return lambda ctx: ctx['signed_by'] == value.lower()
+            try:
+                key = CertFilterOption(key_str)
+            except ValueError:
+                return lambda cert_ctx: True
+
+            if key in (CertFilterOption.NAME, CertFilterOption.SERVICE):
+                return lambda cert_ctx: fnmatch(cert_ctx.get(key, ''), value)
+
+            if key in (CertFilterOption.SCOPE, CertFilterOption.STATUS, CertFilterOption.SIGNED_BY):
+                return lambda cert_ctx: cert_ctx.get(key) == value
+
             # Default: unknown field selector -> nop filter (don't exclude)
-            return lambda ctx: True
+            return lambda cert_ctx: True
 
-        # By default: filter out cephadm-signed certs unless explicitly included
-        # with the exception of the cephadm root CA cert (CEPHADM_ROOT_CA_CERT) as
-        # technically the user may be interested in adding it to his CA trust chain
-        filters = [_make_filter(expr) for expr in filter_by.split(",") if expr.strip()]
-        if not include_cephadm_signed and not any('signed-by=' in f for f in filter_by.split(',')):
-            filters.append(lambda ctx: ctx['signed_by'] == 'user' or ctx['name'] == self.CEPHADM_ROOT_CA_CERT)
+        def build_filters() -> List[Callable[[Dict[CertFilterOption, Any]], bool]]:
+            filter_exprs = [e.strip() for e in filter_by.split(',') if e.strip()]
+            cert_filters = [_field_filter(expr) for expr in filter_exprs]
+            # By default: filter out cephadm-signed certs unless explicitly included
+            # with the exception of the cephadm root CA cert (CEPHADM_ROOT_CA_CERT) as
+            # technically the user may be interested in adding it to his CA trust chain
+            explicit_signed_by = any(_lhs(e) == str(CertFilterOption.SIGNED_BY) for e in filter_exprs)
+            if not include_cephadm_signed and not explicit_signed_by:
+                cert_filters.append(
+                    lambda cert_ctx:
+                    cert_ctx.get(CertFilterOption.SIGNED_BY) == 'user'
+                    or cert_ctx[CertFilterOption.NAME] == self.CEPHADM_ROOT_CA_CERT
+                )
+            return cert_filters
 
+        filters = build_filters()
         cert_objects: List = self.cert_store.list_tlsobjects()
         ls: Dict = {}
         for cert_name, cert_obj, target in cert_objects:
 
             cert_info = self._check_certificate_state(cert_name, target, cert_obj)
-            if not all(f(build_cert_context(cert_info)) for f in filters):
+            ctx = _build_cert_context(cert_info)
+            if not all(f(ctx) for f in filters):
                 continue
 
             cert_extended_info = get_certificate_info(cert_obj.cert, include_details)
             cert_scope = self.get_cert_scope(cert_name)
             if cert_name not in ls:
-                ls[cert_name] = {'scope': str(cert_scope), 'certificates': {}}
+                ls[cert_name] = {'scope': cert_scope.value, 'certificates': {}}
             if cert_scope == TLSObjectScope.GLOBAL:
                 ls[cert_name]['certificates'] = cert_extended_info
             else:
@@ -381,23 +445,23 @@ class CertMgr:
 
         return ls
 
-    def key_ls(self, include_cephadm_signed: bool = False) -> Dict:
+    def key_ls(self, include_cephadm_generated_keys: bool = False) -> Dict:
         key_objects: List = self.key_store.list_tlsobjects()
         ls: Dict = {}
         for key_name, key_obj, target in key_objects:
-            if not include_cephadm_signed and self.is_cephadm_signed_object(key_name):
+            if not include_cephadm_generated_keys and self.is_cephadm_signed_object(key_name):
                 continue
             priv_key_info = get_private_key_info(key_obj.key)
             key_scope = self.get_key_scope(key_name)
             if key_name not in ls:
-                ls[key_name] = {'scope': str(key_scope), 'keys': {}}
+                ls[key_name] = {'scope': key_scope.value, 'keys': {}}
             if key_scope == TLSObjectScope.GLOBAL:
                 ls[key_name]['keys'] = priv_key_info
             else:
                 ls[key_name]['keys'].update({target: priv_key_info})
 
         # we don't want this key to be leaked
-        del ls[self.CEPHADM_ROOT_CA_KEY]
+        ls.pop(self.CEPHADM_ROOT_CA_KEY, None)
 
         return ls
 
@@ -414,7 +478,7 @@ class CertMgr:
         return []
 
     def get_consumers(self, get_scope: bool = False) -> Dict[str, Any]:
-        return {f'{scope}': consumers for scope, consumers in self.consumers_by_scope.items()}
+        return {scope.value: consumers for scope, consumers in self.consumers_by_scope.items()}
 
     def list_consumers(self) -> List[str]:
         """
@@ -459,7 +523,7 @@ class CertMgr:
             cert_status = cert_info.get_status_description()
             detailed_error_msgs.append(cert_status)
             if not cert_info.is_valid:
-                if "expired" in cert_info.error_info:
+                if 'expired' in cert_info.error_info:
                     expired_count += 1
                 else:
                     invalid_count += 1
@@ -468,9 +532,9 @@ class CertMgr:
 
         # Generate a short description with a summary of all the detected issues
         issues = [
-            f'{invalid_count} {CertStatus.INVALID.value}' if invalid_count > 0 else '',
-            f'{expired_count} {CertStatus.EXPIRED.value}' if expired_count > 0 else '',
-            f'{expiring_count} {CertStatus.EXPIRING.value}' if expiring_count > 0 else ''
+            f'{invalid_count} {CertStatus.INVALID}' if invalid_count > 0 else '',
+            f'{expired_count} {CertStatus.EXPIRED}' if expired_count > 0 else '',
+            f'{expiring_count} {CertStatus.EXPIRING}' if expiring_count > 0 else ''
         ]
         issues_description = ', '.join(filter(None, issues))  # collect only non-empty issues
         total_issues = invalid_count + expired_count + expiring_count
@@ -536,7 +600,8 @@ class CertMgr:
             if key_obj:
                 # certificate has a key, let's check the cert/key pair
                 cert_info = self._check_certificate_state(cert_name, target, cert_obj, key_obj)
-            elif key_name in self.known_keys or self.is_cephadm_signed_object(key_name):
+
+            elif any(key_name in ks for ks in self.known_keys.values()) or self.is_cephadm_signed_object(key_name):
                 # certificate is supposed to have a key but it's missing
                 logger.error(f"Key '{key_name}' is missing for certificate '{cert_name}'.")
                 cert_info = CertInfo(cert_name, target, cert_obj.user_made, False, False, 0, "missing key")
@@ -589,12 +654,12 @@ class CertMgr:
             # This is a cephadm-signed certificate, let's try to fix it
             if not cert_info.is_valid:
                 # Remove the invalid certificate to force regeneration
-                service_name, host = self.cert_store.determine_tlsobject_target(cert_info.cert_name, cert_info.target)
+                tlsobj_target = self.cert_store.determine_tlsobject_target(cert_info.cert_name, cert_info.target)
                 logger.info(
                     f'Removing invalid certificate for {cert_info.cert_name} to trigger regeneration '
-                    f'(service: {service_name}, host: {host}).'
+                    f'(service: {tlsobj_target.service}, host: {tlsobj_target.host}).'
                 )
-                self.cert_store.rm_tlsobject(cert_info.cert_name, service_name, host)
+                self.cert_store.rm_tlsobject(cert_info.cert_name, tlsobj_target.service, tlsobj_target.host)
                 return True
             elif cert_info.is_close_to_expiration:
                 return self._renew_self_signed_certificate(cert_info, cert_obj)

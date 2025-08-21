@@ -90,51 +90,35 @@ class Migrations:
         logger.info('running migrations')
 
         if self.mgr.migration_current == 0:
-            logger.info('trying migrate_0_1')
             if self.migrate_0_1():
-                logger.info('migrate_0_1 Done')
                 self.set(1)
 
         if self.mgr.migration_current == 1:
-            logger.info('trying migrate_1_2')
             if self.migrate_1_2():
-                logger.info('migrate_1_2 Done')
                 self.set(2)
 
         if self.mgr.migration_current == 2 and not startup:
-            logger.info('trying migrate_2_3')
             if self.migrate_2_3():
-                logger.info('migrate_2_3 Done')
                 self.set(3)
 
         if self.mgr.migration_current == 3:
-            logger.info('trying migrate_3_4')
             if self.migrate_3_4():
-                logger.info('migrate_3_4 Done')
                 self.set(4)
 
         if self.mgr.migration_current == 4:
-            logger.info('trying migrate_4_5')
             if self.migrate_4_5():
-                logger.info('migrate_4_5 Done')
                 self.set(5)
 
         if self.mgr.migration_current == 5:
-            logger.info('trying migrate_5_6')
             if self.migrate_5_6():
-                logger.info('migrate_5_6 Done')
                 self.set(6)
 
         if self.mgr.migration_current == 6:
-            logger.info('trying migrate_6_7')
             if self.migrate_6_7():
-                logger.info('migrate_6_7 Done')
                 self.set(7)
 
         if self.mgr.migration_current == 7:
-            logger.info('trying migrate_7_8')
             if self.migrate_7_8():
-                logger.info('migrate_7_8 Done')
                 self.set(8)
 
     def migrate_0_1(self) -> bool:
@@ -534,7 +518,7 @@ def queue_migrate_rgw_ssl_spec(mgr: "CephadmOrchestrator", spec_dict: Dict[Any, 
     ls = json.loads(queued)
     ls.append(spec_dict)
     mgr.set_store('rgw_ssl_migration_queue', json.dumps(ls))
-    logger.info(f'Queued rgw.{service_id} for migration')
+    logger.info(f'Queued rgw.{service_id} for TLS migration')
 
 
 def queue_migrate_nfs_spec(mgr: "CephadmOrchestrator", spec_dict: Dict[Any, Any]) -> None:
