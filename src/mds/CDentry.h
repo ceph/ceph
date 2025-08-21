@@ -254,7 +254,8 @@ public:
   // misc
   void make_path_string(std::string& s, bool projected=false,
 		        int path_comp_count=-1) const;
-  void make_path(filepath& fp, bool projected=false) const;
+  void make_path(filepath& fp, bool projected=false,
+		 int path_comp_count=-1) const;
 
   // -- version --
   version_t get_version() const { return version; }
