@@ -140,6 +140,7 @@ def test_cephadm_build(env, source_dir, tmp_path):
     'env',
     [
         'centos-9-plusdeps',
+        'centos-10-plusdeps',
         'centos-9',
     ],
 )
