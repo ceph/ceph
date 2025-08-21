@@ -313,9 +313,25 @@ void CDentry::make_path_string(string& s, bool projected) const
 
 void CDentry::make_path(filepath& fp, bool projected) const
 {
-  ceph_assert(dir);
-  dir->inode->make_path(fp, projected);
-  fp.push_dentry(get_name());
+  /* path_comp_count = path components count
+   *
+   * Printing more than 10 components of a path not only is not useful but also it
+   * makes reading logs harder (imagine path with 2000 components). Therefore,
+   * shorten path.
+   */
+  static int path_comp_count = 1;
+  fp.set_trimmed();
+
+  if (path_comp_count <= 10) {
+    ceph_assert(dir);
+    ++path_comp_count;
+    dir->inode->make_path(fp, projected);
+    fp.push_dentry(get_name());
+  } else {
+    // resetting the counter
+    path_comp_count = 1;
+    return;
+  }
 }
 
 /*

@@ -41,6 +41,14 @@ void filepath::parse_bits() const {
   }
 }
 
+void filepath::set_trimmed() {
+  if (trimmed)
+    return;
+  // indicates that the path has been shortened.
+  path += "...";
+  trimmed = true;
+}
+
 void filepath::set_path(std::string_view s) {
   if (!s.empty() && s[0] == '/') {
     path = s.substr(1);
