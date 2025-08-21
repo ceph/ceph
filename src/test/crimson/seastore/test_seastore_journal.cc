@@ -157,7 +157,7 @@ struct journal_test_t : seastar_test_suite_t, SegmentProvider, JournalTrimmer {
       block_size = segment_manager->get_block_size();
       sms.reset(new SegmentManagerGroup());
       next = segment_id_t(segment_manager->get_device_id(), 0);
-      journal = journal::make_segmented(*this, *this);
+      journal = journal::make_segmented(0, *this, *this);
       journal->set_write_pipeline(&pipeline);
       sms->add_segment_manager(segment_manager.get());
       return journal->open_for_mkfs();
@@ -182,7 +182,7 @@ struct journal_test_t : seastar_test_suite_t, SegmentProvider, JournalTrimmer {
   auto replay(T &&f) {
     return journal->close(
     ).safe_then([this, f=std::move(f)]() mutable {
-      journal = journal::make_segmented(*this, *this);
+      journal = journal::make_segmented(0, *this, *this);
       journal->set_write_pipeline(&pipeline);
       return journal->replay(std::forward<T>(std::move(f)));
     }).safe_then([this] {

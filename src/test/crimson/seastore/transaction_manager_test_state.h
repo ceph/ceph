@@ -294,7 +294,7 @@ protected:
     }
 #endif
     shard_stats = {};
-    tm = make_transaction_manager(p_dev, sec_devices, shard_stats, true);
+    tm = make_transaction_manager(p_dev, sec_devices, shard_stats, 0, true);
     epm = tm->get_epm();
     lba_manager = tm->get_lba_manager();
     cache = tm->get_cache();
