@@ -504,6 +504,46 @@ TEST(FSCrypt, SetPolicyNonDir) {
   ceph_shutdown(cmount);
 }
 
+TEST(FSCrypt, SetPolicyNotSupported) {
+  struct ceph_fscrypt_key_identifier kid;
+
+  struct ceph_mount_info* cmount;
+  int r = init_mount(&cmount);
+  ASSERT_EQ(0, r);
+
+  string dir_path = "dir2";
+  ceph_mkdir(cmount, dir_path.c_str(), 0777);
+
+  int fd = ceph_open(cmount, dir_path.c_str(), O_DIRECTORY, 0);
+
+  r = ceph_add_fscrypt_key(cmount, fscrypt_key, sizeof(fscrypt_key), &kid, 1299);
+
+  struct fscrypt_policy_v2 policy;
+  policy.version = 2;
+  policy.contents_encryption_mode = FSCRYPT_MODE_AES_256_CTS;
+  policy.filenames_encryption_mode = FSCRYPT_MODE_AES_256_XTS;
+  policy.flags = FSCRYPT_POLICY_FLAGS_PAD_32;
+  memset(policy.__reserved, 0, sizeof(policy.__reserved));
+  memcpy(policy.master_key_identifier, kid.raw, FSCRYPT_KEY_IDENTIFIER_SIZE);
+
+  r = ceph_set_fscrypt_policy_v2(cmount, fd, &policy);
+  ASSERT_EQ(-EINVAL, r);
+
+  policy.version = 1;
+  policy.contents_encryption_mode = FSCRYPT_MODE_AES_256_XTS;
+  policy.filenames_encryption_mode = FSCRYPT_MODE_AES_256_CTS;
+  policy.flags = FSCRYPT_POLICY_FLAGS_PAD_32;
+  memset(policy.__reserved, 0, sizeof(policy.__reserved));
+  memcpy(policy.master_key_identifier, kid.raw, FSCRYPT_KEY_IDENTIFIER_SIZE);
+
+  r = ceph_set_fscrypt_policy_v2(cmount, fd, &policy);
+  ASSERT_EQ(-EINVAL, r);
+
+  ceph_rmdir(cmount, dir_path.c_str());
+  ceph_shutdown(cmount);
+}
+
+
 TEST(FSCrypt, LockedListDir) {
   struct ceph_fscrypt_key_identifier kid;
 
