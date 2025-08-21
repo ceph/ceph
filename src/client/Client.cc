@@ -18334,6 +18334,11 @@ int Client::ll_set_fscrypt_policy_v2(Inode *in, const struct fscrypt_policy_v2& 
   }
 
   FSCryptContext fsc(cct);
+
+  if (!fsc.is_supported_policy(policy)) {
+    return -EINVAL;
+  }
+
   fsc.init(policy);
   fsc.generate_new_nonce();
 
