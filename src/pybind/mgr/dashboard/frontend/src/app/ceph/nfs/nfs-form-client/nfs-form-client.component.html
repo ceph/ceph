@@ -40,8 +40,8 @@
                   <span *ngIf="showError(index, 'addresses', formDir, 'required')"
                         i18n>This field is required.</span>
 
-                  <span *ngIf="showError(index, 'addresses', formDir, 'pattern')">
-                    <ng-container i18n>Must contain one or more comma-separated values</ng-container>
+                  <span *ngIf="showError(index, 'addresses', formDir, 'invalidAddress')">
+                    <ng-container i18n>Must contain one or more comma-separated valid addresses.</ng-container>
                     <br>
                     <ng-container i18n>For example:</ng-container> 192.168.0.10, 192.168.1.0/8
                   </span>
