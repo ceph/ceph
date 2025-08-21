@@ -283,8 +283,8 @@ void MgrStandby::send_beacon()
   // 1. The mon has chosen a standby to be active
   // 2. The chosen active mgr has all of its modules initialized
   //
-  // In extreme cases, if modules take very long to initialize (several retries are
-  // allowed; see "mgr_module_load_max_retries"), we will proceed to mark the chosen
+  // In extreme cases, if modules take very long to initialize (a buffer of extra time
+  // is allowed; see "mgr_module_load_expiration"), we will proceed to mark the chosen
   // active mgr "available" to unblock other mgr functionality such as reporting PG
   // availability. If this happens, a health error will be issued indicating which
   // mgr modules got stuck initializing (See src/mgr/PyModuleRegistry.cc). This unblocks
@@ -292,10 +292,7 @@ void MgrStandby::send_beacon()
   // are unusuable.
   bool available = false;
   if (active_mgr != nullptr) {
-    available = active_mgr->is_initialized() || active_mgr->exceeded_initialization_retires();
-    if (!available) {
-      active_mgr->update_initialization_retries();
-    }
+    available = active_mgr->is_initialized() || active_mgr->exceeded_initialization_expiration();
   }
 
   auto addrs = available ? active_mgr->get_server_addrs() : entity_addrvec_t();

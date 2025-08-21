@@ -69,7 +69,7 @@ Mgr::Mgr(MonClient *monc_, const MgrMap& mgrmap,
   audit_clog(audit_clog_),
   initialized(false),
   initializing(false),
-  initialization_retries(0)
+  initialization_start_time(ceph::coarse_mono_clock::zero())
 {
   cluster_state.set_objecter(objecter);
 }
@@ -167,6 +167,7 @@ void Mgr::background_init(Context *completion)
   ceph_assert(!initializing);
   ceph_assert(!initialized);
   initializing = true;
+  initialization_start_time = ceph::coarse_mono_clock::now();
 
   finisher.start();
 
@@ -763,21 +764,27 @@ bool Mgr::got_mgr_map(const MgrMap& m)
   return false;
 }
 
-bool Mgr::exceeded_initialization_retires() const
+bool Mgr::exceeded_initialization_expiration()
 {
-  uint64_t max_retries = g_conf().get_val<uint64_t>("mgr_module_load_max_retries");
-  return initialization_retries > max_retries;
-}
-
-void Mgr::update_initialization_retries()
-{
-  std::lock_guard l(lock);
-  if (!is_initialized()) {
-    initialization_retries++;
-  } else {
-    initialization_retries = 0;
+  // initialization_start_time=0 when initialization hasn't started yet,
+  // so know we can't have exceeded the time expiration.
+  if (ceph::coarse_mono_clock::is_zero(initialization_start_time)) {
+    return false;
   }
-  dout(20) << "initialization retries: " << initialization_retries << dendl;
+
+  // Save the amount of time elapsed
+  auto time_elapsed = ceph::coarse_mono_clock::now() - initialization_start_time;
+  dout(20) << "time elapsed since mgr initialization: " << time_elapsed << dendl;
+
+  // Reset `initialization_start_time` if the expiration time has been exceeded.
+  auto expiration = g_conf().get_val<std::chrono::milliseconds>("mgr_module_load_expiration");
+  bool exceeded_expiration = time_elapsed > expiration;
+  if (exceeded_expiration) {
+    std::lock_guard l(lock);
+    initialization_start_time = ceph::coarse_mono_clock::zero();
+  }
+
+  return exceeded_expiration;
 }
 
 void Mgr::handle_mgr_digest(ref_t<MMgrDigest> m)
