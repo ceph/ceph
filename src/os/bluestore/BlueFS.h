@@ -86,9 +86,6 @@ enum {
   l_bluefs_wal_alloc_lat,
   l_bluefs_db_alloc_lat,
   l_bluefs_slow_alloc_lat,
-  l_bluefs_wal_alloc_max_lat,
-  l_bluefs_db_alloc_max_lat,
-  l_bluefs_slow_alloc_max_lat,
   l_bluefs_last,
 };
 
@@ -556,8 +553,6 @@ private:
     l_bluefs_max_bytes_wal,
     l_bluefs_max_bytes_db,
   };
-
-  ceph::timespan max_alloc_lat[MAX_BDEV] = {ceph::make_timespan(0)};
 
   // cache
   struct {
