@@ -29,6 +29,7 @@ class ECEncoder {
     std::optional<ceph::bufferlist> do_encode(ceph::bufferlist inbl);
     int get_k(void);
     int get_m(void);
+    int get_chunk_size(void);
 };
 }
 }
