@@ -17,9 +17,19 @@ CONTAINERS = {
         'base_image': 'quay.io/centos/centos:stream9',
         'script': 'dnf install -y python3',
     },
+    'centos-10': {
+        'name': 'cephadm-build-test:centos10-py3',
+        'base_image': 'quay.io/centos/centos:stream10',
+        'script': 'dnf install -y python3',
+    },
     'centos-9-plusdeps': {
         'name': 'cephadm-build-test:centos9-py3-deps',
         'base_image': 'quay.io/centos/centos:stream9',
+        'script': 'dnf install -y python3 python3-jinja2 python3-pyyaml',
+    },
+    'centos-10-plusdeps': {
+        'name': 'cephadm-build-test:centos10-py3-deps',
+        'base_image': 'quay.io/centos/centos:stream10',
         'script': 'dnf install -y python3 python3-jinja2 python3-pyyaml',
     },
     'ubuntu-20.04': {
@@ -86,6 +96,7 @@ def source_dir():
     'env',
     [
         'centos-9',
+        'centos-10',
         'ubuntu-20.04',
         'ubuntu-22.04',
     ],
