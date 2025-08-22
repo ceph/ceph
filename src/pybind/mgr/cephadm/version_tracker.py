@@ -15,10 +15,23 @@ class VersionTracker:
         self.db = self.mgr.db()
         self._db_lock = self.mgr._db_lock
 
+        SQL_QUERY = '''
+        SELECT 1 
+            FROM ClusterVersionInfo 
+            LIMIT 1;
+        '''
+
+        with self._db_lock, self.db:
+            cursor = self.db.execute(SQL_QUERY)
+            row = cursor.fetchone()
+
+            if row is None:
+                self.add_cluster_version(self.mgr._version)
+
 
     def add_cluster_version(self, version: str) -> None:
         SQL_QUERY = '''
-        INSERT OR IGNORE INTO ClusterVersionInfo (version)
+        INSERT OR IGNORE INTO ClusterVersionInfo (cluster_version)
             VALUES (?);
         '''
 
@@ -37,8 +50,9 @@ class VersionTracker:
 
         with self._db_lock, self.db:
             cursor = self.db.execute(SQL_QUERY)
+            rows = cursor.fetchall()
 
-            for row in cursor:
+            for row in rows:
                 res[row['creation_time']] = row['cluster_version']
 
         if not res:
@@ -69,7 +83,3 @@ class VersionTracker:
                     self.db.execute(SQL_QUERY_OPTION, (time_stamp,))
         
         return 0, 'Cluster Version History Deletion Successful', ''
-
-
-
-# look through devicehealth to see how it integrated with MgrModule's db functions, check if it's possible to even do that with cephadm
