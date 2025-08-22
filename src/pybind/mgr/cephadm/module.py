@@ -165,31 +165,35 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         CREATE TABLE IF NOT EXISTS ClusterVersionInfo(
             cluster_version_id INTEGER PRIMARY KEY, 
             cluster_version TEXT NOT NULL,
-            creation_time TEXT DEFAULT CURRENT_TIMESTAMP
+            creation_time TEXT NOT NULL
         );
         ''',
         '''
         CREATE TABLE IF NOT EXISTS VersionAssociation(
             id INTEGER PRIMARY KEY,
+            cluster_version_id INTEGER NOT NULL,
             FOREIGN KEY (cluster_version_id) REFERENCES ClusterVersionInfo(cluster_version_id) 
         );
         '''
     ]
 
     SCHEMA_VERSIONED = [
-        '''
-        CREATE TABLE IF NOT EXISTS ClusterVersionInfo(
-            cluster_version_id INTEGER PRIMARY KEY, 
-            cluster_version TEXT NOT NULL,
-            creation_time TEXT DEFAULT CURRENT_TIMESTAMP
-        );
-        ''',
-        '''
-        CREATE TABLE IF NOT EXISTS VersionAssociation(
-            id INTEGER PRIMARY KEY,
-            FOREIGN KEY (cluster_version_id) REFERENCES ClusterVersionInfo(cluster_version_id) 
-        );
-        '''
+        [
+            '''
+            CREATE TABLE IF NOT EXISTS ClusterVersionInfo(
+                cluster_version_id INTEGER PRIMARY KEY, 
+                cluster_version TEXT NOT NULL,
+                creation_time TEXT NOT NULL
+            );
+            ''',
+            '''
+            CREATE TABLE IF NOT EXISTS VersionAssociation(
+                id INTEGER PRIMARY KEY,
+                cluster_version_id INTEGER NOT NULL,
+                FOREIGN KEY (cluster_version_id) REFERENCES ClusterVersionInfo(cluster_version_id) 
+            );
+            '''
+        ]
     ]
 
     _STORE_HOST_PREFIX = "host"
@@ -4289,6 +4293,34 @@ Then run the following:
         self.need_connect_dashboard_rgw = True
         self.event.set()
 
+    @CLIWriteCommand('cephadm set-bootstrap-version')
+    def _do_set_bootstrap_version(self, version: str) -> Tuple[int, str, str]:
+        '''
+        Stores the bootstrap version in KV store
+        '''
+        return self.version_tracker._set_bootstrap_version(version)
+    
+    @CLIWriteCommand('cephadm set-bootstrap-time')
+    def _do_set_bootstrap_time(self, time: str) -> Tuple[int, str, str]:
+        '''
+        Stores the bootstrap time in KV store
+        '''
+        return self.version_tracker._set_bootstrap_time(time)
+    
+    @CLIReadCommand('cephadm get-bootstrap-version')
+    def _do_get_bootstrap_version(self) -> Tuple[int, str, str]:
+        '''
+        Gets the bootstrap version in KV store
+        '''
+        return self.version_tracker._get_bootstrap_version()
+    
+    @CLIReadCommand('cephadm get-bootstrap-time')
+    def _do_get_bootstrap_time(self) -> Tuple[int, str, str]:
+        '''
+        Gets the bootstrap time in KV store
+        '''
+        return self.version_tracker._get_bootstrap_time()
+    
     @CLIRequiresDB
     @CLIReadCommand('cephadm get-cluster-version-history')
     @MgrModuleRecoverDB
