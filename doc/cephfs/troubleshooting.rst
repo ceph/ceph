@@ -33,6 +33,36 @@ If high logging levels have been set on the MDS, ``dump.txt`` can be expected
 to hold the information needed to diagnose and solve the issue causing the
 CephFS operations to hang.
 
+.. _slow_requests:
+
+Slow requests (MDS)
+-------------------
+List current operations via the admin socket by running the following command
+from the MDS host:
+
+.. prompt:: bash #
+
+   ceph daemon mds.<name> dump_ops_in_flight
+
+Identify the stuck commands and examine why they are stuck.
+Usually the last "event" will have been an attempt to gather locks, or sending
+the operation off to the MDS log. If it is waiting on the OSDs, fix them. 
+
+If operations are stuck on a specific inode, then a client is likely holding
+capabilities, preventing its use by other clients. This situation can be caused
+by a client trying to flush dirty data, but it might be caused because you have
+encountered a bug in the distributed file lock code (the file "capabilities"
+["caps"] system) of CephFS.
+
+If you have determined that the commands are stuck because of a bug in the
+capabilities code, restart the MDS. Restarting the MDS is likely to resolve the
+problem.
+
+If there are no slow requests reported on the MDS, and there is no indication
+that clients are misbehaving, then either there is a problem with the client
+or the client's requests are not reaching the MDS.
+
+
 .. _cephfs_dr_stuck_during_recovery:
 
 Stuck during recovery
@@ -266,35 +296,6 @@ Generally it will be the result of
 
 Otherwise, you have probably discovered a new bug and should report it to
 the developers!
-
-.. _slow_requests:
-
-Slow requests (MDS)
--------------------
-List current operations via the admin socket by running the following command
-from the MDS host:
-
-.. prompt:: bash #
-
-   ceph daemon mds.<name> dump_ops_in_flight
-
-Identify the stuck commands and examine why they are stuck.
-Usually the last "event" will have been an attempt to gather locks, or sending
-the operation off to the MDS log. If it is waiting on the OSDs, fix them. 
-
-If operations are stuck on a specific inode, then a client is likely holding
-capabilities, preventing its use by other clients. This situation can be caused
-by a client trying to flush dirty data, but it might be caused because you have
-encountered a bug in the distributed file lock code (the file "capabilities"
-["caps"] system) of CephFS.
-
-If you have determined that the commands are stuck because of a bug in the
-capabilities code, restart the MDS. Restarting the MDS is likely to resolve the
-problem.
-
-If there are no slow requests reported on the MDS, and there is no indication
-that clients are misbehaving, then either there is a problem with the client
-or the client's requests are not reaching the MDS.
 
 .. _ceph_fuse_debugging:
 
