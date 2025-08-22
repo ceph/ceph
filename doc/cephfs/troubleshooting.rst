@@ -248,20 +248,27 @@ See the :ref:`RADOS troubleshooting documentation<rados_troubleshooting>`.
 The MDS
 =======
 
-If an operation is hung inside the MDS, it will eventually show up in ``ceph health``,
-identifying "slow requests are blocked". It may also identify clients as
-"failing to respond" or misbehaving in other ways. If the MDS identifies
-specific clients as misbehaving, you should investigate why they are doing so.
+Run the ``ceph health`` command. Any operation that is hung in the MDS is
+indicated by the ``slow requests are blocked`` message. 
 
-Generally it will be the result of
+Messages that read ``failing to respond`` indicate that a client is failing to
+respond. 
 
-#. Overloading the system (if you have extra RAM, increase the
-   "mds cache memory limit" config from its default 1GiB; having a larger active
-   file set than your MDS cache is the #1 cause of this!).
+The following list details potential causes of hung operations:
 
-#. Running an older (misbehaving) client.
+#. The system is overloaded. The most likely cause of system overload is an
+   active file set that is larger than the MDS cache. 
+   
+   If you have extra RAM, increase the ``mds_cache_memory_limit``. The specific
+   tunable ``mds_cache_memory_limit`` is discussed in the :ref:`MDS Cache
+   Size<cephfs_cache_configuration_mds_cache_memory_limit>`. Read the :ref:`MDS
+   Cache Configuration<cephfs_mds_cache_configuration>` section in full before
+   making any alterations to the ``mds_cache_memory_limit`` tunable.
 
-#. Underlying RADOS issues.
+#. There is an older (misbehaving) client.
+
+#. There are underlying RADOS issues. See :ref:`The RADOS troubleshooting
+   documentation<rados_troubleshooting>`.
 
 Otherwise, you have probably discovered a new bug and should report it to
 the developers!
