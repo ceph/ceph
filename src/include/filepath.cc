@@ -116,12 +116,14 @@ void filepath::dump(ceph::Formatter *f) const {
   f->dump_string("relative_path", path);
 }
 
-void filepath::generate_test_instances(std::list<filepath*>& o) {
-  o.push_back(new filepath);
-  o.push_back(new filepath("/usr/bin", 0));
-  o.push_back(new filepath("/usr/sbin", 1));
-  o.push_back(new filepath("var/log", 1));
-  o.push_back(new filepath("foo/bar", 101));
+std::list<filepath> filepath::generate_test_instances() {
+  std::list<filepath> o;
+  o.push_back(filepath{});
+  o.push_back(filepath("/usr/bin", 0));
+  o.push_back(filepath("/usr/sbin", 1));
+  o.push_back(filepath("var/log", 1));
+  o.push_back(filepath("foo/bar", 101));
+  return o;
 }
 
 bool filepath::is_last_dot_or_dotdot() const {

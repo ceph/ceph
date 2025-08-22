@@ -176,7 +176,7 @@ public:
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
-  static void generate_test_instances(std::list<ACLGrant*>& o);
+  static std::list<ACLGrant> generate_test_instances();
 
   static ACLGroupTypeEnum uri_to_group(std::string_view uri);
 
@@ -328,7 +328,7 @@ public:
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
-  static void generate_test_instances(std::list<RGWAccessControlList*>& o);
+  static std::list<RGWAccessControlList> generate_test_instances();
 
   bool empty() const { return grant_map.empty(); }
 
@@ -374,7 +374,7 @@ struct ACLOwner {
   }
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
-  static void generate_test_instances(std::list<ACLOwner*>& o);
+  static std::list<ACLOwner> generate_test_instances();
 
   bool empty() const;
 
@@ -414,7 +414,7 @@ public:
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
-  static void generate_test_instances(std::list<RGWAccessControlPolicy*>& o);
+  static std::list<RGWAccessControlPolicy> generate_test_instances();
   void decode_owner(bufferlist::const_iterator& bl) { // sometimes we only need that, should be faster
     DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
     decode(owner, bl);

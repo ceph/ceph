@@ -121,7 +121,7 @@ public:
   void dump(ceph::Formatter *f) const;
   void encode(ceph::buffer::list &bl) const;
   void decode(ceph::buffer::list::const_iterator &bl);
-  static void generate_test_instances(std::list<pow2_hist_t*>& o);
+  static std::list<pow2_hist_t> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(pow2_hist_t)
 

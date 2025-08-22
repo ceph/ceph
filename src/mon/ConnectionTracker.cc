@@ -501,15 +501,17 @@ void ConnectionReport::dump(ceph::Formatter *f) const
   f->close_section(); // peer scores
 }
 
-void ConnectionReport::generate_test_instances(std::list<ConnectionReport*>& o)
+std::list<ConnectionReport> ConnectionReport::generate_test_instances()
 {
-  o.push_back(new ConnectionReport);
-  o.push_back(new ConnectionReport);
-  o.back()->rank = 1;
-  o.back()->epoch = 2;
-  o.back()->epoch_version = 3;
-  o.back()->current[0] = true;
-  o.back()->history[0] = .4;
+  std::list<ConnectionReport> o;
+  o.push_back(ConnectionReport{});
+  o.push_back(ConnectionReport{});
+  o.back().rank = 1;
+  o.back().epoch = 2;
+  o.back().epoch_version = 3;
+  o.back().current[0] = true;
+  o.back().history[0] = .4;
+  return o;
 }
 
 void ConnectionTracker::dump(ceph::Formatter *f) const
@@ -528,15 +530,17 @@ void ConnectionTracker::dump(ceph::Formatter *f) const
   f->close_section(); // reports
 }
 
-void ConnectionTracker::generate_test_instances(std::list<ConnectionTracker*>& o)
+std::list<ConnectionTracker> ConnectionTracker::generate_test_instances()
 {
-  o.push_back(new ConnectionTracker);
-  o.push_back(new ConnectionTracker);
-  ConnectionTracker *e = o.back();
-  e->rank = 2;
-  e->epoch = 3;
-  e->version = 4;
-  e->peer_reports[0];
-  e->peer_reports[1];
-  e->my_reports = e->peer_reports[2];
+  std::list<ConnectionTracker> o;
+  o.push_back(ConnectionTracker{});
+  o.push_back(ConnectionTracker{});
+  ConnectionTracker& e = o.back();
+  e.rank = 2;
+  e.epoch = 3;
+  e.version = 4;
+  e.peer_reports[0];
+  e.peer_reports[1];
+  e.my_reports = e.peer_reports[2];
+  return o;
 }

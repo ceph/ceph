@@ -50,14 +50,16 @@ void EntityName::dump(ceph::Formatter *f) const {
   f->dump_string("id", id);
 }
 
-void EntityName::generate_test_instances(std::list<EntityName*>& ls) {
-  ls.push_back(new EntityName);
-  ls.push_back(new EntityName);
-  ls.back()->set_type(CEPH_ENTITY_TYPE_OSD);
-  ls.back()->set_id("0");
-  ls.push_back(new EntityName);
-  ls.back()->set_type(CEPH_ENTITY_TYPE_MDS);
-  ls.back()->set_id("a");
+std::list<EntityName> EntityName::generate_test_instances() {
+  std::list<EntityName> ls;
+  ls.push_back(EntityName{});
+  ls.push_back(EntityName{});
+  ls.back().set_type(CEPH_ENTITY_TYPE_OSD);
+  ls.back().set_id("0");
+  ls.push_back(EntityName{});
+  ls.back().set_type(CEPH_ENTITY_TYPE_MDS);
+  ls.back().set_id("a");
+  return ls;
 }
 
 const std::string& EntityName::to_str() const {

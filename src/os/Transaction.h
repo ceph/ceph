@@ -1386,7 +1386,7 @@ public:
   }
 
   void dump(ceph::Formatter *f);
-  static void generate_test_instances(std::list<Transaction*>& o);
+  static std::list<Transaction> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(ceph::os::Transaction)
 WRITE_CLASS_ENCODER(ceph::os::Transaction::TransactionData)

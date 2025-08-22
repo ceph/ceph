@@ -799,7 +799,7 @@ struct RGWUserInfo
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
-  static void generate_test_instances(std::list<RGWUserInfo*>& o);
+  static std::list<RGWUserInfo> generate_test_instances();
 
   void decode_json(JSONObj *obj);
 };
@@ -865,7 +865,7 @@ struct RGWAccountInfo {
 
   void dump(Formatter* f) const;
   void decode_json(JSONObj* obj);
-  static void generate_test_instances(std::list<RGWAccountInfo*>& o);
+  static std::list<RGWAccountInfo> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(RGWAccountInfo)
 
@@ -899,7 +899,7 @@ struct RGWGroupInfo {
 
   void dump(Formatter* f) const;
   void decode_json(JSONObj* obj);
-  static void generate_test_instances(std::list<RGWGroupInfo*>& o);
+  static std::list<RGWGroupInfo> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(RGWGroupInfo)
 
@@ -1109,7 +1109,7 @@ struct RGWBucketInfo {
   void encode(bufferlist& bl) const;
   void decode(bufferlist::const_iterator& bl);
   void dump(Formatter *f) const;
-  static void generate_test_instances(std::list<RGWBucketInfo*>& o);
+  static std::list<RGWBucketInfo> generate_test_instances();
 
   void decode_json(JSONObj *obj);
 
@@ -1206,7 +1206,7 @@ struct RGWBucketEntryPoint
 
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
-  static void generate_test_instances(std::list<RGWBucketEntryPoint*>& o);
+  static std::list<RGWBucketEntryPoint> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(RGWBucketEntryPoint)
 
@@ -1534,7 +1534,7 @@ struct RGWBucketEnt {
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
-  static void generate_test_instances(std::list<RGWBucketEnt*>& o);
+  static std::list<RGWBucketEnt> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(RGWBucketEnt)
 
@@ -1600,11 +1600,13 @@ struct multipart_upload_info
     dest_placement.dump(f);
   }
 
-  static void generate_test_instances(std::list<multipart_upload_info*>& o) {
-    o.push_back(new multipart_upload_info);
-    o.push_back(new multipart_upload_info);
-    o.back()->dest_placement.name = "dest_placement";
-    o.back()->dest_placement.storage_class = "dest_storage_class";
+  static std::list<multipart_upload_info> generate_test_instances() {
+    std::list<multipart_upload_info> o;
+    o.push_back(multipart_upload_info{});
+    o.push_back(multipart_upload_info{});
+    o.back().dest_placement.name = "dest_placement";
+    o.back().dest_placement.storage_class = "dest_storage_class";
+    return o;
   }
 };
 WRITE_CLASS_ENCODER(multipart_upload_info)

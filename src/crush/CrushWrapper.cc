@@ -3966,10 +3966,12 @@ void CrushWrapper::dump_tree(
   }
 }
 
-void CrushWrapper::generate_test_instances(list<CrushWrapper*>& o)
+list<CrushWrapper> CrushWrapper::generate_test_instances()
 {
-  o.push_back(new CrushWrapper);
+  list<CrushWrapper> o;
+  o.emplace_back();
   // fixme
+  return o;
 }
 
 /**

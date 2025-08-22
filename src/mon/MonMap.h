@@ -89,7 +89,7 @@ struct mon_info_t {
   void decode(ceph::buffer::list::const_iterator& p);
   void print(std::ostream& out) const;
   void dump(ceph::Formatter *f) const;
-  static void generate_test_instances(std::list<mon_info_t*>& ls);
+  static std::list<mon_info_t> generate_test_instances();
 };
 WRITE_CLASS_ENCODER_FEATURES(mon_info_t)
 
@@ -485,7 +485,7 @@ public:
 
   void check_health(health_check_map_t *checks) const;
 
-  static void generate_test_instances(std::list<MonMap*>& o);
+  static std::list<MonMap> generate_test_instances();
 protected:
   /**
    * build a monmap from a list of entity_addrvec_t's

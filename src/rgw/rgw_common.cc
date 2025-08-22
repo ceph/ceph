@@ -2069,13 +2069,15 @@ void RGWUserCaps::dump(Formatter *f) const
   dump(f, "caps");
 }
 
-void RGWUserCaps::generate_test_instances(list<RGWUserCaps*>& o)
+list<RGWUserCaps> RGWUserCaps::generate_test_instances()
 {
-  o.push_back(new RGWUserCaps);
-  RGWUserCaps *caps = new RGWUserCaps;
-  caps->add_cap("read");
-  caps->add_cap("write");
-  o.push_back(caps);
+  list<RGWUserCaps> o;
+  o.push_back(RGWUserCaps{});
+  RGWUserCaps caps;
+  caps.add_cap("read");
+  caps.add_cap("write");
+  o.push_back(std::move(caps));
+  return o;
 }
 
 void RGWUserCaps::dump(Formatter *f, const char *name) const
@@ -2207,14 +2209,16 @@ void rgw_raw_obj::decode_from_rgw_obj(bufferlist::const_iterator& bl)
   pool = old_obj.get_explicit_data_pool();
 }
 
-void rgw_raw_obj::generate_test_instances(std::list<rgw_raw_obj*>& o)
+std::list<rgw_raw_obj> rgw_raw_obj::generate_test_instances()
 {
-  rgw_raw_obj *r = new rgw_raw_obj;
-  r->oid = "foo";
-  r->loc = "bar";
-  r->pool.name = "baz";
-  r->pool.ns = "ns";
-  o.push_back(r);
+  std::list<rgw_raw_obj> o;
+  rgw_raw_obj r;
+  r.oid = "foo";
+  r.loc = "bar";
+  r.pool.name = "baz";
+  r.pool.ns = "ns";
+  o.push_back(std::move(r));
+  return o;
 }
 
 static struct rgw_name_to_flag op_type_mapping[] = { {"*",  RGW_OP_TYPE_ALL},
@@ -2512,15 +2516,17 @@ void encode_json(const char *name, const RGWUserCaps& val, Formatter *f)
   val.dump(f, name);
 }
 
-void RGWBucketEnt::generate_test_instances(list<RGWBucketEnt*>& o)
+list<RGWBucketEnt> RGWBucketEnt::generate_test_instances()
 {
-  RGWBucketEnt *e = new RGWBucketEnt;
-  init_bucket(&e->bucket, "tenant", "bucket", "pool", ".index_pool", "marker", "10");
-  e->size = 1024;
-  e->size_rounded = 4096;
-  e->count = 1;
-  o.push_back(e);
-  o.push_back(new RGWBucketEnt);
+  list<RGWBucketEnt> o;
+  RGWBucketEnt e;
+  init_bucket(&e.bucket, "tenant", "bucket", "pool", ".index_pool", "marker", "10");
+  e.size = 1024;
+  e.size_rounded = 4096;
+  e.count = 1;
+  o.push_back(std::move(e));
+  o.push_back(RGWBucketEnt{});
+  return o;
 }
 
 void RGWBucketEnt::dump(Formatter *f) const
@@ -2534,13 +2540,14 @@ void RGWBucketEnt::dump(Formatter *f) const
   encode_json("placement_rule", placement_rule.to_str(), f);
 }
 
-void rgw_obj::generate_test_instances(list<rgw_obj*>& o)
+list<rgw_obj> rgw_obj::generate_test_instances()
 {
+  list<rgw_obj> o;
   rgw_bucket b;
   init_bucket(&b, "tenant", "bucket", "pool", ".index_pool", "marker", "10");
-  rgw_obj *obj = new rgw_obj(b, "object");
-  o.push_back(obj);
-  o.push_back(new rgw_obj);
+  o.push_back(rgw_obj(b, "object"));
+  o.push_back(rgw_obj{});
+  return o;
 }
 
 void rgw_bucket_placement::dump(Formatter *f) const
@@ -2549,8 +2556,9 @@ void rgw_bucket_placement::dump(Formatter *f) const
   encode_json("placement_rule", placement_rule, f);
 }
 
-void RGWBucketInfo::generate_test_instances(list<RGWBucketInfo*>& o)
+list<RGWBucketInfo> RGWBucketInfo::generate_test_instances()
 {
+  list<RGWBucketInfo> o;
   // Since things without a log will have one synthesized on decode,
   // ensure the things we attempt to encode will have one added so we
   // round-trip properly.
@@ -2565,15 +2573,16 @@ void RGWBucketInfo::generate_test_instances(list<RGWBucketInfo*>& o)
   };
 
 
-  RGWBucketInfo *i = new RGWBucketInfo;
-  init_bucket(&i->bucket, "tenant", "bucket", "pool", ".index_pool", "marker", "10");
-  i->owner = "owner";
-  i->flags = BUCKET_SUSPENDED;
-  gen_layout(i->layout);
-  o.push_back(i);
-  i = new RGWBucketInfo;
-  gen_layout(i->layout);
-  o.push_back(i);
+  RGWBucketInfo i;
+  init_bucket(&i.bucket, "tenant", "bucket", "pool", ".index_pool", "marker", "10");
+  i.owner = "owner";
+  i.flags = BUCKET_SUSPENDED;
+  gen_layout(i.layout);
+  o.push_back(std::move(i));
+  i = RGWBucketInfo{};
+  gen_layout(i.layout);
+  o.push_back(std::move(i));
+  return o;
 }
 
 void RGWBucketInfo::dump(Formatter *f) const
@@ -2648,17 +2657,18 @@ void RGWBucketInfo::decode_json(JSONObj *obj) {
   }
 }
 
-void RGWUserInfo::generate_test_instances(list<RGWUserInfo*>& o)
+list<RGWUserInfo> RGWUserInfo::generate_test_instances()
 {
-  RGWUserInfo *i = new RGWUserInfo;
-  i->user_id = "user_id";
-  i->display_name =  "display_name";
-  i->user_email = "user@email";
-  i->account_id = "RGW12345678901234567";
-  i->path = "/";
-  i->create_date = ceph::real_time{std::chrono::hours(1)};
-  i->tags.emplace("key", "value");
-  i->group_ids.insert("group");
+  list<RGWUserInfo> o;
+  RGWUserInfo i;
+  i.user_id = "user_id";
+  i.display_name =  "display_name";
+  i.user_email = "user@email";
+  i.account_id = "RGW12345678901234567";
+  i.path = "/";
+  i.create_date = ceph::real_time{std::chrono::hours(1)};
+  i.tags.emplace("key", "value");
+  i.group_ids.insert("group");
   RGWAccessKey k1, k2;
   k1.id = "id1";
   k1.key = "key1";
@@ -2667,12 +2677,13 @@ void RGWUserInfo::generate_test_instances(list<RGWUserInfo*>& o)
   RGWSubUser u;
   u.name = "id2";
   u.perm_mask = 0x1;
-  i->access_keys[k1.id] = k1;
-  i->swift_keys[k2.id] = k2;
-  i->subusers[u.name] = u;
-  o.push_back(i);
+  i.access_keys[k1.id] = k1;
+  i.swift_keys[k2.id] = k2;
+  i.subusers[u.name] = u;
+  o.push_back(std::move(i));
 
-  o.push_back(new RGWUserInfo);
+  o.push_back(RGWUserInfo{});
+  return o;
 }
 
 static void user_info_dump_subuser(const char *name, const RGWSubUser& subuser, Formatter *f, void *parent)
@@ -2957,13 +2968,15 @@ void RGWUserInfo::decode_json(JSONObj *obj)
 }
 
 
-void RGWSubUser::generate_test_instances(list<RGWSubUser*>& o)
+list<RGWSubUser> RGWSubUser::generate_test_instances()
 {
-  RGWSubUser *u = new RGWSubUser;
-  u->name = "name";
-  u->perm_mask = 0xf;
-  o.push_back(u);
-  o.push_back(new RGWSubUser);
+  list<RGWSubUser> o;
+  RGWSubUser u;
+  u.name = "name";
+  u.perm_mask = 0xf;
+  o.push_back(std::move(u));
+  o.push_back(RGWSubUser{});
+  return o;
 }
 
 void RGWSubUser::dump(Formatter *f) const
@@ -3010,14 +3023,16 @@ void RGWSubUser::decode_json(JSONObj *obj)
   perm_mask = str_to_perm(perm_str);
 }
 
-void RGWAccessKey::generate_test_instances(list<RGWAccessKey*>& o)
+list<RGWAccessKey> RGWAccessKey::generate_test_instances()
 {
-  RGWAccessKey *k = new RGWAccessKey;
-  k->id = "id";
-  k->key = "key";
-  k->subuser = "subuser";
-  o.push_back(k);
-  o.push_back(new RGWAccessKey);
+  list<RGWAccessKey> o;
+  RGWAccessKey k;
+  k.id = "id";
+  k.key = "key";
+  k.subuser = "subuser";
+  o.push_back(std::move(k));
+  o.push_back(RGWAccessKey{});
+  return o;
 }
 
 void RGWAccessKey::dump(Formatter *f) const
@@ -3117,20 +3132,22 @@ void RGWAccountInfo::decode_json(JSONObj* obj)
   JSONDecoder::decode_json("max_access_keys", max_access_keys, obj);
 }
 
-void RGWAccountInfo::generate_test_instances(std::list<RGWAccountInfo*>& o)
+std::list<RGWAccountInfo> RGWAccountInfo::generate_test_instances()
 {
-  o.push_back(new RGWAccountInfo);
-  auto p = new RGWAccountInfo;
-  p->id = "account1";
-  p->tenant = "tenant1";
-  p->name = "name1";
-  p->email = "email@example.com";
-  p->max_users = 10;
-  p->max_roles = 10;
-  p->max_groups = 10;
-  p->max_buckets = 10;
-  p->max_access_keys = 10;
-  o.push_back(p);
+  std::list<RGWAccountInfo> o;
+  o.push_back(RGWAccountInfo{});
+  auto p = RGWAccountInfo{};
+  p.id = "account1";
+  p.tenant = "tenant1";
+  p.name = "name1";
+  p.email = "email@example.com";
+  p.max_users = 10;
+  p.max_roles = 10;
+  p.max_groups = 10;
+  p.max_buckets = 10;
+  p.max_access_keys = 10;
+  o.push_back(std::move(p));
+  return o;
 }
 
 void RGWGroupInfo::dump(Formatter * const f) const
@@ -3151,16 +3168,18 @@ void RGWGroupInfo::decode_json(JSONObj* obj)
   JSONDecoder::decode_json("account_id", account_id, obj);
 }
 
-void RGWGroupInfo::generate_test_instances(std::list<RGWGroupInfo*>& o)
+std::list<RGWGroupInfo> RGWGroupInfo::generate_test_instances()
 {
-  o.push_back(new RGWGroupInfo);
-  auto p = new RGWGroupInfo;
-  p->id = "id";
-  p->tenant = "tenant";
-  p->name = "name";
-  p->path = "/path/";
-  p->account_id = "account";
-  o.push_back(p);
+  std::list<RGWGroupInfo> o;
+  o.push_back(RGWGroupInfo{});
+  auto p = RGWGroupInfo{};
+  p.id = "id";
+  p.tenant = "tenant";
+  p.name = "name";
+  p.path = "/path/";
+  p.account_id = "account";
+  o.push_back(std::move(p));
+  return o;
 }
 
 void RGWStorageStats::dump(Formatter *f) const
