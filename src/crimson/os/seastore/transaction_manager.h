@@ -1380,6 +1380,10 @@ private:
   _remove_direct_mapping(
     Transaction &t,
     LBAMapping mapping);
+  ref_iertr::future<LBAMapping>
+  _remove_indirect_mapping_only(
+    Transaction &t,
+    LBAMapping mapping);
 
   rewrite_extent_ret rewrite_logical_extent(
     Transaction& t,

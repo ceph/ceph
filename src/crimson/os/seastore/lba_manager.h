@@ -184,6 +184,19 @@ public:
     Transaction &t,
     LBAMapping mapping) = 0;
 
+  /*
+   * remove_indirect_mapping_only
+   *
+   * Remove the indirect mapping without touch the corresponding
+   * direct one.
+   *
+   * @return returns the information about the removed
+   * indirect mapping.
+   */
+  virtual ref_ret remove_indirect_mapping_only(
+    Transaction &t,
+    LBAMapping mapping) = 0;
+
   /**
    * Increments ref count on extent
    *
