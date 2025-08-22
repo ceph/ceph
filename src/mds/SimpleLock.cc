@@ -93,10 +93,12 @@ void SimpleLock::dump(ceph::Formatter *f) const {
   f->close_section();
 }
 
-void SimpleLock::generate_test_instances(std::list<SimpleLock*>& ls) {
-  ls.push_back(new SimpleLock);
-  ls.push_back(new SimpleLock);
-  ls.back()->set_state(LOCK_SYNC);
+std::list<SimpleLock> SimpleLock::generate_test_instances() {
+  std::list<SimpleLock> ls;
+  ls.emplace_back();
+  ls.emplace_back();
+  ls.back().set_state(LOCK_SYNC);
+  return ls;
 }
 
 

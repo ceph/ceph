@@ -48,7 +48,7 @@ public:
   void print(std::ostream& out) const;
   void print_summary(ceph::Formatter *f, std::ostream *out) const;
 
-  static void generate_test_instances(std::list<FSMapUser*>& ls);
+  static std::list<FSMapUser> generate_test_instances();
 
   std::map<fs_cluster_id_t, fs_info_t> filesystems;
   fs_cluster_id_t legacy_client_fscid = FS_CLUSTER_ID_NONE;

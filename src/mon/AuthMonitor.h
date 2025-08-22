@@ -82,15 +82,17 @@ public:
       f->dump_int("auth_type", auth_type);
       f->dump_int("auth_data_len", auth_data.length());
     }
-    static void generate_test_instances(std::list<Incremental*>& ls) {
-      ls.push_back(new Incremental);
-      ls.push_back(new Incremental);
-      ls.back()->inc_type = GLOBAL_ID;
-      ls.back()->max_global_id = 1234;
-      ls.push_back(new Incremental);
-      ls.back()->inc_type = AUTH_DATA;
-      ls.back()->auth_type = 12;
-      ls.back()->auth_data.append("foo");
+    static std::list<Incremental> generate_test_instances() {
+      std::list<Incremental> ls;
+      ls.push_back(Incremental{});
+      ls.push_back(Incremental{});
+      ls.back().inc_type = GLOBAL_ID;
+      ls.back().max_global_id = 1234;
+      ls.push_back(Incremental{});
+      ls.back().inc_type = AUTH_DATA;
+      ls.back().auth_type = 12;
+      ls.back().auth_data.append("foo");
+      return ls;
     }
   };
 

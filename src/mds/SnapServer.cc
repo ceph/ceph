@@ -454,28 +454,28 @@ void SnapServer::dump(Formatter *f) const
   f->close_section();
 }
 
-void SnapServer::generate_test_instances(std::list<SnapServer*>& ls)
+std::list<SnapServer> SnapServer::generate_test_instances()
 {
-  list<SnapInfo*> snapinfo_instances;
-  SnapInfo::generate_test_instances(snapinfo_instances);
-  SnapInfo populated_snapinfo = *(snapinfo_instances.back());
-  for (auto& info : snapinfo_instances) {
-    delete info;
-    info = nullptr;
-  }
+  std::list<SnapServer> ls;
+  list<SnapInfo> snapinfo_instances = SnapInfo::generate_test_instances();
 
-  SnapServer *blank = new SnapServer();
-  ls.push_back(blank);
-  SnapServer *populated = new SnapServer();
-  populated->last_snap = 123;
-  populated->snaps[456] = populated_snapinfo;
-  populated->need_to_purge[2].insert(012);
-  populated->pending_update[234] = populated_snapinfo;
-  populated->pending_destroy[345].first = 567;
-  populated->pending_destroy[345].second = 768;
-  populated->pending_noop.insert(890);
+  SnapInfo populated_snapinfo = snapinfo_instances.back();
 
-  ls.push_back(populated);
+  SnapServer blank;
+  ls.push_back(std::move(blank));
+
+  SnapServer populated;
+  populated.last_snap = 123;
+  populated.snaps[456] = populated_snapinfo;
+  populated.need_to_purge[2].insert(012);
+  populated.pending_update[234] = populated_snapinfo;
+  populated.pending_destroy[345].first = 567;
+  populated.pending_destroy[345].second = 768;
+  populated.pending_noop.insert(890);
+
+  ls.push_back(std::move(populated));
+
+  return ls;
 }
 
 bool SnapServer::force_update(snapid_t last, snapid_t v2_since,

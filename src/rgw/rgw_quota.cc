@@ -1039,14 +1039,16 @@ void RGWQuotaInfo::dump(Formatter *f) const
   f->dump_int("max_objects", max_objects);
 }
 
-void RGWQuotaInfo::generate_test_instances(std::list<RGWQuotaInfo*>& o)
+std::list<RGWQuotaInfo> RGWQuotaInfo::generate_test_instances()
 {
-  o.push_back(new RGWQuotaInfo);
-  o.push_back(new RGWQuotaInfo);
-  o.back()->enabled = true;
-  o.back()->check_on_raw = true;
-  o.back()->max_size = 1024;
-  o.back()->max_objects = 1;
+  std::list<RGWQuotaInfo> o;
+  o.push_back(RGWQuotaInfo{});
+  o.push_back(RGWQuotaInfo{});
+  o.back().enabled = true;
+  o.back().check_on_raw = true;
+  o.back().max_size = 1024;
+  o.back().max_objects = 1;
+  return o;
 }
 
 void RGWQuotaInfo::decode_json(JSONObj *obj)

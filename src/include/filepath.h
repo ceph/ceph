@@ -151,7 +151,7 @@ class filepath {
   void encode(ceph::buffer::list& bl) const;
   void decode(ceph::buffer::list::const_iterator& blp);
   void dump(ceph::Formatter *f) const;
-  static void generate_test_instances(std::list<filepath*>& o);
+  static std::list<filepath> generate_test_instances();
 
   bool is_last_dot_or_dotdot() const;
 

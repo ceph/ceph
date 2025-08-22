@@ -35,7 +35,7 @@ public:
   void encode(bufferlist &bl) const;
   void decode(bufferlist::const_iterator &bl);
   void dump(Formatter *f) const;
-  static void generate_test_instances(std::list<Anchor*>& ls);
+  static std::list<Anchor> generate_test_instances();
   bool operator==(const Anchor &r) const {
     return ino == r.ino && dirino == r.dirino &&
 	   d_name == r.d_name && d_type == r.d_type &&

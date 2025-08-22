@@ -452,7 +452,7 @@ struct EventEntry {
   void decode(bufferlist::const_iterator& it);
   void dump(Formatter *f) const;
 
-  static void generate_test_instances(std::list<EventEntry *> &o);
+  static std::list<EventEntry> generate_test_instances();
 
 private:
   static const uint32_t EVENT_FIXED_SIZE = 14; /// version encoding, type
@@ -593,7 +593,7 @@ struct ClientData {
   void decode(bufferlist::const_iterator& it);
   void dump(Formatter *f) const;
 
-  static void generate_test_instances(std::list<ClientData *> &o);
+  static std::list<ClientData> generate_test_instances();
 };
 
 // Journal Tag data structures
@@ -648,7 +648,7 @@ struct TagData {
   void decode(bufferlist::const_iterator& it);
   void dump(Formatter *f) const;
 
-  static void generate_test_instances(std::list<TagData *> &o);
+  static std::list<TagData> generate_test_instances();
 };
 
 std::ostream &operator<<(std::ostream &out, const EventType &type);

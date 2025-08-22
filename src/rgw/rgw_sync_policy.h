@@ -675,7 +675,7 @@ struct rgw_sync_policy_info {
   }
 
   void dump(ceph::Formatter *f) const;
-  static void generate_test_instances(std::list<rgw_sync_policy_info*>& o);
+  static std::list<rgw_sync_policy_info> generate_test_instances();
   void decode_json(JSONObj *obj);
 
   bool empty() const {

@@ -31,9 +31,11 @@ void object_t::dump(ceph::Formatter *f) const {
   f->dump_string("name", name);
 }
 
-void object_t::generate_test_instances(std::list<object_t*>& o) {
-  o.push_back(new object_t);
-  o.push_back(new object_t("myobject"));
+std::list<object_t> object_t::generate_test_instances() {
+  std::list<object_t> o;
+  o.push_back(object_t{});
+  o.push_back(object_t{"myobject"});
+  return o;
 }
 
 std::ostream& operator<<(std::ostream& out, const object_t& o) {
@@ -60,9 +62,11 @@ void sobject_t::dump(ceph::Formatter *f) const {
   f->dump_stream("snap") << snap;
 }
 
-void sobject_t::generate_test_instances(std::list<sobject_t*>& o) {
-  o.push_back(new sobject_t);
-  o.push_back(new sobject_t(object_t("myobject"), 123));
+std::list<sobject_t> sobject_t::generate_test_instances() {
+  std::list<sobject_t> o;
+  o.push_back(sobject_t{});
+  o.push_back(sobject_t{object_t("myobject"), 123});
+  return o;
 }
 
 std::ostream& operator<<(std::ostream& out, const sobject_t &o) {

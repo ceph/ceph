@@ -412,7 +412,7 @@ struct client_t {
     decode(v, bl);
   }
   void dump(ceph::Formatter *f) const;
-  static void generate_test_instances(std::list<client_t*>& ls);
+  static std::list<client_t> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(client_t)
 
@@ -490,7 +490,7 @@ struct shard_id_t {
     decode(id, bl);
   }
   void dump(ceph::Formatter *f) const;
-  static void generate_test_instances(std::list<shard_id_t*>& ls);
+  static std::list<shard_id_t> generate_test_instances();
   shard_id_t& operator++() { ++id; return *this; }
   friend constexpr std::strong_ordering operator<=>(const shard_id_t &lhs,
                                                     const shard_id_t &rhs) {
@@ -563,7 +563,7 @@ struct errorcode32_t {
     set_wire_to_host(newcode);
   }
   void dump(ceph::Formatter *f) const;
-  static void generate_test_instances(std::list<errorcode32_t*>& ls);
+  static std::list<errorcode32_t> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(errorcode32_t)
 
@@ -608,12 +608,14 @@ struct sha_digest_t {
   void dump(ceph::Formatter *f) const {
     f->dump_string("sha1", to_str());
   }
-  static void generate_test_instances(std::list<sha_digest_t*>& ls) {
-    ls.push_back(new sha_digest_t);
-    ls.push_back(new sha_digest_t);
-    ls.back()->v[0] = 1;
-    ls.push_back(new sha_digest_t);
-    ls.back()->v[0] = 2;
+  static std::list<sha_digest_t> generate_test_instances() {
+    std::list<sha_digest_t> ls;
+    ls.push_back(sha_digest_t{});
+    ls.push_back(sha_digest_t{});
+    ls.back().v[0] = 1;
+    ls.push_back(sha_digest_t{});
+    ls.back().v[0] = 2;
+    return ls;
   }
 };
 

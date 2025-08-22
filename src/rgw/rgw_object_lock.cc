@@ -49,9 +49,10 @@ void ObjectLockRule::dump(Formatter *f) const {
   f->close_section();
 }
 
-void ObjectLockRule::generate_test_instances(std::list<ObjectLockRule*>& o) {
-  ObjectLockRule *obj = new ObjectLockRule;
-  o.push_back(obj);
+std::list<ObjectLockRule> ObjectLockRule::generate_test_instances() {
+  std::list<ObjectLockRule> o;
+  o.push_back(ObjectLockRule{});
+  return o;
 }
 
 void RGWObjectLock::decode_xml(XMLObj *obj) {
@@ -94,15 +95,17 @@ ceph::real_time RGWObjectLock::get_lock_until_date(const ceph::real_time& mtime)
   return mtime + std::chrono::years(get_years());
 }
 
-void RGWObjectLock::generate_test_instances(list<RGWObjectLock*>& o) {
-  RGWObjectLock *obj = new RGWObjectLock;
-  obj->enabled = true;
-  obj->rule_exist = true;
-  o.push_back(obj);
-  obj = new RGWObjectLock;
-  obj->enabled = false;
-  obj->rule_exist = false;
-  o.push_back(obj);
+list<RGWObjectLock> RGWObjectLock::generate_test_instances() {
+  list<RGWObjectLock> o;
+  RGWObjectLock obj;
+  obj.enabled = true;
+  obj.rule_exist = true;
+  o.push_back(std::move(obj));
+  obj = RGWObjectLock{};
+  obj.enabled = false;
+  obj.rule_exist = false;
+  o.push_back(std::move(obj));
+  return o;
 }
 
 void RGWObjectRetention::decode_xml(XMLObj *obj) {
