@@ -70,6 +70,8 @@ import argparse
 import contextlib
 import enum
 import glob
+import hashlib
+import json
 import logging
 import os
 import pathlib
@@ -78,6 +80,7 @@ import shlex
 import shutil
 import subprocess
 import sys
+import time
 
 log = logging.getLogger()
 
@@ -89,6 +92,12 @@ except ImportError:
     class StrEnum(str, enum.Enum):
         def __str__(self):
             return self.value
+
+
+try:
+    from functools import cache as ftcache
+except ImportError:
+    ftcache = lambda f: f
 
 
 class DistroKind(StrEnum):
@@ -164,6 +173,18 @@ class DidNotExecute(Exception):
     pass
 
 
+_CONTAINER_SOURCES = [
+    "Dockerfile.build",
+    "src/script/lib-build.sh",
+    "src/script/run-make.sh",
+    "ceph.spec.in",
+    "do_cmake.sh",
+    "install-deps.sh",
+    "run-make-check.sh",
+    "src/script/buildcontainer-setup.sh",
+]
+
+
 def _cmdstr(cmd):
     return " ".join(shlex.quote(c) for c in cmd)
 
@@ -222,6 +243,12 @@ def _container_cmd(ctx, args, *, workdir=None, interactive=False):
         cmd.append(f"-eCCACHE_BASEDIR={ctx.cli.homedir}")
     for extra_arg in ctx.cli.extra or []:
         cmd.append(extra_arg)
+    if ctx.npm_cache_dir:
+        # use :z so that other builds can use the cache
+        cmd.extend([
+            f'--volume={ctx.npm_cache_dir}:/npmcache:z',
+            '--env=NPM_CACHEDIR=/npmcache'
+        ])
     cmd.append(ctx.image_name)
     cmd.extend(args)
     return cmd
@@ -233,6 +260,9 @@ def _git_command(ctx, args):
     return cmd
 
 
+# Assume that the git version will not be changing after the 1st time
+# the command is run.
+@ftcache
 def _git_current_branch(ctx):
     cmd = _git_command(ctx, ["rev-parse", "--abbrev-ref", "HEAD"])
     res = _run(cmd, check=True, capture_output=True)
@@ -249,16 +279,32 @@ def _git_current_sha(ctx, short=True):
     return res.stdout.decode("utf8").strip()
 
 
+@ftcache
+def _hash_sources(bsize=4096):
+    hh = hashlib.sha256()
+    buf = bytearray(bsize)
+    for path in sorted(_CONTAINER_SOURCES):
+        with open(path, "rb") as fh:
+            while True:
+                rlen = fh.readinto(buf)
+                hh.update(buf[:rlen])
+                if rlen < len(buf):
+                    break
+    return f"sha256:{hh.hexdigest()}"
+
+
 class Steps(StrEnum):
     DNF_CACHE = "dnfcache"
     BUILD_CONTAINER = "build-container"
     CONTAINER = "container"
     CONFIGURE = "configure"
+    NPM_CACHE = "npmcache"
     BUILD = "build"
     BUILD_TESTS = "buildtests"
     TESTS = "tests"
     CUSTOM = "custom"
     SOURCE_RPM = "source-rpm"
+    FIND_SRPM = "find-srpm"
     RPM = "rpm"
     DEBS = "debs"
     PACKAGES = "packages"
@@ -292,6 +338,7 @@ class Context:
         self.cli = cli
         self._engine = None
         self.distro_cache_name = ""
+        self.current_srpm = None
 
     @property
     def container_engine(self):
@@ -358,6 +405,14 @@ class Context:
         return None
 
     @property
+    def npm_cache_dir(self):
+        if self.cli.npm_cache_path:
+            path = pathlib.Path(self.cli.npm_cache_path)
+            path = path.expanduser()
+            return path.resolve()
+        return None
+
+    @property
     def map_user(self):
         # TODO: detect if uid mapping is needed
         return os.getuid() != 0
@@ -411,23 +466,46 @@ class Builder:
 
     def __init__(self):
         self._did_steps = set()
+        self._reported_failed = False
 
     def wants(self, step, ctx, *, force=False, top=False):
         log.info("want to execute build step: %s", step)
         if ctx.cli.no_prereqs and not top:
             log.info("Running prerequisite steps disabled")
             return
-        if step in self._did_steps:
+        if step in self._did_steps and not force:
             log.info("step already done: %s", step)
             return
         if not self._did_steps:
             prepare_env_once(ctx)
-        self._steps[step](ctx)
-        self._did_steps.add(step)
-        log.info("step done: %s", step)
+        with self._timer(step):
+            self._steps[step](ctx)
+            self._did_steps.add(step)
 
     def available_steps(self):
         return [str(k) for k in self._steps]
+
+    @contextlib.contextmanager
+    def _timer(self, step):
+        ns = argparse.Namespace(start=time.monotonic())
+        status = "not-started"
+        try:
+            yield ns
+            status = "completed"
+        except Exception:
+            status = "failed"
+            raise
+        finally:
+            ns.end = time.monotonic()
+            ns.duration = int(ns.end - ns.start)
+            hrs, _rest = map(int, divmod(ns.duration, 3600))
+            mins, secs = map(int, divmod(_rest, 60))
+            ns.duration_hms = f"{hrs:02}:{mins:02}:{secs:02}"
+            if not self._reported_failed:
+                log.info(
+                    "step done: %s %s in %s", step, status, ns.duration_hms
+                )
+            self._reported_failed = status == "failed"
 
     @classmethod
     def set(self, step):
@@ -467,6 +545,14 @@ def dnf_cache_dir(ctx):
     (cache_dir / ".DNF_CACHE").touch(exist_ok=True)
 
 
+@Builder.set(Steps.NPM_CACHE)
+def npm_cache_dir(ctx):
+    """Set up an NPM cache directory for reuse across container builds."""
+    if not ctx.cli.npm_cache_path:
+        return
+    ctx.npm_cache_dir.mkdir(parents=True, exist_ok=True)
+
+
 @Builder.set(Steps.BUILD_CONTAINER)
 def build_container(ctx):
     """Generate a build environment container image."""
@@ -477,14 +563,14 @@ def build_container(ctx):
         "--pull",
         "-t",
         ctx.image_name,
-        f"--build-arg=JENKINS_HOME={ctx.cli.homedir}",
+        f"--label=io.ceph.build-with-container.src={_hash_sources()}",
         f"--build-arg=CEPH_BASE_BRANCH={ctx.base_branch()}",
     ]
     if ctx.cli.distro:
         cmd.append(f"--build-arg=DISTRO={ctx.from_image}")
     if ctx.dnf_cache_dir and "docker" in ctx.container_engine:
         log.warning(
-            "The --volume option is not supported by docker. Skipping dnf cache dir mounts"
+            "The --volume option is not supported by docker build/buildx. Skipping dnf cache dir mounts"
         )
     elif ctx.dnf_cache_dir:
         cmd += [
@@ -492,20 +578,46 @@ def build_container(ctx):
             f"--volume={ctx.dnf_cache_dir}:/var/cache/dnf:Z",
             "--build-arg=CLEAN_DNF=no",
         ]
+    if ctx.cli.build_args:
+        cmd.extend([f"--build-arg={v}" for v in ctx.cli.build_args])
     cmd += ["-f", ctx.cli.containerfile, ctx.cli.containerdir]
     with ctx.user_command():
         _run(cmd, check=True, ctx=ctx)
 
 
-@Builder.set(Steps.CONTAINER)
-def get_container(ctx):
-    """Build or fetch a container image that we will build in."""
+def _check_cached_image(ctx):
     inspect_cmd = [
         ctx.container_engine,
         "image",
         "inspect",
         ctx.image_name,
     ]
+    res = _run(inspect_cmd, check=False, capture_output=True)
+    if res.returncode != 0:
+        log.info("Container image %s not present", ctx.image_name)
+        return False, False
+
+    log.info("Container image %s present", ctx.image_name)
+    ctr_info = json.loads(res.stdout)[0]
+    labels = {}
+    if "Labels" in ctr_info:
+        labels = ctr_info["Labels"]
+    elif "Labels" in ctr_info.get("ContainerConfig", {}):
+        labels = ctr_info["ContainerConfig"]["Labels"]
+    elif "Labels" in ctr_info.get("Config", {}):
+        labels = ctr_info["Config"]["Labels"]
+    saved_hash = labels.get("io.ceph.build-with-container.src", "")
+    curr_hash = _hash_sources()
+    if saved_hash == curr_hash:
+        log.info("Container passes source check")
+        return True, True
+    log.info("Container sources do not match: %s", curr_hash)
+    return True, False
+
+
+@Builder.set(Steps.CONTAINER)
+def get_container(ctx):
+    """Build or fetch a container image that we will build in."""
     pull_cmd = [
         ctx.container_engine,
         "pull",
@@ -513,16 +625,18 @@ def get_container(ctx):
     ]
     allowed = ctx.cli.image_sources or ImageSource
     if ImageSource.CACHE in allowed:
-        res = _run(inspect_cmd, check=False, capture_output=True)
-        if res.returncode == 0:
-            log.info("Container image %s present", ctx.image_name)
+        log.info("Checking for cached image")
+        present, hash_ok = _check_cached_image(ctx)
+        if present and hash_ok or len(allowed) == 1:
             return
-        log.info("Container image %s not present", ctx.image_name)
     if ImageSource.PULL in allowed:
+        log.info("Checking for image in remote repository")
         res = _run(pull_cmd, check=False, capture_output=True)
         if res.returncode == 0:
             log.info("Container image %s pulled successfully", ctx.image_name)
-            return
+            present, hash_ok = _check_cached_image(ctx)
+            if present and hash_ok:
+                return
     log.info("Container image %s needed", ctx.image_name)
     if ImageSource.BUILD in allowed:
         ctx.build.wants(Steps.BUILD_CONTAINER, ctx)
@@ -549,6 +663,7 @@ def bc_configure(ctx):
 @Builder.set(Steps.BUILD)
 def bc_build(ctx):
     """Execute a standard build."""
+    ctx.build.wants(Steps.NPM_CACHE, ctx)
     ctx.build.wants(Steps.CONFIGURE, ctx)
     cmd = _container_cmd(
         ctx,
@@ -565,6 +680,7 @@ def bc_build(ctx):
 @Builder.set(Steps.BUILD_TESTS)
 def bc_build_tests(ctx):
     """Build the tests."""
+    ctx.build.wants(Steps.NPM_CACHE, ctx)
     ctx.build.wants(Steps.CONFIGURE, ctx)
     cmd = _container_cmd(
         ctx,
@@ -581,6 +697,7 @@ def bc_build_tests(ctx):
 @Builder.set(Steps.TESTS)
 def bc_run_tests(ctx):
     """Execute the tests."""
+    ctx.build.wants(Steps.NPM_CACHE, ctx)
     ctx.build.wants(Steps.BUILD_TESTS, ctx)
     cmd = _container_cmd(
         ctx,
@@ -596,7 +713,8 @@ def bc_run_tests(ctx):
 
 @Builder.set(Steps.SOURCE_RPM)
 def bc_make_source_rpm(ctx):
-    """Build SPRMs."""
+    """Build SRPMs."""
+    ctx.build.wants(Steps.NPM_CACHE, ctx)
     ctx.build.wants(Steps.CONTAINER, ctx)
     make_srpm_cmd = f"cd {ctx.cli.homedir} && ./make-srpm.sh"
     if ctx.cli.ceph_version:
@@ -613,11 +731,77 @@ def bc_make_source_rpm(ctx):
         _run(cmd, check=True, ctx=ctx)
 
 
-@Builder.set(Steps.RPM)
-def bc_build_rpm(ctx):
-    """Build RPMs from SRPM."""
-    srpm_glob = "ceph*.src.rpm"
-    if ctx.cli.rpm_match_sha:
+def _glob_search(ctx, pattern):
+    overlay = ctx.overlay()
+    try:
+        return glob.glob(pattern, root_dir=overlay.upper if overlay else None)
+    except TypeError:
+        log.info("glob with root_dir failed... falling back to chdir")
+    try:
+        prev_dir = os.getcwd()
+        if overlay:
+            os.chdir(overlay.upper)
+            log.debug("chdir %s -> %s", prev_dir, overlay.upper)
+        result = glob.glob(pattern)
+    finally:
+        if overlay:
+            os.chdir(prev_dir)
+    return result
+
+
+def _find_srpm_glob(ctx, pattern):
+    paths = _glob_search(ctx, pattern)
+    if len(paths) > 1:
+        raise RuntimeError(
+            "too many matching source rpms"
+            f" (rename or remove unwanted files matching {pattern} in the"
+            " ceph dir and try again)"
+        )
+    if not paths:
+        log.info("No SRPM found for pattern: %s", pattern)
+        return None
+    return paths[0]
+
+
+def _find_srpm_by_rpm_query(ctx):
+    log.info("Querying spec file for rpm versions")  # XXX: DEBUG
+    rpmquery_args = [
+        "rpm", "--qf", "%{version}-%{release}\n", "--specfile", "ceph.spec"
+    ]
+    rpmquery_cmd = ' '.join(shlex.quote(cmd) for cmd in rpmquery_args)
+    cmd = _container_cmd(
+        ctx,
+        [
+            "bash",
+            "-c",
+            f"cd {ctx.cli.homedir} && {rpmquery_cmd}",
+        ],
+    )
+    res = _run(cmd, check=False, capture_output=True)
+    if res.returncode != 0:
+        log.warning("Failed to list rpm versions")
+        return None
+    versions = set(l.strip() for l in res.stdout.decode().splitlines())
+    if len(versions) > 1:
+        raise RuntimeError("too many versions in rpm query")
+    version = list(versions)[0]
+    filename = f'ceph-{version}.src.rpm'
+    # lazily reuse the glob match function to detect file presence even tho
+    # it's not got any wildcard chars
+    return _find_srpm_glob(ctx, filename)
+
+
+@Builder.set(Steps.FIND_SRPM)
+def bc_find_srpm(ctx):
+    """Find the current/matching Source RPM."""
+    # side effects ctx setting current_srpm to a string when match is found.
+    if ctx.cli.srpm_match == 'any':
+        ctx.current_srpm = _find_srpm_glob(ctx, "ceph*.src.rpm")
+    elif ctx.cli.srpm_match == 'versionglob':
+        # in theory we could probably drop this method now that
+        # _find_srpm_by_rpm_query exists, but this is retained in case I missed
+        # something and that this is noticeably faster since it doesn't need to
+        # start a container
         if not ctx.cli.ceph_version:
             head_sha = _git_current_sha(ctx)
             srpm_glob = f"ceph*.g{head_sha}.*.src.rpm"
@@ -633,19 +817,24 @@ def bc_build_rpm(ctx):
                 ctx.cli.ceph_version
             )
             srpm_glob = f"ceph-{srpm_version}.*.src.rpm"
-    paths = glob.glob(srpm_glob)
-    if len(paths) > 1:
-        raise RuntimeError(
-            "too many matching source rpms"
-            f" (rename or remove unwanted files matching {srpm_glob} in the"
-            " ceph dir and try again)"
-        )
-    if not paths:
+        ctx.current_srpm = _find_srpm_glob(ctx, srpm_glob)
+    else:
+        ctx.current_srpm = _find_srpm_by_rpm_query(ctx)
+    if ctx.current_srpm:
+        log.info("Found SRPM: %s", ctx.current_srpm)
+
+
+@Builder.set(Steps.RPM)
+def bc_build_rpm(ctx):
+    """Build RPMs from SRPM."""
+    ctx.build.wants(Steps.FIND_SRPM, ctx, force=True)
+    if not ctx.current_srpm:
         # no matches. build a new srpm
         ctx.build.wants(Steps.SOURCE_RPM, ctx)
-        paths = glob.glob(srpm_glob)
-        assert paths
-    srpm_path = pathlib.Path(ctx.cli.homedir) / paths[0]
+        ctx.build.wants(Steps.FIND_SRPM, ctx, force=True)
+        if not ctx.current_srpm:
+            raise RuntimeError("unable to find source rpm(s)")
+    srpm_path = pathlib.Path(ctx.cli.homedir) / ctx.current_srpm
     topdir = pathlib.Path(ctx.cli.homedir) / "rpmbuild"
     if ctx.cli.build_dir:
         topdir = (
@@ -655,7 +844,7 @@ def bc_build_rpm(ctx):
         'rpmbuild',
         '--rebuild',
         f'-D_topdir {topdir}',
-    ] + list(ctx.cli.rpmbuild_arg) + [str(srpm_path)]
+    ] + list(ctx.cli.rpmbuild_arg or []) + [str(srpm_path)]
     rpmbuild_cmd = ' '.join(shlex.quote(cmd) for cmd in rpmbuild_args)
     cmd = _container_cmd(
         ctx,
@@ -817,7 +1006,11 @@ def parse_cli(build_step_names):
     )
     parser.add_argument(
         "--dnf-cache-path",
-        help="DNF caching using provided base dir",
+        help="DNF caching using provided base dir (during build-container build)",
+    )
+    parser.add_argument(
+        "--npm-cache-path",
+        help="NPM caching using provided base dir (during build)",
     )
     parser.add_argument(
         "--build-dir",
@@ -825,6 +1018,15 @@ def parse_cli(build_step_names):
         help=(
             "Specify a build directory relative to the home dir"
             " (the ceph source root)"
+        ),
+    )
+    parser.add_argument(
+        "--build-arg",
+        dest="build_args",
+        action="append",
+        help=(
+            "Extra argument to pass to container image build."
+            " Can be used to override default build image behavior."
         ),
     )
     parser.add_argument(
@@ -872,11 +1074,25 @@ def parse_cli(build_step_names):
     )
     parser.add_argument(
         "--rpm-no-match-sha",
-        dest="rpm_match_sha",
-        action="store_false",
+        dest="srpm_match",
+        action="store_const",
+        const='any',
         help=(
             "Do not try to build RPM packages that match the SHA of the current"
             " git checkout. Use any source RPM available."
+            " [DEPRECATED] Use --rpm-match=any"
+        ),
+    )
+    parser.add_argument(
+        "--srpm-match",
+        dest="srpm_match",
+        choices=("any", "versionglob", "auto"),
+        default="auto",
+        help=(
+            "Method used to detect what Source RPM (SRPM) to build:"
+            " 'any' looks for any ceph source rpms."
+            " 'versionglob' uses a glob matching against version/git id."
+            " 'auto' (the default) uses a version derived from ceph.spec."
         ),
     )
     parser.add_argument(
