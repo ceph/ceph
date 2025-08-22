@@ -535,11 +535,11 @@ void MonClient::shutdown()
   monc_lock.lock();
   stopping = true;
   while (!version_requests.empty()) {
-    asio::dispatch(
-      asio::append(std::move(version_requests.begin()->second),
-		   make_error_code(monc_errc::shutting_down), 0, 0));
     ldout(cct, 20) << __func__ << " canceling and discarding version request "
 		   << version_requests.begin()->first << dendl;
+    asio::post(service.get_executor(),
+               asio::append(std::move(version_requests.begin()->second),
+                            make_error_code(monc_errc::shutting_down), 0, 0));
     version_requests.erase(version_requests.begin());
   }
   while (!mon_commands.empty()) {
@@ -769,9 +769,11 @@ void MonClient::_reopen_session(int rank)
 
   // throw out version check requests
   while (!version_requests.empty()) {
-    asio::dispatch(asio::append(std::move(version_requests.begin()->second),
-				make_error_code(monc_errc::session_reset),
-				0, 0));
+    ldout(cct, 20) << __func__ << " canceling and discarding version request "
+		   << version_requests.begin()->first << dendl;
+    asio::post(service.get_executor(),
+               asio::append(std::move(version_requests.begin()->second),
+                            make_error_code(monc_errc::session_reset), 0, 0));
     version_requests.erase(version_requests.begin());
   }
 
