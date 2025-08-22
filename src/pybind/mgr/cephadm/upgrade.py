@@ -2,6 +2,7 @@ import errno
 import json
 import logging
 import time
+import datetime
 import uuid
 from dataclasses import dataclass, field, asdict
 from typing import TYPE_CHECKING, Optional, Dict, List, Tuple, Any, cast, Set
@@ -595,6 +596,11 @@ class CephadmUpgrade:
 
         if running_mgr_count < 2:
             raise OrchestratorError('Need at least 2 running mgr daemons for upgrade')
+
+        if not self.mgr.db_ready():
+            raise OrchestratorError('needs mgr db ready for upgrade')
+        
+        self.mgr.version_tracker.add_bootstrap_cluster_version()
 
         self.mgr.log.info('Upgrade: Started with target %s' % target_name)
         self.upgrade_state = UpgradeState(
@@ -1703,7 +1709,7 @@ class CephadmUpgrade:
         if self.upgrade_state.progress_id:
             self.mgr.remote('progress', 'complete',
                             self.upgrade_state.progress_id)
-        self.mgr.version_tracker.add_cluster_version(self.upgrade_state.target_name)
+        self.mgr.version_tracker.add_cluster_version(self.mgr._version, str(datetime.datetime.now(datetime.timezone.utc)))
         self.upgrade_state = None
         self._ok_to_upgrade_osds_in_crush_bucket = None
         self._save_upgrade_state()
