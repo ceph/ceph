@@ -162,8 +162,6 @@ struct shard_as_auth_t {
   object_info_t oi;
   shard_to_scrubmap_t::iterator auth_iter;
   std::optional<uint32_t> digest;
-  // when used for Crimson, we'll probably want to return 'digest_match' (and
-  // other in/out arguments) via this struct
 };
 
 namespace fmt {
@@ -227,10 +225,12 @@ struct auth_selection_t {
   bool digest_match{true};        ///< do all (existing) digests match?
 };
 
+namespace fmt {
+
 // note: some scrub tests are sensitive to the specific format of
 // auth_selection_t listing in the logs
 template <>
-struct fmt::formatter<auth_selection_t> {
+struct formatter<auth_selection_t> {
   template <typename ParseContext>
   constexpr auto parse(ParseContext& ctx)
   {
@@ -250,6 +250,19 @@ struct fmt::formatter<auth_selection_t> {
                           aus.digest_match);
   }
 };
+} // namespace fmt
+
+
+/**
+ * the back-end data that is per-object
+ */
+struct object_scrub_data_t {
+  std::set<pg_shard_t> cur_missing;
+  std::set<pg_shard_t> cur_inconsistent;
+  bool fix_digest{false};
+};
+
+
 
 /**
  * the back-end data that is per-chunk
@@ -258,7 +271,7 @@ struct fmt::formatter<auth_selection_t> {
  */
 struct scrub_chunk_t {
 
-  explicit scrub_chunk_t(pg_shard_t i_am) { received_maps[i_am] = ScrubMap{}; }
+  explicit scrub_chunk_t(pg_shard_t i_am, uint32_t ec_digest_sz);
 
   /// the working set of scrub maps: the received maps, plus
   /// Primary's own map.
@@ -279,11 +292,8 @@ struct scrub_chunk_t {
   /// shallow/deep error counters
   error_counters_t m_error_counts;
 
-  // these must be reset for each element:
-
-  std::set<pg_shard_t> cur_missing;
-  std::set<pg_shard_t> cur_inconsistent;
-  bool fix_digest{false};
+  // EC-related:
+  shard_id_map<bufferlist> m_ec_digest_map;
 };
 
 
@@ -377,11 +387,13 @@ class ScrubBackend {
   /// Mapping from object with errors to good peers
   std::map<hobject_t, auth_peers_t> m_auth_peers;
 
+  // EC related:
+  /// size of the EC digest map, calculated based on the EC configuration
+  uint32_t m_ec_digest_map_size{0};
+
   // shorthands:
   ConfigProxy& m_conf;
   LoggerSinkSet& clog;
-
- private:
 
   struct auth_and_obj_errs_t {
     std::list<pg_shard_t> auth_list;
@@ -389,6 +401,9 @@ class ScrubBackend {
   };
 
   std::optional<scrub_chunk_t> this_chunk;
+
+  /// the data collected/processed re the specific object being scrubbed
+  object_scrub_data_t m_current_obj;
 
   /// Maps from objects with errors to missing peers
   HobjToShardSetMapping m_missing;  // used by scrub_process_inconsistent()
