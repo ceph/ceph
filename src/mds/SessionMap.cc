@@ -473,7 +473,7 @@ void SessionMap::save(MDSContext *onsave, version_t needv)
       bufferlist bl;
       if (!validate_and_encode_session(mds, session, bl)) {
 	derr << __func__ << ": session (" << name << ") exceeds"
-	     << " sesion metadata threshold - blocklisting" << dendl;
+	     << " session metadata threshold - blocklisting" << dendl;
 	to_blocklist.emplace(name);
 	continue;
       }
@@ -933,7 +933,7 @@ void SessionMap::save_if_dirty(const std::set<entity_name_t> &tgt_sessions,
     bufferlist bl;
     if (!validate_and_encode_session(mds, session, bl)) {
       derr << __func__ << ": session (" << session_id << ") exceeds"
-	   << " sesion metadata threshold - blocklisting" << dendl;
+	   << " session metadata threshold - blocklisting" << dendl;
       to_blocklist.emplace(session_id);
       continue;
     }
