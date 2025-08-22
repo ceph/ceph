@@ -1116,36 +1116,23 @@ public:
     LOG_PREFIX(TransactionManager::remove_mappings_in_range);
     SUBDEBUGT(seastore_tm, "{}~{}, first_mapping: {}",
       t, start, unaligned_len, first_mapping);
-    // remove all middle mappings
-    return seastar::do_with(
-      std::move(first_mapping),
-      [&t, this, start, unaligned_len](auto &mapping) {
-      return trans_intr::repeat([&t, this, start, unaligned_len, &mapping] {
-	if (mapping.is_end()) {
-	  return punch_mappings_iertr::make_ready_future<
-	    seastar::stop_iteration>(seastar::stop_iteration::yes);
+    auto mapping = co_await first_mapping.refresh();
+    while (!mapping.is_end()) {
+      assert(mapping.get_key() >= start);
+      auto mapping_end =
+	(mapping.get_key() + mapping.get_length()).checked_to_laddr();
+      if (mapping_end > start + unaligned_len) {
+	break;
+      }
+      mapping = co_await remove(t, std::move(mapping)
+      ).handle_error_interruptible(
+	punch_mappings_iertr::pass_further{},
+	crimson::ct_error::assert_all{
+	  "remove_mappings_in_range hit invalid error"
 	}
-	assert(mapping.get_key() >= start);
-	auto mapping_end =
-	  (mapping.get_key() + mapping.get_length()).checked_to_laddr();
-	if (mapping_end > start + unaligned_len) {
-	  return punch_mappings_iertr::make_ready_future<
-	    seastar::stop_iteration>(seastar::stop_iteration::yes);
-	}
-	return remove(t, std::move(mapping)
-	).si_then([&mapping](auto next_mapping) {
-	  mapping = std::move(next_mapping);
-	  return seastar::stop_iteration::no;
-	}).handle_error_interruptible(
-	  punch_mappings_iertr::pass_further{},
-	  crimson::ct_error::assert_all{
-	    "remove_mappings_in_range hit invalid error"
-	  }
-	);
-      }).si_then([&mapping] {
-	return std::move(mapping);
-      });
-    });
+      );
+    }
+    co_return std::move(mapping);
   }
 
   ~TransactionManager();
