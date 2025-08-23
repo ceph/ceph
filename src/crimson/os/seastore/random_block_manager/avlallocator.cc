@@ -84,7 +84,7 @@ rbm_abs_addr AvlAllocator::find_block(size_t size)
       return off;
     } 
   }
-  return total_size;
+  return base_addr + total_size;
 }
 
 extent_len_t AvlAllocator::find_block(
