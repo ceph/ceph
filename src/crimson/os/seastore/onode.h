@@ -104,6 +104,7 @@ public:
   virtual void clear_snapset(Transaction&) = 0;
   virtual void set_need_cow(Transaction&) = 0;
   virtual void unset_need_cow(Transaction&) = 0;
+  virtual void swap_layout(Transaction&, Onode&) = 0;
 
   laddr_t get_metadata_hint(uint64_t block_size) const {
     assert(default_metadata_offset);
