@@ -93,6 +93,47 @@ struct FLTreeOnode final : Onode, Value {
     layout_func(p.first, p.second);
   }
 
+  void swap_layout(Transaction &t, Onode &onode) final {
+    _swap_layout(t, static_cast<FLTreeOnode&>(onode));
+  }
+
+  void _swap_layout(Transaction &t, FLTreeOnode &other) {
+    assert(status != status_t::DELETED);
+    assert(other.status != status_t::DELETED);
+    auto [payload_mut, recorder] = prepare_mutate_payload<
+      onode_layout_t, Recorder>(t);
+    auto &mlayout = *reinterpret_cast<onode_layout_t*>(
+      payload_mut.get_write());
+    auto [o_payload_mut, o_recorder] = other.prepare_mutate_payload<
+      onode_layout_t, Recorder>(t);
+    auto &o_mlayout = *reinterpret_cast<onode_layout_t*>(
+      o_payload_mut.get_write());
+    std::swap(mlayout.object_data, o_mlayout.object_data);
+    std::swap(mlayout.omap_root, o_mlayout.omap_root);
+    std::swap(mlayout.log_root, o_mlayout.log_root);
+    std::swap(mlayout.xattr_root, o_mlayout.xattr_root);
+    if (recorder) {
+      recorder->encode_update(
+	payload_mut, Recorder::delta_op_t::UPDATE_OBJECT_DATA);
+      recorder->encode_update(
+	payload_mut, Recorder::delta_op_t::UPDATE_OMAP_ROOT);
+      recorder->encode_update(
+	payload_mut, Recorder::delta_op_t::UPDATE_LOG_ROOT);
+      recorder->encode_update(
+	payload_mut, Recorder::delta_op_t::UPDATE_XATTR_ROOT);
+    }
+    if (o_recorder) {
+      o_recorder->encode_update(
+	o_payload_mut, Recorder::delta_op_t::UPDATE_OBJECT_DATA);
+      o_recorder->encode_update(
+	o_payload_mut, Recorder::delta_op_t::UPDATE_OMAP_ROOT);
+      o_recorder->encode_update(
+	o_payload_mut, Recorder::delta_op_t::UPDATE_LOG_ROOT);
+      o_recorder->encode_update(
+	o_payload_mut, Recorder::delta_op_t::UPDATE_XATTR_ROOT);
+    }
+  }
+
   void create_default_layout(Transaction &t) {
     with_mutable_layout(
       t,
