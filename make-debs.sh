@@ -50,7 +50,8 @@ test -f "ceph-$vers.tar.bz2" || ./make-dist $vers
 #
 mkdir -p $releasedir
 mv ceph-$vers.tar.bz2 $releasedir/ceph_$vers.orig.tar.bz2
-tar -C $releasedir -jxf $releasedir/ceph_$vers.orig.tar.bz2
+tar -C $releasedir --no-same-owner -jxf $releasedir/ceph_$vers.orig.tar.bz2
+
 #
 # copy the debian directory over and remove -dbg packages
 # because they are large and take time to build
