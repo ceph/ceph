@@ -5722,7 +5722,7 @@ int OSDMap::calc_pg_upmaps(
   float cur_max_deviation = calc_deviations(cct, pgs_by_osd, osd_weight, pgs_per_weight,
 				      	    osd_deviation, deviation_osd, stddev);
 
-  ldout(cct, 20) << " stdev " << stddev << " max_deviation " << cur_max_deviation << dendl;
+  ldout(cct, 10) << " stddev " << stddev << " max_deviation " << cur_max_deviation << dendl;
   if (cur_max_deviation <= max_deviation) {
     ldout(cct, 10) << __func__ << " distribution is almost perfect"
                    << dendl;
@@ -5954,7 +5954,8 @@ int OSDMap::calc_pg_upmaps(
     					      pgs_per_weight, temp_osd_deviation,
 					      temp_deviation_osd, new_stddev);
     ldout(cct, 10) << " stddev " << stddev << " -> " << new_stddev << dendl;
-    if (new_stddev >= stddev) {
+    // accept change if it doesn't make things worse
+    if (new_stddev > stddev) {
       if (!aggressive) {
         ldout(cct, 10) << " break because stddev is not decreasing"
                        << " and aggressive mode is not enabled"
@@ -5983,7 +5984,7 @@ int OSDMap::calc_pg_upmaps(
     }
 
     // ready to go
-    ceph_assert(new_stddev < stddev);
+    ceph_assert(new_stddev <= stddev);
     stddev = new_stddev;
     pgs_by_osd = temp_pgs_by_osd;
     osd_deviation = temp_osd_deviation;
@@ -5993,7 +5994,7 @@ int OSDMap::calc_pg_upmaps(
 
     num_changed += pack_upmap_results(cct, to_unmap, to_upmap, tmp_osd_map, pending_inc);
 
-    ldout(cct, 20) << " stdev " << stddev << " max_deviation " << cur_max_deviation << dendl;
+    ldout(cct, 10) << " stddev " << stddev << " max_deviation " << cur_max_deviation << dendl;
     if (cur_max_deviation <= max_deviation) {
       ldout(cct, 10) << __func__ << " Optimization plan is almost perfect"
                      << dendl;
