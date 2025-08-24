@@ -1,10 +1,14 @@
 roles:
-- [mon.a, mgr.x, osd.0, osd.1, osd.2, osd.3, client.0]
+- [mon.a, mgr.y, osd.0, osd.4, osd.8, osd.12]
+- [mon.b, osd.1, osd.5, osd.9, osd.13]
+- [mon.c, osd.2, osd.6, osd.10, osd.14]
+- [mgr.x, osd.3, osd.7, osd.11, osd.15, client.0]
 overrides:
   ceph:
     conf:
       osd:
-        crimson cpu num: 3
+        osd shutdown pgref assert: true
+        crimson cpu num: 4
       global:
         ms cluster mode: crc
         ms service mode: crc
@@ -12,4 +16,3 @@ overrides:
         ms mon service mode: crc
         ms mon cluster mode: crc
         ms mon client mode: crc
-

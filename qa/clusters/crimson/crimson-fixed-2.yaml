@@ -1,10 +1,12 @@
 roles:
-- [mon.a, mgr.x, osd.0, osd.1, osd.2, osd.3, client.0]
+- [mon.a, osd.0, osd.1, client.0, node-exporter.a]
+- [mgr.x, osd.2, osd.3, client.1, prometheus.a, node-exporter.b]
 overrides:
   ceph:
     conf:
       osd:
-        crimson cpu num: 3
+        osd shutdown pgref assert: true
+        crimson cpu num: 4
       global:
         ms cluster mode: crc
         ms service mode: crc
@@ -12,4 +14,3 @@ overrides:
         ms mon service mode: crc
         ms mon cluster mode: crc
         ms mon client mode: crc
-
