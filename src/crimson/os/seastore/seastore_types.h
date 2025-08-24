@@ -1933,6 +1933,10 @@ public:
   omap_type_t get_type() const {
     return type;
   }
+
+  bool is_null() const {
+    return addr == laddr_le_t(L_ADDR_NULL);
+  }
 };
 
 /**
