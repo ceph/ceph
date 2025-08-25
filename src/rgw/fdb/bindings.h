@@ -394,6 +394,14 @@ inline bool get(ceph::libfdb::transaction_handle txn, auto key, std::function<vo
  return true;
 }
 
+template <typename K>
+inline bool key_exists(transaction_handle txn, K k)
+{
+ auto r = ceph::libfdb::detail::get_single_value_from_transaction(txn, ceph::libfdb::to::convert(key));
+
+ return r.key_was_found;
+}
+
 } // namespace ceph::libfdb
 
 namespace ceph::libfdb::detail {

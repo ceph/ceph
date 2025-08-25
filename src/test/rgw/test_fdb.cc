@@ -149,6 +149,26 @@ TEST_CASE("fdb simple", "[rgw][fdb]") {
       CHECK(v == out_value); 
     }
  }
+
+ SECTION("check for existence of key") {
+    REQUIRE(nullptr != dbh);
+
+    // Erase the key if it's already there:
+    lfdb::erase(lfdb::make_transaction(dbh), k, lfdb::commit_after_op::commit));
+
+    // Now, we shouldn't find anything:
+    CHECK_FALSE(lfdb::key_exists(lfdb::make_transaction(dbh), k));
+
+    // Write the key:
+    lfdb::set(lfdb::make_transaction(dbh), k, v, lfdb::commit_after_op::commit);
+
+    // ...it should magically be there!
+    CHECK(lfdb::key_exists(lfdb::make_transaction(dbh), k));
+
+    // ...and now it should be gone again:
+    lfdb::erase(lfdb::make_transaction(dbh), k, lfdb::commit_after_op::commit);
+    CHECK_FALSE(lfdb::key_exists(lfdb::make_transaction(dbh), k));
+ }
 }
 
 TEMPLATE_PRODUCT_TEST_CASE("A Template product test case", "[template][product]", 
