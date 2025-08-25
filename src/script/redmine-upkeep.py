@@ -1244,7 +1244,7 @@ h2. Update Payload
 
             This is an automated message by src/script/redmine-upkeep.py.
 
-            I found one or more 'Fixes:' tags in the commit messages in
+            I found one or more `Fixes:` tags in the commit messages in
 
             `git log {revrange}`
 
@@ -1252,10 +1252,7 @@ h2. Update Payload
 
             {tracker_links}
 
-            Those tickets do not reference this merged Pull Request. If this
-            Pull Request merge resolves any of those tickets, please update the
-            "Pull Request ID" field on each ticket. A future run of this
-            script will appropriately update them.
+            Those tickets do not reference this merged Pull Request. If this Pull Request merge resolves any of those tickets, please update the "Pull Request ID" field on each ticket. A future run of this script will appropriately update them.
 
             Update Log: {GITHUB_ACTION_LOG}
 
