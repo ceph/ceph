@@ -223,12 +223,6 @@ export class HostsComponent extends ListWithDetails implements OnDestroy, OnInit
         cellTemplate: this.hostNameTpl
       },
       {
-        name: $localize`Service Instances`,
-        prop: 'service_instances',
-        flexGrow: 1.5,
-        cellTemplate: this.servicesTpl
-      },
-      {
         name: $localize`Labels`,
         prop: 'labels',
         flexGrow: 1,
