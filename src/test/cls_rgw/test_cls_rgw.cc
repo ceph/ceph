@@ -1000,47 +1000,158 @@ TEST_F(cls_rgw, gc_defer)
   ASSERT_EQ(0, destroy_one_pool_pp(gc_pool_name, rados));
 }
 
-auto populate_usage_log_info(std::string user, std::string payer, int total_usage_entries)
+auto populate_usage_log_info(std::string user, std::string payer, int total_usage_entries, uint64_t epoch = 0)
 {
   rgw_usage_log_info info;
 
   for (int i=0; i < total_usage_entries; i++){
     auto bucket = str_int("bucket", i);
     info.entries.emplace_back(rgw_usage_log_entry(user, payer, bucket));
+    info.entries.back().epoch = epoch;
   }
 
   return info;
 }
 
-auto gen_usage_log_info(std::string payer, std::string bucket, int total_usage_entries)
+auto gen_usage_log_info(std::string payer, std::string bucket, int total_usage_entries, uint64_t epoch = 0)
 {
   rgw_usage_log_info info;
   for (int i=0; i < total_usage_entries; i++){
     auto user = str_int("user", i);
     info.entries.emplace_back(rgw_usage_log_entry(user, payer, bucket));
+    info.entries.back().epoch = epoch;
   }
 
   return info;
+}
+
+// Copied from cls_rgw.cc in order to populate usage logs with old keys
+static void usage_record_name_by_time(uint64_t epoch, const std::string& user, const std::string& bucket, std::string& key)
+{
+    char buf[32 + user.size() + bucket.size()];
+    snprintf(buf, sizeof(buf), "%011llu_%s_%s", (long long unsigned)epoch, user.c_str(), bucket.c_str());
+    key = buf;
+}
+
+static void usage_record_name_by_user_old(const std::string& user, uint64_t epoch, const std::string& bucket, std::string& key)
+{
+    char buf[32 + user.size() + bucket.size()];
+    snprintf(buf, sizeof(buf), "%s_%011llu_%s", user.c_str(), (long long unsigned)epoch, bucket.c_str());
+    key = buf;
+}
+
+void populate_old_usage_log_info(librados::IoCtx &ioctx,
+                                 std::string& oid,
+                                 std::string& user,
+                                 std::string& payer,
+                                 int total_usage_entries,
+                                 uint64_t epoch)
+{
+  for (int i=0; i < total_usage_entries; ++i) {
+    auto bucket = str_int("bucket", i);
+    rgw_usage_log_entry entry(user, payer, bucket);
+    entry.epoch = epoch;
+    bufferlist bl;
+    encode(entry, bl);
+
+    std::string key_by_time;
+    std::string key_by_user;
+    std::string owner = payer.empty() ? user : payer;
+
+    usage_record_name_by_time(epoch, owner, bucket, key_by_time);
+    usage_record_name_by_user_old(owner, epoch, bucket, key_by_user);
+
+    map<std::string, bufferlist> omap_records{
+      {key_by_time, bl},
+      {key_by_user, bl}
+    };
+
+    librados::ObjectWriteOperation op;
+    op.omap_set(omap_records);
+    ASSERT_EQ(0, ioctx.operate(oid, &op));
+  }
+}
+
+TEST_F(cls_rgw, usage_key_transition)
+{
+  string oid="usage.1";
+  string user="012-345-678";
+  uint64_t an_hour{3600}, start_epoch{0}, log_epoch{1755892800}, end_epoch{log_epoch + an_hour * 3};
+  int total_usage_entries = 8, extra_entries = 4;
+  uint64_t max_entries = 12;
+  string payer;
+
+  // Populate logs with old keys
+  populate_old_usage_log_info(ioctx, oid, user, payer, total_usage_entries, log_epoch);
+  populate_old_usage_log_info(ioctx, oid, user, payer, total_usage_entries, log_epoch + an_hour);
+
+  // Populate logs with new keys with the same epoch as the last old ones. They override the old ones.
+  auto info = populate_usage_log_info(user, payer, total_usage_entries / 2, log_epoch + an_hour);
+  ObjectWriteOperation op;
+  cls_rgw_usage_log_add(op, info);
+  ASSERT_EQ(0, ioctx.operate(oid, &op));
+
+  // Populate logs with new keys with the new epoch
+  info = populate_usage_log_info(user, payer, total_usage_entries + extra_entries, log_epoch + an_hour * 2);
+  ObjectWriteOperation another_op;
+  cls_rgw_usage_log_add(another_op, info);
+  ASSERT_EQ(0, ioctx.operate(oid, &another_op));
+
+  string read_iter;
+  map <rgw_user_bucket, rgw_usage_log_entry> usage, usage2, usage3;
+  bool truncated;
+  int ret = cls_rgw_usage_log_read(ioctx, oid, user, payer, start_epoch, end_epoch, max_entries, read_iter, usage, &truncated);
+  ASSERT_EQ(ret, 0);
+  ASSERT_TRUE(truncated);
+  ASSERT_TRUE(!read_iter.empty() && read_iter.at(0) == '0'); // Old key;
+  ASSERT_EQ(usage.size(), total_usage_entries);
+
+  ret = cls_rgw_usage_log_read(ioctx, oid, user, payer, start_epoch, end_epoch, max_entries, read_iter, usage2, &truncated);
+  ASSERT_EQ(ret, 0);
+  ASSERT_TRUE(truncated); // Still have more left
+  ASSERT_TRUE(!read_iter.empty() && read_iter.at(0) == '~'); // New key;
+  ASSERT_EQ(usage2.size(), total_usage_entries);
+
+  ret = cls_rgw_usage_log_read(ioctx, oid, user, payer, start_epoch, end_epoch, max_entries, read_iter, usage3, &truncated);
+  ASSERT_EQ(ret, 0);
+  ASSERT_FALSE(truncated); // Nothing left
+  ASSERT_TRUE(read_iter.empty()); // Done
+  ASSERT_EQ(usage3.size(), extra_entries);
+
+  ret = cls_rgw_usage_log_trim(ioctx, oid, user, payer, start_epoch, end_epoch);
+  ASSERT_EQ(ret, 0);
+
+  usage.clear();
+  ret = cls_rgw_usage_log_read(ioctx, oid, user, payer, start_epoch, end_epoch, max_entries, read_iter, usage, &truncated);
+  ASSERT_EQ(ret, 0);
+  ASSERT_FALSE(truncated); // Nothing left
+  ASSERT_EQ(usage.size(), 0); // Got nothing
 }
 
 TEST_F(cls_rgw, usage_basic)
 {
   string oid="usage.1";
   string user="user1";
-  uint64_t start_epoch{0}, end_epoch{(uint64_t) -1};
+  uint64_t a_minute{60}, an_hour{3600};
+  uint64_t start_epoch{0}, log_epoch{1755892800}, end_epoch{log_epoch + a_minute};
   int total_usage_entries = 512;
   uint64_t max_entries = 2000;
   string payer;
 
-  auto info = populate_usage_log_info(user, payer, total_usage_entries);
+  auto info = populate_usage_log_info(user, payer, total_usage_entries, log_epoch);
   ObjectWriteOperation op;
   cls_rgw_usage_log_add(op, info);
   ASSERT_EQ(0, ioctx.operate(oid, &op));
 
+  // Slip in some records of a user whose name could cause those records to be among key_by_time ones.
+  auto extra_info = populate_usage_log_info("01234", payer, total_usage_entries, log_epoch + an_hour);
+  ObjectWriteOperation extra_op;
+  cls_rgw_usage_log_add(extra_op, extra_info);
+  ASSERT_EQ(0, ioctx.operate(oid, &extra_op));
+
   string read_iter;
   map <rgw_user_bucket, rgw_usage_log_entry> usage, usage2;
   bool truncated;
-
 
   int ret = cls_rgw_usage_log_read(ioctx, oid, user, "", start_epoch, end_epoch,
 				   max_entries, read_iter, usage, &truncated);
@@ -1050,8 +1161,7 @@ TEST_F(cls_rgw, usage_basic)
   ASSERT_EQ(static_cast<uint64_t>(total_usage_entries), usage.size());
 
   // delete and read to assert that we've deleted all the values
-  ASSERT_EQ(0, cls_rgw_usage_log_trim(ioctx, oid, user, "", start_epoch, end_epoch));
-
+  ASSERT_EQ(0, cls_rgw_usage_log_trim(ioctx, oid, "", "", start_epoch, end_epoch));
 
   ret = cls_rgw_usage_log_read(ioctx, oid, user, "", start_epoch, end_epoch,
 			       max_entries, read_iter, usage2, &truncated);

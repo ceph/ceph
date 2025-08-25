@@ -211,6 +211,10 @@
 * Dashboard: RGW granular bucket replication
 * Dashboard: SMB monitoring and management
 * Monitoring: New monitoring Dashboards for Application, NVMe, CephFS, and SMB Overview
+* RGW: Introduce the `rgw_usage_log_key_transition` configuration option to handle
+  the co-existence of old and new usage log keys. This option is enabled by default
+  to ensure compatibility during upgrades, but can be disabled once old usage logs
+  are no longer present to avoid performance overhead.
 
 >=19.2.1
 
