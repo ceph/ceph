@@ -210,12 +210,17 @@ class HostControllerTest(ControllerTestCase):
             self.assertNotIn('service_instances', by_host['host-1'])
 
             # facts=true and include_service_instances=true
-            def get_facts_mock(hostname: str):
-                return [{
-                    'hostname': hostname,
-                    'cpu_count': 1 if hostname == 'host-0' else 2,
-                    'memory_total_kb': 1024
-                }]
+            def get_facts_mock(hostname=None, **_kwargs):
+                if hostname:
+                    return [{
+                        'hostname': hostname,
+                        'cpu_count': 1 if hostname == 'host-0' else 2,
+                        'memory_total_kb': 1024
+                    }]
+                return [
+                    {'hostname': 'host-0', 'cpu_count': 1, 'memory_total_kb': 1024},
+                    {'hostname': 'host-1', 'cpu_count': 2, 'memory_total_kb': 1024}
+                ]
 
             fake_client.hosts.get_facts.side_effect = get_facts_mock
             self._get(
