@@ -171,25 +171,29 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         '''
         CREATE TABLE IF NOT EXISTS VersionAssociation(
             id INTEGER PRIMARY KEY,
+            cluster_version_id INTEGER NOT NULL,
             FOREIGN KEY (cluster_version_id) REFERENCES ClusterVersionInfo(cluster_version_id) 
         );
         '''
     ]
 
     SCHEMA_VERSIONED = [
-        '''
-        CREATE TABLE IF NOT EXISTS ClusterVersionInfo(
-            cluster_version_id INTEGER PRIMARY KEY, 
-            cluster_version TEXT NOT NULL,
-            creation_time TEXT DEFAULT CURRENT_TIMESTAMP
-        );
-        ''',
-        '''
-        CREATE TABLE IF NOT EXISTS VersionAssociation(
-            id INTEGER PRIMARY KEY,
-            FOREIGN KEY (cluster_version_id) REFERENCES ClusterVersionInfo(cluster_version_id) 
-        );
-        '''
+        [
+            '''
+            CREATE TABLE IF NOT EXISTS ClusterVersionInfo(
+                cluster_version_id INTEGER PRIMARY KEY, 
+                cluster_version TEXT NOT NULL,
+                creation_time TEXT DEFAULT CURRENT_TIMESTAMP
+            );
+            ''',
+            '''
+            CREATE TABLE IF NOT EXISTS VersionAssociation(
+                id INTEGER PRIMARY KEY,
+                cluster_version_id INTEGER NOT NULL,
+                FOREIGN KEY (cluster_version_id) REFERENCES ClusterVersionInfo(cluster_version_id) 
+            );
+            '''
+        ]
     ]
 
     _STORE_HOST_PREFIX = "host"

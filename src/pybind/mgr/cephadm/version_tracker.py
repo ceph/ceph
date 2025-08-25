@@ -1,33 +1,38 @@
 import errno
 import json
 from datetime import datetime
-from typing import TYPE_CHECKING, Dict, Optional, Tuple
+from typing import TYPE_CHECKING, Optional, Tuple
 
 if TYPE_CHECKING:
-    from cephadm.module import CephadmOrchestrator
+    from .module import CephadmOrchestrator
 
 
 
 class VersionTracker:
 
-    def __init__(self, mgr: CephadmOrchestrator) -> None:
+    def __init__(self, mgr: "CephadmOrchestrator") -> None:
         self.mgr = mgr
-        self.db = self.mgr.db()
-        self._db_lock = self.mgr._db_lock
+        
+        if self.cluster_version_history_is_empty():
+            self.add_cluster_version(self.mgr._version)
 
+
+    def cluster_version_history_is_empty(self) -> bool:
         SQL_QUERY = '''
-        SELECT 1 
-            FROM ClusterVersionInfo 
+        SELECT 1
+            FROM ClusterVersionInfo
             LIMIT 1;
         '''
 
-        with self._db_lock, self.db:
-            cursor = self.db.execute(SQL_QUERY)
+        with self.mgr._db_lock, self.mgr.db:
+            cursor = self.mgr.db.execute(SQL_QUERY)
             row = cursor.fetchone()
 
             if row is None:
-                self.add_cluster_version(self.mgr._version)
-
+                return True
+            
+            return False
+        
 
     def add_cluster_version(self, version: str) -> None:
         SQL_QUERY = '''
@@ -35,8 +40,8 @@ class VersionTracker:
             VALUES (?);
         '''
 
-        with self._db_lock, self.db:
-            self.db.execute(SQL_QUERY, (version,))
+        with self.mgr._db_lock, self.mgr.db:
+            self.mgr.db.execute(SQL_QUERY, (version,))
 
 
     def get_cluster_version_history(self) -> Tuple[int, str, str]:
@@ -46,10 +51,10 @@ class VersionTracker:
             ORDER BY creation_time ASC;
         '''
 
-        res = Dict()
+        res = dict()
 
-        with self._db_lock, self.db:
-            cursor = self.db.execute(SQL_QUERY)
+        with self.mgr._db_lock, self.mgr.db:
+            cursor = self.mgr.db.execute(SQL_QUERY)
             rows = cursor.fetchall()
 
             for row in rows:
@@ -71,15 +76,18 @@ class VersionTracker:
         DELETE FROM ClusterVersionInfo;
         '''
 
-        with self._db_lock, self.db:
+        if self.cluster_version_info_is_empty():
+            return 0, 'No Cluster Version History', ''
+        
+        with self.mgr._db_lock, self.mgr.db:
             if time_stamp is None:
-                self.db.execute(SQL_QUERY_ALL)
+                self.mgr.db.execute(SQL_QUERY_ALL)
             else:
                 try:
                     datetime.strptime(time_stamp, '%Y-%m-%d %H:%M:%S')
                 except ValueError:
-                    return errno.EINVAL, '', 'not a valid time stamp'
+                    return -errno.EINVAL, '', 'invalid datetime format, use "YYYY-MM-DD HH:MM:SS"'
                 else:
-                    self.db.execute(SQL_QUERY_OPTION, (time_stamp,))
+                    self.mgr.db.execute(SQL_QUERY_OPTION, (time_stamp,))
         
         return 0, 'Cluster Version History Deletion Successful', ''
