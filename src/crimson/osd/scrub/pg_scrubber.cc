@@ -277,6 +277,12 @@ void PGScrubber::emit_scrub_result(
   DEBUGDPP("", pg);
   pg.peering_state.update_stats(
     [this, FNAME, deep, &in_stats](auto &history, auto &pg_stats) {
+      // Handle invalid stats, in case of split/merge
+      if (pg_stats.stats_invalid) {
+        pg_stats.stats.sum = in_stats;
+        pg_stats.stats_invalid = false;
+        DEBUGDPP(" repaired invalid stats! ", pg);
+      }
       foreach_scrub_maintained_stat(
 	[deep, &pg_stats, &in_stats](
 	  const auto &name, auto statptr, bool skip_for_shallow) {
