@@ -105,6 +105,14 @@ class HostControllerTest(ControllerTestCase):
                 'ceph': True,
                 'orchestrator': False
             },
+            'addr': '',
+            'cpu_cores': 0,
+            'model': '',
+            'nic_count': 0,
+            'hdd_count': 0,
+            'flash_count': 0,
+            'hdd_capacity_bytes': 0,
+            'flash_capacity_bytes': 0,
             'cpu_count': 1,
             'memory_total_kb': 1024,
             'services': [],
@@ -115,6 +123,14 @@ class HostControllerTest(ControllerTestCase):
                 'ceph': False,
                 'orchestrator': True
             },
+            'addr': '',
+            'cpu_cores': 0,
+            'model': '',
+            'nic_count': 0,
+            'hdd_count': 0,
+            'flash_count': 0,
+            'hdd_capacity_bytes': 0,
+            'flash_capacity_bytes': 0,
             'cpu_count': 2,
             'memory_total_kb': 1024,
             'services': [],
@@ -124,10 +140,12 @@ class HostControllerTest(ControllerTestCase):
         with patch_orch(True, hosts=hosts_without_facts) as fake_client:
             mock_get_hosts.return_value = hosts_without_facts
 
-            def get_facts_mock(hostname: str):
-                if hostname == 'host-0':
-                    return [hosts_facts[0]]
-                return [hosts_facts[1]]
+            def get_facts_mock(*args, **_kwargs):
+                if args:
+                    hostname = args[0]
+                    return [hosts_facts[0]] if hostname == 'host-0' else [hosts_facts[1]]
+                return hosts_facts
+
             fake_client.hosts.get_facts.side_effect = get_facts_mock
             # test with ?facts=true
             self._get('{}?facts=true'.format(self.URL_HOST), version=APIVersion(1, 3))
