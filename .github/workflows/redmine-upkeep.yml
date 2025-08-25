@@ -84,6 +84,7 @@ jobs:
              --git-dir=./ceph/
         env:
           REDMINE_API_KEY: ${{ secrets.REDMINE_API_KEY_BACKPORT_BOT }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Run redmine-upkeep via test push
         if: github.event_name == 'push' && github.ref == 'refs/heads/feature/redmine-upkeep'
@@ -93,6 +94,7 @@ jobs:
              --git-dir=./ceph/
         env:
           REDMINE_API_KEY: ${{ secrets.REDMINE_API_KEY_BACKPORT_BOT }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Run redmine-upkeep via merge on pull_request_target
         if: github.event_name == 'pull_request_target' && github.event.pull_request.merged == true
@@ -104,3 +106,4 @@ jobs:
              --merge-commit=${{ github.event.pull_request.merge_commit_sha }}
         env:
           REDMINE_API_KEY: ${{ secrets.REDMINE_API_KEY_BACKPORT_BOT }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
