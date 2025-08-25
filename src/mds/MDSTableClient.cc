@@ -183,7 +183,7 @@ void MDSTableClient::_prepare(bufferlist& mutation, version_t *ptid, bufferlist 
     dout(10) << "tableserver is not ready yet, deferring request" << dendl;
 }
 
-void MDSTableClient::commit(version_t tid, LogSegment *ls)
+void MDSTableClient::commit(version_t tid, LogSegmentRef const& ls)
 {
   dout(10) << "commit " << tid << dendl;
 
@@ -210,7 +210,7 @@ void MDSTableClient::commit(version_t tid, LogSegment *ls)
 
 // recovery
 
-void MDSTableClient::got_journaled_agree(version_t tid, LogSegment *ls)
+void MDSTableClient::got_journaled_agree(version_t tid, LogSegmentRef const& ls)
 {
   dout(10) << "got_journaled_agree " << tid << dendl;
   ls->pending_commit_tids[table].insert(tid);

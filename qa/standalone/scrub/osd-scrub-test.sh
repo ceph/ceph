@@ -472,7 +472,7 @@ function TEST_just_deep_scrubs() {
     echo "Pool: $poolname : $poolid"
 
     TESTDATA="testdata.$$"
-    local objects=15
+    local objects=90
     dd if=/dev/urandom of=$TESTDATA bs=1032 count=1
     for i in `seq 1 $objects`
     do
@@ -502,6 +502,10 @@ function TEST_just_deep_scrubs() {
     ceph tell $pgid schedule-deep-scrub
 
     sleep 5 # 5s is the 'pg dump' interval
+
+    ceph pg dump pgs --format=json-pretty | jq -r '.pg_stats[] | "\(.pgid) \(.stat_sum.num_objects)"'
+    echo "Objects # in pg $pgid: " $(ceph pg $pgid query --format=json-pretty | jq -r '.info.stats.stat_sum.num_objects')
+
     declare -A sc_data_2
     extract_published_sch $pgid $now_is $now_is sc_data_2
     echo "test counter @ should show no change: " ${sc_data_2['query_scrub_seq']}
@@ -526,7 +530,7 @@ function TEST_dump_scrub_schedule() {
     local dir=$1
     local poolname=test
     local OSDS=3
-    local objects=15
+    local objects=90
 
     TESTDATA="testdata.$$"
 

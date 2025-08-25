@@ -38,19 +38,14 @@
   </ng-template>
 
   <ng-template #fullpathForSelectionTpl>
-    <span
-      data-toggle="tooltip"
-      [title]="row.pathForSelection"
-      class="font-monospace"
-      >{{ row.pathForSelection?.split?.("@")?.[0] }}
-      <cd-copy-2-clipboard-button
-        *ngIf="row.pathForSelection"
-        [source]="row.pathForSelection?.split?.('@')?.[0]"
-        [byId]="false"
-        [showIconOnly]="true"
-      >
-      </cd-copy-2-clipboard-button>
-    </span>
+    <cd-copy-2-clipboard-button
+      *ngIf="row.pathForSelection"
+      [source]="row.pathForSelection?.split?.('@')?.[0]"
+      [byId]="false"
+      [size]="lg"
+      [text]="row.pathForSelection?.split?.('@')?.[0]"
+    >
+    </cd-copy-2-clipboard-button>
   </ng-template>
 </ng-template>
 

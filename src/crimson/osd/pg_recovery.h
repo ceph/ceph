@@ -15,12 +15,11 @@
 
 #include "osd/object_state.h"
 
+class MOSDPGBackfillRemove;
+
 namespace crimson::osd {
 class UrgentRecovery;
 class PglogBasedRecovery;
-}
-
-class MOSDPGBackfillRemove;
 class PGBackend;
 
 class PGRecovery : public crimson::osd::BackfillState::BackfillListener {
@@ -148,3 +147,5 @@ private:
   friend crimson::osd::PG;
   // backfill end
 };
+
+}

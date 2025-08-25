@@ -30,7 +30,7 @@ public:
   }
 
   void dump(ceph::Formatter *f) const;
-  static void generate_test_instances(std::list<bluefs_extent_t*>&);
+  static std::list<bluefs_extent_t> generate_test_instances();
 };
 WRITE_CLASS_DENC(bluefs_extent_t)
 
@@ -284,8 +284,7 @@ struct bluefs_fnode_t {
   bluefs_fnode_delta_t* make_delta(bluefs_fnode_delta_t* delta);
 
   void dump(ceph::Formatter *f) const;
-  static void generate_test_instances(std::list<bluefs_fnode_t*>& ls);
-
+  static std::list<bluefs_fnode_t> generate_test_instances();
 };
 WRITE_CLASS_DENC(bluefs_fnode_t)
 
@@ -309,7 +308,7 @@ struct bluefs_layout_t {
   void encode(ceph::buffer::list& bl) const;
   void decode(ceph::buffer::list::const_iterator& p);
   void dump(ceph::Formatter *f) const;
-  static void generate_test_instances(std::list<bluefs_layout_t*>& ls);
+  static std::list<bluefs_layout_t> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(bluefs_layout_t)
 
@@ -337,7 +336,7 @@ struct bluefs_super_t {
   void encode(ceph::buffer::list& bl) const;
   void decode(ceph::buffer::list::const_iterator& p);
   void dump(ceph::Formatter *f) const;
-  static void generate_test_instances(std::list<bluefs_super_t*>& ls);
+  static std::list<bluefs_super_t> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(bluefs_super_t)
 
@@ -440,7 +439,7 @@ struct bluefs_transaction_t {
   void encode(ceph::buffer::list& bl) const;
   void decode(ceph::buffer::list::const_iterator& p);
   void dump(ceph::Formatter *f) const;
-  static void generate_test_instances(std::list<bluefs_transaction_t*>& ls);
+  static std::list<bluefs_transaction_t> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(bluefs_transaction_t)
 

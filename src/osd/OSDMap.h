@@ -84,7 +84,7 @@ struct osd_info_t {
   void dump(ceph::Formatter *f) const;
   void encode(ceph::buffer::list& bl) const;
   void decode(ceph::buffer::list::const_iterator& bl);
-  static void generate_test_instances(std::list<osd_info_t*>& o);
+  static std::list<osd_info_t> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(osd_info_t)
 
@@ -105,7 +105,7 @@ struct osd_xinfo_t {
   void dump(ceph::Formatter *f) const;
   void encode(ceph::buffer::list& bl, uint64_t features) const;
   void decode(ceph::buffer::list::const_iterator& bl);
-  static void generate_test_instances(std::list<osd_xinfo_t*>& o);
+  static std::list<osd_xinfo_t> generate_test_instances();
 };
 WRITE_CLASS_ENCODER_FEATURES(osd_xinfo_t)
 
@@ -346,11 +346,13 @@ struct PGTempMap {
       f->close_section();
     }
   }
-  static void generate_test_instances(std::list<PGTempMap*>& o) {
-    o.push_back(new PGTempMap);
-    o.push_back(new PGTempMap);
-    o.back()->set(pg_t(1, 2), { 3, 4 });
-    o.back()->set(pg_t(2, 3), { 4, 5 });
+  static std::list<PGTempMap> generate_test_instances() {
+    std::list<PGTempMap> o;
+    o.push_back(PGTempMap{});
+    o.push_back(PGTempMap{});
+    o.back().set(pg_t(1, 2), { 3, 4 });
+    o.back().set(pg_t(2, 3), { 4, 5 });
+    return o;
   }
 };
 WRITE_CLASS_ENCODER(PGTempMap)
@@ -453,7 +455,7 @@ public:
     void decode_classic(ceph::buffer::list::const_iterator &p);
     void decode(ceph::buffer::list::const_iterator &bl);
     void dump(ceph::Formatter *f) const;
-    static void generate_test_instances(std::list<Incremental*>& o);
+    static std::list<Incremental> generate_test_instances();
 
     explicit Incremental(epoch_t e=0) :
       encode_features(0),
@@ -1338,16 +1340,16 @@ public:
     return false;
   }
   bool get_primary_shard(const pg_t& pgid, int *primary, spg_t *out) const {
-    auto i = get_pools().find(pgid.pool());
-    if (i == get_pools().end()) {
+    auto poolit = get_pools().find(pgid.pool());
+    if (poolit == get_pools().end()) {
       return false;
     }
     std::vector<int> acting;
     pg_to_acting_osds(pgid, &acting, primary);
-    if (i->second.is_erasure()) {
+    if (poolit->second.is_erasure()) {
       for (uint8_t i = 0; i < acting.size(); ++i) {
 	if (acting[i] == *primary) {
-	  *out = spg_t(pgid, shard_id_t(i));
+	  *out = spg_t(pgid, pgtemp_undo_primaryfirst(poolit->second, pgid, shard_id_t(i)));
 	  return true;
 	}
       }
@@ -1358,11 +1360,20 @@ public:
     return false;
   }
 
+  bool has_pgtemp(const pg_t pg) const {
+    return (pg_temp->find(pg) != pg_temp->end());
+  }
   const std::vector<int> pgtemp_primaryfirst(const pg_pool_t& pool,
 			   const std::vector<int>& pg_temp) const;
   const std::vector<int> pgtemp_undo_primaryfirst(const pg_pool_t& pool,
 			   const pg_t pg,
 			   const std::vector<int>& acting) const;
+  const shard_id_t pgtemp_primaryfirst(const pg_pool_t& pool,
+				       const pg_t pg,
+				       const shard_id_t shard) const;
+  shard_id_t pgtemp_undo_primaryfirst(const pg_pool_t& pool,
+					    const pg_t pg,
+					    const shard_id_t shard) const;
 
   bool in_removed_snaps_queue(int64_t pool, snapid_t snap) const {
     auto p = removed_snaps_queue.find(pool);
@@ -1840,7 +1851,7 @@ public:
   void dump_osds(ceph::Formatter *f) const;
   void dump_pool(CephContext *cct, int64_t pid, const pg_pool_t &pdata, ceph::Formatter *f) const;
   void dump_read_balance_score(CephContext *cct, int64_t pid, const pg_pool_t &pdata, ceph::Formatter *f) const;
-  static void generate_test_instances(std::list<OSDMap*>& o);
+  static std::list<OSDMap> generate_test_instances();
   bool check_new_blocklist_entries() const { return new_blocklist_entries; }
 
   void check_health(CephContext *cct, health_check_map_t *checks) const;

@@ -68,7 +68,7 @@ public:
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
-  //  static void generate_test_instances(list<ACLOwner*>& o);
+  //  static list<ACLOwner> generate_test_instances();
   void set_days(const std::string& _days) { days = _days; }
   std::string get_days_str() const {
     return days;
@@ -542,7 +542,7 @@ public:
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
-  static void generate_test_instances(std::list<RGWLifecycleConfiguration*>& o);
+  static std::list<RGWLifecycleConfiguration> generate_test_instances();
 
   void add_rule(const LCRule& rule);
 
@@ -566,6 +566,7 @@ class RGWLC : public DoutPrefixProvider {
   CephContext *cct;
   rgw::sal::Driver* driver;
   std::unique_ptr<rgw::sal::Lifecycle> sal_lc;
+  std::unique_ptr<rgw::sal::Restore> sal_restore;
   int max_objs{0};
   std::string *obj_names{nullptr};
   std::atomic<bool> down_flag = { false };
@@ -664,6 +665,7 @@ public:
 
   CephContext *get_cct() const override { return cct; }
   rgw::sal::Lifecycle* get_lc() const { return sal_lc.get(); }
+  rgw::sal::Restore* get_restore() const { return sal_restore.get(); }
   unsigned get_subsys() const;
   std::ostream& gen_prefix(std::ostream& out) const;
 

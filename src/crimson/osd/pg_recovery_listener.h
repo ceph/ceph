@@ -10,10 +10,8 @@
 #include "osd/osd_types.h"
 
 namespace crimson::osd {
-  class ShardServices;
-  class PglogBasedRecovery;
-};
-
+class ShardServices;
+class PglogBasedRecovery;
 class RecoveryBackend;
 class PGRecovery;
 
@@ -45,3 +43,5 @@ public:
   virtual void reset_pglog_based_recovery_op() = 0;
   virtual void schedule_event_after(PGPeeringEventRef evt, float delay) = 0;
 };
+
+}

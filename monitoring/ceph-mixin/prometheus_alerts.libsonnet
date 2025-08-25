@@ -1035,6 +1035,16 @@
             description: 'High latencies may indicate a constraint within the cluster e.g. CPU, network. Please investigate',
           },
         },
+        {
+          alert: 'NVMeoFHostKeepAliveTimeout',
+          'for': '1m',
+          expr: 'ceil(changes(ceph_nvmeof_host_keepalive_timeout[%(NVMeoFHostKeepAliveTimeoutTrackDurationHours)dh:]) / 2) > 0' % $._config,
+          labels: { severity: 'warning', type: 'ceph_default' },
+          annotations: {
+            summary: 'Host ({{ $labels.host_nqn }}) was disconnected {{ $value }} times from subsystem ({{ $labels.nqn }}) in last %(NVMeoFHostKeepAliveTimeoutTrackDurationHours)d hours' % $._config,
+            description: 'Host was disconnected due to host keep alive timeout',
+          },
+        },
       ],
     },
   ],

@@ -4,35 +4,27 @@
 #include <limits.h>
 
 #include "acconfig.h"
-#include "common/config.h"
-#include "common/errno.h"
 #include "common/ceph_argparse.h"
-#include "common/ceph_json.h"
 #include "common/common_init.h"
 #include "common/TracepointProvider.h"
 #include "common/hobject.h"
 #include "common/async/waiter.h"
 #include "include/rados/librados.h"
-#include "include/types.h"
-#include <include/stringify.h>
 
 #include "librados/librados_c.h"
 #include "librados/AioCompletionImpl.h"
 #include "librados/IoCtxImpl.h"
 #include "librados/ObjectOperationImpl.h"
-#include "librados/PoolAsyncCompletionImpl.h"
 #include "librados/RadosClient.h"
 #include "librados/RadosXattrIter.h"
 #include "librados/ListObjectImpl.h"
 #include "librados/librados_util.h"
-#include <cls/lock/cls_lock_client.h>
 
 #include <string>
 #include <map>
 #include <set>
 #include <vector>
 #include <list>
-#include <stdexcept>
 
 #ifdef WITH_LTTNG
 #define TRACEPOINT_DEFINE

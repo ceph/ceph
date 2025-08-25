@@ -293,7 +293,10 @@ write_superblock(
     bufferptr(ceph::buffer::create_page_aligned(sb.block_size)),
     [=, &device](auto &bp)
   {
+    //  Encode SEASTORE_SUPERBLOCK_SIGN at offset 0 before
+    //  encoding anything else
     bufferlist bl;
+    bl.append(SEASTORE_SUPERBLOCK_SIGN);
     encode(sb, bl);
     auto iter = bl.begin();
     assert(bl.length() < sb.block_size);
@@ -323,14 +326,23 @@ read_superblock(seastar::file &device, seastar::stat_data sd)
       bl.push_back(bp);
       block_sm_superblock_t ret;
       auto bliter = bl.cbegin();
+      // Validate the magic prefix
+      std::string sb_magic;
+      bliter.copy(SEASTORE_SUPERBLOCK_SIGN_LEN, sb_magic);
+      if (sb_magic != SEASTORE_SUPERBLOCK_SIGN) {
+        ERROR("invalid superblock signature: got '{}' expected '{}'",
+	      sb_magic, SEASTORE_SUPERBLOCK_SIGN);
+        ceph_abort_msg("invalid superblock signature");
+      }
+
       try {
         decode(ret, bliter);
       } catch (...) {
         ERROR("got decode error!");
         ceph_assert(0 == "invalid superblock");
       }
-      assert(ceph::encoded_sizeof<block_sm_superblock_t>(ret) <
-             sd.block_size);
+      assert(ceph::encoded_sizeof<block_sm_superblock_t>(ret) +
+	     SEASTORE_SUPERBLOCK_SIGN_LEN <= sd.block_size);
       return BlockSegmentManager::access_ertr::future<block_sm_superblock_t>(
         BlockSegmentManager::access_ertr::ready_future_marker{},
         ret);

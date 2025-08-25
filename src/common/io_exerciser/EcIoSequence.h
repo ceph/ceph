@@ -12,7 +12,8 @@ class EcIoSequence : public IoSequence {
       std::optional<std::pair<int, int>> km,
       std::optional<std::pair<std::string_view, std::string_view>>
           mappinglayers,
-      int seed);
+      int seed,
+      bool check_consistency);
 
  protected:
   bool setup_inject;
@@ -20,7 +21,7 @@ class EcIoSequence : public IoSequence {
   std::optional<uint64_t> shard_to_inject;
   InjectOpType inject_op_type;
 
-  EcIoSequence(std::pair<int, int> obj_size_range, int seed);
+  EcIoSequence(std::pair<int, int> obj_size_range, int seed, bool check_consistency);
 
   // Writes cannot be sent to injected on shard zero, so selections seperated
   // out
@@ -50,7 +51,8 @@ class ReadInjectSequence : public EcIoSequence {
       std::pair<int, int> obj_size_range, int seed, Sequence s,
       std::optional<std::pair<int, int>> km,
       std::optional<std::pair<std::string_view, std::string_view>>
-          mappinglayers);
+          mappinglayers,
+      bool check_consistency);
 
   Sequence get_id() const override;
   std::string get_name() const override;
@@ -67,7 +69,8 @@ class Seq10 : public EcIoSequence {
   Seq10(std::pair<int, int> obj_size_range, int seed,
         std::optional<std::pair<int, int>> km,
         std::optional<std::pair<std::string_view, std::string_view>>
-            mappinglayers);
+            mappinglayers,
+        bool check_consistency);
 
   Sequence get_id() const override;
   std::string get_name() const override;

@@ -54,19 +54,34 @@ static entity_addr_t get_server_addr() {
   return saddr;
 }
 
+/*
+ * at_exit() is now deprecated, and Seastar recommends using deferred_stop()
+ * as an alternative for object cleanup.
+ *
+ * However, in our use case, deferred_stop() is not a suitable replacement
+ * due to differences in how it manages object lifetimes.
+ *
+ * Previously, at_exit() captured the sharded_obj and kept it alive until shutdown.
+ * In contrast, deferred_stop() does not retain ownership and assumes the referenced
+ * object remains valid for the lifetime of the deferred_stop instance.
+ *
+ * To address this, we introduced a static list to retain each sharded_obj
+ * created via create_sharded().
+ */
+
+template <typename T>
+static std::list<seastar::lw_shared_ptr<seastar::sharded<T>>> sharded_objects;
+
 template <typename T, typename... Args>
 seastar::future<T*> create_sharded(Args... args) {
   // we should only construct/stop shards on #0
-  return seastar::smp::submit_to(0, [=] {
+  return seastar::smp::submit_to(0, [=]() -> seastar::future<seastar::sharded<T>*> {
     auto sharded_obj = seastar::make_lw_shared<seastar::sharded<T>>();
-    return sharded_obj->start(args...
-    ).then([sharded_obj] {
-      seastar::engine().at_exit([sharded_obj] {
-        return sharded_obj->stop().then([sharded_obj] {});
-      });
+    sharded_objects<T>.push_back(sharded_obj);
+    return sharded_obj->start(args...).then([sharded_obj] {
       return sharded_obj.get();
     });
-  }).then([](seastar::sharded<T> *ptr_shard) {
+  }).then([](seastar::sharded<T>* ptr_shard) {
     return &ptr_shard->local();
   });
 }
@@ -390,6 +405,15 @@ static seastar::future<> test_echo(unsigned rounds,
     }).handle_exception([](auto eptr) {
       logger().error("test_echo() failed: got exception {}", eptr);
       throw;
+    }).then([] {
+      return seastar::smp::submit_to(0, [] {
+	return seastar::do_for_each(sharded_objects<test_state::Client>,
+	    [](auto& sharded_obj) {
+	  return sharded_obj->stop();
+        });
+      }).then([] {
+	sharded_objects<test_state::Client>.clear();
+      });
     }).finally([gates, server1, server2] {
       return gates->close();
     });
@@ -3831,6 +3855,15 @@ seastar::future<int> do_test(seastar::app_template& app)
       // Seastar has bugs to have events undispatched during shutdown,
       // which will result in memory leak and thus fail LeakSanitizer.
       return seastar::sleep(100ms);
+    });
+  }).then([] {
+    return seastar::smp::submit_to(0, [] {
+      return seastar::do_for_each(sharded_objects<ShardedGates>,
+	  [](auto& sharded_obj) {
+	return sharded_obj->stop();
+      });
+    }).then([] {
+       sharded_objects<ShardedGates>.clear();
     });
   }).then([] {
     return crimson::common::sharded_conf().stop();

@@ -1,13 +1,15 @@
 import { Component, OnDestroy, OnInit } from '@angular/core';
 
 import _ from 'lodash';
-import { BehaviorSubject, Observable, Subscription, of } from 'rxjs';
-import { switchMap, take } from 'rxjs/operators';
+import { BehaviorSubject, EMPTY, Observable, Subject, Subscription, of } from 'rxjs';
+import { catchError, exhaustMap, switchMap, takeUntil } from 'rxjs/operators';
 
 import { HealthService } from '~/app/shared/api/health.service';
-import { OsdService } from '~/app/shared/api/osd.service';
-import { PrometheusService } from '~/app/shared/api/prometheus.service';
-import { Promqls as queries } from '~/app/shared/enum/dashboard-promqls.enum';
+import { PrometheusService, PromqlGuageMetric } from '~/app/shared/api/prometheus.service';
+import {
+  CapacityCardQueries,
+  UtilizationCardQueries
+} from '~/app/shared/enum/dashboard-promqls.enum';
 import { Icons } from '~/app/shared/enum/icons.enum';
 import { DashboardDetails } from '~/app/shared/models/cd-details';
 import { Permissions } from '~/app/shared/models/permissions';
@@ -26,7 +28,19 @@ import { MgrModuleService } from '~/app/shared/api/mgr-module.service';
 import { AlertClass } from '~/app/shared/enum/health-icon.enum';
 import { HardwareService } from '~/app/shared/api/hardware.service';
 import { SettingsService } from '~/app/shared/api/settings.service';
-import { OsdSettings } from '~/app/shared/models/osd-settings';
+import {
+  IscsiMap,
+  MdsMap,
+  MgrMap,
+  MonMap,
+  OsdMap,
+  PgStatus
+} from '~/app/shared/models/health.interface';
+
+type CapacityCardData = {
+  osdNearfull: number;
+  osdFull: number;
+};
 
 @Component({
   selector: 'cd-dashboard-v3',
@@ -35,8 +49,10 @@ import { OsdSettings } from '~/app/shared/models/osd-settings';
 })
 export class DashboardV3Component extends PrometheusListHelper implements OnInit, OnDestroy {
   detailsCardData: DashboardDetails = {};
-  osdSettingsService: any;
-  osdSettings = new OsdSettings();
+  capacityCardData: CapacityCardData = {
+    osdNearfull: null,
+    osdFull: null
+  };
   interval = new Subscription();
   permissions: Permissions;
   enabledFeature$: FeatureTogglesMap$;
@@ -80,11 +96,21 @@ export class DashboardV3Component extends PrometheusListHelper implements OnInit
   hardwareSubject = new BehaviorSubject<any>([]);
   managedByConfig$: Observable<any>;
   private subs = new Subscription();
+  private destroy$ = new Subject<void>();
+
+  hostsCount: number = null;
+  monMap: MonMap = null;
+  mgrMap: MgrMap = null;
+  osdMap: OsdMap = null;
+  poolStatus: Record<string, any>[] = null;
+  pgStatus: PgStatus = null;
+  rgwCount: number = null;
+  mdsMap: MdsMap = null;
+  iscsiMap: IscsiMap = null;
 
   constructor(
     private summaryService: SummaryService,
     private orchestratorService: OrchestratorService,
-    private osdService: OsdService,
     private authStorageService: AuthStorageService,
     private featureToggles: FeatureTogglesService,
     private healthService: HealthService,
@@ -116,15 +142,20 @@ export class DashboardV3Component extends PrometheusListHelper implements OnInit
       );
       this.managedByConfig$ = this.settingsService.getValues('MANAGED_BY_CLUSTERS');
     }
-    this.interval = this.refreshIntervalService.intervalData$.subscribe(() => {
-      this.getHealth();
-      this.getCapacity();
-      if (this.permissions.configOpt.read) this.getOsdSettings();
-      if (this.hardwareEnabled) this.hardwareSubject.next([]);
+
+    this.loadInventories();
+
+    // fetch capacity to load the capacity chart
+    this.refreshIntervalObs(() => this.healthService.getClusterCapacity()).subscribe({
+      next: (capacity: any) => {
+        this.capacity = capacity;
+      }
     });
+
     this.getPrometheusData(this.prometheusService.lastHourDateObject);
     this.getDetailsCardData();
     this.getTelemetryReport();
+    this.getCapacityCardData();
     this.prometheusAlertService.getAlerts(true);
   }
 
@@ -136,15 +167,10 @@ export class DashboardV3Component extends PrometheusListHelper implements OnInit
        Telemetry configration.';
   }
   ngOnDestroy() {
-    this.interval.unsubscribe();
     this.prometheusService.unsubscribe();
     this.subs?.unsubscribe();
-  }
-
-  getHealth() {
-    this.healthService.getMinimalHealth().subscribe((data: any) => {
-      this.healthData = data;
-    });
+    this.destroy$.next();
+    this.destroy$.complete();
   }
 
   toggleAlertsWindow(type: AlertClass) {
@@ -167,27 +193,36 @@ export class DashboardV3Component extends PrometheusListHelper implements OnInit
     );
   }
 
-  private getCapacity() {
-    this.capacityService = this.healthService.getClusterCapacity().subscribe((data: any) => {
-      this.capacity = data;
-    });
-  }
-
-  private getOsdSettings() {
-    this.osdSettingsService = this.osdService
-      .getOsdSettings()
-      .pipe(take(1))
-      .subscribe((data: OsdSettings) => {
-        this.osdSettings = data;
-      });
-  }
-
   public getPrometheusData(selectedTime: any) {
-    this.queriesResults = this.prometheusService.getPrometheusQueriesData(
+    this.queriesResults = this.prometheusService.getRangeQueriesData(
       selectedTime,
-      queries,
+      UtilizationCardQueries,
       this.queriesResults
     );
+  }
+
+  getCapacityQueryValues(data: PromqlGuageMetric['result']) {
+    let osdFull = null;
+    let osdNearfull = null;
+    if (data?.[0]?.metric?.['__name__'] === CapacityCardQueries.OSD_FULL) {
+      osdFull = data[0]?.value?.[1];
+      osdNearfull = data[1]?.value?.[1];
+    } else {
+      osdFull = data?.[1]?.value?.[1];
+      osdNearfull = data?.[0]?.value?.[1];
+    }
+    return [osdFull, osdNearfull];
+  }
+
+  getCapacityCardData() {
+    const CAPACITY_QUERY = `{__name__=~"${CapacityCardQueries.OSD_FULL}|${CapacityCardQueries.OSD_NEARFULL}"}`;
+    this.prometheusService
+      .getGaugeQueryData(CAPACITY_QUERY)
+      .subscribe((data: PromqlGuageMetric) => {
+        const [osdFull, osdNearfull] = this.getCapacityQueryValues(data?.result);
+        this.capacityCardData.osdFull = this.prometheusService.formatGuageMetric(osdFull);
+        this.capacityCardData.osdNearfull = this.prometheusService.formatGuageMetric(osdNearfull);
+      });
   }
 
   private getTelemetryReport() {
@@ -207,5 +242,30 @@ export class DashboardV3Component extends PrometheusListHelper implements OnInit
         return of(resp?.hw_monitoring);
       })
     );
+  }
+
+  refreshIntervalObs(fn: Function) {
+    return this.refreshIntervalService.intervalData$.pipe(
+      exhaustMap(() => fn().pipe(catchError(() => EMPTY))),
+      takeUntil(this.destroy$)
+    );
+  }
+
+  loadInventories() {
+    this.refreshIntervalObs(() => this.healthService.getMinimalHealth()).subscribe({
+      next: (result: any) => {
+        this.hostsCount = result.hosts;
+        this.monMap = result.mon_status;
+        this.mgrMap = result.mgr_map;
+        this.osdMap = result.osd_map;
+        this.poolStatus = result.pools;
+        this.pgStatus = result.pg_info;
+        this.rgwCount = result.rgw;
+        this.mdsMap = result.fs_map;
+        this.iscsiMap = result.iscsi_daemons;
+        this.healthData = result.health;
+        this.enabledFeature$ = this.featureToggles.get();
+      }
+    });
   }
 }

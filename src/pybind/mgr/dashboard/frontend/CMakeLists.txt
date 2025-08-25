@@ -60,6 +60,11 @@ else(WITH_SYSTEM_NPM)
   if(DEFINED ENV{NODE_MIRROR})
     set(node_mirror_opt "--mirror=$ENV{NODE_MIRROR}")
   endif()
+  if(DEFINED ENV{NPM_CACHEDIR})
+    set(npm-cache-dir "$ENV{NPM_CACHEDIR}")
+  else()
+    set(npm-cache-dir "${mgr-dashboard-nodeenv-dir}/.npm")
+  endif()
   add_custom_command(
     OUTPUT "${mgr-dashboard-nodeenv-dir}/bin/npm"
     COMMAND ${CMAKE_SOURCE_DIR}/src/tools/setup-virtualenv.sh --python=${MGR_PYTHON_EXECUTABLE} ${mgr-dashboard-nodeenv-dir}
@@ -70,7 +75,7 @@ else(WITH_SYSTEM_NPM)
     # uid 1000 and running the unpack in a id-mapped namespace (container)
     # that lets tar set the uid to a "bad" uid outside the namespace
     COMMAND bash -c 'chown -R `id -u`:`id -g` ${mgr-dashboard-nodeenv-dir}/src'
-    COMMAND mkdir ${mgr-dashboard-nodeenv-dir}/.npm
+    COMMAND mkdir -p ${npm-cache-dir}
     WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
     COMMENT "dashboard nodeenv is being installed")
   if(DEFINED ENV{NPM_REGISTRY})
@@ -79,7 +84,7 @@ else(WITH_SYSTEM_NPM)
   add_npm_options(
     NODEENV_DIR ${mgr-dashboard-nodeenv-dir}
     TARGET mgr-dashboard-nodeenv
-    OPTION cache=${mgr-dashboard-nodeenv-dir}/.npm
+    OPTION cache=${npm-cache-dir}
     ${npm_registry_opts})
   add_custom_target(mgr-dashboard-frontend-deps
     DEPENDS node_modules mgr-dashboard-nodeenv

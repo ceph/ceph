@@ -240,9 +240,10 @@ END_IGNORE_DEPRECATED
   }
   }
 
-  void ECUtilL::HashInfo::generate_test_instances(list<HashInfo*>& o)
+  auto ECUtilL::HashInfo::generate_test_instances() -> list<HashInfo>
   {
-    o.push_back(new HashInfo(3));
+    list<HashInfo> o;
+    o.push_back(HashInfo(3));
     {
       bufferlist bl;
       bl.append_zero(20);
@@ -250,10 +251,11 @@ END_IGNORE_DEPRECATED
       buffers[0] = bl;
       buffers[1] = bl;
       buffers[2] = bl;
-      o.back()->append(0, buffers);
-      o.back()->append(20, buffers);
+      o.back().append(0, buffers);
+      o.back().append(20, buffers);
     }
-    o.push_back(new HashInfo(4));
+    o.push_back(HashInfo(4));
+    return o;
   }
 
   const string HINFO_KEY = "hinfo_key";

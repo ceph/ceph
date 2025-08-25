@@ -38,7 +38,7 @@ To install Ceph with RPMs, execute the following steps:
      enabled = 1
 
 #. Ensure your YUM ``ceph.repo`` entry includes ``priority=2``. See
-   `Get Packages`_ for details::
+   :ref:`packages` for details::
 
      [ceph]
      name=Ceph packages for $basearch
@@ -91,7 +91,6 @@ executing the following:
    sudo ninja install
 
 If you install Ceph locally, ``ninja`` will place the executables in
-``usr/local/bin``. You may add the Ceph configuration file to the
+``usr/local/bin``. You may add the :ref:`Ceph configuration file <configuring-ceph>` to the
 ``usr/local/bin`` directory to run Ceph from a single directory.
 
-.. _Get Packages: ../get-packages

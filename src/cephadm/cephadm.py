@@ -3958,7 +3958,9 @@ def command_zap_osds(ctx: CephadmContext) -> None:
 
 
 def get_ceph_cluster_count(ctx: CephadmContext) -> int:
-    return len([c for c in os.listdir(ctx.data_dir) if is_fsid(c)])
+    if os.path.isdir(ctx.data_dir):
+        return len([c for c in os.listdir(ctx.data_dir) if is_fsid(c)])
+    return 0
 
 
 def command_rm_cluster(ctx: CephadmContext) -> None:

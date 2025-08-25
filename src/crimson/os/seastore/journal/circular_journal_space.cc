@@ -27,7 +27,7 @@ std::ostream &operator<<(std::ostream &out,
 CircularJournalSpace::CircularJournalSpace(RBMDevice * device) : device(device) {}
   
 bool CircularJournalSpace::needs_roll(std::size_t length) const {
-  if (length + get_rbm_addr(get_written_to()) > get_journal_end()) {
+  if (length + get_rbm_addr(get_written_to()) >= get_journal_end()) {
     return true;
   }
   return false;
@@ -55,10 +55,8 @@ CircularJournalSpace::write(ceph::bufferlist&& to_write) {
   assert(get_written_to().segment_seq != NULL_SEG_SEQ);
   auto encoded_size = to_write.length();
   if (encoded_size > get_records_available_size()) {
-    ceph_abort("should be impossible with EPM reservation");
+    ceph_abort_msg("should be impossible with EPM reservation");
   }
-  assert(encoded_size + get_rbm_addr(get_written_to())
-	 < get_journal_end());
 
   auto target = get_rbm_addr(get_written_to());
   auto new_written_to = target + encoded_size;
@@ -162,7 +160,7 @@ CircularJournalSpace::device_write_bl(
 {
   LOG_PREFIX(CircularJournalSpace::device_write_bl);
   auto length = bl.length();
-  if (offset + length > get_journal_end()) {
+  if (offset + length >= get_journal_end()) {
     return crimson::ct_error::erange::make();
   }
   DEBUG(

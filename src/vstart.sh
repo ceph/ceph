@@ -388,6 +388,9 @@ crimson_alienstore_physical_only=0
 crimson_balance_cpu="" # "osd", "socket"
 crimson_poll_mode=false
 
+# default value for the benchmark option
+run_benchmark=0
+
 while [ $# -ge 1 ]; do
 case $1 in
     -d | --debug)
@@ -444,6 +447,10 @@ case $1 in
         ;;
     --osd-args)
         extra_osd_args="$2"
+        if [ "$extra_osd_args" == "--run-benchmark" ]; then
+            run_benchmark=1
+            extra_osd_args=""
+        fi
         shift
         ;;
     --msgr1)
@@ -1022,17 +1029,7 @@ $BLUESTORE_OPTS
 
         ; kstore
         kstore fsck on mount = true
-EOF
-    if [ "$crimson" -eq 1 ]; then
-        wconf <<EOF
-        crimson osd objectstore = $objectstore
-EOF
-    else
-        wconf <<EOF
         osd objectstore = $objectstore
-EOF
-    fi
-    wconf <<EOF
 $SEASTORE_OPTS
 $COSDSHORT
         $(format_conf "${extra_conf}")
@@ -1216,12 +1213,12 @@ do_balance_cpu() {
 
     local reactor_interval=${cpu_table[${osd}]}
     if ! [ "${reactor_interval}" == "" ]; then
-        local cmd="$CEPH_BIN/ceph -c $conf_fn config set osd.$osd crimson_seastar_cpu_cores ${reactor_interval}"
+        local cmd="$CEPH_BIN/ceph -c $conf_fn config set osd.$osd crimson_cpu_set ${reactor_interval}"
         echo $cmd
         $cmd
     else
         echo "No cpu_table entry for osd $osd, setting crimson_seastar_num_reactors"
-        local cmd="$CEPH_BIN/ceph -c $conf_fn config set osd.$osd crimson_seastar_num_threads $crimson_smp"
+        local cmd="$CEPH_BIN/ceph -c $conf_fn config set osd.$osd crimson_cpu_num $crimson_smp"
         echo $cmd
         $cmd
         return
@@ -1230,7 +1227,7 @@ do_balance_cpu() {
 
     local alienstore_interval=${cpu_table[${alienstore_idx}]}
     if [ ! "${alienstore_interval}" == "" ]; then
-        local cmd="$CEPH_BIN/ceph -c $conf_fn config set osd.$osd crimson_alien_thread_cpu_cores ${alienstore_interval}"
+        local cmd="$CEPH_BIN/ceph -c $conf_fn config set osd.$osd crimson_bluestore_cpu_set ${alienstore_interval}"
         echo $cmd
         $cmd
     else
@@ -1332,6 +1329,26 @@ EOF
 [osd.$osd]
         key = $OSD_SECRET
 EOF
+        fi
+        # Run the osd benchmark if requested
+        if [ "$run_benchmark" -eq 1 ]; then
+            echo "running $SUDO $CEPH_BIN/$ceph_osd --run-benchmark -i $osd $ARGS"
+            osd_bench_result=$($SUDO $CEPH_BIN/$ceph_osd --run-benchmark -i $osd $ARGS)
+            echo "osd_bench_result: $osd_bench_result"
+            local run_status=$(echo "$osd_bench_result" | jq -r '.status')
+            if [ "$run_status" == "0" ]; then
+                local iops=$(echo "$osd_bench_result" | jq -r '.iops')
+                local is_rotational=$(echo "$osd_bench_result" | jq -r '.is_rotational')
+                if [ "$is_rotational" -eq 1 ]; then
+                    wconf <<EOF
+        osd mclock max capacity iops hdd = $iops
+EOF
+                else
+                    wconf <<EOF
+        osd mclock max capacity iops ssd = $iops
+EOF
+                fi
+            fi
         fi
         echo start osd.$osd
         local osd_pid
@@ -1793,8 +1810,8 @@ if [ "$ceph_osd" == "crimson-osd" ]; then
     fi
     if [ "$objectstore" == "bluestore" ]; then
         if [ $crimson_alien_num_threads -gt 0 ]; then
-            echo "$CEPH_BIN/ceph -c $conf_fn config set osd crimson_alien_op_num_threads $crimson_alien_num_threads"
-            $CEPH_BIN/ceph -c $conf_fn config set osd crimson_alien_op_num_threads "$crimson_alien_num_threads"
+            echo "$CEPH_BIN/ceph -c $conf_fn config set osd crimson_bluestore_num_threads $crimson_alien_num_threads"
+            $CEPH_BIN/ceph -c $conf_fn config set osd crimson_bluestore_num_threads "$crimson_alien_num_threads"
         fi
     fi
 fi

@@ -15,7 +15,8 @@
                  for="name"
                  i18n>Name</label>
           <div class="cd-col-form-input">
-            <input id="name"
+            <input data-testid="pool-name"
+                   id="name"
                    type="text"
                    class="form-control"
                    placeholder="Name..."
@@ -45,6 +46,7 @@
                  i18n>Pool type</label>
           <div class="cd-col-form-input">
             <select class="form-select"
+                    data-testid="pool-type-select"
                     id="poolType"
                     formControlName="poolType">
               <option ngValue=""
@@ -87,6 +89,7 @@
             <div class="cd-col-form-input">
               <input class="form-control"
                      id="pgNum"
+                     data-testid="pgNum"
                      formControlName="pgNum"
                      min="1"
                      type="number"
@@ -201,6 +204,7 @@
             <div class="custom-control custom-checkbox">
               <input class="custom-control-input"
                      id="rbdMirroring"
+                     data-testid="rbd-mirroring-check"
                      type="checkbox"
                      formControlName="rbdMirroring">
               <label class="custom-control-label"

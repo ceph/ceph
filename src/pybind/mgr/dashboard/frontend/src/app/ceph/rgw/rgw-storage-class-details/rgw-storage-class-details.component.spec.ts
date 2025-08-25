@@ -40,7 +40,8 @@ describe('RgwStorageClassDetailsComponent', () => {
       multipart_sync_threshold: 200,
       host_style: 'path',
       retain_head_object: true,
-      allow_read_through: true
+      allow_read_through: true,
+      tier_type: 'local'
     };
     component.selection = mockSelection;
     component.ngOnChanges();

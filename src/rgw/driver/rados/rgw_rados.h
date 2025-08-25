@@ -41,6 +41,7 @@
 #include "rgw_sal_fwd.h"
 #include "rgw_pubsub.h"
 #include "rgw_tools.h"
+#include "rgw_restore.h"
 
 struct D3nDataCache;
 struct RGWLCCloudTierCtx;
@@ -111,7 +112,7 @@ struct RGWOLHInfo {
      decode(removed, bl);
      DECODE_FINISH(bl);
   }
-  static void generate_test_instances(std::list<RGWOLHInfo*>& o);
+  static std::list<RGWOLHInfo> generate_test_instances();
   void dump(Formatter *f) const;
 };
 WRITE_CLASS_ENCODER(RGWOLHInfo)
@@ -134,7 +135,7 @@ struct RGWOLHPendingInfo {
   }
 
   void dump(Formatter *f) const;
-  static void generate_test_instances(std::list<RGWOLHPendingInfo*>& o);
+  static std::list<RGWOLHPendingInfo> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(RGWOLHPendingInfo)
 
@@ -297,7 +298,7 @@ struct objexp_hint_entry {
   }
 
   void dump(Formatter *f) const;
-  static void generate_test_instances(std::list<objexp_hint_entry*>& o);
+  static std::list<objexp_hint_entry> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(objexp_hint_entry)
 
@@ -358,6 +359,8 @@ class RGWRados
   int open_root_pool_ctx(const DoutPrefixProvider *dpp);
   int open_gc_pool_ctx(const DoutPrefixProvider *dpp);
   int open_lc_pool_ctx(const DoutPrefixProvider *dpp);
+  int open_restore_pool_ctx(const DoutPrefixProvider *dpp);
+  int open_restore_pool_neo_ctx(const DoutPrefixProvider *dpp);
   int open_objexp_pool_ctx(const DoutPrefixProvider *dpp);
   int open_reshard_pool_ctx(const DoutPrefixProvider *dpp);
   int open_notif_pool_ctx(const DoutPrefixProvider *dpp);
@@ -372,9 +375,11 @@ class RGWRados
   rgw::sal::RadosStore* driver{nullptr};
   RGWGC* gc{nullptr};
   RGWLC* lc{nullptr};
+  std::unique_ptr<rgw::restore::Restore> restore{nullptr};
   RGWObjectExpirer* obj_expirer{nullptr};
   bool use_gc_thread{false};
   bool use_lc_thread{false};
+  bool use_restore_thread{false};
   bool quota_threads{false};
   bool run_sync_thread{false};
   bool run_reshard_thread{false};
@@ -449,6 +454,8 @@ protected:
 
   librados::IoCtx gc_pool_ctx;        // .rgw.gc
   librados::IoCtx lc_pool_ctx;        // .rgw.lc
+  librados::IoCtx restore_pool_ctx;        // .rgw.restore
+  neorados::IOContext restore_pool_neo_ctx;        // .rgw.restore 
   librados::IoCtx objexp_pool_ctx;
   librados::IoCtx reshard_pool_ctx;
   librados::IoCtx notif_pool_ctx;     // .rgw.notif
@@ -500,6 +507,10 @@ public:
     return gc;
   }
 
+  rgw::restore::Restore *get_restore() {
+    return restore.get();
+  }
+
   RGWRados& set_run_gc_thread(bool _use_gc_thread) {
     use_gc_thread = _use_gc_thread;
     return *this;
@@ -507,6 +518,11 @@ public:
 
   RGWRados& set_run_lc_thread(bool _use_lc_thread) {
     use_lc_thread = _use_lc_thread;
+    return *this;
+  }
+
+  RGWRados& set_run_restore_thread(bool _use_restore_thread) {
+    use_restore_thread = _use_restore_thread;
     return *this;
   }
 
@@ -534,6 +550,14 @@ public:
     return &lc_pool_ctx;
   }
 
+  librados::IoCtx* get_restore_pool_ctx() {
+    return &restore_pool_ctx;
+  }
+
+  neorados::IOContext* get_restore_pool_neo_ctx() {
+    return &restore_pool_neo_ctx;
+  }
+  
   librados::IoCtx& get_notif_pool_ctx() {
     return notif_pool_ctx;
   }
@@ -693,8 +717,12 @@ public:
     int get_state(const DoutPrefixProvider *dpp, RGWObjState **pstate, RGWObjManifest **pmanifest, bool follow_olh, optional_yield y, bool assume_noent = false);
     void invalidate_state();
 
-    int prepare_atomic_modification(const DoutPrefixProvider *dpp, librados::ObjectWriteOperation& op, bool reset_obj, const std::string *ptag,
-                                    const char *ifmatch, const char *ifnomatch, bool removal_op, bool modify_tail, optional_yield y);
+    int get_current_version_state(const DoutPrefixProvider *dpp, RGWObjState*& current_state, optional_yield y);
+    int check_preconditions(const DoutPrefixProvider *dpp, std::optional<uint64_t> size_match,
+                              ceph::real_time last_mod_time_match, bool high_precision_time,
+                              const char *if_match, const char *if_nomatch, RGWObjState& current_state, optional_yield y);
+    int prepare_atomic_modification(const DoutPrefixProvider *dpp, librados::ObjectWriteOperation& op, bool reset_obj,
+                                    const std::string *ptag, bool modify_tail, bool set_attr_id_tag, optional_yield y);
     int complete_atomic_modification(const DoutPrefixProvider *dpp, bool keep_tail, optional_yield y);
 
   public:
@@ -758,8 +786,8 @@ public:
         bool high_precision_time;
         uint32_t mod_zone_id;
         uint64_t mod_pg_ver;
-        const char *if_match;
-        const char *if_nomatch;
+        const char *if_match{nullptr};
+        const char *if_nomatch{nullptr};
 
         ConditionParams() :
                  mod_ptr(NULL), unmod_ptr(NULL), high_precision_time(false), mod_zone_id(0), mod_pg_ver(0),
@@ -805,8 +833,8 @@ public:
         ACLOwner owner; // owner/owner_display_name for bucket index
         RGWObjCategory category;
         int flags;
-        const char *if_match;
-        const char *if_nomatch;
+        const char *if_match{nullptr};
+        const char *if_nomatch{nullptr};
         std::optional<uint64_t> olh_epoch;
         ceph::real_time delete_at;
         bool canceled;
@@ -853,7 +881,10 @@ public:
         std::list<rgw_obj_index_key> *remove_objs;
         ceph::real_time expiration_time;
         ceph::real_time unmod_since;
+        ceph::real_time last_mod_time_match;
         ceph::real_time mtime; /* for setting delete marker mtime */
+        std::optional<uint64_t> size_match;
+        const char *if_match{nullptr};
         bool high_precision_time;
         rgw_zone_set *zones_trace;
 	bool abortmp;
@@ -1258,13 +1289,11 @@ int restore_obj_from_cloud(RGWLCCloudTierCtx& tier_ctx,
                              RGWObjectCtx& obj_ctx,
                              RGWBucketInfo& dest_bucket_info,
                              const rgw_obj& dest_obj,
-                             rgw_placement_rule& dest_placement,
                              RGWObjTier& tier_config,
-                             uint64_t olh_epoch,
                              std::optional<uint64_t> days,
+			     bool& in_progress,
                              const DoutPrefixProvider *dpp,
-                             optional_yield y,
-                             bool log_op = true);
+                             optional_yield y);
 
   int check_bucket_empty(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_info, optional_yield y);
 

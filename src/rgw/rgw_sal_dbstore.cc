@@ -492,7 +492,7 @@ namespace rgw::sal {
 
   int DBObject::list_parts(const DoutPrefixProvider* dpp, CephContext* cct,
 			   int max_parts, int marker, int* next_marker,
-			   bool* truncated, list_parts_each_t each_func,
+			   bool* truncated, list_parts_each_t&& each_func,
 			   optional_yield y)
   {
     return -EOPNOTSUPP;
@@ -709,7 +709,9 @@ namespace rgw::sal {
     parent_op.params.remove_objs = params.remove_objs;
     parent_op.params.expiration_time = params.expiration_time;
     parent_op.params.unmod_since = params.unmod_since;
+    parent_op.params.last_mod_time_match = params.last_mod_time_match;
     parent_op.params.mtime = params.mtime;
+    parent_op.params.size_match = params.size_match;
     parent_op.params.high_precision_time = params.high_precision_time;
     parent_op.params.zones_trace = params.zones_trace;
     parent_op.params.abortmp = params.abortmp;
@@ -1920,6 +1922,11 @@ namespace rgw::sal {
     return std::make_unique<LCDBSerializer>(store, oid, lock_name, cookie);
   }
 
+  std::unique_ptr<Restore> DBStore::get_restore()
+  {
+    return nullptr;
+  }
+  
   std::unique_ptr<Notification> DBStore::get_notification(
     rgw::sal::Object* obj, rgw::sal::Object* src_obj, req_state* s,
     rgw::notify::EventType event_type, optional_yield y,

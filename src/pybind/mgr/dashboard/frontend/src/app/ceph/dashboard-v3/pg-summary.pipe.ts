@@ -9,6 +9,7 @@ export class PgSummaryPipe implements PipeTransform {
   constructor(private pgCategoryService: PgCategoryService) {}
 
   transform(value: any): any {
+    if (!value) return null;
     const categoryPgAmount: Record<string, number> = {};
     let total = 0;
     _.forEach(value.statuses, (pgAmount, pgStatesText) => {

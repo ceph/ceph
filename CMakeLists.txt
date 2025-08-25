@@ -736,7 +736,6 @@ if (WITH_SYSTEM_ROCKSDB)
 endif()
 
 option(WITH_CRIMSON "Build seastar components")
-set(HAVE_SEASTAR ${WITH_CRIMSON})
 
 # Boost
 option(WITH_SYSTEM_BOOST "require and build with system Boost" OFF)

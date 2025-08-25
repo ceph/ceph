@@ -7,8 +7,8 @@ set(crimson_seastore_srcs
   segment_manager/block.cc
   transaction_interruptor.cc
   transaction_manager.cc
-  transaction.cc
   cache.cc
+  extent_pinboard.cc
   root_block.cc
   lba_manager.cc
   async_cleaner.cc

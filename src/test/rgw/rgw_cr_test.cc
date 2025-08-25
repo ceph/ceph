@@ -350,7 +350,8 @@ int main(int argc, const char **argv)
 			      false,
 			      false,
 			      false,
-            true, true, null_yield, cfgstore.get(),
+			      false,
+			       true, true, null_yield, cfgstore.get(), 
 			      false));
   if (!store) {
     std::cerr << "couldn't init storage provider" << std::endl;

@@ -32,8 +32,6 @@ struct ECTransaction {
     bool invalidates_cache = false; // Yes, both are possible
     std::map<hobject_t,extent_set> to_read;
     std::map<hobject_t,extent_set> will_write;
-
-    std::map<hobject_t,ECUtil::HashInfoRef> hash_infos;
   };
 };
 
@@ -102,7 +100,8 @@ struct ECCommon {
   struct read_request_t {
     const std::list<ec_align_t> to_read;
     const uint32_t flags = 0;
-    const ECUtil::shard_extent_set_t shard_want_to_read;
+    ECUtil::shard_extent_set_t shard_want_to_read;
+    ECUtil::shard_extent_set_t zeros_for_decode;
     shard_id_map<shard_read_t> shard_reads;
     bool want_attrs = false;
     uint64_t object_size;
@@ -114,6 +113,7 @@ struct ECCommon {
       to_read(to_read),
       flags(to_read.front().flags),
       shard_want_to_read(shard_want_to_read),
+      zeros_for_decode(shard_want_to_read.get_max_shards()),
       shard_reads(shard_want_to_read.get_max_shards()),
       want_attrs(want_attrs),
       object_size(object_size) {}
@@ -121,6 +121,7 @@ struct ECCommon {
     read_request_t(const ECUtil::shard_extent_set_t &shard_want_to_read,
                bool want_attrs, uint64_t object_size) :
       shard_want_to_read(shard_want_to_read),
+      zeros_for_decode(shard_want_to_read.get_max_shards()),
       shard_reads(shard_want_to_read.get_max_shards()),
       want_attrs(want_attrs),
       object_size(object_size) {}
@@ -131,6 +132,7 @@ struct ECCommon {
       os << "read_request_t(to_read=[" << to_read << "]"
           << ", flags=" << flags
           << ", shard_want_to_read=" << shard_want_to_read
+          << ", zeros_for_decode=" << zeros_for_decode
           << ", shard_reads=" << shard_reads
           << ", want_attrs=" << want_attrs
           << ")";
@@ -169,6 +171,7 @@ struct ECCommon {
     std::optional<std::map<std::string, ceph::buffer::list, std::less<>>> attrs;
     ECUtil::shard_extent_map_t buffers_read;
     ECUtil::shard_extent_set_t processed_read_requests;
+    shard_id_set zero_length_reads;
 
     read_result_t(const ECUtil::stripe_info_t *sinfo) :
       r(0), buffers_read(sinfo),
@@ -181,7 +184,9 @@ struct ECCommon {
       } else {
         os << ", noattrs";
       }
-      os << ", buffers_read=" << buffers_read << ")";
+      os << ", buffers_read=" << buffers_read;
+      os << ", processed_read_requests=" << processed_read_requests;
+      os << ", zero_length_reads=" << zero_length_reads << ")";
     }
   };
 
@@ -384,7 +389,7 @@ struct ECCommon {
         read_result_t &read_result,
         read_request_t &read_request,
         bool for_recovery,
-        bool fast_read);
+        bool want_attrs);
 
     void get_all_avail_shards(
         const hobject_t &hoid,
@@ -400,6 +405,14 @@ struct ECCommon {
     void get_want_to_read_shards(
         const std::list<ec_align_t> &to_read,
         ECUtil::shard_extent_set_t &want_shard_reads);
+
+    void get_want_to_read_all_shards(
+        const std::list<ec_align_t> &to_read,
+        ECUtil::shard_extent_set_t &want_shard_reads);
+    void create_parity_read_buffer(
+        ECUtil::shard_extent_map_t buffers_read,
+        ec_align_t read,
+        bufferlist *outbl);
 
     /// Returns to_read replicas sufficient to reconstruct want
     int get_min_avail_to_read_shards(
@@ -531,7 +544,7 @@ struct ECCommon {
             << " temp_cleared=" << temp_cleared
             << " remote_read_result=" << remote_shard_extent_map
             << " pending_commits=" << pending_commits
-            << " plan.to_read=" << plan
+            << " plans=" << plan
             << ")";
       }
     };
@@ -612,6 +625,7 @@ struct ECCommon {
     ECCommon &ec_backend;
     ECExtentCache extent_cache;
     uint64_t ec_pdw_write_mode;
+    bool next_write_all_shards = false;
 
     RMWPipeline(CephContext *cct,
                 ceph::ErasureCodeInterfaceRef ec_impl,
@@ -626,30 +640,6 @@ struct ECCommon {
         ec_backend(ec_backend),
         extent_cache(*this, ec_extent_cache_lru, sinfo, cct),
         ec_pdw_write_mode(cct->_conf.get_val<uint64_t>("ec_pdw_write_mode")) {}
-  };
-
-  class UnstableHashInfoRegistry {
-    CephContext *cct;
-    ceph::ErasureCodeInterfaceRef ec_impl;
-    /// If modified, ensure that the ref is held until the update is applied
-    SharedPtrRegistry<hobject_t, ECUtil::HashInfo> registry;
-
-   public:
-    UnstableHashInfoRegistry(
-        CephContext *cct,
-        ceph::ErasureCodeInterfaceRef ec_impl)
-      : cct(cct),
-        ec_impl(std::move(ec_impl)) {}
-
-    ECUtil::HashInfoRef maybe_put_hash_info(
-        const hobject_t &hoid,
-        ECUtil::HashInfo &&hinfo);
-
-    ECUtil::HashInfoRef get_hash_info(
-        const hobject_t &hoid,
-        bool create,
-        const std::map<std::string, ceph::buffer::list, std::less<>> &attrs,
-        uint64_t size);
   };
 };
 

@@ -1885,7 +1885,7 @@ static http_op op_from_method(const char *method)
 int RGWHandler_REST::init_permissions(RGWOp* op, optional_yield y)
 {
   if (op->get_type() == RGW_OP_CREATE_BUCKET) {
-    rgw_build_iam_environment(driver, s);
+    rgw_build_iam_environment(s);
     return 0;
   }
 
@@ -1931,7 +1931,20 @@ int RGWHandler_REST::read_permissions(RGWOp* op_obj, optional_yield y)
     return -EINVAL;
   }
 
-  return do_read_permissions(op_obj, only_bucket, y);
+  auto ret = do_read_permissions(op_obj, only_bucket, y);
+  switch (s->op) {
+  case OP_HEAD:
+  case OP_GET:
+    if (ret == -ENOENT /* note, access already accounted for */) [[unlikely]] {
+      (void) s->object->load_obj_state(s, s->yield, true /* follow_olh */);
+      auto tf = s->object->is_delete_marker() ? "true" : "false";
+      dump_header(s, "x-amz-delete-marker", tf);
+    }
+  default:
+    break;
+  }
+
+  return ret;
 }
 
 void RGWRESTMgr::register_resource(string resource, RGWRESTMgr *mgr)

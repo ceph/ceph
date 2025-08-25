@@ -124,6 +124,7 @@ public:
     rgw_flush_formatter_and_reset(s, s->formatter);
   }
   const char* name() const override { return "get_bucket_logging"; }
+  std::string canonical_name() const override { return fmt::format("REST.{}.LOGGING", s->info.method); }
   RGWOpType get_type() override { return RGW_OP_GET_BUCKET_LOGGING; }
   uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
 };
@@ -215,6 +216,7 @@ class RGWPutBucketLoggingOp : public RGWDefaultResponseOp {
   }
 
   const char* name() const override { return "put_bucket_logging"; }
+  std::string canonical_name() const override { return fmt::format("REST.{}.LOGGING", s->info.method); }
   RGWOpType get_type() override { return RGW_OP_PUT_BUCKET_LOGGING; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
 
@@ -373,6 +375,7 @@ class RGWPostBucketLoggingOp : public RGWDefaultResponseOp {
   }
 
   const char* name() const override { return "post_bucket_logging"; }
+  std::string canonical_name() const override { return fmt::format("REST.{}.LOGGING", s->info.method); }
   RGWOpType get_type() override { return RGW_OP_POST_BUCKET_LOGGING; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
 

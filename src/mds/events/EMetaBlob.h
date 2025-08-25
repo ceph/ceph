@@ -21,6 +21,8 @@
 #include "../CDir.h"
 #include "../CDentry.h"
 #include "../LogSegment.h"
+#include "../LogSegmentRef.h"
+
 
 #include "include/interval_set.h"
 #include "common/strescape.h"
@@ -43,7 +45,6 @@ struct MDPeerUpdate;
  *   it is journaled).
  *
  */
-
 
 class EMetaBlob {
 
@@ -103,7 +104,7 @@ public:
     void encode(bufferlist& bl, uint64_t features) const;
     void decode(bufferlist::const_iterator &bl);
     void dump(Formatter *f) const;
-    static void generate_test_instances(std::list<EMetaBlob::fullbit*>& ls);
+    static std::list<EMetaBlob::fullbit> generate_test_instances();
 
     void update_inode(MDSRank *mds, CInode *in);
     bool is_dirty() const { return (state & STATE_DIRTY); }
@@ -173,7 +174,7 @@ public:
       out << std::endl;
     }
     void dump(Formatter *f) const;
-    static void generate_test_instances(std::list<remotebit*>& ls);
+    static std::list<remotebit> generate_test_instances();
   };
   WRITE_CLASS_ENCODER_FEATURES(remotebit)
 
@@ -194,7 +195,7 @@ public:
     void encode(bufferlist& bl) const;
     void decode(bufferlist::const_iterator &bl);
     void dump(Formatter *f) const;
-    static void generate_test_instances(std::list<nullbit*>& ls);
+    static std::list<nullbit> generate_test_instances();
     void print(std::ostream& out) const {
       out << " nullbit dn " << dn << " [" << dnfirst << "," << dnlast << "] dnv " << dnv
 	  << " dirty=" << dirty << std::endl;
@@ -312,7 +313,7 @@ public:
     void encode(bufferlist& bl, uint64_t features) const;
     void decode(bufferlist::const_iterator &bl);
     void dump(Formatter *f) const;
-    static void generate_test_instances(std::list<dirlump*>& ls);
+    static std::list<dirlump> generate_test_instances();
   };
   WRITE_CLASS_ENCODER_FEATURES(dirlump)
 
@@ -362,7 +363,7 @@ private:
   entity_name_t get_client_name() const {return client_name;}
 
   void dump(Formatter *f) const;
-  static void generate_test_instances(std::list<EMetaBlob*>& ls);
+  static std::list<EMetaBlob> generate_test_instances();
 
   // for replay, in certain cases
   //LogSegment *_segment;
@@ -626,8 +627,8 @@ private:
     out << "]";
   }
 
-  void update_segment(LogSegment *ls);
-  void replay(MDSRank *mds, LogSegment *ls, int type, MDPeerUpdate *su=NULL);
+  void update_segment(LogSegmentRef const& ls);
+  void replay(MDSRank *mds, LogSegmentRef const& ls, int type, MDPeerUpdate *su=NULL);
 };
 WRITE_CLASS_ENCODER_FEATURES(EMetaBlob)
 WRITE_CLASS_ENCODER_FEATURES(EMetaBlob::fullbit)

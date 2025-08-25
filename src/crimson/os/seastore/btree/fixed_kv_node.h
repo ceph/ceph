@@ -349,6 +349,8 @@ struct FixedKVInternalNode
     auto replacement_right = c.cache.template alloc_new_non_data_extent<node_type_t>(
       c.trans, node_size, placement_hint_t::HOT, INIT_GENERATION);
 
+    // We should do full merge if pivot_idx == right.get_size().
+    ceph_assert(pivot_idx != right.get_size());
     this->balance_child_ptrs(
       c.trans,
       static_cast<node_type_t&>(*this),
@@ -438,7 +440,11 @@ struct FixedKVInternalNode
   }
 
   ceph::bufferlist get_delta() {
-    ceph::buffer::ptr bptr(delta_buffer.get_bytes());
+    auto buffer_len = delta_buffer.get_bytes();
+    if (buffer_len == 0) {
+      return ceph::bufferlist();
+    }
+    ceph::buffer::ptr bptr(buffer_len);
     delta_buffer.copy_out(bptr.c_str(), bptr.length());
     ceph::bufferlist bl;
     bl.push_back(bptr);

@@ -3,7 +3,7 @@ overrides:
     conf:
       osd:
         # crimson's osd objectstore option
-        crimson osd objectstore: seastore
+        osd objectstore: seastore
         seastore main device type: RANDOM_BLOCK_SSD
         debug seastore: 20
         debug seastore onode: 20

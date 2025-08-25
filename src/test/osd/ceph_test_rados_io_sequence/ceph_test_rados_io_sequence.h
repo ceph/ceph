@@ -389,14 +389,9 @@ class SelectErasurePool : public ProgramOptionReader<std::string> {
                     bool allow_pool_deep_scrubbing,
                     bool allow_pool_scrubbing,
                     bool test_recovery,
-                    bool disable_pool_ec_optimizations);
+                    bool allow_pool_ec_optimizations);
   const std::string select() override;
   std::string create();
-  void configureServices(bool allow_pool_autoscaling,
-                         bool allow_pool_balancer,
-                         bool allow_pool_deep_scrubbing,
-                         bool allow_pool_scrubbing,
-                         bool test_recovery);
 
   inline bool get_allow_pool_autoscaling() { return allow_pool_autoscaling; }
   inline bool get_allow_pool_balancer() { return allow_pool_balancer; }
@@ -405,7 +400,7 @@ class SelectErasurePool : public ProgramOptionReader<std::string> {
   }
   inline bool get_allow_pool_scrubbing() { return allow_pool_scrubbing; }
   inline bool get_allow_pool_ec_optimizations() {
-    return !disable_pool_ec_optimizations;
+    return allow_pool_ec_optimizations;
   }
   inline std::optional<Profile> getProfile() { return profile; }
 
@@ -418,13 +413,24 @@ class SelectErasurePool : public ProgramOptionReader<std::string> {
   bool allow_pool_deep_scrubbing;
   bool allow_pool_scrubbing;
   bool test_recovery;
-  bool disable_pool_ec_optimizations;
+  bool allow_pool_ec_optimizations;
 
   bool first_use;
 
   SelectErasureProfile sep;
 
   std::optional<Profile> profile;
+
+  void configureServices(const std::string& pool_name,
+                         bool allow_pool_autoscaling,
+                         bool allow_pool_balancer,
+                         bool allow_pool_deep_scrubbing,
+                         bool allow_pool_scrubbing,
+                         bool disable_pool_ec_optimizations,
+                         bool allow_pool_ec_overwrites,
+                         bool test_recovery);
+
+ void setApplication(const std::string& pool_name);
 };
 
 class TestObject {
@@ -443,7 +449,8 @@ class TestObject {
              bool dryrun,
              bool verbose,
              std::optional<int> seqseed,
-             bool testRecovery);
+             bool testRecovery,
+             bool checkConsistency);
 
   int get_num_io();
   bool readyForIo();
@@ -466,6 +473,7 @@ class TestObject {
   std::optional<std::pair<std::string_view, std::string_view>>
       pool_mappinglayers;
   bool testrecovery;
+  bool checkconsistency;
 };
 
 class TestRunner {
@@ -504,12 +512,12 @@ class TestRunner {
   bool interactive;
 
   bool testrecovery;
+  bool checkconsistency;
 
   bool allow_pool_autoscaling;
   bool allow_pool_balancer;
   bool allow_pool_deep_scrubbing;
   bool allow_pool_scrubbing;
-  bool disable_pool_ec_optimizations;
 
   bool show_sequence;
   bool show_help;

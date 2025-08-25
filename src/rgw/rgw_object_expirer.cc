@@ -104,7 +104,7 @@ int main(const int argc, const char **argv)
     exit(1);
   }
 
-  driver = DriverManager::get_storage(&dp, g_ceph_context, cfg, context_pool, site, false, false, false, false, false, false, true, null_yield, cfgstore.get());
+  driver = DriverManager::get_storage(&dp, g_ceph_context, cfg, context_pool, site, false, false, false, false, false, false, false, true, null_yield, cfgstore.get());
   if (!driver) {
     std::cerr << "couldn't init storage provider" << std::endl;
     return EIO;

@@ -21,6 +21,7 @@ public:
 		  std::string_view name);
   ~BitmapAllocator() override
   {
+    shutdown();
   }
 
   const char* get_type() const override

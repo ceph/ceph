@@ -472,6 +472,7 @@ static inline int parse_v4_auth_header(const req_info& info,               /* in
 bool is_non_s3_op(RGWOpType op_type)
 {
   switch (op_type) {
+  case RGW_STS_GET_CALLER_IDENTITY:
   case RGW_STS_GET_SESSION_TOKEN:
   case RGW_STS_ASSUME_ROLE:
   case RGW_STS_ASSUME_ROLE_WEB_IDENTITY:
@@ -510,6 +511,7 @@ bool is_non_s3_op(RGWOpType op_type)
   case RGW_OP_LIST_ROLE_TAGS:
   case RGW_OP_UNTAG_ROLE:
   case RGW_OP_UPDATE_ROLE:
+  case RGW_OP_GET_ACCOUNT_SUMMARY:
 
   case RGW_OP_CREATE_USER:
   case RGW_OP_GET_USER:
@@ -1757,13 +1759,18 @@ void get_aws_version_and_auth_type(const req_state* s, string& aws_version, stri
       aws_version = "SigV2";
     }
   } else {
-    auth_type = "QueryString";
-    if (s->info.args.get("x-amz-algorithm") == AWS4_HMAC_SHA256_STR) {
+    if (!s->info.args.get("x-amz-credential").empty()) {
+      auth_type = "QueryString";
+      if (s->info.args.get("x-amz-algorithm") == AWS4_HMAC_SHA256_STR) {
       /* AWS v4 */
-      aws_version = "SigV4";
-    } else if (!s->info.args.get("AWSAccessKeyId").empty()) {
+	aws_version = "SigV4";
+      } else if (!s->info.args.get("AWSAccessKeyId").empty()) {
       /* AWS v2 */
-      aws_version = "SigV2";
+	aws_version = "SigV2";
+      }
+    } else {
+      // Unauthenticated
+      auth_type.clear();
     }
   }
 }

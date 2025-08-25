@@ -99,7 +99,7 @@ export class RgwOverviewDashboardComponent implements OnInit, OnDestroy {
       this.getSyncStatus();
     });
     this.realmSub = this.rgwRealmService.list().subscribe((data: any) => {
-      this.rgwRealmCount = data['realms'].length;
+      this.rgwRealmCount = data['realms'].length || 0;
     });
     this.ZonegroupSub = this.rgwZonegroupService.list().subscribe((data: any) => {
       this.rgwZonegroupCount = data['zonegroups'].length;
@@ -149,7 +149,7 @@ export class RgwOverviewDashboardComponent implements OnInit, OnDestroy {
   }
 
   getPrometheusData(selectedTime: any) {
-    this.queriesResults = this.prometheusService.getPrometheusQueriesData(
+    this.queriesResults = this.prometheusService.getRangeQueriesData(
       selectedTime,
       queries,
       this.queriesResults,

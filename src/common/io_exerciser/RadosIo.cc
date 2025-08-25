@@ -6,10 +6,15 @@
 #include <ranges>
 
 #include "DataGenerator.h"
+#include "IoOp.h"
 #include "common/ceph_json.h"
 #include "common/json/OSDStructures.h"
+#include "librados/librados_asio.h"
+
+#include <boost/asio/io_context.hpp>
 
 using RadosIo = ceph::io_exerciser::RadosIo;
+using ConsistencyChecker = ceph::consistency::ConsistencyChecker;
 
 namespace {
 template <typename S>
@@ -48,6 +53,7 @@ RadosIo::RadosIo(librados::Rados& rados, boost::asio::io_context& asio,
       om(std::make_unique<ObjectModel>(oid, block_size, seed)),
       db(data_generation::DataGenerator::create_generator(
           data_generation::GenerationType::HeaderedSeededRandom, *om)),
+      cc(std::make_unique<ConsistencyChecker>(rados, asio, pool)),
       pool(pool),
       cached_shard_order(cached_shard_order),
       threads(threads),
@@ -57,10 +63,6 @@ RadosIo::RadosIo(librados::Rados& rados, boost::asio::io_context& asio,
   int rc;
   rc = rados.ioctx_create(pool.c_str(), io);
   ceph_assert(rc == 0);
-  allow_ec_overwrites(true);
-  if (ec_optimizations) {
-    allow_ec_optimizations();
-  }
 }
 
 RadosIo::~RadosIo() {}
@@ -82,28 +84,6 @@ void RadosIo::wait_for_io(int count) {
   while (outstanding_io > count) {
     cond.wait(l);
   }
-}
-
-void RadosIo::allow_ec_overwrites(bool allow) {
-  int rc;
-  bufferlist inbl, outbl;
-  std::string cmdstr = "{\"prefix\": \"osd pool set\", \"pool\": \"" + pool +
-                       "\", \
-      \"var\": \"allow_ec_overwrites\", \"val\": \"" +
-                       (allow ? "true" : "false") + "\"}";
-  rc = rados.mon_command(cmdstr, inbl, &outbl, nullptr);
-  ceph_assert(rc == 0);
-}
-
-void RadosIo::allow_ec_optimizations()
-{
-  int rc;
-  bufferlist inbl, outbl;
-  std::string cmdstr =
-    "{\"prefix\": \"osd pool set\", \"pool\": \"" + pool + "\", \
-      \"var\": \"allow_ec_optimizations\", \"val\": \"true\"}";
-  rc = rados.mon_command(cmdstr, inbl, &outbl, nullptr);
-  ceph_assert(rc == 0);
 }
 
 template <int N>
@@ -188,6 +168,22 @@ void RadosIo::applyIoOp(IoOp& op) {
                               std::move(wop), 0, nullptr, remove_cb);
       break;
     }
+
+    case OpType::Consistency: {
+      start_io();
+      ceph_assert(cc);
+      bool is_consistent =
+        cc->single_read_and_check_consistency(oid, block_size, 0, 0);
+      if (!is_consistent) {
+        std::stringstream strstream;
+        cc->print_results(strstream);
+        std::cerr << strstream.str() << std::endl;
+      }
+      ceph_assert(is_consistent);
+      finish_io();
+      break;
+    }
+
     case OpType::Read:
       [[fallthrough]];
     case OpType::Read2:

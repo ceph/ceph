@@ -478,7 +478,9 @@ public:
                 const UserPerm& perms);
   int flock(int fd, int operation, uint64_t owner);
   int truncate(const char *path, loff_t size, const UserPerm& perms);
-
+  int getlk(int fd, struct flock *fl, uint64_t owner);
+  int setlk(int fd, struct flock *fl, uint64_t owner, int sleep);
+  
   // file ops
   int mknod(const char *path, mode_t mode, const UserPerm& perms, dev_t rdev=0);
 
@@ -1758,9 +1760,9 @@ private:
   void do_readahead(Fh *f, Inode *in, uint64_t off, uint64_t len);
   int64_t _write_success(Fh *fh, utime_t start, uint64_t fpos,
           int64_t offset, uint64_t size, Inode *in);
-  int64_t _write(Fh *fh, int64_t offset, uint64_t size, const char *buf,
-          const struct iovec *iov, int iovcnt, Context *onfinish = nullptr,
-          bool do_fsync = false, bool syncdataonly = false);
+  int64_t _write(Fh *fh, int64_t offset, uint64_t size, bufferlist bl,
+          Context *onfinish = nullptr, bool do_fsync = false,
+          bool syncdataonly = false);
   int64_t _preadv_pwritev_locked(Fh *fh, const struct iovec *iov,
                                  int iovcnt, int64_t offset,
                                  bool write, bool clamp_to_int,
@@ -1862,6 +1864,8 @@ private:
   int _lookup_name(Inode *in, Inode *parent, const UserPerm& perms);
   int _lookup_vino(vinodeno_t ino, const UserPerm& perms, Inode **inode=NULL);
   bool _ll_forget(Inode *in, uint64_t count);
+
+  int _statfs(Inode *in, struct statvfs *stbuf, const UserPerm& perms);
 
   void collect_and_send_metrics();
   void collect_and_send_global_metrics();

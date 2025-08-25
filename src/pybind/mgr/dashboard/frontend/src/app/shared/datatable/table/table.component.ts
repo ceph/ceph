@@ -206,6 +206,12 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
   theme: string;
 
   /**
+   * Use to make the expandable row scrollable with max-height
+   */
+  @Input()
+  scrollable: boolean = true;
+
+  /**
    * Should be a function to update the input data if undefined nothing will be triggered
    *
    * Sometimes it's useful to only define fetchData once.
@@ -376,6 +382,7 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
       return filter.value !== undefined;
     });
   }
+  private previousRows = new Map<string | number, TableItem[]>();
 
   constructor(
     // private ngZone: NgZone,
@@ -442,43 +449,59 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
       .subscribe({
         next: (values) => {
           const datasets: TableItem[][] = values.map((val) => {
-            return this.tableColumns.map((column: CdTableColumn, colIndex: number) => {
+            const rowId = val?.id ?? val?.[this.identifier];
+            const prevRow = this.previousRows.get(rowId);
+
+            const newRow: TableItem[] = this.tableColumns.map((column, colIndex) => {
               const rowValue = _.get(val, column?.prop);
 
               const pipeTransform = () =>
                 column?.prop ? column.pipe.transform(rowValue) : column.pipe.transform(val);
 
-              let tableItem = new TableItem({
-                selected: val,
-                data: {
-                  value: column.pipe ? pipeTransform() : rowValue,
-                  row: val,
-                  column: { ...column, ...val }
-                }
-              });
+              let existingCell: TableItem | undefined = prevRow?.[colIndex];
+              const oldValue = existingCell?.data?.value;
 
-              if (colIndex === 0) {
-                tableItem.data = { ...tableItem.data, row: val };
+              const newValue = column.pipe ? pipeTransform() : rowValue;
 
-                if (this.hasDetails) {
-                  tableItem.expandedData = val;
-                  tableItem.expandedTemplate = this.rowDetailTpl;
+              if (existingCell && !_.isEqual(oldValue, newValue)) {
+                // here i am updating value in place
+                existingCell.data.value = newValue;
+                existingCell.data.row = val;
+                existingCell.data.column = { ...column, ...val };
+
+                if (colIndex === 0 && this.hasDetails) {
+                  existingCell.expandedData = val;
+                  existingCell.expandedTemplate = this.rowDetailTpl;
                 }
               }
 
-              if (column.cellClass && _.isFunction(column.cellClass)) {
-                this.model.header[colIndex].className = column.cellClass({
-                  row: val,
-                  column,
-                  value: rowValue
-                });
-              }
-
-              tableItem.template = column.cellTemplate || this.defaultValueTpl;
-              return tableItem;
+              return (
+                existingCell ??
+                new TableItem({
+                  selected: val,
+                  data: {
+                    value: newValue,
+                    row: val,
+                    column: { ...column, ...val }
+                  },
+                  template: column.cellTemplate || this.defaultValueTpl,
+                  ...(colIndex === 0 && this.hasDetails
+                    ? { expandedData: val, expandedTemplate: this.rowDetailTpl }
+                    : {})
+                })
+              );
             });
+
+            this.previousRows.set(rowId, newRow);
+            return newRow;
           });
-          if (!_.isEqual(this.model.data, datasets)) {
+          // Only update  the data if actual row content changed
+          const prevRaw = this.model.data.map((row) => row?.[0]?.data?.row);
+          const newRaw = values;
+
+          const dataChanged = !_.isEqual(prevRaw, newRaw);
+
+          if (dataChanged || this.model.data.length !== datasets.length) {
             this.model.data = datasets;
           }
         }
@@ -562,9 +585,9 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
     // this method was triggered by ngOnChanges().
     if (this.fetchData.observers.length > 0) {
       this.loadingIndicator = true;
-      const loadingSubscription = this.fetchData.subscribe(() => {
-        this.loadingIndicator = false;
-        this.cdRef.detectChanges();
+      const loadingSubscription = this.fetchData.subscribe({
+        next: () => this.cdRef.detectChanges(),
+        complete: () => (this.loadingIndicator = false)
       });
       this._subscriptions.add(loadingSubscription);
     }

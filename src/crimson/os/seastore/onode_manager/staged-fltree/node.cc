@@ -93,7 +93,7 @@ void tree_cursor_t::assert_next_to(
     }
   } else {
     assert(is_invalid());
-    ceph_abort("impossible");
+    ceph_abort_msg("impossible");
   }
 #endif
 }
@@ -240,7 +240,7 @@ void tree_cursor_t::Cache::maybe_duplicate(const node_version_t& current_version
     p_node_base = current_p_node_base;
   } else {
     // It is impossible to change state backwards, see node_types.h.
-    ceph_abort("impossible");
+    ceph_abort_msg("impossible");
   }
 }
 
@@ -701,13 +701,13 @@ eagain_ifuture<Ref<Node>> Node::load(
       ERRORT("load addr={}, is_level_tail={} error, "
              "got invalid header -- {}",
              c.t, addr, expect_is_level_tail, fmt::ptr(extent));
-      ceph_abort("fatal error");
+      ceph_abort_msg("fatal error");
     }
     if (header.get_is_level_tail() != expect_is_level_tail) {
       ERRORT("load addr={}, is_level_tail={} error, "
              "is_level_tail mismatch -- {}",
              c.t, addr, expect_is_level_tail, fmt::ptr(extent));
-      ceph_abort("fatal error");
+      ceph_abort_msg("fatal error");
     }
 
     auto node_type = header.get_node_type();
@@ -716,7 +716,7 @@ eagain_ifuture<Ref<Node>> Node::load(
         ERRORT("load addr={}, is_level_tail={} error, "
                "leaf length mismatch -- {}",
                c.t, addr, expect_is_level_tail, fmt::ptr(extent));
-        ceph_abort("fatal error");
+        ceph_abort_msg("fatal error");
       }
       auto impl = LeafNodeImpl::load(extent, *field_type);
       auto *derived_ptr = impl.get();
@@ -727,14 +727,14 @@ eagain_ifuture<Ref<Node>> Node::load(
         ERRORT("load addr={}, is_level_tail={} error, "
                "internal length mismatch -- {}",
                c.t, addr, expect_is_level_tail, fmt::ptr(extent));
-        ceph_abort("fatal error");
+        ceph_abort_msg("fatal error");
       }
       auto impl = InternalNodeImpl::load(extent, *field_type);
       auto *derived_ptr = impl.get();
       return eagain_iertr::make_ready_future<Ref<Node>>(
 	new InternalNode(derived_ptr, std::move(impl)));
     } else {
-      ceph_abort("impossible path");
+      ceph_abort_msg("impossible path");
     }
   });
 }
@@ -945,7 +945,7 @@ eagain_ifuture<> InternalNode::erase_child(context_t c, Ref<Node>&& child_ref)
           //
           // In order to preserve the invariant, we need to make sure the new
           // internal root also has at least 2 children.
-          ceph_abort("trying to erase the last item from the internal root node");
+          ceph_abort_msg("trying to erase the last item from the internal root node");
         }
 
         // track erase
@@ -1568,7 +1568,7 @@ eagain_ifuture<Ref<Node>> InternalNode::get_or_track_child(
       if (child->level() + 1 != level()) {
         ERRORT("loaded child {} error from parent {} at pos({}), level mismatch",
                c.t, child->get_name(), get_name(), position);
-        ceph_abort("fatal error");
+        ceph_abort_msg("fatal error");
       }
       child->as_child(position, this);
       return child;
@@ -1893,14 +1893,14 @@ LeafNode::erase<false>(context_t, const search_position_t&, bool);
 eagain_ifuture<> LeafNode::extend_value(
     context_t c, const search_position_t& pos, value_size_t extend_size)
 {
-  ceph_abort("not implemented");
+  ceph_abort_msg("not implemented");
   return eagain_iertr::now();
 }
 
 eagain_ifuture<> LeafNode::trim_value(
     context_t c, const search_position_t& pos, value_size_t trim_size)
 {
-  ceph_abort("not implemented");
+  ceph_abort_msg("not implemented");
   return eagain_iertr::now();
 }
 

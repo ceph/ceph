@@ -10,7 +10,6 @@ from mgr_module import CLICheckNonemptyFileInput, CLICommand, CLIReadCommand, \
     CLIWriteCommand, HandleCommandResult, HandlerFuncType
 from prettytable import PrettyTable
 
-from ..exceptions import DashboardException
 from ..model.nvmeof import CliFlags, CliHeader
 from ..rest_client import RequestException
 from .nvmeof_conf import ManagedByOrchestratorException, \
@@ -55,6 +54,33 @@ def remove_nvmeof_gateway(_, name: str, daemon_name: str = ''):
         return -errno.EINVAL, '', str(ex)
 
 
+MULTIPLES = ['', "K", "M", "G", "T", "P"]
+UNITS = {
+    f"{prefix}{suffix}": 1024 ** mult
+    for mult, prefix in enumerate(MULTIPLES)
+    for suffix in ['', 'B', 'iB']
+    if not (prefix == '' and suffix == 'iB')
+}
+
+
+def convert_to_bytes(size: Union[int, str], default_unit=None):
+    if isinstance(size, int):
+        number = size
+        size = str(size)
+    else:
+        num_str = ''.join(filter(str.isdigit, size))
+        number = int(num_str)
+    unit_str = ''.join(filter(str.isalpha, size))
+    if not unit_str:
+        if not default_unit:
+            raise ValueError("default unit was not provided")
+        unit_str = default_unit
+
+    if unit_str in UNITS:
+        return number * UNITS[unit_str]
+    raise ValueError(f"Invalid unit: {unit_str}")
+
+
 def convert_from_bytes(num_in_bytes):
     units = ['B', 'KB', 'MB', 'GB', 'TB', 'PB']
     size = float(num_in_bytes)
@@ -97,23 +123,26 @@ class AnnotatedDataTextOutputFormatter(OutputFormatter):
             return self._get_list_text_output(data)
         return self._get_object_text_output(data)
 
+    def _get_row(self, columns, data_obj):
+        row = []
+        for col in columns:
+            col_val = data_obj.get(col)
+            if col_val is None:
+                col_val = ''
+            row.append(str(col_val))
+        return row
+
     def _get_list_text_output(self, data):
         columns = list(dict.fromkeys([key for obj in data for key in obj.keys()]))
         table = self._create_table(columns)
         for d in data:
-            row = []
-            for col in columns:
-                row.append(str(d.get(col)))
-            table.add_row(row)
+            table.add_row(self._get_row(columns, d))
         return table.get_string()
 
     def _get_object_text_output(self, data):
         columns = [k for k in data.keys() if k not in ["status", "error_message"]]
         table = self._create_table(columns)
-        row = []
-        for col in columns:
-            row.append(str(data.get(col)))
-        table.add_row(row)
+        table.add_row(self._get_row(columns, data))
         return table.get_string()
 
     def _is_list_of_complex_type(self, value):
@@ -198,20 +227,25 @@ class AnnotatedDataTextOutputFormatter(OutputFormatter):
 
 
 class NvmeofCLICommand(CLICommand):
-    def __init__(self, prefix, model: Type[NamedTuple], perm='rw', poll=False):
+    desc: str
+
+    def __init__(self, prefix, model: Type[NamedTuple], alias=None, perm='rw', poll=False):
         super().__init__(prefix, perm, poll)
         self._output_formatter = AnnotatedDataTextOutputFormatter()
         self._model = model
+        self._alias = alias
+
+    def _use_api_endpoint_desc_if_available(self, func):
+        if not self.desc and hasattr(func, 'doc_info'):
+            self.desc = func.doc_info.get('summary', '')
 
     def __call__(self, func) -> HandlerFuncType:  # type: ignore
-        # pylint: disable=useless-super-delegation
-        """
-        This method is being overriden solely to be able to disable the linters checks for typing.
-        The NvmeofCLICommand decorator assumes a different type returned from the
-        function it wraps compared to CLICmmand, breaking a Liskov substitution principal,
-        hence triggering linters alerts.
-        """
-        return super().__call__(func)
+        if self._alias:
+            NvmeofCLICommand(self._alias, model=self._model)._register_handler(func)
+
+        resp = super().__call__(func)
+        self._use_api_endpoint_desc_if_available(func)
+        return resp
 
     def call(self,
              mgr: Any,
@@ -232,5 +266,5 @@ class NvmeofCLICommand(CLICommand):
                 return HandleCommandResult(-errno.EINVAL, '',
                                            f"format '{out_format}' is not implemented")
             return HandleCommandResult(0, out, '')
-        except DashboardException as e:
+        except Exception as e:  # pylint: disable=broad-except
             return HandleCommandResult(-errno.EINVAL, '', str(e))
