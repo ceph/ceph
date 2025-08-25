@@ -741,26 +741,18 @@ seastar::future<>
 ExtentPlacementManager::BackgroundProcess::run()
 {
   assert(is_running());
-  return seastar::repeat([this] {
-    if (!is_running()) {
-      log_state("run(exit)");
-      return seastar::make_ready_future<seastar::stop_iteration>(
-          seastar::stop_iteration::yes);
+  while (is_running()) {
+    if (background_should_run()) {
+      log_state("run(background)");
+      co_await do_background_cycle();
+    } else {
+      log_state("run(block)");
+      assert(!blocking_background);
+      blocking_background = seastar::promise<>();
+      co_await blocking_background->get_future();
     }
-    return seastar::futurize_invoke([this] {
-      if (background_should_run()) {
-        log_state("run(background)");
-        return do_background_cycle();
-      } else {
-        log_state("run(block)");
-        ceph_assert(!blocking_background);
-        blocking_background = seastar::promise<>();
-        return blocking_background->get_future();
-      }
-    }).then([] {
-      return seastar::stop_iteration::no;
-    });
-  });
+  }
+  log_state("run(exit)");
 }
 
 /**
