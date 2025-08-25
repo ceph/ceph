@@ -262,40 +262,33 @@ public:
 	seastar::open_flags::rw | seastar::open_flags::dsync
       ).then([this, stat](auto file) mutable {
 	return seastar::do_with(
-	  file,
-	  [this, stat](auto &file) mutable 
+	  file, stat,
+	  [this](auto &file, auto &stat) mutable 
 	{
-	  return file.size().then([this, stat, &file](auto size) mutable {
+	  return file.size().then([this, &stat, &file](auto size) mutable {
 	    stat.size = size;
-	    return stat_device_ret(
-	      read_ertr::ready_future_marker{},
-	      stat
-	    );
 	    return identify_namespace(file
-	    ).safe_then([stat] (auto id_namespace_data) mutable {
+	    ).safe_then([&stat] (auto id_namespace_data) mutable {
 	      // LBA format provides LBA size which is power of 2. LBA is the
 	      // minimum size of read and write.
 	      stat.block_size = (1 << id_namespace_data.lbaf[0].lbads);
 	      if (stat.block_size < RBM_SUPERBLOCK_SIZE) {
 		stat.block_size = RBM_SUPERBLOCK_SIZE;
 	      } 
-	      return stat_device_ret(
-		read_ertr::ready_future_marker{},
-		stat
-	      );
+	      return read_ertr::now();
 	    }).handle_error(crimson::ct_error::input_output_error::handle(
-	      [stat]{
+	      [&stat]() mutable {
+	      if (stat.block_size < RBM_SUPERBLOCK_SIZE) {
+                stat.block_size = RBM_SUPERBLOCK_SIZE;
+              }
+	      return read_ertr::now();
+	    }), crimson::ct_error::pass_further_all{});
+	  }).safe_then([&file, &stat]() mutable {
+	    return file.close(
+	    ).then([&stat] {
 	      return stat_device_ret(
 		read_ertr::ready_future_marker{},
 		stat
-	      );
-	    }), crimson::ct_error::pass_further_all{});
-	  }).safe_then([&file](auto st) mutable {
-	    return file.close(
-	    ).then([st] {
-	      return stat_device_ret(
-		read_ertr::ready_future_marker{},
-		st
 	      );
 	    });
 	  });
