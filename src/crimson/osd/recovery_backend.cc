@@ -55,15 +55,12 @@ void RecoveryBackend::clean_up(ceph::os::Transaction& t,
   replica_push_targets.clear();
 
   for (auto& [soid, recovery_waiter] : recovering) {
-    if ((recovery_waiter->pull_info
-         && recovery_waiter->pull_info->is_complete())
-	|| (!recovery_waiter->pull_info
-	  && recovery_waiter->obc && recovery_waiter->obc->obs.exists)) {
+    if (recovery_waiter->obc) {
       recovery_waiter->obc->interrupt(
 	  ::crimson::common::actingset_changed(
 	      pg.is_primary()));
-      recovery_waiter->interrupt(why);
     }
+    recovery_waiter->interrupt(why);
   }
   recovering.clear();
 }
