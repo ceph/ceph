@@ -804,7 +804,7 @@ ObjectDataHandler::punch_inner_mappings(
     extent_len_t>(overwrite_range.aligned_begin);
   return ctx.tm.remove_mappings_in_range(
     ctx.t, overwrite_range.aligned_begin,
-    unaligned_len, std::move(first_mapping));
+    unaligned_len, std::move(first_mapping), {});
 }
 
 // The last step in the multi-mapping-hole-punching scenario: remap
@@ -1403,6 +1403,8 @@ ObjectDataHandler::clone_ret ObjectDataHandler::clone(
     }
     return ctx.tm.get_pin(ctx.t, object_data.get_reserved_data_base()
     ).si_then([this, &object_data, &d_object_data, ctx](auto mapping) {
+      auto old_base = object_data.get_reserved_data_base();
+      auto old_len = object_data.get_reserved_data_len();
       return prepare_data_reservation(
 	ctx,
 	d_object_data,
@@ -1435,12 +1437,15 @@ ObjectDataHandler::clone_ret ObjectDataHandler::clone(
 	    object_data.get_reserved_data_len());
 	  return ctx.tm.remove(ctx.t, std::move(*mapping));
 	});
-      }).si_then([ctx, &object_data,
-		  mapping=std::move(mapping)](auto pos) mutable {
+      }).si_then([ctx, &object_data, mapping](auto pos) mutable {
 	auto base = object_data.get_reserved_data_base();
 	auto len = object_data.get_reserved_data_len();
 	return ctx.tm.clone_range(
 	  ctx.t, base, len, std::move(pos), std::move(mapping), false);
+      }).si_then([ctx, mapping, old_base, old_len] {
+	return ctx.tm.remove_mappings_in_range(
+	  ctx.t, old_base, old_len, std::move(mapping), {false, true}
+	).discard_result();
       });
     }).handle_error_interruptible(
       clone_iertr::pass_further{},
