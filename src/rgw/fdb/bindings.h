@@ -231,6 +231,13 @@ inline bool get_value_range_from_transaction(transaction_handle& txn, std::strin
  return false;
 }
 
+// JFW: TODO: consolidate all of these functions-- I believe the unifying element is going to be
+// pretty simple, but I had to get my head around it first! Basically, taking a function is the
+// way forward; additionally, the event loop may not be entirely correct, it's hard to tell from
+// the FDB examples-- but I now think the high level API function actually handles all the retries
+// and backoff in the correct fashion, we're basically doing too much work-- but for now I need
+// things to "work"! :-)
+
 } // namespace ceph::libfdb::detail 
 
 namespace ceph::libfdb {
@@ -272,6 +279,23 @@ inline void erase(transaction_handle h, K k, const commit_after_op commit_after)
  }
 
  h->commit();
+}
+
+// JFW: See note about some current key-type limitations (we will reinvestigate when the prototype is
+// starting to work, there's no hard need for the string type limitation, it's just most straightforward
+// to deal with):
+template <typename SelectorT> requires ceph::libfdb::concepts::selector<SelectorT>
+inline bool erase(ceph::libfdb::transaction_handle txn, const SelectorT& key_range, const commit_after_op commit_after)
+{
+ fdb_transaction_clear_range(txn, 
+  key_range.begin_key, key_range.begin_key.size(), 
+  key_range.end_key, key_range.end_key.size());
+
+ if(commit_after_op::commit == commit_after) {
+  h->commit();
+ }
+
+ return result;
 }
 
 // Selectors: The user could get a range of values back:
@@ -392,6 +416,14 @@ inline bool get(ceph::libfdb::transaction_handle txn, auto key, std::function<vo
  fn(r.out_data.data(), r.out_data.size());
 
  return true;
+}
+
+template <typename K>
+inline bool key_exists(transaction_handle txn, K k)
+{
+ auto r = ceph::libfdb::detail::get_single_value_from_transaction(txn, ceph::libfdb::to::convert(key));
+
+ return r.key_was_found;
 }
 
 } // namespace ceph::libfdb
