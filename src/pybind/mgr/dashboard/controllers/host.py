@@ -266,12 +266,14 @@ class Host(RESTController):
     @EndpointDoc("List Host Specifications",
                  parameters={
                      'sources': (str, 'Host Sources'),
-                     'facts': (bool, 'Host Facts')
+                     'facts': (bool, 'Host Facts'),
+                     'include_service_instances': (bool, 'Include Service Instances')
                  },
                  responses={200: LIST_HOST_SCHEMA})
     @RESTController.MethodMap(version=APIVersion(1, 3))
     def list(self, sources=None, facts=False, offset: int = 0,
-             limit: int = 5, search: str = '', sort: str = ''):
+             limit: int = 5, search: str = '', sort: str = '',
+             include_service_instances=True):
         hosts = get_hosts(sources)
         params = ['hostname']
         paginator = ListPaginator(int(offset), int(limit), sort, search, hosts,
@@ -284,8 +286,9 @@ class Host(RESTController):
         for host in hosts:
             if 'services' not in host:
                 host['services'] = []
-            host['service_instances'] = populate_service_instances(
-                host['hostname'], host['services'])
+            if str_to_bool(include_service_instances):
+                host['service_instances'] = populate_service_instances(
+                    host['hostname'], host['services'])
         if str_to_bool(facts):
             if orch.available():
                 if not orch.get_missing_features(['get_facts']):
