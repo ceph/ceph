@@ -15,97 +15,129 @@
 # GNU Library Public License for more details.
 #
 set -xe
+set -o pipefail
 
 . /etc/os-release
 base=${1:-/tmp/release}
-releasedir=$base/$NAME/WORKDIR
-rm -fr $(dirname $releasedir)
-#
-# remove all files not under git so they are not
-# included in the distribution.
+releasedir="$base/$NAME/WORKDIR"
+rm -fr "$(dirname "$releasedir")"
 
+# Clean untracked files if we're in a git checkout
 [ -e .git ] && git clean -dxf
 
-# git describe provides a version that is
-# a) human readable
-# b) is unique for each commit
-# c) compares higher than any previous commit
-# d) contains the short hash of the commit
-#
-# CI builds compute the version at an earlier stage, via the same method. Since
-# git metadata is not part of the source distribution, we take the version as
-# an argument to this script.
-#
-if [ -z "${2}" ]; then
-    vers=$(git describe --match "v*" | sed s/^v//)
-    dvers=${vers}-1
+# Determine version (use arg if provided by CI)
+if [ -z "${2:-}" ]; then
+  vers="$(git describe --match "v*" | sed 's/^v//')"
+  dvers="${vers}-1"
 else
-    vers=${2}
-    dvers=${vers}-1${VERSION_CODENAME}
+  vers="${2}"
+  dvers="${vers}-1${VERSION_CODENAME}"
 fi
 
-test -f "ceph-$vers.tar.bz2" || ./make-dist $vers
-#
-# rename the tarball to match debian conventions and extract it
-#
-mkdir -p $releasedir
-mv ceph-$vers.tar.bz2 $releasedir/ceph_$vers.orig.tar.bz2
-tar -C $releasedir -jxf $releasedir/ceph_$vers.orig.tar.bz2
+# Ensure source tarball exists
+test -f "ceph-$vers.tar.bz2" || ./make-dist "$vers"
 
-#
-# Optionally disable -dbg package builds
-# because they are large and take time to build
-#
-cp -a debian $releasedir/ceph-$vers/debian
-cd $releasedir
-if [[ -n "$SKIP_DEBUG_PACKAGES" ]] ; then
-	perl -ni -e 'print if(!(/^Package: .*-dbg$/../^$/))' ceph-$vers/debian/control
-	perl -pi -e 's/--dbg-package.*//' ceph-$vers/debian/rules
+# Prepare Debian build tree
+mkdir -p "$releasedir"
+mv "ceph-$vers.tar.bz2" "$releasedir/ceph_${vers}.orig.tar.bz2"
+tar -C "$releasedir" -jxf "$releasedir/ceph_${vers}.orig.tar.bz2"
+
+cp -a debian "$releasedir/ceph-$vers/debian"
+cd "$releasedir"
+
+# Optionally remove -dbg packages
+if [[ -n "${SKIP_DEBUG_PACKAGES:-}" ]]; then
+  perl -ni -e 'print if(!(/^Package: .*-dbg$/../^$/))' "ceph-$vers/debian/control"
+  perl -pi -e 's/--dbg-package.*//' "ceph-$vers/debian/rules"
 fi
 
-# For cache hit consistency, allow CI builds to use a build directory whose name
-# does not contain version information
-if [ "${CEPH_BUILD_NORMALIZE_PATHS}" = 'true' ]; then
-    mv ceph-$vers ceph
-    cd ceph
+# Normalize build dir name for cache hits if requested
+if [ "${CEPH_BUILD_NORMALIZE_PATHS:-false}" = "true" ]; then
+  mv "ceph-$vers" ceph
+  cd ceph
 else
-    cd ceph-$vers
+  cd "ceph-$vers"
 fi
 
-#
-# update the changelog to match the desired version
-#
-chvers=$(head -1 debian/changelog | perl -ne 's/.*\(//; s/\).*//; print')
+# Bump changelog if needed
+chvers="$(head -1 debian/changelog | perl -ne 's/.*\(//; s/\).*//; print')"
 if [ "$chvers" != "$dvers" ]; then
-   DEBEMAIL="contact@ceph.com" dch -D $VERSION_CODENAME --force-distribution -b -v "$dvers" "new version"
+  DEBEMAIL="contact@ceph.com" dch -D "$VERSION_CODENAME" --force-distribution -b -v "$dvers" "new version"
 fi
-#
-# create the packages
-# a) with ccache to speed things up when building repeatedly
-# b) do not sign the packages
-# c) use half of the available processors
-#
-: ${NPROC:=$(($(nproc) / 2))}
-if test $NPROC -gt 1 ; then
-    j=-j${NPROC}
+
+# --------------------------
+# Parallelism: memory-aware
+# --------------------------
+# Use cgroup v2 memory limit if present; else MemAvailable.
+limit_bytes="$(cat /sys/fs/cgroup/memory.max 2>/dev/null || echo max)"
+if [ "$limit_bytes" = "max" ] || [ "$limit_bytes" -ge 9007199254740991 ]; then
+  limit_bytes="$(awk '/MemAvailable:/ {print $2*1024}' /proc/meminfo)"
 fi
-if [ "$SCCACHE" != "true" ] ; then
-    PATH=/usr/lib/ccache:$PATH
+mem_gib="$(awk -v b="$limit_bytes" 'BEGIN{printf "%.0f", b/1024/1024/1024}')"
+
+# Assume ~2 GiB per job; keep 16 GiB headroom
+jobs=$(( (mem_gib - 16) / 2 ))
+[ "$jobs" -lt 1 ] && jobs=1
+
+# Cap by half the CPUs (SMT inflates nproc for memory-bound workloads)
+cpu_cap=$(( $(nproc) / 2 ))
+[ "$cpu_cap" -lt 1 ] && cpu_cap=1
+[ "$jobs" -gt "$cpu_cap" ] && jobs="$cpu_cap"
+
+echo "Detected ~${mem_gib} GiB available, CPUs=$(nproc); using parallel=${jobs}"
+
+export DEB_BUILD_OPTIONS="parallel=${jobs} ${DEB_BUILD_OPTIONS:-}"
+export MAKEFLAGS="--output-sync=line -j${jobs}"
+j="-j${jobs}"
+
+# -----------------------------------
+# LTO + debug flags
+# -----------------------------------
+if [ "${DISABLE_LTO:-false}" = "true" ]; then
+  export DEB_BUILD_MAINT_OPTIONS="optimize=-lto ${DEB_BUILD_MAINT_OPTIONS:-}"
+  export DEB_CFLAGS_MAINT_APPEND="${DEB_CFLAGS_MAINT_APPEND:-} -g1 -gsplit-dwarf"
+  export DEB_CXXFLAGS_MAINT_APPEND="${DEB_CXXFLAGS_MAINT_APPEND:-} -g1 -gsplit-dwarf"
+else
+  export DEB_CFLAGS_MAINT_APPEND="${DEB_CFLAGS_MAINT_APPEND:-} -g1 -flto=1 -fno-fat-lto-objects"
+  export DEB_CXXFLAGS_MAINT_APPEND="${DEB_CXXFLAGS_MAINT_APPEND:-} -g1 -flto=1 -fno-fat-lto-objects"
+  DEB_CFLAGS_MAINT_APPEND="${DEB_CFLAGS_MAINT_APPEND/ -gsplit-dwarf/}"
+  DEB_CXXFLAGS_MAINT_APPEND="${DEB_CXXFLAGS_MAINT_APPEND/ -gsplit-dwarf/}"
+  export DEB_CFLAGS_MAINT_APPEND DEB_CXXFLAGS_MAINT_APPEND
 fi
-PATH=$PATH dpkg-buildpackage $j -uc -us
+
+# -----------------------------------
+# Linker flags (force bfd)
+# -----------------------------------
+export DEB_LDFLAGS_MAINT_APPEND="${DEB_LDFLAGS_MAINT_APPEND:-} -Wl,-O1,--as-needed,--no-keep-memory"
+DEB_LDFLAGS_MAINT_APPEND="$(echo "$DEB_LDFLAGS_MAINT_APPEND" | sed 's/-fuse-ld=gold//g') -fuse-ld=bfd"
+export DEB_LDFLAGS_MAINT_APPEND
+
+# ccache unless SCCACHE=true
+if [ "${SCCACHE:-}" != "true" ]; then
+  PATH="/usr/lib/ccache:$PATH"
+fi
+
+# Also hard override the environment for safety
+export CFLAGS="${CFLAGS/-fuse-ld=gold/} -fuse-ld=bfd"
+export CXXFLAGS="${CXXFLAGS/-fuse-ld=gold/} -fuse-ld=bfd"
+export LDFLAGS="${LDFLAGS/-fuse-ld=gold/} -fuse-ld=bfd"
+
+# Build
+PATH="$PATH" dpkg-buildpackage "$j" -uc -us
+
+# Reprepro metadata
 cd ../..
-mkdir -p $VERSION_CODENAME/conf
-cat > $VERSION_CODENAME/conf/distributions <<EOF
+mkdir -p "$VERSION_CODENAME/conf"
+cat > "$VERSION_CODENAME/conf/distributions" <<EOF
 Codename: $VERSION_CODENAME
 Suite: stable
 Components: main
 Architectures: $(dpkg --print-architecture) source
 EOF
 if [ ! -e conf ]; then
-    ln -s $VERSION_CODENAME/conf conf
+  ln -s "$VERSION_CODENAME/conf" conf
 fi
-reprepro --basedir $(pwd) include $VERSION_CODENAME WORKDIR/*.changes
-#
-# teuthology needs the version in the version file
-#
-echo $dvers > $VERSION_CODENAME/version
+reprepro --basedir "$(pwd)" include "$VERSION_CODENAME" WORKDIR/*.changes
+
+# teuthology needs the version
+echo "$dvers" > "$VERSION_CODENAME/version"
