@@ -709,4 +709,59 @@ export class CdValidators {
 
     return invalidUrls.length > 0 ? { invalidURL: true } : null;
   }
+
+  /**
+   * Validator that checks if the input is a valid FQDN, IPv4, or IPv6.
+   * Uses existing IP validator and adds FQDN validation via `validator` lib.
+   *
+   * @param options - Configuration options:
+   *   - allowIPv4: Enable IPv4 validation (default: true)
+   *   - allowIPv6: Enable IPv6 validation (default: true)
+   *   - fqdnOptions: Additional options for FQDN validation
+   *
+   * @returns A ValidatorFn that returns `invalidFqdnOrIp` if validation fails.
+   */
+  static fqdnOrIp(options?: {
+    allowIPv4?: boolean;
+    allowIPv6?: boolean;
+    fqdnOptions?: validator.IsFQDNOptions;
+  }): ValidatorFn {
+    const { allowIPv4 = true, allowIPv6 = true, fqdnOptions = { require_tld: false } } =
+      options || {};
+
+    return (control: AbstractControl): ValidationErrors | null => {
+      const value = control.value;
+
+      if (isEmptyInputValue(value)) {
+        return null;
+      }
+
+      // If both IPv4 and IPv6 are allowed
+      if (allowIPv4 && allowIPv6) {
+        const ipValidation = this.ip(0)(control);
+        if (!ipValidation) {
+          return null;
+        }
+      } else if (allowIPv4) {
+        // Only IPv4 allowed
+        const ipValidation = this.ip(4)(control);
+        if (!ipValidation) {
+          return null;
+        }
+      } else if (allowIPv6) {
+        // Only IPv6 allowed
+        const ipValidation = this.ip(6)(control);
+        if (!ipValidation) {
+          return null;
+        }
+      }
+      const isFqdn = validator.isFQDN(value, fqdnOptions);
+
+      if (isFqdn) {
+        return null; // Valid FQDN
+      }
+
+      return { invalidFqdnOrIp: true };
+    };
+  }
 }

@@ -948,6 +948,79 @@ describe('CdValidators', () => {
         const control = new UntypedFormControl('');
         expect(CdValidators.url(control)).toBeNull();
       });
+
+      describe('fqdnOrIp', () => {
+        it('should return null for empty value', () => {
+          const control = new UntypedFormControl('');
+          expect(CdValidators.fqdnOrIp()(control)).toBeNull();
+        });
+
+        it('should return null for valid IPv4 address', () => {
+          const control = new UntypedFormControl('192.168.1.1');
+          expect(CdValidators.fqdnOrIp()(control)).toBeNull();
+        });
+
+        it('should return null for valid IPv6 address', () => {
+          const control = new UntypedFormControl('c4dc:1475:cb0b:24ed:3c80:468b:70cd:1a95');
+          expect(CdValidators.fqdnOrIp()(control)).toBeNull();
+        });
+
+        it('should return null for valid FQDN', () => {
+          const control = new UntypedFormControl('example.com');
+          expect(CdValidators.fqdnOrIp()(control)).toBeNull();
+        });
+
+        it('should return error for invalid IP and FQDN', () => {
+          const control = new UntypedFormControl('invalid_host_name!');
+          expect(CdValidators.fqdnOrIp()(control)).toEqual({ invalidFqdnOrIp: true });
+        });
+
+        it('should return null for valid FQDN with custom fqdnOptions', () => {
+          const control = new UntypedFormControl('myhost');
+          expect(
+            CdValidators.fqdnOrIp({ fqdnOptions: { require_tld: false } })(control)
+          ).toBeNull();
+        });
+
+        it('should return error for valid IPv6 when only IPv4 allowed', () => {
+          const control = new UntypedFormControl('c4dc:1475:cb0b:24ed:3c80:468b:70cd:1a95');
+          expect(CdValidators.fqdnOrIp({ allowIPv4: true, allowIPv6: false })(control)).toEqual({
+            invalidFqdnOrIp: true
+          });
+        });
+
+        it('should return error for valid IPv4 when only IPv6 allowed', () => {
+          const control = new UntypedFormControl('192.168.1.1');
+          expect(CdValidators.fqdnOrIp({ allowIPv4: false, allowIPv6: true })(control)).toEqual({
+            invalidFqdnOrIp: true
+          });
+        });
+
+        it('should return null for valid IPv4 when only IPv4 allowed', () => {
+          const control = new UntypedFormControl('192.168.1.1');
+          expect(CdValidators.fqdnOrIp({ allowIPv4: true, allowIPv6: false })(control)).toBeNull();
+        });
+
+        it('should return null for valid IPv6 when only IPv6 allowed', () => {
+          const control = new UntypedFormControl('c4dc:1475:cb0b:24ed:3c80:468b:70cd:1a95');
+          expect(CdValidators.fqdnOrIp({ allowIPv4: false, allowIPv6: true })(control)).toBeNull();
+        });
+
+        it('should return error for invalid IPv4', () => {
+          const control = new UntypedFormControl('999.999.999.999');
+          expect(CdValidators.fqdnOrIp()(control)).toEqual({ invalidFqdnOrIp: true });
+        });
+
+        it('should return error for invalid IPv6', () => {
+          const control = new UntypedFormControl('c4dc:1475:cb0b:24ed:3c80:468b:70cd:1a95:zzzz');
+          expect(CdValidators.fqdnOrIp()(control)).toEqual({ invalidFqdnOrIp: true });
+        });
+
+        it('should return error for string with spaces', () => {
+          const control = new UntypedFormControl('not a valid fqdn');
+          expect(CdValidators.fqdnOrIp()(control)).toEqual({ invalidFqdnOrIp: true });
+        });
+      });
     });
   });
 });
