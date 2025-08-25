@@ -1,29 +1,67 @@
-<cd-table [data]="filesystems"
-          columnMode="flex"
-          [columns]="columns"
-          (fetchData)="loadFilesystems($event)"
-          identifier="id"
-          forceIdentifier="true"
-          selectionType="single"
-          [hasDetails]="true"
-          (setExpandedRow)="setExpandedRow($event)"
-          (updateSelection)="updateSelection($event)">
-  <cd-cephfs-tabs *cdTableDetail
-                  [selection]="expandedRow">
-  </cd-cephfs-tabs>
-  <div class="table-actions">
-    <cd-table-actions [permission]="permissions.cephfs"
-                      [selection]="selection"
-                      class="btn-group"
-                      id="cephfs-actions"
-                      [tableActions]="tableActions">
-    </cd-table-actions>
-  </div>
-</cd-table>
+<cds-tabs
+  [type]="'contained'"
+  [followFocus]="true"
+  [isNavigation]="false"
+  [cacheActive]="true"
+  >
+  <cds-tab
+    heading="File systems"
+    i18n-heading
+    [tabContent]="fileSystemListContent">
+  </cds-tab>
+  <cds-tab
+    heading="Overview"
+    i18n-heading
+    [tabContent]="grafanaContent">
+  </cds-tab>
+</cds-tabs>
+
+<ng-template #fileSystemListContent>
+  <cd-table
+    [data]="filesystems"
+    columnMode="flex"
+    [columns]="columns"
+    (fetchData)="loadFilesystems($event)"
+    identifier="id"
+    forceIdentifier="true"
+    selectionType="single"
+    [hasDetails]="true"
+    (setExpandedRow)="setExpandedRow($event)"
+    (updateSelection)="updateSelection($event)"
+  >
+    <cd-cephfs-tabs
+      *cdTableDetail
+      [selection]="expandedRow">
+    </cd-cephfs-tabs>
+    <div class="table-actions">
+      <cd-table-actions
+        [permission]="permissions.cephfs"
+        [selection]="selection"
+        class="btn-group"
+        id="cephfs-actions"
+        [tableActions]="tableActions"
+      >
+      </cd-table-actions>
+    </div>
+  </cd-table>
+</ng-template>
 
 <ng-template #deleteTpl>
   <cd-alert-panel type="danger"
                   i18n>
     This will remove its data and metadata pools. It'll also remove the MDS daemon associated with the volume.
   </cd-alert-panel>
+</ng-template>
+
+<ng-template #grafanaContent>
+  <cd-grafana
+    i18n-title
+    title="CephFS Overview"
+    [grafanaPath]="'ceph-filesystem-overview?'"
+    [type]="'metrics'"
+    uid="718Bruins"
+    *ngIf="permissions.grafana.read"
+    grafanaStyle="two"
+  >
+  </cd-grafana>
 </ng-template>
