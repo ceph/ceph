@@ -47,7 +47,6 @@ GITHUB_RUN_ID = os.getenv("GITHUB_RUN_ID", "nil")
 
 GITHUB_ACTION_LOG = f"{GITHUB_SERVER_URL}/{GITHUB_REPOSITORY}/actions/runs/{GITHUB_RUN_ID}"
 
-GITHUB_USER = os.getenv("GITHUB_USER", os.getenv("GITHUB_USER", getuser()))
 GITHUB_API_ENDPOINT = f"https://api.github.com/repos/{GITHUB_REPOSITORY}"
 
 REDMINE_CUSTOM_FIELD_ID_BACKPORT = 2
@@ -112,8 +111,10 @@ log_stream = logging.StreamHandler()
 log.addHandler(log_stream)
 log.setLevel(logging.INFO)
 
-def gitauth():
-    return (GITHUB_USER, GITHUB_TOKEN)
+GITHUB_HEADERS = {
+    "Authorization": f"Bearer {GITHUB_TOKEN}",
+    "X-GitHub-Api-Version": "2022-11-28",
+}
 
 def post_github_comment(session, pr_id, body):
     """Helper to post a comment to a GitHub PR."""
@@ -125,7 +126,7 @@ def post_github_comment(session, pr_id, body):
     endpoint = f"{GITHUB_API_ENDPOINT}/issues/{pr_id}/comments"
     payload = {'body': body}
     try:
-        response = session.post(endpoint, auth=gitauth(), json=payload)
+        response = session.post(endpoint, headers=GITHUB_HEADERS, json=payload)
         response.raise_for_status()
         log.info(f"Successfully posted comment to PR #{pr_id}.")
         return True
@@ -341,7 +342,7 @@ class IssueUpdate:
         endpoint = f"{GITHUB_API_ENDPOINT}/pulls/{pr_id}"
         params = {}
         try:
-            response = self.github_session.get(endpoint, auth=gitauth(), params=params)
+            response = self.github_session.get(endpoint, headers=GITHUB_HEADERS, params=params)
             response.raise_for_status()
             pr_data = response.json()
             self.logger.debug("PR #%d json:\n%s", pr_id, pr_data)
@@ -1393,6 +1394,10 @@ def main():
 
     if not REDMINE_API_KEY:
         log.fatal("REDMINE_API_KEY not found! Please set REDMINE_API_KEY environment variable or ~/.redmine_key.")
+        sys.exit(1)
+
+    if GITHUB_TOKEN is None:
+        log.fatal("GITHUB_TOKEN not found! Please set GITHUB_TOKEN environment variable or ~/.github_token.")
         sys.exit(1)
 
     if IS_GITHUB_ACTION and GITHUB_REPOSITORY != "ceph/ceph":
