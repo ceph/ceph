@@ -68,7 +68,7 @@ export const RESOURCE = {
 
 export const AUTHMODE = {
   User: 'user',
-  activeDirectory: 'active-directory'
+  ActiveDirectory: 'active-directory'
 };
 
 export const PLACEMENT = {
