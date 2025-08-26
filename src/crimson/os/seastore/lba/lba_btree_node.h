@@ -89,14 +89,14 @@ using LBAInternalNodeRef = LBAInternalNode::Ref;
  *   checksum   : ceph_le32[1]                4B
  *   size       : ceph_le32[1]                4B
  *   meta       : lba_node_meta_le_t[1]       36B
- *   keys       : laddr_le_t[CAPACITY]        (109*16)B
- *   values     : lba_map_val_le_t[CAPACITY]  (109*21)B
+ *   keys       : laddr_le_t[CAPACITY]        (106*16)B
+ *   values     : lba_map_val_le_t[CAPACITY]  (106*21)B
  *                                            = 4077B
  *
  * TODO: update FixedKVNodeLayout to handle the above calculation
  * TODO: the above alignment probably isn't portable without further work
  */
-constexpr size_t LEAF_NODE_CAPACITY = 109;
+constexpr size_t LEAF_NODE_CAPACITY = 106;
 
 struct LBALeafNode
   : FixedKVLeafNode<
