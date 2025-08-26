@@ -79,15 +79,9 @@ class Onode : public boost::intrusive_ref_counter<
 {
 protected:
   virtual laddr_t get_hint() const = 0;
-  const uint32_t default_metadata_offset = 0;
-  const uint32_t default_metadata_range = 0;
   const hobject_t hobj;
 public:
-  Onode(uint32_t ddr, uint32_t dmr, const hobject_t &hobj)
-    : default_metadata_offset(ddr),
-      default_metadata_range(dmr),
-      hobj(hobj)
-  {}
+  explicit Onode(const hobject_t &hobj) : hobj(hobj) {}
 
   virtual bool is_alive() const = 0;
   virtual const onode_layout_t &get_layout() const = 0;
@@ -119,12 +113,7 @@ public:
   virtual void swap_layout(Transaction&, Onode&) = 0;
 
   laddr_t get_metadata_hint(uint64_t block_size) const {
-    assert(default_metadata_offset);
-    assert(default_metadata_range);
-    uint64_t range_blocks = default_metadata_range / block_size;
-    auto random_offset = default_metadata_offset +
-        (((uint32_t)std::rand() % range_blocks) * block_size);
-    return (get_hint() + random_offset).checked_to_laddr();
+    return get_hint();
   }
   laddr_t get_data_hint() const {
     return get_hint();
