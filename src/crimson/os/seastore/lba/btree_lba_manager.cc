@@ -1096,4 +1096,132 @@ BtreeLBAManager::remap_mappings(
   co_return ret;
 }
 
+BtreeLBAManager::move_mapping_ret
+BtreeLBAManager::_copy_mapping(
+  op_context_t c,
+  LBABtree &btree,
+  LBACursorRef src,
+  laddr_t dest_laddr,
+  LBACursorRef dest,
+  LogicalChildNode *extent)
+{
+  LOG_PREFIX(BtreeLBAManager::_copy_mapping);
+  assert(src && dest);
+  assert(dest->is_viewable());
+  assert(src->is_viewable());
+  assert(!src->is_end());
+  assert(src->get_refcount() == EXTENT_DEFAULT_REF_COUNT);
+  assert(!src->is_indirect() == (bool)extent);
+  DEBUGT("src={} dest={}", c.trans, *src, *dest);
+  move_mapping_ret_t ret{std::move(src), std::move(dest)};
+  auto &cursor = *ret.dest;
+  auto iter = btree.make_partial_iter(c, cursor);
+  if (!iter.is_end()) {
+    assert(iter.get_key() >= dest_laddr + ret.src->get_length());
+  }
+  // insert the src mapping to dest
+  // attach extent to the new mapping if it exists
+  pladdr_t addr;
+  if (ret.src->is_indirect()) {
+    addr = ret.src->get_intermediate_key().get_local_clone_id();
+  } else {
+    addr = ret.src->get_paddr();
+  }
+  auto [niter, inserted] = co_await btree.insert(
+      c,
+      std::move(iter),
+      dest_laddr,
+      lba_map_val_t{
+	ret.src->get_length(),
+        std::move(addr),
+	EXTENT_DEFAULT_REF_COUNT,
+	ret.src->is_indirect() ? 0 : ret.src->get_checksum(),
+	ret.src->get_extent_type()},
+      extent ? extent : get_reserved_ptr<LBALeafNode, laddr_t>());
+  ceph_assert(inserted);
+  ret.dest = niter.get_cursor(c);
+  co_await ret.src->refresh();
+  co_return ret;
+}
+
+BtreeLBAManager::move_mapping_ret
+BtreeLBAManager::_move_mapping(
+  Transaction &t,
+  LBACursorRef src,
+  laddr_t dest_laddr,
+  LBACursorRef dest,
+  LogicalChildNode *extent) {
+  LOG_PREFIX(BtreeLBAManager::_move_mapping);
+  assert(src && dest);
+  assert(dest->is_viewable());
+  assert(src->is_viewable());
+  assert(!src->is_end());
+  assert(src->get_refcount() == EXTENT_DEFAULT_REF_COUNT);
+  DEBUGT("src={} dest={}", t, *src, *dest);
+  auto c = get_context(t);
+  auto btree = co_await get_btree<LBABtree>(cache, c);
+  auto ret = co_await _copy_mapping(
+    c, btree, std::move(src), dest_laddr, std::move(dest), extent);
+
+  ret.src = co_await update_mapping_refcount(
+    c.trans, ret.src, -1
+  ).handle_error_interruptible(
+    move_mapping_iertr::pass_further{},
+    crimson::ct_error::assert_all{"unexpected error"});
+
+  co_await ret.dest->refresh();
+  auto iter = btree.make_partial_iter(c, *ret.dest);
+  iter = co_await iter.next(c);
+  ret.dest = iter.get_cursor(c);
+
+  co_return ret;
+}
+
+BtreeLBAManager::move_mapping_ret
+BtreeLBAManager::move_and_clone_direct_mapping(
+  Transaction &t,
+  LBACursorRef src,
+  laddr_t dest_laddr,
+  LBACursorRef dest,
+  LogicalChildNode &extent)
+{
+  LOG_PREFIX(BtreeLBAManager::move_and_clone_direct_mapping);
+  assert(src && dest);
+  assert(dest->is_viewable());
+  assert(src->is_viewable());
+  assert(!src->is_indirect());
+  assert(!src->is_end());
+  assert(src->get_refcount() == EXTENT_DEFAULT_REF_COUNT);
+  DEBUGT("src={} dest={}", t, *src, *dest);
+  auto c = get_context(t);
+  auto btree = co_await get_btree<LBABtree>(cache, c);
+  auto ret = co_await _copy_mapping(
+    c, btree, std::move(src), dest_laddr, std::move(dest), &extent);
+
+  // turn the src mapping into an indirect one pointing to
+  // the previously inserted mapping
+  auto cursor = co_await _update_mapping(
+    c.trans,
+    *ret.src,
+    [&ret](const auto &in) {
+      lba_map_val_t val = in;
+      val.pladdr = ret.dest->get_key().get_local_clone_id();
+      val.checksum = 0;
+      return val;
+    },
+    nullptr
+  ).handle_error_interruptible(
+    move_mapping_iertr::pass_further{},
+    crimson::ct_error::assert_all{"unexpected error"});
+
+  assert(cursor->is_indirect());
+  auto iter = btree.make_partial_iter(c, *cursor);
+  DEBUGT("resetting child ptr, leaf: {}, pos: {}",
+	 t, *iter.get_leaf_node(), iter.get_leaf_pos());
+  iter.get_leaf_node()->reset_child_ptr(iter.get_leaf_pos());
+  ret.src = std::move(cursor);
+  co_await ret.dest->refresh();
+  co_return ret;
+}
+
 }
