@@ -252,7 +252,7 @@ BtreeLBAManager::reserve_region(
   auto iter = btree.make_partial_iter(c, *cursor);
   lba_map_val_t val{
     len,
-    P_ADDR_ZERO,
+    pladdr_t{P_ADDR_ZERO},
     EXTENT_DEFAULT_REF_COUNT,
     0,
     extent_types_t::NONE};
@@ -287,7 +287,7 @@ BtreeLBAManager::alloc_extents(
       ext->get_laddr(),
       lba_map_val_t{
 	ext->get_length(),
-	ext->get_paddr(),
+	pladdr_t{ext->get_paddr()},
 	EXTENT_DEFAULT_REF_COUNT,
 	ext->get_last_committed_crc(),
         ext->get_type()},
@@ -333,13 +333,14 @@ BtreeLBAManager::clone_mapping(
   auto btree = co_await get_btree<LBABtree>(cache, c);
   co_await pos->refresh();
   assert(laddr + len <= pos->get_laddr());
+  assert(inter_key.get_clone_prefix() != laddr.get_clone_prefix());
   auto p = co_await btree.insert(
     c,
     btree.make_partial_iter(c, *pos),
     laddr,
     lba_map_val_t{
       len,
-      inter_key,
+      pladdr_t{inter_key.get_local_clone_id()},
       EXTENT_DEFAULT_REF_COUNT,
       0,
       mapping->get_extent_type()},
@@ -924,7 +925,7 @@ BtreeLBAManager::scan_mapped_space(
            pos.get_val().type);
     ceph_assert(pos.get_val().len > 0 &&
                 pos.get_val().len % block_size == 0);
-    ceph_assert(pos.get_val().pladdr != L_ADDR_NULL);
+    ceph_assert(pos.get_val().pladdr != pladdr_t{LOCAL_CLONE_ID_NULL});
     scan_visitor(
         pos.get_val().pladdr.get_paddr(),
         pos.get_val().len,
@@ -1020,9 +1021,10 @@ BtreeLBAManager::remap_mappings(
     auto new_key = (orig_laddr + remap.offset).checked_to_laddr();
     val.len = remap.len;
     if (val.pladdr.is_laddr()) {
-      auto laddr = val.pladdr.get_laddr();
-      DEBUGT("{} + {:#x}", t, laddr, remap.offset);
-      val.pladdr = (laddr + remap.offset).checked_to_laddr();
+      DEBUGT("{} + {:#x}",
+        t,
+        val.pladdr.get_local_clone_id(),
+        remap.offset);
     } else {
       auto paddr = val.pladdr.get_paddr();
       val.pladdr = paddr + remap.offset;
