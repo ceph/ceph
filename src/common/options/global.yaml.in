@@ -3818,13 +3818,11 @@ options:
 - name: osd_objectstore
   type: str
   level: advanced
-  desc: backend type for an OSD (like filestore or bluestore)
+  desc: backend type for an OSD (like bluestore or memstore)
   default: bluestore
   enum_values:
   - bluestore
   - memstore
-  - seastore
-  - cyanstore
   flags:
   - create
   with_legacy: true
