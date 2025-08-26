@@ -1,0 +1,371 @@
+[36m⠋[39m Generating browser application bundles (phase: setup)...[1m[33m    TypeScript compiler options "target" and "useDefineForClassFields" are set to "ES2022" and "false" respectively by the Angular CLI. To control ECMA version and features use the Browserslist configuration. For more information, see https://angular.dev/tools/cli/build#configuring-browser-compatibility[39m[22m
+[1m[33m    NOTE: You can set the "target" to "ES2022" in the project's tsconfig to remove this warning.[39m[22m
+[1m[33m[7m[1m[36m NX [39m[33m[22m[1m[27m Falling back to ts-node for local typescript execution. This may be a little slower.[39m[22m
+[1m[33m  - To fix this, ensure @swc-node/register and @swc/core have been installed[39m[22m
+[1m[33mCould not find a version for "@rollup/rollup-linux-arm64-gnu" in the root "package.json" when collecting shared packages for the Module Federation setup. The package will not be shared.[39m[22m
+[1m[33mCould not find a version for "brace-expansion" in the root "package.json" when collecting shared packages for the Module Federation setup. The package will not be shared.[39m[22m
+(node:182729) [DEP0128] DeprecationWarning: Invalid 'main' field in '/home/afreenmisbah/repos/forks/dev/ceph/src/pybind/mgr/dashboard/frontend/node_modules/rxjs/src/ajax/package.json' of './index.js'. Please either fix that or report it to the module author
+(Use `node --trace-deprecation ...` to show where the warning was created)
+(node:182729) [DEP0128] DeprecationWarning: Invalid 'main' field in '/home/afreenmisbah/repos/forks/dev/ceph/src/pybind/mgr/dashboard/frontend/node_modules/rxjs/src/fetch/package.json' of './index.js'. Please either fix that or report it to the module author
+(node:182729) [DEP0128] DeprecationWarning: Invalid 'main' field in '/home/afreenmisbah/repos/forks/dev/ceph/src/pybind/mgr/dashboard/frontend/node_modules/rxjs/src/internal-compatibility/package.json' of './index.js'. Please either fix that or report it to the module author
+(node:182729) [DEP0128] DeprecationWarning: Invalid 'main' field in '/home/afreenmisbah/repos/forks/dev/ceph/src/pybind/mgr/dashboard/frontend/node_modules/rxjs/src/operators/package.json' of './index.js'. Please either fix that or report it to the module author
+(node:182729) [DEP0128] DeprecationWarning: Invalid 'main' field in '/home/afreenmisbah/repos/forks/dev/ceph/src/pybind/mgr/dashboard/frontend/node_modules/rxjs/src/testing/package.json' of './index.js'. Please either fix that or report it to the module author
+(node:182729) [DEP0128] DeprecationWarning: Invalid 'main' field in '/home/afreenmisbah/repos/forks/dev/ceph/src/pybind/mgr/dashboard/frontend/node_modules/rxjs/src/webSocket/package.json' of './index.js'. Please either fix that or report it to the module author
+[2K[1G[36m⠙[39m Generating browser application bundles (phase: setup)...[36m[ Module Federation Manifest Plugin ][39m Manifest will use absolute path resolution via its host at runtime, reason: publicPath='auto'
+(node:182729) [DEP0180] DeprecationWarning: fs.Stats constructor is deprecated.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+[2K[1G[36m⠹[39m Generating browser application bundles (phase: setup)...[2K[1G[36m⠸[39m Generating browser application bundles (phase: building)...[2K[1G[36m⠼[39m Generating browser application bundles (phase: building)...[2K[1G[36m⠴[39m Generating browser application bundles (phase: building)...[2K[1G[36m⠦[39m Generating browser application bundles (phase: building)...[2K[1G[36m⠧[39m Generating browser application bundles (phase: building)...[2K[1G[36m⠇[39m Generating browser application bundles (phase: building)...[2K[1G[36m⠏[39m Generating browser application bundles (phase: building)...[2K[1G[36m⠋[39m Generating browser application bundles (phase: building)...[2K[1G[36m⠙[39m Generating browser application bundles (phase: building)...[2K[1G[36m⠹[39m Generating browser application bundles (phase: building)...[2K[1G[36m⠸[39m Generating browser application bundles (phase: building)...[2K[1G[36m⠼[39m Generating browser application bundles (phase: building)...[2K[1G[36m⠴[39m Generating browser application bundles (phase: building)...[2K[1G[36m⠦[39m Generating browser application bundles (phase: building)...[2K[1G[36m⠧[39m Generating browser application bundles (phase: building)...[2K[1G[36m⠇[39m Generating browser application bundles (phase: building)...[2K[1G[36m⠏[39m Generating browser application bundles (phase: building)...[2K[1G[36m⠋[39m Generating browser application bundles (phase: building)...[2K[1G[36m⠙[39m Generating browser application bundles (phase: building)...[2K[1G[36m⠹[39m Generating browser application bundles (phase: building)...[2K[1G[36m⠸[39m Generating browser application bundles (phase: building)...[2K[1G[36m⠼[39m Generating browser application bundles (phase: building)...[2K[1G[36m⠴[39m Generating browser application bundles (phase: building)...[2K[1G[36m⠦[39m Generating browser application bundles (phase: building)...[2K[1G[36m⠧[39m Generating browser application bundles (phase: building)...[2K[1G[36m⠇[39m Generating browser application bundles (phase: building)...[2K[1G[36m⠏[39m Generating browser application bundles (phase: building)...[2K[1G[36m⠋[39m Generating browser application bundles (phase: building)...[2K[1G[36m⠙[39m Generating browser application bundles (phase: building)...[2K[1G[36m⠹[39m Generating browser application bundles (phase: building)...[2K[1G[36m⠸[39m Generating browser application bundles (phase: building)...[2K[1G[36m⠼[39m Generating browser application bundles (phase: building)...[2K[1G[36m⠴[39m Generating browser application bundles (phase: building)...[2K[1G[36m⠦[39m Generating browser application bundles (phase: building)...[2K[1G[36m⠧[39m Generating browser application bundles (phase: building)...[2K[1G[36m⠇[39m Generating browser application bundles (phase: building)...[2K[1G[36m⠏[39m Generating browser application bundles (phase: building)...[2K[1G[36m⠋[39m Generating browser application bundles (phase: building)...[2K[1G[36m⠙[39m Generating browser application bundles (phase: building)...[2K[1G[36m⠹[39m Generating browser application bundles (phase: building)...[2K[1G[36m⠸[39m Generating browser application bundles (phase: building)...[2K[1G[36m⠼[39m Generating browser application bundles (phase: building)...[2K[1G[36m⠴[39m Generating browser application bundles (phase: building)...[2K[1G[36m⠦[39m Generating browser application bundles (phase: building)...[2K[1G[36m⠧[39m Generating browser application bundles (phase: building)...[2K[1G[36m⠇[39m Generating browser application bundles (phase: building)...[2K[1G[36m⠏[39m Generating browser application bundles (phase: building)...[2K[1G[36m⠋[39m Generating browser application bundles (phase: building)...[2K[1G[36m⠙[39m Generating browser application bundles (phase: building)...[2K[1G[36m⠹[39m Generating browser application bundles (phase: building)...[2K[1G[36m⠸[39m Generating browser application bundles (phase: sealing)...[2K[1G[36m⠼[39m Generating browser application bundles (phase: sealing)...[2K[1G[36m⠴[39m Generating browser application bundles (phase: sealing)...[2K[1G[32m✔[39m Browser application bundle generation complete.
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/home/afreenmisbah/repos/forks/dev/ceph/src/pybind/mgr/dashboard/frontend/node_modules/@swagger-api/apidom-ast/src/yaml/schemas/canonical-format.mjs depends on 'unraw'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/home/afreenmisbah/repos/forks/dev/ceph/src/pybind/mgr/dashboard/frontend/node_modules/@swagger-api/apidom-core/src/index.mjs depends on 'minim'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/home/afreenmisbah/repos/forks/dev/ceph/src/pybind/mgr/dashboard/frontend/node_modules/@swagger-api/apidom-reference/src/util/url.mjs depends on 'process'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/home/afreenmisbah/repos/forks/dev/ceph/src/pybind/mgr/dashboard/frontend/node_modules/carbon-components-angular/fesm2020/carbon-components-angular-datepicker.mjs depends on 'flatpickr/dist/l10n/index'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/home/afreenmisbah/repos/forks/dev/ceph/src/pybind/mgr/dashboard/frontend/node_modules/carbon-components-angular/fesm2020/carbon-components-angular-datepicker.mjs depends on 'flatpickr/dist/plugins/rangePlugin'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/home/afreenmisbah/repos/forks/dev/ceph/src/pybind/mgr/dashboard/frontend/node_modules/react-redux/es/components/connect.js depends on 'hoist-non-react-statics'. CommonJS or AMD dependencies [39m[22m[1m[33mcan cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/home/afreenmisbah/repos/forks/dev/ceph/src/pybind/mgr/dashboard/frontend/node_modules/swagger-client/es/resolver/specmap/lib/index.js depends on 'deepmerge'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/home/afreenmisbah/repos/forks/dev/ceph/src/pybind/mgr/dashboard/frontend/node_modules/swagger-ui/dist/swagger-ui-es-bundle-core.js depends on '@braintree/sanitize-url'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/home/afreenmisbah/repos/forks/dev/ceph/src/pybind/mgr/dashboard/frontend/node_modules/swagger-ui/dist/swagger-ui-es-bundle-core.js depends on 'base64-js'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/home/afreenmisbah/repos/forks/dev/ceph/src/pybind/mgr/dashboard/frontend/node_modules/swagger-ui/dist/swagger-ui-es-bundle-core.js depends on 'classnames'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/home/afreenmisbah/repos/forks/dev/ceph/src/pybind/mgr/dashboard/frontend/node_modules/swagger-ui/dist/swagger-ui-es-bundle-core.js depends on 'css.escape'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/home/afreenmisbah/repos/forks/dev/ceph/src/pybind/mgr/dashboard/frontend/node_modules/swagger-ui/dist/swagger-ui-es-bundle-core.js depends on 'dompurify'. [39m[22m[1m[33mCommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/home/afreenmisbah/repos/forks/dev/ceph/src/pybind/mgr/dashboard/frontend/node_modules/swagger-ui/dist/swagger-ui-es-bundle-core.js depends on 'ieee754'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/home/afreenmisbah/repos/forks/dev/ceph/src/pybind/mgr/dashboard/frontend/node_modules/swagger-ui/dist/swagger-ui-es-bundle-core.js depends on 'immutable'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/home/afreenmisbah/repos/forks/dev/ceph/src/pybind/mgr/dashboard/frontend/node_modules/swagger-ui/dist/swagger-ui-es-bundle-core.js depends on 'js-file-download'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/home/afreenmisbah/repos/forks/dev/ceph/src/pybind/mgr/dashboard/frontend/node_modules/swagger-ui/dist/swagger-ui-es-bundle-core.js depends on 'prop-types'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/home/afreenmisbah/repos/forks/dev/ceph/src/pybind/mgr/dashboard/frontend/node_modules/swagger-ui/dist/swagger-ui-es-bundle-core.js depends on 'randexp'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/home/afreenmisbah/repos/forks/dev/ceph/src/pybind/mgr/dashboard/frontend/node_modules/swagger-ui/dist/swagger-ui-es-bundle-core.js depends on[39m[22m[1m[33m 'react-copy-to-clipboard'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/home/afreenmisbah/repos/forks/dev/ceph/src/pybind/mgr/dashboard/frontend/node_modules/swagger-ui/dist/swagger-ui-es-bundle-core.js depends on 'react-debounce-input'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/home/afreenmisbah/repos/forks/dev/ceph/src/pybind/mgr/dashboard/frontend/node_modules/swagger-ui/dist/swagger-ui-es-bundle-core.js depends on 'react-immutable-proptypes'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/home/afreenmisbah/repos/forks/dev/ceph/src/pybind/mgr/dashboard/frontend/node_modules/swagger-ui/dist/swagger-ui-es-bundle-core.js depends on 'redux-immutable'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/home/afreenmisbah/repos/forks/dev/ceph/src/pybind/mgr/dashboard/frontend/node_modules/swagger-ui/dist/swagger-ui-es-bundle-core.js depends on 'serialize-error'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/home/afreenmisbah/repos/forks/dev/ceph/src/pybind/mgr/dashboard/frontend/node_modules/swagger-ui/dist/swagger-ui-es-bundle-core.js depends on 'url-parse'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/home/afreenmisbah/repos/forks/dev/ceph/src/pybind/mgr/dashboard/frontend/node_[39m[22m[1m[33mmodules/swagger-ui/dist/swagger-ui-es-bundle-core.js depends on 'xml-but-prettier'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/home/afreenmisbah/repos/forks/dev/ceph/src/pybind/mgr/dashboard/frontend/node_modules/swagger-ui/dist/swagger-ui-es-bundle-core.js depends on 'zenscroll'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0mundefined depends on 'moment'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0mundefined depends on 'validator'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0mundefined depends on 'xml2js'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[36m./src/app/ceph/dashboard/dashboard.module.ts[39m[31m[0m:[0m[93m19:0-52[39m[31m[0m - [0m[91mError: [39m[31m[0mModule not found: Error: Can't resolve './mon-summary.pipe' in '/home/afreenmisbah/repos/forks/dev/ceph/src/pybind/mgr/dashboard/frontend/src/app/ceph/dashboard'[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/app.module.ts[0m:[93m32[0m:[93m5[0m - [91merror[0m[90m NG6002: [0mThis import contains errors, which may affect components that depend on this NgModule.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m32[0m     CephModule[39m[22m
+[1m[31m[7m  [0m [91m    ~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/ceph/ceph.module.ts[0m:[93m16[0m:[93m5[0m - [91merror[0m[90m NG6002: [0m'DashboardModule' does not appear to be an NgModule class.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m16[0m     DashboardModule,[39m[22m
+[1m[31m[7m  [0m [91m    ~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96msrc/app/ceph/dashboard/dashboard.module.ts[0m:[93m51[0m:[93m14[0m[39m[22m
+[1m[31m    [7m51[0m export class DashboardModule {}[39m[22m
+[1m[31m    [7m  [0m [96m             ~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Is it missing an @NgModule annotation?[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/ceph/dashboard/dashboard.module.ts[0m:[93m20[0m:[93m32[0m - [91merror[0m[90m TS2307: [0mCannot find module './mon-summary.pipe' or its corresponding type declarations.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m20[0m import { MonSummaryPipe } from './mon-summary.pipe';[39m[22m
+[1m[31m[7m  [0m [91m                               ~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/ceph/dashboard/dashboard.module.ts[0m:[93m37[0m:[93m17[0m - [91merror[0m[90m NG1010: [0mValue[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/ceph/dashboard/health-pie/health-pie.component.html[0m:[93m4[0m:[93m11[0m - [91merror[0m[90m NG8002: [0mCan't bind to 'datasets' since it isn't a known property of 'canvas'.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m4[0m           [datasets]="chartConfig.dataset"[39m[22m
+[1m[31m[7m [0m [91m          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96msrc/app/ceph/dashboard/health-pie/health-pie.component.ts[0m:[93m22[0m:[93m16[0m[39m[22m
+[1m[31m    [7m22[0m   templateUrl: './health-pie.component.[39m[22m[1m[31mhtml',[39m[22m
+[1m[31m    [7m  [0m [96m               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Error occurs in the template of component HealthPieComponent.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/ceph/dashboard/health-pie/health-pie.component.html[0m:[93m5[0m:[93m11[0m - [91merror[0m[90m NG8002: [0mCan't bind to 'type' since it isn't a known property of 'canvas'.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m5[0m           [type]="chartConfig.chartType"[39m[22m
+[1m[31m[7m [0m [91m          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96msrc/app/ceph/dashboard/health-pie/health-pie.component.ts[0m:[93m22[0m:[93m16[0m[39m[22m
+[1m[31m    [7m22[0m   templateUrl: './health-pie.component.html',[39m[22m
+[1m[31m    [7m  [0m [96m               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Error occurs in the template of component HealthPieComponent.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/ceph/dashboard/health-pie/health-pie.component.html[0m:[93m6[0m:[93m11[0m - [91merror[0m[90m NG8002: [0mCan't bind to 'options' since it isn't a known property of 'canvas'.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m6[0m           [options]="chartConfig.options"[39m[22m
+[1m[31m[7m [0m [91m          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96msrc/app/ceph/dashboard/health-pie/health-pie.component.ts[0m:[93m22[0m:[93m16[0m[39m[22m
+[1m[31m    [7m22[0m   templateUrl: './health-pie.component.html',[39m[22m
+[1m[31m    [7m  [0m [96m               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Error occurs in the template of component HealthPieComponent.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/ceph/dashboard/health-pie/health-pie.component.html[0m:[93m7[0m:[93m11[0m - [91merror[0m[90m NG8002: [0mCan't bind to 'labels' since it isn't a known property of 'canvas'.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m7[0m           [labels]="chartConfig.labels"[39m[22m
+[1m[31m[7m [0m [91m          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96msrc/app/ceph/dashboard/health-pie/health-pie.component.ts[0m:[93m22[0m:[93m16[0m[39m[22m
+[1m[31m    [7m22[0m   templateUrl: './health-pie.component.html',[39m[22m
+[1m[31m    [7m  [0m [96m               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Error occurs in the template of component HealthPieC[39m[22m[1m[31momponent.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/ceph/dashboard/health-pie/health-pie.component.html[0m:[93m8[0m:[93m11[0m - [91merror[0m[90m NG8002: [0mCan't bind to 'plugins' since it isn't a known property of 'canvas'.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m8[0m           [plugins]="doughnutChartPlugins"[39m[22m
+[1m[31m[7m [0m [91m          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96msrc/app/ceph/dashboard/health-pie/health-pie.component.ts[0m:[93m22[0m:[93m16[0m[39m[22m
+[1m[31m    [7m22[0m   templateUrl: './health-pie.component.html',[39m[22m
+[1m[31m    [7m  [0m [96m               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Error occurs in the template of component HealthPieComponent.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/ceph/dashboard/info-card/info-card.component.html[0m:[93m2[0m:[93m6[0m - [91merror[0m[90m NG8002: [0mCan't bind to 'ngClass' since it isn't a known property of 'div'.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m2[0m      [ngClass]="cardClass">[39m[22m
+[1m[31m[7m [0m [91m     ~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96msrc/app/ceph/dashboard/info-card/info-card.component.ts[0m:[93m5[0m:[93m16[0m[39m[22m
+[1m[31m    [7m5[0m   templateUrl: './info-card.component.html',[39m[22m
+[1m[31m    [7m [0m [96m               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Error occurs in the template of component InfoCardComponent.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/ceph/dashboard/info-card/info-card.component.html[0m:[93m14[0m:[93m10[0m - [91merror[0m[90m NG8002: [0mCan't bind to 'ngClass' since it isn't a known property of 'div'.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m14[0m          [ngClass]="contentClass">[39m[22m
+[1m[31m[7m  [0m [91m         ~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96msrc/app/ceph/dashboard/info-card/info-card.component.ts[0m:[93m5[0m:[93m16[0m[39m[22m
+[1m[31m    [7m5[0m   templateUrl: './info-card.component.html',[39m[22m
+[1m[31m    [7m [0m [96m               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Error occurs in the template of component InfoCardComponent.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/ceph/dashboard/info-group/info-group.component.html[0m:[93m4[0m:[93m5[0m - [91merror[0m[90m NG8001: [0m'cd-helper' is not a known[39m[22m[1m[31m element:[39m[22m
+[1m[31m1. If 'cd-helper' is an Angular component, then verify that it is part of this module.[39m[22m
+[1m[31m2. If 'cd-helper' is a Web Component then add 'CUSTOM_ELEMENTS_SCHEMA' to the '@NgModule.schemas' of this component to suppress this message.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m4[0m     <cd-helper iconClass="fa fa-info-circle fa-2xs">[39m[22m
+[1m[31m[7m [0m [91m    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96msrc/app/ceph/dashboard/info-group/info-group.component.ts[0m:[93m7[0m:[93m16[0m[39m[22m
+[1m[31m    [7m7[0m   templateUrl: './info-group.component.html',[39m[22m
+[1m[31m    [7m [0m [96m               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Error occurs in the template of component InfoGroupComponent.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/ceph/dashboard/info-group/info-group.component.html[0m:[93m6[0m:[93m50[0m - [91merror[0m[90m NG8004: [0mNo pipe found with name 'lowercase'.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m6[0m            i18n>For an overview of {{ groupTitle|lowercase }} widgets click[39m[22m
+[1m[31m[7m [0m [91m                                                 ~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96msrc/app/ceph/dashboard/info-group/info-group.component.ts[0m:[93m7[0m:[93m16[0m[39m[22m
+[1m[31m    [7m7[0m   templateUrl: './info-group.component.html',[39m[22m
+[1m[31m    [7m [0m [96m               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Error occurs in the template of component InfoGroupComponent.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/ceph/dashboard/info-group/info-group.component.html[0m:[93m7[0m:[93m9[0m - [91merror[0m[90m NG8001: [0m'cd-doc' is not a known element:[39m[22m
+[1m[31m1. If 'cd-doc' is an Angular component, then verify that it is part of this module.[39m[22m
+[1m[31m2. If 'cd-doc' is a Web Component then add 'CUSTOM_ELEMENTS_SCHEMA' to the '@NgModule.schemas' of this component to suppress this message.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m7[0m         <cd-doc section="dashboard-landing-page-{{ groupTitle|lowercase }}"[39m[22m
+[1m[31m[7m [0m [91m        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[7m8[0m                 docText="here"[39m[22m
+[1m[31m[7m [0m [91m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[7m9[0m      [39m[22m[1m[31m           i18n-docText></cd-doc>[39m[22m
+[1m[31m[7m [0m [91m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96msrc/app/ceph/dashboard/info-group/info-group.component.ts[0m:[93m7[0m:[93m16[0m[39m[22m
+[1m[31m    [7m7[0m   templateUrl: './info-group.component.html',[39m[22m
+[1m[31m    [7m [0m [96m               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Error occurs in the template of component InfoGroupComponent.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/ceph/dashboard/info-group/info-group.component.html[0m:[93m7[0m:[93m17[0m - [91merror[0m[90m NG8002: [0mCan't bind to 'section' since it isn't a known property of 'cd-doc'.[39m[22m
+[1m[31m1. If 'cd-doc' is an Angular component and it has 'section' input, then verify that it is part of this module.[39m[22m
+[1m[31m2. If 'cd-doc' is a Web Component then add 'CUSTOM_ELEMENTS_SCHEMA' to the '@NgModule.schemas' of this component to suppress this message.[39m[22m
+[1m[31m3. To allow any property add 'NO_ERRORS_SCHEMA' to the '@NgModule.schemas' of this component.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m7[0m         <cd-doc section="dashboard-landing-page-{{ groupTitle|lowercase }}"[39m[22m
+[1m[31m[7m [0m [91m                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96msrc/app/ceph/dashboard/info-group/info-group.component.ts[0m:[93m7[0m:[93m16[0m[39m[22m
+[1m[31m    [7m7[0m   templateUrl: './info-group.component.html',[39m[22m
+[1m[31m    [7m [0m [96m               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Error occurs in the template of component InfoGroupComponent.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/ceph/dashboard/info-group/info-group.component.html[0m:[93m7[0m:[93m63[0m - [91merror[0m[90m NG8004: [0mNo pipe found with name 'lowercase'.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m7[0m         <cd-doc section="dashboard-landing-page-{{ groupTitle|lowercase }}"[39m[22m
+[1m[31m[7m [0m [91m                                                              ~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96msrc/app/ceph/dashboard/info-group/info-group.component.ts[0m:[93m7[0m:[93m16[0m[39m[22m
+[1m[31m    [7m7[0m   templateUrl: './info-group.component.html',[39m[22m
+[1m[31m    [7m [0m [96m               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Er[39m[22m[1m[31mror occurs in the template of component InfoGroupComponent.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/ceph/shared/feedback/feedback.component.html[0m:[93m1[0m:[93m1[0m - [91merror[0m[90m NG8001: [0m'cd-modal' is not a known element:[39m[22m
+[1m[31m1. If 'cd-modal' is an Angular component, then verify that it is part of this module.[39m[22m
+[1m[31m2. If 'cd-modal' is a Web Component then add 'CUSTOM_ELEMENTS_SCHEMA' to the '@NgModule.schemas' of this component to suppress this message.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m1[0m <cd-modal [modalRef]="activeModal">[39m[22m
+[1m[31m[7m [0m [91m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96msrc/app/ceph/shared/feedback/feedback.component.ts[0m:[93m16[0m:[93m16[0m[39m[22m
+[1m[31m    [7m16[0m   templateUrl: './feedback.component.html',[39m[22m
+[1m[31m    [7m  [0m [96m               ~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Error occurs in the template of component FeedbackComponent.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/ceph/shared/feedback/feedback.component.html[0m:[93m1[0m:[93m11[0m - [91merror[0m[90m NG8002: [0mCan't bind to 'modalRef' since it isn't a known property of 'cd-modal'.[39m[22m
+[1m[31m1. If 'cd-modal' is an Angular component and it has 'modalRef' input, then verify that it is part of this module.[39m[22m
+[1m[31m2. If 'cd-modal' is a Web Component then add 'CUSTOM_ELEMENTS_SCHEMA' to the '@NgModule.schemas' of this component to suppress this message.[39m[22m
+[1m[31m3. To allow any property add 'NO_ERRORS_SCHEMA' to the '@NgModule.schemas' of this component.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m1[0m <cd-modal [modalRef]="activeModal">[39m[22m
+[1m[31m[7m [0m [91m          ~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96msrc/app/ceph/shared/feedback/feedback.component.ts[0m:[93m16[0m:[93m16[0m[39m[22m
+[1m[31m    [7m16[0m   templateUrl: './feedback.component.html',[39m[22m
+[1m[31m    [7m  [0m [96m               ~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Error occurs in the template of component FeedbackComponent.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/ceph/shared/feedback/feedback.component.html[0m:[93m7[0m:[93m11[0m - [91merror[0m[90m NG8002: [0mCan't bind to 'formGroup' since it isn't a known property of [39m[22m[1m[31m'form'.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m7[0m           [formGroup]="feedbackForm"[39m[22m
+[1m[31m[7m [0m [91m          ~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96msrc/app/ceph/shared/feedback/feedback.component.ts[0m:[93m16[0m:[93m16[0m[39m[22m
+[1m[31m    [7m16[0m   templateUrl: './feedback.component.html',[39m[22m
+[1m[31m    [7m  [0m [96m               ~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Error occurs in the template of component FeedbackComponent.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/ceph/shared/feedback/feedback.component.html[0m:[93m8[0m:[93m21[0m - [91merror[0m[90m NG8003: [0mNo directive found with exportAs 'ngForm'.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m8[0m           #formDir="ngForm">[39m[22m
+[1m[31m[7m [0m [91m                    ~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96msrc/app/ceph/shared/feedback/feedback.component.ts[0m:[93m16[0m:[93m16[0m[39m[22m
+[1m[31m    [7m16[0m   templateUrl: './feedback.component.html',[39m[22m
+[1m[31m    [7m  [0m [96m               ~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Error occurs in the template of component FeedbackComponent.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/ceph/shared/feedback/feedback.component.html[0m:[93m112[0m:[93m9[0m - [91merror[0m[90m NG8001: [0m'cd-form-button-panel' is not a known element:[39m[22m
+[1m[31m1. If 'cd-form-button-panel' is an Angular component, then verify that it is part of this module.[39m[22m
+[1m[31m2. If 'cd-form-button-panel' is a Web Component then add 'CUSTOM_ELEMENTS_SCHEMA' to the '@NgModule.schemas' of this component to suppress this message.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m112[0m         <cd-form-button-panel (submitActionEvent)="onSubmit()"[39m[22m
+[1m[31m[7m   [0m [91m        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[7m113[0m                               [form]="feedbackForm"[39m[22m
+[1m[31m[7m   [0m [91m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[7m114[0m                               [submitText]="actionLabels.SUBMIT"[39m[22m
+[1m[31m[7m   [0m [91m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[7m115[0m                               wrappingClass="text-right">[39m[22m
+[1m[31m[7m   [0m [91m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [39m[22m[1m[31m[96msrc/app/ceph/shared/feedback/feedback.component.ts[0m:[93m16[0m:[93m16[0m[39m[22m
+[1m[31m    [7m16[0m   templateUrl: './feedback.component.html',[39m[22m
+[1m[31m    [7m  [0m [96m               ~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Error occurs in the template of component FeedbackComponent.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/ceph/shared/feedback/feedback.component.html[0m:[93m113[0m:[93m31[0m - [91merror[0m[90m NG8002: [0mCan't bind to 'form' since it isn't a known property of 'cd-form-button-panel'.[39m[22m
+[1m[31m1. If 'cd-form-button-panel' is an Angular component and it has 'form' input, then verify that it is part of this module.[39m[22m
+[1m[31m2. If 'cd-form-button-panel' is a Web Component then add 'CUSTOM_ELEMENTS_SCHEMA' to the '@NgModule.schemas' of this component to suppress this message.[39m[22m
+[1m[31m3. To allow any property add 'NO_ERRORS_SCHEMA' to the '@NgModule.schemas' of this component.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m113[0m                               [form]="feedbackForm"[39m[22m
+[1m[31m[7m   [0m [91m                              ~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96msrc/app/ceph/shared/feedback/feedback.component.ts[0m:[93m16[0m:[93m16[0m[39m[22m
+[1m[31m    [7m16[0m   templateUrl: './feedback.component.html',[39m[22m
+[1m[31m    [7m  [0m [96m               ~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Error occurs in the template of component FeedbackComponent.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/ceph/shared/feedback/feedback.component.html[0m:[93m114[0m:[93m31[0m - [91merror[0m[90m NG8002: [0mCan't bind to 'submitText' since it isn't a known property of 'cd-form-button-panel'.[39m[22m
+[1m[31m1. If 'cd-form-button-panel' is an Angular component and it has 'submitText' input, then verify that it is part of this module.[39m[22m
+[1m[31m2. If 'cd-form-button-panel' is a Web Component then add 'CUSTOM_ELEMENTS_SCHEMA' to the '@NgModule.schemas' of this component to suppress this message.[39m[22m
+[1m[31m3. To allow any property add 'NO_ERRORS_SCHEMA' to the '@NgModule.schemas' of this component.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m114[0m                               [submitText]="actionLabels.SUBMIT"[39m[22m
+[1m[31m[7m   [0m [91m        [39m[22m[1m[31m                      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96msrc/app/ceph/shared/feedback/feedback.component.ts[0m:[93m16[0m:[93m16[0m[39m[22m
+[1m[31m    [7m16[0m   templateUrl: './feedback.component.html',[39m[22m
+[1m[31m    [7m  [0m [96m               ~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Error occurs in the template of component FeedbackComponent.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m

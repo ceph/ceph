@@ -1,0 +1,3714 @@
+{
+  "id": "ceph_dashboard",
+  "name": "ceph_dashboard",
+  "metaData": {
+    "name": "ceph_dashboard",
+    "type": "app",
+    "buildInfo": {
+      "buildVersion": "0.0.0",
+      "buildName": "ceph-dashboard"
+    },
+    "remoteEntry": {
+      "name": "",
+      "path": "",
+      "type": "module"
+    },
+    "types": {
+      "path": "",
+      "name": "",
+      "zip": "",
+      "api": ""
+    },
+    "globalName": "ceph_dashboard",
+    "pluginVersion": "0.9.1",
+    "prefetchInterface": false,
+    "publicPath": "auto"
+  },
+  "shared": [
+    {
+      "singleton": true,
+      "requiredVersion": "18.2.11",
+      "shareScope": "default",
+      "strictVersion": true,
+      "name": "@angular/animations/browser",
+      "version": "18.2.11",
+      "eager": false,
+      "id": "ceph_dashboard:@angular/animations/browser",
+      "assets": {
+        "js": {
+          "async": [
+            "node_modules_angular_core_fesm2022_core_mjs.js",
+            "default-node_modules_angular_animations_fesm2022_animations_mjs.js",
+            "default-node_modules_rxjs__esm2015_internal_AsyncSubject_js-node_modules_rxjs__esm2015_intern-7c6e1a.js",
+            "node_modules_rxjs__esm2015_operators_index_js.js",
+            "node_modules_rxjs__esm2015_index_js.js",
+            "node_modules_angular_core_fesm2022_primitives_signals_mjs.js",
+            "node_modules_angular_core_fesm2022_primitives_event-dispatch_mjs.js",
+            "default-node_modules_angular_common_fesm2022_common_mjs.js"
+          ],
+          "sync": [
+            "default-node_modules_angular_animations_fesm2022_browser_mjs.js"
+          ]
+        },
+        "css": {
+          "async": [],
+          "sync": []
+        }
+      },
+      "usedIn": []
+    },
+    {
+      "singleton": true,
+      "requiredVersion": "18.2.11",
+      "shareScope": "default",
+      "strictVersion": true,
+      "name": "@angular/animations",
+      "version": "18.2.11",
+      "eager": false,
+      "id": "ceph_dashboard:@angular/animations",
+      "assets": {
+        "js": {
+          "async": [
+            "node_modules_angular_core_fesm2022_core_mjs.js",
+            "default-node_modules_angular_common_fesm2022_common_mjs.js",
+            "default-node_modules_rxjs__esm2015_internal_AsyncSubject_js-node_modules_rxjs__esm2015_intern-7c6e1a.js",
+            "node_modules_rxjs__esm2015_operators_index_js.js",
+            "node_modules_rxjs__esm2015_index_js.js",
+            "node_modules_angular_core_fesm2022_primitives_signals_mjs.js",
+            "node_modules_angular_core_fesm2022_primitives_event-dispatch_mjs.js"
+          ],
+          "sync": [
+            "default-node_modules_angular_animations_fesm2022_animations_mjs.js"
+          ]
+        },
+        "css": {
+          "async": [],
+          "sync": []
+        }
+      },
+      "usedIn": []
+    },
+    {
+      "singleton": true,
+      "requiredVersion": "18.2.11",
+      "shareScope": "default",
+      "strictVersion": true,
+      "name": "@angular/common/http",
+      "version": "18.2.11",
+      "eager": false,
+      "id": "ceph_dashboard:@angular/common/http",
+      "assets": {
+        "js": {
+          "async": [
+            "node_modules_angular_core_fesm2022_core_mjs.js",
+            "default-node_modules_angular_common_fesm2022_common_mjs.js",
+            "default-node_modules_rxjs__esm2015_internal_AsyncSubject_js-node_modules_rxjs__esm2015_intern-7c6e1a.js",
+            "node_modules_rxjs__esm2015_operators_index_js.js",
+            "node_modules_rxjs__esm2015_index_js.js",
+            "node_modules_angular_core_fesm2022_primitives_signals_mjs.js",
+            "node_modules_angular_core_fesm2022_primitives_event-dispatch_mjs.js"
+          ],
+          "sync": [
+            "default-node_modules_angular_common_fesm2022_http_mjs.js"
+          ]
+        },
+        "css": {
+          "async": [],
+          "sync": []
+        }
+      },
+      "usedIn": []
+    },
+    {
+      "singleton": true,
+      "requiredVersion": "18.2.11",
+      "shareScope": "default",
+      "strictVersion": true,
+      "name": "@angular/common",
+      "version": "18.2.11",
+      "eager": false,
+      "id": "ceph_dashboard:@angular/common",
+      "assets": {
+        "js": {
+          "async": [
+            "node_modules_angular_core_fesm2022_core_mjs.js",
+            "default-node_modules_rxjs__esm2015_internal_AsyncSubject_js-node_modules_rxjs__esm2015_intern-7c6e1a.js",
+            "node_modules_rxjs__esm2015_operators_index_js.js",
+            "node_modules_rxjs__esm2015_index_js.js",
+            "node_modules_angular_core_fesm2022_primitives_signals_mjs.js",
+            "node_modules_angular_core_fesm2022_primitives_event-dispatch_mjs.js"
+          ],
+          "sync": [
+            "default-node_modules_angular_common_fesm2022_common_mjs.js"
+          ]
+        },
+        "css": {
+          "async": [],
+          "sync": []
+        }
+      },
+      "usedIn": []
+    },
+    {
+      "singleton": true,
+      "requiredVersion": "18.2.11",
+      "shareScope": "default",
+      "strictVersion": true,
+      "name": "@angular/core/primitives/event-dispatch",
+      "version": "18.2.11",
+      "eager": false,
+      "id": "ceph_dashboard:@angular/core/primitives/event-dispatch",
+      "assets": {
+        "js": {
+          "async": [],
+          "sync": [
+            "node_modules_angular_core_fesm2022_primitives_event-dispatch_mjs.js"
+          ]
+        },
+        "css": {
+          "async": [],
+          "sync": []
+        }
+      },
+      "usedIn": []
+    },
+    {
+      "singleton": true,
+      "requiredVersion": "18.2.11",
+      "shareScope": "default",
+      "strictVersion": true,
+      "name": "@angular/core/primitives/signals",
+      "version": "18.2.11",
+      "eager": false,
+      "id": "ceph_dashboard:@angular/core/primitives/signals",
+      "assets": {
+        "js": {
+          "async": [],
+          "sync": [
+            "node_modules_angular_core_fesm2022_primitives_signals_mjs.js"
+          ]
+        },
+        "css": {
+          "async": [],
+          "sync": []
+        }
+      },
+      "usedIn": []
+    },
+    {
+      "singleton": true,
+      "requiredVersion": "18.2.11",
+      "shareScope": "default",
+      "strictVersion": true,
+      "name": "@angular/core/rxjs-interop",
+      "version": "18.2.11",
+      "eager": false,
+      "id": "ceph_dashboard:@angular/core/rxjs-interop",
+      "assets": {
+        "js": {
+          "async": [
+            "node_modules_angular_core_fesm2022_core_mjs.js",
+            "default-node_modules_rxjs__esm2015_internal_AsyncSubject_js-node_modules_rxjs__esm2015_intern-7c6e1a.js",
+            "node_modules_rxjs__esm2015_operators_index_js.js",
+            "node_modules_rxjs__esm2015_index_js.js",
+            "default-node_modules_angular_platform-browser_fesm2022_platform-browser_mjs.js",
+            "default-node_modules_angular_common_fesm2022_common_mjs.js",
+            "default-node_modules_angular_animations_fesm2022_browser_mjs.js",
+            "default-node_modules_angular_forms_fesm2022_forms_mjs.js",
+            "default-node_modules_ngx-formly_core_fesm2020_ngx-formly-core_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-icon_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-i18n_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-layer_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-timepicker-select_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-checkbox_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-popover_mjs.js",
+            "node_modules_moment_moment_js.js",
+            "node_modules_chart_js_dist_chart_js.js",
+            "node_modules_angular_core_fesm2022_primitives_signals_mjs.js",
+            "node_modules_angular_core_fesm2022_primitives_event-dispatch_mjs.js",
+            "default-node_modules_angular_common_fesm2022_http_mjs.js",
+            "default-node_modules_angular_animations_fesm2022_animations_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-utils_mjs.js",
+            "default-node_modules_carbon-components-angular_fesm2020_carbon-components-angular-select_mjs.js"
+          ],
+          "sync": [
+            "common.js"
+          ]
+        },
+        "css": {
+          "async": [],
+          "sync": []
+        }
+      },
+      "usedIn": []
+    },
+    {
+      "singleton": true,
+      "requiredVersion": "18.2.11",
+      "shareScope": "default",
+      "strictVersion": true,
+      "name": "@angular/core",
+      "version": "18.2.11",
+      "eager": false,
+      "id": "ceph_dashboard:@angular/core",
+      "assets": {
+        "js": {
+          "async": [
+            "default-node_modules_rxjs__esm2015_internal_AsyncSubject_js-node_modules_rxjs__esm2015_intern-7c6e1a.js",
+            "node_modules_rxjs__esm2015_operators_index_js.js",
+            "node_modules_rxjs__esm2015_index_js.js",
+            "node_modules_angular_core_fesm2022_primitives_signals_mjs.js",
+            "node_modules_angular_core_fesm2022_primitives_event-dispatch_mjs.js"
+          ],
+          "sync": [
+            "node_modules_angular_core_fesm2022_core_mjs.js"
+          ]
+        },
+        "css": {
+          "async": [],
+          "sync": []
+        }
+      },
+      "usedIn": []
+    },
+    {
+      "singleton": true,
+      "requiredVersion": "18.2.11",
+      "shareScope": "default",
+      "strictVersion": true,
+      "name": "@angular/forms",
+      "version": "18.2.11",
+      "eager": false,
+      "id": "ceph_dashboard:@angular/forms",
+      "assets": {
+        "js": {
+          "async": [
+            "node_modules_angular_core_fesm2022_core_mjs.js",
+            "default-node_modules_angular_common_fesm2022_common_mjs.js",
+            "default-node_modules_rxjs__esm2015_internal_AsyncSubject_js-node_modules_rxjs__esm2015_intern-7c6e1a.js",
+            "node_modules_rxjs__esm2015_operators_index_js.js",
+            "node_modules_rxjs__esm2015_index_js.js",
+            "node_modules_angular_core_fesm2022_primitives_signals_mjs.js",
+            "node_modules_angular_core_fesm2022_primitives_event-dispatch_mjs.js"
+          ],
+          "sync": [
+            "default-node_modules_angular_forms_fesm2022_forms_mjs.js"
+          ]
+        },
+        "css": {
+          "async": [],
+          "sync": []
+        }
+      },
+      "usedIn": []
+    },
+    {
+      "singleton": true,
+      "requiredVersion": "18.2.11",
+      "shareScope": "default",
+      "strictVersion": true,
+      "name": "@angular/platform-browser/animations",
+      "version": "18.2.11",
+      "eager": false,
+      "id": "ceph_dashboard:@angular/platform-browser/animations",
+      "assets": {
+        "js": {
+          "async": [
+            "node_modules_angular_core_fesm2022_core_mjs.js",
+            "default-node_modules_rxjs__esm2015_internal_AsyncSubject_js-node_modules_rxjs__esm2015_intern-7c6e1a.js",
+            "node_modules_rxjs__esm2015_operators_index_js.js",
+            "node_modules_rxjs__esm2015_index_js.js",
+            "default-node_modules_angular_platform-browser_fesm2022_platform-browser_mjs.js",
+            "default-node_modules_angular_common_fesm2022_common_mjs.js",
+            "default-node_modules_angular_animations_fesm2022_browser_mjs.js",
+            "default-node_modules_angular_forms_fesm2022_forms_mjs.js",
+            "default-node_modules_ngx-formly_core_fesm2020_ngx-formly-core_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-icon_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-i18n_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-layer_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-timepicker-select_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-checkbox_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-popover_mjs.js",
+            "node_modules_moment_moment_js.js",
+            "node_modules_chart_js_dist_chart_js.js",
+            "node_modules_angular_core_fesm2022_primitives_signals_mjs.js",
+            "node_modules_angular_core_fesm2022_primitives_event-dispatch_mjs.js",
+            "default-node_modules_angular_common_fesm2022_http_mjs.js",
+            "default-node_modules_angular_animations_fesm2022_animations_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-utils_mjs.js",
+            "default-node_modules_carbon-components-angular_fesm2020_carbon-components-angular-select_mjs.js"
+          ],
+          "sync": [
+            "common.js"
+          ]
+        },
+        "css": {
+          "async": [],
+          "sync": []
+        }
+      },
+      "usedIn": []
+    },
+    {
+      "singleton": true,
+      "requiredVersion": "18.2.11",
+      "shareScope": "default",
+      "strictVersion": true,
+      "name": "@angular/platform-browser",
+      "version": "18.2.11",
+      "eager": false,
+      "id": "ceph_dashboard:@angular/platform-browser",
+      "assets": {
+        "js": {
+          "async": [
+            "node_modules_angular_core_fesm2022_core_mjs.js",
+            "default-node_modules_angular_common_fesm2022_common_mjs.js",
+            "default-node_modules_angular_common_fesm2022_http_mjs.js",
+            "default-node_modules_rxjs__esm2015_internal_AsyncSubject_js-node_modules_rxjs__esm2015_intern-7c6e1a.js",
+            "node_modules_rxjs__esm2015_operators_index_js.js",
+            "node_modules_rxjs__esm2015_index_js.js",
+            "node_modules_angular_core_fesm2022_primitives_signals_mjs.js",
+            "node_modules_angular_core_fesm2022_primitives_event-dispatch_mjs.js"
+          ],
+          "sync": [
+            "default-node_modules_angular_platform-browser_fesm2022_platform-browser_mjs.js"
+          ]
+        },
+        "css": {
+          "async": [],
+          "sync": []
+        }
+      },
+      "usedIn": []
+    },
+    {
+      "singleton": true,
+      "requiredVersion": "18.2.11",
+      "shareScope": "default",
+      "strictVersion": true,
+      "name": "@angular/router",
+      "version": "18.2.11",
+      "eager": false,
+      "id": "ceph_dashboard:@angular/router",
+      "assets": {
+        "js": {
+          "async": [
+            "default-node_modules_angular_platform-browser_fesm2022_platform-browser_mjs.js",
+            "node_modules_angular_core_fesm2022_core_mjs.js",
+            "default-node_modules_angular_common_fesm2022_common_mjs.js",
+            "default-node_modules_rxjs__esm2015_internal_AsyncSubject_js-node_modules_rxjs__esm2015_intern-7c6e1a.js",
+            "node_modules_rxjs__esm2015_operators_index_js.js",
+            "node_modules_rxjs__esm2015_index_js.js",
+            "default-node_modules_angular_common_fesm2022_http_mjs.js",
+            "node_modules_angular_core_fesm2022_primitives_signals_mjs.js",
+            "node_modules_angular_core_fesm2022_primitives_event-dispatch_mjs.js"
+          ],
+          "sync": [
+            "default-node_modules_angular_router_fesm2022_router_mjs.js"
+          ]
+        },
+        "css": {
+          "async": [],
+          "sync": []
+        }
+      },
+      "usedIn": []
+    },
+    {
+      "singleton": true,
+      "requiredVersion": "1.23.9",
+      "shareScope": "default",
+      "strictVersion": true,
+      "name": "@carbon/charts-angular",
+      "version": "1.23.9",
+      "eager": false,
+      "id": "ceph_dashboard:@carbon/charts-angular",
+      "assets": {
+        "js": {
+          "async": [
+            "node_modules_angular_core_fesm2022_core_mjs.js",
+            "default-node_modules_angular_common_fesm2022_common_mjs.js",
+            "default-node_modules_rxjs__esm2015_internal_AsyncSubject_js-node_modules_rxjs__esm2015_intern-7c6e1a.js",
+            "node_modules_rxjs__esm2015_operators_index_js.js",
+            "node_modules_rxjs__esm2015_index_js.js",
+            "node_modules_angular_core_fesm2022_primitives_signals_mjs.js",
+            "node_modules_angular_core_fesm2022_primitives_event-dispatch_mjs.js"
+          ],
+          "sync": [
+            "default-node_modules_carbon_charts-angular_fesm2022_carbon-charts-angular_mjs.js"
+          ]
+        },
+        "css": {
+          "async": [],
+          "sync": []
+        }
+      },
+      "usedIn": []
+    },
+    {
+      "singleton": true,
+      "requiredVersion": "17.0.1",
+      "shareScope": "default",
+      "strictVersion": true,
+      "name": "@ng-bootstrap/ng-bootstrap",
+      "version": "17.0.1",
+      "eager": false,
+      "id": "ceph_dashboard:@ng-bootstrap/ng-bootstrap",
+      "assets": {
+        "js": {
+          "async": [
+            "node_modules_angular_core_fesm2022_core_mjs.js",
+            "default-node_modules_angular_common_fesm2022_common_mjs.js",
+            "default-node_modules_rxjs__esm2015_internal_AsyncSubject_js-node_modules_rxjs__esm2015_intern-7c6e1a.js",
+            "node_modules_rxjs__esm2015_operators_index_js.js",
+            "default-node_modules_angular_forms_fesm2022_forms_mjs.js",
+            "node_modules_rxjs__esm2015_index_js.js",
+            "common.js",
+            "node_modules_popperjs_core_lib_index_js.js",
+            "node_modules_angular_core_fesm2022_primitives_signals_mjs.js",
+            "node_modules_angular_core_fesm2022_primitives_event-dispatch_mjs.js"
+          ],
+          "sync": [
+            "default-node_modules_ng-bootstrap_ng-bootstrap_fesm2022_ng-bootstrap_mjs.js"
+          ]
+        },
+        "css": {
+          "async": [],
+          "sync": []
+        }
+      },
+      "usedIn": []
+    },
+    {
+      "singleton": true,
+      "requiredVersion": "6.1.1",
+      "shareScope": "default",
+      "strictVersion": true,
+      "name": "@ngx-formly/bootstrap/addons",
+      "version": "6.1.1",
+      "eager": false,
+      "id": "ceph_dashboard:@ngx-formly/bootstrap/addons",
+      "assets": {
+        "js": {
+          "async": [
+            "node_modules_angular_core_fesm2022_core_mjs.js",
+            "default-node_modules_rxjs__esm2015_internal_AsyncSubject_js-node_modules_rxjs__esm2015_intern-7c6e1a.js",
+            "node_modules_rxjs__esm2015_operators_index_js.js",
+            "node_modules_rxjs__esm2015_index_js.js",
+            "default-node_modules_angular_platform-browser_fesm2022_platform-browser_mjs.js",
+            "default-node_modules_angular_common_fesm2022_common_mjs.js",
+            "default-node_modules_angular_animations_fesm2022_browser_mjs.js",
+            "default-node_modules_angular_forms_fesm2022_forms_mjs.js",
+            "default-node_modules_ngx-formly_core_fesm2020_ngx-formly-core_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-icon_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-i18n_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-layer_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-timepicker-select_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-checkbox_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-popover_mjs.js",
+            "node_modules_moment_moment_js.js",
+            "node_modules_chart_js_dist_chart_js.js",
+            "node_modules_angular_core_fesm2022_primitives_signals_mjs.js",
+            "node_modules_angular_core_fesm2022_primitives_event-dispatch_mjs.js",
+            "default-node_modules_angular_common_fesm2022_http_mjs.js",
+            "default-node_modules_angular_animations_fesm2022_animations_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-utils_mjs.js",
+            "default-node_modules_carbon-components-angular_fesm2020_carbon-components-angular-select_mjs.js"
+          ],
+          "sync": [
+            "common.js"
+          ]
+        },
+        "css": {
+          "async": [],
+          "sync": []
+        }
+      },
+      "usedIn": []
+    },
+    {
+      "singleton": true,
+      "requiredVersion": "6.1.1",
+      "shareScope": "default",
+      "strictVersion": true,
+      "name": "@ngx-formly/bootstrap/checkbox",
+      "version": "6.1.1",
+      "eager": false,
+      "id": "ceph_dashboard:@ngx-formly/bootstrap/checkbox",
+      "assets": {
+        "js": {
+          "async": [
+            "node_modules_angular_core_fesm2022_core_mjs.js",
+            "default-node_modules_rxjs__esm2015_internal_AsyncSubject_js-node_modules_rxjs__esm2015_intern-7c6e1a.js",
+            "node_modules_rxjs__esm2015_operators_index_js.js",
+            "node_modules_rxjs__esm2015_index_js.js",
+            "default-node_modules_angular_platform-browser_fesm2022_platform-browser_mjs.js",
+            "default-node_modules_angular_common_fesm2022_common_mjs.js",
+            "default-node_modules_angular_animations_fesm2022_browser_mjs.js",
+            "default-node_modules_angular_forms_fesm2022_forms_mjs.js",
+            "default-node_modules_ngx-formly_core_fesm2020_ngx-formly-core_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-icon_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-i18n_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-layer_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-timepicker-select_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-checkbox_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-popover_mjs.js",
+            "node_modules_moment_moment_js.js",
+            "node_modules_chart_js_dist_chart_js.js",
+            "node_modules_angular_core_fesm2022_primitives_signals_mjs.js",
+            "node_modules_angular_core_fesm2022_primitives_event-dispatch_mjs.js",
+            "default-node_modules_angular_common_fesm2022_http_mjs.js",
+            "default-node_modules_angular_animations_fesm2022_animations_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-utils_mjs.js",
+            "default-node_modules_carbon-components-angular_fesm2020_carbon-components-angular-select_mjs.js"
+          ],
+          "sync": [
+            "common.js"
+          ]
+        },
+        "css": {
+          "async": [],
+          "sync": []
+        }
+      },
+      "usedIn": []
+    },
+    {
+      "singleton": true,
+      "requiredVersion": "6.1.1",
+      "shareScope": "default",
+      "strictVersion": true,
+      "name": "@ngx-formly/bootstrap/form-field",
+      "version": "6.1.1",
+      "eager": false,
+      "id": "ceph_dashboard:@ngx-formly/bootstrap/form-field",
+      "assets": {
+        "js": {
+          "async": [
+            "node_modules_angular_core_fesm2022_core_mjs.js",
+            "default-node_modules_rxjs__esm2015_internal_AsyncSubject_js-node_modules_rxjs__esm2015_intern-7c6e1a.js",
+            "node_modules_rxjs__esm2015_operators_index_js.js",
+            "node_modules_rxjs__esm2015_index_js.js",
+            "default-node_modules_angular_platform-browser_fesm2022_platform-browser_mjs.js",
+            "default-node_modules_angular_common_fesm2022_common_mjs.js",
+            "default-node_modules_angular_animations_fesm2022_browser_mjs.js",
+            "default-node_modules_angular_forms_fesm2022_forms_mjs.js",
+            "default-node_modules_ngx-formly_core_fesm2020_ngx-formly-core_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-icon_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-i18n_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-layer_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-timepicker-select_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-checkbox_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-popover_mjs.js",
+            "node_modules_moment_moment_js.js",
+            "node_modules_chart_js_dist_chart_js.js",
+            "node_modules_angular_core_fesm2022_primitives_signals_mjs.js",
+            "node_modules_angular_core_fesm2022_primitives_event-dispatch_mjs.js",
+            "default-node_modules_angular_common_fesm2022_http_mjs.js",
+            "default-node_modules_angular_animations_fesm2022_animations_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-utils_mjs.js",
+            "default-node_modules_carbon-components-angular_fesm2020_carbon-components-angular-select_mjs.js"
+          ],
+          "sync": [
+            "common.js"
+          ]
+        },
+        "css": {
+          "async": [],
+          "sync": []
+        }
+      },
+      "usedIn": []
+    },
+    {
+      "singleton": true,
+      "requiredVersion": "6.1.1",
+      "shareScope": "default",
+      "strictVersion": true,
+      "name": "@ngx-formly/bootstrap/input",
+      "version": "6.1.1",
+      "eager": false,
+      "id": "ceph_dashboard:@ngx-formly/bootstrap/input",
+      "assets": {
+        "js": {
+          "async": [
+            "node_modules_angular_core_fesm2022_core_mjs.js",
+            "default-node_modules_rxjs__esm2015_internal_AsyncSubject_js-node_modules_rxjs__esm2015_intern-7c6e1a.js",
+            "node_modules_rxjs__esm2015_operators_index_js.js",
+            "node_modules_rxjs__esm2015_index_js.js",
+            "default-node_modules_angular_platform-browser_fesm2022_platform-browser_mjs.js",
+            "default-node_modules_angular_common_fesm2022_common_mjs.js",
+            "default-node_modules_angular_animations_fesm2022_browser_mjs.js",
+            "default-node_modules_angular_forms_fesm2022_forms_mjs.js",
+            "default-node_modules_ngx-formly_core_fesm2020_ngx-formly-core_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-icon_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-i18n_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-layer_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-timepicker-select_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-checkbox_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-popover_mjs.js",
+            "node_modules_moment_moment_js.js",
+            "node_modules_chart_js_dist_chart_js.js",
+            "node_modules_angular_core_fesm2022_primitives_signals_mjs.js",
+            "node_modules_angular_core_fesm2022_primitives_event-dispatch_mjs.js",
+            "default-node_modules_angular_common_fesm2022_http_mjs.js",
+            "default-node_modules_angular_animations_fesm2022_animations_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-utils_mjs.js",
+            "default-node_modules_carbon-components-angular_fesm2020_carbon-components-angular-select_mjs.js"
+          ],
+          "sync": [
+            "common.js"
+          ]
+        },
+        "css": {
+          "async": [],
+          "sync": []
+        }
+      },
+      "usedIn": []
+    },
+    {
+      "singleton": true,
+      "requiredVersion": "6.1.1",
+      "shareScope": "default",
+      "strictVersion": true,
+      "name": "@ngx-formly/bootstrap/multicheckbox",
+      "version": "6.1.1",
+      "eager": false,
+      "id": "ceph_dashboard:@ngx-formly/bootstrap/multicheckbox",
+      "assets": {
+        "js": {
+          "async": [
+            "node_modules_angular_core_fesm2022_core_mjs.js",
+            "default-node_modules_rxjs__esm2015_internal_AsyncSubject_js-node_modules_rxjs__esm2015_intern-7c6e1a.js",
+            "node_modules_rxjs__esm2015_operators_index_js.js",
+            "node_modules_rxjs__esm2015_index_js.js",
+            "default-node_modules_angular_platform-browser_fesm2022_platform-browser_mjs.js",
+            "default-node_modules_angular_common_fesm2022_common_mjs.js",
+            "default-node_modules_angular_animations_fesm2022_browser_mjs.js",
+            "default-node_modules_angular_forms_fesm2022_forms_mjs.js",
+            "default-node_modules_ngx-formly_core_fesm2020_ngx-formly-core_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-icon_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-i18n_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-layer_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-timepicker-select_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-checkbox_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-popover_mjs.js",
+            "node_modules_moment_moment_js.js",
+            "node_modules_chart_js_dist_chart_js.js",
+            "node_modules_angular_core_fesm2022_primitives_signals_mjs.js",
+            "node_modules_angular_core_fesm2022_primitives_event-dispatch_mjs.js",
+            "default-node_modules_angular_common_fesm2022_http_mjs.js",
+            "default-node_modules_angular_animations_fesm2022_animations_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-utils_mjs.js",
+            "default-node_modules_carbon-components-angular_fesm2020_carbon-components-angular-select_mjs.js"
+          ],
+          "sync": [
+            "common.js"
+          ]
+        },
+        "css": {
+          "async": [],
+          "sync": []
+        }
+      },
+      "usedIn": []
+    },
+    {
+      "singleton": true,
+      "requiredVersion": "6.1.1",
+      "shareScope": "default",
+      "strictVersion": true,
+      "name": "@ngx-formly/bootstrap/radio",
+      "version": "6.1.1",
+      "eager": false,
+      "id": "ceph_dashboard:@ngx-formly/bootstrap/radio",
+      "assets": {
+        "js": {
+          "async": [
+            "node_modules_angular_core_fesm2022_core_mjs.js",
+            "default-node_modules_rxjs__esm2015_internal_AsyncSubject_js-node_modules_rxjs__esm2015_intern-7c6e1a.js",
+            "node_modules_rxjs__esm2015_operators_index_js.js",
+            "node_modules_rxjs__esm2015_index_js.js",
+            "default-node_modules_angular_platform-browser_fesm2022_platform-browser_mjs.js",
+            "default-node_modules_angular_common_fesm2022_common_mjs.js",
+            "default-node_modules_angular_animations_fesm2022_browser_mjs.js",
+            "default-node_modules_angular_forms_fesm2022_forms_mjs.js",
+            "default-node_modules_ngx-formly_core_fesm2020_ngx-formly-core_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-icon_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-i18n_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-layer_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-timepicker-select_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-checkbox_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-popover_mjs.js",
+            "node_modules_moment_moment_js.js",
+            "node_modules_chart_js_dist_chart_js.js",
+            "node_modules_angular_core_fesm2022_primitives_signals_mjs.js",
+            "node_modules_angular_core_fesm2022_primitives_event-dispatch_mjs.js",
+            "default-node_modules_angular_common_fesm2022_http_mjs.js",
+            "default-node_modules_angular_animations_fesm2022_animations_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-utils_mjs.js",
+            "default-node_modules_carbon-components-angular_fesm2020_carbon-components-angular-select_mjs.js"
+          ],
+          "sync": [
+            "common.js"
+          ]
+        },
+        "css": {
+          "async": [],
+          "sync": []
+        }
+      },
+      "usedIn": []
+    },
+    {
+      "singleton": true,
+      "requiredVersion": "6.1.1",
+      "shareScope": "default",
+      "strictVersion": true,
+      "name": "@ngx-formly/bootstrap/select",
+      "version": "6.1.1",
+      "eager": false,
+      "id": "ceph_dashboard:@ngx-formly/bootstrap/select",
+      "assets": {
+        "js": {
+          "async": [
+            "node_modules_angular_core_fesm2022_core_mjs.js",
+            "default-node_modules_rxjs__esm2015_internal_AsyncSubject_js-node_modules_rxjs__esm2015_intern-7c6e1a.js",
+            "node_modules_rxjs__esm2015_operators_index_js.js",
+            "node_modules_rxjs__esm2015_index_js.js",
+            "default-node_modules_angular_platform-browser_fesm2022_platform-browser_mjs.js",
+            "default-node_modules_angular_common_fesm2022_common_mjs.js",
+            "default-node_modules_angular_animations_fesm2022_browser_mjs.js",
+            "default-node_modules_angular_forms_fesm2022_forms_mjs.js",
+            "default-node_modules_ngx-formly_core_fesm2020_ngx-formly-core_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-icon_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-i18n_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-layer_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-timepicker-select_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-checkbox_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-popover_mjs.js",
+            "node_modules_moment_moment_js.js",
+            "node_modules_chart_js_dist_chart_js.js",
+            "node_modules_angular_core_fesm2022_primitives_signals_mjs.js",
+            "node_modules_angular_core_fesm2022_primitives_event-dispatch_mjs.js",
+            "default-node_modules_angular_common_fesm2022_http_mjs.js",
+            "default-node_modules_angular_animations_fesm2022_animations_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-utils_mjs.js",
+            "default-node_modules_carbon-components-angular_fesm2020_carbon-components-angular-select_mjs.js"
+          ],
+          "sync": [
+            "common.js"
+          ]
+        },
+        "css": {
+          "async": [],
+          "sync": []
+        }
+      },
+      "usedIn": []
+    },
+    {
+      "singleton": true,
+      "requiredVersion": "6.1.1",
+      "shareScope": "default",
+      "strictVersion": true,
+      "name": "@ngx-formly/bootstrap/textarea",
+      "version": "6.1.1",
+      "eager": false,
+      "id": "ceph_dashboard:@ngx-formly/bootstrap/textarea",
+      "assets": {
+        "js": {
+          "async": [
+            "node_modules_angular_core_fesm2022_core_mjs.js",
+            "default-node_modules_rxjs__esm2015_internal_AsyncSubject_js-node_modules_rxjs__esm2015_intern-7c6e1a.js",
+            "node_modules_rxjs__esm2015_operators_index_js.js",
+            "node_modules_rxjs__esm2015_index_js.js",
+            "default-node_modules_angular_platform-browser_fesm2022_platform-browser_mjs.js",
+            "default-node_modules_angular_common_fesm2022_common_mjs.js",
+            "default-node_modules_angular_animations_fesm2022_browser_mjs.js",
+            "default-node_modules_angular_forms_fesm2022_forms_mjs.js",
+            "default-node_modules_ngx-formly_core_fesm2020_ngx-formly-core_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-icon_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-i18n_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-layer_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-timepicker-select_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-checkbox_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-popover_mjs.js",
+            "node_modules_moment_moment_js.js",
+            "node_modules_chart_js_dist_chart_js.js",
+            "node_modules_angular_core_fesm2022_primitives_signals_mjs.js",
+            "node_modules_angular_core_fesm2022_primitives_event-dispatch_mjs.js",
+            "default-node_modules_angular_common_fesm2022_http_mjs.js",
+            "default-node_modules_angular_animations_fesm2022_animations_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-utils_mjs.js",
+            "default-node_modules_carbon-components-angular_fesm2020_carbon-components-angular-select_mjs.js"
+          ],
+          "sync": [
+            "common.js"
+          ]
+        },
+        "css": {
+          "async": [],
+          "sync": []
+        }
+      },
+      "usedIn": []
+    },
+    {
+      "singleton": true,
+      "requiredVersion": "6.1.1",
+      "shareScope": "default",
+      "strictVersion": true,
+      "name": "@ngx-formly/bootstrap",
+      "version": "6.1.1",
+      "eager": false,
+      "id": "ceph_dashboard:@ngx-formly/bootstrap",
+      "assets": {
+        "js": {
+          "async": [
+            "node_modules_angular_core_fesm2022_core_mjs.js",
+            "default-node_modules_rxjs__esm2015_internal_AsyncSubject_js-node_modules_rxjs__esm2015_intern-7c6e1a.js",
+            "node_modules_rxjs__esm2015_operators_index_js.js",
+            "node_modules_rxjs__esm2015_index_js.js",
+            "default-node_modules_angular_platform-browser_fesm2022_platform-browser_mjs.js",
+            "default-node_modules_angular_common_fesm2022_common_mjs.js",
+            "default-node_modules_angular_animations_fesm2022_browser_mjs.js",
+            "default-node_modules_angular_forms_fesm2022_forms_mjs.js",
+            "default-node_modules_ngx-formly_core_fesm2020_ngx-formly-core_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-icon_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-i18n_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-layer_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-timepicker-select_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-checkbox_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-popover_mjs.js",
+            "node_modules_moment_moment_js.js",
+            "node_modules_chart_js_dist_chart_js.js",
+            "node_modules_angular_core_fesm2022_primitives_signals_mjs.js",
+            "node_modules_angular_core_fesm2022_primitives_event-dispatch_mjs.js",
+            "default-node_modules_angular_common_fesm2022_http_mjs.js",
+            "default-node_modules_angular_animations_fesm2022_animations_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-utils_mjs.js",
+            "default-node_modules_carbon-components-angular_fesm2020_carbon-components-angular-select_mjs.js"
+          ],
+          "sync": [
+            "common.js"
+          ]
+        },
+        "css": {
+          "async": [],
+          "sync": []
+        }
+      },
+      "usedIn": []
+    },
+    {
+      "singleton": true,
+      "requiredVersion": "6.1.1",
+      "shareScope": "default",
+      "strictVersion": true,
+      "name": "@ngx-formly/core/json-schema",
+      "version": "6.1.1",
+      "eager": false,
+      "id": "ceph_dashboard:@ngx-formly/core/json-schema",
+      "assets": {
+        "js": {
+          "async": [
+            "node_modules_angular_core_fesm2022_core_mjs.js",
+            "default-node_modules_rxjs__esm2015_internal_AsyncSubject_js-node_modules_rxjs__esm2015_intern-7c6e1a.js",
+            "node_modules_rxjs__esm2015_operators_index_js.js",
+            "default-node_modules_angular_forms_fesm2022_forms_mjs.js",
+            "default-node_modules_ngx-formly_core_fesm2020_ngx-formly-core_mjs.js",
+            "node_modules_rxjs__esm2015_index_js.js",
+            "node_modules_angular_core_fesm2022_primitives_signals_mjs.js",
+            "node_modules_angular_core_fesm2022_primitives_event-dispatch_mjs.js",
+            "default-node_modules_angular_common_fesm2022_common_mjs.js",
+            "default-node_modules_angular_platform-browser_fesm2022_platform-browser_mjs.js",
+            "default-node_modules_angular_common_fesm2022_http_mjs.js"
+          ],
+          "sync": [
+            "default-node_modules_ngx-formly_core_fesm2020_ngx-formly-core-json-schema_mjs.js"
+          ]
+        },
+        "css": {
+          "async": [],
+          "sync": []
+        }
+      },
+      "usedIn": []
+    },
+    {
+      "singleton": true,
+      "requiredVersion": "6.1.1",
+      "shareScope": "default",
+      "strictVersion": true,
+      "name": "@ngx-formly/core/select",
+      "version": "6.1.1",
+      "eager": false,
+      "id": "ceph_dashboard:@ngx-formly/core/select",
+      "assets": {
+        "js": {
+          "async": [
+            "node_modules_angular_core_fesm2022_core_mjs.js",
+            "default-node_modules_rxjs__esm2015_internal_AsyncSubject_js-node_modules_rxjs__esm2015_intern-7c6e1a.js",
+            "node_modules_rxjs__esm2015_operators_index_js.js",
+            "node_modules_rxjs__esm2015_index_js.js",
+            "default-node_modules_angular_platform-browser_fesm2022_platform-browser_mjs.js",
+            "default-node_modules_angular_common_fesm2022_common_mjs.js",
+            "default-node_modules_angular_animations_fesm2022_browser_mjs.js",
+            "default-node_modules_angular_forms_fesm2022_forms_mjs.js",
+            "default-node_modules_ngx-formly_core_fesm2020_ngx-formly-core_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-icon_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-i18n_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-layer_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-timepicker-select_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-checkbox_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-popover_mjs.js",
+            "node_modules_moment_moment_js.js",
+            "node_modules_chart_js_dist_chart_js.js",
+            "node_modules_angular_core_fesm2022_primitives_signals_mjs.js",
+            "node_modules_angular_core_fesm2022_primitives_event-dispatch_mjs.js",
+            "default-node_modules_angular_common_fesm2022_http_mjs.js",
+            "default-node_modules_angular_animations_fesm2022_animations_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-utils_mjs.js",
+            "default-node_modules_carbon-components-angular_fesm2020_carbon-components-angular-select_mjs.js"
+          ],
+          "sync": [
+            "common.js"
+          ]
+        },
+        "css": {
+          "async": [],
+          "sync": []
+        }
+      },
+      "usedIn": []
+    },
+    {
+      "singleton": true,
+      "requiredVersion": "6.1.1",
+      "shareScope": "default",
+      "strictVersion": true,
+      "name": "@ngx-formly/core",
+      "version": "6.1.1",
+      "eager": false,
+      "id": "ceph_dashboard:@ngx-formly/core",
+      "assets": {
+        "js": {
+          "async": [
+            "default-node_modules_angular_platform-browser_fesm2022_platform-browser_mjs.js",
+            "node_modules_angular_core_fesm2022_core_mjs.js",
+            "default-node_modules_angular_common_fesm2022_common_mjs.js",
+            "default-node_modules_rxjs__esm2015_internal_AsyncSubject_js-node_modules_rxjs__esm2015_intern-7c6e1a.js",
+            "node_modules_rxjs__esm2015_operators_index_js.js",
+            "default-node_modules_angular_forms_fesm2022_forms_mjs.js",
+            "node_modules_rxjs__esm2015_index_js.js",
+            "default-node_modules_angular_common_fesm2022_http_mjs.js",
+            "node_modules_angular_core_fesm2022_primitives_signals_mjs.js",
+            "node_modules_angular_core_fesm2022_primitives_event-dispatch_mjs.js"
+          ],
+          "sync": [
+            "default-node_modules_ngx-formly_core_fesm2020_ngx-formly-core_mjs.js"
+          ]
+        },
+        "css": {
+          "async": [],
+          "sync": []
+        }
+      },
+      "usedIn": []
+    },
+    {
+      "singleton": true,
+      "requiredVersion": "2.11.8",
+      "shareScope": "default",
+      "strictVersion": true,
+      "name": "@popperjs/core",
+      "version": "2.11.8",
+      "eager": false,
+      "id": "ceph_dashboard:@popperjs/core",
+      "assets": {
+        "js": {
+          "async": [],
+          "sync": [
+            "node_modules_popperjs_core_lib_index_js.js"
+          ]
+        },
+        "css": {
+          "async": [],
+          "sync": []
+        }
+      },
+      "usedIn": []
+    },
+    {
+      "singleton": true,
+      "requiredVersion": "0.5.0",
+      "shareScope": "default",
+      "strictVersion": true,
+      "name": "async-mutex",
+      "version": "0.5.0",
+      "eager": false,
+      "id": "ceph_dashboard:async-mutex",
+      "assets": {
+        "js": {
+          "async": [],
+          "sync": [
+            "node_modules_async-mutex_index_mjs.js"
+          ]
+        },
+        "css": {
+          "async": [],
+          "sync": []
+        }
+      },
+      "usedIn": []
+    },
+    {
+      "singleton": true,
+      "requiredVersion": "5.56.2",
+      "shareScope": "default",
+      "strictVersion": true,
+      "name": "carbon-components-angular/accordion",
+      "version": "5.56.2",
+      "eager": false,
+      "id": "ceph_dashboard:carbon-components-angular/accordion",
+      "assets": {
+        "js": {
+          "async": [
+            "node_modules_angular_core_fesm2022_core_mjs.js",
+            "default-node_modules_rxjs__esm2015_internal_AsyncSubject_js-node_modules_rxjs__esm2015_intern-7c6e1a.js",
+            "node_modules_rxjs__esm2015_operators_index_js.js",
+            "node_modules_rxjs__esm2015_index_js.js",
+            "default-node_modules_angular_platform-browser_fesm2022_platform-browser_mjs.js",
+            "default-node_modules_angular_common_fesm2022_common_mjs.js",
+            "default-node_modules_angular_animations_fesm2022_browser_mjs.js",
+            "default-node_modules_angular_forms_fesm2022_forms_mjs.js",
+            "default-node_modules_ngx-formly_core_fesm2020_ngx-formly-core_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-icon_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-i18n_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-layer_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-timepicker-select_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-checkbox_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-popover_mjs.js",
+            "node_modules_moment_moment_js.js",
+            "node_modules_chart_js_dist_chart_js.js",
+            "node_modules_angular_core_fesm2022_primitives_signals_mjs.js",
+            "node_modules_angular_core_fesm2022_primitives_event-dispatch_mjs.js",
+            "default-node_modules_angular_common_fesm2022_http_mjs.js",
+            "default-node_modules_angular_animations_fesm2022_animations_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-utils_mjs.js",
+            "default-node_modules_carbon-components-angular_fesm2020_carbon-components-angular-select_mjs.js"
+          ],
+          "sync": [
+            "common.js"
+          ]
+        },
+        "css": {
+          "async": [],
+          "sync": []
+        }
+      },
+      "usedIn": []
+    },
+    {
+      "singleton": true,
+      "requiredVersion": "5.56.2",
+      "shareScope": "default",
+      "strictVersion": true,
+      "name": "carbon-components-angular/breadcrumb",
+      "version": "5.56.2",
+      "eager": false,
+      "id": "ceph_dashboard:carbon-components-angular/breadcrumb",
+      "assets": {
+        "js": {
+          "async": [
+            "default-node_modules_angular_platform-browser_fesm2022_platform-browser_mjs.js",
+            "node_modules_angular_core_fesm2022_core_mjs.js",
+            "default-node_modules_angular_common_fesm2022_common_mjs.js",
+            "default-node_modules_angular_router_fesm2022_router_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-icon_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-i18n_mjs.js",
+            "default-node_modules_carbon-components-angular_fesm2020_carbon-components-angular-dialog_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-button_mjs.js",
+            "default-node_modules_angular_common_fesm2022_http_mjs.js",
+            "default-node_modules_rxjs__esm2015_internal_AsyncSubject_js-node_modules_rxjs__esm2015_intern-7c6e1a.js",
+            "node_modules_rxjs__esm2015_operators_index_js.js",
+            "node_modules_rxjs__esm2015_index_js.js",
+            "node_modules_angular_core_fesm2022_primitives_signals_mjs.js",
+            "node_modules_angular_core_fesm2022_primitives_event-dispatch_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-utils_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-tooltip_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-common_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-placeholder_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-experimental_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-popover_mjs.js"
+          ],
+          "sync": [
+            "default-node_modules_carbon-components-angular_fesm2020_carbon-components-angular-breadcrumb_mjs.js"
+          ]
+        },
+        "css": {
+          "async": [],
+          "sync": []
+        }
+      },
+      "usedIn": []
+    },
+    {
+      "singleton": true,
+      "requiredVersion": "5.56.2",
+      "shareScope": "default",
+      "strictVersion": true,
+      "name": "carbon-components-angular/button",
+      "version": "5.56.2",
+      "eager": false,
+      "id": "ceph_dashboard:carbon-components-angular/button",
+      "assets": {
+        "js": {
+          "async": [
+            "node_modules_angular_core_fesm2022_core_mjs.js",
+            "default-node_modules_angular_common_fesm2022_common_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-tooltip_mjs.js",
+            "default-node_modules_rxjs__esm2015_internal_AsyncSubject_js-node_modules_rxjs__esm2015_intern-7c6e1a.js",
+            "node_modules_rxjs__esm2015_operators_index_js.js",
+            "node_modules_rxjs__esm2015_index_js.js",
+            "node_modules_angular_core_fesm2022_primitives_signals_mjs.js",
+            "node_modules_angular_core_fesm2022_primitives_event-dispatch_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-popover_mjs.js"
+          ],
+          "sync": [
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-button_mjs.js"
+          ]
+        },
+        "css": {
+          "async": [],
+          "sync": []
+        }
+      },
+      "usedIn": []
+    },
+    {
+      "singleton": true,
+      "requiredVersion": "5.56.2",
+      "shareScope": "default",
+      "strictVersion": true,
+      "name": "carbon-components-angular/checkbox",
+      "version": "5.56.2",
+      "eager": false,
+      "id": "ceph_dashboard:carbon-components-angular/checkbox",
+      "assets": {
+        "js": {
+          "async": [
+            "node_modules_angular_core_fesm2022_core_mjs.js",
+            "default-node_modules_angular_common_fesm2022_common_mjs.js",
+            "default-node_modules_angular_forms_fesm2022_forms_mjs.js",
+            "default-node_modules_rxjs__esm2015_internal_AsyncSubject_js-node_modules_rxjs__esm2015_intern-7c6e1a.js",
+            "node_modules_rxjs__esm2015_operators_index_js.js",
+            "node_modules_rxjs__esm2015_index_js.js",
+            "node_modules_angular_core_fesm2022_primitives_signals_mjs.js",
+            "node_modules_angular_core_fesm2022_primitives_event-dispatch_mjs.js"
+          ],
+          "sync": [
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-checkbox_mjs.js"
+          ]
+        },
+        "css": {
+          "async": [],
+          "sync": []
+        }
+      },
+      "usedIn": []
+    },
+    {
+      "singleton": true,
+      "requiredVersion": "5.56.2",
+      "shareScope": "default",
+      "strictVersion": true,
+      "name": "carbon-components-angular/code-snippet",
+      "version": "5.56.2",
+      "eager": false,
+      "id": "ceph_dashboard:carbon-components-angular/code-snippet",
+      "assets": {
+        "js": {
+          "async": [
+            "node_modules_angular_core_fesm2022_core_mjs.js",
+            "default-node_modules_angular_common_fesm2022_common_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-icon_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-i18n_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-button_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-utils_mjs.js",
+            "default-node_modules_rxjs__esm2015_internal_AsyncSubject_js-node_modules_rxjs__esm2015_intern-7c6e1a.js",
+            "node_modules_rxjs__esm2015_operators_index_js.js",
+            "node_modules_rxjs__esm2015_index_js.js",
+            "node_modules_angular_core_fesm2022_primitives_signals_mjs.js",
+            "node_modules_angular_core_fesm2022_primitives_event-dispatch_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-tooltip_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-popover_mjs.js"
+          ],
+          "sync": [
+            "default-node_modules_carbon-components-angular_fesm2020_carbon-components-angular-code-snippet_mjs.js"
+          ]
+        },
+        "css": {
+          "async": [],
+          "sync": []
+        }
+      },
+      "usedIn": []
+    },
+    {
+      "singleton": true,
+      "requiredVersion": "5.56.2",
+      "shareScope": "default",
+      "strictVersion": true,
+      "name": "carbon-components-angular/combobox",
+      "version": "5.56.2",
+      "eager": false,
+      "id": "ceph_dashboard:carbon-components-angular/combobox",
+      "assets": {
+        "js": {
+          "async": [
+            "node_modules_angular_core_fesm2022_core_mjs.js",
+            "default-node_modules_angular_common_fesm2022_common_mjs.js",
+            "default-node_modules_rxjs__esm2015_internal_AsyncSubject_js-node_modules_rxjs__esm2015_intern-7c6e1a.js",
+            "node_modules_rxjs__esm2015_operators_index_js.js",
+            "default-node_modules_angular_forms_fesm2022_forms_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-icon_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-i18n_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-utils_mjs.js",
+            "default-node_modules_carbon-components-angular_fesm2020_carbon-components-angular-dropdown_mjs.js",
+            "node_modules_rxjs__esm2015_index_js.js",
+            "node_modules_angular_core_fesm2022_primitives_signals_mjs.js",
+            "node_modules_angular_core_fesm2022_primitives_event-dispatch_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-placeholder_mjs.js"
+          ],
+          "sync": [
+            "default-node_modules_carbon-components-angular_fesm2020_carbon-components-angular-combobox_mjs.js"
+          ]
+        },
+        "css": {
+          "async": [],
+          "sync": []
+        }
+      },
+      "usedIn": []
+    },
+    {
+      "singleton": true,
+      "requiredVersion": "5.56.2",
+      "shareScope": "default",
+      "strictVersion": true,
+      "name": "carbon-components-angular/common",
+      "version": "5.56.2",
+      "eager": false,
+      "id": "ceph_dashboard:carbon-components-angular/common",
+      "assets": {
+        "js": {
+          "async": [],
+          "sync": [
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-common_mjs.js"
+          ]
+        },
+        "css": {
+          "async": [],
+          "sync": []
+        }
+      },
+      "usedIn": []
+    },
+    {
+      "singleton": true,
+      "requiredVersion": "5.56.2",
+      "shareScope": "default",
+      "strictVersion": true,
+      "name": "carbon-components-angular/contained-list",
+      "version": "5.56.2",
+      "eager": false,
+      "id": "ceph_dashboard:carbon-components-angular/contained-list",
+      "assets": {
+        "js": {
+          "async": [
+            "node_modules_angular_core_fesm2022_core_mjs.js",
+            "default-node_modules_rxjs__esm2015_internal_AsyncSubject_js-node_modules_rxjs__esm2015_intern-7c6e1a.js",
+            "node_modules_rxjs__esm2015_operators_index_js.js",
+            "node_modules_rxjs__esm2015_index_js.js",
+            "default-node_modules_angular_platform-browser_fesm2022_platform-browser_mjs.js",
+            "default-node_modules_angular_common_fesm2022_common_mjs.js",
+            "default-node_modules_angular_animations_fesm2022_browser_mjs.js",
+            "default-node_modules_angular_forms_fesm2022_forms_mjs.js",
+            "default-node_modules_ngx-formly_core_fesm2020_ngx-formly-core_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-icon_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-i18n_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-layer_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-timepicker-select_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-checkbox_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-popover_mjs.js",
+            "node_modules_moment_moment_js.js",
+            "node_modules_chart_js_dist_chart_js.js",
+            "node_modules_angular_core_fesm2022_primitives_signals_mjs.js",
+            "node_modules_angular_core_fesm2022_primitives_event-dispatch_mjs.js",
+            "default-node_modules_angular_common_fesm2022_http_mjs.js",
+            "default-node_modules_angular_animations_fesm2022_animations_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-utils_mjs.js",
+            "default-node_modules_carbon-components-angular_fesm2020_carbon-components-angular-select_mjs.js"
+          ],
+          "sync": [
+            "common.js"
+          ]
+        },
+        "css": {
+          "async": [],
+          "sync": []
+        }
+      },
+      "usedIn": []
+    },
+    {
+      "singleton": true,
+      "requiredVersion": "5.56.2",
+      "shareScope": "default",
+      "strictVersion": true,
+      "name": "carbon-components-angular/content-switcher",
+      "version": "5.56.2",
+      "eager": false,
+      "id": "ceph_dashboard:carbon-components-angular/content-switcher",
+      "assets": {
+        "js": {
+          "async": [
+            "node_modules_angular_core_fesm2022_core_mjs.js",
+            "default-node_modules_angular_common_fesm2022_common_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-common_mjs.js",
+            "default-node_modules_rxjs__esm2015_internal_AsyncSubject_js-node_modules_rxjs__esm2015_intern-7c6e1a.js",
+            "node_modules_rxjs__esm2015_operators_index_js.js",
+            "node_modules_rxjs__esm2015_index_js.js",
+            "node_modules_angular_core_fesm2022_primitives_signals_mjs.js",
+            "node_modules_angular_core_fesm2022_primitives_event-dispatch_mjs.js"
+          ],
+          "sync": [
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-content-switcher_mjs.js"
+          ]
+        },
+        "css": {
+          "async": [],
+          "sync": []
+        }
+      },
+      "usedIn": []
+    },
+    {
+      "singleton": true,
+      "requiredVersion": "5.56.2",
+      "shareScope": "default",
+      "strictVersion": true,
+      "name": "carbon-components-angular/context-menu",
+      "version": "5.56.2",
+      "eager": false,
+      "id": "ceph_dashboard:carbon-components-angular/context-menu",
+      "assets": {
+        "js": {
+          "async": [
+            "node_modules_angular_core_fesm2022_core_mjs.js",
+            "default-node_modules_angular_common_fesm2022_common_mjs.js",
+            "default-node_modules_rxjs__esm2015_internal_AsyncSubject_js-node_modules_rxjs__esm2015_intern-7c6e1a.js",
+            "node_modules_rxjs__esm2015_index_js.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-icon_mjs.js",
+            "node_modules_rxjs__esm2015_operators_index_js.js",
+            "node_modules_angular_core_fesm2022_primitives_signals_mjs.js",
+            "node_modules_angular_core_fesm2022_primitives_event-dispatch_mjs.js"
+          ],
+          "sync": [
+            "default-node_modules_carbon-components-angular_fesm2020_carbon-components-angular-context-menu_mjs.js"
+          ]
+        },
+        "css": {
+          "async": [],
+          "sync": []
+        }
+      },
+      "usedIn": []
+    },
+    {
+      "singleton": true,
+      "requiredVersion": "5.56.2",
+      "shareScope": "default",
+      "strictVersion": true,
+      "name": "carbon-components-angular/datepicker-input",
+      "version": "5.56.2",
+      "eager": false,
+      "id": "ceph_dashboard:carbon-components-angular/datepicker-input",
+      "assets": {
+        "js": {
+          "async": [
+            "node_modules_angular_core_fesm2022_core_mjs.js",
+            "default-node_modules_angular_common_fesm2022_common_mjs.js",
+            "default-node_modules_angular_forms_fesm2022_forms_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-icon_mjs.js",
+            "default-node_modules_rxjs__esm2015_internal_AsyncSubject_js-node_modules_rxjs__esm2015_intern-7c6e1a.js",
+            "node_modules_rxjs__esm2015_operators_index_js.js",
+            "node_modules_rxjs__esm2015_index_js.js",
+            "node_modules_angular_core_fesm2022_primitives_signals_mjs.js",
+            "node_modules_angular_core_fesm2022_primitives_event-dispatch_mjs.js"
+          ],
+          "sync": [
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-datepicker-input_mjs.js"
+          ]
+        },
+        "css": {
+          "async": [],
+          "sync": []
+        }
+      },
+      "usedIn": []
+    },
+    {
+      "singleton": true,
+      "requiredVersion": "5.56.2",
+      "shareScope": "default",
+      "strictVersion": true,
+      "name": "carbon-components-angular/datepicker",
+      "version": "5.56.2",
+      "eager": false,
+      "id": "ceph_dashboard:carbon-components-angular/datepicker",
+      "assets": {
+        "js": {
+          "async": [
+            "node_modules_angular_core_fesm2022_core_mjs.js",
+            "default-node_modules_angular_common_fesm2022_common_mjs.js",
+            "default-node_modules_angular_forms_fesm2022_forms_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-i18n_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-utils_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-datepicker-input_mjs.js",
+            "default-node_modules_rxjs__esm2015_internal_AsyncSubject_js-node_modules_rxjs__esm2015_intern-7c6e1a.js",
+            "node_modules_rxjs__esm2015_operators_index_js.js",
+            "node_modules_rxjs__esm2015_index_js.js",
+            "node_modules_angular_core_fesm2022_primitives_signals_mjs.js",
+            "node_modules_angular_core_fesm2022_primitives_event-dispatch_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-icon_mjs.js"
+          ],
+          "sync": [
+            "default-node_modules_carbon-components-angular_fesm2020_carbon-components-angular-datepicker_mjs.js"
+          ]
+        },
+        "css": {
+          "async": [],
+          "sync": []
+        }
+      },
+      "usedIn": []
+    },
+    {
+      "singleton": true,
+      "requiredVersion": "5.56.2",
+      "shareScope": "default",
+      "strictVersion": true,
+      "name": "carbon-components-angular/dialog",
+      "version": "5.56.2",
+      "eager": false,
+      "id": "ceph_dashboard:carbon-components-angular/dialog",
+      "assets": {
+        "js": {
+          "async": [
+            "node_modules_angular_core_fesm2022_core_mjs.js",
+            "default-node_modules_angular_common_fesm2022_common_mjs.js",
+            "default-node_modules_rxjs__esm2015_internal_AsyncSubject_js-node_modules_rxjs__esm2015_intern-7c6e1a.js",
+            "node_modules_rxjs__esm2015_index_js.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-icon_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-i18n_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-button_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-tooltip_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-utils_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-common_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-placeholder_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-experimental_mjs.js",
+            "node_modules_rxjs__esm2015_operators_index_js.js",
+            "node_modules_angular_core_fesm2022_primitives_signals_mjs.js",
+            "node_modules_angular_core_fesm2022_primitives_event-dispatch_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-popover_mjs.js"
+          ],
+          "sync": [
+            "default-node_modules_carbon-components-angular_fesm2020_carbon-components-angular-dialog_mjs.js"
+          ]
+        },
+        "css": {
+          "async": [],
+          "sync": []
+        }
+      },
+      "usedIn": []
+    },
+    {
+      "singleton": true,
+      "requiredVersion": "5.56.2",
+      "shareScope": "default",
+      "strictVersion": true,
+      "name": "carbon-components-angular/dropdown",
+      "version": "5.56.2",
+      "eager": false,
+      "id": "ceph_dashboard:carbon-components-angular/dropdown",
+      "assets": {
+        "js": {
+          "async": [
+            "node_modules_angular_core_fesm2022_core_mjs.js",
+            "default-node_modules_angular_common_fesm2022_common_mjs.js",
+            "default-node_modules_rxjs__esm2015_internal_AsyncSubject_js-node_modules_rxjs__esm2015_intern-7c6e1a.js",
+            "node_modules_rxjs__esm2015_operators_index_js.js",
+            "default-node_modules_angular_forms_fesm2022_forms_mjs.js",
+            "node_modules_rxjs__esm2015_index_js.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-icon_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-i18n_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-utils_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-placeholder_mjs.js",
+            "node_modules_angular_core_fesm2022_primitives_signals_mjs.js",
+            "node_modules_angular_core_fesm2022_primitives_event-dispatch_mjs.js"
+          ],
+          "sync": [
+            "default-node_modules_carbon-components-angular_fesm2020_carbon-components-angular-dropdown_mjs.js"
+          ]
+        },
+        "css": {
+          "async": [],
+          "sync": []
+        }
+      },
+      "usedIn": []
+    },
+    {
+      "singleton": true,
+      "requiredVersion": "5.56.2",
+      "shareScope": "default",
+      "strictVersion": true,
+      "name": "carbon-components-angular/experimental",
+      "version": "5.56.2",
+      "eager": false,
+      "id": "ceph_dashboard:carbon-components-angular/experimental",
+      "assets": {
+        "js": {
+          "async": [
+            "node_modules_angular_core_fesm2022_core_mjs.js",
+            "default-node_modules_rxjs__esm2015_internal_AsyncSubject_js-node_modules_rxjs__esm2015_intern-7c6e1a.js",
+            "node_modules_rxjs__esm2015_operators_index_js.js",
+            "node_modules_rxjs__esm2015_index_js.js",
+            "node_modules_angular_core_fesm2022_primitives_signals_mjs.js",
+            "node_modules_angular_core_fesm2022_primitives_event-dispatch_mjs.js"
+          ],
+          "sync": [
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-experimental_mjs.js"
+          ]
+        },
+        "css": {
+          "async": [],
+          "sync": []
+        }
+      },
+      "usedIn": []
+    },
+    {
+      "singleton": true,
+      "requiredVersion": "5.56.2",
+      "shareScope": "default",
+      "strictVersion": true,
+      "name": "carbon-components-angular/file-uploader",
+      "version": "5.56.2",
+      "eager": false,
+      "id": "ceph_dashboard:carbon-components-angular/file-uploader",
+      "assets": {
+        "js": {
+          "async": [
+            "node_modules_angular_core_fesm2022_core_mjs.js",
+            "default-node_modules_angular_common_fesm2022_common_mjs.js",
+            "default-node_modules_angular_forms_fesm2022_forms_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-icon_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-i18n_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-button_mjs.js",
+            "common.js",
+            "default-node_modules_rxjs__esm2015_internal_AsyncSubject_js-node_modules_rxjs__esm2015_intern-7c6e1a.js",
+            "node_modules_rxjs__esm2015_operators_index_js.js",
+            "node_modules_rxjs__esm2015_index_js.js",
+            "node_modules_angular_core_fesm2022_primitives_signals_mjs.js",
+            "node_modules_angular_core_fesm2022_primitives_event-dispatch_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-utils_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-tooltip_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-popover_mjs.js"
+          ],
+          "sync": [
+            "default-node_modules_carbon-components-angular_fesm2020_carbon-components-angular-file-uploader_mjs.js"
+          ]
+        },
+        "css": {
+          "async": [],
+          "sync": []
+        }
+      },
+      "usedIn": []
+    },
+    {
+      "singleton": true,
+      "requiredVersion": "5.56.2",
+      "shareScope": "default",
+      "strictVersion": true,
+      "name": "carbon-components-angular/forms",
+      "version": "5.56.2",
+      "eager": false,
+      "id": "ceph_dashboard:carbon-components-angular/forms",
+      "assets": {
+        "js": {
+          "async": [
+            "node_modules_angular_core_fesm2022_core_mjs.js",
+            "default-node_modules_angular_common_fesm2022_common_mjs.js",
+            "default-node_modules_angular_forms_fesm2022_forms_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-button_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-checkbox_mjs.js",
+            "common.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-radio_mjs.js",
+            "default-node_modules_carbon-components-angular_fesm2020_carbon-components-angular-input_mjs.js",
+            "default-node_modules_rxjs__esm2015_internal_AsyncSubject_js-node_modules_rxjs__esm2015_intern-7c6e1a.js",
+            "node_modules_rxjs__esm2015_operators_index_js.js",
+            "node_modules_rxjs__esm2015_index_js.js",
+            "node_modules_angular_core_fesm2022_primitives_signals_mjs.js",
+            "node_modules_angular_core_fesm2022_primitives_event-dispatch_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-tooltip_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-i18n_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-icon_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-popover_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-utils_mjs.js"
+          ],
+          "sync": [
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-forms_mjs.js"
+          ]
+        },
+        "css": {
+          "async": [],
+          "sync": []
+        }
+      },
+      "usedIn": []
+    },
+    {
+      "singleton": true,
+      "requiredVersion": "5.56.2",
+      "shareScope": "default",
+      "strictVersion": true,
+      "name": "carbon-components-angular/grid",
+      "version": "5.56.2",
+      "eager": false,
+      "id": "ceph_dashboard:carbon-components-angular/grid",
+      "assets": {
+        "js": {
+          "async": [
+            "node_modules_angular_core_fesm2022_core_mjs.js",
+            "default-node_modules_angular_common_fesm2022_common_mjs.js",
+            "default-node_modules_rxjs__esm2015_internal_AsyncSubject_js-node_modules_rxjs__esm2015_intern-7c6e1a.js",
+            "node_modules_rxjs__esm2015_index_js.js",
+            "node_modules_rxjs__esm2015_operators_index_js.js",
+            "node_modules_angular_core_fesm2022_primitives_signals_mjs.js",
+            "node_modules_angular_core_fesm2022_primitives_event-dispatch_mjs.js"
+          ],
+          "sync": [
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-grid_mjs.js"
+          ]
+        },
+        "css": {
+          "async": [],
+          "sync": []
+        }
+      },
+      "usedIn": []
+    },
+    {
+      "singleton": true,
+      "requiredVersion": "5.56.2",
+      "shareScope": "default",
+      "strictVersion": true,
+      "name": "carbon-components-angular/i18n",
+      "version": "5.56.2",
+      "eager": false,
+      "id": "ceph_dashboard:carbon-components-angular/i18n",
+      "assets": {
+        "js": {
+          "async": [
+            "node_modules_angular_core_fesm2022_core_mjs.js",
+            "default-node_modules_rxjs__esm2015_internal_AsyncSubject_js-node_modules_rxjs__esm2015_intern-7c6e1a.js",
+            "node_modules_rxjs__esm2015_operators_index_js.js",
+            "node_modules_rxjs__esm2015_index_js.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-utils_mjs.js",
+            "node_modules_angular_core_fesm2022_primitives_signals_mjs.js",
+            "node_modules_angular_core_fesm2022_primitives_event-dispatch_mjs.js"
+          ],
+          "sync": [
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-i18n_mjs.js"
+          ]
+        },
+        "css": {
+          "async": [],
+          "sync": []
+        }
+      },
+      "usedIn": []
+    },
+    {
+      "singleton": true,
+      "requiredVersion": "5.56.2",
+      "shareScope": "default",
+      "strictVersion": true,
+      "name": "carbon-components-angular/icon",
+      "version": "5.56.2",
+      "eager": false,
+      "id": "ceph_dashboard:carbon-components-angular/icon",
+      "assets": {
+        "js": {
+          "async": [
+            "node_modules_angular_core_fesm2022_core_mjs.js",
+            "default-node_modules_angular_common_fesm2022_common_mjs.js",
+            "default-node_modules_rxjs__esm2015_internal_AsyncSubject_js-node_modules_rxjs__esm2015_intern-7c6e1a.js",
+            "node_modules_rxjs__esm2015_operators_index_js.js",
+            "node_modules_rxjs__esm2015_index_js.js",
+            "node_modules_angular_core_fesm2022_primitives_signals_mjs.js",
+            "node_modules_angular_core_fesm2022_primitives_event-dispatch_mjs.js"
+          ],
+          "sync": [
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-icon_mjs.js"
+          ]
+        },
+        "css": {
+          "async": [],
+          "sync": []
+        }
+      },
+      "usedIn": []
+    },
+    {
+      "singleton": true,
+      "requiredVersion": "5.56.2",
+      "shareScope": "default",
+      "strictVersion": true,
+      "name": "carbon-components-angular/inline-loading",
+      "version": "5.56.2",
+      "eager": false,
+      "id": "ceph_dashboard:carbon-components-angular/inline-loading",
+      "assets": {
+        "js": {
+          "async": [
+            "node_modules_angular_core_fesm2022_core_mjs.js",
+            "default-node_modules_rxjs__esm2015_internal_AsyncSubject_js-node_modules_rxjs__esm2015_intern-7c6e1a.js",
+            "node_modules_rxjs__esm2015_operators_index_js.js",
+            "node_modules_rxjs__esm2015_index_js.js",
+            "default-node_modules_angular_platform-browser_fesm2022_platform-browser_mjs.js",
+            "default-node_modules_angular_common_fesm2022_common_mjs.js",
+            "default-node_modules_angular_animations_fesm2022_browser_mjs.js",
+            "default-node_modules_angular_forms_fesm2022_forms_mjs.js",
+            "default-node_modules_ngx-formly_core_fesm2020_ngx-formly-core_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-icon_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-i18n_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-layer_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-timepicker-select_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-checkbox_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-popover_mjs.js",
+            "node_modules_moment_moment_js.js",
+            "node_modules_chart_js_dist_chart_js.js",
+            "node_modules_angular_core_fesm2022_primitives_signals_mjs.js",
+            "node_modules_angular_core_fesm2022_primitives_event-dispatch_mjs.js",
+            "default-node_modules_angular_common_fesm2022_http_mjs.js",
+            "default-node_modules_angular_animations_fesm2022_animations_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-utils_mjs.js",
+            "default-node_modules_carbon-components-angular_fesm2020_carbon-components-angular-select_mjs.js"
+          ],
+          "sync": [
+            "common.js"
+          ]
+        },
+        "css": {
+          "async": [],
+          "sync": []
+        }
+      },
+      "usedIn": []
+    },
+    {
+      "singleton": true,
+      "requiredVersion": "5.56.2",
+      "shareScope": "default",
+      "strictVersion": true,
+      "name": "carbon-components-angular/input",
+      "version": "5.56.2",
+      "eager": false,
+      "id": "ceph_dashboard:carbon-components-angular/input",
+      "assets": {
+        "js": {
+          "async": [
+            "node_modules_angular_core_fesm2022_core_mjs.js",
+            "default-node_modules_angular_common_fesm2022_common_mjs.js",
+            "default-node_modules_angular_forms_fesm2022_forms_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-icon_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-button_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-tooltip_mjs.js",
+            "default-node_modules_rxjs__esm2015_internal_AsyncSubject_js-node_modules_rxjs__esm2015_intern-7c6e1a.js",
+            "node_modules_rxjs__esm2015_operators_index_js.js",
+            "node_modules_rxjs__esm2015_index_js.js",
+            "node_modules_angular_core_fesm2022_primitives_signals_mjs.js",
+            "node_modules_angular_core_fesm2022_primitives_event-dispatch_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-popover_mjs.js"
+          ],
+          "sync": [
+            "default-node_modules_carbon-components-angular_fesm2020_carbon-components-angular-input_mjs.js"
+          ]
+        },
+        "css": {
+          "async": [],
+          "sync": []
+        }
+      },
+      "usedIn": []
+    },
+    {
+      "singleton": true,
+      "requiredVersion": "5.56.2",
+      "shareScope": "default",
+      "strictVersion": true,
+      "name": "carbon-components-angular/layer",
+      "version": "5.56.2",
+      "eager": false,
+      "id": "ceph_dashboard:carbon-components-angular/layer",
+      "assets": {
+        "js": {
+          "async": [
+            "node_modules_angular_core_fesm2022_core_mjs.js",
+            "default-node_modules_angular_common_fesm2022_common_mjs.js",
+            "default-node_modules_rxjs__esm2015_internal_AsyncSubject_js-node_modules_rxjs__esm2015_intern-7c6e1a.js",
+            "node_modules_rxjs__esm2015_operators_index_js.js",
+            "node_modules_rxjs__esm2015_index_js.js",
+            "node_modules_angular_core_fesm2022_primitives_signals_mjs.js",
+            "node_modules_angular_core_fesm2022_primitives_event-dispatch_mjs.js"
+          ],
+          "sync": [
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-layer_mjs.js"
+          ]
+        },
+        "css": {
+          "async": [],
+          "sync": []
+        }
+      },
+      "usedIn": []
+    },
+    {
+      "singleton": true,
+      "requiredVersion": "5.56.2",
+      "shareScope": "default",
+      "strictVersion": true,
+      "name": "carbon-components-angular/layout",
+      "version": "5.56.2",
+      "eager": false,
+      "id": "ceph_dashboard:carbon-components-angular/layout",
+      "assets": {
+        "js": {
+          "async": [
+            "node_modules_angular_core_fesm2022_core_mjs.js",
+            "default-node_modules_angular_common_fesm2022_common_mjs.js",
+            "default-node_modules_rxjs__esm2015_internal_AsyncSubject_js-node_modules_rxjs__esm2015_intern-7c6e1a.js",
+            "node_modules_rxjs__esm2015_operators_index_js.js",
+            "node_modules_rxjs__esm2015_index_js.js",
+            "node_modules_angular_core_fesm2022_primitives_signals_mjs.js",
+            "node_modules_angular_core_fesm2022_primitives_event-dispatch_mjs.js"
+          ],
+          "sync": [
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-layout_mjs.js"
+          ]
+        },
+        "css": {
+          "async": [],
+          "sync": []
+        }
+      },
+      "usedIn": []
+    },
+    {
+      "singleton": true,
+      "requiredVersion": "5.56.2",
+      "shareScope": "default",
+      "strictVersion": true,
+      "name": "carbon-components-angular/link",
+      "version": "5.56.2",
+      "eager": false,
+      "id": "ceph_dashboard:carbon-components-angular/link",
+      "assets": {
+        "js": {
+          "async": [
+            "node_modules_angular_core_fesm2022_core_mjs.js",
+            "default-node_modules_angular_common_fesm2022_common_mjs.js",
+            "default-node_modules_rxjs__esm2015_internal_AsyncSubject_js-node_modules_rxjs__esm2015_intern-7c6e1a.js",
+            "node_modules_rxjs__esm2015_operators_index_js.js",
+            "node_modules_rxjs__esm2015_index_js.js",
+            "node_modules_angular_core_fesm2022_primitives_signals_mjs.js",
+            "node_modules_angular_core_fesm2022_primitives_event-dispatch_mjs.js"
+          ],
+          "sync": [
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-link_mjs.js"
+          ]
+        },
+        "css": {
+          "async": [],
+          "sync": []
+        }
+      },
+      "usedIn": []
+    },
+    {
+      "singleton": true,
+      "requiredVersion": "5.56.2",
+      "shareScope": "default",
+      "strictVersion": true,
+      "name": "carbon-components-angular/list",
+      "version": "5.56.2",
+      "eager": false,
+      "id": "ceph_dashboard:carbon-components-angular/list",
+      "assets": {
+        "js": {
+          "async": [
+            "node_modules_angular_core_fesm2022_core_mjs.js",
+            "default-node_modules_angular_common_fesm2022_common_mjs.js",
+            "default-node_modules_rxjs__esm2015_internal_AsyncSubject_js-node_modules_rxjs__esm2015_intern-7c6e1a.js",
+            "node_modules_rxjs__esm2015_operators_index_js.js",
+            "node_modules_rxjs__esm2015_index_js.js",
+            "node_modules_angular_core_fesm2022_primitives_signals_mjs.js",
+            "node_modules_angular_core_fesm2022_primitives_event-dispatch_mjs.js"
+          ],
+          "sync": [
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-list_mjs.js"
+          ]
+        },
+        "css": {
+          "async": [],
+          "sync": []
+        }
+      },
+      "usedIn": []
+    },
+    {
+      "singleton": true,
+      "requiredVersion": "5.56.2",
+      "shareScope": "default",
+      "strictVersion": true,
+      "name": "carbon-components-angular/loading",
+      "version": "5.56.2",
+      "eager": false,
+      "id": "ceph_dashboard:carbon-components-angular/loading",
+      "assets": {
+        "js": {
+          "async": [
+            "node_modules_angular_core_fesm2022_core_mjs.js",
+            "default-node_modules_rxjs__esm2015_internal_AsyncSubject_js-node_modules_rxjs__esm2015_intern-7c6e1a.js",
+            "node_modules_rxjs__esm2015_operators_index_js.js",
+            "node_modules_rxjs__esm2015_index_js.js",
+            "default-node_modules_angular_platform-browser_fesm2022_platform-browser_mjs.js",
+            "default-node_modules_angular_common_fesm2022_common_mjs.js",
+            "default-node_modules_angular_animations_fesm2022_browser_mjs.js",
+            "default-node_modules_angular_forms_fesm2022_forms_mjs.js",
+            "default-node_modules_ngx-formly_core_fesm2020_ngx-formly-core_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-icon_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-i18n_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-layer_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-timepicker-select_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-checkbox_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-popover_mjs.js",
+            "node_modules_moment_moment_js.js",
+            "node_modules_chart_js_dist_chart_js.js",
+            "node_modules_angular_core_fesm2022_primitives_signals_mjs.js",
+            "node_modules_angular_core_fesm2022_primitives_event-dispatch_mjs.js",
+            "default-node_modules_angular_common_fesm2022_http_mjs.js",
+            "default-node_modules_angular_animations_fesm2022_animations_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-utils_mjs.js",
+            "default-node_modules_carbon-components-angular_fesm2020_carbon-components-angular-select_mjs.js"
+          ],
+          "sync": [
+            "common.js"
+          ]
+        },
+        "css": {
+          "async": [],
+          "sync": []
+        }
+      },
+      "usedIn": []
+    },
+    {
+      "singleton": true,
+      "requiredVersion": "5.56.2",
+      "shareScope": "default",
+      "strictVersion": true,
+      "name": "carbon-components-angular/modal",
+      "version": "5.56.2",
+      "eager": false,
+      "id": "ceph_dashboard:carbon-components-angular/modal",
+      "assets": {
+        "js": {
+          "async": [
+            "node_modules_angular_core_fesm2022_core_mjs.js",
+            "default-node_modules_angular_common_fesm2022_common_mjs.js",
+            "default-node_modules_rxjs__esm2015_internal_AsyncSubject_js-node_modules_rxjs__esm2015_intern-7c6e1a.js",
+            "node_modules_rxjs__esm2015_operators_index_js.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-icon_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-i18n_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-common_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-placeholder_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-experimental_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-forms_mjs.js",
+            "node_modules_rxjs__esm2015_index_js.js",
+            "node_modules_angular_core_fesm2022_primitives_signals_mjs.js",
+            "node_modules_angular_core_fesm2022_primitives_event-dispatch_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-utils_mjs.js",
+            "default-node_modules_angular_forms_fesm2022_forms_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-button_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-checkbox_mjs.js",
+            "common.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-radio_mjs.js",
+            "default-node_modules_carbon-components-angular_fesm2020_carbon-components-angular-input_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-tooltip_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-popover_mjs.js"
+          ],
+          "sync": [
+            "default-node_modules_carbon-components-angular_fesm2020_carbon-components-angular-modal_mjs.js"
+          ]
+        },
+        "css": {
+          "async": [],
+          "sync": []
+        }
+      },
+      "usedIn": []
+    },
+    {
+      "singleton": true,
+      "requiredVersion": "5.56.2",
+      "shareScope": "default",
+      "strictVersion": true,
+      "name": "carbon-components-angular/notification",
+      "version": "5.56.2",
+      "eager": false,
+      "id": "ceph_dashboard:carbon-components-angular/notification",
+      "assets": {
+        "js": {
+          "async": [
+            "node_modules_angular_core_fesm2022_core_mjs.js",
+            "default-node_modules_angular_common_fesm2022_common_mjs.js",
+            "default-node_modules_rxjs__esm2015_internal_AsyncSubject_js-node_modules_rxjs__esm2015_intern-7c6e1a.js",
+            "node_modules_rxjs__esm2015_index_js.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-icon_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-i18n_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-button_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-experimental_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-link_mjs.js",
+            "node_modules_rxjs__esm2015_operators_index_js.js",
+            "node_modules_angular_core_fesm2022_primitives_signals_mjs.js",
+            "node_modules_angular_core_fesm2022_primitives_event-dispatch_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-utils_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-tooltip_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-popover_mjs.js"
+          ],
+          "sync": [
+            "default-node_modules_carbon-components-angular_fesm2020_carbon-components-angular-notification_mjs.js"
+          ]
+        },
+        "css": {
+          "async": [],
+          "sync": []
+        }
+      },
+      "usedIn": []
+    },
+    {
+      "singleton": true,
+      "requiredVersion": "5.56.2",
+      "shareScope": "default",
+      "strictVersion": true,
+      "name": "carbon-components-angular/number-input",
+      "version": "5.56.2",
+      "eager": false,
+      "id": "ceph_dashboard:carbon-components-angular/number-input",
+      "assets": {
+        "js": {
+          "async": [
+            "node_modules_angular_core_fesm2022_core_mjs.js",
+            "default-node_modules_angular_common_fesm2022_common_mjs.js",
+            "default-node_modules_angular_forms_fesm2022_forms_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-icon_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-i18n_mjs.js",
+            "default-node_modules_rxjs__esm2015_internal_AsyncSubject_js-node_modules_rxjs__esm2015_intern-7c6e1a.js",
+            "node_modules_rxjs__esm2015_operators_index_js.js",
+            "node_modules_rxjs__esm2015_index_js.js",
+            "node_modules_angular_core_fesm2022_primitives_signals_mjs.js",
+            "node_modules_angular_core_fesm2022_primitives_event-dispatch_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-utils_mjs.js"
+          ],
+          "sync": [
+            "default-node_modules_carbon-components-angular_fesm2020_carbon-components-angular-number-input_mjs.js"
+          ]
+        },
+        "css": {
+          "async": [],
+          "sync": []
+        }
+      },
+      "usedIn": []
+    },
+    {
+      "singleton": true,
+      "requiredVersion": "5.56.2",
+      "shareScope": "default",
+      "strictVersion": true,
+      "name": "carbon-components-angular/pagination",
+      "version": "5.56.2",
+      "eager": false,
+      "id": "ceph_dashboard:carbon-components-angular/pagination",
+      "assets": {
+        "js": {
+          "async": [
+            "node_modules_angular_core_fesm2022_core_mjs.js",
+            "default-node_modules_angular_common_fesm2022_common_mjs.js",
+            "default-node_modules_angular_forms_fesm2022_forms_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-icon_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-i18n_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-utils_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-common_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-experimental_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-forms_mjs.js",
+            "default-node_modules_rxjs__esm2015_internal_AsyncSubject_js-node_modules_rxjs__esm2015_intern-7c6e1a.js",
+            "node_modules_rxjs__esm2015_operators_index_js.js",
+            "node_modules_rxjs__esm2015_index_js.js",
+            "node_modules_angular_core_fesm2022_primitives_signals_mjs.js",
+            "node_modules_angular_core_fesm2022_primitives_event-dispatch_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-button_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-checkbox_mjs.js",
+            "common.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-radio_mjs.js",
+            "default-node_modules_carbon-components-angular_fesm2020_carbon-components-angular-input_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-tooltip_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-popover_mjs.js"
+          ],
+          "sync": [
+            "default-node_modules_carbon-components-angular_fesm2020_carbon-components-angular-pagination_mjs.js"
+          ]
+        },
+        "css": {
+          "async": [],
+          "sync": []
+        }
+      },
+      "usedIn": []
+    },
+    {
+      "singleton": true,
+      "requiredVersion": "5.56.2",
+      "shareScope": "default",
+      "strictVersion": true,
+      "name": "carbon-components-angular/placeholder",
+      "version": "5.56.2",
+      "eager": false,
+      "id": "ceph_dashboard:carbon-components-angular/placeholder",
+      "assets": {
+        "js": {
+          "async": [
+            "node_modules_angular_core_fesm2022_core_mjs.js",
+            "default-node_modules_angular_common_fesm2022_common_mjs.js",
+            "default-node_modules_rxjs__esm2015_internal_AsyncSubject_js-node_modules_rxjs__esm2015_intern-7c6e1a.js",
+            "node_modules_rxjs__esm2015_operators_index_js.js",
+            "node_modules_rxjs__esm2015_index_js.js",
+            "node_modules_angular_core_fesm2022_primitives_signals_mjs.js",
+            "node_modules_angular_core_fesm2022_primitives_event-dispatch_mjs.js"
+          ],
+          "sync": [
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-placeholder_mjs.js"
+          ]
+        },
+        "css": {
+          "async": [],
+          "sync": []
+        }
+      },
+      "usedIn": []
+    },
+    {
+      "singleton": true,
+      "requiredVersion": "5.56.2",
+      "shareScope": "default",
+      "strictVersion": true,
+      "name": "carbon-components-angular/popover",
+      "version": "5.56.2",
+      "eager": false,
+      "id": "ceph_dashboard:carbon-components-angular/popover",
+      "assets": {
+        "js": {
+          "async": [
+            "node_modules_angular_core_fesm2022_core_mjs.js",
+            "default-node_modules_angular_common_fesm2022_common_mjs.js",
+            "default-node_modules_rxjs__esm2015_internal_AsyncSubject_js-node_modules_rxjs__esm2015_intern-7c6e1a.js",
+            "node_modules_rxjs__esm2015_operators_index_js.js",
+            "node_modules_rxjs__esm2015_index_js.js",
+            "node_modules_angular_core_fesm2022_primitives_signals_mjs.js",
+            "node_modules_angular_core_fesm2022_primitives_event-dispatch_mjs.js"
+          ],
+          "sync": [
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-popover_mjs.js"
+          ]
+        },
+        "css": {
+          "async": [],
+          "sync": []
+        }
+      },
+      "usedIn": []
+    },
+    {
+      "singleton": true,
+      "requiredVersion": "5.56.2",
+      "shareScope": "default",
+      "strictVersion": true,
+      "name": "carbon-components-angular/progress-bar",
+      "version": "5.56.2",
+      "eager": false,
+      "id": "ceph_dashboard:carbon-components-angular/progress-bar",
+      "assets": {
+        "js": {
+          "async": [
+            "node_modules_angular_core_fesm2022_core_mjs.js",
+            "default-node_modules_rxjs__esm2015_internal_AsyncSubject_js-node_modules_rxjs__esm2015_intern-7c6e1a.js",
+            "node_modules_rxjs__esm2015_operators_index_js.js",
+            "node_modules_rxjs__esm2015_index_js.js",
+            "default-node_modules_angular_platform-browser_fesm2022_platform-browser_mjs.js",
+            "default-node_modules_angular_common_fesm2022_common_mjs.js",
+            "default-node_modules_angular_animations_fesm2022_browser_mjs.js",
+            "default-node_modules_angular_forms_fesm2022_forms_mjs.js",
+            "default-node_modules_ngx-formly_core_fesm2020_ngx-formly-core_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-icon_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-i18n_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-layer_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-timepicker-select_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-checkbox_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-popover_mjs.js",
+            "node_modules_moment_moment_js.js",
+            "node_modules_chart_js_dist_chart_js.js",
+            "node_modules_angular_core_fesm2022_primitives_signals_mjs.js",
+            "node_modules_angular_core_fesm2022_primitives_event-dispatch_mjs.js",
+            "default-node_modules_angular_common_fesm2022_http_mjs.js",
+            "default-node_modules_angular_animations_fesm2022_animations_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-utils_mjs.js",
+            "default-node_modules_carbon-components-angular_fesm2020_carbon-components-angular-select_mjs.js"
+          ],
+          "sync": [
+            "common.js"
+          ]
+        },
+        "css": {
+          "async": [],
+          "sync": []
+        }
+      },
+      "usedIn": []
+    },
+    {
+      "singleton": true,
+      "requiredVersion": "5.56.2",
+      "shareScope": "default",
+      "strictVersion": true,
+      "name": "carbon-components-angular/progress-indicator",
+      "version": "5.56.2",
+      "eager": false,
+      "id": "ceph_dashboard:carbon-components-angular/progress-indicator",
+      "assets": {
+        "js": {
+          "async": [
+            "node_modules_angular_core_fesm2022_core_mjs.js",
+            "default-node_modules_rxjs__esm2015_internal_AsyncSubject_js-node_modules_rxjs__esm2015_intern-7c6e1a.js",
+            "node_modules_rxjs__esm2015_operators_index_js.js",
+            "node_modules_rxjs__esm2015_index_js.js",
+            "default-node_modules_angular_platform-browser_fesm2022_platform-browser_mjs.js",
+            "default-node_modules_angular_common_fesm2022_common_mjs.js",
+            "default-node_modules_angular_animations_fesm2022_browser_mjs.js",
+            "default-node_modules_angular_forms_fesm2022_forms_mjs.js",
+            "default-node_modules_ngx-formly_core_fesm2020_ngx-formly-core_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-icon_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-i18n_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-layer_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-timepicker-select_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-checkbox_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-popover_mjs.js",
+            "node_modules_moment_moment_js.js",
+            "node_modules_chart_js_dist_chart_js.js",
+            "node_modules_angular_core_fesm2022_primitives_signals_mjs.js",
+            "node_modules_angular_core_fesm2022_primitives_event-dispatch_mjs.js",
+            "default-node_modules_angular_common_fesm2022_http_mjs.js",
+            "default-node_modules_angular_animations_fesm2022_animations_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-utils_mjs.js",
+            "default-node_modules_carbon-components-angular_fesm2020_carbon-components-angular-select_mjs.js"
+          ],
+          "sync": [
+            "common.js"
+          ]
+        },
+        "css": {
+          "async": [],
+          "sync": []
+        }
+      },
+      "usedIn": []
+    },
+    {
+      "singleton": true,
+      "requiredVersion": "5.56.2",
+      "shareScope": "default",
+      "strictVersion": true,
+      "name": "carbon-components-angular/radio",
+      "version": "5.56.2",
+      "eager": false,
+      "id": "ceph_dashboard:carbon-components-angular/radio",
+      "assets": {
+        "js": {
+          "async": [
+            "node_modules_angular_core_fesm2022_core_mjs.js",
+            "default-node_modules_angular_common_fesm2022_common_mjs.js",
+            "default-node_modules_angular_forms_fesm2022_forms_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-icon_mjs.js",
+            "default-node_modules_rxjs__esm2015_internal_AsyncSubject_js-node_modules_rxjs__esm2015_intern-7c6e1a.js",
+            "node_modules_rxjs__esm2015_operators_index_js.js",
+            "node_modules_rxjs__esm2015_index_js.js",
+            "node_modules_angular_core_fesm2022_primitives_signals_mjs.js",
+            "node_modules_angular_core_fesm2022_primitives_event-dispatch_mjs.js"
+          ],
+          "sync": [
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-radio_mjs.js"
+          ]
+        },
+        "css": {
+          "async": [],
+          "sync": []
+        }
+      },
+      "usedIn": []
+    },
+    {
+      "singleton": true,
+      "requiredVersion": "5.56.2",
+      "shareScope": "default",
+      "strictVersion": true,
+      "name": "carbon-components-angular/search",
+      "version": "5.56.2",
+      "eager": false,
+      "id": "ceph_dashboard:carbon-components-angular/search",
+      "assets": {
+        "js": {
+          "async": [
+            "node_modules_angular_core_fesm2022_core_mjs.js",
+            "default-node_modules_rxjs__esm2015_internal_AsyncSubject_js-node_modules_rxjs__esm2015_intern-7c6e1a.js",
+            "node_modules_rxjs__esm2015_operators_index_js.js",
+            "node_modules_rxjs__esm2015_index_js.js",
+            "default-node_modules_angular_platform-browser_fesm2022_platform-browser_mjs.js",
+            "default-node_modules_angular_common_fesm2022_common_mjs.js",
+            "default-node_modules_angular_animations_fesm2022_browser_mjs.js",
+            "default-node_modules_angular_forms_fesm2022_forms_mjs.js",
+            "default-node_modules_ngx-formly_core_fesm2020_ngx-formly-core_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-icon_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-i18n_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-layer_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-timepicker-select_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-checkbox_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-popover_mjs.js",
+            "node_modules_moment_moment_js.js",
+            "node_modules_chart_js_dist_chart_js.js",
+            "node_modules_angular_core_fesm2022_primitives_signals_mjs.js",
+            "node_modules_angular_core_fesm2022_primitives_event-dispatch_mjs.js",
+            "default-node_modules_angular_common_fesm2022_http_mjs.js",
+            "default-node_modules_angular_animations_fesm2022_animations_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-utils_mjs.js",
+            "default-node_modules_carbon-components-angular_fesm2020_carbon-components-angular-select_mjs.js"
+          ],
+          "sync": [
+            "common.js"
+          ]
+        },
+        "css": {
+          "async": [],
+          "sync": []
+        }
+      },
+      "usedIn": []
+    },
+    {
+      "singleton": true,
+      "requiredVersion": "5.56.2",
+      "shareScope": "default",
+      "strictVersion": true,
+      "name": "carbon-components-angular/select",
+      "version": "5.56.2",
+      "eager": false,
+      "id": "ceph_dashboard:carbon-components-angular/select",
+      "assets": {
+        "js": {
+          "async": [
+            "node_modules_angular_core_fesm2022_core_mjs.js",
+            "default-node_modules_angular_common_fesm2022_common_mjs.js",
+            "default-node_modules_angular_forms_fesm2022_forms_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-icon_mjs.js",
+            "default-node_modules_rxjs__esm2015_internal_AsyncSubject_js-node_modules_rxjs__esm2015_intern-7c6e1a.js",
+            "node_modules_rxjs__esm2015_operators_index_js.js",
+            "node_modules_rxjs__esm2015_index_js.js",
+            "node_modules_angular_core_fesm2022_primitives_signals_mjs.js",
+            "node_modules_angular_core_fesm2022_primitives_event-dispatch_mjs.js"
+          ],
+          "sync": [
+            "default-node_modules_carbon-components-angular_fesm2020_carbon-components-angular-select_mjs.js"
+          ]
+        },
+        "css": {
+          "async": [],
+          "sync": []
+        }
+      },
+      "usedIn": []
+    },
+    {
+      "singleton": true,
+      "requiredVersion": "5.56.2",
+      "shareScope": "default",
+      "strictVersion": true,
+      "name": "carbon-components-angular/skeleton",
+      "version": "5.56.2",
+      "eager": false,
+      "id": "ceph_dashboard:carbon-components-angular/skeleton",
+      "assets": {
+        "js": {
+          "async": [
+            "node_modules_angular_core_fesm2022_core_mjs.js",
+            "default-node_modules_angular_common_fesm2022_common_mjs.js",
+            "default-node_modules_rxjs__esm2015_internal_AsyncSubject_js-node_modules_rxjs__esm2015_intern-7c6e1a.js",
+            "node_modules_rxjs__esm2015_operators_index_js.js",
+            "node_modules_rxjs__esm2015_index_js.js",
+            "node_modules_angular_core_fesm2022_primitives_signals_mjs.js",
+            "node_modules_angular_core_fesm2022_primitives_event-dispatch_mjs.js"
+          ],
+          "sync": [
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-skeleton_mjs.js"
+          ]
+        },
+        "css": {
+          "async": [],
+          "sync": []
+        }
+      },
+      "usedIn": []
+    },
+    {
+      "singleton": true,
+      "requiredVersion": "5.56.2",
+      "shareScope": "default",
+      "strictVersion": true,
+      "name": "carbon-components-angular/slider",
+      "version": "5.56.2",
+      "eager": false,
+      "id": "ceph_dashboard:carbon-components-angular/slider",
+      "assets": {
+        "js": {
+          "async": [
+            "node_modules_angular_core_fesm2022_core_mjs.js",
+            "default-node_modules_angular_common_fesm2022_common_mjs.js",
+            "default-node_modules_angular_forms_fesm2022_forms_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-utils_mjs.js",
+            "default-node_modules_rxjs__esm2015_internal_AsyncSubject_js-node_modules_rxjs__esm2015_intern-7c6e1a.js",
+            "node_modules_rxjs__esm2015_operators_index_js.js",
+            "node_modules_rxjs__esm2015_index_js.js",
+            "node_modules_angular_core_fesm2022_primitives_signals_mjs.js",
+            "node_modules_angular_core_fesm2022_primitives_event-dispatch_mjs.js"
+          ],
+          "sync": [
+            "default-node_modules_carbon-components-angular_fesm2020_carbon-components-angular-slider_mjs.js"
+          ]
+        },
+        "css": {
+          "async": [],
+          "sync": []
+        }
+      },
+      "usedIn": []
+    },
+    {
+      "singleton": true,
+      "requiredVersion": "5.56.2",
+      "shareScope": "default",
+      "strictVersion": true,
+      "name": "carbon-components-angular/structured-list",
+      "version": "5.56.2",
+      "eager": false,
+      "id": "ceph_dashboard:carbon-components-angular/structured-list",
+      "assets": {
+        "js": {
+          "async": [
+            "node_modules_angular_core_fesm2022_core_mjs.js",
+            "default-node_modules_angular_common_fesm2022_common_mjs.js",
+            "default-node_modules_angular_forms_fesm2022_forms_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-icon_mjs.js",
+            "default-node_modules_rxjs__esm2015_internal_AsyncSubject_js-node_modules_rxjs__esm2015_intern-7c6e1a.js",
+            "node_modules_rxjs__esm2015_operators_index_js.js",
+            "node_modules_rxjs__esm2015_index_js.js",
+            "node_modules_angular_core_fesm2022_primitives_signals_mjs.js",
+            "node_modules_angular_core_fesm2022_primitives_event-dispatch_mjs.js"
+          ],
+          "sync": [
+            "default-node_modules_carbon-components-angular_fesm2020_carbon-components-angular-structured--bcaf2f.js"
+          ]
+        },
+        "css": {
+          "async": [],
+          "sync": []
+        }
+      },
+      "usedIn": []
+    },
+    {
+      "singleton": true,
+      "requiredVersion": "5.56.2",
+      "shareScope": "default",
+      "strictVersion": true,
+      "name": "carbon-components-angular/table",
+      "version": "5.56.2",
+      "eager": false,
+      "id": "ceph_dashboard:carbon-components-angular/table",
+      "assets": {
+        "js": {
+          "async": [
+            "node_modules_angular_core_fesm2022_core_mjs.js",
+            "default-node_modules_angular_common_fesm2022_common_mjs.js",
+            "default-node_modules_rxjs__esm2015_internal_AsyncSubject_js-node_modules_rxjs__esm2015_intern-7c6e1a.js",
+            "node_modules_rxjs__esm2015_operators_index_js.js",
+            "default-node_modules_angular_forms_fesm2022_forms_mjs.js",
+            "node_modules_rxjs__esm2015_index_js.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-icon_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-i18n_mjs.js",
+            "default-node_modules_carbon-components-angular_fesm2020_carbon-components-angular-dialog_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-button_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-utils_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-common_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-checkbox_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-radio_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-forms_mjs.js",
+            "common.js",
+            "node_modules_angular_core_fesm2022_primitives_signals_mjs.js",
+            "node_modules_angular_core_fesm2022_primitives_event-dispatch_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-tooltip_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-placeholder_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-experimental_mjs.js",
+            "default-node_modules_carbon-components-angular_fesm2020_carbon-components-angular-input_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-popover_mjs.js"
+          ],
+          "sync": [
+            "default-node_modules_carbon-components-angular_fesm2020_carbon-components-angular-table_mjs.js"
+          ]
+        },
+        "css": {
+          "async": [],
+          "sync": []
+        }
+      },
+      "usedIn": []
+    },
+    {
+      "singleton": true,
+      "requiredVersion": "5.56.2",
+      "shareScope": "default",
+      "strictVersion": true,
+      "name": "carbon-components-angular/tabs",
+      "version": "5.56.2",
+      "eager": false,
+      "id": "ceph_dashboard:carbon-components-angular/tabs",
+      "assets": {
+        "js": {
+          "async": [
+            "node_modules_angular_core_fesm2022_core_mjs.js",
+            "default-node_modules_angular_common_fesm2022_common_mjs.js",
+            "default-node_modules_rxjs__esm2015_internal_AsyncSubject_js-node_modules_rxjs__esm2015_intern-7c6e1a.js",
+            "node_modules_rxjs__esm2015_index_js.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-i18n_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-utils_mjs.js",
+            "node_modules_rxjs__esm2015_operators_index_js.js",
+            "node_modules_angular_core_fesm2022_primitives_signals_mjs.js",
+            "node_modules_angular_core_fesm2022_primitives_event-dispatch_mjs.js"
+          ],
+          "sync": [
+            "default-node_modules_carbon-components-angular_fesm2020_carbon-components-angular-tabs_mjs.js"
+          ]
+        },
+        "css": {
+          "async": [],
+          "sync": []
+        }
+      },
+      "usedIn": []
+    },
+    {
+      "singleton": true,
+      "requiredVersion": "5.56.2",
+      "shareScope": "default",
+      "strictVersion": true,
+      "name": "carbon-components-angular/tag",
+      "version": "5.56.2",
+      "eager": false,
+      "id": "ceph_dashboard:carbon-components-angular/tag",
+      "assets": {
+        "js": {
+          "async": [
+            "node_modules_angular_core_fesm2022_core_mjs.js",
+            "default-node_modules_rxjs__esm2015_internal_AsyncSubject_js-node_modules_rxjs__esm2015_intern-7c6e1a.js",
+            "node_modules_rxjs__esm2015_operators_index_js.js",
+            "node_modules_rxjs__esm2015_index_js.js",
+            "default-node_modules_angular_platform-browser_fesm2022_platform-browser_mjs.js",
+            "default-node_modules_angular_common_fesm2022_common_mjs.js",
+            "default-node_modules_angular_animations_fesm2022_browser_mjs.js",
+            "default-node_modules_angular_forms_fesm2022_forms_mjs.js",
+            "default-node_modules_ngx-formly_core_fesm2020_ngx-formly-core_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-icon_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-i18n_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-layer_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-timepicker-select_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-checkbox_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-popover_mjs.js",
+            "node_modules_moment_moment_js.js",
+            "node_modules_chart_js_dist_chart_js.js",
+            "node_modules_angular_core_fesm2022_primitives_signals_mjs.js",
+            "node_modules_angular_core_fesm2022_primitives_event-dispatch_mjs.js",
+            "default-node_modules_angular_common_fesm2022_http_mjs.js",
+            "default-node_modules_angular_animations_fesm2022_animations_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-utils_mjs.js",
+            "default-node_modules_carbon-components-angular_fesm2020_carbon-components-angular-select_mjs.js"
+          ],
+          "sync": [
+            "common.js"
+          ]
+        },
+        "css": {
+          "async": [],
+          "sync": []
+        }
+      },
+      "usedIn": []
+    },
+    {
+      "singleton": true,
+      "requiredVersion": "5.56.2",
+      "shareScope": "default",
+      "strictVersion": true,
+      "name": "carbon-components-angular/theme",
+      "version": "5.56.2",
+      "eager": false,
+      "id": "ceph_dashboard:carbon-components-angular/theme",
+      "assets": {
+        "js": {
+          "async": [
+            "node_modules_angular_core_fesm2022_core_mjs.js",
+            "default-node_modules_rxjs__esm2015_internal_AsyncSubject_js-node_modules_rxjs__esm2015_intern-7c6e1a.js",
+            "node_modules_rxjs__esm2015_operators_index_js.js",
+            "node_modules_rxjs__esm2015_index_js.js",
+            "default-node_modules_angular_platform-browser_fesm2022_platform-browser_mjs.js",
+            "default-node_modules_angular_common_fesm2022_common_mjs.js",
+            "default-node_modules_angular_animations_fesm2022_browser_mjs.js",
+            "default-node_modules_angular_forms_fesm2022_forms_mjs.js",
+            "default-node_modules_ngx-formly_core_fesm2020_ngx-formly-core_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-icon_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-i18n_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-layer_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-timepicker-select_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-checkbox_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-popover_mjs.js",
+            "node_modules_moment_moment_js.js",
+            "node_modules_chart_js_dist_chart_js.js",
+            "node_modules_angular_core_fesm2022_primitives_signals_mjs.js",
+            "node_modules_angular_core_fesm2022_primitives_event-dispatch_mjs.js",
+            "default-node_modules_angular_common_fesm2022_http_mjs.js",
+            "default-node_modules_angular_animations_fesm2022_animations_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-utils_mjs.js",
+            "default-node_modules_carbon-components-angular_fesm2020_carbon-components-angular-select_mjs.js"
+          ],
+          "sync": [
+            "common.js"
+          ]
+        },
+        "css": {
+          "async": [],
+          "sync": []
+        }
+      },
+      "usedIn": []
+    },
+    {
+      "singleton": true,
+      "requiredVersion": "5.56.2",
+      "shareScope": "default",
+      "strictVersion": true,
+      "name": "carbon-components-angular/tiles",
+      "version": "5.56.2",
+      "eager": false,
+      "id": "ceph_dashboard:carbon-components-angular/tiles",
+      "assets": {
+        "js": {
+          "async": [
+            "node_modules_angular_core_fesm2022_core_mjs.js",
+            "default-node_modules_angular_common_fesm2022_common_mjs.js",
+            "default-node_modules_angular_router_fesm2022_router_mjs.js",
+            "default-node_modules_rxjs__esm2015_internal_AsyncSubject_js-node_modules_rxjs__esm2015_intern-7c6e1a.js",
+            "node_modules_rxjs__esm2015_operators_index_js.js",
+            "default-node_modules_angular_forms_fesm2022_forms_mjs.js",
+            "node_modules_rxjs__esm2015_index_js.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-icon_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-i18n_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-utils_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-link_mjs.js",
+            "node_modules_angular_core_fesm2022_primitives_signals_mjs.js",
+            "node_modules_angular_core_fesm2022_primitives_event-dispatch_mjs.js",
+            "default-node_modules_angular_platform-browser_fesm2022_platform-browser_mjs.js",
+            "default-node_modules_angular_common_fesm2022_http_mjs.js"
+          ],
+          "sync": [
+            "default-node_modules_carbon-components-angular_fesm2020_carbon-components-angular-tiles_mjs.js"
+          ]
+        },
+        "css": {
+          "async": [],
+          "sync": []
+        }
+      },
+      "usedIn": []
+    },
+    {
+      "singleton": true,
+      "requiredVersion": "5.56.2",
+      "shareScope": "default",
+      "strictVersion": true,
+      "name": "carbon-components-angular/timepicker-select",
+      "version": "5.56.2",
+      "eager": false,
+      "id": "ceph_dashboard:carbon-components-angular/timepicker-select",
+      "assets": {
+        "js": {
+          "async": [
+            "node_modules_angular_core_fesm2022_core_mjs.js",
+            "default-node_modules_angular_common_fesm2022_common_mjs.js",
+            "default-node_modules_angular_forms_fesm2022_forms_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-icon_mjs.js",
+            "default-node_modules_carbon-components-angular_fesm2020_carbon-components-angular-select_mjs.js",
+            "default-node_modules_rxjs__esm2015_internal_AsyncSubject_js-node_modules_rxjs__esm2015_intern-7c6e1a.js",
+            "node_modules_rxjs__esm2015_operators_index_js.js",
+            "node_modules_rxjs__esm2015_index_js.js",
+            "node_modules_angular_core_fesm2022_primitives_signals_mjs.js",
+            "node_modules_angular_core_fesm2022_primitives_event-dispatch_mjs.js"
+          ],
+          "sync": [
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-timepicker-select_mjs.js"
+          ]
+        },
+        "css": {
+          "async": [],
+          "sync": []
+        }
+      },
+      "usedIn": []
+    },
+    {
+      "singleton": true,
+      "requiredVersion": "5.56.2",
+      "shareScope": "default",
+      "strictVersion": true,
+      "name": "carbon-components-angular/timepicker",
+      "version": "5.56.2",
+      "eager": false,
+      "id": "ceph_dashboard:carbon-components-angular/timepicker",
+      "assets": {
+        "js": {
+          "async": [
+            "node_modules_angular_core_fesm2022_core_mjs.js",
+            "default-node_modules_rxjs__esm2015_internal_AsyncSubject_js-node_modules_rxjs__esm2015_intern-7c6e1a.js",
+            "node_modules_rxjs__esm2015_operators_index_js.js",
+            "node_modules_rxjs__esm2015_index_js.js",
+            "default-node_modules_angular_platform-browser_fesm2022_platform-browser_mjs.js",
+            "default-node_modules_angular_common_fesm2022_common_mjs.js",
+            "default-node_modules_angular_animations_fesm2022_browser_mjs.js",
+            "default-node_modules_angular_forms_fesm2022_forms_mjs.js",
+            "default-node_modules_ngx-formly_core_fesm2020_ngx-formly-core_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-icon_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-i18n_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-layer_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-timepicker-select_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-checkbox_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-popover_mjs.js",
+            "node_modules_moment_moment_js.js",
+            "node_modules_chart_js_dist_chart_js.js",
+            "node_modules_angular_core_fesm2022_primitives_signals_mjs.js",
+            "node_modules_angular_core_fesm2022_primitives_event-dispatch_mjs.js",
+            "default-node_modules_angular_common_fesm2022_http_mjs.js",
+            "default-node_modules_angular_animations_fesm2022_animations_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-utils_mjs.js",
+            "default-node_modules_carbon-components-angular_fesm2020_carbon-components-angular-select_mjs.js"
+          ],
+          "sync": [
+            "common.js"
+          ]
+        },
+        "css": {
+          "async": [],
+          "sync": []
+        }
+      },
+      "usedIn": []
+    },
+    {
+      "singleton": true,
+      "requiredVersion": "5.56.2",
+      "shareScope": "default",
+      "strictVersion": true,
+      "name": "carbon-components-angular/toggle",
+      "version": "5.56.2",
+      "eager": false,
+      "id": "ceph_dashboard:carbon-components-angular/toggle",
+      "assets": {
+        "js": {
+          "async": [
+            "node_modules_angular_core_fesm2022_core_mjs.js",
+            "default-node_modules_rxjs__esm2015_internal_AsyncSubject_js-node_modules_rxjs__esm2015_intern-7c6e1a.js",
+            "node_modules_rxjs__esm2015_operators_index_js.js",
+            "node_modules_rxjs__esm2015_index_js.js",
+            "default-node_modules_angular_platform-browser_fesm2022_platform-browser_mjs.js",
+            "default-node_modules_angular_common_fesm2022_common_mjs.js",
+            "default-node_modules_angular_animations_fesm2022_browser_mjs.js",
+            "default-node_modules_angular_forms_fesm2022_forms_mjs.js",
+            "default-node_modules_ngx-formly_core_fesm2020_ngx-formly-core_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-icon_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-i18n_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-layer_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-timepicker-select_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-checkbox_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-popover_mjs.js",
+            "node_modules_moment_moment_js.js",
+            "node_modules_chart_js_dist_chart_js.js",
+            "node_modules_angular_core_fesm2022_primitives_signals_mjs.js",
+            "node_modules_angular_core_fesm2022_primitives_event-dispatch_mjs.js",
+            "default-node_modules_angular_common_fesm2022_http_mjs.js",
+            "default-node_modules_angular_animations_fesm2022_animations_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-utils_mjs.js",
+            "default-node_modules_carbon-components-angular_fesm2020_carbon-components-angular-select_mjs.js"
+          ],
+          "sync": [
+            "common.js"
+          ]
+        },
+        "css": {
+          "async": [],
+          "sync": []
+        }
+      },
+      "usedIn": []
+    },
+    {
+      "singleton": true,
+      "requiredVersion": "5.56.2",
+      "shareScope": "default",
+      "strictVersion": true,
+      "name": "carbon-components-angular/toggletip",
+      "version": "5.56.2",
+      "eager": false,
+      "id": "ceph_dashboard:carbon-components-angular/toggletip",
+      "assets": {
+        "js": {
+          "async": [
+            "node_modules_angular_core_fesm2022_core_mjs.js",
+            "default-node_modules_rxjs__esm2015_internal_AsyncSubject_js-node_modules_rxjs__esm2015_intern-7c6e1a.js",
+            "node_modules_rxjs__esm2015_operators_index_js.js",
+            "node_modules_rxjs__esm2015_index_js.js",
+            "default-node_modules_angular_platform-browser_fesm2022_platform-browser_mjs.js",
+            "default-node_modules_angular_common_fesm2022_common_mjs.js",
+            "default-node_modules_angular_animations_fesm2022_browser_mjs.js",
+            "default-node_modules_angular_forms_fesm2022_forms_mjs.js",
+            "default-node_modules_ngx-formly_core_fesm2020_ngx-formly-core_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-icon_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-i18n_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-layer_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-timepicker-select_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-checkbox_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-popover_mjs.js",
+            "node_modules_moment_moment_js.js",
+            "node_modules_chart_js_dist_chart_js.js",
+            "node_modules_angular_core_fesm2022_primitives_signals_mjs.js",
+            "node_modules_angular_core_fesm2022_primitives_event-dispatch_mjs.js",
+            "default-node_modules_angular_common_fesm2022_http_mjs.js",
+            "default-node_modules_angular_animations_fesm2022_animations_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-utils_mjs.js",
+            "default-node_modules_carbon-components-angular_fesm2020_carbon-components-angular-select_mjs.js"
+          ],
+          "sync": [
+            "common.js"
+          ]
+        },
+        "css": {
+          "async": [],
+          "sync": []
+        }
+      },
+      "usedIn": []
+    },
+    {
+      "singleton": true,
+      "requiredVersion": "5.56.2",
+      "shareScope": "default",
+      "strictVersion": true,
+      "name": "carbon-components-angular/tooltip",
+      "version": "5.56.2",
+      "eager": false,
+      "id": "ceph_dashboard:carbon-components-angular/tooltip",
+      "assets": {
+        "js": {
+          "async": [
+            "node_modules_angular_core_fesm2022_core_mjs.js",
+            "default-node_modules_angular_common_fesm2022_common_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-popover_mjs.js",
+            "default-node_modules_rxjs__esm2015_internal_AsyncSubject_js-node_modules_rxjs__esm2015_intern-7c6e1a.js",
+            "node_modules_rxjs__esm2015_operators_index_js.js",
+            "node_modules_rxjs__esm2015_index_js.js",
+            "node_modules_angular_core_fesm2022_primitives_signals_mjs.js",
+            "node_modules_angular_core_fesm2022_primitives_event-dispatch_mjs.js"
+          ],
+          "sync": [
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-tooltip_mjs.js"
+          ]
+        },
+        "css": {
+          "async": [],
+          "sync": []
+        }
+      },
+      "usedIn": []
+    },
+    {
+      "singleton": true,
+      "requiredVersion": "5.56.2",
+      "shareScope": "default",
+      "strictVersion": true,
+      "name": "carbon-components-angular/treeview",
+      "version": "5.56.2",
+      "eager": false,
+      "id": "ceph_dashboard:carbon-components-angular/treeview",
+      "assets": {
+        "js": {
+          "async": [
+            "node_modules_angular_core_fesm2022_core_mjs.js",
+            "default-node_modules_angular_common_fesm2022_common_mjs.js",
+            "default-node_modules_rxjs__esm2015_internal_AsyncSubject_js-node_modules_rxjs__esm2015_intern-7c6e1a.js",
+            "node_modules_rxjs__esm2015_index_js.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-icon_mjs.js",
+            "node_modules_rxjs__esm2015_operators_index_js.js",
+            "node_modules_angular_core_fesm2022_primitives_signals_mjs.js",
+            "node_modules_angular_core_fesm2022_primitives_event-dispatch_mjs.js"
+          ],
+          "sync": [
+            "default-node_modules_carbon-components-angular_fesm2020_carbon-components-angular-treeview_mjs.js"
+          ]
+        },
+        "css": {
+          "async": [],
+          "sync": []
+        }
+      },
+      "usedIn": []
+    },
+    {
+      "singleton": true,
+      "requiredVersion": "5.56.2",
+      "shareScope": "default",
+      "strictVersion": true,
+      "name": "carbon-components-angular/ui-shell",
+      "version": "5.56.2",
+      "eager": false,
+      "id": "ceph_dashboard:carbon-components-angular/ui-shell",
+      "assets": {
+        "js": {
+          "async": [
+            "default-node_modules_angular_platform-browser_fesm2022_platform-browser_mjs.js",
+            "node_modules_angular_core_fesm2022_core_mjs.js",
+            "default-node_modules_angular_common_fesm2022_common_mjs.js",
+            "default-node_modules_angular_router_fesm2022_router_mjs.js",
+            "default-node_modules_rxjs__esm2015_internal_AsyncSubject_js-node_modules_rxjs__esm2015_intern-7c6e1a.js",
+            "node_modules_rxjs__esm2015_index_js.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-icon_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-i18n_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-button_mjs.js",
+            "default-node_modules_angular_common_fesm2022_http_mjs.js",
+            "node_modules_rxjs__esm2015_operators_index_js.js",
+            "node_modules_angular_core_fesm2022_primitives_signals_mjs.js",
+            "node_modules_angular_core_fesm2022_primitives_event-dispatch_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-utils_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-tooltip_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-popover_mjs.js"
+          ],
+          "sync": [
+            "default-node_modules_carbon-components-angular_fesm2020_carbon-components-angular-ui-shell_mjs.js"
+          ]
+        },
+        "css": {
+          "async": [],
+          "sync": []
+        }
+      },
+      "usedIn": []
+    },
+    {
+      "singleton": true,
+      "requiredVersion": "5.56.2",
+      "shareScope": "default",
+      "strictVersion": true,
+      "name": "carbon-components-angular/utils",
+      "version": "5.56.2",
+      "eager": false,
+      "id": "ceph_dashboard:carbon-components-angular/utils",
+      "assets": {
+        "js": {
+          "async": [
+            "node_modules_angular_core_fesm2022_core_mjs.js",
+            "default-node_modules_rxjs__esm2015_internal_AsyncSubject_js-node_modules_rxjs__esm2015_intern-7c6e1a.js",
+            "node_modules_rxjs__esm2015_operators_index_js.js",
+            "node_modules_rxjs__esm2015_index_js.js",
+            "node_modules_angular_core_fesm2022_primitives_signals_mjs.js",
+            "node_modules_angular_core_fesm2022_primitives_event-dispatch_mjs.js"
+          ],
+          "sync": [
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-utils_mjs.js"
+          ]
+        },
+        "css": {
+          "async": [],
+          "sync": []
+        }
+      },
+      "usedIn": []
+    },
+    {
+      "singleton": true,
+      "requiredVersion": "5.56.2",
+      "shareScope": "default",
+      "strictVersion": true,
+      "name": "carbon-components-angular",
+      "version": "5.56.2",
+      "eager": false,
+      "id": "ceph_dashboard:carbon-components-angular",
+      "assets": {
+        "js": {
+          "async": [
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-icon_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-i18n_mjs.js",
+            "default-node_modules_carbon-components-angular_fesm2020_carbon-components-angular-dialog_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-button_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-tooltip_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-utils_mjs.js",
+            "default-node_modules_carbon-components-angular_fesm2020_carbon-components-angular-dropdown_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-datepicker-input_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-placeholder_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-experimental_mjs.js",
+            "common.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-checkbox_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-radio_mjs.js",
+            "default-node_modules_carbon-components-angular_fesm2020_carbon-components-angular-input_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-forms_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-link_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-layer_mjs.js",
+            "default-node_modules_carbon-components-angular_fesm2020_carbon-components-angular-select_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-timepicker-select_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-popover_mjs.js",
+            "default-node_modules_carbon-components-angular_fesm2020_carbon-components-angular-breadcrumb_mjs.js",
+            "default-node_modules_carbon-components-angular_fesm2020_carbon-components-angular-code-snippet_mjs.js",
+            "default-node_modules_carbon-components-angular_fesm2020_carbon-components-angular-combobox_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-content-switcher_mjs.js",
+            "default-node_modules_carbon-components-angular_fesm2020_carbon-components-angular-context-menu_mjs.js",
+            "default-node_modules_carbon-components-angular_fesm2020_carbon-components-angular-datepicker_mjs.js",
+            "default-node_modules_carbon-components-angular_fesm2020_carbon-components-angular-file-uploader_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-grid_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-layout_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-list_mjs.js",
+            "default-node_modules_carbon-components-angular_fesm2020_carbon-components-angular-modal_mjs.js",
+            "default-node_modules_carbon-components-angular_fesm2020_carbon-components-angular-notification_mjs.js",
+            "default-node_modules_carbon-components-angular_fesm2020_carbon-components-angular-number-input_mjs.js",
+            "default-node_modules_carbon-components-angular_fesm2020_carbon-components-angular-pagination_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-skeleton_mjs.js",
+            "default-node_modules_carbon-components-angular_fesm2020_carbon-components-angular-slider_mjs.js",
+            "default-node_modules_carbon-components-angular_fesm2020_carbon-components-angular-structured--bcaf2f.js",
+            "default-node_modules_carbon-components-angular_fesm2020_carbon-components-angular-table_mjs.js",
+            "default-node_modules_carbon-components-angular_fesm2020_carbon-components-angular-tabs_mjs.js",
+            "default-node_modules_carbon-components-angular_fesm2020_carbon-components-angular-tiles_mjs.js",
+            "default-node_modules_carbon-components-angular_fesm2020_carbon-components-angular-treeview_mjs.js",
+            "default-node_modules_carbon-components-angular_fesm2020_carbon-components-angular-ui-shell_mjs.js",
+            "node_modules_angular_core_fesm2022_core_mjs.js",
+            "default-node_modules_angular_common_fesm2022_common_mjs.js",
+            "default-node_modules_rxjs__esm2015_internal_AsyncSubject_js-node_modules_rxjs__esm2015_intern-7c6e1a.js",
+            "node_modules_rxjs__esm2015_operators_index_js.js",
+            "node_modules_rxjs__esm2015_index_js.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-common_mjs.js",
+            "default-node_modules_angular_forms_fesm2022_forms_mjs.js",
+            "default-node_modules_angular_platform-browser_fesm2022_platform-browser_mjs.js",
+            "default-node_modules_angular_router_fesm2022_router_mjs.js",
+            "node_modules_angular_core_fesm2022_primitives_signals_mjs.js",
+            "node_modules_angular_core_fesm2022_primitives_event-dispatch_mjs.js",
+            "default-node_modules_angular_common_fesm2022_http_mjs.js"
+          ],
+          "sync": [
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular_mjs.js"
+          ]
+        },
+        "css": {
+          "async": [],
+          "sync": []
+        }
+      },
+      "usedIn": []
+    },
+    {
+      "singleton": true,
+      "requiredVersion": "4.4.7",
+      "shareScope": "default",
+      "strictVersion": true,
+      "name": "chart.js",
+      "version": "4.4.7",
+      "eager": false,
+      "id": "ceph_dashboard:chart.js",
+      "assets": {
+        "js": {
+          "async": [],
+          "sync": [
+            "node_modules_chart_js_dist_chart_js.js"
+          ]
+        },
+        "css": {
+          "async": [],
+          "sync": []
+        }
+      },
+      "usedIn": []
+    },
+    {
+      "singleton": true,
+      "requiredVersion": "1.0.1",
+      "shareScope": "default",
+      "strictVersion": true,
+      "name": "chartjs-adapter-moment",
+      "version": "1.0.1",
+      "eager": false,
+      "id": "ceph_dashboard:chartjs-adapter-moment",
+      "assets": {
+        "js": {
+          "async": [
+            "node_modules_angular_core_fesm2022_core_mjs.js",
+            "default-node_modules_rxjs__esm2015_internal_AsyncSubject_js-node_modules_rxjs__esm2015_intern-7c6e1a.js",
+            "node_modules_rxjs__esm2015_operators_index_js.js",
+            "node_modules_rxjs__esm2015_index_js.js",
+            "default-node_modules_angular_platform-browser_fesm2022_platform-browser_mjs.js",
+            "default-node_modules_angular_common_fesm2022_common_mjs.js",
+            "default-node_modules_angular_animations_fesm2022_browser_mjs.js",
+            "default-node_modules_angular_forms_fesm2022_forms_mjs.js",
+            "default-node_modules_ngx-formly_core_fesm2020_ngx-formly-core_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-icon_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-i18n_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-layer_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-timepicker-select_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-checkbox_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-popover_mjs.js",
+            "node_modules_moment_moment_js.js",
+            "node_modules_chart_js_dist_chart_js.js",
+            "node_modules_angular_core_fesm2022_primitives_signals_mjs.js",
+            "node_modules_angular_core_fesm2022_primitives_event-dispatch_mjs.js",
+            "default-node_modules_angular_common_fesm2022_http_mjs.js",
+            "default-node_modules_angular_animations_fesm2022_animations_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-utils_mjs.js",
+            "default-node_modules_carbon-components-angular_fesm2020_carbon-components-angular-select_mjs.js"
+          ],
+          "sync": [
+            "common.js"
+          ]
+        },
+        "css": {
+          "async": [],
+          "sync": []
+        }
+      },
+      "usedIn": []
+    },
+    {
+      "singleton": true,
+      "requiredVersion": "5.3.0",
+      "shareScope": "default",
+      "strictVersion": true,
+      "name": "detect-browser",
+      "version": "5.3.0",
+      "eager": false,
+      "id": "ceph_dashboard:detect-browser",
+      "assets": {
+        "js": {
+          "async": [],
+          "sync": [
+            "node_modules_detect-browser_es_index_js.js"
+          ]
+        },
+        "css": {
+          "async": [],
+          "sync": []
+        }
+      },
+      "usedIn": []
+    },
+    {
+      "singleton": true,
+      "requiredVersion": "2.0.5",
+      "shareScope": "default",
+      "strictVersion": true,
+      "name": "file-saver",
+      "version": "2.0.5",
+      "eager": false,
+      "id": "ceph_dashboard:file-saver",
+      "assets": {
+        "js": {
+          "async": [],
+          "sync": [
+            "node_modules_file-saver_dist_FileSaver_min_js.js"
+          ]
+        },
+        "css": {
+          "async": [],
+          "sync": []
+        }
+      },
+      "usedIn": []
+    },
+    {
+      "singleton": true,
+      "requiredVersion": "4.1.0",
+      "shareScope": "default",
+      "strictVersion": true,
+      "name": "js-yaml",
+      "version": "4.1.0",
+      "eager": false,
+      "id": "ceph_dashboard:js-yaml",
+      "assets": {
+        "js": {
+          "async": [],
+          "sync": [
+            "node_modules_js-yaml_dist_js-yaml_mjs.js"
+          ]
+        },
+        "css": {
+          "async": [],
+          "sync": []
+        }
+      },
+      "usedIn": []
+    },
+    {
+      "singleton": true,
+      "requiredVersion": "4.17.21",
+      "shareScope": "default",
+      "strictVersion": true,
+      "name": "lodash",
+      "version": "4.17.21",
+      "eager": false,
+      "id": "ceph_dashboard:lodash",
+      "assets": {
+        "js": {
+          "async": [],
+          "sync": [
+            "node_modules_lodash_lodash_js.js"
+          ]
+        },
+        "css": {
+          "async": [],
+          "sync": []
+        }
+      },
+      "usedIn": []
+    },
+    {
+      "singleton": true,
+      "requiredVersion": "2.29.4",
+      "shareScope": "default",
+      "strictVersion": true,
+      "name": "moment",
+      "version": "2.29.4",
+      "eager": false,
+      "id": "ceph_dashboard:moment",
+      "assets": {
+        "js": {
+          "async": [],
+          "sync": [
+            "node_modules_moment_moment_js.js"
+          ]
+        },
+        "css": {
+          "async": [],
+          "sync": []
+        }
+      },
+      "usedIn": []
+    },
+    {
+      "singleton": true,
+      "requiredVersion": "4.0.1",
+      "shareScope": "default",
+      "strictVersion": true,
+      "name": "ng-block-ui",
+      "version": "4.0.1",
+      "eager": false,
+      "id": "ceph_dashboard:ng-block-ui",
+      "assets": {
+        "js": {
+          "async": [
+            "node_modules_angular_core_fesm2022_core_mjs.js",
+            "default-node_modules_angular_common_fesm2022_common_mjs.js",
+            "default-node_modules_rxjs__esm2015_internal_AsyncSubject_js-node_modules_rxjs__esm2015_intern-7c6e1a.js",
+            "node_modules_rxjs__esm2015_index_js.js",
+            "node_modules_rxjs__esm2015_operators_index_js.js",
+            "node_modules_angular_core_fesm2022_primitives_signals_mjs.js",
+            "node_modules_angular_core_fesm2022_primitives_event-dispatch_mjs.js"
+          ],
+          "sync": [
+            "default-node_modules_ng-block-ui_fesm2020_ng-block-ui_mjs.js"
+          ]
+        },
+        "css": {
+          "async": [],
+          "sync": []
+        }
+      },
+      "usedIn": []
+    },
+    {
+      "singleton": true,
+      "requiredVersion": "9.0.1",
+      "shareScope": "default",
+      "strictVersion": true,
+      "name": "ng-click-outside",
+      "version": "9.0.1",
+      "eager": false,
+      "id": "ceph_dashboard:ng-click-outside",
+      "assets": {
+        "js": {
+          "async": [
+            "node_modules_angular_core_fesm2022_core_mjs.js",
+            "default-node_modules_rxjs__esm2015_internal_AsyncSubject_js-node_modules_rxjs__esm2015_intern-7c6e1a.js",
+            "node_modules_rxjs__esm2015_operators_index_js.js",
+            "node_modules_rxjs__esm2015_index_js.js",
+            "default-node_modules_angular_platform-browser_fesm2022_platform-browser_mjs.js",
+            "default-node_modules_angular_common_fesm2022_common_mjs.js",
+            "default-node_modules_angular_animations_fesm2022_browser_mjs.js",
+            "default-node_modules_angular_forms_fesm2022_forms_mjs.js",
+            "default-node_modules_ngx-formly_core_fesm2020_ngx-formly-core_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-icon_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-i18n_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-layer_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-timepicker-select_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-checkbox_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-popover_mjs.js",
+            "node_modules_moment_moment_js.js",
+            "node_modules_chart_js_dist_chart_js.js",
+            "node_modules_angular_core_fesm2022_primitives_signals_mjs.js",
+            "node_modules_angular_core_fesm2022_primitives_event-dispatch_mjs.js",
+            "default-node_modules_angular_common_fesm2022_http_mjs.js",
+            "default-node_modules_angular_animations_fesm2022_animations_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-utils_mjs.js",
+            "default-node_modules_carbon-components-angular_fesm2020_carbon-components-angular-select_mjs.js"
+          ],
+          "sync": [
+            "common.js"
+          ]
+        },
+        "css": {
+          "async": [],
+          "sync": []
+        }
+      },
+      "usedIn": []
+    },
+    {
+      "singleton": true,
+      "requiredVersion": "7.0.0",
+      "shareScope": "default",
+      "strictVersion": true,
+      "name": "ng2-charts",
+      "version": "7.0.0",
+      "eager": false,
+      "id": "ceph_dashboard:ng2-charts",
+      "assets": {
+        "js": {
+          "async": [
+            "node_modules_angular_core_fesm2022_core_mjs.js",
+            "default-node_modules_rxjs__esm2015_internal_AsyncSubject_js-node_modules_rxjs__esm2015_intern-7c6e1a.js",
+            "node_modules_rxjs__esm2015_operators_index_js.js",
+            "node_modules_rxjs__esm2015_index_js.js",
+            "node_modules_chart_js_dist_chart_js.js",
+            "node_modules_angular_core_fesm2022_primitives_signals_mjs.js",
+            "node_modules_angular_core_fesm2022_primitives_event-dispatch_mjs.js"
+          ],
+          "sync": [
+            "default-node_modules_ng2-charts_fesm2022_ng2-charts_mjs.js"
+          ]
+        },
+        "css": {
+          "async": [],
+          "sync": []
+        }
+      },
+      "usedIn": []
+    },
+    {
+      "singleton": true,
+      "requiredVersion": "19.1.2",
+      "shareScope": "default",
+      "strictVersion": true,
+      "name": "ngx-cookie-service",
+      "version": "19.1.2",
+      "eager": false,
+      "id": "ceph_dashboard:ngx-cookie-service",
+      "assets": {
+        "js": {
+          "async": [
+            "node_modules_angular_core_fesm2022_core_mjs.js",
+            "default-node_modules_rxjs__esm2015_internal_AsyncSubject_js-node_modules_rxjs__esm2015_intern-7c6e1a.js",
+            "node_modules_rxjs__esm2015_operators_index_js.js",
+            "node_modules_rxjs__esm2015_index_js.js",
+            "default-node_modules_angular_platform-browser_fesm2022_platform-browser_mjs.js",
+            "default-node_modules_angular_common_fesm2022_common_mjs.js",
+            "default-node_modules_angular_animations_fesm2022_browser_mjs.js",
+            "default-node_modules_angular_forms_fesm2022_forms_mjs.js",
+            "default-node_modules_ngx-formly_core_fesm2020_ngx-formly-core_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-icon_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-i18n_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-layer_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-timepicker-select_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-checkbox_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-popover_mjs.js",
+            "node_modules_moment_moment_js.js",
+            "node_modules_chart_js_dist_chart_js.js",
+            "node_modules_angular_core_fesm2022_primitives_signals_mjs.js",
+            "node_modules_angular_core_fesm2022_primitives_event-dispatch_mjs.js",
+            "default-node_modules_angular_common_fesm2022_http_mjs.js",
+            "default-node_modules_angular_animations_fesm2022_animations_mjs.js",
+            "node_modules_carbon-components-angular_fesm2020_carbon-components-angular-utils_mjs.js",
+            "default-node_modules_carbon-components-angular_fesm2020_carbon-components-angular-select_mjs.js"
+          ],
+          "sync": [
+            "common.js"
+          ]
+        },
+        "css": {
+          "async": [],
+          "sync": []
+        }
+      },
+      "usedIn": []
+    },
+    {
+      "singleton": true,
+      "requiredVersion": "19.0.0",
+      "shareScope": "default",
+      "strictVersion": true,
+      "name": "ngx-toastr",
+      "version": "19.0.0",
+      "eager": false,
+      "id": "ceph_dashboard:ngx-toastr",
+      "assets": {
+        "js": {
+          "async": [
+            "default-node_modules_angular_platform-browser_fesm2022_platform-browser_mjs.js",
+            "node_modules_angular_core_fesm2022_core_mjs.js",
+            "default-node_modules_angular_common_fesm2022_common_mjs.js",
+            "default-node_modules_rxjs__esm2015_internal_AsyncSubject_js-node_modules_rxjs__esm2015_intern-7c6e1a.js",
+            "node_modules_rxjs__esm2015_index_js.js",
+            "default-node_modules_angular_animations_fesm2022_animations_mjs.js",
+            "default-node_modules_angular_common_fesm2022_http_mjs.js",
+            "node_modules_rxjs__esm2015_operators_index_js.js",
+            "node_modules_angular_core_fesm2022_primitives_signals_mjs.js",
+            "node_modules_angular_core_fesm2022_primitives_event-dispatch_mjs.js"
+          ],
+          "sync": [
+            "default-node_modules_ngx-toastr_fesm2022_ngx-toastr_mjs.js"
+          ]
+        },
+        "css": {
+          "async": [],
+          "sync": []
+        }
+      },
+      "usedIn": []
+    },
+    {
+      "singleton": true,
+      "requiredVersion": "6.6.3",
+      "shareScope": "default",
+      "strictVersion": true,
+      "name": "rxjs/operators",
+      "version": "6.6.3",
+      "eager": false,
+      "id": "ceph_dashboard:rxjs/operators",
+      "assets": {
+        "js": {
+          "async": [],
+          "sync": [
+            "node_modules_rxjs__esm2015_operators_index_js.js"
+          ]
+        },
+        "css": {
+          "async": [],
+          "sync": []
+        }
+      },
+      "usedIn": []
+    },
+    {
+      "singleton": true,
+      "requiredVersion": "6.6.3",
+      "shareScope": "default",
+      "strictVersion": true,
+      "name": "rxjs",
+      "version": "6.6.3",
+      "eager": false,
+      "id": "ceph_dashboard:rxjs",
+      "assets": {
+        "js": {
+          "async": [],
+          "sync": [
+            "node_modules_rxjs__esm2015_index_js.js"
+          ]
+        },
+        "css": {
+          "async": [],
+          "sync": []
+        }
+      },
+      "usedIn": []
+    },
+    {
+      "singleton": true,
+      "requiredVersion": "3.3.0",
+      "shareScope": "default",
+      "strictVersion": true,
+      "name": "simplebar-angular",
+      "version": "3.3.0",
+      "eager": false,
+      "id": "ceph_dashboard:simplebar-angular",
+      "assets": {
+        "js": {
+          "async": [
+            "node_modules_angular_core_fesm2022_core_mjs.js",
+            "default-node_modules_rxjs__esm2015_internal_AsyncSubject_js-node_modules_rxjs__esm2015_intern-7c6e1a.js",
+            "node_modules_rxjs__esm2015_operators_index_js.js",
+            "node_modules_rxjs__esm2015_index_js.js",
+            "node_modules_angular_core_fesm2022_primitives_signals_mjs.js",
+            "node_modules_angular_core_fesm2022_primitives_event-dispatch_mjs.js"
+          ],
+          "sync": [
+            "default-node_modules_simplebar-angular_fesm2022_simplebar-angular_mjs.js"
+          ]
+        },
+        "css": {
+          "async": [],
+          "sync": []
+        }
+      },
+      "usedIn": []
+    },
+    {
+      "singleton": true,
+      "requiredVersion": "5.3.1",
+      "shareScope": "default",
+      "strictVersion": true,
+      "name": "swagger-ui",
+      "version": "5.3.1",
+      "eager": false,
+      "id": "ceph_dashboard:swagger-ui",
+      "assets": {
+        "js": {
+          "async": [
+            "node_modules_tslib_tslib_es6_mjs.js",
+            "node_modules_js-yaml_dist_js-yaml_mjs.js"
+          ],
+          "sync": [
+            "default-node_modules_swagger-ui_dist_swagger-ui-es-bundle-core_js.js"
+          ]
+        },
+        "css": {
+          "async": [],
+          "sync": []
+        }
+      },
+      "usedIn": []
+    },
+    {
+      "singleton": true,
+      "requiredVersion": "2.6.2",
+      "shareScope": "default",
+      "strictVersion": true,
+      "name": "tslib",
+      "version": "2.6.2",
+      "eager": false,
+      "id": "ceph_dashboard:tslib",
+      "assets": {
+        "js": {
+          "async": [],
+          "sync": [
+            "node_modules_tslib_tslib_es6_mjs.js"
+          ]
+        },
+        "css": {
+          "async": [],
+          "sync": []
+        }
+      },
+      "usedIn": []
+    },
+    {
+      "singleton": true,
+      "requiredVersion": "13.12.0",
+      "shareScope": "default",
+      "strictVersion": true,
+      "name": "validator",
+      "version": "13.12.0",
+      "eager": false,
+      "id": "ceph_dashboard:validator",
+      "assets": {
+        "js": {
+          "async": [],
+          "sync": [
+            "node_modules_validator_index_js.js"
+          ]
+        },
+        "css": {
+          "async": [],
+          "sync": []
+        }
+      },
+      "usedIn": []
+    },
+    {
+      "singleton": true,
+      "requiredVersion": "0.6.2",
+      "shareScope": "default",
+      "strictVersion": true,
+      "name": "xml2js",
+      "version": "0.6.2",
+      "eager": false,
+      "id": "ceph_dashboard:xml2js",
+      "assets": {
+        "js": {
+          "async": [],
+          "sync": [
+            "node_modules_xml2js_lib_xml2js_js.js"
+          ]
+        },
+        "css": {
+          "async": [],
+          "sync": []
+        }
+      },
+      "usedIn": []
+    }
+  ],
+  "remotes": [],
+  "exposes": []
+}

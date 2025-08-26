@@ -1,0 +1,417 @@
+[36m⠋[39m Generating browser application bundles (phase: setup)...[1m[33m    TypeScript compiler options "target" and "useDefineForClassFields" are set to "ES2022" and "false" respectively by the Angular CLI. To control ECMA version and features use the Browserslist configuration. For more information, see https://angular.dev/tools/cli/build#configuring-browser-compatibility[39m[22m
+[1m[33m    NOTE: You can set the "target" to "ES2022" in the project's tsconfig to remove this warning.[39m[22m
+[1m[33m[7m[1m[36m NX [39m[33m[22m[1m[27m Falling back to ts-node for local typescript execution. This may be a little slower.[39m[22m
+[1m[33m  - To fix this, ensure @swc-node/register and @swc/core have been installed[39m[22m
+[1m[33mCould not find a version for "@rollup/rollup-linux-arm64-gnu" in the root "package.json" when collecting shared packages for the Module Federation setup. The package will not be shared.[39m[22m
+[1m[33mCould not find a version for "brace-expansion" in the root "package.json" when collecting shared packages for the Module Federation setup. The package will not be shared.[39m[22m
+(node:1123238) [DEP0128] DeprecationWarning: Invalid 'main' field in '/home/afreenmisbah/repos/forks/dev/ceph/src/pybind/mgr/dashboard/frontend/node_modules/rxjs/src/ajax/package.json' of './index.js'. Please either fix that or report it to the module author
+(Use `node --trace-deprecation ...` to show where the warning was created)
+(node:1123238) [DEP0128] DeprecationWarning: Invalid 'main' field in '/home/afreenmisbah/repos/forks/dev/ceph/src/pybind/mgr/dashboard/frontend/node_modules/rxjs/src/fetch/package.json' of './index.js'. Please either fix that or report it to the module author
+(node:1123238) [DEP0128] DeprecationWarning: Invalid 'main' field in '/home/afreenmisbah/repos/forks/dev/ceph/src/pybind/mgr/dashboard/frontend/node_modules/rxjs/src/internal-compatibility/package.json' of './index.js'. Please either fix that or report it to the module author
+(node:1123238) [DEP0128] DeprecationWarning: Invalid 'main' field in '/home/afreenmisbah/repos/forks/dev/ceph/src/pybind/mgr/dashboard/frontend/node_modules/rxjs/src/operators/package.json' of './index.js'. Please either fix that or report it to the module author
+(node:1123238) [DEP0128] DeprecationWarning: Invalid 'main' field in '/home/afreenmisbah/repos/forks/dev/ceph/src/pybind/mgr/dashboard/frontend/node_modules/rxjs/src/testing/package.json' of './index.js'. Please either fix that or report it to the module author
+(node:1123238) [DEP0128] DeprecationWarning: Invalid 'main' field in '/home/afreenmisbah/repos/forks/dev/ceph/src/pybind/mgr/dashboard/frontend/node_modules/rxjs/src/webSocket/package.json' of './index.js'. Please either fix that or report it to the module author
+[2K[1G[1A[2K[1G[36m⠙[39m Generating browser application bundles (phase: setup)...(node:1123238) [DEP0180] DeprecationWarning: fs.Stats constructor is deprecated.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+[36m[ Module Federation Manifest Plugin ][39m Manifest will use absolute path resolution via its host at runtime, reason: publicPath='auto'
+[2K[1G[1A[2K[1G[36m⠹[39m Generating browser application bundles (phase: setup)...[2K[1G[1A[2K[1G[36m⠸[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠼[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠴[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠦[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠧[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠇[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠏[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠋[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠙[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠹[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠸[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠼[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠴[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠦[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠧[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠇[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠏[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠋[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠙[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠹[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠸[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠼[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠴[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠦[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠧[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠇[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠏[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠋[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠙[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠹[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠸[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠼[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠴[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠦[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠧[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠇[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠏[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠋[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠙[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠹[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠸[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠼[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠴[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠦[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠧[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠇[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠏[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠋[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠙[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠹[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠸[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠼[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠴[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠦[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠧[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠇[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠏[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠋[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠙[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠹[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠸[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠼[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠴[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠦[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠧[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠇[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠏[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠋[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠙[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠹[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠸[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠼[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠴[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠦[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠧[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠇[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠏[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠋[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠙[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠹[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠸[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠼[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠴[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠦[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠧[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠇[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠏[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠋[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠙[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠹[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠸[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠼[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠴[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠦[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠧[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠇[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠏[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠋[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠙[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠹[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠸[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠼[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠴[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠦[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠧[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠇[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠏[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠋[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠙[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠹[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠸[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠼[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠴[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠦[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠧[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠇[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠏[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠋[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠙[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠹[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠸[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠼[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠴[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠦[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠧[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠇[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠏[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠋[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠙[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠹[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠸[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠼[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠴[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠦[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠧[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠇[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠏[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠋[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠙[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠹[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠸[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠼[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠴[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠦[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠧[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠇[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠏[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠋[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠙[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠹[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠸[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠼[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠴[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠦[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠧[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠇[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠏[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠋[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠙[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠹[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠸[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠼[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠴[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠦[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠧[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠇[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠏[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠋[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠙[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠹[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠸[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠼[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠴[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠦[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠧[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠇[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠏[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠋[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠙[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠹[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠸[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠼[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠴[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠦[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠧[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠇[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠏[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠋[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠙[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠹[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠸[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠼[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠴[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠦[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠧[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠇[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠏[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠋[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠙[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠹[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠸[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠼[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠴[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠦[39m Generating browser application bundles (phase: building)...[2K[1G[1A[2K[1G[36m⠧[39m Generating browser application bundles (phase: building)...==[2K[1G[1A[2K[1G[32m✔[39m Browser application bundle generation complete.
+^_^_^_^_^_^_[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/home/afreenmisbah/repos/forks/dev/ceph/src/pybind/mgr/dashboard/frontend/node_modules/@swagger-api/apidom-ast/src/yaml/schemas/canonical-format.mjs depends on 'unraw'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/home/afreenmisbah/repos/forks/dev/ceph/src/pybind/mgr/dashboard/frontend/node_modules/@swagger-api/apidom-core/src/index.mjs depends on 'minim'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/home/afreenmisbah/repos/forks/dev/ceph/src/pybind/mgr/dashboard/frontend/node_modules/@swagger-api/apidom-reference/src/util/url.mjs depends on 'process'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/home/afreenmisbah/repos/forks/dev/ceph/src/pybind/mgr/dashboard/frontend/node_modules/carbon-components-angular/fesm2020/carbon-components-angular-datepicker.mjs depends on 'flatpickr/dist/l10n/index'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/home/afreenmisbah/repos/forks/dev/ceph/src/pybind/mgr/dashboard/frontend/node_modules/carbon-components-angular/fesm2020/carbon-components-angular-datepicker.mjs depends on 'flatpickr/dist/plugins/rangePlugin'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/home/afreenmisbah/repos/forks/dev/ceph/src/pybind/mgr/dashboard/frontend/node_modules/react-redux/es/components/connect.js depends on 'hoist-non-react-statics'. CommonJS or AMD dependencies [39m[22m[1m[33mcan cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/home/afreenmisbah/repos/forks/dev/ceph/src/pybind/mgr/dashboard/frontend/node_modules/swagger-client/es/resolver/specmap/lib/index.js depends on 'deepmerge'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/home/afreenmisbah/repos/forks/dev/ceph/src/pybind/mgr/dashboard/frontend/node_modules/swagger-ui/dist/swagger-ui-es-bundle-core.js depends on '@braintree/sanitize-url'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/home/afreenmisbah/repos/forks/dev/ceph/src/pybind/mgr/dashboard/frontend/node_modules/swagger-ui/dist/swagger-ui-es-bundle-core.js depends on 'base64-js'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/home/afreenmisbah/repos/forks/dev/ceph/src/pybind/mgr/dashboard/frontend/node_modules/swagger-ui/dist/swagger-ui-es-bundle-core.js depends on 'classnames'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/home/afreenmisbah/repos/forks/dev/ceph/src/pybind/mgr/dashboard/frontend/node_modules/swagger-ui/dist/swagger-ui-es-bundle-core.js depends on 'css.escape'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/home/afreenmisbah/repos/forks/dev/ceph/src/pybind/mgr/dashboard/frontend/node_modules/swagger-ui/dist/swagger-ui-es-bundle-core.js depends on 'dompurify'. [39m[22m[1m[33mCommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/home/afreenmisbah/repos/forks/dev/ceph/src/pybind/mgr/dashboard/frontend/node_modules/swagger-ui/dist/swagger-ui-es-bundle-core.js depends on 'ieee754'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/home/afreenmisbah/repos/forks/dev/ceph/src/pybind/mgr/dashboard/frontend/node_modules/swagger-ui/dist/swagger-ui-es-bundle-core.js depends on 'immutable'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/home/afreenmisbah/repos/forks/dev/ceph/src/pybind/mgr/dashboard/frontend/node_modules/swagger-ui/dist/swagger-ui-es-bundle-core.js depends on 'js-file-download'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/home/afreenmisbah/repos/forks/dev/ceph/src/pybind/mgr/dashboard/frontend/node_modules/swagger-ui/dist/swagger-ui-es-bundle-core.js depends on 'prop-types'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/home/afreenmisbah/repos/forks/dev/ceph/src/pybind/mgr/dashboard/frontend/node_modules/swagger-ui/dist/swagger-ui-es-bundle-core.js depends on 'randexp'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/home/afreenmisbah/repos/forks/dev/ceph/src/pybind/mgr/dashboard/frontend/node_modules/swagger-ui/dist/swagger-ui-es-bundle-core.js depends on[39m[22m[1m[33m 'react-copy-to-clipboard'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/home/afreenmisbah/repos/forks/dev/ceph/src/pybind/mgr/dashboard/frontend/node_modules/swagger-ui/dist/swagger-ui-es-bundle-core.js depends on 'react-debounce-input'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/home/afreenmisbah/repos/forks/dev/ceph/src/pybind/mgr/dashboard/frontend/node_modules/swagger-ui/dist/swagger-ui-es-bundle-core.js depends on 'react-immutable-proptypes'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/home/afreenmisbah/repos/forks/dev/ceph/src/pybind/mgr/dashboard/frontend/node_modules/swagger-ui/dist/swagger-ui-es-bundle-core.js depends on 'redux-immutable'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/home/afreenmisbah/repos/forks/dev/ceph/src/pybind/mgr/dashboard/frontend/node_modules/swagger-ui/dist/swagger-ui-es-bundle-core.js depends on 'serialize-error'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/home/afreenmisbah/repos/forks/dev/ceph/src/pybind/mgr/dashboard/frontend/node_modules/swagger-ui/dist/swagger-ui-es-bundle-core.js depends on 'url-parse'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/home/afreenmisbah/repos/forks/dev/ceph/src/pybind/mgr/dashboard/frontend/node_[39m[22m[1m[33mmodules/swagger-ui/dist/swagger-ui-es-bundle-core.js depends on 'xml-but-prettier'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/home/afreenmisbah/repos/forks/dev/ceph/src/pybind/mgr/dashboard/frontend/node_modules/swagger-ui/dist/swagger-ui-es-bundle-core.js depends on 'zenscroll'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0mundefined depends on 'moment'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0mundefined depends on 'validator'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0mundefined depends on 'xml2js'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m191[0m:[93m28[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token '}'[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m191[0m:[93m28[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token {, expected identifier, keyword, or string[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m193[0m:[93m23[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token '}'[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m193[0m:[93m23[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token {, expected identifier, keyword, or string[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m195[0m:[93m15[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token '}'[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m195[0m:[93m15[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token {, expected identifier, keyword, or string[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m196[0m:[93m24[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token '}'[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m196[0m:[93m24[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token {, expected identifier, keyword, or string[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m197[0m:[93m46[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token '}'[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m197[0m:[93m46[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token {, expected identifier, keyword, or st[39m[22m[1m[31mring[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m198[0m:[93m38[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token '}'[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m198[0m:[93m38[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token {, expected identifier, keyword, or string[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m199[0m:[93m22[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token '}'[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m199[0m:[93m22[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token {, expected identifier, keyword, or string[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m200[0m:[93m23[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token '}'[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m200[0m:[93m23[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token {, expected identifier, keyword, or string[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m201[0m:[93m27[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token '}'[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m201[0m:[93m27[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token {, expected identifier, keyword, or string[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m202[0m:[93m27[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token '}'[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m202[0m:[93m27[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token {, expected identifier, keyword, [39m[22m[1m[31mor string[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m208[0m:[93m28[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token '}'[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m208[0m:[93m28[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token {, expected identifier, keyword, or string[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m209[0m:[93m33[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token '}'[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m209[0m:[93m33[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token {, expected identifier, keyword, or string[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m210[0m:[93m31[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token '}'[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m210[0m:[93m31[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token {, expected identifier, keyword, or string[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m211[0m:[93m31[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token '}'[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m211[0m:[93m31[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token {, expected identifier, keyword, or string[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m212[0m:[93m40[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token '}'[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m212[0m:[93m40[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token {, expected identifier, keyw[39m[22m[1m[31mord, or string[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m219[0m:[93m11[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token '}'[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m219[0m:[93m11[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token {, expected identifier, keyword, or string[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m222[0m:[93m27[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token '}'[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m222[0m:[93m27[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token {, expected identifier, keyword, or string[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m232[0m:[93m8[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token '}'[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m232[0m:[93m8[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token {, expected identifier, keyword, or string[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m233[0m:[93m22[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token '}'[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m233[0m:[93m22[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token {, expected identifier, keyword, or string[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m235[0m:[93m38[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token '}'[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m235[0m:[93m38[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token {, expected identifier, k[39m[22m[1m[31meyword, or string[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m243[0m:[93m20[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token '}'[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m243[0m:[93m20[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token {, expected identifier, keyword, or string[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m243[0m:[93m39[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token '}'[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m243[0m:[93m39[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token {, expected identifier, keyword, or string[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m247[0m:[93m22[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token '}'[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m247[0m:[93m22[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token {, expected identifier, keyword, or string[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m248[0m:[93m30[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token '}'[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m248[0m:[93m30[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token {, expected identifier, keyword, or string[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m251[0m:[93m19[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token '}'[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m251[0m:[93m19[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token {, expected identifi[39m[22m[1m[31mer, keyword, or string[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m252[0m:[93m33[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token '}'[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m252[0m:[93m33[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token {, expected identifier, keyword, or string[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m253[0m:[93m40[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token '}'[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m253[0m:[93m40[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token {, expected identifier, keyword, or string[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m254[0m:[93m40[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token '}'[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m254[0m:[93m40[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token {, expected identifier, keyword, or string[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m255[0m:[93m42[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token '}'[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m255[0m:[93m42[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token {, expected identifier, keyword, or string[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m256[0m:[93m47[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token '}'[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m256[0m:[93m47[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token {, expected ide[39m[22m[1m[31mntifier, keyword, or string[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m257[0m:[93m53[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token '}'[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m257[0m:[93m53[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token {, expected identifier, keyword, or string[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m258[0m:[93m45[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token '}'[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m258[0m:[93m45[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token {, expected identifier, keyword, or string[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m259[0m:[93m52[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token '}'[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m259[0m:[93m52[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token {, expected identifier, keyword, or string[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m262[0m:[93m9[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token '}'[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m262[0m:[93m9[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token {, expected identifier, keyword, or string[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m272[0m:[93m11[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token '}'[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m272[0m:[93m11[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token {, expected [39m[22m[1m[31midentifier, keyword, or string[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m279[0m:[93m27[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token '}'[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m279[0m:[93m27[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token {, expected identifier, keyword, or string[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m280[0m:[93m31[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token '}'[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m280[0m:[93m31[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token {, expected identifier, keyword, or string[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m287[0m:[93m20[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token '}'[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m287[0m:[93m20[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token {, expected identifier, keyword, or string[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m288[0m:[93m21[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token '}'[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m288[0m:[93m21[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token {, expected identifier, keyword, or string[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m288[0m:[93m35[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token '}'[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m288[0m:[93m35[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token {, expe[39m[22m[1m[31mcted identifier, keyword, or string[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m293[0m:[93m17[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token '}'[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m293[0m:[93m17[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token {, expected identifier, keyword, or string[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m294[0m:[93m16[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token '}'[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m294[0m:[93m16[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token {, expected identifier, keyword, or string[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m300[0m:[93m3[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token '}'[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m300[0m:[93m3[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token {, expected identifier, keyword, or string[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m307[0m:[93m17[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token '}'[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m307[0m:[93m17[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token {, expected identifier, keyword, or string[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m308[0m:[93m6[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token '}'[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m308[0m:[93m6[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token {, exp[39m[22m[1m[31mected identifier, keyword, or string[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m309[0m:[93m20[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token '}'[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m309[0m:[93m20[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token {, expected identifier, keyword, or string[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m310[0m:[93m5[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token '}'[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m310[0m:[93m5[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token {, expected identifier, keyword, or string[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m312[0m:[93m9[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token '}'[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m312[0m:[93m9[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token {, expected identifier, keyword, or string[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m313[0m:[93m20[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token '}'[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m313[0m:[93m20[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token {, expected identifier, keyword, or string[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m313[0m:[93m134[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token '}'[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m313[0m:[93m134[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token {, [39m[22m[1m[31mexpected identifier, keyword, or string[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m318[0m:[93m16[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token '}'[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m318[0m:[93m16[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token {, expected identifier, keyword, or string[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m318[0m:[93m64[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token '}'[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m318[0m:[93m64[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token {, expected identifier, keyword, or string[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m324[0m:[93m9[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token '}'[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m324[0m:[93m9[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token {, expected identifier, keyword, or string[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m326[0m:[93m22[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token '}'[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m326[0m:[93m22[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token {, expected identifier, keyword, or string[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m327[0m:[93m11[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token '}'[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m327[0m:[93m11[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token [39m[22m[1m[31m{, expected identifier, keyword, or string[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m328[0m:[93m7[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token '}'[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m328[0m:[93m7[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token {, expected identifier, keyword, or string[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m330[0m:[93m11[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token '}'[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m330[0m:[93m11[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token {, expected identifier, keyword, or string[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m337[0m:[93m9[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token '}'[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m337[0m:[93m9[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token {, expected identifier, keyword, or string[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m343[0m:[93m9[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token '}'[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m343[0m:[93m9[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token {, expected identifier, keyword, or string[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m347[0m:[93m14[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token '}'[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m347[0m:[93m14[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token {[39m[22m[1m[31m, expected identifier, keyword, or string[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m348[0m:[93m19[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token '}'[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m348[0m:[93m19[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token {, expected identifier, keyword, or string[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m349[0m:[93m7[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token '}'[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m349[0m:[93m7[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token {, expected identifier, keyword, or string[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m358[0m:[93m18[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token '}'[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m358[0m:[93m18[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token {, expected identifier, keyword, or string[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m358[0m:[93m25[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token '}'[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m358[0m:[93m25[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token {, expected identifier, keyword, or string[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m366[0m:[93m42[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token '}'[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m366[0m:[93m42[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected toke[39m[22m[1m[31mn {, expected identifier, keyword, or string[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m367[0m:[93m41[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token '}'[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m367[0m:[93m41[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token {, expected identifier, keyword, or string[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m371[0m:[93m15[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token '}'[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m371[0m:[93m15[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token {, expected identifier, keyword, or string[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m378[0m:[93m18[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token '}'[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m378[0m:[93m18[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token {, expected identifier, keyword, or string[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m378[0m:[93m34[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token '}'[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m378[0m:[93m34[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token {, expected identifier, keyword, or string[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m383[0m:[93m31[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token '}'[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m383[0m:[93m31[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected[39m[22m[1m[31m token {, expected identifier, keyword, or string[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m384[0m:[93m41[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token '}'[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m384[0m:[93m41[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token {, expected identifier, keyword, or string[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m385[0m:[93m39[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token '}'[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m385[0m:[93m39[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token {, expected identifier, keyword, or string[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m387[0m:[93m37[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token '}'[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m387[0m:[93m37[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token {, expected identifier, keyword, or string[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m393[0m:[93m31[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token '}'[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m393[0m:[93m31[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token {, expected identifier, keyword, or string[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m394[0m:[93m41[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token '}'[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m394[0m:[93m41[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexp[39m[22m[1m[31mected token {, expected identifier, keyword, or string[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m395[0m:[93m39[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token '}'[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m395[0m:[93m39[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token {, expected identifier, keyword, or string[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m396[0m:[93m39[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token '}'[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m396[0m:[93m39[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token {, expected identifier, keyword, or string[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m397[0m:[93m39[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token '}'[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/table/table.component.html[0m:[93m397[0m:[93m39[0m - [91merror[0m[90m NG5002: [0mParser Error: Unexpected token {, expected identifier, keyword, or string[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m

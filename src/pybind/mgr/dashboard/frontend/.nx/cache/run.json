@@ -1,0 +1,21 @@
+{
+  "run": {
+    "command": "nx build --skip-nx-cache --configuration=en-US",
+    "startTime": "2025-08-25T11:52:09.062Z",
+    "endTime": "2025-08-25T11:53:03.911Z",
+    "inner": false
+  },
+  "tasks": [
+    {
+      "taskId": "ceph-dashboard:build:en-US",
+      "target": "build",
+      "projectName": "ceph-dashboard",
+      "hash": "10948143094821808286",
+      "startTime": "2025-08-25T11:52:09.073Z",
+      "endTime": "2025-08-25T11:53:03.828Z",
+      "params": "",
+      "cacheStatus": "cache-miss",
+      "status": 0
+    }
+  ]
+}
