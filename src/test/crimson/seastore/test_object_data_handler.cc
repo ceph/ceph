@@ -44,7 +44,25 @@ public:
       std::swap(layout.xattr_root, o_mlayout.xattr_root);
     });
   }
-  laddr_t get_hint() const final {return L_ADDR_MIN; }
+  laddr_hint_t get_hint() const {
+    laddr_hint_t hint;
+    hint.addr = laddr_t::from_byte_offset(0);
+    hint.condition = laddr_conflict_condition_t::all_at_object_content;
+    hint.policy = laddr_conflict_policy_t::linear_search;
+    hint.block_size = laddr_t::UNIT_SIZE;
+    return hint;
+  }
+  laddr_hint_t init_hint(
+    extent_len_t block_size,
+    bool is_metadata) const final {
+    return get_hint();
+  }
+  laddr_hint_t generate_clone_hint(
+    local_object_id_t object_id,
+    extent_len_t block_size,
+    bool is_metadata) const final {
+    return get_hint();
+  }
   ~TestOnode() final = default;
 
   void set_need_cow(Transaction &t) final {
