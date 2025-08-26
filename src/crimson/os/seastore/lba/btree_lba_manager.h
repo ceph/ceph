@@ -83,7 +83,7 @@ public:
 
   alloc_extent_ret reserve_region(
     Transaction &t,
-    laddr_t hint,
+    laddr_hint_t hint,
     extent_len_t len) final
   {
     std::vector<alloc_mapping_info_t> alloc_infos = {
@@ -120,7 +120,7 @@ public:
 
   alloc_extent_ret alloc_extent(
     Transaction &t,
-    laddr_t hint,
+    laddr_hint_t hint,
     LogicalChildNode &ext,
     extent_ref_count_t refcount) final
   {
@@ -149,7 +149,7 @@ public:
 
   alloc_extents_ret alloc_extents(
     Transaction &t,
-    laddr_t hint,
+    laddr_hint_t hint,
     std::vector<LogicalChildNodeRef> extents,
     extent_ref_count_t refcount) final
   {
@@ -556,7 +556,7 @@ private:
   search_insert_position_ret search_insert_position(
     op_context_t c,
     LBABtree &btree,
-    laddr_t hint,
+    laddr_hint_t hint,
     extent_len_t length,
     alloc_policy_t policy);
 
@@ -574,7 +574,7 @@ private:
    */
   alloc_mappings_ret alloc_contiguous_mappings(
     Transaction &t,
-    laddr_t hint,
+    laddr_hint_t hint,
     std::vector<alloc_mapping_info_t> &alloc_infos,
     alloc_policy_t policy);
 
@@ -589,7 +589,7 @@ private:
    */
   alloc_mappings_ret alloc_sparse_mappings(
     Transaction &t,
-    laddr_t hint,
+    laddr_hint_t hint,
     std::vector<alloc_mapping_info_t> &alloc_infos,
     alloc_policy_t policy);
 

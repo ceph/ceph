@@ -543,21 +543,22 @@ BtreeLBAManager::search_insert_position_ret
 BtreeLBAManager::search_insert_position(
   op_context_t c,
   LBABtree &btree,
-  laddr_t hint,
+  laddr_hint_t hint,
   extent_len_t length,
   alloc_policy_t policy)
 {
   LOG_PREFIX(BtreeLBAManager::search_insert_position);
   auto lookup_attempts = stats.num_alloc_extents_iter_nexts;
   using OptIter = std::optional<LBABtree::iterator>;
+  // TODO: handle conflict condition and policy
   return seastar::do_with(
-    hint, OptIter(std::nullopt),
+    hint.addr, OptIter(std::nullopt),
     [this, c, &btree, hint, length, lookup_attempts, policy, FNAME]
     (laddr_t &last_end, OptIter &insert_iter)
   {
     return LBABtree::iterate_repeat(
       c,
-      btree.upper_bound_right(c, hint),
+      btree.upper_bound_right(c, hint.addr),
       [this, c, hint, length, lookup_attempts, policy,
        &last_end, &insert_iter, FNAME](auto &iter)
     {
@@ -565,7 +566,7 @@ BtreeLBAManager::search_insert_position(
       if (iter.is_end() ||
 	  iter.get_key() >= (last_end + length)) {
 	if (policy == alloc_policy_t::deterministic) {
-	  ceph_assert(hint == last_end);
+	  ceph_assert(hint.addr == last_end);
 	}
 	DEBUGT("hint: {}~0x{:x}, allocated laddr: {}, insert position: {}, "
 	       "done with {} attempts",
@@ -592,11 +593,11 @@ BtreeLBAManager::search_insert_position(
 BtreeLBAManager::alloc_mappings_ret
 BtreeLBAManager::alloc_contiguous_mappings(
   Transaction &t,
-  laddr_t hint,
+  laddr_hint_t hint,
   std::vector<alloc_mapping_info_t> &alloc_infos,
   alloc_policy_t policy)
 {
-  ceph_assert(hint != L_ADDR_NULL);
+  ceph_assert(hint.addr != L_ADDR_NULL);
   extent_len_t total_len = 0;
   for (auto &info : alloc_infos) {
     assert(info.key == L_ADDR_NULL);
@@ -625,11 +626,11 @@ BtreeLBAManager::alloc_contiguous_mappings(
 BtreeLBAManager::alloc_mappings_ret
 BtreeLBAManager::alloc_sparse_mappings(
   Transaction &t,
-  laddr_t hint,
+  laddr_hint_t hint,
   std::vector<alloc_mapping_info_t> &alloc_infos,
   alloc_policy_t policy)
 {
-  ceph_assert(hint != L_ADDR_NULL);
+  ceph_assert(hint.addr != L_ADDR_NULL);
 #ifndef NDEBUG
   assert(alloc_infos.front().key != L_ADDR_NULL);
   for (size_t i = 1; i < alloc_infos.size(); i++) {
@@ -639,7 +640,7 @@ BtreeLBAManager::alloc_sparse_mappings(
     assert(prev.key + prev.value.len <= cur.key);
   }
 #endif
-  auto total_len = hint.get_byte_distance<extent_len_t>(
+  auto total_len = hint.addr.get_byte_distance<extent_len_t>(
     alloc_infos.back().key + alloc_infos.back().value.len);
   auto c = get_context(t);
   return with_btree<LBABtree>(
@@ -651,7 +652,7 @@ BtreeLBAManager::alloc_sparse_mappings(
     ).si_then([this, c, hint, &alloc_infos, &btree, policy](auto res) {
       if (policy != alloc_policy_t::deterministic) {
 	for (auto &info : alloc_infos) {
-	  auto offset = info.key.get_byte_distance<extent_len_t>(hint);
+	  auto offset = info.key.get_byte_distance<extent_len_t>(hint.addr);
 	  info.key = (res.laddr + offset).checked_to_laddr();
 	}
       } // deterministic guarantees hint == res.laddr
