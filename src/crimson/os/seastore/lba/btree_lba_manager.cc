@@ -544,58 +544,101 @@ BtreeLBAManager::search_insert_position(
   op_context_t c,
   LBABtree &btree,
   laddr_hint_t hint,
-  extent_len_t length,
-  alloc_policy_t policy)
+  extent_len_t length)
 {
   LOG_PREFIX(BtreeLBAManager::search_insert_position);
-  auto lookup_attempts = stats.num_alloc_extents_iter_nexts;
-  using OptIter = std::optional<LBABtree::iterator>;
-  // TODO: handle conflict condition and policy
-  return seastar::do_with(
-    hint.addr, OptIter(std::nullopt),
-    [this, c, &btree, hint, length, lookup_attempts, policy, FNAME]
-    (laddr_t &last_end, OptIter &insert_iter)
-  {
-    return LBABtree::iterate_repeat(
-      c,
-      btree.upper_bound_right(c, hint.addr),
-      [this, c, hint, length, lookup_attempts, policy,
-       &last_end, &insert_iter, FNAME](auto &iter)
-    {
-      ++stats.num_alloc_extents_iter_nexts;
-      if (iter.is_end() ||
-	  iter.get_key() >= (last_end + length)) {
-	if (policy == alloc_policy_t::deterministic) {
-	  ceph_assert(hint.addr == last_end);
-	}
-	DEBUGT("hint: {}~0x{:x}, allocated laddr: {}, insert position: {}, "
-	       "done with {} attempts",
-	       c.trans, hint, length, last_end, iter,
-	       stats.num_alloc_extents_iter_nexts - lookup_attempts);
-	insert_iter.emplace(iter);
-	return search_insert_position_iertr::make_ready_future<
-	  seastar::stop_iteration>(seastar::stop_iteration::yes);
+  assert(hint != LADDR_HINT_NULL);
+  assert(hint.addr != L_ADDR_NULL);
+  auto orig_hint = hint;
+  auto loop_threshold = 32;
+  auto next_warn = 1;
+  auto lookup_attempts = 1;
+  auto check_conflict = [&](LBABtree::iterator &iter) {
+    assert(!iter.is_end());
+    auto &hint_begin = hint.addr;
+    auto hint_end = hint_begin + length;
+    auto mapping_begin = iter.get_key();
+    auto mapping_end = iter.get_key() + iter.get_val().len;
+    return ((hint_begin < mapping_end) && (hint_end > mapping_begin))
+	|| hint.conflict_with(mapping_begin);
+  };
+
+  TRACET("hint: {}~{}", c.trans, hint, length);
+  auto iter = co_await btree.upper_bound_right(c, hint.lower_boundary());
+
+  while (!iter.is_end() && check_conflict(iter)) {
+    TRACET("hint {}~{} conflict with {} {}",
+	   c.trans, hint, length, iter.get_key(), iter.get_val());
+
+    ceph_assert(hint.condition != laddr_conflict_condition_t::all_at_never);
+
+    lookup_attempts++;
+    if (lookup_attempts / loop_threshold == next_warn) {
+      next_warn++;
+      WARNT("attempt searching LBABtree voer {} times -- "
+	    "orig_hint: {}, cur_hint: {}, cur_iter: {}",
+	    c.trans, lookup_attempts, orig_hint,
+	    hint, iter);
+    }
+
+    if (hint.policy == laddr_conflict_policy_t::gen_random) {
+      hint.find_next_random();
+      TRACET("re-search with random hint {}", c.trans, hint);
+      iter = co_await btree.upper_bound_right(c, hint.lower_boundary());
+      continue;
+    }
+
+    // linear search
+    ceph_assert(
+      hint.condition == laddr_conflict_condition_t::all_at_block_offset ||
+      hint.condition == laddr_conflict_condition_t::all_at_object_content);
+
+    hint.addr = (iter.get_key() + iter.get_val().len).checked_to_laddr();
+    bool loop_back = false;
+
+    if (orig_hint.addr.is_global_address()) {
+      if (orig_hint.addr.get_object_prefix() !=
+	  hint.addr.get_object_prefix()) {
+	hint.addr = L_ADDR_MIN;
+	loop_back = true;
       }
-      ceph_assert(policy == alloc_policy_t::linear_search);
-      last_end = (iter.get_key() + iter.get_val().len).checked_to_laddr();
-      TRACET("hint: {}~0x{:x}, current iter: {}, repeat ...",
-	     c.trans, hint, length, iter);
-      return search_insert_position_iertr::make_ready_future<
-	seastar::stop_iteration>(seastar::stop_iteration::no);
-    }).si_then([&last_end, &insert_iter] {
-      ceph_assert(insert_iter);
-      return search_insert_position_iertr::make_ready_future<
-	insert_position_t>(last_end, *std::move(insert_iter));
-    });
-  });
+    } else if (orig_hint.addr.is_onode_extent_address()) {
+      if (hint.addr.get_local_object_id() != LOCAL_OBJECT_ID_ZERO) {
+	hint.addr.set_local_object_id(LOCAL_OBJECT_ID_ZERO);
+	hint.addr.set_object_content(0);
+	loop_back = true;
+      }
+    } else {
+      assert(orig_hint.addr.is_metadata());
+      if (orig_hint.addr.get_clone_prefix() !=
+	  hint.addr.get_clone_prefix()) {
+	hint.addr = orig_hint.addr.with_offset_by_blocks(0);
+	loop_back = true;
+      }
+    }
+
+    TRACET("move to next hint: {} loop_back: {}", c.trans, hint, loop_back);
+
+    if (loop_back) {
+      iter = co_await btree.lower_bound(c, hint.addr);
+    } else {
+      iter = co_await iter.next(c);
+    }
+  }
+
+  DEBUGT("hint: {}~{}, allocated laddr: {}, insert position: {}"
+	 "done with {} attempts",
+	 c.trans, orig_hint, length,
+	 hint.addr, iter, lookup_attempts);
+  stats.num_alloc_extents_iter_nexts += lookup_attempts;
+  co_return insert_position_t{hint.addr, iter};
 }
 
 BtreeLBAManager::alloc_mappings_ret
 BtreeLBAManager::alloc_contiguous_mappings(
   Transaction &t,
   laddr_hint_t hint,
-  std::vector<alloc_mapping_info_t> &alloc_infos,
-  alloc_policy_t policy)
+  std::vector<alloc_mapping_info_t> &alloc_infos)
 {
   ceph_assert(hint.addr != L_ADDR_NULL);
   extent_len_t total_len = 0;
@@ -608,9 +651,9 @@ BtreeLBAManager::alloc_contiguous_mappings(
   return with_btree<LBABtree>(
     cache,
     c,
-    [this, c, hint, &alloc_infos, total_len, policy](auto &btree)
+    [this, c, hint, &alloc_infos, total_len](auto &btree)
   {
-    return search_insert_position(c, btree, hint, total_len, policy
+    return search_insert_position(c, btree, hint, total_len
     ).si_then([this, c, &alloc_infos, &btree](insert_position_t res) {
       extent_len_t offset = 0;
       for (auto &info : alloc_infos) {
@@ -627,8 +670,7 @@ BtreeLBAManager::alloc_mappings_ret
 BtreeLBAManager::alloc_sparse_mappings(
   Transaction &t,
   laddr_hint_t hint,
-  std::vector<alloc_mapping_info_t> &alloc_infos,
-  alloc_policy_t policy)
+  std::vector<alloc_mapping_info_t> &alloc_infos)
 {
   ceph_assert(hint.addr != L_ADDR_NULL);
 #ifndef NDEBUG
@@ -646,11 +688,11 @@ BtreeLBAManager::alloc_sparse_mappings(
   return with_btree<LBABtree>(
     cache,
     c,
-    [this, c, hint, &alloc_infos, total_len, policy](auto &btree)
+    [this, c, hint, &alloc_infos, total_len](auto &btree)
   {
-    return search_insert_position(c, btree, hint, total_len, policy
-    ).si_then([this, c, hint, &alloc_infos, &btree, policy](auto res) {
-      if (policy != alloc_policy_t::deterministic) {
+    return search_insert_position(c, btree, hint, total_len
+    ).si_then([this, c, hint, &alloc_infos, &btree](auto res) {
+      if (hint.condition != laddr_conflict_condition_t::all_at_never) {
 	for (auto &info : alloc_infos) {
 	  auto offset = info.key.get_byte_distance<extent_len_t>(hint.addr);
 	  info.key = (res.laddr + offset).checked_to_laddr();

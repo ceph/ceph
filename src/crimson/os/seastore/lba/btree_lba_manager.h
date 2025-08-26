@@ -92,7 +92,7 @@ public:
       std::move(alloc_infos),
       [&t, hint, this](auto &alloc_infos) {
       return alloc_contiguous_mappings(
-	t, hint, alloc_infos, alloc_policy_t::linear_search
+	t, hint, alloc_infos
       ).si_then([](auto cursors) {
 	assert(cursors.size() == 1);
 	return LBAMapping::create_direct(std::move(cursors.front()));
@@ -139,7 +139,7 @@ public:
       std::move(alloc_infos),
       [this, &t, hint](auto &alloc_infos) {
       return alloc_contiguous_mappings(
-	t, hint, alloc_infos, alloc_policy_t::linear_search
+	t, hint, alloc_infos
       ).si_then([](auto cursors) {
 	assert(cursors.size() == 1);
 	return LBAMapping::create_direct(std::move(cursors.front()));
@@ -173,8 +173,8 @@ public:
       [this, &t, hint, has_laddr](auto &alloc_infos)
     {
       if (has_laddr) {
-	return alloc_sparse_mappings(
-	  t, hint, alloc_infos, alloc_policy_t::deterministic)
+	assert(hint.condition == laddr_conflict_condition_t::all_at_never);
+	return alloc_sparse_mappings(t, hint, alloc_infos)
 #ifndef NDEBUG
 	.si_then([&alloc_infos](std::list<LBACursorRef> cursors) {
 	  assert(alloc_infos.size() == cursors.size());
@@ -190,8 +190,7 @@ public:
 #endif
 	  ;
       } else {
-	return alloc_contiguous_mappings(
-	  t, hint, alloc_infos, alloc_policy_t::linear_search);
+	return alloc_contiguous_mappings(t, hint, alloc_infos);
       }
     }).si_then([](std::list<LBACursorRef> cursors) {
       std::vector<LBAMapping> ret;
@@ -546,10 +545,6 @@ private:
     laddr_t laddr;
     LBABtree::iterator insert_iter;
   };
-  enum class alloc_policy_t {
-    deterministic, // no conflict
-    linear_search,
-  };
   using search_insert_position_iertr = base_iertr;
   using search_insert_position_ret =
       search_insert_position_iertr::future<insert_position_t>;
@@ -557,8 +552,7 @@ private:
     op_context_t c,
     LBABtree &btree,
     laddr_hint_t hint,
-    extent_len_t length,
-    alloc_policy_t policy);
+    extent_len_t length);
 
   using alloc_mappings_iertr = base_iertr;
   using alloc_mappings_ret =
@@ -575,8 +569,7 @@ private:
   alloc_mappings_ret alloc_contiguous_mappings(
     Transaction &t,
     laddr_hint_t hint,
-    std::vector<alloc_mapping_info_t> &alloc_infos,
-    alloc_policy_t policy);
+    std::vector<alloc_mapping_info_t> &alloc_infos);
 
   /**
    * alloc_sparse_mappings
@@ -590,8 +583,7 @@ private:
   alloc_mappings_ret alloc_sparse_mappings(
     Transaction &t,
     laddr_hint_t hint,
-    std::vector<alloc_mapping_info_t> &alloc_infos,
-    alloc_policy_t policy);
+    std::vector<alloc_mapping_info_t> &alloc_infos);
 
   /**
    * insert_mappings
