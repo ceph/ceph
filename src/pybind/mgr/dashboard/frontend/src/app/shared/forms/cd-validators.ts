@@ -709,7 +709,9 @@ export class CdValidators {
       return null;
     }
 
-    const urls = value.includes(',') ? value.split(',') : [value];
+    const urls = value.includes(',')
+      ? value.split(',').map((v: string) => v.trim())
+      : [value.trim()];
 
     const invalidUrls = urls.filter(
       (url: string) =>
