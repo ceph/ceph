@@ -68,17 +68,14 @@ CircularBoundedJournal::submit_record(
   LOG_PREFIX(CircularBoundedJournal::submit_record);
   DEBUG("H{} {} start ...", (void*)&handle, record);
   assert(write_pipeline);
-  return do_submit_record(
+  co_await do_submit_record(
     std::move(record), handle, std::move(on_submission)
-  ).safe_then([this, t_src] {
-    if (is_trim_transaction(t_src)) {
-      return update_journal_tail(
-	trimmer.get_dirty_tail(),
-	trimmer.get_alloc_tail());
-    } else {
-      return seastar::now();
-    }
-  });
+  );
+  if (is_trim_transaction(t_src)) {
+    co_await update_journal_tail(
+      trimmer.get_dirty_tail(),
+      trimmer.get_alloc_tail());
+  }
 }
 
 CircularBoundedJournal::submit_record_ertr::future<>
