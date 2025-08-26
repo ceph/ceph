@@ -292,10 +292,27 @@ class Host(RESTController):
         if str_to_bool(facts):
             if orch.available():
                 if not orch.get_missing_features(['get_facts']):
+                    all_facts = orch.hosts.get_facts()
                     hosts_facts = []
+                    facts_map = {facts.get('hostname'): facts for facts in all_facts}
                     for host in hosts:
-                        facts = orch.hosts.get_facts(host['hostname'])[0]
-                        hosts_facts.append(facts)
+                        hostname = host['hostname']
+                        facts = facts_map.get(hostname, {})
+                        host_facts = {
+                            'hostname': facts.get('hostname', hostname),
+                            'addr': facts.get('addr', ''),
+                            'cpu_cores': facts.get('cpu_cores', 0),
+                            'cpu_count': facts.get('cpu_count', 0),
+                            'model': facts.get('model', ''),
+                            'memory_total_kb': facts.get('memory_total_kb', 0),
+                            'nic_count': facts.get('nic_count', 0),
+                            'hdd_count': facts.get('hdd_count', 0),
+                            'flash_count': facts.get('flash_count', 0),
+                            'hdd_capacity_bytes': facts.get('hdd_capacity_bytes', 0),
+                            'flash_capacity_bytes': facts.get('flash_capacity_bytes', 0)
+                        }
+                        hosts_facts.append(host_facts)
+
                     return merge_list_of_dicts_by_key(hosts, hosts_facts, 'hostname')
 
                 raise DashboardException(
