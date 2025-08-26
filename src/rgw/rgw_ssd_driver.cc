@@ -516,6 +516,7 @@ auto SSDDriver::get_async(const DoutPrefixProvider *dpp, const Executor& ex, con
         auto ec = boost::system::error_code{-ret, boost::system::system_category()};
         ceph::async::post(std::move(p), ec, bufferlist{});
     } else {
+        // coverity[leaked_storage:SUPPRESS]
         (void)p.release();
     }
   }, token, dpp, ex, key, read_ofs, read_len);
