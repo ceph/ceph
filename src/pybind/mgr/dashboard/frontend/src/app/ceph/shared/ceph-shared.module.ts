@@ -1,6 +1,8 @@
 import { CommonModule } from '@angular/common';
 import { NgModule } from '@angular/core';
 
+import { RouterModule } from '@angular/router';
+
 import { NgbNavModule } from '@ng-bootstrap/ng-bootstrap';
 import { PipesModule } from '~/app/shared/pipes/pipes.module';
 
@@ -11,7 +13,7 @@ import { SmartListComponent } from './smart-list/smart-list.component';
 import { HealthChecksComponent } from './health-checks/health-checks.component';
 
 @NgModule({
-  imports: [CommonModule, DataTableModule, SharedModule, NgbNavModule, PipesModule],
+  imports: [CommonModule, DataTableModule, SharedModule, NgbNavModule, PipesModule, RouterModule],
   exports: [DeviceListComponent, SmartListComponent, HealthChecksComponent],
   declarations: [DeviceListComponent, SmartListComponent, HealthChecksComponent]
 })
