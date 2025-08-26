@@ -190,6 +190,25 @@ int NVMeofGwMap::cfg_delete_gw(
   return -EINVAL;
 }
 
+int  NVMeofGwMap::check_all_gws_in_deleting_state(const NvmeGwId &gw_id,
+    const NvmeGroupKey& group_key) {
+  for (auto& gws_states: created_gws[group_key]) {
+    auto& state = gws_states.second;
+    if (state.availability != gw_availability_t::GW_DELETING) {
+      return 0;
+    }
+  }
+  dout(4) << "all gws in DELETING State, remove them from the map " << dendl;
+  /* Monitor have to force remove GWs because otherwise all GW will stay forever
+   * in  DELETING state - no beacons from the group and monitor cannot update
+   * number namespaces in each group so delete condition newer turns true.
+  */
+  for (auto& gws_states: created_gws[group_key]) {
+    do_delete_gw(gws_states.first, group_key);
+  }
+  return 0;
+}
+
 int  NVMeofGwMap::do_erase_gw_id(const NvmeGwId &gw_id,
       const NvmeGroupKey& group_key) {
 
