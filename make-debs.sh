@@ -20,11 +20,6 @@ set -xe
 base=${1:-/tmp/release}
 releasedir=$base/$NAME/WORKDIR
 rm -fr $(dirname $releasedir)
-#
-# remove all files not under git so they are not
-# included in the distribution.
-
-[ -e .git ] && git clean -dxf
 
 # git describe provides a version that is
 # a) human readable
