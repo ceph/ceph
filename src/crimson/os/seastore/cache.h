@@ -1221,20 +1221,15 @@ public:
     Transaction &t,
     laddr_t remap_laddr,
     paddr_t remap_paddr,
+    extent_len_t remap_offset,
     extent_len_t remap_length,
-    laddr_t original_laddr,
-    std::optional<ceph::bufferptr> &original_bptr) {
+    const std::optional<ceph::bufferptr> &original_bptr) {
     LOG_PREFIX(Cache::alloc_remapped_extent);
-    assert(remap_laddr >= original_laddr);
     TCachedExtentRef<T> ext;
     if (original_bptr.has_value()) {
       // shallow copy the buffer from original extent
-      auto remap_offset = remap_laddr.get_byte_distance<
-	extent_len_t>(original_laddr);
-
       auto nbp = ceph::bufferptr(buffer::create_page_aligned(remap_length));
       original_bptr->copy_out(remap_offset, remap_length, nbp.c_str());
-
       // ExtentPlacementManager::alloc_new_extent will make a new
       // (relative/temp) paddr, so make extent directly
       ext = CachedExtent::make_cached_extent_ref<T>(std::move(nbp));

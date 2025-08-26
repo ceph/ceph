@@ -425,6 +425,10 @@ public:
     set_child_ptracker(child);
   }
 
+  void reset_child_ptr(btreenode_pos_t pos) {
+    children[pos] = get_reserved_ptr<T, node_key_t>();
+  }
+
 protected:
   ParentNode(btreenode_pos_t capacity)
     : children(capacity, nullptr) {}
