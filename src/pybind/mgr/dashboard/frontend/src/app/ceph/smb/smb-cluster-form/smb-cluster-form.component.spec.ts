@@ -81,7 +81,7 @@ describe('SmbClusterFormComponent', () => {
   });
 
   it('should check submit request', () => {
-    component.smbForm.get('auth_mode').setValue(AUTHMODE.activeDirectory);
+    component.smbForm.get('auth_mode').setValue(AUTHMODE.ActiveDirectory);
     component.smbForm.get('domain_settings').setValue('test-realm');
     component.smbForm.get('cluster_id').setValue('cluster-id');
     component.submitAction();
