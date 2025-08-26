@@ -39,19 +39,13 @@ using RBMDevice = random_block_device::RBMDevice;
  *
  * - Commit time
  * After submit_record is done, written_to is increased(this in-memory value)
- * ---written_to represents where the new record will be appended. Note that
- * applied_to is not changed here.
+ * ---written_to represents where the new record will be appended.
  *
  * - Replay time
  * At replay time, CBJournal begins to replay records in CBjournal by reading
  * records from dirty_tail. Then, CBJournal examines whether the records is valid
  * one by one, at which point written_to is recovered
- * if the valid record is founded. Note that applied_to is stored
- * permanently when the apply work---applying the records in CBJournal to RBM---
- * is done by CBJournal (TODO).
- *
- * TODO: apply records from CircularBoundedJournal to RandomBlockManager
- *
+ * if the valid record is founded.
  */
 
 constexpr uint64_t DEFAULT_BLOCK_SIZE = 4096;
