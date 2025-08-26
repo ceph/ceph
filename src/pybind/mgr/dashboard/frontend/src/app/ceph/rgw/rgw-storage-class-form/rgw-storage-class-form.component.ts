@@ -43,7 +43,8 @@ import {
   EXPEDITED_TIER_TYPE_TEXT,
   TextLabels,
   CLOUD_TIER_REQUIRED_FIELDS,
-  GLACIER_REQUIRED_FIELDS
+  GLACIER_REQUIRED_FIELDS,
+  GLACIER_TARGET_STORAGE_CLASS
 } from '../models/rgw-storage-class.model';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { NotificationService } from '~/app/shared/services/notification.service';
@@ -500,7 +501,8 @@ export class RgwStorageClassFormComponent extends CdForm implements OnInit {
             tier_config: {
               ...tierConfig,
               glacier_restore_days: rawFormValue.glacier_restore_days,
-              glacier_restore_tier_type: rawFormValue.glacier_restore_tier_type
+              glacier_restore_tier_type: rawFormValue.glacier_restore_tier_type,
+              target_storage_class: GLACIER_TARGET_STORAGE_CLASS
             }
           }
         ]
