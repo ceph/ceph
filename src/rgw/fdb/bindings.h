@@ -304,9 +304,15 @@ inline bool erase(ceph::libfdb::transaction_handle txn, const SelectorT& key_ran
 // requirements and the fact that not all output_iterator sinks are written in a way that actually implements
 // the requirements:
 template <typename SelectorT> requires ceph::libfdb::concepts::selector<SelectorT>
-inline bool get(ceph::libfdb::transaction_handle txn, const SelectorT& key_range, auto out_iter)
+inline bool get(ceph::libfdb::transaction_handle txn, const SelectorT& key_range, auto out_iter, const commit_after_op commit_after = commit_after_op::no_commit)
 {
- return ceph::libfdb::detail::get_value_range_from_transaction(txn, key_range.begin_key, key_range.end_key, out_iter);
+ auto r = ceph::libfdb::detail::get_value_range_from_transaction(txn, key_range.begin_key, key_range.end_key, out_iter);
+
+ if(commit_after_op::commit == commit_after) {
+  h->commit();
+ }
+
+ return r;
 }
 
 /* get() is a little fun:
@@ -345,10 +351,10 @@ simple and frankly focus on stability and getting the core mechanics right while
 // 	and span<const std::uint8_t> FROM the database which the user must copy into their concrete type.
 //
 
-inline bool get(ceph::libfdb::transaction_handle txn, auto key, std::int64_t& out_value)
+inline bool get(ceph::libfdb::transaction_handle txn, auto key, std::int64_t& out_value, const commit_after_op commit_after = commit_after_op::no_commit)
 {
  static_assert("JFW: I haven't implemented int64 keys yet!");
- auto result = ceph::libfdb::detail::get_single_value_from_transaction(txn, ceph::libfdb::to::convert(key));
+ auto r = ceph::libfdb::detail::get_single_value_from_transaction(txn, ceph::libfdb::to::convert(key));
 
  if(!result.key_was_found)
   return false;
@@ -359,10 +365,14 @@ inline bool get(ceph::libfdb::transaction_handle txn, auto key, std::int64_t& ou
 
  ceph::libfdb::from::convert(result.out_data, out_value);
 
- return true;
+ if(commit_after_op::commit == commit_after) {
+  h->commit();
+ }
+
+ return r;
 }
 
-inline bool get(ceph::libfdb::transaction_handle txn, auto key, std::string& out_value)
+inline bool get(ceph::libfdb::transaction_handle txn, auto key, std::string& out_value, const commit_after_op commit_after = commit_after_op::no_commit)
 {
  auto result = ceph::libfdb::detail::get_single_value_from_transaction(txn, ceph::libfdb::to::convert(key));
 
@@ -371,25 +381,35 @@ inline bool get(ceph::libfdb::transaction_handle txn, auto key, std::string& out
 
  ceph::libfdb::from::convert(result.out_data, out_value);
 
+ if(commit_after_op::commit == commit_after) {
+  h->commit();
+ }
+
  return true;
 }
 
 template <typename AppendTo, typename OutT>
 requires ceph::libfdb::concepts::appendable_container<AppendTo, OutT>
-inline bool get(ceph::libfdb::transaction_handle txn, auto key, AppendTo &out_container)
+inline bool get(ceph::libfdb::transaction_handle txn, auto key, AppendTo &out_container, const commit_after_op commit_after = commit_after_op::no_commit)
 {
- return ceph::libfdb::detail::get_single_value_from_transaction(txn, 
-	  ceph::libfdb::to::convert(key), out_container);
+ auto r = ceph::libfdb::detail::get_single_value_from_transaction(txn, 
+	    ceph::libfdb::to::convert(key), out_container);
+
+ if(commit_after_op::commit == commit_after) {
+  h->commit();
+ }
+ 
+ return r;
 }
 
 /*
-inline bool get(ceph::libfdb::transaction_handle txn, auto key, std::input_iterator auto out_iter)
+inline bool get(ceph::libfdb::transaction_handle txn, auto key, std::input_iterator auto out_iter, const commit_after_op commit_after = commit_after_op::no_commit)
 {
  return ceph::libfdb::detail::get_single_value_from_transaction(txn, ceph::libfdb::to::convert(key), out_iter);
 }
 */
 
-inline bool get(ceph::libfdb::transaction_handle txn, auto key, auto &out_value)
+inline bool get(ceph::libfdb::transaction_handle txn, auto key, auto &out_value, const commit_after_op commit_after = commit_after_op::no_commit)
 {
  // Depending on what we want /out/ we need to handle the future differently:
  // JFW: TODO: handle different dispatches
@@ -401,12 +421,16 @@ inline bool get(ceph::libfdb::transaction_handle txn, auto key, auto &out_value)
 
  ceph::libfdb::from::convert(result.out_data, out_value);
 
+ if(commit_after_op::commit == commit_after) {
+  h->commit();
+ }
+
  return true;
 }
 
 // The user can provide an immediate conversion function:
 // (No function_ref() until C++26.)
-inline bool get(ceph::libfdb::transaction_handle txn, auto key, std::function<void(const char *, std::size_t)>)
+inline bool get(ceph::libfdb::transaction_handle txn, auto key, std::function<void(const char *, std::size_t)>, const commit_after_op commit_after = commit_after_op::no_commit)
 {
  auto r = ceph::libfdb::detail::get_single_value_from_transaction(txn, ceph::libfdb::to::convert(key));
 
@@ -414,6 +438,10 @@ inline bool get(ceph::libfdb::transaction_handle txn, auto key, std::function<vo
   return false;
 
  fn(r.out_data.data(), r.out_data.size());
+
+ if(commit_after_op::commit == commit_after) {
+  h->commit();
+ }
 
  return true;
 }
