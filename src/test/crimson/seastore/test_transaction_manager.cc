@@ -448,10 +448,15 @@ struct transaction_manager_test_t :
 
   TestBlockRef alloc_extent(
     test_transaction_t &t,
-    laddr_t hint,
+    laddr_t addr,
     extent_len_t len,
     char contents) {
     auto extents = with_trans_intr(*(t.t), [&](auto& trans) {
+      laddr_hint_t hint;
+      hint.addr = addr;
+      hint.condition = laddr_conflict_condition_t::all_at_object_content;
+      hint.policy = laddr_conflict_policy_t::gen_random;
+      hint.block_size = laddr_t::UNIT_SIZE;
       return tm->alloc_data_extents<TestBlock>(trans, hint, len);
     }).unsafe_get();
     assert(extents.size() == 1);
@@ -459,7 +464,7 @@ struct transaction_manager_test_t :
     extent_len_t allocated_len = 0;
     extent->set_contents(contents);
     EXPECT_FALSE(test_mappings.contains(extent->get_laddr(), t.mapping_delta));
-    test_mappings.alloced(hint, *extent, t.mapping_delta);
+    test_mappings.alloced(addr, *extent, t.mapping_delta);
     allocated_len += extent->get_length();
     EXPECT_EQ(len, allocated_len);
     return extent;
@@ -467,10 +472,15 @@ struct transaction_manager_test_t :
 
   std::vector<TestBlockRef> alloc_extents(
     test_transaction_t &t,
-    laddr_t hint,
+    laddr_t addr,
     extent_len_t len,
     char contents) {
     auto extents = with_trans_intr(*(t.t), [&](auto& trans) {
+      laddr_hint_t hint;
+      hint.addr = addr;
+      hint.condition = laddr_conflict_condition_t::all_at_object_content;
+      hint.policy = laddr_conflict_policy_t::gen_random;
+      hint.block_size = laddr_t::UNIT_SIZE;
       return tm->alloc_data_extents<TestBlock>(trans, hint, len);
     }).unsafe_get();
     size_t length = 0;
@@ -479,7 +489,7 @@ struct transaction_manager_test_t :
       extent->set_contents(contents);
       length += extent->get_length();
       EXPECT_FALSE(test_mappings.contains(extent->get_laddr(), t.mapping_delta));
-      test_mappings.alloced(hint, *extent, t.mapping_delta);
+      test_mappings.alloced(addr, *extent, t.mapping_delta);
       exts.push_back(extent->template cast<TestBlock>());
     }
     EXPECT_EQ(len, length);
@@ -488,12 +498,17 @@ struct transaction_manager_test_t :
 
   void alloc_extents_deemed_fail(
     test_transaction_t &t,
-    laddr_t hint,
+    laddr_t addr,
     extent_len_t len,
     char contents)
   {
     std::cout << __func__ << std::endl;
     auto fut = with_trans_intr(*(t.t), [&](auto& trans) {
+      laddr_hint_t hint;
+      hint.addr = addr;
+      hint.condition = laddr_conflict_condition_t::all_at_object_content;
+      hint.policy = laddr_conflict_policy_t::gen_random;
+      hint.block_size = laddr_t::UNIT_SIZE;
       return tm->alloc_data_extents<TestBlock>(trans, hint, len);
     });
     fut.unsafe_wait();
@@ -853,8 +868,13 @@ struct transaction_manager_test_t :
 		boost::make_counting_iterator(0),
 		boost::make_counting_iterator(num),
 		[&t, this, size](auto) {
+		  laddr_hint_t hint;
+		  hint.addr = L_ADDR_MIN;
+		  hint.condition = laddr_conflict_condition_t::all_at_object_content;
+		  hint.policy = laddr_conflict_policy_t::gen_random;
+		  hint.block_size = laddr_t::UNIT_SIZE;
 		  return tm->alloc_data_extents<TestBlock>(
-		    *(t.t), L_ADDR_MIN, size
+		    *(t.t), hint, size
 		  ).si_then([&t, this, size](auto extents) {
 		    extent_len_t length = 0;
 		    for (auto &extent : extents) {
@@ -1252,7 +1272,11 @@ struct transaction_manager_test_t :
             o_len - new_offset - new_len)
         }
       ).si_then([this, new_offset, new_len, o_laddr, &t, &bl](auto ret) {
-        return tm->alloc_data_extents<TestBlock>(t, (o_laddr + new_offset).checked_to_laddr(), new_len
+        return tm->alloc_data_extents<TestBlock>(
+	  t,
+	  laddr_hint_t::create_as_fixed(
+	    (o_laddr + new_offset).checked_to_laddr()),
+	  new_len
         ).si_then([this, ret = std::move(ret), new_len,
                    new_offset, o_laddr, &t, &bl](auto extents) mutable {
 	  assert(extents.size() == 1);
@@ -1286,7 +1310,11 @@ struct transaction_manager_test_t :
             o_len - new_offset - new_len)
         }
       ).si_then([this, new_offset, new_len, o_laddr, &t, &bl](auto ret) {
-        return tm->alloc_data_extents<TestBlock>(t, (o_laddr + new_offset).checked_to_laddr(), new_len
+        return tm->alloc_data_extents<TestBlock>(
+	  t,
+	  laddr_hint_t::create_as_fixed(
+	    (o_laddr + new_offset).checked_to_laddr()),
+	  new_len
         ).si_then([this, ret = std::move(ret), new_offset, new_len,
                    o_laddr, &t, &bl](auto extents) mutable {
 	  assert(extents.size() == 1);
@@ -1315,7 +1343,11 @@ struct transaction_manager_test_t :
             new_offset)
         }
       ).si_then([this, new_offset, new_len, o_laddr, &t, &bl](auto ret) {
-        return tm->alloc_data_extents<TestBlock>(t, (o_laddr + new_offset).checked_to_laddr(), new_len
+        return tm->alloc_data_extents<TestBlock>(
+	  t,
+	  laddr_hint_t::create_as_fixed(
+	    (o_laddr + new_offset).checked_to_laddr()),
+	  new_len
         ).si_then([this, ret = std::move(ret), new_len, o_laddr, &t, &bl]
           (auto extents) mutable {
 	  assert(extents.size() == 1);
@@ -1457,12 +1489,12 @@ struct transaction_manager_test_t :
   void test_clone_and_remap_pin() {
     run_async([this] {
       disable_max_extent_size();
-      laddr_t l_offset = get_laddr_hint(32 << 10);
+      laddr_t l_offset = L_ADDR_MIN.with_local_clone_id(10);
       size_t l_len = 32 << 10;
-      laddr_t r_offset = get_laddr_hint(64 << 10);
+      laddr_t r_offset = L_ADDR_MIN.with_local_clone_id(20);
       size_t r_len = 32 << 10;
-      laddr_t l_clone_offset = get_laddr_hint(96 << 10);
-      laddr_t r_clone_offset = get_laddr_hint(128 << 10);
+      laddr_t l_clone_offset = L_ADDR_MIN.with_local_clone_id(30);
+      laddr_t r_clone_offset = L_ADDR_MIN.with_local_clone_id(40);
       {
 	auto t = create_transaction();
 	auto lext = alloc_extent(t, l_offset, l_len);
