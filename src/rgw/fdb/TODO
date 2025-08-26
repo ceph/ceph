@@ -1,0 +1,3 @@
+
+- string_view -> span<const std::int8_t> for internal buffers
+

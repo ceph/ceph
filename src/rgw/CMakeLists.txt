@@ -1,3 +1,7 @@
+
+add_executable(radosgw)
+add_library(rgw_common STATIC)
+
 find_program(GPERF gperf
   REQUIRED)
 
@@ -280,7 +284,35 @@ if(WITH_RADOSGW_D4N)
         driver/d4n/rgw_sal_d4n.cc)
 endif()
 
-add_library(rgw_common STATIC ${librgw_common_srcs})
+if(WITH_RADOSGW_FDB)
+ message("FoundationDB support is active")
+
+ add_library(rgw_fdb STATIC
+  fdb/base.cc
+  fdb/bindings.cc)
+
+ target_link_libraries(rgw_fdb PRIVATE
+  -lfdb_c
+  -lm
+  -lrt
+ )
+
+ target_compile_options(rgw_fdb PRIVATE
+   -pthread)
+
+ target_include_directories(rgw_fdb PRIVATE 
+  /usr/include/foundationdb)
+
+ target_include_directories(rgw_common PRIVATE 
+  /usr/include/foundationdb
+  "${CMAKE_SOURCE_DIR}/src/rgw")
+
+ target_link_libraries(rgw_common PRIVATE
+  rgw_fdb)
+
+ target_include_directories(radosgw PRIVATE 
+  /usr/include/foundationdb)
+endif()
 
 include(CheckCXXCompilerFlag)
 check_cxx_compiler_flag("-Wimplicit-const-int-float-conversion"
@@ -289,6 +321,9 @@ if(COMPILER_SUPPORTS_WARN_IMPLICIT_CONST_INT_FLOAT_CONVERSION)
   target_compile_definitions(common-objs PRIVATE
     HAVE_WARN_IMPLICIT_CONST_INT_FLOAT_CONVERSION)
 endif()
+
+target_sources(rgw_common PRIVATE 
+  ${librgw_common_srcs})
 
 target_link_libraries(rgw_common
   PRIVATE
@@ -477,7 +512,8 @@ target_link_libraries(rgw_schedulers
 set(radosgw_srcs
   rgw_main.cc)
 
-add_executable(radosgw ${radosgw_srcs})
+target_sources(radosgw PUBLIC
+  ${radosgw_srcs})
 
 if(WITH_RADOSGW_ARROW_FLIGHT)
   # target_compile_definitions(radosgw PUBLIC WITH_ARROW_FLIGHT)
@@ -581,6 +617,18 @@ install(TARGETS rgw-policy-check DESTINATION bin)
 set(librgw_srcs
   librgw.cc)
 add_library(rgw SHARED ${librgw_srcs})
+
+if(D4N_USE_FDB_SINK)
+ message("Building with FDB support as D4N sink (experimental).")
+
+#JFW:
+# target_link_libraries(rgw_common PRIVATE
+#  rgw_fdb)
+
+#JFW:
+# target_link_libraries(radosgw PRIVATE
+#  rgw_fdb)
+endif()
 
 target_compile_definitions(rgw PUBLIC "-DCLS_CLIENT_HIDE_IOCTX")
 target_include_directories(rgw
