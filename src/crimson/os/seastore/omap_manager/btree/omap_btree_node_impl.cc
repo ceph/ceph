@@ -663,12 +663,14 @@ OMapInnerNode::get_containing_child(const std::string &key)
 
 std::ostream &OMapLeafNode::print_detail_l(std::ostream &out) const
 {
-  out << ", size=" << get_size()
-         << ", depth=" << get_meta().depth
-	 << ", is_root=" << is_btree_root();
-  if (get_size() > 0) {
-    out << ", begin=" << get_begin()
-	<< ", end=" << get_end();
+  if (is_fully_loaded()) {
+    out << ", size=" << get_size()
+	<< ", depth=" << get_meta().depth
+	<< ", is_root=" << is_btree_root();
+    if (get_size() > 0) {
+      out << ", begin=" << get_begin()
+	  << ", end=" << get_end();
+    }
   }
   if (this->child_node_t::is_parent_valid())
     return out << ", parent=" << (void*)this->child_node_t::peek_parent_node().get();
