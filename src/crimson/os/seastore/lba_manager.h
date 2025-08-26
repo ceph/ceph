@@ -89,7 +89,7 @@ public:
   using alloc_extent_ret = alloc_extent_iertr::future<LBAMapping>;
   virtual alloc_extent_ret alloc_extent(
     Transaction &t,
-    laddr_t hint,
+    laddr_hint_t hint,
     LogicalChildNode &nextent,
     extent_ref_count_t refcount) = 0;
 
@@ -97,7 +97,7 @@ public:
     std::vector<LBAMapping>>;
   virtual alloc_extents_ret alloc_extents(
     Transaction &t,
-    laddr_t hint,
+    laddr_hint_t hint,
     std::vector<LogicalChildNodeRef> extents,
     extent_ref_count_t refcount) = 0;
   /*
@@ -133,7 +133,7 @@ public:
 
   virtual alloc_extent_ret reserve_region(
     Transaction &t,
-    laddr_t hint,
+    laddr_hint_t hint,
     extent_len_t len) = 0;
 
   /*

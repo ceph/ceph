@@ -546,7 +546,7 @@ struct btree_lba_manager_test : btree_test_base {
 
   auto alloc_mappings(
     test_transaction_t &t,
-    laddr_t hint,
+    laddr_t addr,
     size_t len) {
     auto rets = with_trans_intr(
       *t.t,
@@ -560,7 +560,11 @@ struct btree_lba_manager_test : btree_test_base {
 	return seastar::do_with(
 	  std::vector<LogicalChildNodeRef>(
 	    extents.begin(), extents.end()),
-	  [this, &t, hint](auto &extents) {
+	  [this, &t, addr](auto &extents) {
+	  laddr_hint_t hint;
+	  hint.addr = addr;
+	  hint.condition = laddr_conflict_condition_t::all_at_object_content;
+	  hint.policy = laddr_conflict_policy_t::linear_search;
 	  return lba_manager->alloc_extents(t, hint, std::move(extents), EXTENT_DEFAULT_REF_COUNT);
 	});
       }).unsafe_get();

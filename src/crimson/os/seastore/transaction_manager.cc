@@ -772,7 +772,8 @@ TransactionManager::rewrite_logical_extent(
             ceph_assert(refcount != 0);
             fut = lba_manager->alloc_extent(
               t,
-              (extent->get_laddr() + off).checked_to_laddr(),
+              laddr_hint_t::create_as_fixed(
+                (extent->get_laddr() + off).checked_to_laddr()),
               *nextent,
               refcount
             ).si_then([extent, nextent, off](auto mapping) {
