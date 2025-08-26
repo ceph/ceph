@@ -336,7 +336,7 @@ BtreeLBAManager::reserve_region(
     [pos=std::move(pos), c, addr, len](auto &btree) mutable {
     auto &cursor = pos.get_effective_cursor();
     auto iter = btree.make_partial_iter(c, cursor);
-    lba_map_val_t val{len, P_ADDR_ZERO, EXTENT_DEFAULT_REF_COUNT, 0};
+    lba_map_val_t val{len, pladdr_t{P_ADDR_ZERO}, EXTENT_DEFAULT_REF_COUNT, 0};
     return btree.insert(c, iter, addr, val
     ).si_then([c](auto p) {
       auto &[iter, inserted] = p;
@@ -389,7 +389,7 @@ BtreeLBAManager::alloc_extents(
 	    ext->get_laddr(),
 	    lba_map_val_t{
 	      ext->get_length(),
-	      ext->get_paddr(),
+	      pladdr_t{ext->get_paddr()},
 	      EXTENT_DEFAULT_REF_COUNT,
 	      ext->get_last_committed_crc()}
 	  ).si_then([ext, c, FNAME, &iter, &ret](auto p) {
@@ -486,11 +486,14 @@ BtreeLBAManager::clone_mapping(
             ? state.mapping.get_intermediate_key()
             : state.mapping.get_key();
           inter_key = (inter_key + state.offset).checked_to_laddr();
+	  assert(inter_key.get_clone_prefix() != state.laddr.get_clone_prefix());
 	  return btree.insert(
 	    c,
 	    btree.make_partial_iter(c, cursor),
 	    state.laddr,
-            lba_map_val_t{state.len, inter_key, EXTENT_DEFAULT_REF_COUNT, 0});
+            lba_map_val_t{
+	      state.len, pladdr_t{inter_key.get_local_clone_id()},
+	      EXTENT_DEFAULT_REF_COUNT, 0});
 	}).si_then([c, &state](auto p) {
 	  auto &[iter, inserted] = p;
 	  auto &leaf_node = *iter.get_leaf_node();
@@ -1274,8 +1277,7 @@ BtreeLBAManager::remap_mappings(
 	  auto new_key = (old_key + remap.offset).checked_to_laddr();
 	  val.len = remap.len;
 	  if (pladdr.is_laddr()) {
-	    auto laddr = pladdr.get_laddr();
-	    val.pladdr = (laddr + remap.offset).checked_to_laddr();
+	    val.pladdr = pladdr;
 	  } else {
 	    auto paddr = pladdr.get_paddr();
 	    val.pladdr = paddr + remap.offset;

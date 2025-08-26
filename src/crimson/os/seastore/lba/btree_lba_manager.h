@@ -398,7 +398,7 @@ private:
 	laddr,
 	{
 	  len,
-	  pladdr_t(intermediate_key),
+	  pladdr_t(intermediate_key.get_local_clone_id()),
 	  EXTENT_DEFAULT_REF_COUNT,
 	  0	// crc will only be used and checked with LBA direct mappings
 		// also see pin_to_extent(_by_type)

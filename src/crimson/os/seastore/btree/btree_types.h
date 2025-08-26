@@ -269,7 +269,7 @@ struct LBACursor : BtreeCursor<laddr_t, lba::lba_map_val_t> {
   laddr_t get_intermediate_key() const {
     assert(is_indirect());
     assert(!is_end());
-    return val->pladdr.get_laddr();
+    return val->pladdr.build_laddr(key);
   }
   checksum_t get_checksum() const {
     assert(!is_end());
