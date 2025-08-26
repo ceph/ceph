@@ -3828,8 +3828,6 @@ options:
   enum_values:
   - bluestore
   - memstore
-  - seastore
-  - cyanstore
   flags:
   - create
   with_legacy: true
