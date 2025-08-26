@@ -271,7 +271,8 @@ ObjectDataHandler::write_ret do_zero(
       ctx.tm.get_block_size() - data.tailbl->length());
     auto extents = co_await ctx.tm.alloc_data_extents<ObjectDataBlock>(
       ctx.t,
-      (overwrite_range.aligned_end - ctx.tm.get_block_size()).checked_to_laddr(),
+      laddr_hint_t::create_as_fixed(
+        (overwrite_range.aligned_end - ctx.tm.get_block_size()).checked_to_laddr()),
       ctx.tm.get_block_size(),
       std::move(zero_pos)
     ).handle_error_interruptible(
@@ -321,7 +322,7 @@ ObjectDataHandler::write_ret do_zero(
       ctx.tm.get_block_size() - data.headbl->length());
     auto extents = co_await ctx.tm.alloc_data_extents<ObjectDataBlock>(
 	ctx.t,
-	overwrite_range.aligned_begin,
+	laddr_hint_t::create_as_fixed(overwrite_range.aligned_begin),
 	ctx.tm.get_block_size(),
 	std::move(zero_pos)
     ).handle_error_interruptible(
@@ -358,7 +359,7 @@ ObjectDataHandler::clone_ret do_clonerange(
     data.merge_head(ctx.tm.get_block_size());
     auto extents = co_await ctx.tm.alloc_data_extents<ObjectDataBlock>(
       ctx.t,
-      overwrite_range.aligned_begin,
+      laddr_hint_t::create_as_fixed(overwrite_range.aligned_begin),
       ctx.tm.get_block_size(),
       std::move(write_pos)
     ).handle_error_interruptible(
@@ -438,7 +439,7 @@ ObjectDataHandler::write_ret do_write(
   assert(data.bl);
   return ctx.tm.alloc_data_extents<ObjectDataBlock>(
     ctx.t,
-    overwrite_range.aligned_begin,
+    laddr_hint_t::create_as_fixed(overwrite_range.aligned_begin),
     overwrite_range.aligned_end.template get_byte_distance<
       extent_len_t>(overwrite_range.aligned_begin),
     std::move(write_pos)
