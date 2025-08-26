@@ -84,17 +84,16 @@ tasks:
    - workload
 - print: "**** done workload v19.2.0"
 
-# TODO: uncomment when v19.2.2 is available
 #######  upgrade to v19.2.2
-#- install.upgrade:
-#    mon.a:
-#      tag: v19.2.2
-#    mon.b:
-#      tag: v19.2.2
-#- parallel:
-#   - workload_squid
-#   - upgrade-sequence_squid
-#- print: "**** done parallel squid v19.2.2"
+- install.upgrade:
+    mon.a:
+      tag: v19.2.3
+    mon.b:
+      tag: v19.2.3
+- parallel:
+   - workload_squid
+   - upgrade-sequence_squid
+- print: "**** done parallel squid v19.2.2"
 
 ####  upgrade to latest squid
 - install.upgrade:
