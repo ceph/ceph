@@ -23,6 +23,8 @@
 #include "crimson/os/seastore/journal/circular_journal_space.h"
 #include "crimson/os/seastore/record_scanner.h"
 
+using namespace std::literals;
+
 namespace crimson::os::seastore::journal {
 
 using RBMDevice = random_block_device::RBMDevice;
@@ -223,6 +225,20 @@ private:
   // the sequence to written records
   CircularJournalSpace cjs;
   RecordSubmitter record_submitter; 
+
+  struct {
+    uint64_t submit_record_count = 0;
+    uint64_t submit_record_size = 0;
+    std::chrono::duration<double> submit_record_latency_total = 0.0s;
+
+    uint64_t submit_record_roll_count = 0;
+    std::chrono::duration<double> submit_record_roll_latency_total = 0.0s;
+
+    uint64_t submit_record_wait_count = 0;
+    std::chrono::duration<double> submit_record_wait_latency_total = 0.0s;
+  } stats;
+  seastar::metrics::metric_group metrics;
+  void register_metrics();
 };
 
 }
