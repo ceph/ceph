@@ -725,7 +725,7 @@ local g = import 'grafonnet/grafana.libsonnet';
         )
       + { options: { legend: { calcs: ['lastNotNull'], displayMode: 'list', placement: 'right', showLegend: true, sortBy: 'Last *', sortDesc: true } } },
       RgwOverviewPanel(
-        'Pending Notifications size by Topic',
+        'Pending Notifications Size by Topic',
         'Shows the total size of pending notifications stored per Object topic, reflecting how much data is waiting to be delivered.',
         'deckbytes',
         'short',

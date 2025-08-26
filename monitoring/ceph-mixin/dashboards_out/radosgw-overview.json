@@ -1386,7 +1386,7 @@
          "thresholds": [ ],
          "timeFrom": null,
          "timeShift": null,
-         "title": "Pending Notifications size by Topic",
+         "title": "Pending Notifications Size by Topic",
          "tooltip": {
             "shared": true,
             "sort": 0,
