@@ -29,7 +29,9 @@ CircularBoundedJournal::CircularBoundedJournal(
     crimson::common::get_conf<double>(
       "seastore_journal_batch_preferred_fullness"),
     cjs)
-  {}
+{
+  register_metrics();
+}
 
 CircularBoundedJournal::open_for_mkfs_ret
 CircularBoundedJournal::open_for_mkfs()
@@ -85,17 +87,42 @@ CircularBoundedJournal::do_submit_record(
   on_submission_func_t &&on_submission)
 {
   LOG_PREFIX(CircularBoundedJournal::do_submit_record);
+  stats.submit_record_count++;
+  stats.submit_record_size += record.size.get_raw_mdlength();
+  auto start = ceph::mono_clock::now();
 
   RecordSubmitter::action_t action;
+  bool waited = false;
+  bool rolled = false;
   while (true) {
     if (!record_submitter.is_available()) {
       DEBUG("H{} wait ...", (void*)&handle);
+
+      auto wait_start = ceph::mono_clock::now();
+
       co_await record_submitter.wait_available();
+
+      if (!waited) {
+	stats.submit_record_wait_count++;
+	waited = true;
+      }
+      stats.submit_record_wait_latency_total +=
+	ceph::mono_clock::now() - wait_start;
       continue;
     }
     action = record_submitter.check_action(record.size);
     if (action == RecordSubmitter::action_t::ROLL) {
+
+      auto roll_start = ceph::mono_clock::now();
+
       co_await record_submitter.roll_segment();
+
+      if (!rolled) {
+	stats.submit_record_roll_count++;
+	rolled = true;
+      }
+      stats.submit_record_roll_latency_total +=
+	ceph::mono_clock::now() - roll_start;
       continue;
     }
     break;
@@ -117,6 +144,8 @@ CircularBoundedJournal::do_submit_record(
   auto new_committed_to = result.write_result.get_end_seq();
   record_submitter.update_committed_to(new_committed_to);
   std::invoke(on_submission, result);
+
+  stats.submit_record_latency_total += ceph::mono_clock::now() - start;
 }
 
 Journal::replay_ret CircularBoundedJournal::replay_segment(
@@ -399,6 +428,86 @@ Journal::replay_ret CircularBoundedJournal::replay(
 	get_alloc_tail());
     });
   });
+}
+
+void CircularBoundedJournal::register_metrics()
+{
+  namespace sm = seastar::metrics;
+  metrics.add_group(
+    "seastore_cbj",
+    {
+      sm::make_gauge(
+	"submit_record_count",
+	[this] {
+	  return stats.submit_record_count;
+	}
+      ),
+      sm::make_gauge(
+	"submit_record_size",
+	[this] {
+	  return stats.submit_record_size;
+	}
+      ),
+      sm::make_gauge(
+	"submit_record_latency_total",
+	[this] {
+	  return stats.submit_record_latency_total.count();
+	}
+      ),
+      sm::make_gauge(
+	"submit_record_latency_average",
+	[this] {
+	  return stats.submit_record_latency_total.count() /
+	    stats.submit_record_count;
+	}
+      ),
+      sm::make_gauge(
+	"submit_record_size_average",
+	[this] {
+	  return stats.submit_record_size /
+	    stats.submit_record_count;
+	}
+      ),
+      sm::make_gauge(
+	"submit_record_roll_count",
+	[this] {
+	  return stats.submit_record_roll_count;
+	}
+      ),
+      sm::make_gauge(
+	"submit_record_roll_latency_total",
+	[this] {
+	  return stats.submit_record_roll_latency_total.count();
+	}
+      ),
+      sm::make_gauge(
+	"submit_record_roll_latency_average",
+	[this] {
+	  return stats.submit_record_roll_latency_total.count() /
+	    stats.submit_record_roll_count;
+	}
+      ),
+      sm::make_gauge(
+	"submit_record_wait_count",
+	[this] {
+	  return stats.submit_record_wait_count;
+	}
+      ),
+      sm::make_gauge(
+	"submit_record_wait_latency_total",
+	[this] {
+	  return stats.submit_record_wait_latency_total.count();
+	}
+      ),
+      sm::make_gauge(
+	"submit_record_wait_latency_average",
+	[this] {
+	  return stats.submit_record_wait_latency_total.count() /
+	    stats.submit_record_wait_count;
+	}
+      )
+    }
+  );
 }
 
 }
