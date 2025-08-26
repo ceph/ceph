@@ -78,8 +78,36 @@ class Onode : public boost::intrusive_ref_counter<
   boost::thread_unsafe_counter>
 {
 protected:
-  virtual laddr_t get_hint() const = 0;
+  virtual laddr_hint_t init_hint(
+    extent_len_t block_size,
+    bool is_metadata) const = 0;
+  virtual laddr_hint_t generate_clone_hint(
+    local_object_id_t object_id,
+    extent_len_t block_size,
+    bool is_metadata) const = 0;
+  laddr_hint_t get_hint(extent_len_t block_size, bool is_metadata) const {
+    assert(block_size >= laddr_t::UNIT_SIZE);
+    auto prefix = get_clone_prefix();
+    if (prefix) {
+      if (is_metadata) {
+        return laddr_hint_t::create_object_md_hint(*prefix, block_size);
+      } else {
+        return laddr_hint_t::create_object_data_hint(*prefix, block_size);
+      }
+    } else if (sibling_object_id) {
+      return generate_clone_hint(
+        *sibling_object_id, block_size, is_metadata);
+    } else {
+      return init_hint(block_size, is_metadata);
+    }
+  }
+  laddr_hint_t get_clone_hint(extent_len_t block_size, bool is_metadata) const {
+    return generate_clone_hint(
+      get_clone_prefix()->get_local_object_id(), block_size, is_metadata);
+  }
   const hobject_t hobj;
+  std::optional<local_object_id_t> sibling_object_id;
+
 public:
   explicit Onode(const hobject_t &hobj) : hobj(hobj) {}
 
@@ -112,11 +140,19 @@ public:
   virtual void unset_need_cow(Transaction&) = 0;
   virtual void swap_layout(Transaction&, Onode&) = 0;
 
-  laddr_t get_metadata_hint(uint64_t block_size) const {
-    return get_hint();
+  laddr_t get_metadata_hint(uint64_t block_size = laddr_t::UNIT_SIZE) const {
+    // TODO: return laddr_hint_t
+    return get_hint(block_size, /*is_metadata*/true).addr;
   }
-  laddr_t get_data_hint() const {
-    return get_hint();
+  laddr_t get_data_hint(uint64_t block_size = laddr_t::UNIT_SIZE) const {
+    // TODO: return laddr_hint_t
+    return get_hint(block_size, /*is_metadata*/false).addr;
+  }
+  laddr_hint_t get_metadata_clone_hint(uint64_t block_size = laddr_t::UNIT_SIZE) const {
+    return get_clone_hint(block_size, /*is_metadata*/true);
+  }
+  laddr_hint_t get_data_clone_hint(uint64_t block_size = laddr_t::UNIT_SIZE) const {
+    return get_clone_hint(block_size, /*is_metadata*/false);
   }
   const omap_root_le_t& get_root(omap_type_t type) const {
     return get_layout().get_root(type);
