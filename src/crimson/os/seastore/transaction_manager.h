@@ -538,13 +538,15 @@ public:
   reserve_extent_ret reserve_region(
     Transaction &t,
     laddr_hint_t hint,
-    extent_len_t len) {
+    extent_len_t len,
+    extent_types_t type) {
     LOG_PREFIX(TransactionManager::reserve_region);
-    SUBDEBUGT(seastore_tm, "hint {}~0x{:x} ...", t, hint, len);
+    SUBDEBUGT(seastore_tm, "hint {}~0x{:x} {} ...", t, hint, len, type);
     return lba_manager->reserve_region(
       t,
       hint,
-      len
+      len,
+      type
     ).si_then([FNAME, &t](auto pin) {
       SUBDEBUGT(seastore_tm, "reserved {}", t, pin);
       return pin;
@@ -555,16 +557,18 @@ public:
     Transaction &t,
     LBAMapping pos,
     laddr_t hint,
-    extent_len_t len) {
+    extent_len_t len,
+    extent_types_t type) {
     LOG_PREFIX(TransactionManager::reserve_region);
-    SUBDEBUGT(seastore_tm, "hint {}~0x{:x} ...", t, hint, len);
+    SUBDEBUGT(seastore_tm, "hint {}~0x{:x} ...", t, hint, len, type);
     return pos.refresh(
-    ).si_then([FNAME, this, &t, hint, len](auto pos) {
+    ).si_then([FNAME, this, &t, hint, len, type](auto pos) {
       return lba_manager->reserve_region(
 	t,
 	std::move(pos),
 	hint,
-	len
+	len,
+	type
       ).si_then([FNAME, &t](auto pin) {
 	SUBDEBUGT(seastore_tm, "reserved {}", t, pin);
 	return pin;
@@ -659,7 +663,8 @@ public:
 	  t,
 	  std::move(pos),
 	  (dst_base + cloned_to).checked_to_laddr(),
-	  clone_len
+	  clone_len,
+	  mapping.get_extent_type()
 	).handle_error_interruptible(
 	  clone_iertr::pass_further{},
 	  crimson::ct_error::assert_all{"unexpected error"}
@@ -979,7 +984,8 @@ public:
 		t,
 		std::move(pos),
 		laddr,
-		remap.len
+		remap.len,
+		extent_types_t::OBJECT_DATA_BLOCK
 	      ).si_then([&mappings](auto new_mapping) {
 		mappings.emplace_back(new_mapping);
 		return new_mapping.next();
