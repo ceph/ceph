@@ -204,7 +204,7 @@ struct pg_shard_t {
   }
   static std::list<pg_shard_t> generate_test_instances() {
     std::list<pg_shard_t> o;
-    o.push_back(pg_shard_t{});
+    o.emplace_back();
     o.push_back(pg_shard_t(1));
     o.push_back(pg_shard_t(1, shard_id_t(2)));
     return o;
@@ -619,7 +619,7 @@ struct spg_t {
   }
   static std::list<spg_t> generate_test_instances() {
     std::list<spg_t> o;
-    o.push_back(spg_t{});
+    o.emplace_back();
     o.push_back(spg_t(pg_t(1, 2), shard_id_t(3)));
     return o;
   }
@@ -956,7 +956,7 @@ public:
   }
   static std::list<eversion_t> generate_test_instances() {
     std::list<eversion_t> o;
-    o.push_back(eversion_t{});
+    o.emplace_back();
     o.push_back(eversion_t(1, 2));
     return o;
   }
@@ -1252,8 +1252,8 @@ struct pg_merge_meta_t {
   }
   static std::list<pg_merge_meta_t> generate_test_instances() {
     std::list<pg_merge_meta_t> o;
-    o.push_back(pg_merge_meta_t{});
-    o.push_back(pg_merge_meta_t{});
+    o.emplace_back();
+    o.emplace_back();
     o.back().source_pgid = pg_t(1,2);
     o.back().ready_epoch = 1;
     o.back().last_epoch_started = 2;
@@ -3341,8 +3341,8 @@ struct pg_fast_info_t {
   }
   static std::list<pg_fast_info_t> generate_test_instances() {
     std::list<pg_fast_info_t> o;
-    o.push_back(pg_fast_info_t{});
-    o.push_back(pg_fast_info_t{});
+    o.emplace_back();
+    o.emplace_back();
     o.back().last_update = eversion_t(1, 2);
     o.back().last_complete = eversion_t(3, 4);
     o.back().last_user_version = version_t(5);
@@ -4417,9 +4417,9 @@ struct pg_log_op_return_item_t {
   }
   static std::list<pg_log_op_return_item_t> generate_test_instances() {
     std::list<pg_log_op_return_item_t> o;
-    o.push_back(pg_log_op_return_item_t{});
+    o.emplace_back();
     o.back().rval = 0;
-    o.push_back(pg_log_op_return_item_t{});
+    o.emplace_back();
     o.back().rval = 1;
     o.back().bl.append("asdf");
     return o;
@@ -4969,11 +4969,11 @@ struct pg_missing_item {
   }
   static std::list<pg_missing_item> generate_test_instances() {
     std::list<pg_missing_item> o;
-    o.push_back(pg_missing_item{});
-    o.push_back(pg_missing_item{});
+    o.emplace_back();
+    o.emplace_back();
     o.back().need = eversion_t(1, 2);
     o.back().have = eversion_t(1, 1);
-    o.push_back(pg_missing_item{});
+    o.emplace_back();
     o.back().need = eversion_t(3, 5);
     o.back().have = eversion_t(3, 4);
     o.back().clean_regions.mark_data_region_dirty(4096, 8192);
@@ -5335,14 +5335,14 @@ public:
   }
   static std::list<pg_missing_set> generate_test_instances() {
     std::list<pg_missing_set> o;
-    o.push_back(pg_missing_set{});
+    o.emplace_back();
     o.back().may_include_deletes = true;
-    o.push_back(pg_missing_set{});
+    o.emplace_back();
     o.back().add(
       hobject_t(object_t("foo"), "foo", 123, 456, 0, ""),
       eversion_t(5, 6), eversion_t(5, 1), false);
     o.back().may_include_deletes = true;
-    o.push_back(pg_missing_set{});
+    o.emplace_back();
     o.back().add(
       hobject_t(object_t("foo"), "foo", 123, 456, 0, ""),
       eversion_t(5, 6), eversion_t(5, 1), true);
@@ -5480,18 +5480,18 @@ struct pg_nls_response_template {
   }
   static std::list<pg_nls_response_template> generate_test_instances() {
     std::list<pg_nls_response_template<T>> o;
-    o.push_back(pg_nls_response_template<T>{});
-    o.push_back(pg_nls_response_template<T>{});
+    o.emplace_back();
+    o.emplace_back();
     o.back().handle = hobject_t(object_t("hi"), "key", 1, 2, -1, "");
     o.back().entries.push_back(librados::ListObjectImpl("", "one", ""));
     o.back().entries.push_back(librados::ListObjectImpl("", "two", "twokey"));
     o.back().entries.push_back(librados::ListObjectImpl("", "three", ""));
-    o.push_back(pg_nls_response_template<T>{});
+    o.emplace_back();
     o.back().handle = hobject_t(object_t("hi"), "key", 3, 4, -1, "");
     o.back().entries.push_back(librados::ListObjectImpl("n1", "n1one", ""));
     o.back().entries.push_back(librados::ListObjectImpl("n1", "n1two", "n1twokey"));
     o.back().entries.push_back(librados::ListObjectImpl("n1", "n1three", ""));
-    o.push_back(pg_nls_response_template<T>{});
+    o.emplace_back();
     o.back().handle = hobject_t(object_t("hi"), "key", 5, 6, -1, "");
     o.back().entries.push_back(librados::ListObjectImpl("", "one", ""));
     o.back().entries.push_back(librados::ListObjectImpl("", "two", "twokey"));
@@ -5540,8 +5540,8 @@ struct pg_ls_response_t {
   }
   static std::list<pg_ls_response_t> generate_test_instances() {
     std::list<pg_ls_response_t> o;
-    o.push_back(pg_ls_response_t{});
-    o.push_back(pg_ls_response_t{});
+    o.emplace_back();
+    o.emplace_back();
     o.back().handle = hobject_t(object_t("hi"), "key", 1, 2, -1, "");
     o.back().entries.push_back(std::make_pair(object_t("one"), std::string()));
     o.back().entries.push_back(std::make_pair(object_t("two"), std::string("twokey")));
@@ -6741,8 +6741,8 @@ struct obj_list_watch_response_t {
   static std::list<obj_list_watch_response_t> generate_test_instances() {
     std::list<obj_list_watch_response_t> o;
     entity_addr_t ea;
-    o.push_back(obj_list_watch_response_t{});
-    o.push_back(obj_list_watch_response_t{});
+    o.emplace_back();
+    o.emplace_back();
     std::list<watch_item_t> test_watchers = watch_item_t::generate_test_instances();
     for (auto &e : test_watchers) {
       o.back().entries.push_back(e);
@@ -6801,14 +6801,14 @@ struct clone_info {
   }
   static std::list<clone_info> generate_test_instances() {
     std::list<clone_info> o;
-    o.push_back(clone_info{});
-    o.push_back(clone_info{});
+    o.emplace_back();
+    o.emplace_back();
     o.back().cloneid = 1;
     o.back().snaps.push_back(1);
     o.back().overlap.push_back(std::pair<uint64_t,uint64_t>(0,4096));
     o.back().overlap.push_back(std::pair<uint64_t,uint64_t>(8192,4096));
     o.back().size = 16384;
-    o.push_back(clone_info{});
+    o.emplace_back();
     o.back().cloneid = CEPH_NOSNAP;
     o.back().size = 32768;
     return o;
@@ -6851,8 +6851,8 @@ struct obj_list_snap_response_t {
   }
   static std::list<obj_list_snap_response_t> generate_test_instances() {
     std::list<obj_list_snap_response_t> o;
-    o.push_back(obj_list_snap_response_t{});
-    o.push_back(obj_list_snap_response_t{});
+    o.emplace_back();
+    o.emplace_back();
     clone_info cl;
     cl.cloneid = 1;
     cl.snaps.push_back(1);
@@ -6975,7 +6975,7 @@ struct pool_pg_num_history_t {
   }
   static std::list<pool_pg_num_history_t> generate_test_instances() {
     std::list<pool_pg_num_history_t> ls;
-    ls.push_back(pool_pg_num_history_t{});
+    ls.emplace_back();
     return ls;
   }
   friend std::ostream& operator<<(std::ostream& out, const pool_pg_num_history_t& h) {

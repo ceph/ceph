@@ -45,8 +45,8 @@ struct add_op {
     std::list<add_op> l;
     l.emplace_back();
     l.emplace_back();
-    l.back().entries.push_back(entry{});
-    l.back().entries.push_back(entry{});
+    l.back().entries.emplace_back();
+    l.back().entries.emplace_back();
     l.back().entries.back().section = "section";
     l.back().entries.back().name = "name";
     l.back().entries.back().timestamp = ceph::real_time{1s + 2ns};
@@ -137,8 +137,8 @@ struct list_ret {
     std::list<list_ret> ls;
     ls.emplace_back();
     ls.emplace_back();
-    ls.back().entries.push_back(entry{});
-    ls.back().entries.push_back(entry{});
+    ls.back().entries.emplace_back();
+    ls.back().entries.emplace_back();
     ls.back().entries.back().section = "section";
     ls.back().entries.back().name = "name";
     ls.back().entries.back().timestamp = ceph::real_time{1s + 2ns};

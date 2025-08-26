@@ -83,7 +83,7 @@ struct rgw_zone_id {
 
   static std::list<rgw_zone_id> generate_test_instances() {
     std::list<rgw_zone_id> o;
-    o.push_back(rgw_zone_id{});
+    o.emplace_back();
     o.push_back(rgw_zone_id("id"));
     return o;
   }

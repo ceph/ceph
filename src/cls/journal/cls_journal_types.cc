@@ -35,7 +35,7 @@ void ObjectPosition::dump(Formatter *f) const {
 
 std::list<ObjectPosition> ObjectPosition::generate_test_instances() {
   std::list<ObjectPosition> o;
-  o.push_back(ObjectPosition{});
+  o.emplace_back();
   o.push_back(ObjectPosition(1, 2, 3));
   return o;
 }
@@ -64,7 +64,7 @@ void ObjectSetPosition::dump(Formatter *f) const {
 
 std::list<ObjectSetPosition> ObjectSetPosition::generate_test_instances() {
   std::list<ObjectSetPosition> o;
-  o.push_back(ObjectSetPosition{});
+  o.emplace_back();
   o.push_back(ObjectSetPosition({{0, 1, 120}, {121, 2, 121}}));
   return o;
 }
@@ -142,7 +142,7 @@ void Tag::dump(Formatter *f) const {
 
 std::list<Tag> Tag::generate_test_instances() {
   std::list<Tag> o;
-  o.push_back(Tag{});
+  o.emplace_back();
 
   bufferlist data;
   data.append(std::string(128, '1'));

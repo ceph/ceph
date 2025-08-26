@@ -71,8 +71,8 @@ static void decode_placement_targets(map<string, RGWZoneGroupPlacementTarget>& t
 list<RGWZone> RGWZone::generate_test_instances()
 {
   list<RGWZone> o;
-  o.push_back(RGWZone{});
-  o.push_back(RGWZone{});
+  o.emplace_back();
+  o.emplace_back();
   return o;
 }
 
@@ -511,8 +511,8 @@ void RGWZonePlacementInfo::dump(Formatter *f) const
 list<RGWZonePlacementInfo> RGWZonePlacementInfo::generate_test_instances()
 {
   list<RGWZonePlacementInfo> o;
-  o.push_back(RGWZonePlacementInfo{});
-  o.push_back(RGWZonePlacementInfo{});
+  o.emplace_back();
+  o.emplace_back();
   o.back().index_pool = rgw_pool("rgw.buckets.index");
   
   o.back().data_extra_pool = rgw_pool("rgw.buckets.non-ec");
@@ -585,7 +585,7 @@ void RGWZoneStorageClasses::dump(Formatter *f) const
 list<RGWZoneStorageClasses> RGWZoneStorageClasses::generate_test_instances()
 {
   list<RGWZoneStorageClasses> o;
-  o.push_back(RGWZoneStorageClasses{});
+  o.emplace_back();
   return o;
 }
 
@@ -672,8 +672,8 @@ void RGWZoneStorageClass::dump(Formatter *f) const
 list<RGWZoneStorageClass> RGWZoneStorageClass::generate_test_instances()
 {
   list<RGWZoneStorageClass> o;
-  o.push_back(RGWZoneStorageClass{});
-  o.push_back(RGWZoneStorageClass{});
+  o.emplace_back();
+  o.emplace_back();
   o.back().data_pool = rgw_pool("pool1");
   o.back().compression_type = "zlib";
   return o;

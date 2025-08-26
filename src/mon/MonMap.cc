@@ -123,8 +123,8 @@ void mon_info_t::dump(ceph::Formatter *f) const
 list<mon_info_t> mon_info_t::generate_test_instances()
 {
   list<mon_info_t> ls;
-  ls.push_back(mon_info_t{});
-  ls.push_back(mon_info_t{});
+  ls.emplace_back();
+  ls.emplace_back();
   ls.back().name = "noname";
   ls.back().public_addrs.parse("v1:1.2.3.4:567/890");
   ls.back().priority = 1;
@@ -328,8 +328,8 @@ void MonMap::decode(ceph::buffer::list::const_iterator& p)
 list<MonMap> MonMap::generate_test_instances()
 {
   list<MonMap> o;
-  o.push_back(MonMap{});
-  o.push_back(MonMap{});
+  o.emplace_back();
+  o.emplace_back();
   o.back().epoch = 1;
   o.back().last_changed = utime_t(123, 456);
   o.back().created = utime_t(789, 101112);

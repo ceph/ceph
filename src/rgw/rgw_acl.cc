@@ -260,7 +260,7 @@ list<ACLPermission> ACLPermission::generate_test_instances()
   ACLPermission p;
   p.set_permissions(RGW_PERM_WRITE_ACP);
   o.push_back(std::move(p));
-  o.push_back(ACLPermission{});
+  o.emplace_back();
   return o;
 }
 
@@ -314,7 +314,7 @@ list<ACLGrant> ACLGrant::generate_test_instances()
   g1.set_group(ACL_GROUP_AUTHENTICATED_USERS, RGW_PERM_WRITE);
   o.push_back(std::move(g2));
 
-  o.push_back(ACLGrant{});
+  o.emplace_back();
   return o;
 }
 
@@ -322,7 +322,7 @@ list<ACLGranteeType> ACLGranteeType::generate_test_instances()
 {
   list<ACLGranteeType> o;
   o.push_back(ACLGranteeType(ACL_TYPE_CANON_USER));
-  o.push_back(ACLGranteeType{});
+  o.emplace_back();
   return o;
 }
 
@@ -335,7 +335,7 @@ list<RGWAccessControlList> RGWAccessControlList::generate_test_instances()
     acl.add_grant(grant);
   }
   o.push_back(std::move(acl));
-  o.push_back(RGWAccessControlList{});
+  o.emplace_back();
   return o;
 }
 
@@ -346,7 +346,7 @@ list<ACLOwner> ACLOwner::generate_test_instances()
   owner.id = "rgw";
   owner.display_name = "Mr. RGW";
   o.push_back(std::move(owner));
-  o.push_back(ACLOwner{});
+  o.emplace_back();
   return o;
 }
 
@@ -364,7 +364,7 @@ list<RGWAccessControlPolicy> RGWAccessControlPolicy::generate_test_instances()
     o.push_back(std::move(p));
   }
 
-  o.push_back(RGWAccessControlPolicy{});
+  o.emplace_back();
 
   return o;
 }

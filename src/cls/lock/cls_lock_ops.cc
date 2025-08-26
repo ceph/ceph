@@ -51,7 +51,7 @@ list<cls_lock_lock_op> cls_lock_lock_op::generate_test_instances()
   i.duration = utime_t(5, 0);
   i.flags = LOCK_FLAG_MAY_RENEW;
   o.push_back(std::move(i));
-  o.push_back(cls_lock_lock_op{});
+  o.emplace_back();
   return o;
 }
 
@@ -68,7 +68,7 @@ list<cls_lock_unlock_op> cls_lock_unlock_op::generate_test_instances()
   i.name = "name";
   i.cookie = "cookie";
   o.push_back(std::move(i));
-  o.push_back(cls_lock_unlock_op{});
+  o.emplace_back();
   return o;
 }
 
@@ -87,7 +87,7 @@ list<cls_lock_break_op> cls_lock_break_op::generate_test_instances()
   i.cookie = "cookie";
   i.locker =  entity_name_t::CLIENT(1);
   o.push_back(std::move(i));
-  o.push_back(cls_lock_break_op{});
+  o.emplace_back();
   return o;
 }
 
@@ -102,7 +102,7 @@ list<cls_lock_get_info_op> cls_lock_get_info_op::generate_test_instances()
   cls_lock_get_info_op i;
   i.name = "name";
   o.push_back(std::move(i));
-  o.push_back(cls_lock_get_info_op{});
+  o.emplace_back();
   return o;
 }
 
@@ -154,7 +154,7 @@ list<cls_lock_get_info_reply> cls_lock_get_info_reply::generate_test_instances()
   i.lockers[id2] = locker_info_t(utime_t(20, 0), addr2, "description2");
 
   o.push_back(std::move(i));
-  o.push_back(cls_lock_get_info_reply{});
+  o.emplace_back();
   return o;
 }
 
@@ -179,7 +179,7 @@ list<cls_lock_list_locks_reply> cls_lock_list_locks_reply::generate_test_instanc
   i.locks.push_back("lock3");
 
   o.push_back(std::move(i));
-  o.push_back(cls_lock_list_locks_reply{});
+  o.emplace_back();
   return o;
 }
 
@@ -200,7 +200,7 @@ list<cls_lock_assert_op> cls_lock_assert_op::generate_test_instances()
   i.cookie = "cookie";
   i.tag = "tag";
   o.push_back(std::move(i));
-  o.push_back(cls_lock_assert_op{});
+  o.emplace_back();
   return o;
 }
 
@@ -223,7 +223,7 @@ list<cls_lock_set_cookie_op> cls_lock_set_cookie_op::generate_test_instances()
   i.tag = "tag";
   i.new_cookie = "new cookie";
   o.push_back(std::move(i));
-  o.push_back(cls_lock_set_cookie_op{});
+  o.emplace_back();
   return o;
 }
 

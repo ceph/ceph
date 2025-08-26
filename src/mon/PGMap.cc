@@ -197,7 +197,7 @@ void PGMapDigest::dump(ceph::Formatter *f) const
 list<PGMapDigest> PGMapDigest::generate_test_instances()
 {
   list<PGMapDigest> ls;
-  ls.push_back(PGMapDigest{});
+  ls.emplace_back();
   return ls;
 }
 
@@ -1118,15 +1118,15 @@ void PGMap::Incremental::dump(ceph::Formatter *f) const
 list<PGMap::Incremental> PGMap::Incremental::generate_test_instances()
 {
   list<PGMap::Incremental> o;
-  o.push_back(Incremental{});
-  o.push_back(Incremental{});
+  o.emplace_back();
+  o.emplace_back();
   o.back().version = 1;
   o.back().stamp = utime_t(123,345);
-  o.push_back(Incremental{});
+  o.emplace_back();
   o.back().version = 2;
   o.back().pg_stat_updates[pg_t(1,2)] = pg_stat_t();
   o.back().osd_stat_updates[5] = osd_stat_t();
-  o.push_back(Incremental{});
+  o.emplace_back();
   o.back().version = 3;
   o.back().osdmap_epoch = 1;
   o.back().pg_scan = 2;
@@ -2264,7 +2264,7 @@ void PGMap::clear_delta()
 list<PGMap> PGMap::generate_test_instances()
 {
   list<PGMap> o;
-  o.push_back(PGMap{});
+  o.emplace_back();
   list<Incremental> inc = Incremental::generate_test_instances();
   inc.pop_front();
   while (!inc.empty()) {

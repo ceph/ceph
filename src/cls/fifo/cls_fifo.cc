@@ -59,8 +59,8 @@ struct entry_header {
   }
   static std::list<entry_header> generate_test_instances() {
     std::list<entry_header> ls;
-    ls.push_back(entry_header{});
-    ls.push_back(entry_header{});
+    ls.emplace_back();
+    ls.emplace_back();
     ls.back().mtime = ceph::real_clock::now();
     return ls;
   }

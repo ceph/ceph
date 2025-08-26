@@ -84,7 +84,7 @@ list<rgw_bucket> rgw_bucket::generate_test_instances()
   rgw_bucket b;
   init_bucket(&b, "tenant", "name", "pool", ".index_pool", "marker", "123");
   o.push_back(std::move(b));
-  o.push_back(rgw_bucket{});
+  o.emplace_back();
   return o;
 }
 
@@ -128,7 +128,7 @@ list<rgw_user> rgw_user::generate_test_instances()
   rgw_user u("tenant", "user");
 
   o.push_back(u);
-  o.push_back(rgw_user{});
+  o.emplace_back();
   return o;
 }
 

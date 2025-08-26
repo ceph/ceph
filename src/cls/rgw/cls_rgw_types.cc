@@ -64,8 +64,8 @@ void rgw_zone_set::dump(Formatter *f) const
 list<rgw_zone_set> rgw_zone_set::generate_test_instances()
 {
   list<rgw_zone_set> o;
-  o.push_back(rgw_zone_set{});
-  o.push_back(rgw_zone_set{});
+  o.emplace_back();
+  o.emplace_back();
   std::optional<string> loc_key = "loc_key";
   o.back().insert("zone1", loc_key);
   o.back().insert("zone2", loc_key);
@@ -151,7 +151,7 @@ list<rgw_bucket_pending_info> rgw_bucket_pending_info::generate_test_instances()
   i.state = CLS_RGW_STATE_COMPLETE;
   i.op = CLS_RGW_OP_DEL;
   o.push_back(std::move(i));
-  o.push_back(rgw_bucket_pending_info{});
+  o.emplace_back();
   return o;
 }
 
@@ -189,7 +189,7 @@ list<rgw_bucket_dir_entry_meta> rgw_bucket_dir_entry_meta::generate_test_instanc
   m.owner_display_name = "display name";
   m.content_type = "content/type";
   o.push_back(std::move(m));
-  o.push_back(rgw_bucket_dir_entry_meta{});
+  o.emplace_back();
   return o;
 }
 
@@ -245,7 +245,7 @@ list<rgw_bucket_dir_entry> rgw_bucket_dir_entry::generate_test_instances()
 
     o.push_back(std::move(e));
   }
-  o.push_back(rgw_bucket_dir_entry{});
+  o.emplace_back();
   return o;
 }
 
@@ -263,8 +263,8 @@ void rgw_bucket_entry_ver::decode_json(JSONObj *obj) {
 list<rgw_bucket_entry_ver> rgw_bucket_entry_ver::generate_test_instances()
 {
   list<rgw_bucket_entry_ver> ls;
-  ls.push_back(rgw_bucket_entry_ver{});
-  ls.push_back(rgw_bucket_entry_ver{});
+  ls.emplace_back();
+  ls.emplace_back();
   ls.back().pool = 123;
   ls.back().epoch = 12322;
   return ls;
@@ -463,7 +463,7 @@ list<rgw_cls_bi_entry> rgw_cls_bi_entry::generate_test_instances()
   m.idx = "idx";
   encode(entry, m.data);
   o.push_back(std::move(m));
-  o.push_back(rgw_cls_bi_entry{});
+  o.emplace_back();
   return o;
 }
 
@@ -501,7 +501,7 @@ list<rgw_bucket_olh_entry> rgw_bucket_olh_entry::generate_test_instances()
   entry.exists = true;
   entry.pending_removal = true;
   o.push_back(std::move(entry));
-  o.push_back(rgw_bucket_olh_entry{});
+  o.emplace_back();
   return o;
 }
 
@@ -522,7 +522,7 @@ list<rgw_bucket_deleted_entry> rgw_bucket_deleted_entry::generate_test_instances
   entry.key.name = "key.name";
   entry.key.instance = "key.instance";
   o.push_back(std::move(entry));
-  o.push_back(rgw_bucket_deleted_entry{});
+  o.emplace_back();
   return o;
 }
 
@@ -537,7 +537,7 @@ list<rgw_bucket_olh_log_entry> rgw_bucket_olh_log_entry::generate_test_instances
   entry.key.instance = "key.instance";
   entry.delete_marker = true;
   o.push_back(std::move(entry));
-  o.push_back(rgw_bucket_olh_log_entry{});
+  o.emplace_back();
   return o;
 }
 
@@ -650,8 +650,8 @@ void rgw_bi_log_entry::dump(Formatter *f) const
 list<rgw_bi_log_entry> rgw_bi_log_entry::generate_test_instances()
 {
   list<rgw_bi_log_entry> ls;
-  ls.push_back(rgw_bi_log_entry{});
-  ls.push_back(rgw_bi_log_entry{});
+  ls.emplace_back();
+  ls.emplace_back();
   ls.back().id = "midf";
   ls.back().object = "obj";
   ls.back().timestamp = ceph::real_clock::from_ceph_timespec({ceph_le32(2), ceph_le32(3)});
@@ -671,7 +671,7 @@ list<rgw_bucket_category_stats> rgw_bucket_category_stats::generate_test_instanc
   s.num_entries = 2;
   s.actual_size = 1024;
   o.push_back(std::move(s));
-  o.push_back(rgw_bucket_category_stats{});
+  o.emplace_back();
   return o;
 }
 
@@ -699,7 +699,7 @@ list<rgw_bucket_dir_header> rgw_bucket_dir_header::generate_test_instances()
     o.push_back(std::move(h));
   }
 
-  o.push_back(rgw_bucket_dir_header{});
+  o.emplace_back();
   return o;
 }
 
@@ -742,7 +742,7 @@ list<rgw_bucket_dir> rgw_bucket_dir::generate_test_instances()
     o.push_back(std::move(d));
   }
 
-  o.push_back(rgw_bucket_dir{});
+  o.emplace_back();
   return o;
 }
 
@@ -769,7 +769,7 @@ list<rgw_s3select_usage_data> rgw_s3select_usage_data::generate_test_instances()
   s.bytes_processed = 1024;
   s.bytes_returned = 512;
   o.push_back(std::move(s));
-  o.push_back(rgw_s3select_usage_data{});
+  o.emplace_back();
   return o;
 }
 
@@ -788,7 +788,7 @@ list<rgw_usage_data> rgw_usage_data::generate_test_instances()
   s.ops = 2;
   s.successful_ops = 1;
   o.push_back(std::move(s));
-  o.push_back(rgw_usage_data{});
+  o.emplace_back();
   return o;
 }
 
@@ -811,7 +811,7 @@ list<rgw_usage_log_info> rgw_usage_log_info::generate_test_instances()
   rgw_usage_log_entry r(owner, payer, bucket);
   s.entries.push_back(r);
   o.push_back(std::move(s));
-  o.push_back(rgw_usage_log_info{});
+  o.emplace_back();
   return o;
 }
 
@@ -827,7 +827,7 @@ list<rgw_user_bucket> rgw_user_bucket::generate_test_instances()
   s.user = "user";
   s.bucket = "bucket";
   o.push_back(std::move(s));
-  o.push_back(rgw_user_bucket{});
+  o.emplace_back();
   return o;
 }
 
@@ -889,7 +889,7 @@ list<rgw_usage_log_entry> rgw_usage_log_entry::generate_test_instances()
   entry.usage_map["get_obj"] = usage_data;
   entry.s3select_usage = s3select_usage_data;
   o.push_back(std::move(entry));
-  o.push_back(rgw_usage_log_entry{});
+  o.emplace_back();
   return o;
 }
 
@@ -931,8 +931,8 @@ void cls_rgw_reshard_entry::dump(Formatter *f) const
 list<cls_rgw_reshard_entry> cls_rgw_reshard_entry::generate_test_instances()
 {
   list<cls_rgw_reshard_entry> ls;
-  ls.push_back(cls_rgw_reshard_entry{});
-  ls.push_back(cls_rgw_reshard_entry{});
+  ls.emplace_back();
+  ls.emplace_back();
   ls.back().time = ceph::real_clock::from_ceph_timespec({ceph_le32(2), ceph_le32(3)});
   ls.back().tenant = "tenant";
   ls.back().bucket_name = "bucket1""";
@@ -950,8 +950,8 @@ void cls_rgw_bucket_instance_entry::dump(Formatter *f) const
 list<cls_rgw_bucket_instance_entry> cls_rgw_bucket_instance_entry::generate_test_instances()
 {
   list<cls_rgw_bucket_instance_entry> ls;
-  ls.push_back(cls_rgw_bucket_instance_entry{});
-  ls.push_back(cls_rgw_bucket_instance_entry{});
+  ls.emplace_back();
+  ls.emplace_back();
   ls.back().reshard_status = RESHARD_STATUS::IN_PROGRESS;
   return ls;
 }
@@ -971,7 +971,7 @@ list<cls_rgw_lc_entry> cls_rgw_lc_entry::generate_test_instances()
   s.start_time = 10;
   s.status = 1;
   o.push_back(std::move(s));
-  o.push_back(cls_rgw_lc_entry{});
+  o.emplace_back();
   return o;
 }
 
