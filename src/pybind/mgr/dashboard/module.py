@@ -146,6 +146,7 @@ class CherryPyConfig(object):
                 'application/json',
                 'application/*+json',
                 'application/javascript',
+                'text/css',
             ],
             'tools.json_in.on': True,
             'tools.json_in.force': True,
