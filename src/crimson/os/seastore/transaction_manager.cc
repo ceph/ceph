@@ -4,6 +4,7 @@
 #include "include/denc.h"
 #include "include/intarith.h"
 
+#include "crimson/common/coroutine.h"
 #include "crimson/os/seastore/logging.h"
 #include "crimson/os/seastore/transaction_manager.h"
 #include "crimson/os/seastore/journal.h"
@@ -437,6 +438,97 @@ TransactionManager::refs_ret TransactionManager::remove(
       return ref_iertr::make_ready_future<std::vector<unsigned>>(std::move(refcnts));
     });
   });
+}
+
+base_iertr::future<LogicalChildNodeRef>
+TransactionManager::relocate_logical_extent(
+  Transaction &t, LBAMapping mapping)
+{
+  LOG_PREFIX(TransactionManager::relocate_logical_extent);
+  SUBDEBUGT(seastore_tm, "relocate {}", t, mapping);
+  assert(!mapping.is_indirect());
+  assert(!mapping.is_zero_reserved());
+  assert(mapping.is_viewable());
+  auto v = mapping.get_logical_extent(t);
+  if (!v.has_child()) {
+    cache->retire_absent_extent_addr(
+      t, mapping.get_key(), mapping.get_val(), mapping.get_length());
+  } else {
+    auto extent = co_await v.get_child_fut().si_then([](auto ext) {
+      return ext;
+    });
+    cache->retire_extent(t, extent);
+  }
+  co_return cache->alloc_remapped_extent_by_type(
+    t, mapping.get_extent_type(), mapping.get_key(),
+    mapping.get_val(), 0, mapping.get_length(), std::nullopt
+  )->cast<LogicalChildNode>();
+}
+
+TransactionManager::move_region_ret
+TransactionManager::move_region(
+  Transaction &t,
+  LBAMapping src,
+  LBAMapping dst,
+  laddr_t dst_prefix)
+{
+  auto src_prefix = src.get_key().get_clone_prefix();
+  auto calc_dst_key = [&src, dst_prefix] {
+    auto key = src.get_key();
+    auto offset = key.get_byte_distance<loffset_t>(key.get_clone_prefix());
+    return (dst_prefix + offset).checked_to_laddr();
+  };
+
+  // remove the reserved mapping at dst
+
+  assert(!dst.is_indirect());
+  assert(dst.is_zero_reserved());
+  auto remove_ret = co_await lba_manager->remove_mapping(
+    t, std::move(dst)
+  ).handle_error_interruptible(
+    move_region_iertr::pass_further(),
+    crimson::ct_error::assert_all("invalid error"));
+  dst = std::move(remove_ret.result.mapping);
+  src = co_await src.refresh();
+
+  assert(src.is_viewable());
+  assert(dst.is_viewable());
+  // move mapping from src to dst
+  while (src.get_key().get_clone_prefix() == src_prefix) {
+    if (src.is_indirect()) {
+      auto ret = co_await lba_manager->move_indirect_mapping(
+	t, src, calc_dst_key(), dst);
+      src = std::move(ret.src);
+      dst = std::move(ret.dest);
+    } else if (!src.is_zero_reserved()) {
+      auto extent = co_await relocate_logical_extent(t, src);
+      auto laddr = calc_dst_key();
+      extent->set_laddr(laddr);
+      auto ret = co_await lba_manager->move_direct_mapping(
+	t, src, laddr, dst, *extent);
+      src = std::move(ret.src);
+      dst = std::move(ret.dest);
+    } else { // src is direct mapping
+      auto len = src.get_length();
+      auto dst_key = calc_dst_key();
+      auto remove_ret = co_await lba_manager->remove_mapping(t, src
+      ).handle_error_interruptible(
+	move_region_iertr::pass_further(),
+	crimson::ct_error::assert_all("invalid error"));
+      src = std::move(remove_ret.result.mapping);
+      dst = co_await dst.refresh();
+      auto insert = co_await reserve_region(
+	t, std::move(dst), dst_key, len, src.get_extent_type()
+      ).handle_error_interruptible(
+	move_region_iertr::pass_further(),
+	crimson::ct_error::assert_all("invalid error"));
+      src = co_await src.refresh();
+      dst = co_await insert.next();
+    }
+    assert(src.is_viewable());
+    assert(dst.is_viewable());
+  }
+  co_return;
 }
 
 TransactionManager::submit_transaction_iertr::future<>
