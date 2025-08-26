@@ -171,6 +171,31 @@ TEST_CASE("fdb simple", "[rgw][fdb]") {
  }
 }
 
+TEST_CASE("fdb simple (delete keys in range)", "[rgw][fdb]") {
+
+ // Write a bunch of kvs:
+ const auto kvs = make_monotonic_kvs(100);
+ lfdb::set(lfdb::make_transaction(dbh), begin(kvs), end(kvs), lfdb::commit_after_op::commit);
+
+ // Make sure that worked:
+ std::vector<std::string> out_values;
+ lfdb::get(lfdb::make_transaction(dbh), lfdb::select { "key_00", "key_99" }, std::back_inserter(out_values));
+ CHECK(100 == out_values.size());
+
+ // Erase some of the range:
+ CHECK(0 == out_values.size());
+ lfdb::erase(lfdb::make_transaction(dbh), lfdb::select { "key_40", "key_59" }, lfdb::commit_after_op::commit);
+
+ // They should be "mostly gone":
+ lfdb::get(lfdb::make_transaction(dbh), lfdb::select { "key_00", "key_99" }, std::back_inserter(out_values));
+ CHECK(50 == out_values.size());
+
+ // Aaaaand, abracadabra, they should ALL be gone:
+ out_values.clear();
+ lfdb::get(lfdb::make_transaction(dbh), lfdb::select { "key_00", "key_99" }, std::back_inserter(out_values));
+ CHECK(0 == out_values.size());
+}
+
 TEMPLATE_PRODUCT_TEST_CASE("A Template product test case", "[template][product]", 
 (std::vector, std::list), (string_pair)) {
  auto dbh = lfdb::make_database();

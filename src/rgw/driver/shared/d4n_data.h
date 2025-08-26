@@ -61,3 +61,16 @@ class Directory {
     Directory() {}
 };
 
+namespace rgw::d4n {
+
+int check_bool(std::string str) {
+  if (str == "true" || str == "1") {
+    return 1;
+  } else if (str == "false" || str == "0") {
+    return 0;
+  } else {
+    return -EINVAL;
+  }
+}
+
+} // namespace rgw::d4n
