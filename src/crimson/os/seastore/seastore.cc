@@ -236,6 +236,11 @@ seastar::future<> SeaStore::get_shard_nums()
       });
     INFO("seastore shard nums {}", shard_nums);
     store_shard_nums = shard_nums;
+    if(!crimson::common::get_conf<bool>("seastore_enable_shards_changes")) {
+      if (store_shard_nums != seastar::smp::count) {
+        ceph_abort_msg("seastore_enable_shards_changes is false, seastore shards do not match seastar::smp");
+      }
+    }
     co_return;
   }
 }
