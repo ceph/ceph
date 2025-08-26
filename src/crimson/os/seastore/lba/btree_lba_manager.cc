@@ -1307,12 +1307,14 @@ BtreeLBAManager::remap_mappings(
       assert(mapping.is_indirect() ||
 	(val.pladdr.is_paddr() &&
 	 val.pladdr.get_paddr().is_absolute()));
+      // remove the remapped mapping
       return update_refcount(c.trans, &cursor, -1
       ).si_then([&mapping, &btree, &iter, c, &ret,
 		&remaps, pladdr=val.pladdr](auto r) {
 	assert(r.refcount == 0);
 	auto &cursor = r.mapping.get_effective_cursor();
 	iter = btree.make_partial_iter(c, cursor);
+	// insert new remap mapping
 	return trans_intr::do_for_each(
 	  remaps,
 	  [&mapping, &btree, &iter, c, &ret, pladdr](auto &remap) {
@@ -1370,6 +1372,9 @@ BtreeLBAManager::remap_mappings(
 	return base_iertr::now();
       }).si_then([this, c, &mapping, &remaps] {
 	if (remaps.size() > 1 && mapping.is_indirect()) {
+	  // increase the refcount of the direct mapping if
+	  // the mapping is indirect and it's remapped into
+	  // more than 1 mappings
 	  auto &cursor = mapping.direct_cursor;
 	  assert(cursor->is_viewable());
 	  return update_refcount(
@@ -1390,6 +1395,140 @@ BtreeLBAManager::remap_mappings(
       });
     });
   });
+}
+
+BtreeLBAManager::move_mapping_ret
+BtreeLBAManager::_copy_mapping(
+  op_context_t c,
+  LBABtree &btree,
+  LBAMapping src,
+  laddr_t dest_laddr,
+  LBAMapping dest,
+  LogicalChildNode *extent)
+{
+  LOG_PREFIX(BtreeLBAManager::_copy_mapping);
+  assert(dest.is_viewable());
+  assert(src.is_viewable());
+  assert(!src.is_end());
+  assert(src.direct_cursor->get_refcount() == EXTENT_DEFAULT_REF_COUNT);
+  assert(!src.is_indirect() == (bool)extent);
+  DEBUGT("src={} dest={}", c.trans, src, dest);
+  move_mapping_ret_t ret{std::move(src), std::move(dest)};
+  auto &cursor = ret.dest.get_effective_cursor();
+  auto iter = btree.make_partial_iter(c, cursor);
+  if (!iter.is_end()) {
+    assert(iter.get_key() >= dest_laddr + ret.src.get_length());
+  }
+  // insert the src mapping to dest
+  auto [niter, inserted] = co_await btree.insert(
+      c,
+      std::move(iter),
+      dest_laddr,
+      lba_map_val_t{
+	ret.src.get_length(),
+	ret.src.is_indirect()
+	  ? pladdr_t(ret.src.get_intermediate_key().get_local_clone_id())
+	  : pladdr_t(ret.src.get_val()),
+	EXTENT_DEFAULT_REF_COUNT,
+	ret.src.is_indirect() ? 0 : ret.src.get_checksum(),
+	ret.src.get_extent_type()});
+  ceph_assert(inserted);
+  // attach extent to the new mapping if it exists
+  auto &leaf_node = *niter.get_leaf_node();
+  leaf_node.insert_child_ptr(
+    niter.get_leaf_pos(),
+    extent ? extent : get_reserved_ptr<LBALeafNode, laddr_t>(),
+    leaf_node.get_size() - 1 /*the size before the insert*/);
+  ret.dest = LBAMapping::create_direct(niter.get_cursor(c));
+  ret.src = co_await ret.src.refresh();
+  co_return ret;
+}
+
+BtreeLBAManager::move_mapping_ret
+BtreeLBAManager::_move_mapping(
+  Transaction &t,
+  LBAMapping src,
+  laddr_t dest_laddr,
+  LBAMapping dest,
+  LogicalChildNode *extent) {
+  LOG_PREFIX(BtreeLBAManager::move_direct_mapping);
+  assert(dest.is_viewable());
+  assert(src.is_viewable());
+  assert(!src.is_indirect());
+  assert(!src.is_end());
+  assert(src.direct_cursor->get_refcount() == EXTENT_DEFAULT_REF_COUNT);
+  DEBUGT("src={} dest={}", t, src, dest);
+  auto c = get_context(t);
+  auto btree = co_await get_btree(t);
+  auto ret = co_await _copy_mapping(
+    c, btree, std::move(src), dest_laddr, std::move(dest), extent);
+
+  auto res = co_await update_refcount(
+    c.trans, &ret.src.get_effective_cursor(), -1
+  ).handle_error_interruptible(
+    move_mapping_iertr::pass_further{},
+    crimson::ct_error::assert_all{"unexpected error"});
+
+  ceph_assert(res.refcount == 0);
+
+  if (auto &cursor = res.mapping.get_effective_cursor();
+      cursor.is_indirect()) {
+    ret.src = LBAMapping::create_indirect(nullptr, &cursor);
+  } else {
+    ret.src = LBAMapping::create_direct(&cursor);
+  }
+  auto m = co_await ret.dest.refresh();
+  ret.dest = co_await m.next();
+
+  co_return ret;
+}
+
+BtreeLBAManager::move_mapping_ret
+BtreeLBAManager::move_and_clone_direct_mapping(
+  Transaction &t,
+  LBAMapping src,
+  laddr_t dest_laddr,
+  LBAMapping dest,
+  LogicalChildNode &extent)
+{
+  LOG_PREFIX(BtreeLBAManager::move_and_clone_direct_mapping);
+  assert(dest.is_viewable());
+  assert(src.is_viewable());
+  assert(!src.is_indirect());
+  assert(!src.is_end());
+  assert(src.direct_cursor->get_refcount() == EXTENT_DEFAULT_REF_COUNT);
+  DEBUGT("src={} dest={}", t, src, dest);
+  auto c = get_context(t);
+  auto btree = co_await get_btree(t);
+  auto ret = co_await _copy_mapping(
+    c, btree, std::move(src), dest_laddr, std::move(dest), &extent);
+
+  // turn the src mapping into an indirect one pointing to
+  // the previously inserted mapping
+  auto res = co_await _update_mapping(
+    c.trans,
+    *ret.src.direct_cursor,
+    [&ret](const auto &in) {
+      lba_map_val_t val = in;
+      val.pladdr = ret.dest.get_key().get_local_clone_id();
+      val.checksum = 0;
+      return val;
+    },
+    nullptr
+  ).handle_error_interruptible(
+    move_mapping_iertr::pass_further{},
+    crimson::ct_error::assert_all{"unexpected error"});
+
+  assert(res.is_alive_mapping());
+  auto cursor = res.take_cursor();
+  assert(cursor->is_indirect());
+  auto iter = btree.make_partial_iter(c, *cursor);
+  DEBUGT("resetting child ptr, leaf: {}, pos: {}",
+	 t, *iter.get_leaf_node(), iter.get_leaf_pos());
+  iter.get_leaf_node()->reset_child_ptr(iter.get_leaf_pos());
+  ret.src = LBAMapping::create_indirect(nullptr, std::move(cursor));
+  ret.dest = co_await ret.dest.refresh();
+  co_return ret;
 }
 
 }
