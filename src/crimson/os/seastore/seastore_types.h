@@ -1636,13 +1636,20 @@ struct __attribute__((packed)) laddr_le_t {
   bool operator==(const laddr_le_t&) const = default;
 };
 
+/**
+ * pladdr_t
+ *
+ * The value of LBA tree leaf node entries, stores either the physical address
+ * of the logical extent, or the value of local_clone_id field of the intermediate
+ * key which points to the physical lba mapping.
+ */
 struct pladdr_t {
-  std::variant<laddr_t, paddr_t> pladdr;
+  std::variant<local_clone_id_t, paddr_t> pladdr;
 
   pladdr_t() = default;
-  pladdr_t(const pladdr_t &) noexcept = default;
-  explicit pladdr_t(laddr_t laddr)
-    : pladdr(laddr) {}
+  pladdr_t(const pladdr_t &) = default;
+  explicit pladdr_t(local_clone_id_t id)
+    : pladdr(id) {}
   constexpr explicit pladdr_t(paddr_t paddr)
     : pladdr(paddr) {}
 
@@ -1659,8 +1666,8 @@ struct pladdr_t {
     return *this;
   }
 
-  pladdr_t& operator=(laddr_t laddr) {
-    pladdr = laddr;
+  pladdr_t& operator=(local_clone_id_t id) {
+    pladdr = id;
     return *this;
   }
 
@@ -1671,11 +1678,16 @@ struct pladdr_t {
     return paddr_t(std::get<1>(pladdr));
   }
 
-  laddr_t get_laddr() const {
+  local_clone_id_t get_local_clone_id() const {
     assert(pladdr.index() == 0);
-    return laddr_t(std::get<0>(pladdr));
+    return std::get<0>(pladdr);
   }
 
+  // The corresponding lba key with stored local clone id is the real
+  // intermediate key.
+  laddr_t build_laddr(laddr_t key) const {
+    return key.with_local_clone_id(get_local_clone_id());
+  }
 };
 
 constexpr pladdr_t PL_ADDR_NULL = pladdr_t(P_ADDR_NULL);
@@ -1688,29 +1700,26 @@ enum class addr_type_t : uint8_t {
 };
 
 struct __attribute__((packed)) pladdr_le_t {
-  ceph_le64 pladdr = ceph_le64(0);
-  addr_type_t addr_type = addr_type_t::MAX;
+  ceph_le64 addr;
+  addr_type_t addr_type;
 
-  pladdr_le_t() = default;
+  pladdr_le_t() : pladdr_le_t(PL_ADDR_NULL) {}
   pladdr_le_t(const pladdr_le_t &) = default;
   explicit pladdr_le_t(const pladdr_t &addr)
-    : pladdr(
-	ceph_le64(
-	  addr.is_laddr() ?
-	    std::get<0>(addr.pladdr).value :
-	    std::get<1>(addr.pladdr).internal_paddr)),
-      addr_type(
-	addr.is_laddr() ?
-	  addr_type_t::LADDR :
-	  addr_type_t::PADDR)
+    : addr(ceph_le64(addr.is_laddr()
+		     ? addr.get_local_clone_id()
+		     : addr.get_paddr().internal_paddr)),
+      addr_type(addr.is_laddr()
+		? addr_type_t::LADDR
+		: addr_type_t::PADDR)
   {}
 
   operator pladdr_t() const {
     if (addr_type == addr_type_t::LADDR) {
-      return pladdr_t(laddr_t(pladdr));
+      return pladdr_t(static_cast<local_clone_id_t>(addr));
     } else {
       assert(addr_type == addr_type_t::PADDR);
-      return pladdr_t(paddr_t(pladdr));
+      return pladdr_t(paddr_t(addr));
     }
   }
 };
