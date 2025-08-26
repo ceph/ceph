@@ -100,6 +100,16 @@ public:
   }
 
   /**
+   * relocate_logical_extent
+   *
+   * Make a new logical extent to update its laddr. The caller is
+   * responsible to update the corresponding lba mapping.
+   */
+  base_iertr::future<LogicalChildNodeRef> relocate_logical_extent(
+    Transaction &t,
+    LBAMapping mapping);
+
+  /**
    * get_pin
    *
    * Get the logical pin at offset
@@ -695,6 +705,14 @@ public:
     }
     co_return clone_range_ret_t{shared_direct, std::move(pos)};
   }
+
+  using move_region_iertr = base_iertr;
+  using move_region_ret = move_region_iertr::future<>;
+  move_region_ret move_region(
+    Transaction &t,
+    LBAMapping src,
+    LBAMapping dst,
+    laddr_t dst_prefix);
 
   /* alloc_extents
    *

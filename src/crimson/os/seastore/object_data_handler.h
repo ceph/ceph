@@ -402,6 +402,9 @@ public:
     extent_len_t len,
     extent_len_t destoff);
 
+  using rename_iertr = base_iertr;
+  using rename_ret = rename_iertr::future<>;
+  rename_ret rename(context_t ctx);
 private:
   /// Updates region [_offset, _offset + bl.length) to bl
   write_ret overwrite(
@@ -431,6 +434,7 @@ private:
   write_iertr::future<std::optional<LBAMapping>>
   prepare_data_reservation(
     context_t ctx,
+    Onode &onode,
     object_data_t &object_data,
     extent_len_t size);
 

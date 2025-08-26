@@ -1930,33 +1930,60 @@ SeaStore::Shard::_rename(
   OnodeRef &onode,
   OnodeRef &d_onode)
 {
-  auto olayout = onode->get_layout();
-  uint32_t size = olayout.size;
-  auto omap_root = rename_omap_root(omap_type_t::OMAP, *onode, *d_onode);
-  auto xattr_root = rename_omap_root(omap_type_t::XATTR, *onode, *d_onode);
-  auto log_root = rename_omap_root(omap_type_t::LOG, *onode, *d_onode);
-  auto object_data = olayout.object_data.get();
-  auto oi_bl = ceph::bufferlist::static_from_mem(
-    &olayout.oi[0],
-    (uint32_t)olayout.oi_size);
-  auto ss_bl = ceph::bufferlist::static_from_mem(
-    &olayout.ss[0],
-    (uint32_t)olayout.ss_size);
+  return seastar::do_with(
+    ObjectDataHandler(max_object_size),
+    [this, &ctx, &onode, &d_onode](ObjectDataHandler &objHanlder)
+  {
+    return objHanlder.rename(ObjectDataHandler::context_t{
+      *transaction_manager, *ctx.transaction, *onode, d_onode.get()
+    }).si_then([&ctx, &onode, &d_onode] {
+      auto get_prefix = [](Onode &onode) {
+	auto p = onode.get_clone_prefix();
+	assert(p);
+	return *p;
+      };
+      auto src_prefix = get_prefix(*onode);
+      auto dst_prefix = get_prefix(*d_onode);
 
-  d_onode->update_onode_size(*ctx.transaction, size);
-  d_onode->update_omap_root(*ctx.transaction, omap_root);
-  d_onode->update_xattr_root(*ctx.transaction, xattr_root);
-  d_onode->update_log_root(*ctx.transaction, log_root);
-  d_onode->update_object_data(*ctx.transaction, object_data);
-  d_onode->update_object_info(*ctx.transaction, oi_bl);
-  d_onode->update_snapset(*ctx.transaction, ss_bl);
-  return onode_manager->erase_onode(
-    *ctx.transaction, onode
-  ).handle_error_interruptible(
-    crimson::ct_error::input_output_error::pass_further(),
-    crimson::ct_error::assert_all{
-      "Invalid error in SeaStoreS::_rename"}
-  );
+      auto rename_omap_root = [&](omap_type_t type) {
+	auto root = onode->get_root(type).get(d_onode->get_metadata_hint());
+	if (root.is_null()) {
+	  return root;
+	}
+	auto offset = root.addr.get_byte_distance<loffset_t>(src_prefix);
+	root.update(
+	  (dst_prefix + offset).checked_to_laddr(),
+	  root.depth, d_onode->get_metadata_hint(), type);
+	return root;
+      };
+
+      auto olayout = onode->get_layout();
+      uint32_t size = olayout.size;
+      auto omap_root = rename_omap_root(omap_type_t::OMAP);
+      auto xattr_root = rename_omap_root(omap_type_t::XATTR);
+      auto log_root = rename_omap_root(omap_type_t::LOG);
+      auto oi_bl = ceph::bufferlist::static_from_mem(
+	&olayout.oi[0],
+	(uint32_t)olayout.oi_size);
+      auto ss_bl = ceph::bufferlist::static_from_mem(
+	&olayout.ss[0],
+	(uint32_t)olayout.ss_size);
+
+      d_onode->update_onode_size(*ctx.transaction, size);
+      d_onode->update_omap_root(*ctx.transaction, omap_root);
+      d_onode->update_xattr_root(*ctx.transaction, xattr_root);
+      d_onode->update_log_root(*ctx.transaction, log_root);
+      d_onode->update_object_info(*ctx.transaction, oi_bl);
+      d_onode->update_snapset(*ctx.transaction, ss_bl);
+    });
+  }).si_then([this, &ctx, &onode] {
+    return onode_manager->erase_onode(
+      *ctx.transaction, onode
+    ).handle_error_interruptible(
+      crimson::ct_error::input_output_error::pass_further(),
+      crimson::ct_error::assert_all{
+	"Invalid error in SeaStoreS::_rename"});
+  });
 }
 
 SeaStore::Shard::tm_ret

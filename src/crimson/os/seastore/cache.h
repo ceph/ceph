@@ -1246,6 +1246,15 @@ public:
     return extent;
   }
 
+  CachedExtentRef alloc_remapped_extent_by_type(
+    Transaction &t,
+    extent_types_t type,
+    laddr_t remap_laddr,
+    paddr_t remap_paddr,
+    extent_len_t remap_offset,
+    extent_len_t remap_length,
+    const std::optional<ceph::bufferptr> &original_bptr);
+
   /**
    * alloc_new_non_data_extent_by_type
    *
