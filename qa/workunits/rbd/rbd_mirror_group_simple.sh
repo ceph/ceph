@@ -2814,12 +2814,17 @@ test_force_promote_delete_group()
   wait_for_group_present "${secondary_cluster}" "${pool}" "${group0}" $(("${image_count}"-1))
   wait_for_group_present "${primary_cluster}" "${pool}" "${group0}" "${image_count}"
 
+  # disable on original primary before removing the new primary group, i.e.,
+  # the secondary that was force-promoted. Otherwise, the check for new primary
+  # group removal may fail since the rbd-mirror daemon can race to recreate the
+  # group quickly after it has been removed.
+  mirror_group_disable "${primary_cluster}" "${pool}/${group0}"
+
   group_remove "${secondary_cluster}" "${pool}/${group0}"
   wait_for_group_not_present "${secondary_cluster}" "${pool}" "${group0}"
   images_remove "${secondary_cluster}" "${pool}/${image_prefix}" "${image_count}"
 
-  # disable and re-enable on original primary
-  mirror_group_disable "${primary_cluster}" "${pool}/${group0}"
+  # re-enable on original primary
   mirror_group_enable "${primary_cluster}" "${pool}/${group0}"
 
   # confirm that group is mirrored back to secondary
