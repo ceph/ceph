@@ -131,6 +131,54 @@ public:
 				// direct mapping
   ) = 0;
 
+  struct move_mapping_ret_t {
+    LBAMapping src;
+    LBAMapping dest;
+  };
+  /*
+   * move_and_clone_direct_mapping
+   *
+   * move the direct mapping "src" to "dest" and clone it at the
+   * position of "src".
+   *
+   * Return: the new indirect mapping and the moved direct mapping
+   */
+  using move_mapping_iertr = alloc_extent_iertr;
+  using move_mapping_ret = move_mapping_iertr::future<move_mapping_ret_t>;
+  virtual move_mapping_ret move_and_clone_direct_mapping(
+    Transaction &t,
+    LBAMapping src,
+    laddr_t dest_laddr,
+    LBAMapping dest,
+    LogicalChildNode &extent) = 0;
+
+  /*
+   * move_indirect_mapping
+   *
+   * move the indirect mapping "src" to dest, and remove "src".
+   *
+   * Return: the mapping next to "src" and the original "dest"
+   */
+  virtual move_mapping_ret move_indirect_mapping(
+    Transaction &t,
+    LBAMapping src,
+    laddr_t dest_laddr,
+    LBAMapping dest) = 0;
+
+  /*
+   * move_direct_mapping
+   *
+   * move the indirect mapping "src" to dest, and remove "src".
+   *
+   * Return: the mapping next to "src" and the original "dest"
+   */
+  virtual move_mapping_ret move_direct_mapping(
+    Transaction &t,
+    LBAMapping src,
+    laddr_t dest_laddr,
+    LBAMapping dest,
+    LogicalChildNode &extent) = 0;
+
   virtual alloc_extent_ret reserve_region(
     Transaction &t,
     laddr_hint_t hint,

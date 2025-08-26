@@ -1374,8 +1374,8 @@ private:
 	      t,
 	      remap_laddr,
 	      remap_paddr,
+	      remap_offset,
 	      remap_len,
-	      original_laddr,
 	      original_bptr);
 	    // user must initialize the logical extent themselves.
 	    extent->set_seen_by_users();
