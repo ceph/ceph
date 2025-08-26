@@ -3625,6 +3625,12 @@ options:
 # osd_*_priority determines the ratio of available io between client and
 # recovery.  Each option may be set between
 # 1..63.
+- name: rocksdb_compact_on_mount
+  type: bool
+  level: dev
+  desc: Trigger RocksDB compaction when OSD mounts the store.
+  default: false
+  with_legacy: true
 - name: rocksdb_cf_compact_on_deletion
   type: bool
   level: dev

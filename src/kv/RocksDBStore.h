@@ -249,7 +249,7 @@ public:
     dbstats(NULL),
     compact_queue_stop(false),
     compact_thread(this),
-    compact_on_mount(false),
+    compact_on_mount(cct->_conf.get_val<bool>("rocksdb_compact_on_mount")),
     disableWAL(false)
   {}
 
