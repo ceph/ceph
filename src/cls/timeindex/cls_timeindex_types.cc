@@ -18,6 +18,6 @@ std::list<cls_timeindex_entry> cls_timeindex_entry::generate_test_instances()
   bl.append("bar");
   i.value = bl;
   o.push_back(std::move(i));
-  o.push_back(cls_timeindex_entry{});
+  o.emplace_back();
   return o;
 }

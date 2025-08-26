@@ -64,8 +64,8 @@ struct MonCommand {
 
   static std::list<MonCommand> generate_test_instances() {
     std::list<MonCommand> ls;
-    ls.push_back(MonCommand{});
-    ls.push_back(MonCommand{});
+    ls.emplace_back();
+    ls.emplace_back();
     ls.back().cmdstring = "foo";
     ls.back().helpstring = "bar";
     ls.back().module = "baz";

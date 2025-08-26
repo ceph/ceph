@@ -41,7 +41,7 @@ struct cls_cas_chunk_create_or_get_ref_op {
   }
   static std::list<cls_cas_chunk_create_or_get_ref_op> generate_test_instances() {
     std::list<cls_cas_chunk_create_or_get_ref_op> ls;
-    ls.push_back(cls_cas_chunk_create_or_get_ref_op{});
+    ls.emplace_back();
     return ls;
   }
 };
@@ -69,7 +69,7 @@ struct cls_cas_chunk_get_ref_op {
   }
   static std::list<cls_cas_chunk_get_ref_op> generate_test_instances() {
     std::list<cls_cas_chunk_get_ref_op> ls;
-    ls.push_back(cls_cas_chunk_get_ref_op{});
+    ls.emplace_back();
     return ls;
   }
 };
@@ -98,7 +98,7 @@ struct cls_cas_chunk_put_ref_op {
   }
   static std::list<cls_cas_chunk_put_ref_op> generate_test_instances() {
     std::list<cls_cas_chunk_put_ref_op> ls;
-    ls.push_back(cls_cas_chunk_put_ref_op{});
+    ls.emplace_back();
     return ls;
   }
 };

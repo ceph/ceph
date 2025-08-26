@@ -72,7 +72,7 @@ std::list<RGWObjTags> RGWObjTags::generate_test_instances()
   r.add_tag("key1","val1");
   r.add_tag("key2","val2");
   o.push_back(std::move(r));
-  o.push_back(RGWObjTags{});
+  o.emplace_back();
   return o;
 }
 

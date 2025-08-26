@@ -16,8 +16,8 @@ void cls_refcount_get_op::dump(ceph::Formatter *f) const
 list<cls_refcount_get_op> cls_refcount_get_op::generate_test_instances()
 {
   list<cls_refcount_get_op> ls;
-  ls.push_back(cls_refcount_get_op{});
-  ls.push_back(cls_refcount_get_op{});
+  ls.emplace_back();
+  ls.emplace_back();
   ls.back().tag = "foo";
   ls.back().implicit_ref = true;
   return ls;
@@ -33,8 +33,8 @@ void cls_refcount_put_op::dump(ceph::Formatter *f) const
 list<cls_refcount_put_op> cls_refcount_put_op::generate_test_instances()
 {
   list<cls_refcount_put_op> ls;
-  ls.push_back(cls_refcount_put_op{});
-  ls.push_back(cls_refcount_put_op{});
+  ls.emplace_back();
+  ls.emplace_back();
   ls.back().tag = "foo";
   ls.back().implicit_ref = true;
   return ls;
@@ -50,8 +50,8 @@ void cls_refcount_set_op::dump(ceph::Formatter *f) const
 list<cls_refcount_set_op> cls_refcount_set_op::generate_test_instances()
 {
   list<cls_refcount_set_op> ls;
-  ls.push_back(cls_refcount_set_op{});
-  ls.push_back(cls_refcount_set_op{});
+  ls.emplace_back();
+  ls.emplace_back();
   ls.back().refs.push_back("foo");
   ls.back().refs.push_back("bar");
   return ls;
@@ -66,8 +66,8 @@ void cls_refcount_read_op::dump(ceph::Formatter *f) const
 list<cls_refcount_read_op> cls_refcount_read_op::generate_test_instances()
 {
   list<cls_refcount_read_op> ls;
-  ls.push_back(cls_refcount_read_op{});
-  ls.push_back(cls_refcount_read_op{});
+  ls.emplace_back();
+  ls.emplace_back();
   return ls;
 }
 
@@ -83,8 +83,8 @@ void cls_refcount_read_ret::dump(ceph::Formatter *f) const
 list<cls_refcount_read_ret> cls_refcount_read_ret::generate_test_instances()
 {
   list<cls_refcount_read_ret> ls;
-  ls.push_back(cls_refcount_read_ret{});
-  ls.push_back(cls_refcount_read_ret{});
+  ls.emplace_back();
+  ls.emplace_back();
   ls.back().refs.push_back("foo");
   ls.back().refs.push_back("bar");
   return ls;
@@ -110,7 +110,7 @@ void obj_refcount::dump(ceph::Formatter *f) const
 list<obj_refcount> obj_refcount::generate_test_instances()
 {
   list<obj_refcount> ls;
-  ls.push_back(obj_refcount{});
+  ls.emplace_back();
   ls.back().refs.emplace("foo",true);
   ls.back().retired_refs.emplace("bar");
   return ls;

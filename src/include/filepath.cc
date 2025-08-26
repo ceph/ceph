@@ -118,7 +118,7 @@ void filepath::dump(ceph::Formatter *f) const {
 
 std::list<filepath> filepath::generate_test_instances() {
   std::list<filepath> o;
-  o.push_back(filepath{});
+  o.emplace_back();
   o.push_back(filepath("/usr/bin", 0));
   o.push_back(filepath("/usr/sbin", 1));
   o.push_back(filepath("var/log", 1));

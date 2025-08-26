@@ -534,7 +534,7 @@ list<Transaction> Transaction::generate_test_instances()
 {
   list<Transaction> o;
 
-  o.push_back(Transaction{});
+  o.emplace_back();
 
   Transaction t;
   t.nop();

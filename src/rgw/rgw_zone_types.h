@@ -572,7 +572,7 @@ struct RGWZoneGroupTierS3Glacier {
   void decode_json(JSONObj *obj);
   static std::list<RGWZoneGroupTierS3Glacier> generate_test_instances() {
     std::list<RGWZoneGroupTierS3Glacier> o;
-    o.push_back(RGWZoneGroupTierS3Glacier{});
+    o.emplace_back();
     o.back().glacier_restore_days = 2;
     o.back().glacier_restore_tier_type = GlacierRestoreTierType::Expedited;
     return o;
@@ -671,8 +671,8 @@ struct RGWZoneGroupPlacementTier {
   void decode_json(JSONObj *obj);
   static std::list<RGWZoneGroupPlacementTier> generate_test_instances() {
     std::list<RGWZoneGroupPlacementTier> o;
-    o.push_back(RGWZoneGroupPlacementTier{});
-    o.push_back(RGWZoneGroupPlacementTier{});
+    o.emplace_back();
+    o.emplace_back();
     o.back().tier_type = RGWTierType::CLOUD_S3;
     o.back().storage_class = RGW_STORAGE_CLASS_STANDARD;
     o.back().allow_read_through = false;
@@ -730,9 +730,9 @@ struct RGWZoneGroupPlacementTarget {
   void decode_json(JSONObj *obj);
   static std::list<RGWZoneGroupPlacementTarget> generate_test_instances() {
     std::list<RGWZoneGroupPlacementTarget> o;
-    o.push_back(RGWZoneGroupPlacementTarget{});
+    o.emplace_back();
     o.back().storage_classes.insert(RGW_STORAGE_CLASS_STANDARD);
-    o.push_back(RGWZoneGroupPlacementTarget{});
+    o.emplace_back();
     o.back().name = "target";
     o.back().tags.insert("tag1");
     o.back().tags.insert("tag2");

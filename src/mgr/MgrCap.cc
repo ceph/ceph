@@ -387,24 +387,24 @@ void MgrCap::dump(ceph::Formatter *f) const {
 
 std::list<MgrCap> MgrCap::generate_test_instances() {
   std::list<MgrCap> ls;
-  ls.push_back(MgrCap{});
-  ls.push_back(MgrCap{});
+  ls.emplace_back();
+  ls.emplace_back();
   ls.back().parse("allow *");
-  ls.push_back(MgrCap{});
+  ls.emplace_back();
   ls.back().parse("allow rwx");
-  ls.push_back(MgrCap{});
+  ls.emplace_back();
   ls.back().parse("allow service foo x");
-  ls.push_back(MgrCap{});
+  ls.emplace_back();
   ls.back().parse("allow command bar x");
-  ls.push_back(MgrCap{});
+  ls.emplace_back();
   ls.back().parse("allow service foo r, allow command bar x");
-  ls.push_back(MgrCap{});
+  ls.emplace_back();
   ls.back().parse("allow command bar with k1=v1 x");
-  ls.push_back(MgrCap{});
+  ls.emplace_back();
   ls.back().parse("allow command bar with k1=v1 k2=v2 x");
-  ls.push_back(MgrCap{});
+  ls.emplace_back();
   ls.back().parse("allow module bar with k1=v1 k2=v2 x");
-  ls.push_back(MgrCap{});
+  ls.emplace_back();
   ls.back().parse("profile rbd pool=rbd");
   return ls;
 }

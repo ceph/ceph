@@ -95,7 +95,7 @@ struct cls_rbd_parent {
 
   static std::list<cls_rbd_parent> generate_test_instances() {
     std::list<cls_rbd_parent> o;
-    o.push_back(cls_rbd_parent{});
+    o.emplace_back();
     o.push_back(cls_rbd_parent{{1, "", "image id", 234}, {}});
     o.push_back(cls_rbd_parent{{1, "", "image id", 234}, {123}});
     o.push_back(cls_rbd_parent{{1, "ns", "image id", 234}, {123}});

@@ -1179,8 +1179,8 @@ struct cls_rgw_obj {
   }
   static std::list<cls_rgw_obj> generate_test_instances() {
     std::list<cls_rgw_obj> ls;
-    ls.push_back(cls_rgw_obj{});
-    ls.push_back(cls_rgw_obj{});
+    ls.emplace_back();
+    ls.emplace_back();
     ls.back().pool = "mypool";
     ls.back().key.name = "myoid";
     ls.back().loc = "mykey";
@@ -1233,7 +1233,7 @@ struct cls_rgw_obj_chain {
   }
   static std::list<cls_rgw_obj_chain> generate_test_instances() {
     std::list<cls_rgw_obj_chain> ls;
-    ls.push_back(cls_rgw_obj_chain{});
+    ls.emplace_back();
     return ls;
   }
 
@@ -1286,8 +1286,8 @@ struct cls_rgw_gc_obj_info
   }
   static std::list<cls_rgw_gc_obj_info> generate_test_instances() {
     std::list<cls_rgw_gc_obj_info> ls;
-    ls.push_back(cls_rgw_gc_obj_info{});
-    ls.push_back(cls_rgw_gc_obj_info{});
+    ls.emplace_back();
+    ls.emplace_back();
     ls.back().tag = "footag";
     ceph_timespec ts{ceph_le32(21), ceph_le32(32)};
     ls.back().time = ceph::real_clock::from_ceph_timespec(ts);

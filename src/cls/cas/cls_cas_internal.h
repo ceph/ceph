@@ -95,7 +95,7 @@ struct chunk_refs_t {
   }
   static std::list<chunk_refs_t> generate_test_instances() {
     std::list<chunk_refs_t> ls;
-    ls.push_back(chunk_refs_t{});
+    ls.emplace_back();
     return ls;
   }
 };
@@ -149,8 +149,8 @@ struct chunk_refs_by_object_t : public chunk_refs_t::refs_t {
   }
   static std::list<chunk_refs_by_object_t> generate_test_instances() {
     std::list<chunk_refs_by_object_t> ls;
-    ls.push_back(chunk_refs_by_object_t{});
-    ls.push_back(chunk_refs_by_object_t{});
+    ls.emplace_back();
+    ls.emplace_back();
     ls.back().by_object.insert(hobject_t(sobject_t("foo", CEPH_NOSNAP)));
     ls.back().by_object.insert(hobject_t(sobject_t("bar", CEPH_NOSNAP)));
     return ls;
@@ -398,8 +398,8 @@ struct chunk_refs_count_t : public chunk_refs_t::refs_t {
   }
   static std::list<chunk_refs_count_t> generate_test_instances() {
     std::list<chunk_refs_count_t> o;
-    o.push_back(chunk_refs_count_t{});
-    o.push_back(chunk_refs_count_t{});
+    o.emplace_back();
+    o.emplace_back();
     o.back().total = 123;
     return o;
   }

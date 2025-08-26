@@ -2676,7 +2676,7 @@ RGWLC::LCWorker::~LCWorker()
 list<RGWLifecycleConfiguration> RGWLifecycleConfiguration::generate_test_instances()
 {
   list<RGWLifecycleConfiguration> o;
-  o.push_back(RGWLifecycleConfiguration{});
+  o.emplace_back();
   return o;
 }
 

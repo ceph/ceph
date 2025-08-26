@@ -62,8 +62,8 @@ struct RGWUID
   }
   static std::list<RGWUID> generate_test_instances() {
     std::list<RGWUID> o;
-    o.push_back(RGWUID{});
-    o.push_back(RGWUID{});
+    o.emplace_back();
+    o.emplace_back();
     o.back().id = "test:tester";
     return o;
   }

@@ -85,9 +85,9 @@ struct creating_pgs_t {
     }
     static std::list<pg_create_info> generate_test_instances() {
       std::list<pg_create_info> o;
-      o.push_back(pg_create_info{});
+      o.emplace_back();
       o.back().create_epoch = 10;
-      o.push_back(pg_create_info{});
+      o.emplace_back();
       o.back().create_epoch = 1;
       o.back().create_stamp = utime_t(2, 3);
       o.back().up = {1, 2, 3};
