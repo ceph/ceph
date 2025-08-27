@@ -129,6 +129,7 @@ BtreeOMapManager::handle_root_merge(
 BtreeOMapManager::omap_get_value_ret
 BtreeOMapManager::omap_get_value(
   const omap_root_t &omap_root,
+  Onode &onode,
   Transaction &t,
   const std::string &key)
 {
@@ -150,6 +151,7 @@ BtreeOMapManager::omap_get_value(
 BtreeOMapManager::omap_set_keys_ret
 BtreeOMapManager::omap_set_keys(
   omap_root_t &omap_root,
+  Onode &onode,
   Transaction &t,
   std::map<std::string, ceph::bufferlist>&& keys)
 {
@@ -158,7 +160,7 @@ BtreeOMapManager::omap_set_keys(
       keys.begin(),
       keys.end(),
       [&, this](auto &p) {
-      return omap_set_key(omap_root, t, p.first, p.second);
+      return omap_set_key(omap_root, onode, t, p.first, p.second);
     });
   });
 }
@@ -166,6 +168,7 @@ BtreeOMapManager::omap_set_keys(
 BtreeOMapManager::omap_set_key_ret
 BtreeOMapManager::omap_set_key(
   omap_root_t &omap_root,
+  Onode &onode,
   Transaction &t,
   const std::string &key,
   const ceph::bufferlist &value)
@@ -195,6 +198,7 @@ BtreeOMapManager::omap_set_key(
 BtreeOMapManager::omap_rm_key_ret
 BtreeOMapManager::omap_rm_key(
   omap_root_t &omap_root,
+  Onode &onode,
   Transaction &t,
   const std::string &key)
 {
@@ -229,6 +233,7 @@ BtreeOMapManager::omap_rm_key(
 BtreeOMapManager::omap_rm_key_range_ret
 BtreeOMapManager::omap_rm_key_range(
   omap_root_t &omap_root,
+  Onode &onode,
   Transaction &t,
   const std::string &first,
   const std::string &last,
@@ -240,14 +245,15 @@ BtreeOMapManager::omap_rm_key_range(
   return seastar::do_with(
     std::make_optional<std::string>(first),
     std::make_optional<std::string>(last),
-    [this, &omap_root, &t, config](auto &first, auto &last) {
+    [this, &omap_root, &t, &onode, config](auto &first, auto &last) {
     return omap_list(
       omap_root,
+      onode,
       t,
       first,
       last,
       config);
-  }).si_then([this, &omap_root, &t](auto results) {
+  }).si_then([this, &omap_root, &t, &onode](auto results) {
     LOG_PREFIX(BtreeOMapManager::omap_rm_key_range);
     auto &[complete, kvs] = results;
     std::vector<std::string> keys;
@@ -257,12 +263,12 @@ BtreeOMapManager::omap_rm_key_range(
     DEBUGT("total {} keys to remove", t, keys.size());
     return seastar::do_with(
       std::move(keys),
-      [this, &omap_root, &t](auto& keys) {
+      [this, &omap_root, &t, &onode](auto& keys) {
       return trans_intr::do_for_each(
 	keys.begin(),
 	keys.end(),
-	[this, &omap_root, &t](auto& key) {
-	return omap_rm_key(omap_root, t, key);
+	[this, &omap_root, &t, &onode](auto& key) {
+	return omap_rm_key(omap_root, onode, t, key);
       });
     });
   });
@@ -271,6 +277,7 @@ BtreeOMapManager::omap_rm_key_range(
 BtreeOMapManager::omap_iterate_ret
 BtreeOMapManager::omap_iterate(
   const omap_root_t &omap_root,
+  Onode &onode,
   Transaction &t,
   ObjectStore::omap_iter_seek_t &start_from,
   omap_iterate_cb_t callback)
@@ -291,6 +298,7 @@ BtreeOMapManager::omap_iterate(
 BtreeOMapManager::omap_list_ret
 BtreeOMapManager::omap_list(
   const omap_root_t &omap_root,
+  Onode &onode,
   Transaction &t,
   const std::optional<std::string> &first,
   const std::optional<std::string> &last,
@@ -323,6 +331,7 @@ BtreeOMapManager::omap_list(
 BtreeOMapManager::omap_clear_ret
 BtreeOMapManager::omap_clear(
   omap_root_t &omap_root,
+  Onode &onode,
   Transaction &t)
 {
   LOG_PREFIX(BtreeOMapManager::omap_clear);
