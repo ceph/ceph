@@ -12140,10 +12140,6 @@ int main(int argc, char **argv) {
   g_ceph_context->_conf._clear_safe_to_start_threads();
 
   g_ceph_context->_conf.set_val_or_die("osd_journal_size", "400");
-  g_ceph_context->_conf.set_val_or_die("filestore_index_retry_probability", "0.5");
-  g_ceph_context->_conf.set_val_or_die("filestore_op_thread_timeout", "1000");
-  g_ceph_context->_conf.set_val_or_die("filestore_op_thread_suicide_timeout", "10000");
-  //g_ceph_context->_conf.set_val_or_die("filestore_fiemap", "true");
   g_ceph_context->_conf.set_val_or_die("bluestore_fsck_on_mkfs", "false");
   g_ceph_context->_conf.set_val_or_die("bluestore_fsck_on_mount", "false");
   g_ceph_context->_conf.set_val_or_die("bluestore_fsck_on_umount", "false");
