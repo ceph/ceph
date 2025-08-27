@@ -5304,7 +5304,7 @@ def main() -> None:
 
     ctx = cephadm_init_ctx(av)
     if not ctx.has_function():
-        sys.stderr.write('No command specified; pass -h or --help for usage\n')
+        sys.stderr.write('No COMMAND specified; pass -h or --help for usage\n')
         sys.exit(1)
 
     if ctx.has_function() and getattr(ctx.func, '_execute_early', False):
