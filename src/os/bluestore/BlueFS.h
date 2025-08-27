@@ -471,7 +471,7 @@ public:
     }
 
     bufferlist::contiguous_filler append_hole(uint64_t len) {
-      return buffer.append_hole(len);
+      return buffer_appender.append_hole(len);
     }
 
     uint64_t get_effective_write_pos() {
