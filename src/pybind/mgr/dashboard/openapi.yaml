@@ -3919,14 +3919,14 @@ paths:
       summary: Export Ceph Users
       tags:
       - Cluster
-  /api/cluster/user/{user_entity}:
+  /api/cluster/user/{user_entities}:
     delete:
-      description: "\n        Delete a ceph user and it's defined capabilities.\n\
-        \        "
+      description: "\n        Delete one or more ceph users and their defined capabilities.\n\
+        \        user_entities: comma-separated string of users to delete\n      \
+        \  "
       parameters:
-      - description: Entity to delete
-        in: path
-        name: user_entity
+      - in: path
+        name: user_entities
         required: true
         schema:
           type: string
@@ -3952,7 +3952,7 @@ paths:
             trace.
       security:
       - jwt: []
-      summary: Delete Ceph User
+      summary: Delete one or more Ceph Users
       tags:
       - Cluster
   /api/cluster_conf:
