@@ -2511,26 +2511,6 @@ bool PeeringState::choose_acting(pg_shard_t &get_log_shard_id,
   auto get_log_shard = find_best_info(all_info, restrict_to_up_acting,
 				    false, history_les_bound);
 
-  if ((repeat_getlog != nullptr) &&
-      get_log_shard != all_info.end() &&
-      (info.last_update < get_log_shard->second.last_update) &&
-      pool.info.is_nonprimary_shard(get_log_shard->first.shard)) {
-    // Only EC pools with ec_optimizations enabled:
-    // Our log is behind that of the get_log_shard which is a
-    // non-primary shard and hence may have a sparse log,
-    // get a complete log from the auth_log_shard first then
-    // repeat this step in the state machine to work out what
-    // has to be rolled backwards
-    psdout(10) << "get_log_shard " << get_log_shard->first
-	       << " is ahead but is a non_primary shard" << dendl;
-    if (auth_log_shard != all_info.end()) {
-      psdout(10) << "auth_log_shard " << auth_log_shard->first
-		 << " selected instead" << dendl;
-      get_log_shard = auth_log_shard;
-      *repeat_getlog = true;
-    }
-  }
-
   if ((auth_log_shard == all_info.end()) ||
       (get_log_shard == all_info.end())) {
     if (up != acting) {
@@ -2544,6 +2524,23 @@ bool PeeringState::choose_acting(pg_shard_t &get_log_shard_id,
       ceph_assert(want_acting.empty());
     }
     return false;
+  }
+
+  if ((repeat_getlog != nullptr) &&
+      (info.last_update < auth_log_shard->second.last_update) &&
+      pool.info.is_nonprimary_shard(get_log_shard->first.shard)) {
+    // Only EC pools with ec_optimizations enabled:
+    // Our log is behind that of the auth_log_shard and
+    // the get log shard is a non-primary shard and hence may have
+    // a sparse log, get a complete log from the auth_log_shard
+    // first then repeat this step in the state machine to work
+    // out what has to be rolled backwards
+    psdout(10) << "get_log_shard " << get_log_shard->first
+	       << " is ahead but is a non_primary shard" << dendl;
+    psdout(10) << "auth_log_shard " << auth_log_shard->first
+	       << " selected instead" << dendl;
+    get_log_shard = auth_log_shard;
+    *repeat_getlog = true;
   }
 
   ceph_assert(!auth_log_shard->second.is_incomplete());
