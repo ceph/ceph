@@ -97,3 +97,18 @@ export enum Icons {
   spin = 'fa fa-spin', //  To get any icon to rotate
   inverse = 'fa fa-inverse' // To get an alternative icon color
 }
+
+export enum IconSize {
+  size16 = '16',
+  size20 = '20',
+  size24 = '24',
+  size32 = '32'
+}
+
+export const ICON_TYPE = {
+  copy: 'copy',
+  danger: 'warning--filled',
+  infoCircle: 'information--filled',
+  success: 'checkmark--filled',
+  warning: 'warning--alt--filled'
+} as const;
