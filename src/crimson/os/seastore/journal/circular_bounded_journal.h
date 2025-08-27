@@ -156,11 +156,6 @@ public:
     cbj_delta_handler_t &&delta_handler,
     journal_seq_t tail);
 
-  submit_record_ertr::future<> do_submit_record(
-    record_t &&record,
-    OrderingHandle &handle,
-    on_submission_func_t &&on_submission);
-
   void try_read_rolled_header(scan_valid_records_cursor &cursor) {
     paddr_t addr = convert_abs_addr_to_paddr(
       get_records_start(),
