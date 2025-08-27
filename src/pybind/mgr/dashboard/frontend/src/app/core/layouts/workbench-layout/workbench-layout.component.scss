@@ -1,5 +1,5 @@
 @use './src/styles/vendor/variables' as vv;
-@use './src/styles/ceph-custom/grid';
+@use './src/styles/ceph-custom/grid'  as *;
 
 .dashboard {
   background-color: vv.$body-bg-alt;

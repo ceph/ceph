@@ -1,5 +1,5 @@
 @use '../../../../styles/vendor/variables' as vv;
-@use './src/styles/ceph-custom/grid';
+@use './src/styles/ceph-custom/grid'  as *;
 
 .fa-wrench {
   color: vv.$info;

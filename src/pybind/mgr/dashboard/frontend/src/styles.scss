@@ -53,46 +53,11 @@ $grid-breakpoints: (
   font-weight: 700;
 }
 
-//Displaying the password strength
-.password-strength-level {
-  flex: 100%;
-  margin-top: 2px;
-
-  .weak,
-  .ok,
-  .strong,
-  .very-strong {
-    border-radius: 0.25rem;
-    height: 13px;
-  }
-
-  .weak {
-    background: $danger;
-    width: 25%;
-  }
-
-  .ok {
-    background: $warning;
-    width: 50%;
-  }
-
-  .strong {
-    background: $success;
-    width: 75%;
-  }
-
-  .very-strong {
-    background: darken($success, 15%);
-    width: 100%;
-  }
-}
-
-// Custom tag.
-
-.tag-background-gray,
-.tag-hdd {
-  background-color: colors.$gray-60;
-  color: colors.$white;
+// Custom badges.
+.badge-background-gray,
+.badge-hdd {
+  background-color: $gray-600;
+  color: $white;
 }
 
 .tag-background-primary,
