@@ -70,23 +70,7 @@ CircularBoundedJournal::submit_record(
   LOG_PREFIX(CircularBoundedJournal::submit_record);
   DEBUG("H{} {} start ...", (void*)&handle, record);
   assert(write_pipeline);
-  co_await do_submit_record(
-    std::move(record), handle, std::move(on_submission)
-  );
-  if (is_trim_transaction(t_src)) {
-    co_await update_journal_tail(
-      trimmer.get_dirty_tail(),
-      trimmer.get_alloc_tail());
-  }
-}
 
-CircularBoundedJournal::submit_record_ertr::future<>
-CircularBoundedJournal::do_submit_record(
-  record_t &&record,
-  OrderingHandle &handle,
-  on_submission_func_t &&on_submission)
-{
-  LOG_PREFIX(CircularBoundedJournal::do_submit_record);
   stats.submit_record_count++;
   stats.submit_record_size += record.size.get_raw_mdlength();
   auto start = ceph::mono_clock::now();
@@ -146,6 +130,12 @@ CircularBoundedJournal::do_submit_record(
   std::invoke(on_submission, result);
 
   stats.submit_record_latency_total += ceph::mono_clock::now() - start;
+
+  if (is_trim_transaction(t_src)) {
+    co_await update_journal_tail(
+      trimmer.get_dirty_tail(),
+      trimmer.get_alloc_tail());
+  }
 }
 
 Journal::replay_ret CircularBoundedJournal::replay_segment(
