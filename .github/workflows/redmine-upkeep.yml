@@ -18,7 +18,7 @@ on:
         default: false
         type: boolean
   schedule:
-    - cron: '*/30 * * * *'
+    - cron: '0 */12 * * *'
   pull_request_target:
     types: [closed]
     branches:
@@ -82,6 +82,7 @@ jobs:
              python3 ceph/src/script/redmine-upkeep.py
              --github-action
              --git-dir=./ceph/
+             --limit=5000
         env:
           REDMINE_API_KEY: ${{ secrets.REDMINE_API_KEY_BACKPORT_BOT }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -92,6 +93,7 @@ jobs:
              python3 ceph/src/script/redmine-upkeep.py
              --github-action
              --git-dir=./ceph/
+             --limit=5000
         env:
           REDMINE_API_KEY: ${{ secrets.REDMINE_API_KEY_BACKPORT_BOT }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
