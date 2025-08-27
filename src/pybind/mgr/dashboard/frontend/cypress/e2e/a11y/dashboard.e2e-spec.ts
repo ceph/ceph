@@ -1,7 +1,7 @@
-import { DashboardPageHelper } from '../ui/dashboard.po';
+import { DashboardV3PageHelper } from '../ui/dashboard-v3.po';
 
 describe('Dashboard Main Page', { retries: 0 }, () => {
-  const dashboard = new DashboardPageHelper();
+  const dashboard = new DashboardV3PageHelper();
 
   beforeEach(() => {
     cy.login();
