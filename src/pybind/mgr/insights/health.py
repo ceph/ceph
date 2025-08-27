@@ -12,7 +12,9 @@ NOW_OFFSET = None
 
 class HealthEncoder(json.JSONEncoder):
     def default(self, obj):
-        if isinstance(obj, set):
+        if obj.__class__.__name__ == 'mappingproxy':
+            return dict(obj)
+        elif isinstance(obj, set):
             return list(obj)
         return json.JSONEncoder.default(self, obj)
 
