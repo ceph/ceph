@@ -243,7 +243,7 @@ namespace lrc {
 // matches what index will be chosen from the layers array.
 inline static constexpr int mapping_layer_array_sizes = 15;
 
-inline static std::array<std::string, mapping_layer_array_sizes> mapping_choices = {{
+inline std::array<std::string, mapping_layer_array_sizes> mapping_choices = {{
     "_DD",
     "_DDD",
     "_DDDD",
@@ -261,7 +261,7 @@ inline static std::array<std::string, mapping_layer_array_sizes> mapping_choices
     "_D_D_DDDD",
 }};
 
-inline static std::array<std::string, mapping_layer_array_sizes> layer_choices = {{
+inline std::array<std::string, mapping_layer_array_sizes> layer_choices = {{
     "[[\"cDD\",\"\"]]",
     "[[\"cDDD\",\"\"]]",
     "[[\"cDDDD\",\"\"]]",
