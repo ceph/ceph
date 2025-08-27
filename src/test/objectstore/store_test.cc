@@ -12180,7 +12180,7 @@ int main(int argc, char **argv) {
  * Local Variables:
  * compile-command: "cd ../.. ; make ceph_test_objectstore && 
  *    ./ceph_test_objectstore \
- *        --gtest_filter=*.collect_metadata* --log-to-stderr=true --debug-filestore=20
+ *        --gtest_filter=*.collect_metadata* --log-to-stderr=true --debug-bluestore=20
  *  "
  * End:
  */
