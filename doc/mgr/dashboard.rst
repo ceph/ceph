@@ -129,16 +129,6 @@ updates on any changes in the cluster and allows quick access to other sections 
 
 .. image:: dashboard-landing-page.png
 
-
-.. note::
-  You can change the landing page to the previous version from:
-  ``Cluster >> Manager Modules >> Dashboard >> Edit``.
-  Editing the ``FEATURE_TOGGLE_DASHBOARD`` option will change the landing page, from one view to another.
-
-  Note that the previous version of the landing page will be disabled in future releases.
-
-.. _dashboard-landing-page-details:
-
 Details
 """""""
 Provides an overview of the cluster configuration, displaying various critical aspects of the cluster.
