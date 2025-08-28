@@ -194,6 +194,10 @@
   C `rbd_mirror_image_resync()`, and Python `Image.mirror_image_resync()` --
   will return EINVAL instead of ENOENT when mirroring is not enabled.
 
+* DASHBOARD: Removed the older landing page which was deprecated in quincy.
+  The admin can no longer enable the older, deprecated landing page layout by 
+  adjusting FEATURE_TOGGLE_DASHBOARD.
+
 >=19.2.1
 
 * CephFS: The `fs subvolume create` command now allows tagging subvolumes through option
