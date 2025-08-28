@@ -791,14 +791,6 @@ void foo(T t, std::vector<std::vector<std::string>>& responses)
     });
 }
 
-template <> struct fmt::formatter<boost::redis::resp3::type> : fmt::ostream_formatter {};
-template <> struct fmt::formatter<boost::redis::resp3::node> : fmt::formatter<std::string> {
-    template <typename FormatContext> auto format(boost::redis::resp3::node const& node, FormatContext& ctx) const {
-        return format_to(ctx.out(), "({}@{}, {}, {})", node.data_type, node.depth, node.value,
-                         node.aggregate_size);
-    }
-};
-
 TEST_F(BlockDirectoryFixture, Pipeline)
 {
   boost::asio::spawn(io, [this] (boost::asio::yield_context yield) {
@@ -850,8 +842,6 @@ TEST_F(BlockDirectoryFixture, Pipeline)
       boost::redis::generic_response resp;
       conn->async_exec(req, resp, yield[ec]);
       ASSERT_EQ((bool)ec, false);
-      //debug only
-      fmt::print("generic: {}\n", resp.value());
 
       //1st node gives data type and number of elements of that type
       //if data type is aggrgate, like array, map, then next n elements will be values of the aggregate type
