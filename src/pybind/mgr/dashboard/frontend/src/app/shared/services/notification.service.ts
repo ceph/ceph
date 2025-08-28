@@ -18,17 +18,14 @@ export class NotificationService {
 
   // Data observable
   private dataSource = new BehaviorSubject<CdNotification[]>([]);
-  data$ = this.dataSource.asObservable();
-
-  // Panel state observable
   private panelStateSource = new BehaviorSubject<{ isOpen: boolean; useNewPanel: boolean }>({
     isOpen: false,
     useNewPanel: true
   });
-  panelState$ = this.panelStateSource.asObservable();
-
-  // Mute state observable
   private muteStateSource = new BehaviorSubject<boolean>(false);
+
+  data$ = this.dataSource.asObservable();
+  panelState$ = this.panelStateSource.asObservable();
   muteState$ = this.muteStateSource.asObservable();
 
   private queued: CdNotificationConfig[] = [];

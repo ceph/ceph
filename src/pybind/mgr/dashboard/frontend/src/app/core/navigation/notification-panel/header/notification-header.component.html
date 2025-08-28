@@ -1,10 +1,11 @@
 <div class="notification-header">
   <div class="notification-header__top">
     <div class="notification-header__title">
-      <cds-text>Tasks and Notifications</cds-text>
+      <cds-text i18n>Tasks and Notifications</cds-text>
     </div>
 
     <button
+      i18n
       cdsButton="ghost"
       size="sm"
       (click)="onDismissAll()"
@@ -19,6 +20,7 @@
       size="sm"
       (checkedChange)="onToggleMute()"
       label="Mute notifications"
+      i18n-label
       hideLabel="true">
     </cds-toggle>
   </div>
