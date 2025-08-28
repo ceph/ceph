@@ -12,6 +12,7 @@ overrides:
         rgw s3 auth use sts: true
         rgw lc debug interval: 10
         rgw_restore_debug_interval: 20
+        rgw_restore_processor_period: 10
   rgw:
     storage classes:
       LUKEWARM:
