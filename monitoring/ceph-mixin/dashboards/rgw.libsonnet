@@ -200,7 +200,7 @@ local g = import 'grafonnet/grafana.libsonnet';
         1,
         datasource,
         legend_alignAsTable,
-        legend_avg, 
+        legend_avg,
         legend_min,
         legend_max,
         legend_current,
@@ -722,7 +722,7 @@ local g = import 'grafonnet/grafana.libsonnet';
         28,
         12,
         8
-        )
+      )
       + { options: { legend: { calcs: ['lastNotNull'], displayMode: 'list', placement: 'right', showLegend: true, sortBy: 'Last *', sortDesc: true } } },
       RgwOverviewPanel(
         'Pending Notifications Size by Topic',
