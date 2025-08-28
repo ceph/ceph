@@ -1046,7 +1046,8 @@ struct transaction_manager_test_t :
         extent_types_t::TEST_BLOCK,
         extent_types_t::TEST_BLOCK_PHYSICAL,
         extent_types_t::BACKREF_INTERNAL,
-        extent_types_t::BACKREF_LEAF
+        extent_types_t::BACKREF_LEAF,
+	extent_types_t::LOG_NODE
       };
       // exclude DINK_LADDR_LEAF, RETIRED_PLACEHOLDER,
       //         ALLOC_INFO, JOURNAL_TAIL

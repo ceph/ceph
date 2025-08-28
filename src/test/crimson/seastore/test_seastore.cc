@@ -158,6 +158,15 @@ struct seastore_test_t :
         std::move(t)).get();
     }
 
+    void set_log_object(
+      SeaStoreShard &sharded_seastore) {
+      CTransaction t;
+      t.set_alloc_hint(cid, oid, 0, 0, CEPH_OSD_ALLOC_HINT_FLAG_LOG);
+      sharded_seastore.do_transaction(
+        coll,
+        std::move(t)).get();
+    }
+
     void truncate(
       CTransaction &t,
       uint64_t off) {
@@ -215,6 +224,18 @@ struct seastore_test_t :
 	arg);
     }
 
+    void set_omaps(
+      CTransaction &t,
+      std::map<string, bufferlist> arg) {
+      for (auto p : arg) {
+	omap[p.first] = p.second;
+      }
+      t.omap_setkeys(
+	cid,
+	oid,
+	arg);
+    }
+
     void set_omap(
       SeaStoreShard &sharded_seastore,
       const string &key,
@@ -224,6 +245,98 @@ struct seastore_test_t :
       sharded_seastore.do_transaction(
 	coll,
 	std::move(t)).get();
+    }
+
+    auto get_omaps(
+      SeaStoreShard &sharded_seastore,
+      std::string start) {
+      ObjectStore::omap_iter_seek_t start_from{"", ObjectStore::omap_iter_seek_t::LOWER_BOUND};
+      std::map<std::string, bufferlist> kvs;
+      std::function<ObjectStore::omap_iter_ret_t(std::string_view, std::string_view)> callback =
+        [&kvs] (std::string_view key, std::string_view value)
+      {
+        ceph::bufferlist bl;
+        bl.append(value);
+	kvs[std::string(key)] = bl;
+        return ObjectStore::omap_iter_ret_t::NEXT;
+      };
+
+      sharded_seastore.omap_iterate(
+        coll,
+        oid,
+	start_from,
+        callback).unsafe_get();
+      return kvs;
+    }
+
+    void rm_omap(
+      CTransaction &t,
+      const string &key) {
+      omap.erase(key);
+      t.omap_rmkey(
+        cid,
+        oid,
+        key);
+    }
+
+    void rm_omap(
+      SeaStoreShard &sharded_seastore,
+      const string &key) {
+      CTransaction t;
+      rm_omap(t, key);
+      sharded_seastore.do_transaction(
+        coll,
+        std::move(t)).get();
+    }
+
+    void rm_omaps(
+      CTransaction &t,
+      const std::set<std::string> &s) {
+      for (auto p : s) {
+        omap.erase(p);
+      }
+      t.omap_rmkeys(
+        cid,
+        oid,
+        s);
+    }
+
+    void rm_omaps(
+      SeaStoreShard &sharded_seastore,
+      const std::set<std::string> &keys) {
+      CTransaction t;
+      rm_omaps(t, keys);
+      sharded_seastore.do_transaction(
+        coll,
+        std::move(t)).get();
+    }
+
+    void rm_omap_range(
+      CTransaction &t,
+      const std::string &first,
+      const std::string &last) {
+      auto s = omap.find(first);
+      if (s == omap.end()) {
+        s = omap.begin();
+      }
+      auto l = omap.find(last);
+      omap.erase(s, l);
+      t.omap_rmkeyrange(
+        cid,
+        oid,
+        first,
+        last);
+    }
+
+    void rm_omap_range(
+      SeaStoreShard &sharded_seastore,
+      const std::string &first,
+      const std::string &last) {
+      CTransaction t;
+      rm_omap_range(t, first, last);
+      sharded_seastore.do_transaction(
+        coll,
+        std::move(t)).get();
     }
 
     void write(
@@ -1339,6 +1452,202 @@ TEST_P(seastore_test_t, zero)
       (BS * 4) + 128);
   });
 }
+
+TEST_P(seastore_test_t, log_writes)
+{
+  run_async([this] {
+
+    auto &test_obj = get_object(make_oid(0));
+    test_obj.touch(*sharded_seastore);
+    test_obj.set_log_object(*sharded_seastore);
+    int log_count = 1024;
+    version_t version = 271;
+    epoch_t epoch = 11;
+
+    std::set<std::string> key_for_test_obj, key_for_test_obj2, key_for_test_obj3, key_for_test_obj4;
+    auto generate_key = [](epoch_t &e, version_t &v) {
+      char key[32] = {0};
+      key[31] = 0;
+      ritoa<uint64_t, 10, 20>(v, key + 31);
+      key[10] = '.';
+      ritoa<uint32_t, 10, 10>(e, key + 10);
+      return std::string(key);
+    };
+    for (int i = 0; i < log_count; i++) {
+      version += i;
+      std::string key = generate_key(epoch, version);
+      char c_array[238] = {(char)((i % 10) + '0')};
+      bufferlist l;
+      std::string ss(&c_array[0], sizeof(c_array));
+      encode(ss, l);
+      test_obj.set_omap(*sharded_seastore, key, l);
+      key_for_test_obj.insert(key);
+    }
+
+    version += 1;
+    std::string to_remove = generate_key(epoch, version);
+    auto &test_obj2 = get_object(make_oid(100));
+    test_obj2.touch(*sharded_seastore);
+    test_obj2.set_log_object(*sharded_seastore);
+
+    version = 275;
+    epoch = 13;
+    // 2 kv pair for leaf in the same transaction
+    for (int i = 0; i < 100; i = i + 2) {
+      version = i;
+      std::string key = generate_key(epoch, version);
+      char c_array[238] = {(char)((i % 10) + '0')};
+      bufferlist l;
+      std::string ss(&c_array[0], sizeof(c_array));
+      encode(ss, l);
+
+      version += 1;
+      std::string key2 = generate_key(epoch, version);
+      bufferlist l2;
+      char c_array2[238] = {(char)(((i + 1) % 10) + '0')};
+      std::string ss2(&c_array2[0], sizeof(c_array2));
+      encode(ss, l2);
+
+      CTransaction t;
+      if (i % 2 == 0) {
+	test_obj2.set_omap(t, key, l);
+	test_obj2.set_omap(t, key2, l2); // x2
+      } else {
+	std::map<string, bufferlist> kvs;
+	kvs[key] = l;
+	kvs[key2] = l2;
+	test_obj2.set_omaps(t, kvs);
+      }
+      do_transaction(std::move(t));
+      key_for_test_obj2.insert(key);
+      key_for_test_obj2.insert(key2);
+    }
+    for (auto p : key_for_test_obj) {
+      test_obj.check_omap_key(
+        *sharded_seastore,
+        p);
+    }
+
+    version += 1;
+    // 1 kv pair for leaf and 5 kv pairs for node
+    for (int i = 0; i < 50; i++) {
+      version += i;
+      std::string key = generate_key(epoch, version);
+      char c_array[238] = {(char)((i % 10) + '0')};
+      bufferlist l;
+      std::string ss(&c_array[0], sizeof(c_array));
+      encode(ss, l);
+      CTransaction t;
+      std::string key2("_fastinfo");
+      std::string key3("_biginfo");
+      std::string key4("_info");
+      std::string key5("_epoch");
+      if (i % 2 == 0) {
+	test_obj2.set_omap(t, "can_rollback_to", l);
+	key_for_test_obj2.insert("can_rollback_to");
+      }
+      test_obj2.set_omap(t, key, l);
+      test_obj2.set_omap(t, key2, l);
+      test_obj2.set_omap(t, key3, l);
+      test_obj2.set_omap(t, key4, l);
+      test_obj2.set_omap(t, key5, l);
+      do_transaction(std::move(t));
+      key_for_test_obj2.insert(key);
+      key_for_test_obj2.insert(key2);
+    }
+    for (auto p : key_for_test_obj2) {
+      test_obj2.check_omap_key(
+        *sharded_seastore,
+        p);
+    }
+
+    // more than 64 entries in a node to check bitmap operation
+    auto &test_obj3 = get_object(make_oid(200));
+    test_obj3.touch(*sharded_seastore);
+    test_obj3.set_log_object(*sharded_seastore);
+    for (int i = 0; i < 96; i++) {
+      std::string key = std::to_string(i);
+      char c_array[16] = {(char)((i % 10) + '0')};
+      bufferlist l;
+      std::string ss(&c_array[0], sizeof(c_array));
+      encode(ss, l);
+      test_obj3.set_omap(*sharded_seastore, key, l);
+      key_for_test_obj3.insert(key);
+    }
+    for (auto p : key_for_test_obj3) {
+      test_obj3.check_omap_key(
+        *sharded_seastore,
+        p);
+    }
+
+    // normal write
+    auto &test_obj4 = get_object(make_oid(300));
+    test_obj4.touch(*sharded_seastore);
+    test_obj4.set_log_object(*sharded_seastore);
+    epoch += 1;
+    for (int i = 0; i < 128; i++) {
+      version += i + 1;
+      std::string key = generate_key(epoch, version);
+      char c_array[238] = {(char)((i % 10) + '0')};
+      bufferlist l;
+      std::string ss(&c_array[0], sizeof(c_array));
+      encode(ss, l);
+      CTransaction t;
+      std::string key2("_fastinfo");
+      std::map<string, bufferlist> kvs;
+      kvs[key] = l;
+      kvs[key2] = l;
+      test_obj4.set_omaps(t, kvs);
+      do_transaction(std::move(t));
+      key_for_test_obj4.insert(key);
+      key_for_test_obj4.insert(key2);
+    }
+    for (auto p : key_for_test_obj4) {
+      test_obj4.check_omap_key(
+        *sharded_seastore,
+        p);
+    }
+    auto kvs = test_obj.get_omaps(*sharded_seastore, std::string());
+    EXPECT_EQ(kvs.size(), test_obj.omap.size());
+
+    std::string str_for_del = "_biginfo";
+    test_obj2.rm_omap(*sharded_seastore, str_for_del);
+    auto kvs2 = test_obj2.get_omaps(*sharded_seastore, str_for_del);
+    for (auto p : kvs2) {
+      EXPECT_NE(p.first, str_for_del);
+    }
+
+    str_for_del = "_epoch";
+    test_obj2.rm_omap(*sharded_seastore, str_for_del);
+    kvs2 = test_obj2.get_omaps(*sharded_seastore, str_for_del);
+    for (auto p : kvs2) {
+      EXPECT_NE(p.first, str_for_del);
+    }
+
+    str_for_del = *(key_for_test_obj3.rbegin());
+    test_obj3.rm_omap(*sharded_seastore, str_for_del);
+    auto kvs3 = test_obj3.get_omaps(*sharded_seastore, str_for_del);
+    for (auto p : kvs3) {
+      EXPECT_NE(p.first, str_for_del);
+    }
+
+    auto it = std::next(key_for_test_obj.begin(), 2);
+    auto target_value = *it;  
+    test_obj.rm_omap_range(*sharded_seastore, std::string(), target_value);
+    kvs = test_obj.get_omaps(*sharded_seastore, std::string());
+    EXPECT_EQ(kvs.size(), log_count - 3);
+
+    auto rit = std::next(key_for_test_obj.rbegin(), 2);
+    target_value = *rit;  
+    test_obj.rm_omap_range(*sharded_seastore, std::string(), target_value);
+    kvs = test_obj.get_omaps(*sharded_seastore, std::string());
+    EXPECT_EQ(kvs.size(), 2);
+    test_obj.rm_omap_range(*sharded_seastore, std::string(), to_remove);
+    kvs = test_obj.get_omaps(*sharded_seastore, std::string());
+    EXPECT_EQ(kvs.size(), test_obj.omap.size());
+  });
+}
+
 INSTANTIATE_TEST_SUITE_P(
   seastore_test,
   seastore_test_t,
