@@ -26,7 +26,8 @@
           <cd-table-actions [permission]="{read: true}"
                             [selection]="selection"
                             dropDownOnly="Cluster-wide configuration"
-                            btnColor="light"
+                            [dropDownOnlyOffset]="{ x: 110, y: 0 }"
+                            [dropDownOnlyBtnColor]="'tertiary'"
                             class="btn-group"
                             id="cluster-wide-actions"
                             [tableActions]="clusterWideActions">
