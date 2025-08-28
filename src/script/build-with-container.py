@@ -648,6 +648,7 @@ def get_container(ctx):
 def bc_configure(ctx):
     """Configure the build"""
     ctx.build.wants(Steps.CONTAINER, ctx)
+    ctx.build.wants(Steps.NPM_CACHE, ctx)
     cmd = _container_cmd(
         ctx,
         [
