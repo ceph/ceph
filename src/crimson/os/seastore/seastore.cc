@@ -30,6 +30,7 @@
 #include "crimson/os/seastore/omap_manager/btree/btree_omap_manager.h"
 #include "crimson/os/seastore/onode_manager.h"
 #include "crimson/os/seastore/object_data_handler.h"
+#include "crimson/os/seastore/omap_manager/log/log_manager.h"
 
 using crimson::common::local_conf;
 
@@ -1847,10 +1848,11 @@ SeaStore::Shard::_do_transaction_step(
 	if (op->hint & CEPH_OSD_ALLOC_HINT_FLAG_LOG) {
 	  ceph_assert(get_omap_root(omap_type_t::LOG, *onode).is_null());
 	  ceph_assert(get_omap_root(omap_type_t::OMAP, *onode).is_null());
-	  // BtreeOMapManager doesn't need a do_with yet.
-	  auto mgr = BtreeOMapManager(*transaction_manager);
-	  return omaptree_initialize(
-	    *ctx.transaction, mgr, omap_type_t::LOG, *onode, *device
+	  auto mgr = crimson::os::seastore::log_manager::LogManager(*transaction_manager);
+	  return mgr.initialize_omap(
+	    *ctx.transaction, 
+	    onode->get_metadata_hint(device->get_block_size()),
+	    omap_type_t::LOG
 	  ).si_then([&onode, &ctx](auto new_root) {
 	    onode->update_omap_root(*ctx.transaction, new_root);
 	  });
