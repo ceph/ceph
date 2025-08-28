@@ -270,6 +270,8 @@ std::ostream &operator<<(std::ostream &out, extent_types_t t)
     return out << "BACKREF_INTERNAL";
   case extent_types_t::BACKREF_LEAF:
     return out << "BACKREF_LEAF";
+  case extent_types_t::LOG_NODE:
+    return out << "LOG_NODE";
   case extent_types_t::NONE:
     return out << "NONE";
   default:
