@@ -42,7 +42,6 @@ public:
       [this](auto &o_mlayout) {
       std::swap(layout.object_data, o_mlayout.object_data);
       std::swap(layout.omap_root, o_mlayout.omap_root);
-      std::swap(layout.log_root, o_mlayout.log_root);
       std::swap(layout.xattr_root, o_mlayout.xattr_root);
     });
   }
@@ -70,12 +69,6 @@ public:
   void update_omap_root(Transaction &t, omap_root_t &oroot) final {
     with_mutable_layout(t, [&oroot](onode_layout_t &mlayout) {
       mlayout.omap_root.update(oroot);
-    });
-  }
-
-  void update_log_root(Transaction &t, omap_root_t &lroot) final {
-    with_mutable_layout(t, [&lroot](onode_layout_t &mlayout) {
-      mlayout.log_root.update(lroot);
     });
   }
 
