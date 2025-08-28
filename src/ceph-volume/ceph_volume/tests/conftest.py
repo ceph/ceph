@@ -289,7 +289,6 @@ def disable_kernel_queries(monkeypatch):
     This speeds up calls to Device and Disk
     '''
     monkeypatch.setattr("ceph_volume.util.device.disk.get_devices", lambda device='': {})
-    monkeypatch.setattr("ceph_volume.util.disk.udevadm_property", lambda *a, **kw: {})
 
 
 @pytest.fixture(params=[
@@ -357,9 +356,15 @@ def patch_bluestore_label():
         yield p
 
 @pytest.fixture
-def device_info(monkeypatch, patch_bluestore_label):
-    def apply(devices=None, lsblk=None, lv=None, blkid=None, udevadm=None,
-              has_bluestore_label=False):
+def patch_udevdata(monkeypatch):
+    fake_udevdata = MagicMock()
+    fake_udevdata.environment = {k:k for k in ['ID_VENDOR', 'ID_MODEL', 'ID_SCSI_SERIAL']}
+    monkeypatch.setattr("ceph_volume.util.disk.UdevData", lambda path: fake_udevdata)
+    yield
+
+@pytest.fixture
+def device_info(monkeypatch, patch_bluestore_label, patch_udevdata):
+    def apply(devices=None, lsblk=None, lv=None, blkid=None):
         if devices:
             for dev in devices.keys():
                 devices[dev]['device_nodes'] = [os.path.basename(dev)]
@@ -367,7 +372,6 @@ def device_info(monkeypatch, patch_bluestore_label):
             devices = {}
         lsblk = lsblk if lsblk else {}
         blkid = blkid if blkid else {}
-        udevadm = udevadm if udevadm else {}
         lv = Factory(**lv) if lv else None
         monkeypatch.setattr("ceph_volume.sys_info.devices", {})
         monkeypatch.setattr("ceph_volume.util.device.disk.get_devices", lambda device='': devices)
@@ -378,7 +382,6 @@ def device_info(monkeypatch, patch_bluestore_label):
                                 lambda path: [lv])
         monkeypatch.setattr("ceph_volume.util.device.disk.lsblk", lambda path: lsblk)
         monkeypatch.setattr("ceph_volume.util.device.disk.blkid", lambda path: blkid)
-        monkeypatch.setattr("ceph_volume.util.disk.udevadm_property", lambda *a, **kw: udevadm)
     return apply
 
 @pytest.fixture(params=[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.95, 0.999, 1.0])
@@ -387,12 +390,23 @@ def data_allocate_fraction(request):
 
 @pytest.fixture
 def fake_filesystem(fs):
-
+    fs.create_dir('/dev')
     fs.create_dir('/sys/block/sda/slaves')
     fs.create_dir('/sys/block/sda/queue')
     fs.create_dir('/sys/block/rbd0')
     fs.create_dir('/var/log/ceph')
     fs.create_dir('/tmp/osdpath')
+    fs.create_file('/sys/block/sda/dev', contents='8:0')
+    fs.create_dir('/run/udev/data')
+    fs.create_file('/run/udev/data/b8:0', contents="""
+P:8:0
+E:DEVNAME=/dev/sda
+E:DEVTYPE=disk
+E:ID_MODEL=
+E:ID_SERIAL=
+E:ID_VENDOR=
+""".strip())
+
     yield fs
 
 @pytest.fixture
