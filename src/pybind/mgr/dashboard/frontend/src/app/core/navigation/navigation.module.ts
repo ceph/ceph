@@ -13,7 +13,7 @@ import {
   GridModule,
   BreadcrumbModule,
   ToggleModule,
-  ButtonModule
+  ButtonModule,
   ModalModule
 } from 'carbon-components-angular';
 
@@ -66,7 +66,7 @@ import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
     GridModule,
     BreadcrumbModule,
     ToggleModule,
-    ButtonModule
+    ButtonModule,
     ModalModule
   ],
   declarations: [
@@ -82,9 +82,8 @@ import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
     IdentityComponent
   ],
   exports: [NavigationComponent, BreadcrumbsComponent],
-  schemas: [CUSTOM_ELEMENTS_SCHEMA]
-  providers: [ModalCdsService],
-  exports: [NavigationComponent, BreadcrumbsComponent]
+  schemas: [CUSTOM_ELEMENTS_SCHEMA],
+  providers: [ModalCdsService]
 })
 export class NavigationModule {
   constructor(private iconService: IconService) {
