@@ -495,7 +495,7 @@ int log_record(rgw::sal::Driver* driver,
     }
   } else if (ret == -ENOENT) {
     // try to create the temporary log object for the first time
-    ret = new_logging_object(conf, target_bucket, obj_name, dpp, region, s->bucket, y, std::nullopt, nullptr);
+    ret = new_logging_object(conf, target_bucket, obj_name, dpp, region, s->bucket, y, std::nullopt, &objv_tracker);
     if (ret == 0) {
       ldpp_dout(dpp, 20) << "INFO: first time logging for bucket '" << target_bucket_id << "' and prefix '" <<
         conf.target_prefix << "'" << dendl;
@@ -633,7 +633,7 @@ int log_record(rgw::sal::Driver* driver,
   if (ret == -EFBIG) {
     ldpp_dout(dpp, 5) << "WARNING: logging object '" << obj_name << "' is full, will be committed to bucket '" <<
       target_bucket->get_key() << "'" << dendl;
-    if (ret = rollover_logging_object(conf, target_bucket, obj_name, dpp, region, s->bucket, y, true, nullptr, nullptr); ret < 0 ) {
+    if (ret = rollover_logging_object(conf, target_bucket, obj_name, dpp, region, s->bucket, y, true, &objv_tracker, nullptr); ret < 0 ) {
       return ret;
     }
     if (ret = target_bucket->write_logging_object(obj_name,
