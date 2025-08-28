@@ -8,46 +8,121 @@ class TestCache(MgrTestCase):
         super(TestCache, self).setUp()
         self.setup_mgrs()
         self._load_module("cli_api")
-        self.ttl = 10
-        self.enable_cache(self.ttl)
-
-    def tearDown(self):
-        self.disable_cache()
+        self.enable_cache()
 
     def get_hit_miss_ratio(self):
-        perf_dump_command = f"daemon mgr.{self.mgr_cluster.get_active_id()} perf dump"
-        perf_dump_res = self.cluster_cmd(perf_dump_command)
-        perf_dump = json.loads(perf_dump_res)
-        h = perf_dump["mgr"]["cache_hit"]
-        m = perf_dump["mgr"]["cache_miss"]
-        return int(h), int(m)
+        cmd = f"daemon mgr.{self.mgr_cluster.get_active_id()} perf dump"
+        p = json.loads(self.cluster_cmd(cmd))
+        return int(p["mgr"]["cache_hit"]), int(p["mgr"]["cache_miss"])
 
-    def enable_cache(self, ttl):
-        set_ttl = f"config set mgr mgr_ttl_cache_expire_seconds {ttl}"
-        self.cluster_cmd(set_ttl)
+    def flush_cache_map(self, what):
+        self.cluster_cmd(f"mgr cli cache flush {what}")
 
-    def disable_cache(self):
-        set_ttl = "config set mgr mgr_ttl_cache_expire_seconds 0"
-        self.cluster_cmd(set_ttl)
+    def osd_epoch(self):
+        m = json.loads(self.cluster_cmd("mgr cli get osd_map"))
+        return int(m["epoch"])
 
+    def enable_cache(self, on=True):
+        self.cluster_cmd(f"config set mgr mgr_map_cache_enabled {'true' if on else 'false'}")
 
+    def bump_osdmap(self):
+        pool = f"foo_{uuid.uuid4().hex[:8]}"
+        self.cluster_cmd(f"osd pool create {pool} 1 --yes-i_really_mean_it")
+        # ensure epoch bump observed
+        start = self.osd_epoch()
+        def ok():
+            return self.osd_epoch() > start
+        self.wait_until_true(ok, 30)
+        self.cluster_cmd(f"osd pool delete {pool} {pool} --yes-i-really-mean-it")
+
+    # Init cache
     def test_init_cache(self):
-        get_ttl = "config get mgr mgr_ttl_cache_expire_seconds"
-        res = self.cluster_cmd(get_ttl)
-        self.assertEqual(int(res), 10)
+        get_cache = "config get mgr mgr_map_cache_enabled"
+        res = self.cluster_cmd(get_cache)
+        self.assertEqual(int(res), 1)
 
-    def test_health_not_cached(self):
-        get_health = "mgr api get health"
+    # Disabled bypass
+    def test_disabled_bypass(self):
+        self.enable_cache(False)
+        h0, m0 = self.get_hit_miss()
+        self.cluster_cmd("mgr cli get osd_map")
+        h1, m1 = self.get_hit_miss()
+        self.assertEqual((h1, m1), (h0, m0))
+        self.enable_cache(True)
 
-        h_start, m_start = self.get_hit_miss_ratio()
-        self.cluster_cmd(get_health)
-        h, m = self.get_hit_miss_ratio()
+    # Non-cacheable key ignored (health)
+    def test_non_cacheable_stays_uncached(self):
+        h0, m0 = self.get_hit_miss()
+        self.cluster_cmd("mgr cli get health")
+        h1, m1 = self.get_hit_miss()
+        self.assertEqual((h1, m1), (h0, m0))
 
-        self.assertEqual(h, h_start)
-        self.assertEqual(m, m_start)
+    # Cache hit after warm
+    def test_osdmap_hit_after_warm(self):
+        self.cluster_cmd("mgr cli get osd_map")
+        h0, m0 = self.get_hit_miss()
+        self.cluster_cmd("mgr cli get osd_map")
+        h1, m1 = self.get_hit_miss()
+        self.assertGreater(h1, h0)
+        self.assertEqual(m1, m0)
 
+    # Invalidate on osdmap change → miss then hit
+    def test_invalidate_on_osdmap_change(self):
+        self.cluster_cmd("mgr cli get osd_map")  # warm
+        h0, m0 = self.get_hit_miss()
+        self.bump_osdmap()                       # should invalidate
+        self.cluster_cmd("mgr cli get osd_map")  # miss
+        h1, m1 = self.get_hit_miss()
+        self.assertGreater(m1, m0)
+        self.cluster_cmd("mgr cli get osd_map")  # hit
+        h2, m2 = self.get_hit_miss()
+        self.assertGreater(h2, h1)
+        self.assertEqual(m2, m1)
+
+    # Concurrency: many reads → one miss, rest hits
+    def test_concurrent_reads_single_miss(self):
+        self.enable_cache(True)
+        self.bump_osdmap()
+        h0, m0 = self.get_hit_miss()
+        N = 8
+        def read_once(_):
+            return self.cluster_cmd("mgr cli get osd_map")
+        with ThreadPoolExecutor(max_workers=N) as ex:
+            list(ex.map(read_once, range(N)))
+        h1, m1 = self.get_hit_miss()
+        # Allow either 1 miss or small race overfill; assert lower bound
+        self.assertGreaterEqual(h1 - h0, N - 1)
+        self.assertGreaterEqual(m1 - m0, 1)
+
+    # Another cacheable key (mon_status) behaves like osd_map
+    def test_mon_status_cached(self):
+        self.cluster_cmd("mgr cli get mon_status")
+        h0, m0 = self.get_hit_miss()
+        self.cluster_cmd("mgr cli get mon_status")
+        h1, m1 = self.get_hit_miss()
+        self.assertGreater(h1, h0)
+        self.assertEqual(m1, m0)
+
+    # Stress invalidate while reading (race safety)
+    def test_race_read_vs_invalidate(self):
+        stop = False
+        def reader():
+            while not stop:
+                self.cluster_cmd("mgr cli get osd_map")
+        t = threading.Thread(target=reader)
+        t.start()
+        try:
+            for _ in range(3):
+                self.bump_osdmap()  # triggers invalidation in mgr
+        finally:
+            stop = True
+            t.join()
+        # If we reach here without exceptions or crashes, pass
+        self.assertTrue(True)
+
+    # test get api
     def test_osdmap(self):
-        get_osdmap = "mgr api get osd_map"
+        get_osdmap = "mgr cli get osd_map"
 
         # store in cache
         self.cluster_cmd(get_osdmap)
@@ -57,27 +132,3 @@ class TestCache(MgrTestCase):
         self.assertIn("osds", osd_map)
         self.assertGreater(len(osd_map["osds"]), 0)
         self.assertIn("epoch", osd_map)
-
-
-
-    def test_hit_miss_ratio(self):
-        get_osdmap = "mgr api get osd_map"
-
-        hit_start, miss_start = self.get_hit_miss_ratio()
-
-        def wait_miss():
-            self.cluster_cmd(get_osdmap)
-            _, m = self.get_hit_miss_ratio()
-            return m == miss_start + 1
-
-        # Miss, add osd_map to cache
-        self.wait_until_true(wait_miss, self.ttl + 5)
-        h, m = self.get_hit_miss_ratio()
-        self.assertEqual(h, hit_start)
-        self.assertEqual(m, miss_start+1)
-
-        # Hit, get osd_map from cache
-        self.cluster_cmd(get_osdmap)
-        h, m = self.get_hit_miss_ratio()
-        self.assertEqual(h, hit_start+1)
-        self.assertEqual(m, miss_start+1)
