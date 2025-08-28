@@ -391,7 +391,7 @@ int LFUDAPolicy::eviction(const DoutPrefixProvider* dpp, uint64_t size, optional
       return ret;
     }
 
-    ldpp_dout(dpp, 10) << "LFUDAPolicy::" << __func__ << "(): Block " << key << " has been evicted." << dendl;
+    ldpp_dout(dpp, 2) << "LFUDAPolicy::" << __func__ << "(): Block " << key << " has been evicted." << dendl;
 
     if (perfcounter) {
       perfcounter->inc(l_rgw_d4n_cache_evictions);
