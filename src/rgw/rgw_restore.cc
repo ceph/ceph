@@ -326,13 +326,14 @@ int Restore::process(int index, int max_secs, optional_yield y)
       ret = process_restore_entry(entry, y);
 
       if (!ret && entry.status == rgw::sal::RGWRestoreStatus::RestoreAlreadyInProgress) {
-	 r_entries.push_back(entry);
+      	 r_entries.push_back(entry);
          ldpp_dout(this, 20) << __PRETTY_FUNCTION__ << ": re-pushing entry: '" << entry
 		 	 << "' on shard:"
   	  	         << obj_names[index] << dendl;	 
       }
 
-      if (ret < 0)
+      // Skip the entry of object/bucket which no longer exists
+      if (ret < 0 && (ret != -ENOENT))
         goto done;
 
       ///process all entries, trim and re-add
