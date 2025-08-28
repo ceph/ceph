@@ -250,6 +250,9 @@ public:
   bool is_waiter_for(uint64_t mask) const {
     return parent->is_waiter_for(getmask(mask));
   }
+  bool has_any_waiter() const {
+    return is_waiter_for(std::numeric_limits<uint64_t>::max());
+  }
 
   bool is_cached() const {
     return state_flags & CACHED;
@@ -576,7 +579,7 @@ public:
    * to formatter, or nothing if is_sync_and_unlocked.
    */
   void dump(ceph::Formatter *f) const;
-  static void generate_test_instances(std::list<SimpleLock*>& ls);
+  static std::list<SimpleLock> generate_test_instances();
 
   virtual void print(std::ostream& out) const {
     out << "(";

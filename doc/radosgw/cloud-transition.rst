@@ -122,7 +122,7 @@ Cloud Transition Specific Configurables
   If ``true``, the metadata of the object transitioned to the cloud service is retained.
   If ``false`` (default), the object is deleted after the transition.
   This option is ignored for current-versioned objects. For more details,
-  refer to the :ref:`Versioned Objects<versioned_objects>` section below.
+  refer to the :ref:`versioned_objects` section below.
 
 
 S3 Specific Configurables
@@ -420,15 +420,13 @@ For versioned and locked objects, similar semantics as that of LifecycleExpirati
 
 Restoring Objects
 -----------------
-The objects transitioned to cloud can now be restored. For more information, refer to 
-`Restoring Objects from Cloud <https://docs.aws.amazon.com/AmazonS3/latest/dev/cloud-restore.html>`_.
+The objects transitioned to cloud can now be restored. For more information, refer to
+:ref:`Restoring Objects from Cloud <radosgw-cloud-restore>`.
 
 
 Future Work
 -----------
 
 * Send presigned redirect or read-through the objects transitioned to cloud.
-
-* Support ``s3:RestoreObject`` operation on cloud transitioned objects.
 
 * Support transition to other cloud providers (like Azure).

@@ -64,7 +64,7 @@ public:
 
   void tick();
 
-  void nudge_log(SimpleLock *lock);
+  bool nudge_log(SimpleLock *lock);
 
   bool acquire_locks(const MDRequestRef& mdr,
 		     MutationImpl::LockOpVec& lov,
@@ -80,7 +80,7 @@ public:
   void drop_locks(MutationImpl *mut, std::set<CInode*> *pneed_issue=0);
   void set_xlocks_done(MutationImpl *mut, bool skip_dentry=false);
   void drop_non_rdlocks(MutationImpl *mut, std::set<CInode*> *pneed_issue=0);
-  void drop_rdlocks_for_early_reply(MutationImpl *mut);
+  void handle_locks_for_early_reply(MutationImpl *mut);
   void drop_lock(MutationImpl* mut, SimpleLock* what);
   void drop_locks_for_fragment_unfreeze(MutationImpl *mut);
 

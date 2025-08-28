@@ -14,7 +14,7 @@
 
 #include "include/buffer.h"
 #include "crimson/os/seastore/seastore_types.h"
-#include "crimson/os/seastore/transaction_interruptor.h"
+#include "crimson/common/errorator.h"
 
 struct btree_lba_manager_test;
 struct lba_btree_test;
@@ -23,6 +23,7 @@ struct cache_test_t;
 
 namespace crimson::os::seastore {
 
+class Transaction;
 class CachedExtent;
 using CachedExtentRef = boost::intrusive_ptr<CachedExtent>;
 class SegmentedAllocator;
@@ -264,6 +265,13 @@ private:
   map_t buffer_map;
 };
 
+enum class extent_2q_state_t : uint8_t {
+  Fresh = 0,
+  WarmIn,
+  Hot,
+  Max
+};
+
 class ExtentIndex;
 class CachedExtent
   : public boost::intrusive_ref_counter<
@@ -311,7 +319,6 @@ public:
             placement_hint_t hint,
             rewrite_gen_t gen,
 	    transaction_id_t trans_id) {
-    assert(gen == NULL_GENERATION || is_rewrite_generation(gen));
     state = _state;
     set_paddr(paddr);
     user_hint = hint;
@@ -758,8 +765,6 @@ public:
 
   /// assign the target rewrite generation for the followup rewrite
   void set_target_rewrite_generation(rewrite_gen_t gen) {
-    assert(is_target_rewrite_generation(gen));
-
     user_hint = placement_hint_t::REWRITE;
     rewrite_generation = gen;
   }
@@ -802,7 +807,6 @@ public:
   enum class viewable_state_t {
     stable,                // viewable
     pending,               // viewable
-    invalid,               // unviewable
     stable_become_retired, // unviewable
     stable_become_pending, // unviewable
   };
@@ -817,6 +821,28 @@ public:
    */
   std::pair<bool, viewable_state_t>
   is_viewable_by_trans(Transaction &t);
+
+  extent_2q_state_t get_2q_state() const {
+    assert("2Q" == crimson::common::get_conf<std::string>
+	   ("seastore_cachepin_type"));
+    return cache_state;
+  }
+
+  void set_2q_state(extent_2q_state_t state) {
+    assert("2Q" == crimson::common::get_conf<std::string>
+	   ("seastore_cachepin_type"));
+    assert(state < extent_2q_state_t::Max);
+    cache_state = state;
+  }
+
+  extent_len_t get_last_touch_end() const {
+    return last_touch_end;
+  }
+
+  void set_last_touch_end(extent_len_t touch_end) {
+    assert(touch_end != 0);
+    last_touch_end = touch_end;
+  }
 
 private:
   template <typename T>
@@ -840,8 +866,12 @@ private:
   friend class ExtentIndex;
   friend class Transaction;
 
-  bool is_linked() {
+  bool is_linked_to_index() {
     return extent_index_hook.is_linked();
+  }
+
+  bool is_linked_to_list() {
+    return primary_ref_list_hook.is_linked();
   }
 
   /// hook for intrusive ref list (mainly dirty or lru list)
@@ -910,8 +940,7 @@ private:
     }
   }
 
-  CachedExtent* get_transactional_view(Transaction &t);
-  CachedExtent* get_transactional_view(transaction_id_t tid);
+  CachedExtent* maybe_get_transactional_view(Transaction &t);
 
   read_trans_set_t<Transaction> read_transactions;
 
@@ -920,6 +949,13 @@ private:
   // the target rewrite generation for the followup rewrite
   // or the rewrite generation for the fresh write
   rewrite_gen_t rewrite_generation = NULL_GENERATION;
+
+  // save the end offset of the most recent of extent touching,
+  // see Cache::touch_extent_by_range() and ExtentPinboardTwoQ.
+  extent_len_t last_touch_end = 0;
+
+  // This field is unused when the ExtentPinboard use LRU algorithm
+  extent_2q_state_t cache_state = extent_2q_state_t::Fresh;
 
 protected:
   trans_view_set_t mutation_pending_extents;
@@ -1011,6 +1047,9 @@ protected:
   }
 
   friend class Cache;
+  friend class ExtentQueue;
+  friend class ExtentPinboardLRU;
+  friend class ExtentPinboardTwoQ;
   template <typename T, typename... Args>
   static TCachedExtentRef<T> make_cached_extent_ref(
     Args&&... args) {
@@ -1270,7 +1309,7 @@ public:
 
   void erase(CachedExtent &extent) {
     assert(extent.parent_index);
-    assert(extent.is_linked());
+    assert(extent.is_linked_to_index());
     [[maybe_unused]] auto erased = extent_index.erase(
       extent_index.s_iterator_to(extent));
     extent.parent_index = nullptr;
@@ -1325,54 +1364,6 @@ public:
 
 private:
   uint64_t bytes = 0;
-};
-
-/**
- * RetiredExtentPlaceholder
- *
- * Cache::retire_extent_addr(Transaction&, paddr_t, extent_len_t) can retire an
- * extent not currently in cache. In that case, in order to detect transaction
- * invalidation, we need to add a placeholder to the cache to create the
- * mapping back to the transaction. And whenever there is a transaction tries
- * to read the placeholder extent out, Cache is responsible to replace the
- * placeholder by the real one. Anyway, No placeholder extents should escape
- * the Cache interface boundary.
- */
-class RetiredExtentPlaceholder : public CachedExtent {
-
-public:
-  RetiredExtentPlaceholder(extent_len_t length)
-    : CachedExtent(CachedExtent::retired_placeholder_construct_t{}, length) {}
-
-  CachedExtentRef duplicate_for_write(Transaction&) final {
-    ceph_abort("Should never happen for a placeholder");
-    return CachedExtentRef();
-  }
-
-  ceph::bufferlist get_delta() final {
-    ceph_abort("Should never happen for a placeholder");
-    return ceph::bufferlist();
-  }
-
-  static constexpr extent_types_t TYPE = extent_types_t::RETIRED_PLACEHOLDER;
-  extent_types_t get_type() const final {
-    return TYPE;
-  }
-
-  void apply_delta_and_adjust_crc(
-    paddr_t base, const ceph::bufferlist &bl) final {
-    ceph_abort("Should never happen for a placeholder");
-  }
-
-  void on_rewrite(Transaction &, CachedExtent&, extent_len_t) final {}
-
-  std::ostream &print_detail(std::ostream &out) const final {
-    return out << ", RetiredExtentPlaceholder";
-  }
-
-  void on_delta_write(paddr_t record_block_offset) final {
-    ceph_abort("Should never happen for a placeholder");
-  }
 };
 
 class LBAMapping;
@@ -1449,12 +1440,12 @@ public:
     extent_len_t len;
   };
   virtual std::optional<modified_region_t> get_modified_region() {
-    ceph_abort("Unsupported");
+    ceph_abort_msg("Unsupported");
     return std::nullopt;
   }
 
   virtual void clear_modified_region() {
-    ceph_abort("Unsupported");
+    ceph_abort_msg("Unsupported");
   }
 
   virtual ~LogicalCachedExtent() {}
@@ -1540,3 +1531,24 @@ template <> struct fmt::formatter<crimson::os::seastore::CachedExtent> : fmt::os
 template <> struct fmt::formatter<crimson::os::seastore::CachedExtent::viewable_state_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::LogicalCachedExtent> : fmt::ostream_formatter {};
 #endif
+
+template <>
+struct fmt::formatter<crimson::os::seastore::extent_2q_state_t>
+    : public fmt::formatter<std::string_view> {
+  using State = crimson::os::seastore::extent_2q_state_t;
+  auto format(const State &s, auto &ctx) const {
+    switch (s) {
+    case State::Fresh:
+      return fmt::format_to(ctx.out(), "Fresh");
+    case State::WarmIn:
+      return fmt::format_to(ctx.out(), "WarmIn");
+    case State::Hot:
+      return fmt::format_to(ctx.out(), "Hot");
+    case State::Max:
+      return fmt::format_to(ctx.out(), "Max");
+    default:
+      __builtin_unreachable();
+      return ctx.out();
+    }
+  }
+};

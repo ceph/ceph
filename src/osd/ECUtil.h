@@ -28,6 +28,10 @@
 
 #include "osd_types.h"
 
+// Must be a power of 2.
+static inline constexpr uint64_t EC_ALIGN_SIZE = 4096;
+static inline constexpr uint64_t EC_ALIGN_MASK = ~(EC_ALIGN_SIZE - 1);
+
 /// If someone wants these types, but not ExtentCache, move to another file
 struct bl_split_merge {
   ceph::buffer::list split(
@@ -54,7 +58,7 @@ struct bl_split_merge {
 
 using extent_set = interval_set<uint64_t, boost::container::flat_map, false>;
 using extent_map = interval_map<uint64_t, ceph::buffer::list, bl_split_merge,
-                                boost::container::flat_map>;
+                                boost::container::flat_map, true>;
 
 /* Slice iterator.  This looks for contiguous buffers which are common
  * across all shards in the out_set.
@@ -63,20 +67,92 @@ using extent_map = interval_map<uint64_t, ceph::buffer::list, bl_split_merge,
  * K must a key suitable for a mini_flat_map.
  * T must be either an extent map or a reference to an extent map.
  */
-template <typename K, typename T>
 class slice_iterator {
-  mini_flat_map<K, T> &input;
+  mini_flat_map<shard_id_t, extent_map> &input;
   uint64_t offset = std::numeric_limits<uint64_t>::max();
   uint64_t length = std::numeric_limits<uint64_t>::max();
   uint64_t start = std::numeric_limits<uint64_t>::max();
   uint64_t end = std::numeric_limits<uint64_t>::max();
-  shard_id_map<std::pair<extent_map::const_iterator,
-                         bufferlist::const_iterator>> iters;
+  shard_id_map<std::pair<extent_map::iterator,
+                         bufferlist::iterator>> iters;
   shard_id_map<bufferptr> in;
   shard_id_map<bufferptr> out;
   const shard_id_set &out_set;
+  const shard_id_set *dedup_set;
+  DoutPrefixProvider *dpp;
+
+  /* zero dedup is used by the slice iterator to detect zero buffers and replace
+   * them with the dedup'd zero buffer. It keeps a replacement buffer which
+   * once full (bl.length() == len) can be used to swap out the input buffer.
+   */
+  struct zeros {
+    uint64_t off;
+    uint64_t len;
+    bufferlist bl;
+
+    zeros(uint64_t _off, uint64_t _len) : off(_off), len(_len) {}
+
+    bool dedup(bufferptr &bp) {
+      bool is_zeros = false;
+      uint64_t bp_len = bp.length();
+      uint64_t off = 0;
+      char *c_str = bp.c_str();
+      // Skip any non-aligned chunk.
+      uint64_t analysed = p2roundup((uintptr_t)c_str, EC_ALIGN_SIZE) - (uintptr_t)c_str;
+
+      while (off + analysed <= bp_len) {
+        bool new_is_zeros;
+        if (bp_len - off - analysed < EC_ALIGN_SIZE) {
+          new_is_zeros = false;
+        } else {
+          new_is_zeros = mem_is_zero(c_str + off + analysed, EC_ALIGN_SIZE);
+        }
+        if (new_is_zeros != is_zeros && analysed) {
+          if (is_zeros) {
+            bl.append_zero2(analysed);
+          } else {
+            bl.append(bufferptr(bp, off, analysed));
+          }
+          off += analysed;
+          analysed = 0;
+        }
+        is_zeros = new_is_zeros;
+        analysed += EC_ALIGN_SIZE;
+      }
+      if (is_zeros) {
+        bl.append_zero2(bp_len - off);
+      } else {
+        bl.append(bufferptr(bp, off, bp_len - off));
+      }
+
+      return bl.length() == len;
+    }
+  };
+
+  std::optional<shard_id_map<zeros>> zeros;
+
+  void zeros_dedup() {
+    for (auto &&[shard, _zeros] : *zeros) {
+
+      if (!out.contains(shard) && !in.contains(shard)) {
+        continue;
+      }
+
+      bufferptr &bp = out.contains(shard) ? out.at(shard) : in.at(shard);
+      if (_zeros.dedup(bp)) {
+        ldpp_dout(dpp, 20) << __func__ << ": overwrite input[" << shard << "]="
+                           << _zeros.off << "~" << _zeros.len
+                           << " with bl=" << _zeros.bl << dendl;
+        input.at(shard).insert(_zeros.off, _zeros.len, _zeros.bl);
+        zeros->erase(shard);
+      }
+    }
+  }
 
   void advance() {
+    if (dedup_set) {
+      zeros_dedup();
+    }
     in.clear();
     out.clear();
     offset = start;
@@ -117,9 +193,15 @@ class slice_iterator {
         // Create a new buffer pointer for the result. We don't want the client
         // manipulating the ptr.
         if (out_set.contains(shard)) {
+          ldpp_dout(dpp, 20) << __func__ << " out[" << shard << "]="
+                             << start << "~" << (end - start)
+                             << dendl;
           out.emplace(
             shard, bufferptr(bl_iter.get_current_ptr(), 0, end - start));
         } else {
+          ldpp_dout(dpp, 20) << __func__ << " in[" << shard << "]="
+                   << start << "~" << (end - start)
+                   << dendl;
           in.emplace(
             shard, bufferptr(bl_iter.get_current_ptr(), 0, end - start));
         }
@@ -129,15 +211,26 @@ class slice_iterator {
 
         // If we have reached the end of the extent, we need to move that on too.
         if (bl_iter == emap_iter.get_val().end()) {
+          // NOTE: Despite appearances, the following is happening BEFORE
+          // the caller gets to use the buffer pointers (since the in/out is
+          // set a few lines above).  This means that the caller must not
+          // check the CRC.
+          if (out_set.contains(shard)) {
+            invalidate_crcs(shard);
+          }
           ++emap_iter;
           if (emap_iter == input[shard].end()) {
             erase = true;
           } else {
             iters.at(shard).second = emap_iter.get_val().begin();
+            if (zeros) {
+              zeros->emplace(shard, emap_iter.get_off(), emap_iter.get_len());
+            }
           }
         }
-      } else
+      } else {
         ceph_assert(iter_offset > start);
+      }
 
       if (erase) {
         iter = iters.erase(iter);
@@ -160,16 +253,35 @@ class slice_iterator {
     }
   }
 
+  void invalidate_crcs(shard_id_t shard) {
+    bufferlist bl = iters.at(shard).first.get_val();
+    bl.invalidate_crc();
+  }
+
 public:
-  slice_iterator(mini_flat_map<K, T> &_input, const shard_id_set &out_set) :
+  slice_iterator(
+      mini_flat_map<shard_id_t, extent_map> &_input,
+      const shard_id_set &out_set,
+      DoutPrefixProvider *_dpp,
+      const shard_id_set *dedup_set) :
     input(_input),
     iters(input.max_size()),
     in(input.max_size()),
     out(input.max_size()),
-    out_set(out_set) {
+    out_set(out_set),
+    dedup_set(dedup_set),
+    dpp(_dpp) {
+
+    if (dedup_set) {
+      zeros.emplace(input.max_size());
+    }
+
     for (auto &&[shard, emap] : input) {
       auto emap_iter = emap.begin();
       auto bl_iter = emap_iter.get_val().begin();
+      if (zeros) {
+        zeros->emplace(shard, emap_iter.get_off(), emap_iter.get_len());
+      }
       auto p = std::make_pair(std::move(emap_iter), std::move(bl_iter));
       iters.emplace(shard, std::move(p));
 
@@ -190,14 +302,14 @@ public:
   bool is_page_aligned() const {
     for (auto &&[_, ptr] : in) {
       uintptr_t p = (uintptr_t)ptr.c_str();
-      if (p & ~CEPH_PAGE_MASK) return false;
-      if ((p + ptr.length()) & ~CEPH_PAGE_MASK) return false;
+      if (p & ~EC_ALIGN_MASK) return false;
+      if ((p + ptr.length()) & ~EC_ALIGN_MASK) return false;
     }
 
     for (auto &&[_, ptr] : out) {
       uintptr_t p = (uintptr_t)ptr.c_str();
-      if (p & ~CEPH_PAGE_MASK) return false;
-      if ((p + ptr.length()) & ~CEPH_PAGE_MASK) return false;
+      if (p & ~EC_ALIGN_MASK) return false;
+      if ((p + ptr.length()) & ~EC_ALIGN_MASK) return false;
     }
 
     return true;
@@ -208,10 +320,6 @@ public:
     return *this;
   }
 };
-
-// Setting to 1 turns on very large amounts of level 0 debug containing the
-// contents of buffers. Even on level 20 this is not really wanted.
-#define DEBUG_EC_BUFFERS 1
 
 namespace ECUtil {
 class shard_extent_map_t;
@@ -314,7 +422,9 @@ struct shard_extent_set_t {
   /** return the sum of extent_set.size */
   uint64_t size() const {
     uint64_t size = 0;
-    for (auto &&[_, e] : map) size += e.size();
+    for (auto &&[_, e] : map) {
+      size += e.size();
+    }
 
     return size;
   }
@@ -330,17 +440,12 @@ struct shard_extent_set_t {
   }
 };
 
-inline uint64_t page_mask() {
-  static const uint64_t page_mask = ((uint64_t)CEPH_PAGE_SIZE) - 1;
-  return page_mask;
+inline uint64_t align_next(uint64_t val) {
+  return p2roundup(val, EC_ALIGN_SIZE);
 }
 
-inline uint64_t align_page_next(uint64_t val) {
-  return p2roundup(val, (uint64_t)CEPH_PAGE_SIZE);
-}
-
-inline uint64_t align_page_prev(uint64_t val) {
-  return p2align(val, (uint64_t)CEPH_PAGE_SIZE);
+inline uint64_t align_prev(uint64_t val) {
+  return p2align(val, EC_ALIGN_SIZE);
 }
 
 class stripe_info_t {
@@ -357,6 +462,7 @@ class stripe_info_t {
   const std::vector<raw_shard_id_t> chunk_mapping_reverse;
   const shard_id_set data_shards;
   const shard_id_set parity_shards;
+  const shard_id_set all_shards;
 
 private:
   void ro_range_to_shards(
@@ -409,6 +515,12 @@ private:
     return data_shards;
   }
 
+  static shard_id_set calc_all_shards(int k_plus_m) {
+    shard_id_set all_shards;
+    all_shards.insert_range(shard_id_t(), k_plus_m);
+    return all_shards;
+  }
+
 public:
   stripe_info_t(const ErasureCodeInterfaceRef &ec_impl, const pg_pool_t *pool,
                 uint64_t stripe_width
@@ -423,7 +535,8 @@ public:
         complete_chunk_mapping(ec_impl->get_chunk_mapping(), k + m)),
       chunk_mapping_reverse(reverse_chunk_mapping(chunk_mapping)),
       data_shards(calc_shards(raw_shard_id_t(), k, chunk_mapping)),
-      parity_shards(calc_shards(raw_shard_id_t(k), m, chunk_mapping)) {
+      parity_shards(calc_shards(raw_shard_id_t(k), m, chunk_mapping)),
+      all_shards(calc_all_shards(k + m)) {
     ceph_assert(stripe_width != 0);
     ceph_assert(stripe_width % k == 0);
   }
@@ -440,7 +553,8 @@ public:
       chunk_mapping(complete_chunk_mapping(std::vector<shard_id_t>(), k + m)),
       chunk_mapping_reverse(reverse_chunk_mapping(chunk_mapping)),
       data_shards(calc_shards(raw_shard_id_t(), k, chunk_mapping)),
-      parity_shards(calc_shards(raw_shard_id_t(k), m, chunk_mapping)) {
+      parity_shards(calc_shards(raw_shard_id_t(k), m, chunk_mapping)),
+      all_shards(calc_all_shards(k + m)) {
     ceph_assert(stripe_width != 0);
     ceph_assert(stripe_width % k == 0);
   }
@@ -511,7 +625,7 @@ public:
       }
       shard_size += remainder;
     }
-    return ECUtil::align_page_next(shard_size);
+    return align_next(shard_size);
   }
 
   uint64_t ro_offset_to_shard_offset(uint64_t ro_offset,
@@ -539,13 +653,13 @@ public:
     return pool->allows_ecoverwrites();
   }
 
+  bool supports_ec_optimisations() const {
+    return pool->allows_ecoptimizations();
+  }
+
   bool supports_sub_chunks() const {
     return (plugin_flags &
       ErasureCodeInterface::FLAG_EC_PLUGIN_REQUIRE_SUB_CHUNKS) != 0;
-  }
-
-  bool get_is_hinfo_required() const {
-    return !supports_ec_overwrites();
   }
 
   bool supports_partial_reads() const {
@@ -561,6 +675,11 @@ public:
   bool supports_parity_delta_writes() const {
     return (plugin_flags &
       ErasureCodeInterface::FLAG_EC_PLUGIN_PARITY_DELTA_OPTIMIZATION) != 0;
+  }
+
+  bool supports_encode_decode_crcs() const {
+    return (plugin_flags &
+            ErasureCodeInterface::FLAG_EC_PLUGIN_CRC_ENCODE_DECODE_SUPPORT) != 0;
   }
 
   uint64_t get_stripe_width() const {
@@ -599,6 +718,11 @@ public:
   auto get_parity_shards() const {
     return parity_shards;
   }
+
+  auto get_all_shards() const {
+    return all_shards;
+  }
+
 
   uint64_t ro_offset_to_prev_chunk_offset(uint64_t offset) const {
     return (offset / stripe_width) * chunk_size;
@@ -728,57 +852,6 @@ public:
       ECUtil::shard_extent_set_t &shard_extent_set) const;
 };
 
-class HashInfo {
-  uint64_t total_chunk_size = 0;
-  std::vector<uint32_t> cumulative_shard_hashes;
-
-public:
-  HashInfo() {}
-
-  explicit HashInfo(unsigned num_chunks) :
-    cumulative_shard_hashes(num_chunks, -1) {}
-
-  void append(uint64_t old_size, shard_id_map<bufferptr> &to_append);
-
-  void clear() {
-    total_chunk_size = 0;
-    cumulative_shard_hashes = std::vector<uint32_t>(
-      cumulative_shard_hashes.size(),
-      -1);
-  }
-
-  void encode(ceph::buffer::list &bl) const;
-  void decode(ceph::buffer::list::const_iterator &bl);
-  void dump(ceph::Formatter *f) const;
-  static void generate_test_instances(std::list<HashInfo*> &o);
-
-  uint32_t get_chunk_hash(shard_id_t shard) const {
-    ceph_assert(shard < cumulative_shard_hashes.size());
-    return cumulative_shard_hashes[int(shard)];
-  }
-
-  uint64_t get_total_chunk_size() const {
-    return total_chunk_size;
-  }
-
-  void set_total_chunk_size_clear_hash(uint64_t new_chunk_size) {
-    cumulative_shard_hashes.clear();
-    total_chunk_size = new_chunk_size;
-  }
-
-  bool has_chunk_hash() const {
-    return !cumulative_shard_hashes.empty();
-  }
-
-  void update_to(const HashInfo &rhs) {
-    *this = rhs;
-  }
-
-  friend std::ostream &operator<<(std::ostream &out, const HashInfo &hi);
-};
-
-typedef std::shared_ptr<HashInfo> HashInfoRef;
-
 class shard_extent_map_t {
   static const uint64_t invalid_offset = std::numeric_limits<uint64_t>::max();
 
@@ -791,8 +864,10 @@ public:
   uint64_t end_offset;
   shard_id_map<extent_map> extent_maps;
 
-  slice_iterator<shard_id_t, extent_map> begin_slice_iterator(
-      const shard_id_set &out_set);
+  slice_iterator begin_slice_iterator(
+      const shard_id_set &out,
+      DoutPrefixProvider *dpp,
+      const shard_id_set *dedup_zeros = nullptr);
 
   /* This caculates the ro offset for an offset into a particular shard */
   uint64_t calc_ro_offset(raw_shard_id_t raw_shard, int shard_offset) const {
@@ -925,23 +1000,29 @@ public:
   void append_zeros_to_ro_offset(uint64_t ro_offset);
   void insert_ro_extent_map(const extent_map &host_extent_map);
   extent_set get_extent_superset() const;
-  int encode(const ErasureCodeInterfaceRef &ec_impl, const HashInfoRef &hinfo,
-             uint64_t before_ro_size);
-  int _encode(const ErasureCodeInterfaceRef &ec_impl);
+  int encode(const ErasureCodeInterfaceRef &ec_impl,
+    DoutPrefixProvider *dpp = nullptr,
+    shard_id_set *dedup_zeros = nullptr);
   int encode_parity_delta(const ErasureCodeInterfaceRef &ec_impl,
-                          shard_extent_map_t &old_sem);
+                          shard_extent_map_t &old_sem,
+                          DoutPrefixProvider *dpp);
 
   void pad_on_shards(const shard_extent_set_t &pad_to,
                      const shard_id_set &shards);
   void pad_on_shards(const extent_set &pad_to,
                      const shard_id_set &shards);
+  void pad_on_shard(const extent_set &pad_to,
+                    const shard_id_t shard);
   void trim(const shard_extent_set_t &trim_to);
   int decode(const ErasureCodeInterfaceRef &ec_impl,
              const shard_extent_set_t &want,
-             uint64_t object_size);
+             uint64_t object_size,
+             DoutPrefixProvider *dpp = nullptr,
+             bool dedup_zeros = false);
   int _decode(const ErasureCodeInterfaceRef &ec_impl,
               const shard_id_set &want_set,
-              const shard_id_set &need_set);
+              const shard_id_set &need_set,
+              DoutPrefixProvider *dpp);
   void get_buffer(shard_id_t shard, uint64_t offset, uint64_t length,
                   buffer::list &append_to) const;
   void get_shard_first_buffer(shard_id_t shard, buffer::list &append_to) const;
@@ -965,7 +1046,7 @@ public:
   bool contains(shard_id_t shard) const;
   bool contains(std::optional<shard_extent_set_t> const &other) const;
   bool contains(shard_extent_set_t const &other) const;
-  void pad_and_rebuild_to_page_align();
+  void pad_and_rebuild_to_ec_align();
   uint64_t size();
   void clear();
   uint64_t get_start_offset() const { return start_offset; }
@@ -975,10 +1056,10 @@ public:
   size_t shard_count() { return extent_maps.size(); }
 
 
-  void assert_buffer_contents_equal(shard_extent_map_t other) const {
+  void assert_buffer_contents_equal(shard_extent_map_t other) {
     for (auto &&[shard, emap] : extent_maps) {
       for (auto &&i : emap) {
-        bufferlist bl = i.get_val();
+        bufferlist &bl = i.get_val();
         bufferlist otherbl;
         other.get_buffer(shard, i.get_off(), i.get_len(), otherbl);
         ceph_assert(bl.contents_equal(otherbl));
@@ -986,16 +1067,9 @@ public:
     }
   }
 
-  bool add_zero_padding_for_decode(uint64_t object_size, shard_id_set &exclude_set) {
-    shard_extent_set_t zeros(sinfo->get_k_plus_m());
-    sinfo->ro_size_to_zero_mask(object_size, zeros);
-    extent_set superset = get_extent_superset();
+  void add_zero_padding_for_decode(ECUtil::shard_extent_set_t &zeros) {
     bool changed = false;
     for (auto &&[shard, z] : zeros) {
-      if (exclude_set.contains(shard)) {
-        continue;
-      }
-      z.intersection_of(superset);
       for (auto [off, len] : z) {
         changed = true;
         bufferlist bl;
@@ -1007,8 +1081,29 @@ public:
     if (changed) {
       compute_ro_range();
     }
+  }
 
-    return changed;
+  template <typename IntervalSetT> requires is_interval_set_v<IntervalSetT>
+  void get_sparse_buffer(shard_id_t shard, bufferlist &bl_out, IntervalSetT &iset) {
+    ceph_assert(bl_out.length() == 0);
+    if (!extent_maps.contains(shard)) {
+      return;
+    }
+    for (auto iter = extent_maps.at(shard).begin(); iter != extent_maps.at(shard).end(); ++iter) {
+      uint64_t off = iter.get_off();
+      bufferlist &bl = iter.get_val();
+
+      auto bl_iter = bl.begin();
+      for (const auto &bp : bl.buffers()) {
+        uint64_t len = bp.length();
+        if (!bp.is_zero_fast()) {
+          iset.insert(off, bp.length());
+          bl_out.append(bp);
+        }
+        off += len;
+        bl_iter += len;
+      }
+    }
   }
 
   friend std::ostream &operator<<(std::ostream &lhs,
@@ -1065,6 +1160,5 @@ struct log_entry_t {
 
 bool is_hinfo_key_string(const std::string &key);
 const std::string &get_hinfo_key();
-
-WRITE_CLASS_ENCODER(ECUtil::HashInfo)
 }
+

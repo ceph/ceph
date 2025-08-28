@@ -175,6 +175,12 @@ class ECBackend : public ECCommon {
       bool fast_read = false
     );
 
+  bool ec_can_decode(const shard_id_set &available_shards) const;
+  shard_id_map<bufferlist> ec_encode_acting_set(const bufferlist &in_bl) const;
+  shard_id_map<bufferlist> ec_decode_acting_set(
+      const shard_id_map<bufferlist> &shard_map, int chunk_size) const;
+  ECUtil::stripe_info_t ec_get_sinfo() const;
+
  private:
   friend struct ECRecoveryHandle;
 
@@ -217,7 +223,6 @@ class ECBackend : public ECCommon {
     ceph::ErasureCodeInterfaceRef ec_impl;
     const ECUtil::stripe_info_t &sinfo;
     ReadPipeline &read_pipeline;
-    UnstableHashInfoRegistry &unstable_hashinfo_registry;
     // TODO: lay an interface down here
     ECListener *parent;
     ECBackend *ecbackend;
@@ -244,7 +249,6 @@ class ECBackend : public ECCommon {
                     ceph::ErasureCodeInterfaceRef ec_impl,
                     const ECUtil::stripe_info_t &sinfo,
                     ReadPipeline &read_pipeline,
-                    UnstableHashInfoRegistry &unstable_hashinfo_registry,
                     ECListener *parent,
                     ECBackend *ecbackend);
 
@@ -252,7 +256,7 @@ class ECBackend : public ECCommon {
       hobject_t hoid;
       eversion_t v;
       std::set<pg_shard_t> missing_on;
-      std::set<shard_id_t> missing_on_shards;
+      shard_id_set missing_on_shards;
 
       ObjectRecoveryInfo recovery_info;
       ObjectRecoveryProgress recovery_progress;
@@ -278,7 +282,6 @@ class ECBackend : public ECCommon {
       // must be filled if state == WRITING
       std::optional<ECUtil::shard_extent_map_t> returned_data;
       std::map<std::string, ceph::buffer::list, std::less<>> xattrs;
-      ECUtil::HashInfoRef hinfo;
       ObjectContextRef obc;
       std::set<pg_shard_t> waiting_on_pushes;
 
@@ -327,12 +330,14 @@ class ECBackend : public ECCommon {
     void continue_recovery_op(
         RecoveryBackend::RecoveryOp &op,
         RecoveryMessages *m);
+    void update_object_size_after_read(
+        uint64_t size,
+        read_result_t &res,
+        read_request_t &req);
     void handle_recovery_read_complete(
         const hobject_t &hoid,
-        ECUtil::shard_extent_map_t &&buffers_read,
-        std::optional<std::map<std::string, ceph::buffer::list, std::less<>>>
-          attrs,
-        const ECUtil::shard_extent_set_t &want_to_read,
+        read_result_t &&res,
+        read_request_t &req,
         RecoveryMessages *m);
     void handle_recovery_push(
         const PushOp &op,
@@ -352,12 +357,10 @@ class ECBackend : public ECCommon {
                       ceph::ErasureCodeInterfaceRef ec_impl,
                       const ECUtil::stripe_info_t &sinfo,
                       ReadPipeline &read_pipeline,
-                      UnstableHashInfoRegistry &unstable_hashinfo_registry,
                       PGBackend::Listener *parent,
                       ECBackend *ecbackend)
       : RecoveryBackend(cct, coll, std::move(ec_impl), sinfo, read_pipeline,
-                        unstable_hashinfo_registry, parent->get_eclistener(),
-                        ecbackend),
+                        parent->get_eclistener(), ecbackend),
         parent(parent) {}
 
     void commit_txn_send_replies(
@@ -441,6 +444,10 @@ class ECBackend : public ECCommon {
     return sinfo.get_chunk_size();
   }
 
+  bool get_ec_supports_crc_encode_decode() const {
+    return sinfo.supports_encode_decode_crcs();
+  }
+
   uint64_t object_size_to_shard_size(const uint64_t size, shard_id_t shard
     ) const {
     return sinfo.object_size_to_shard_size(size, shard);
@@ -448,10 +455,6 @@ class ECBackend : public ECCommon {
 
   uint64_t get_is_nonprimary_shard(shard_id_t shard) const {
     return sinfo.is_nonprimary_shard(shard);
-  }
-
-  bool get_is_hinfo_required() const {
-    return sinfo.get_is_hinfo_required();
   }
 
   /**
@@ -481,16 +484,11 @@ class ECBackend : public ECCommon {
 
   const ECUtil::stripe_info_t sinfo;
 
-  ECCommon::UnstableHashInfoRegistry unstable_hashinfo_registry;
-
-
   std::tuple<
     int,
     std::map<std::string, ceph::bufferlist, std::less<>>,
     size_t
   > get_attrs_n_size_from_disk(const hobject_t &hoid);
-
-  ECUtil::HashInfoRef get_hinfo_from_disk(hobject_t oid);
 
   std::optional<object_info_t> get_object_info_from_obc(
       ObjectContextRef &obc_map

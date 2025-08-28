@@ -10,9 +10,13 @@ unmap images exactly like it would on Linux. Make sure to check the
 
 Please check the `installation guide`_ to get started.
 
+.. note:: 
+
+   Please see the `OS recommendations`_ regarding client package support.
+
 Windows service
 ===============
-On Windows, ``rbd-wnbd`` daemons are managed by a centralized service. This allows
+On MS Windows, ``rbd-wnbd`` daemons are managed by a centralized service. This allows
 decoupling the daemons from the Windows session from which they originate. At
 the same time, the service is responsible of recreating persistent mappings,
 usually when the host boots.
@@ -233,3 +237,4 @@ Please consult the `Windows troubleshooting`_ page.
 .. _san command: https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/san
 .. _StorageSetting command: https://learn.microsoft.com/en-us/powershell/module/storage/set-storagesetting?view=windowsserver2022-ps
 .. _SAN policy reference: https://learn.microsoft.com/en-us/windows-hardware/customize/desktop/unattend/microsoft-windows-partitionmanager-sanpolicy
+.. _OS recommendations: ../../start/os-recommendations

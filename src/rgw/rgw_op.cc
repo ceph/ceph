@@ -68,6 +68,7 @@
 #include "rgw_iam_managed_policy.h"
 #include "rgw_bucket_sync.h"
 #include "rgw_bucket_logging.h"
+#include "rgw_restore.h"
 
 #include "services/svc_zone.h"
 #include "services/svc_quota.h"
@@ -340,6 +341,11 @@ static int get_obj_policy_from_attr(const DoutPrefixProvider *dpp,
   int ret = 0;
 
   std::unique_ptr<rgw::sal::Object::ReadOp> rop = obj->get_read_op();
+
+  ret = rop->prepare(y, dpp);
+  if (ret < 0) {
+    return ret;
+  }
 
   ret = rop->get_attr(dpp, RGW_ATTR_ACL, bl, y);
   if (ret >= 0) {
@@ -878,8 +884,7 @@ static void rgw_add_grant_to_iam_environment(rgw::IAM::Environment& e, req_state
   }
 }
 
-void rgw_build_iam_environment(rgw::sal::Driver* driver,
-	                              req_state* s)
+void rgw_build_iam_environment(req_state* s)
 {
   const auto& m = s->info.env->get_map();
   auto t = ceph::real_clock::now();
@@ -986,13 +991,13 @@ void handle_replication_status_header(
  */
 int handle_cloudtier_obj(req_state* s, const DoutPrefixProvider *dpp, rgw::sal::Driver* driver,
                          rgw::sal::Attrs& attrs, bool sync_cloudtiered, std::optional<uint64_t> days,
-                         bool restore_op, optional_yield y)
+                         bool read_through, optional_yield y)
 {
   int op_ret = 0;
   ldpp_dout(dpp, 20) << "reached handle cloud tier " << dendl;
   auto attr_iter = attrs.find(RGW_ATTR_MANIFEST);
   if (attr_iter == attrs.end()) {
-    if (restore_op) {
+    if (!read_through) {
       op_ret = -ERR_INVALID_OBJECT_STATE;
       s->err.message = "only cloud tier object can be restored";
       return op_ret;
@@ -1005,7 +1010,7 @@ int handle_cloudtier_obj(req_state* s, const DoutPrefixProvider *dpp, rgw::sal::
     decode(m, attr_iter->second);
     if (!m.is_tier_type_s3()) {
       ldpp_dout(dpp, 20) << "not a cloud tier object " <<  s->object->get_key().name << dendl;
-      if (restore_op) {
+      if (!read_through) {
         op_ret = -ERR_INVALID_OBJECT_STATE;
         s->err.message = "only cloud tier object can be restored";
         return op_ret;
@@ -1030,26 +1035,55 @@ int handle_cloudtier_obj(req_state* s, const DoutPrefixProvider *dpp, rgw::sal::
       auto iter = bl.cbegin();
       decode(restore_status, iter);
     }
-    if (attr_iter == attrs.end() || restore_status == rgw::sal::RGWRestoreStatus::RestoreFailed) {
-      // first time restore or previous restore failed
-      rgw::sal::Bucket* pbucket = NULL;
-      pbucket = s->bucket.get();
+    if (restore_status == rgw::sal::RGWRestoreStatus::RestoreAlreadyInProgress) {
+      if (read_through) {
+        op_ret = -ERR_REQUEST_TIMEOUT;
+        ldpp_dout(dpp, 5) << "restore is still in progress, please check restore status and retry" << dendl;
+        s->err.message = "restore is still in progress";
+        return op_ret;
+      } else { 
+       	// for restore-op, corresponds to RESTORE_ALREADY_IN_PROGRESS
+        return static_cast<int>(rgw::sal::RGWRestoreStatus::RestoreAlreadyInProgress);
+      } 
+    } else if (restore_status == rgw::sal::RGWRestoreStatus::CloudRestored) {
+      // corresponds to CLOUD_RESTORED
+      if (!read_through) { //update expiry date iff its temp restored copy
+        op_ret = driver->get_rgwrestore()->update_cloud_restore_exp_date(s->bucket.get(),
+                                              		      s->object.get(), days, dpp, y);
 
+        if (op_ret < 0) {
+	        ldpp_dout(dpp, 20) << "Updating expiry-date of restored object " << s->object->get_key() << " failed - " << op_ret << dendl;
+          s->err.message = "failed to update expiry-date of the restored object";
+          return op_ret;
+        }
+      }
+      return static_cast<int>(rgw::sal::RGWRestoreStatus::CloudRestored);
+    } else { // first time restore or previous restore failed.
+      // Restore the object.
       std::unique_ptr<rgw::sal::PlacementTier> tier;
       rgw_placement_rule target_placement;
-      target_placement.inherit_from(pbucket->get_placement_rule());
-      attr_iter = attrs.find(RGW_ATTR_STORAGE_CLASS);
+      target_placement.inherit_from(s->bucket->get_placement_rule());
+      auto attr_iter = attrs.find(RGW_ATTR_STORAGE_CLASS);
       if (attr_iter != attrs.end()) {
         target_placement.storage_class = attr_iter->second.to_str();
       }
       op_ret = driver->get_zone()->get_zonegroup().get_placement_tier(target_placement, &tier);
-      ldpp_dout(dpp, 20) << "getting tier placement handle cloud tier" << op_ret <<
-                       " storage class " << target_placement.storage_class << dendl;
       if (op_ret < 0) {
-        s->err.message = "failed to restore object";
+	ldpp_dout(dpp, -1) << "failed to fetch tier placement handle, ret = " << op_ret << dendl;
         return op_ret;
+      } else {
+        ldpp_dout(dpp, 20) << "getting tier placement handle cloud tier for " <<
+                         " storage class " << target_placement.storage_class << dendl;
       }
-      if (!restore_op) {
+
+      if (!tier->is_tier_type_s3()) {
+        ldpp_dout(dpp, -1) << "ERROR: not s3 tier type - " << tier->get_tier_type() <<
+                       " for storage class " << target_placement.storage_class << dendl;
+        s->err.message = "failed to restore object";
+        return -EINVAL;
+      }
+
+      if (read_through) {
         if (tier->allow_read_through()) {
           days = tier->get_read_through_restore_days();
         } else { //read-through is not enabled
@@ -1058,56 +1092,30 @@ int handle_cloudtier_obj(req_state* s, const DoutPrefixProvider *dpp, rgw::sal::
           return op_ret;
         }
       }
-      // fill in the entry. XXX: Maybe we can avoid it by passing only necessary params
-      rgw_bucket_dir_entry ent;
-      ent.key.name = s->object->get_key().name;
-      ent.key.instance = s->object->get_key().instance;
-      ent.meta.accounted_size = ent.meta.size = s->obj_size;
-      ent.meta.etag = "" ;
-      uint64_t epoch = 0;
-      op_ret = get_system_versioning_params(s, &epoch, NULL);
-      if (!ent.key.instance.empty()) { // non-current versioned object
-        ent.flags |= rgw_bucket_dir_entry::FLAG_VER;
-      }
-      ldpp_dout(dpp, 20) << "getting versioning params tier placement handle cloud tier" << op_ret << dendl;
+
+      op_ret = driver->get_rgwrestore()->restore_obj_from_cloud(s->bucket.get(),
+		      s->object.get(), tier.get(), days, dpp, y);
+
       if (op_ret < 0) {
-        ldpp_dout(dpp, 20) << "failed to get versioning params, op_ret = " << op_ret << dendl;
+	ldpp_dout(dpp, 0) << "Restore of object " << s->object->get_key() << " failed" << op_ret << dendl;
         s->err.message = "failed to restore object";
         return op_ret;
       }
-      op_ret = s->object->restore_obj_from_cloud(pbucket, tier.get(), target_placement, ent,
-                                                 s->cct, tier_config, epoch,
-                                                 days, dpp, y, s->bucket->get_info().flags);
-      if (op_ret < 0) {
-        ldpp_dout(dpp, 0) << "object " << ent.key.name << " fetching failed" << op_ret << dendl;
-        s->err.message = "failed to restore object";
-        return op_ret;
-      }
-      ldpp_dout(dpp, 20) << "object " << ent.key.name << " fetching succeed" << dendl;
-      /*  Even if restore is complete the first read through request will return but actually downloaded
-       * object asyncronously.
+
+      ldpp_dout(dpp, 20) << "Restore of object " << s->object->get_key() << " initiated" << dendl;
+      /*  Even if restore is complete the first read through request will return
+       *  but actually downloaded object asyncronously.
        */
-      if (!restore_op) { //read-through
+      if (read_through) { //read-through
         op_ret = -ERR_REQUEST_TIMEOUT;
         ldpp_dout(dpp, 5) << "restore is still in progress, please check restore status and retry" << dendl;
         s->err.message = "restore is still in progress";
       }
       return op_ret;
-    } else if (restore_status == rgw::sal::RGWRestoreStatus::RestoreAlreadyInProgress) {
-        if (!restore_op) {
-          op_ret = -ERR_REQUEST_TIMEOUT;
-          ldpp_dout(dpp, 5) << "restore is still in progress, please check restore status and retry" << dendl;
-          s->err.message = "restore is still in progress";
-          return op_ret;
-        } else { 
-          return 1; // for restore-op, corresponds to RESTORE_ALREADY_IN_PROGRESS
-        } 
-    } else {
-      return 2; // corresponds to CLOUD_RESTORED
     }
   } catch (const buffer::end_of_buffer&) {
     //empty manifest; it's not cloud-tiered
-    if (restore_op) {
+    if (!read_through) {
       op_ret = -ERR_INVALID_OBJECT_STATE;
       s->err.message = "only cloud tier object can be restored";
     }
@@ -2590,7 +2598,7 @@ void RGWGetObj::execute(optional_yield y)
 
   if (get_type() == RGW_OP_GET_OBJ && get_data) {
     std::optional<uint64_t> days;
-    op_ret = handle_cloudtier_obj(s, this, driver, attrs, sync_cloudtiered, days, false, y);
+    op_ret = handle_cloudtier_obj(s, this, driver, attrs, sync_cloudtiered, days, true, y);
     if (op_ret < 0) {
       ldpp_dout(this, 4) << "Cannot get cloud tiered object: " << *s->object
                        <<". Failing with " << op_ret << dendl;
@@ -4107,9 +4115,9 @@ int RGWPutObj::init_processing(optional_yield y) {
 
   // reject public canned acls
   if (s->bucket_access_conf && s->bucket_access_conf->block_public_acls() &&
-      (s->canned_acl.compare("public-read") ||
-       s->canned_acl.compare("public-read-write") ||
-       s->canned_acl.compare("authenticated-read"))) {
+      (s->canned_acl == "public-read" ||
+       s->canned_acl == "public-read-write" ||
+       s->canned_acl == "authenticated-read")) {
     return -EACCES;
   }
 
@@ -5451,7 +5459,7 @@ void RGWRestoreObj::execute(optional_yield y)
   }
   rgw::sal::Attrs attrs;
   attrs = s->object->get_attrs();
-  op_ret = handle_cloudtier_obj(s, this, driver, attrs, false, expiry_days, true, y);
+  op_ret = handle_cloudtier_obj(s, this, driver, attrs, false, expiry_days, false, y);
   restore_ret = op_ret;
   ldpp_dout(this, 20) << "Restore completed of object: " << *s->object << "with op ret: " << restore_ret <<dendl;
 
@@ -5665,10 +5673,13 @@ void RGWDeleteObj::execute(optional_yield y)
       del_op->params.bucket_owner = s->bucket_owner.id;
       del_op->params.versioning_status = s->bucket->get_info().versioning_status();
       del_op->params.unmod_since = unmod_since;
+      del_op->params.last_mod_time_match = last_mod_time_match;
       del_op->params.high_precision_time = s->system_request;
       del_op->params.olh_epoch = epoch;
       del_op->params.marker_version_id = version_id;
       del_op->params.null_verid = null_verid;
+      del_op->params.size_match = size_match;
+      del_op->params.if_match = if_match;
 
       op_ret = del_op->delete_obj(this, y, rgw::sal::FLAG_LOG_OP);
       if (op_ret >= 0) {
@@ -7235,7 +7246,7 @@ void RGWCompleteMultipart::execute(optional_yield y)
 
     ret = upload->cleanup_orphaned_parts(this, s->cct, y, meta_obj->get_obj(), remove_objs, processed_prefixes);
     if (ret < 0) {
-      ldpp_dout(this, 0) << "ERROR: failed to clenup orphaned parts. ret=" << ret << dendl;
+      ldpp_dout(this, 0) << "ERROR: failed to cleanup orphaned parts. ret=" << ret << dendl;
     }
   }
 
@@ -7527,8 +7538,11 @@ void RGWDeleteMultiObj::write_ops_log_entry(rgw_log_entry& entry) const {
   entry.delete_multi_obj_meta.objects = std::move(ops_log_entries);
 }
 
-void RGWDeleteMultiObj::handle_individual_object(const rgw_obj_key& o, optional_yield y)
+void RGWDeleteMultiObj::handle_individual_object(const RGWMultiDelObject& object, optional_yield y)
 {
+  const string& key = object.get_key();
+  const string& instance = object.get_version_id();
+  rgw_obj_key o(key, instance);
   // add the object key to the dout prefix so we can trace concurrent calls
   struct ObjectPrefix : public DoutPrefixPipe {
     const rgw_obj_key& o;
@@ -7611,6 +7625,9 @@ void RGWDeleteMultiObj::handle_individual_object(const rgw_obj_key& o, optional_
   del_op->params.obj_owner = s->owner;
   del_op->params.bucket_owner = s->bucket_owner.id;
   del_op->params.marker_version_id = version_id;
+  del_op->params.last_mod_time_match = object.get_last_mod_time();
+  del_op->params.if_match = object.get_if_match();
+  del_op->params.size_match = object.get_size_match();
 
   op_ret = del_op->delete_obj(dpp, y, rgw::sal::FLAG_LOG_OP);
   if (op_ret == -ENOENT) {
@@ -7632,6 +7649,22 @@ void RGWDeleteMultiObj::handle_individual_object(const rgw_obj_key& o, optional_
   }
   
   send_partial_response(o, del_op->result.delete_marker, del_op->result.version_id, op_ret);
+}
+
+void RGWDeleteMultiObj::handle_objects(const std::vector<RGWMultiDelObject>& objects,
+                                       uint32_t max_aio,
+                                       boost::asio::yield_context yield)
+{
+  auto group = ceph::async::spawn_throttle{yield, max_aio};
+
+  for (const auto& object : objects) {
+    group.spawn([this, &object] (boost::asio::yield_context yield) {
+                  handle_individual_object(object, yield);
+                });
+
+    rgw_flush_formatter(s, s->formatter);
+  }
+  group.wait();
 }
 
 void RGWDeleteMultiObj::execute(optional_yield y)
@@ -7684,8 +7717,9 @@ void RGWDeleteMultiObj::execute(optional_yield y)
 
   if (s->bucket->get_info().mfa_enabled()) {
     bool has_versioned = false;
-    for (auto i : multi_delete->objects) {
-      if (!i.instance.empty()) {
+    for (auto object : multi_delete->objects) {
+      const string& instance = object.get_version_id();
+      if (instance.empty()) {
         has_versioned = true;
         break;
       }
@@ -7701,16 +7735,25 @@ void RGWDeleteMultiObj::execute(optional_yield y)
 
   // process up to max_aio object deletes in parallel
   const uint32_t max_aio = std::max<uint32_t>(1, s->cct->_conf->rgw_multi_obj_del_max_aio);
-  auto group = ceph::async::spawn_throttle{y, max_aio};
 
-  for (const auto& key : multi_delete->objects) {
-    group.spawn([this, &key] (boost::asio::yield_context yield) {
-                  handle_individual_object(key, yield);
-                });
+  // if we're not already running in a coroutine, spawn one
+  if (!y) {
+    auto& objects = multi_delete->objects;
 
-    rgw_flush_formatter(s, s->formatter);
+    boost::asio::io_context context;
+    boost::asio::spawn(context,
+        [this, &objects, max_aio] (boost::asio::yield_context yield) {
+          handle_objects(objects, max_aio, yield);
+        },
+        [] (std::exception_ptr eptr) {
+          if (eptr) std::rethrow_exception(eptr);
+        });
+    context.run();
+  } else {
+    // use the existing coroutine's yield context
+    handle_objects(multi_delete->objects, max_aio,
+                   y.get_yield_context());
   }
-  group.wait();
 
   /*  set the return code to zero, errors at this point will be
   dumped to the response */
@@ -8621,7 +8664,7 @@ int RGWHandler::do_init_permissions(const DoutPrefixProvider *dpp, optional_yiel
     return ret==-ENODATA ? -EACCES : ret;
   }
 
-  rgw_build_iam_environment(driver, s);
+  rgw_build_iam_environment(s);
   return ret;
 }
 

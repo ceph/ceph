@@ -20,7 +20,6 @@
 #include "common/errno.h"
 #include "common/Timer.h"
 #include "common/TracepointProvider.h"
-#include "common/openssl_opts_handler.h"
 #include "common/numa.h"
 #include "include/compat.h"
 #include "include/str_list.h"
@@ -168,8 +167,6 @@ void rgw::AppMain::init_frontends1(bool nfs)
   if (!g_conf()->rgw_region.empty() && g_conf()->rgw_zonegroup.empty()) {
     g_conf().set_val_or_die("rgw_zonegroup", g_conf()->rgw_region.c_str());
   }
-
-  ceph::crypto::init_openssl_engine_once();
 } /* init_frontends1 */
 
 void rgw::AppMain::init_numa()
@@ -234,6 +231,10 @@ int rgw::AppMain::init_storage()
     (g_conf()->rgw_enable_lc_threads &&
       ((!nfs) || (nfs && g_conf()->rgw_nfs_run_lc_threads)));
 
+  auto run_restore =
+    (g_conf()->rgw_enable_restore_threads &&
+      ((!nfs) || (nfs && g_conf()->rgw_nfs_run_restore_threads)));
+
   auto run_quota =
     (g_conf()->rgw_enable_quota_threads &&
       ((!nfs) || (nfs && g_conf()->rgw_nfs_run_quota_threads)));
@@ -250,6 +251,7 @@ int rgw::AppMain::init_storage()
 	  site,
           run_gc,
           run_lc,
+	  run_restore,
           run_quota,
           run_sync,
           g_conf().get_val<bool>("rgw_dynamic_resharding"),
@@ -584,7 +586,7 @@ void rgw::AppMain::init_lua()
 #ifdef WITH_RADOSGW_RADOS
   if (driver->get_name() == "rados") { /* Supported for only RadosStore */
     lua_background = std::make_unique<
-      rgw::lua::Background>(driver, dpp->get_cct(), env.lua.manager.get());
+      rgw::lua::Background>(dpp->get_cct(), env.lua.manager.get());
     lua_background->start();
     env.lua.background = lua_background.get();
     static_cast<rgw::sal::RadosLuaManager*>(env.lua.manager.get())->watch_reload(dpp);

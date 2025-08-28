@@ -457,18 +457,6 @@ void BlueFS::_init_logger()
                 "Average allocation latency for primary/shared device",
                 "bsal",
                 PerfCountersBuilder::PRIO_USEFUL);
-  b.add_time(l_bluefs_wal_alloc_max_lat, "alloc_wal_max_lat",
-             "Max allocation latency for wal device",
-             "awxt",
-             PerfCountersBuilder::PRIO_INTERESTING);
-  b.add_time(l_bluefs_db_alloc_max_lat, "alloc_db_max_lat",
-             "Max allocation latency for db device",
-             "adxt",
-             PerfCountersBuilder::PRIO_INTERESTING);
-  b.add_time(l_bluefs_slow_alloc_max_lat, "alloc_slow_max_lat",
-             "Max allocation latency for primary/shared device",
-             "asxt",
-             PerfCountersBuilder::PRIO_INTERESTING);
 
   logger = b.create_perf_counters();
   cct->get_perfcounters_collection()->add(logger);
@@ -533,7 +521,9 @@ int BlueFS::add_block_device(unsigned id, const string& path, bool trim,
   if (trim) {
     interval_set<uint64_t> whole_device;
     whole_device.insert(0, b->get_size());
-    b->try_discard(whole_device, false);
+    dout(5) << __func__ << " trimming device:" << path << dendl;
+    b->try_discard(whole_device, false, true);
+    dout(5) << __func__ << " trimmed device:" << path << dendl;
   }
 
   dout(1) << __func__ << " bdev " << id << " path " << path
@@ -703,6 +693,7 @@ int BlueFS::mkfs(uuid_d osd_uuid, const bluefs_layout_t& layout)
         _get_block_device_size(BlueFS::BDEV_WAL) * 95 / 100,
         _get_block_device_size(BlueFS::BDEV_DB) * 95 / 100,
         _get_block_device_size(BlueFS::BDEV_SLOW) * 95 / 100));
+    vselector->update_from_config(cct);
   }
 
   _init_logger();
@@ -1070,6 +1061,7 @@ int BlueFS::mount()
         _get_block_device_size(BlueFS::BDEV_WAL) * 95 / 100,
         _get_block_device_size(BlueFS::BDEV_DB) * 95 / 100,
         _get_block_device_size(BlueFS::BDEV_SLOW) * 95 / 100));
+    vselector->update_from_config(cct);
   }
 
   _init_alloc();
@@ -4351,25 +4343,13 @@ void BlueFS::_update_allocate_stats(uint8_t id, const ceph::timespan& d)
 {
   switch(id) {
     case BDEV_SLOW:
-      logger->tinc(l_bluefs_slow_alloc_lat, d);
-      if (d > max_alloc_lat[id]) {
-        logger->tset(l_bluefs_slow_alloc_max_lat, utime_t(d));
-        max_alloc_lat[id] = d;
-      }
+      logger->tinc_with_max(l_bluefs_slow_alloc_lat, d);
       break;
     case BDEV_DB:
-      logger->tinc(l_bluefs_db_alloc_lat, d);
-      if (d > max_alloc_lat[id]) {
-        logger->tset(l_bluefs_db_alloc_max_lat, utime_t(d));
-        max_alloc_lat[id] = d;
-      }
+      logger->tinc_with_max(l_bluefs_db_alloc_lat, d);
       break;
     case BDEV_WAL:
-      logger->tinc(l_bluefs_wal_alloc_lat, d);
-      if (d > max_alloc_lat[id]) {
-        logger->tset(l_bluefs_wal_alloc_max_lat, utime_t(d));
-        max_alloc_lat[id] = d;
-      }
+      logger->tinc_with_max(l_bluefs_wal_alloc_lat, d);
       break;
   }
 }

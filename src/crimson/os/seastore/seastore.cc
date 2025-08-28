@@ -62,8 +62,8 @@ template <> struct fmt::formatter<crimson::os::seastore::op_type_t>
     case op_type_t::OMAP_GET_VALUES:
       name = "omap_get_values";
       break;
-    case op_type_t::OMAP_GET_VALUES2:
-      name = "omap_get_values2";
+    case op_type_t::OMAP_ITERATE:
+      name = "omap_iterate";
       break;
     case op_type_t::MAX:
       name = "unknown";
@@ -163,7 +163,7 @@ void SeaStore::Shard::register_metrics()
     {op_type_t::GET_ATTRS,        sm::label_instance("latency", "GET_ATTRS")},
     {op_type_t::STAT,             sm::label_instance("latency", "STAT")},
     {op_type_t::OMAP_GET_VALUES,  sm::label_instance("latency", "OMAP_GET_VALUES")},
-    {op_type_t::OMAP_GET_VALUES2, sm::label_instance("latency", "OMAP_GET_VALUES2")},
+    {op_type_t::OMAP_ITERATE,     sm::label_instance("latency", "OMAP_ITERATE")},
   };
 
   for (auto& [op_type, label] : labels_by_op_type) {
@@ -401,52 +401,34 @@ seastar::future<> SeaStore::write_fsid(uuid_d new_osd_fsid)
   });
 }
 
-seastar::future<>
+TransactionManager::alloc_extent_ertr::future<>
 SeaStore::Shard::mkfs_managers()
 {
+  LOG_PREFIX(SeaStoreS::mkfs_managers);
+  INFO("...");
   init_managers();
-  return transaction_manager->mkfs(
-  ).safe_then([this] {
-    init_managers();
-    return transaction_manager->mount();
-  }).safe_then([this] {
-
-    ++(shard_stats.io_num);
-    ++(shard_stats.pending_io_num);
-    // For TM::submit_transaction()
-    ++(shard_stats.processing_inlock_io_num);
-
-    return repeat_eagain([this] {
-      ++(shard_stats.repeat_io_num);
-
-      return transaction_manager->with_transaction_intr(
-	Transaction::src_t::MUTATE,
-	"mkfs_seastore",
-	CACHE_HINT_TOUCH,
-	[this](auto& t)
-      {
-        LOG_PREFIX(SeaStoreS::mkfs_managers);
-        DEBUGT("...", t);
-	return onode_manager->mkfs(t
-	).si_then([this, &t] {
-	  return collection_manager->mkfs(t);
-	}).si_then([this, &t](auto coll_root) {
-	  transaction_manager->write_collection_root(
-	    t, coll_root);
-	  return transaction_manager->submit_transaction(t);
-	});
-      });
-    });
-  }).handle_error(
-    crimson::ct_error::assert_all{
-      "Invalid error in Shard::mkfs_managers"
-    }
-  ).finally([this] {
-    assert(shard_stats.pending_io_num);
-    --(shard_stats.pending_io_num);
-    // XXX: it's wrong to assume no failure
-    --(shard_stats.processing_postlock_io_num);
-  });
+  co_await transaction_manager->mkfs();
+  init_managers();
+  co_await transaction_manager->mount();
+  ++(shard_stats.io_num);
+  ++(shard_stats.pending_io_num);
+  // For TM::submit_transaction()
+  ++(shard_stats.processing_inlock_io_num);
+  TransactionRef t = transaction_manager->create_transaction(
+    Transaction::src_t::MUTATE, "mkfs_seastore", CACHE_HINT_TOUCH);
+   co_await with_repeat_trans_intr(*t,
+    seastar::coroutine::lambda([&](auto &tr) -> TransactionManager::alloc_extent_iertr::future<> {
+    ++(shard_stats.repeat_io_num);
+    DEBUGT("...", tr);
+    co_await onode_manager->mkfs(tr);
+    auto coll_root = co_await collection_manager->mkfs(tr);
+    transaction_manager->write_collection_root(tr, coll_root);
+    co_await transaction_manager->submit_transaction(tr);
+  }));
+  assert(shard_stats.pending_io_num);
+  --(shard_stats.pending_io_num);
+   // XXX: it's wrong to assume no failure
+  --(shard_stats.processing_postlock_io_num);
 }
 
 seastar::future<> SeaStore::set_secondaries()
@@ -472,11 +454,15 @@ SeaStore::mkfs_ertr::future<> SeaStore::test_mkfs(uuid_d new_osd_fsid)
       return seastar::now();
     } 
     return shard_stores.local().mkfs_managers(
-    ).then([this, new_osd_fsid] {
+    ).safe_then([this, new_osd_fsid] {
       return prepare_meta(new_osd_fsid);
-    }).then([FNAME] {
+    }).safe_then([FNAME] {
       INFO("done");
-    });
+    }).handle_error(
+      crimson::ct_error::assert_all{
+        "Invalid error in SeaStore::mkfs"
+      }
+    );
   });
 }
 
@@ -584,7 +570,8 @@ SeaStore::mkfs_ertr::future<> SeaStore::mkfs(uuid_d new_osd_fsid)
         return device->mount();
       }).safe_then([this] {
         return shard_stores.invoke_on_all([] (auto &local_store) {
-          return local_store.mkfs_managers();
+          return local_store.mkfs_managers().handle_error(
+            crimson::ct_error::assert_all{"Invalid error in SeaStoreS::mkfs_managers"});
         });
       }).safe_then([this, new_osd_fsid] {
         return prepare_meta(new_osd_fsid);
@@ -787,15 +774,15 @@ seastar::future<> SeaStore::report_stats()
       cache_total.add(s);
     }
 
-    cache_size_stats_t lru_sizes_ps = cache_total.lru_sizes;
-    lru_sizes_ps.divide_by(seastar::smp::count);
-    cache_io_stats_t lru_io_ps = cache_total.lru_io;
-    lru_io_ps.divide_by(seastar::smp::count);
-    INFO("cache lru: total{} {}; per-shard: total{} {}",
-         cache_total.lru_sizes,
-         cache_io_stats_printer_t{seconds, cache_total.lru_io},
-         lru_sizes_ps,
-         cache_io_stats_printer_t{seconds, lru_io_ps});
+    cache_size_stats_t queue_sizes_ps = cache_total.pinboard_sizes;
+    queue_sizes_ps.divide_by(seastar::smp::count);
+    cache_io_stats_t queue_io_ps = cache_total.pinboard_io;
+    queue_io_ps.divide_by(seastar::smp::count);
+    INFO("cache pinboard: total{} {}; per-shard: total{} {}",
+         cache_total.pinboard_sizes,
+         cache_io_stats_printer_t{seconds, cache_total.pinboard_io},
+         queue_sizes_ps,
+         cache_io_stats_printer_t{seconds, queue_io_ps});
 
     cache_size_stats_t dirty_sizes_ps = cache_total.dirty_sizes;
     dirty_sizes_ps.divide_by(seastar::smp::count);
@@ -1102,7 +1089,7 @@ SeaStore::Shard::list_collections()
   });
 }
 
-SeaStore::base_iertr::future<ceph::bufferlist>
+base_iertr::future<ceph::bufferlist>
 SeaStore::Shard::_read(
   Transaction& t,
   Onode& onode,
@@ -1279,7 +1266,7 @@ SeaStore::Shard::get_attr(
   });
 }
 
-SeaStore::base_iertr::future<SeaStore::Shard::attrs_t>
+base_iertr::future<SeaStore::Shard::attrs_t>
 SeaStore::Shard::_get_attrs(
   Transaction& t,
   Onode& onode)
@@ -1426,35 +1413,40 @@ SeaStore::Shard::omap_get_values(
   });
 }
 
-SeaStore::Shard::read_errorator::future<SeaStore::Shard::omap_values_paged_t>
-SeaStore::Shard::omap_get_values(
+SeaStore::Shard::read_errorator::future<ObjectStore::omap_iter_ret_t>
+SeaStore::Shard::omap_iterate(
   CollectionRef ch,
   const ghobject_t &oid,
-  const std::optional<std::string> &start,
+  ObjectStore::omap_iter_seek_t start_from,
+  omap_iterate_cb_t callback,
   uint32_t op_flags)
 {
   ++(shard_stats.read_num);
   ++(shard_stats.pending_read_num);
-
-  return repeat_with_onode<omap_values_paged_t>(
-    ch,
-    oid,
-    Transaction::src_t::READ,
-    "omap_get_values2",
-    op_type_t::OMAP_GET_VALUES2,
-    op_flags,
-    [this, start](auto &t, auto &onode)
+  return seastar::do_with(
+    std::move(start_from),
+    [this, ch, &oid, callback, op_flags] (auto &start_from)
   {
-    auto root = select_log_omap_root(onode);
-    return omaptree_get_values(
-      t, std::move(root), start);
-  }).finally([this] {
-    assert(shard_stats.pending_read_num);
-    --(shard_stats.pending_read_num);
+    return repeat_with_onode<ObjectStore::omap_iter_ret_t>(
+      ch,
+      oid,
+      Transaction::src_t::READ,
+      "omap_iterate",
+      op_type_t::OMAP_ITERATE,
+      op_flags,
+      [this, &start_from, callback](auto &t, auto &onode)
+    {
+      auto root = select_log_omap_root(onode);
+      return omaptree_iterate(
+        t, std::move(root), start_from, callback);
+    }).finally([this] {
+      assert(shard_stats.pending_read_num);
+      --(shard_stats.pending_read_num);
+    });
   });
 }
 
-SeaStore::base_iertr::future<SeaStore::Shard::fiemap_ret_t>
+base_iertr::future<SeaStore::Shard::fiemap_ret_t>
 SeaStore::Shard::_fiemap(
   Transaction &t,
   Onode &onode,
@@ -1655,6 +1647,15 @@ SeaStore::Shard::_do_transaction_step(
       ceph::bufferlist hint;
       i.decode_bl(hint);
       return tm_iertr::now();
+    }
+    case Transaction::OP_SPLIT_COLLECTION2:
+    {
+      uint32_t bits = op->split_bits;
+      coll_t cid = i.get_cid(op->cid);
+      coll_t dest_cid = i.get_cid(op->dest_cid);
+      DEBUGT("op OP_SPLIT_COLLECTION2, cid={}, dest_cid={}, bits={}",
+	*ctx.transaction, cid, dest_cid, bits);
+      return _split_collection(ctx, cid, bits);
     }
   }
 
@@ -2235,6 +2236,40 @@ SeaStore::Shard::_rmattrs(
 }
 
 SeaStore::Shard::tm_ret
+SeaStore::Shard::_split_collection(
+  internal_context_t &ctx,
+  const coll_t &cid,
+  int bits)
+{
+  return transaction_manager->read_collection_root(
+    *ctx.transaction
+  ).si_then([=, this, &ctx](auto _cmroot) {
+    return seastar::do_with(
+      _cmroot,
+      [=, this, &ctx](auto &cmroot) {
+        return collection_manager->update(
+          cmroot,
+          *ctx.transaction,
+          cid,
+          bits
+        ).si_then([this, &ctx, &cmroot] {
+          if (cmroot.must_update()) {
+            transaction_manager->write_collection_root(
+              *ctx.transaction,
+              cmroot);
+          }
+        });
+      }
+    );
+  }).handle_error_interruptible(
+    tm_iertr::pass_further{},
+    crimson::ct_error::assert_all{
+      "Invalid error in SeaStoreS::_create_collection"
+    }
+  );
+}
+
+SeaStore::Shard::tm_ret
 SeaStore::Shard::_create_collection(
   internal_context_t &ctx,
   const coll_t& cid, int bits)
@@ -2538,7 +2573,7 @@ SeaStore::Shard::omaptree_get_value(
   });
 }
 
-SeaStore::base_iertr::future<SeaStore::Shard::omap_values_t>
+base_iertr::future<SeaStore::Shard::omap_values_t>
 SeaStore::Shard::omaptree_get_values(
   Transaction& t,
   omap_root_t&& root,
@@ -2583,6 +2618,29 @@ SeaStore::Shard::omaptree_get_values(
   });
 }
 
+SeaStore::Shard::omaptree_iterate_ret
+SeaStore::Shard::omaptree_iterate(
+  Transaction& t,
+  omap_root_t&& root,
+  ObjectStore::omap_iter_seek_t &start_from,
+  omap_iterate_cb_t callback)
+{
+  LOG_PREFIX(SeaStoreS::omaptree_iterate);
+  auto type = root.get_type();
+  DEBUGT("{}, {} ", t, type, start_from);
+  if (root.is_null()) {
+    DEBUGT("{} root is null", t, type);
+    return seastar::make_ready_future<ObjectStore::omap_iter_ret_t>(ObjectStore::omap_iter_ret_t::NEXT);
+  }
+  return seastar::do_with(
+    BtreeOMapManager(*transaction_manager),
+    std::move(root),
+    [&t, &start_from, callback](auto &manager, auto &root)
+  {
+    return manager.omap_iterate(root, t, start_from, callback);
+  });
+}
+
 SeaStore::Shard::omaptree_list_ret
 SeaStore::Shard::omaptree_list(
   Transaction& t,
@@ -2606,7 +2664,7 @@ SeaStore::Shard::omaptree_list(
   });
 }
 
-SeaStore::base_iertr::future<SeaStore::Shard::omap_values_paged_t>
+base_iertr::future<SeaStore::Shard::omap_values_paged_t>
 SeaStore::Shard::omaptree_get_values(
   Transaction& t,
   omap_root_t&& root,
@@ -2626,7 +2684,7 @@ SeaStore::Shard::omaptree_get_values(
   });
 }
 
-SeaStore::base_iertr::future<omap_root_t>
+base_iertr::future<omap_root_t>
 SeaStore::Shard::omaptree_do_clear(
   Transaction& t,
   omap_root_t&& root)
@@ -2645,7 +2703,7 @@ SeaStore::Shard::omaptree_do_clear(
   });
 }
 
-SeaStore::base_iertr::future<>
+base_iertr::future<>
 SeaStore::Shard::omaptree_clear_no_onode(
   Transaction& t,
   omap_root_t&& root)
@@ -2679,7 +2737,7 @@ void omaptree_update_root(
   }
 }
 
-SeaStore::base_iertr::future<>
+base_iertr::future<>
 SeaStore::Shard::omaptree_clear(
   Transaction& t,
   omap_root_t&& root,
@@ -2700,7 +2758,7 @@ SeaStore::Shard::omaptree_clear(
   });
 }
 
-SeaStore::base_iertr::future<>
+base_iertr::future<>
 SeaStore::Shard::omaptree_clone(
   Transaction& t,
   omap_type_t type,
@@ -2791,7 +2849,7 @@ SeaStore::Shard::omaptree_set_keys(
   });
 }
 
-SeaStore::base_iertr::future<>
+base_iertr::future<>
 SeaStore::Shard::omaptree_rm_keys(
   Transaction& t,
   omap_root_t&& root,
@@ -2827,7 +2885,7 @@ SeaStore::Shard::omaptree_rm_keys(
   });
 }
 
-SeaStore::base_iertr::future<>
+base_iertr::future<>
 SeaStore::Shard::omaptree_rm_keyrange(
   Transaction& t,
   omap_root_t&& root,
@@ -2868,7 +2926,7 @@ SeaStore::Shard::omaptree_rm_keyrange(
   });
 }
 
-SeaStore::base_iertr::future<>
+base_iertr::future<>
 SeaStore::Shard::omaptree_rm_key(
   Transaction& t,
   omap_root_t&& root,

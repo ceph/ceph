@@ -1587,6 +1587,25 @@ public:
 
   void update_heartbeat_peers();
   void query_unfound(Formatter *f, std::string state);
+  void apply_pwlc(const std::pair<eversion_t, eversion_t> pwlc,
+		  const pg_shard_t &shard,
+		  pg_info_t &info,
+		  pg_log_t *log1,
+		  PGLog *log2);
+  void apply_pwlc(const std::pair<eversion_t, eversion_t> pwlc,
+		  const pg_shard_t &shard,
+		  pg_info_t &info,
+		  pg_log_t *log)
+  {
+    apply_pwlc(pwlc, shard, info, log, nullptr);
+  }
+  void apply_pwlc(const std::pair<eversion_t, eversion_t> pwlc,
+		  const pg_shard_t &shard,
+		  pg_info_t &info,
+		  PGLog *log = nullptr)
+  {
+    apply_pwlc(pwlc, shard, info, nullptr, log);
+  }
   void update_peer_info(const pg_shard_t &from, const pg_info_t &oinfo);
   bool proc_replica_notify(const pg_shard_t &from, const pg_notify_t &notify);
   void remove_down_peer_info(const OSDMapRef &osdmap);
@@ -1766,11 +1785,12 @@ private:
     pg_log_t&& olog, pg_shard_t from);
 
   void proc_primary_info(ObjectStore::Transaction &t, const pg_info_t &info);
+  void consider_adjusting_pwlc(eversion_t last_complete);
   void consider_rollback_pwlc(eversion_t last_complete);
   void proc_master_log(ObjectStore::Transaction& t, pg_info_t &oinfo,
 		       pg_log_t&& olog, pg_missing_t&& omissing,
 		       pg_shard_t from);
-  void proc_replica_log(pg_info_t &oinfo, const pg_log_t &olog,
+  void proc_replica_log(pg_info_t &oinfo, pg_log_t &olog,
 			pg_missing_t&& omissing, pg_shard_t from);
 
   void calc_min_last_complete_ondisk();
@@ -1787,7 +1807,7 @@ private:
   void update_blocked_by();
   void update_calc_stats();
 
-  void add_log_entry(const pg_log_entry_t& e, bool applied);
+  void add_log_entry(const pg_log_entry_t& e, ObjectStore::Transaction &t, bool applied);
 
   void calc_trim_to();
   void calc_trim_to_aggressive();

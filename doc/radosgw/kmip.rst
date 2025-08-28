@@ -3,7 +3,7 @@ KMIP Integration
 ================
 
 `KMIP`_ can be used as a secure key management service for
-`Server-Side Encryption`_ (SSE-KMS).
+:ref:`Server-Side Encryption <radosgw-encryption>` (SSE-KMS).
 
 .. ditaa::
 
@@ -33,15 +33,12 @@ KMIP Integration
                 |                 | object          |             |
                 |                 |------------------------------>|
 
-#. `Setting KMIP Access for Ceph`_
-#. `Creating Keys in KMIP`_
-#. `Configure the Ceph Object Gateway`_
-#. `Upload object`_
+.. contents:: :depth: 2
 
-Before you can use KMIP with ceph, you will need to do three things.
-You will need to associate ceph with client information in KMIP,
-and configure ceph to use that client information.
-You will also need to create 1 or more keys in KMIP.
+Before you can use KMIP with Ceph, you will need to do three things.
+You will need to associate Ceph with client information in KMIP,
+and configure Ceph to use that client information.
+You will also need to create one or more keys in KMIP.
 
 Setting KMIP Access for Ceph
 ============================
@@ -53,24 +50,22 @@ here,
 1. `IBM Security Guardium Key Lifecycle Manager (SKLM)`__.  This is a well
    supported commercial product.
 
-__ SKLM_
-
-2. PyKMIP_.  This is a small python project, suitable for experimental
+2. `PyKMIP`_.  This is a small Python project, suitable for experimental
    and testing use only.
+
+__ SKLM_
 
 Using IBM SKLM
 --------------
 
-IBM SKLM__ supports client authentication using certificates.
+IBM `SKLM`_ supports client authentication using certificates.
 Certificates may either be self-signed certificates created,
-for instance, using openssl, or certificates may be created
+for instance, using OpenSSL, or certificates may be created
 using SKLM.  Ceph should then be configured (see below) to
 use KMIP and an attempt made to use it.  This will fail,
 but it will leave an "untrusted client device certificate" in SKLM.
 This can be then upgraded to a registered client using the web
 interface to complete the registration process.
-
-__ SKLM_
 
 Find untrusted clients under ``Advanced Configuration``,
 ``Client Device Communication Certificates``.  Select
@@ -80,10 +75,10 @@ Find untrusted clients under ``Advanced Configuration``,
 Using PyKMIP 
 ------------
 
-PyKMIP_ has no special registration process, it simply
+`PyKMIP`_ has no special registration process, it simply
 trusts the certificate.  However, the certificate has to
 be issued by a certificate authority that is trusted by
-pykmip.  PyKMIP also prefers that the certificate contain
+PyKMIP.  PyKMIP also prefers that the certificate contain
 an extension for "extended key usage".  However, that
 can be defeated by specifying ``enable_tls_client_auth=False``
 in the server configuration.
@@ -94,17 +89,19 @@ Creating Keys in KMIP
 Some KMIP implementations come with a web interface or other
 administrative tools to create and manage keys.  Refer to your
 documentation on that if you wish to use it.  The KMIP protocol can also
-be used to create and manage keys.  PyKMIP comes with a python client
+be used to create and manage keys.  PyKMIP comes with a Python client
 library that can be used this way.
 
-In preparation to using the pykmip client, you'll need to have a valid
-kmip client key & certificate, such as the one you created for ceph.
+In preparation to using the `pykmip` client, you'll need to have a valid
+KMIP client key & certificate, such as the one you created for Ceph.
 
-Next, you'll then need to download and install it::
+Next, you'll then need to download and install it:
 
-  virtualenv $HOME/my-kmip-env
-  source $HOME/my-kmip-env/bin/activate
-  pip install pykmip
+.. prompt:: bash $
+
+   virtualenv $HOME/my-kmip-env
+   source $HOME/my-kmip-env/bin/activate
+   pip install pykmip
 
 Then you'll need to prepare a configuration file
 for the client, something like this::
@@ -119,12 +116,12 @@ for the client, something like this::
    ssl_version=PROTOCOL_TLSv1_2
    EOF
 
-You will need to replace {hostname} with the name of your kmip host,
-also replace {clientcert} {clientkey} and {clientca} with pathnames to
-a suitable pem encoded certificate, such as the one you created for
-ceph to use.
+You will need to replace ``{hostname}`` with the name of your KMIP host,
+also replace ``{clientcert}``, ``{clientkey}`` and ``{clientca}`` with pathnames to
+a suitable PEM-encoded certificate, such as the one you created for
+Ceph to use.
 
-Now, you can run this python script directly from
+Now, you can run this Python script directly from
 the shell::
 
   python
@@ -163,57 +160,53 @@ prompt with ">>>" then "..." until the script is read in,
 after which it will read and process names with no prompt
 until a blank line or end of file (^D) is given it, or
 an error occurs.  Of course you can turn this into a regular
-python script if you prefer.
+Python script if you prefer.
 
 Configure the Ceph Object Gateway
 =================================
 
-Edit the Ceph configuration file to enable Vault as a KMS backend for
-server-side encryption::
+Edit the :ref:`Ceph configuration file <configuring-ceph>` to enable KMIP
+as a KMS backend for server-side encryption::
 
   rgw crypt s3 kms backend = kmip
-  rgw crypt kmip ca path: /etc/ceph/kmiproot.crt
-  rgw crypt kmip client cert: /etc/ceph/kmip-client.crt
-  rgw crypt kmip client key: /etc/ceph/private/kmip-client.key
-  rgw crypt kmip kms key template: pykmip-$keyid
+  rgw crypt kmip ca path = /etc/ceph/kmiproot.crt
+  rgw crypt kmip client cert = /etc/ceph/kmip-client.crt
+  rgw crypt kmip client key = /etc/ceph/private/kmip-client.key
+  rgw crypt kmip kms key template = pykmip-$keyid
 
 You may need to change the paths above to match where
-you actually want to store kmip certificate data.
+you actually want to store KMIP certificate data.
 
-The kmip key template describes how ceph will modify
+The KMIP key template describes how Ceph will modify
 the name given to it before it looks it up
-in kmip.  The default is just "$keyid".
-If you don't want ceph to see all your kmip
-keys, you can use this to limit ceph to just the
-designated subset of your kmip key namespace.
+in KMIP.  The default is just "$keyid".
+If you don't want Ceph to see all your KMIP
+keys, you can use this to limit Ceph to just the
+designated subset of your KMIP key namespace.
 
-Upload object
+Upload Object
 =============
 
-When uploading an object to the Gateway, provide the SSE key ID in the request.
-As an example, for the kv engine, using the AWS command-line client::
+When uploading an object to the Ceph Object Gateway, provide the SSE key ID in the request.
+As an example, using the AWS command-line client:
 
-  aws --endpoint=http://radosgw:8000 s3 cp plaintext.txt \
-  s3://mybucket/encrypted.txt --sse=aws:kms --sse-kms-key-id mybucketkey
+.. prompt:: bash $
+
+   aws --endpoint=http://radosgw:8000 s3 cp plaintext.txt \
+   s3://mybucket/encrypted.txt --sse=aws:kms --sse-kms-key-id mybucketkey
   
-As an example, for the transit engine, using the AWS command-line client::
+The Ceph Object Gateway will fetch the key from KMIP, encrypt the object and store
+it in the bucket. Any request to download the object will make the Ceph Object Gateway
+automatically retrieve the corresponding key from KMIP and decrypt the object.
 
-  aws --endpoint=http://radosgw:8000 s3 cp plaintext.txt \
-  s3://mybucket/encrypted.txt --sse=aws:kms --sse-kms-key-id mybucketkey
-
-The Object Gateway will fetch the key from Vault, encrypt the object and store
-it in the bucket. Any request to download the object will make the Gateway
-automatically retrieve the correspondent key from Vault and decrypt the object.
-
-Note that the secret will be fetched from kmip using a name constructed
+Note that the secret will be fetched from KMIP using a name constructed
 from the key template, replacing ``$keyid`` with the key provided.
 
-With the ceph configuration given above,
+With the Ceph configuration given above,
 radosgw would fetch the secret from::
 
   pykmip-mybucketkey
 
-.. _Server-Side Encryption: ../encryption
 .. _KMIP: http://www.oasis-open.org/committees/kmip/
 .. _SKLM: https://www.ibm.com/products/ibm-security-key-lifecycle-manager
 .. _PyKMIP: https://pykmip.readthedocs.io/en/latest/

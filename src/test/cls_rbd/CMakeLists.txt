@@ -4,7 +4,6 @@ add_executable(ceph_test_cls_rbd
   $<TARGET_OBJECTS:common_texttable_obj>)
 target_link_libraries(ceph_test_cls_rbd
   cls_rbd_client
-  cls_lock_client
   libneorados
   librados
   global

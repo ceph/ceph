@@ -25,6 +25,10 @@ class NvmeofService(CephService):
     TYPE = 'nvmeof'
     PROMETHEUS_PORT = 10008
 
+    @property
+    def needs_monitoring(self) -> bool:
+        return True
+
     def config(self, spec: NvmeofServiceSpec) -> None:  # type: ignore
         assert self.TYPE == spec.service_type
         # Looking at src/pybind/mgr/cephadm/services/iscsi.py
@@ -92,6 +96,10 @@ class NvmeofService(CephService):
                 daemon_spec.extra_files['spdk_huge_pages'] = str(huge_pages_value)
             except ValueError:
                 logger.error(f"Invalid value for SPDK huge pages: {spec.spdk_huge_pages}")
+
+        # Enable DSA probing
+        if spec.enable_dsa_acceleration:
+            daemon_spec.extra_files['enable_dsa_acceleration'] = str(spec.enable_dsa_acceleration)
 
         if spec.enable_auth:
             if (

@@ -327,6 +327,13 @@ struct ECCommonL {
     friend struct FinishReadOp;
 
     void get_want_to_read_shards(std::set<int> *want_to_read) const;
+    void get_want_to_read_all_shards(std::set<int> *want_to_read) const;
+    void create_parity_read_buffer(
+      std::map<int, bufferlist> to_decode,
+      std::set<int> wanted_to_read,
+      uint64_t read_size,
+      bufferlist *outbl
+      );
 
     /// Returns to_read replicas sufficient to reconstruct want
     int get_min_avail_to_read_shards(

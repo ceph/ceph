@@ -315,7 +315,7 @@ int commit_logging_object(const configuration& conf,
   std::string target_tenant_name;
   int ret = rgw_parse_url_bucket(conf.target_bucket, tenant_name, target_tenant_name, target_bucket_name);
   if (ret < 0) {
-    ldpp_dout(dpp, 1) << "ERROR: failed to parse target bucket '" << conf.target_bucket << "' when commiting logging object, ret = "
+    ldpp_dout(dpp, 1) << "ERROR: failed to parse target bucket '" << conf.target_bucket << "' when committing logging object, ret = "
       << ret << dendl;
     return ret;
   }
@@ -324,7 +324,7 @@ int commit_logging_object(const configuration& conf,
   ret = driver->load_bucket(dpp, target_bucket_id,
                                &target_bucket, y);
   if (ret < 0) {
-    ldpp_dout(dpp, 1) << "ERROR: failed to get target logging bucket '" << target_bucket_id << "' when commiting logging object, ret = "
+    ldpp_dout(dpp, 1) << "ERROR: failed to get target logging bucket '" << target_bucket_id << "' when committing logging object, ret = "
       << ret << dendl;
     return ret;
   }
@@ -491,7 +491,7 @@ int log_record(rgw::sal::Driver* driver,
         return ret;
       }
     } else {
-      ldpp_dout(dpp, 20) << "INFO: record will be written to current logging object '" << obj_name << "'. will be comitted at: " << time_to_commit << dendl;
+      ldpp_dout(dpp, 20) << "INFO: record will be written to current logging object '" << obj_name << "'. will be committed at: " << time_to_commit << dendl;
     }
   } else if (ret == -ENOENT) {
     // try to create the temporary log object for the first time
@@ -572,11 +572,11 @@ int log_record(rgw::sal::Driver* driver,
         s->info.x_meta_map.contains("x-amz-id-2") ? s->info.x_meta_map.at("x-amz-id-2") : "-",
         aws_version,
         s->info.env->get("SSL_CIPHER", "-"),
-        auth_type,
+        dash_if_empty(auth_type),
         dash_if_empty(fqdn),
         s->info.env->get("TLS_VERSION", "-"),
         "-", // no access point ARN
-        (s->has_acl_header) ? "Yes" : "-");
+        (s->granted_by_acl) ? "Yes" : "-");
       break;
     case LoggingType::Journal:
       record = fmt::format("{} {} [{:%d/%b/%Y:%H:%M:%S %z}] {} {} {} {} {}",

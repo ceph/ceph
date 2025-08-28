@@ -4009,6 +4009,114 @@ returned %d, but should return zero on success." % (self.name, ret))
         if ret < 0:
             raise make_ex(ret, "Ioctx.rados_lock_exclusive(%s): failed to set lock %s on %s" % (self.name, name, key))
 
+    def break_lock(self, key: str, name: str, client: str, cookie: str):
+
+        """
+        Release a shared or exclusive lock on an object, which was taken by the
+        specified client.
+
+        :param key: name of the object
+        :param name: name of the lock
+        :param client: the client currently holding the lock
+        :param cookie: cookie of the lock
+
+        :raises: :class:`TypeError`
+        :raises: :class:`Error`
+        """
+        self.require_ioctx_open()
+
+        key_raw = cstr(key, 'key')
+        name_raw = cstr(name, 'name')
+        client_raw = cstr(client, 'client')
+        cookie_raw = cstr(cookie, 'cookie')
+
+        cdef:
+            char* _key = key_raw
+            char* _name = name_raw
+            char* _client = client_raw
+            char* _cookie = cookie_raw
+
+        with nogil:
+            ret = rados_break_lock(self.io, _key, _name, _client, _cookie)
+        if ret < 0:
+            raise make_ex(ret,
+                          "Ioctx.rados_break_lock(%s): failed to break lock %s "
+                          "on %s for client %s "
+                          "cookie %s" % (self.name, name, key, client, cookie))
+
+    def list_lockers(self, key: str, name: str):
+
+        """
+        List clients that have locked the named object lock and
+        information about the lock.
+
+        :param key: name of the object
+        :param name: name of the lock
+        :returns: dict - contains the following keys:
+                  * ``tag`` - the tag associated with the lock (every
+                    additional locker must use the same tag)
+                  * ``exclusive`` - boolean indicating whether the
+                     lock is exclusive or shared
+                  * ``lockers`` - a list of (client, cookie, address)
+                    tuples
+
+        :raises: :class:`TypeError`
+        :raises: :class:`Error`
+        """
+        self.require_ioctx_open()
+
+        key_raw = cstr(key, 'key')
+        name_raw = cstr(name, 'name')
+
+        cdef:
+            char* _key = key_raw
+            char* _name = name_raw
+            int exclusive = 0
+            char* c_tag = NULL
+            size_t tag_size = 512
+            char* c_clients = NULL
+            size_t clients_size = 512
+            char* c_cookies = NULL
+            size_t cookies_size = 512
+            char* c_addrs = NULL
+            size_t addrs_size = 512
+
+        try:
+            while True:
+                c_tag = <char *>realloc_chk(c_tag, tag_size)
+                c_cookies = <char *>realloc_chk(c_cookies, cookies_size)
+                c_clients = <char *>realloc_chk(c_clients, clients_size)
+                c_addrs = <char *>realloc_chk(c_addrs, addrs_size)
+                with nogil:
+                    ret = rados_list_lockers(self.io, _key, _name, &exclusive,
+                                             c_tag, &tag_size, c_clients, &clients_size,
+                                             c_cookies, &cookies_size, c_addrs, &addrs_size)
+                if ret >= 0:
+                    break
+                elif ret != -errno.ERANGE:
+                    raise make_ex(ret,
+                                  "Ioctx.rados_list_lockers(%s): failed to "
+                                  "list lockers of lock %s on %s" % (self.name, name, key))
+            clients = []
+            cookies = []
+            addrs = []
+
+            if ret > 0:
+                clients = map(decode_cstr, c_clients[:clients_size - 1].split(b'\0'))
+                cookies = map(decode_cstr, c_cookies[:cookies_size - 1].split(b'\0'))
+                addrs = map(decode_cstr, c_addrs[:addrs_size - 1].split(b'\0'))
+
+            return {
+                'tag'       : decode_cstr(c_tag),
+                'exclusive' : exclusive == 1,
+                'lockers'   : list(zip(clients, cookies, addrs)),
+                }
+        finally:
+            free(c_tag)
+            free(c_cookies)
+            free(c_clients)
+            free(c_addrs)
+
     def set_osdmap_full_try(self):
         """
         Set global osdmap_full_try label to true

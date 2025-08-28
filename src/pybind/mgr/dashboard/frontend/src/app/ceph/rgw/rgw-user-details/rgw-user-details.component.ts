@@ -136,4 +136,14 @@ export class RgwUserDetailsComponent implements OnChanges, OnInit {
         break;
     }
   }
+
+  extractPolicyNamesFromArns(arnList: string[]) {
+    if (!arnList || arnList.length === 0) {
+      return '-';
+    }
+    return arnList
+      .map((arn) => arn.trim().split('/').pop())
+      .filter(Boolean)
+      .join(', ');
+  }
 }

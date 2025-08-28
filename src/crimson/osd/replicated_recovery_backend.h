@@ -15,6 +15,8 @@
 #include "messages/MOSDPGRecoveryDeleteReply.h"
 #include "os/ObjectStore.h"
 
+namespace crimson::osd {
+
 class ReplicatedRecoveryBackend : public RecoveryBackend {
 public:
   ReplicatedRecoveryBackend(crimson::osd::PG& pg,
@@ -179,3 +181,5 @@ private:
   std::pair<object_info_t, crimson::osd::SnapSetContextRef>
   get_md_from_push_op(PushOp &push_op);
 };
+
+}

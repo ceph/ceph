@@ -423,5 +423,11 @@ bool ScrubJob::is_autorepair_allowed(urgency_t urgency)
 {
   // note: 'after-repair' scrubs are not allowed to auto-repair
   return urgency == urgency_t::periodic_regular ||
+	 urgency == urgency_t::operator_requested ||
 	 urgency == urgency_t::repairing || urgency == urgency_t::must_repair;
+}
+
+bool ScrubJob::is_repairs_count_limited(urgency_t urgency)
+{
+  return urgency < urgency_t::operator_requested;
 }

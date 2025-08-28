@@ -34,7 +34,7 @@ struct SnapInfo {
   void encode(ceph::buffer::list &bl) const;
   void decode(ceph::buffer::list::const_iterator &bl);
   void dump(ceph::Formatter *f) const;
-  static void generate_test_instances(std::list<SnapInfo*>& ls);
+  static std::list<SnapInfo> generate_test_instances();
 
   std::string_view get_long_name() const;
 
@@ -66,7 +66,7 @@ struct snaplink_t {
   void encode(ceph::buffer::list &bl) const;
   void decode(ceph::buffer::list::const_iterator &bl);
   void dump(ceph::Formatter *f) const;
-  static void generate_test_instances(std::list<snaplink_t*>& ls);
+  static std::list<snaplink_t> generate_test_instances();
 
   inodeno_t ino;
   snapid_t first;
@@ -88,7 +88,7 @@ struct sr_t {
   void encode(ceph::buffer::list &bl) const;
   void decode(ceph::buffer::list::const_iterator &bl);
   void dump(ceph::Formatter *f) const;
-  static void generate_test_instances(std::list<sr_t*>& ls);
+  static std::list<sr_t> generate_test_instances();
 
   snapid_t seq = 0;                     // basically, a version/seq # for changes to _this_ realm.
   snapid_t created = 0;                 // when this realm was created.

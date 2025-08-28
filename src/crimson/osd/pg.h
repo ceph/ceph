@@ -47,8 +47,6 @@
 
 class MQuery;
 class OSDMap;
-class PGBackend;
-class ReplicatedBackend;
 class PGPeeringEvent;
 class osd_op_params_t;
 
@@ -68,6 +66,8 @@ namespace crimson::osd {
 class OpsExecuter;
 class SnapTrimEvent;
 class PglogBasedRecovery;
+class PGBackend;
+class ReplicatedBackend;
 
 class PG : public boost::intrusive_ref_counter<
   PG,
@@ -478,9 +478,13 @@ public:
     void trim(const pg_log_entry_t &entry) override {
       // TODO
     }
-    void partial_write(pg_info_t *info, const pg_log_entry_t &entry) override {
+    void partial_write(pg_info_t *info,
+                       eversion_t previous_version,
+                       const pg_log_entry_t &entry
+      ) override {
       // TODO
-      ceph_assert(entry.written_shards.empty() && info->partial_writes_last_complete.empty());
+      ceph_assert(entry.written_shards.empty() &&
+                  info->partial_writes_last_complete.empty());
     }
   };
   PGLog::LogEntryHandlerRef get_log_handler(
@@ -598,6 +602,10 @@ public:
   void handle_activate_map(PeeringCtx &rctx);
   void handle_initialize(PeeringCtx &rctx);
 
+  void update_snap_mapper_bits(uint32_t bits) {
+    snap_mapper.update_bits(bits);
+  }
+
   void start_split_stats(const std::set<spg_t>& childpgs, std::vector<object_stat_sum_t> *out) {
     peering_state.start_split_stats(childpgs, out);
   }
@@ -627,6 +635,7 @@ public:
 
   void split_into(pg_t child_pgid, Ref<PG> child, unsigned split_bits) {
     peering_state.split_into(child_pgid, &child->peering_state, split_bits);
+    child->update_snap_mapper_bits(split_bits);
     child->snap_trimq = snap_trimq;
   }
 
@@ -1014,7 +1023,7 @@ private:
 
 private:
   friend class IOInterruptCondition;
-  friend class ::ReplicatedBackend;
+  friend class ReplicatedBackend;
   struct log_update_t {
     std::set<pg_shard_t> waiting_on;
     seastar::shared_promise<> all_committed;

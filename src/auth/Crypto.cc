@@ -29,6 +29,7 @@
 #include "common/safe_io.h"
 #include "include/ceph_fs.h"
 #include "include/compat.h"
+#include "include/intarith.h" // for p2align()
 #include "common/Formatter.h"
 #include "common/debug.h"
 #include <errno.h>
@@ -518,14 +519,16 @@ void CryptoKey::dump(Formatter *f) const
   f->dump_int("secret.length", secret.length());
 }
 
-void CryptoKey::generate_test_instances(std::list<CryptoKey*>& ls)
+std::list<CryptoKey> CryptoKey::generate_test_instances()
 {
-  ls.push_back(new CryptoKey);
-  ls.push_back(new CryptoKey);
-  ls.back()->type = CEPH_CRYPTO_AES;
-  ls.back()->set_secret(
+  std::list<CryptoKey> ls;
+  ls.emplace_back();
+  ls.emplace_back();
+  ls.back().type = CEPH_CRYPTO_AES;
+  ls.back().set_secret(
     CEPH_CRYPTO_AES, bufferptr("1234567890123456", 16), utime_t(123, 456));
-  ls.back()->created = utime_t(123, 456);
+  ls.back().created = utime_t(123, 456);
+  return ls;
 }
 
 int CryptoKey::set_secret(int type, const bufferptr& s, utime_t c)

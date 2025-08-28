@@ -1,26 +1,32 @@
-if(NOT CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|AARCH64|arm|ARM")
-  # See https://tracker.ceph.com/issues/70254
-  add_executable(unittest-transaction-manager
-    test_block.cc
-    test_transaction_manager.cc
-    ../gtest_seastar.cc)
-    add_ceph_unittest(unittest-transaction-manager
-    --memory 256M --smp 1)
-  target_link_libraries(
-    unittest-transaction-manager
-    ${CMAKE_DL_LIBS}
-    crimson-seastore)
+# Fixes: https://tracker.ceph.com/issues/71704
+function(avoid_asan_uar_slowdown name)
+  set_tests_properties(${name} PROPERTIES
+    ENVIRONMENT_MODIFICATION
+    ASAN_OPTIONS=string_append::max_uar_stack_size_log=16)
+endfunction()
 
-    add_executable(unittest-omap-manager
-    test_omap_manager.cc
-    ../gtest_seastar.cc)
-  add_ceph_unittest(unittest-omap-manager
-    --memory 256M --smp 1)
-  target_link_libraries(
-    unittest-omap-manager
-    ${CMAKE_DL_LIBS}
-    crimson-seastore)
-endif(NOT CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|AARCH64|arm|ARM")
+add_executable(unittest-transaction-manager
+  test_block.cc
+  test_transaction_manager.cc
+  ../gtest_seastar.cc)
+  add_ceph_unittest(unittest-transaction-manager
+  --memory 256M --smp 1)
+target_link_libraries(
+  unittest-transaction-manager
+  ${CMAKE_DL_LIBS}
+  crimson-seastore)
+avoid_asan_uar_slowdown(unittest-transaction-manager)
+
+add_executable(unittest-omap-manager
+  test_omap_manager.cc
+  ../gtest_seastar.cc)
+add_ceph_unittest(unittest-omap-manager
+  --memory 256M --smp 1)
+target_link_libraries(
+  unittest-omap-manager
+  ${CMAKE_DL_LIBS}
+  crimson-seastore)
+avoid_asan_uar_slowdown(unittest-omap-manager)
 
 add_executable(unittest-btree-lba-manager
   test_btree_lba_manager.cc
@@ -63,6 +69,7 @@ target_link_libraries(
   crimson-seastore
   crimson-os
   crimson-common)
+avoid_asan_uar_slowdown(unittest-object-data-handler)
 
 add_executable(unittest-collection-manager
   test_collection_manager.cc
@@ -87,6 +94,7 @@ target_link_libraries(
   ${CMAKE_DL_LIBS}
   crimson-seastore
   crimson-common)
+avoid_asan_uar_slowdown(unittest-seastore)
 
 add_executable(unittest-seastore-randomblock-manager
   test_randomblock_manager.cc)

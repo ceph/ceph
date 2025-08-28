@@ -1609,17 +1609,20 @@ void ECBackendL::objects_read_async(
     list<pair<ec_align_t,
 	      pair<bufferlist*, Context*> > > to_read;
     unique_ptr<Context> on_complete;
+    CephContext *cct;
     cb(const cb&) = delete;
     cb(cb &&) = default;
     cb(ECBackendL *ec,
        const hobject_t &hoid,
        const list<pair<ec_align_t,
                   pair<bufferlist*, Context*> > > &to_read,
-       Context *on_complete)
+       Context *on_complete,
+       CephContext *cct)
       : ec(ec),
 	hoid(hoid),
 	to_read(to_read),
-	on_complete(on_complete) {}
+	on_complete(on_complete),
+        cct(cct) {}
     void operator()(ECCommonL::ec_extents_t &&results) {
       auto dpp = ec->get_parent()->get_dpp();
       ldpp_dout(dpp, 20) << "objects_read_async_cb: got: " << results
@@ -1652,6 +1655,10 @@ void ECBackendL::objects_read_async(
           ldpp_dout(dpp, 20) << "length: " << length << dendl;
           ldpp_dout(dpp, 20) << "range length: " << range_length << dendl;
 	  ceph_assert(offset + length <= range_offset + range_length);
+          if (cct->_conf->bluestore_debug_inject_read_err &&
+              ECInject::test_parity_read(hoid)) {
+            length = range_length;
+          }
 	  read.second.first->substr_of(
 	    range.first.get_val(),
 	    offset - range_offset,
@@ -1682,7 +1689,8 @@ void ECBackendL::objects_read_async(
 	cb(this,
 	   hoid,
 	   to_read,
-	   on_complete)));
+	   on_complete,
+           cct)));
 }
 
 void ECBackendL::objects_read_and_reconstruct(

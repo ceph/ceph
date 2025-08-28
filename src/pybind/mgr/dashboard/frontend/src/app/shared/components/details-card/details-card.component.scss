@@ -1,0 +1,17 @@
+@use '@carbon/layout';
+
+.details-card-header {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  padding-bottom: layout.$spacing-05;
+  position: relative;
+}
+
+::ng-deep .cds--label {
+  display: block;
+}
+
+.cds--row {
+  row-gap: layout.$spacing-05;
+}

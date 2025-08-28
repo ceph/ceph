@@ -9,14 +9,16 @@ import {
   PrometheusRule
 } from '../models/prometheus-alerts';
 import { PrometheusAlertFormatter } from './prometheus-alert-formatter';
+import { BehaviorSubject } from 'rxjs';
 
 @Injectable({
   providedIn: 'root'
 })
 export class PrometheusAlertService {
   private canAlertsBeNotified = false;
+  private rulesSubject = new BehaviorSubject<PrometheusRule[]>([]);
+  rules$ = this.rulesSubject.asObservable();
   alerts: AlertmanagerAlert[] = [];
-  rules: PrometheusRule[] = [];
   activeAlerts: number;
   activeCriticalAlerts: number;
   activeWarningAlerts: number;
@@ -42,7 +44,7 @@ export class PrometheusAlertService {
   getRules() {
     this.prometheusService.ifPrometheusConfigured(() => {
       this.prometheusService.getRules('alerting').subscribe((groups) => {
-        this.rules = groups['groups'].reduce((acc, group) => {
+        const rules = groups['groups'].reduce((acc, group) => {
           return acc.concat(
             group.rules.map((rule) => {
               rule.group = group.name;
@@ -50,13 +52,13 @@ export class PrometheusAlertService {
             })
           );
         }, []);
+        this.rulesSubject.next(rules);
       });
     });
   }
 
   refresh(clusterFilteredAlerts?: boolean) {
     this.getAlerts(clusterFilteredAlerts);
-    this.getRules();
   }
 
   private handleAlerts(alerts: AlertmanagerAlert[]) {

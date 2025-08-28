@@ -3658,15 +3658,18 @@ auto create_archive_bucket_instance_metadata_handler(rgw::sal::Driver* driver,
                                                                    svc_datalog);
 }
 
-void RGWBucketEntryPoint::generate_test_instances(list<RGWBucketEntryPoint*>& o)
+list<RGWBucketEntryPoint> RGWBucketEntryPoint::generate_test_instances()
 {
-  RGWBucketEntryPoint *bp = new RGWBucketEntryPoint();
-  init_bucket(&bp->bucket, "tenant", "bucket", "pool", ".index.pool", "marker", "10");
-  bp->owner = "owner";
-  bp->creation_time = ceph::real_clock::from_ceph_timespec({ceph_le32(2), ceph_le32(3)});
+  list<RGWBucketEntryPoint> o;
+  RGWBucketEntryPoint bp;
+  init_bucket(&bp.bucket, "tenant", "bucket", "pool", ".index.pool", "marker", "10");
+  bp.owner = "owner";
+  bp.creation_time = ceph::real_clock::from_ceph_timespec({ceph_le32(2), ceph_le32(3)});
 
-  o.push_back(bp);
-  o.push_back(new RGWBucketEntryPoint);
+  o.push_back(std::move(bp));
+  o.push_back(RGWBucketEntryPoint{});
+
+  return o;
 }
 
 void RGWBucketEntryPoint::dump(Formatter *f) const

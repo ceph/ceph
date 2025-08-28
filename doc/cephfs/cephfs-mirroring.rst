@@ -4,7 +4,7 @@
 CephFS Snapshot Mirroring
 =========================
 
-CephFS supports asynchronous replication of snapshots to a remote CephFS file system via
+CephFS supports asynchronous push-based replication of snapshots to a remote CephFS file system via
 the ``cephfs-mirror`` tool. Snapshots are synchronized by mirroring snapshot data followed by
 creating a remote snapshot with the same name (for a given directory on the remote file system) as
 the source snapshot.

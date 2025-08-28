@@ -329,7 +329,7 @@ public:
         crimson::get_logger(ceph_subsys_ms).error(
           "{} try_enter_out_dispatching() got wrong io_state {}",
           conn, io_state);
-        ceph_abort("impossible");
+        ceph_abort_msg("impossible");
       }
     }
 

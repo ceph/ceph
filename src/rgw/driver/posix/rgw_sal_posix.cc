@@ -2911,7 +2911,7 @@ int POSIXObject::copy_object(const ACLOwner& owner,
 
 int POSIXObject::list_parts(const DoutPrefixProvider* dpp, CephContext* cct,
 			    int max_parts, int marker, int* next_marker,
-			    bool* truncated, list_parts_each_t each_func,
+			    bool* truncated, list_parts_each_t&& each_func,
 			    optional_yield y)
 {
   return -EOPNOTSUPP;
@@ -3071,15 +3071,11 @@ int POSIXObject::transition_to_cloud(Bucket* bucket,
 
 int POSIXObject::restore_obj_from_cloud(Bucket* bucket,
           rgw::sal::PlacementTier* tier,
-          rgw_placement_rule& placement_rule,
-          rgw_bucket_dir_entry& o,
 	  CephContext* cct,
-          RGWObjTier& tier_config,
-          uint64_t olh_epoch,
           std::optional<uint64_t> days,
+          bool& in_progress,
           const DoutPrefixProvider* dpp, 
-          optional_yield y,
-          uint32_t flags)
+          optional_yield y)
 {
   return -ERR_NOT_IMPLEMENTED;
 }

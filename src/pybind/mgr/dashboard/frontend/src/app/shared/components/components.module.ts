@@ -36,7 +36,11 @@ import {
   SelectModule,
   ComboBoxModule,
   ProgressIndicatorModule,
-  PanelModule
+  PanelModule,
+  LayoutModule,
+  TilesModule,
+  PopoverModule,
+  InlineLoadingModule
 } from 'carbon-components-angular';
 import EditIcon from '@carbon/icons/es/edit/20';
 import CodeIcon from '@carbon/icons/es/code/16';
@@ -83,12 +87,17 @@ import { FormAdvancedFieldsetComponent } from './form-advanced-fieldset/form-adv
 import { UpgradableComponent } from './upgradable/upgradable.component';
 import { ProgressComponent } from './progress/progress.component';
 import { SidePanelComponent } from './side-panel/side-panel.component';
+import { ChartsModule } from '@carbon/charts-angular';
+import { InlineMessageComponent } from './inline-message/inline-message.component';
+import { IconComponent } from './icon/icon.component';
+import { DetailsCardComponent } from './details-card/details-card.component';
 
 // Icons
 import InfoIcon from '@carbon/icons/es/information/16';
 import CopyIcon from '@carbon/icons/es/copy/32';
 import downloadIcon from '@carbon/icons/es/download/16';
-import { ChartsModule } from '@carbon/charts-angular';
+import IdeaIcon from '@carbon/icons/es/idea/20';
+import CloseIcon from '@carbon/icons/es/close/16';
 
 @NgModule({
   imports: [
@@ -129,7 +138,11 @@ import { ChartsModule } from '@carbon/charts-angular';
     ProgressIndicatorModule,
     BaseChartDirective,
     PanelModule,
-    ChartsModule
+    ChartsModule,
+    LayoutModule,
+    TilesModule,
+    PopoverModule,
+    InlineLoadingModule
   ],
   declarations: [
     SparklineComponent,
@@ -172,7 +185,10 @@ import { ChartsModule } from '@carbon/charts-angular';
     FormAdvancedFieldsetComponent,
     UpgradableComponent,
     ProgressComponent,
-    SidePanelComponent
+    SidePanelComponent,
+    IconComponent,
+    InlineMessageComponent,
+    DetailsCardComponent
   ],
   providers: [provideCharts(withDefaultRegisterables())],
   exports: [
@@ -212,11 +228,22 @@ import { ChartsModule } from '@carbon/charts-angular';
     FormAdvancedFieldsetComponent,
     UpgradableComponent,
     ProgressComponent,
-    SidePanelComponent
+    SidePanelComponent,
+    IconComponent,
+    InlineMessageComponent,
+    DetailsCardComponent
   ]
 })
 export class ComponentsModule {
   constructor(private iconService: IconService) {
-    this.iconService.registerAll([InfoIcon, CopyIcon, EditIcon, CodeIcon, downloadIcon]);
+    this.iconService.registerAll([
+      InfoIcon,
+      CopyIcon,
+      EditIcon,
+      CodeIcon,
+      downloadIcon,
+      IdeaIcon,
+      CloseIcon
+    ]);
   }
 }

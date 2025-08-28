@@ -84,7 +84,7 @@ namespace ECTransactionL {
 	extent_set raw_write_set;
 	for (auto &&extent: op.buffer_updates) {
 	  using BufferUpdate = PGTransaction::ObjectOperation::BufferUpdate;
-	  if (boost::get<BufferUpdate::CloneRange>(&(extent.get_val()))) {
+	  if (std::holds_alternative<BufferUpdate::CloneRange>(extent.get_val())) {
 	    ceph_assert(
 	      0 ==
 	      "CloneRange is not allowed, do_op should have returned ENOTSUPP");

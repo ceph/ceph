@@ -161,7 +161,7 @@ struct rgw_bucket {
 
   void dump(ceph::Formatter *f) const;
   void decode_json(JSONObj *obj);
-  static void generate_test_instances(std::list<rgw_bucket*>& o);
+  static std::list<rgw_bucket> generate_test_instances();
 
   rgw_bucket& operator=(const rgw_bucket&) = default;
 

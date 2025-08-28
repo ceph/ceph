@@ -133,6 +133,11 @@ struct PGLog : DoutPrefixProvider {
     return cct;
   }
 
+  enum NonPrimary : bool {
+    NonPrimaryFalse = false,
+    NonPrimaryTrue = true
+  };
+
   ////////////////////////////// sub classes //////////////////////////////
   struct LogEntryHandler {
     virtual void rollback(
@@ -147,8 +152,10 @@ struct PGLog : DoutPrefixProvider {
       const hobject_t &hoid,
       version_t v) = 0;
     virtual void partial_write(
-      pg_info_t *info,
-      const pg_log_entry_t &entry) = 0;
+        pg_info_t *info,
+        eversion_t previous_version,
+        const pg_log_entry_t &entry
+      ) = 0;
     virtual ~LogEntryHandler() {}
   };
   using LogEntryHandlerRef = std::unique_ptr<LogEntryHandler>;
@@ -195,13 +202,20 @@ public:
 	  rollback_info_trimmed_to = to;
       }
 
+      eversion_t previous_version;
+      if (rollback_info_trimmed_to_riter == log.rend()) {
+	previous_version = tail;
+      } else {
+	previous_version = rollback_info_trimmed_to_riter->version;
+      }
       while (rollback_info_trimmed_to_riter != log.rbegin()) {
 	--rollback_info_trimmed_to_riter;
 	if (rollback_info_trimmed_to_riter->version > rollback_info_trimmed_to) {
 	  ++rollback_info_trimmed_to_riter;
 	  break;
 	}
-	f(*rollback_info_trimmed_to_riter);
+	f(*rollback_info_trimmed_to_riter, previous_version);
+	previous_version = rollback_info_trimmed_to_riter->version;
       }
 
       return dirty_log;
@@ -255,34 +269,35 @@ public:
     void trim_rollback_info_to(eversion_t to, pg_info_t *info, LogEntryHandler *h) {
       advance_can_rollback_to(
 	to,
-	[&](pg_log_entry_t &entry) {
+	[&](pg_log_entry_t &entry, eversion_t previous_version) {
 	  h->trim(entry);
-	  h->partial_write(info, entry);
+	  h->partial_write(info, previous_version, entry);
 	});
     }
     bool roll_forward_to(eversion_t to, pg_info_t *info, LogEntryHandler *h) {
       return advance_can_rollback_to(
 	to,
-	[&](pg_log_entry_t &entry) {
+	[&](pg_log_entry_t &entry, eversion_t previous_version) {
 	  h->rollforward(entry);
-	  h->partial_write(info, entry);
+	  h->partial_write(info, previous_version, entry);
 	});
     }
 
     void skip_can_rollback_to_to_head(pg_info_t *info, LogEntryHandler *h) {
       advance_can_rollback_to(
 	head,
-        [&](pg_log_entry_t &entry) {
-	  h->partial_write(info, entry);
+        [&](pg_log_entry_t &entry, eversion_t previous_version) {
+	  h->partial_write(info, previous_version, entry);
 	});
     }
 
     void skip_can_rollback_to_to_head() {
-      advance_can_rollback_to(head, [&](const pg_log_entry_t &entry) {});
+      advance_can_rollback_to(head, [&](const pg_log_entry_t &entry,
+					eversion_t previous_version) {});
     }
 
-    mempool::osd_pglog::list<pg_log_entry_t> rewind_from_head(eversion_t newhead) {
-      auto divergent = pg_log_t::rewind_from_head(newhead);
+    mempool::osd_pglog::list<pg_log_entry_t> rewind_from_head(eversion_t newhead, bool *dirty_log = nullptr) {
+      auto divergent = pg_log_t::rewind_from_head(newhead, dirty_log);
       index();
       reset_rollback_info_trimmed_to_riter();
       return divergent;
@@ -319,6 +334,30 @@ public:
       pg_t child_pgid,
       unsigned split_bits,
       IndexedLog *target);
+
+    void split_pwlc(pg_info_t &info) {
+      eversion_t previous_version;
+      if (rollback_info_trimmed_to_riter == log.rend()) {
+	previous_version = tail;
+      } else {
+	previous_version = rollback_info_trimmed_to_riter->version;
+      }
+      // When a split occurs log entries are divided between the two PGs,
+      // this can leave pwlc refering to entries that are no longer in this
+      // PG log. Update pwlc so it is not beyond the last entry in the log.
+      // Non-primary shards which don't have a full log may rollback pwlc
+      // too far, but this will get corrected by the primary shard when
+      // activating shards later in peering.
+      for (auto & [shard, versionrange] : info.partial_writes_last_complete) {
+	auto &&[old_v,  new_v] = versionrange;
+	if (new_v > previous_version) {
+	  new_v = previous_version;
+	  if (old_v > new_v) {
+	    old_v = new_v;
+	  }
+	}
+      }
+    }
 
     void zero() {
       // we must have already trimmed the old entries
@@ -611,9 +650,13 @@ public:
     }
 
     // actors
-    void add(const pg_log_entry_t& e, bool applied = true) {
+    void add(const pg_log_entry_t& e, enum NonPrimary nonprimary, bool applied, pg_info_t *info, LogEntryHandler *h) {
       if (!applied) {
-	ceph_assert(get_can_rollback_to() == head);
+        if (!nonprimary) {
+          ceph_assert(get_can_rollback_to() == head);
+        } else {
+          ceph_assert(get_can_rollback_to() >= head);
+        }
       }
 
       // make sure our buffers don't pin bigger buffers
@@ -649,9 +692,15 @@ public:
       }
 
       if (!applied) {
-	skip_can_rollback_to_to_head();
+	skip_can_rollback_to_to_head(info, h);
       }
     } // add
+
+    // nonprimary and applied must either both be provided or neither. If
+    // neither is provided applied = true and the nonprimary is irrelevant.
+    void add(const pg_log_entry_t& e) {
+      add(e, NonPrimaryFalse, true, nullptr, nullptr);
+    }
 
     void trim(
       CephContext* cct,
@@ -820,9 +869,13 @@ public:
 
   void unindex() { log.unindex(); }
 
-  void add(const pg_log_entry_t& e, bool applied = true) {
+  void add(const pg_log_entry_t& e, enum NonPrimary nonprimary, bool applied, pg_info_t *info, LogEntryHandler *h) {
     mark_writeout_from(e.version);
-    log.add(e, applied);
+    log.add(e, nonprimary, applied, info, h);
+  }
+
+  void add(const pg_log_entry_t& e) {
+    add(e, NonPrimaryFalse, true, nullptr, nullptr);
   }
 
   void reset_recovery_pointers() { log.reset_recovery_pointers(); }
@@ -889,6 +942,10 @@ public:
     }
   }
 
+  void split_pwlc(pg_info_t &info) {
+    log.split_pwlc(info);
+  }
+
   void merge_from(
     const std::vector<PGLog*>& sources,
     eversion_t last_update) {
@@ -911,8 +968,10 @@ public:
       missing.got(oid, v);
       info.stats.stats.sum.num_objects_missing = missing.num_missing();
 
+      const bool missing_empty = missing.get_items().empty();
+
       // raise last_complete?
-      if (missing.get_items().empty()) {
+      if (missing_empty) {
 	log.complete_to = log.log.end();
 	info.last_complete = info.last_update;
       }
@@ -920,6 +979,16 @@ public:
       while (log.complete_to != log.log.end()) {
 	if (oldest_need <= log.complete_to->version)
 	  break;
+        /* If optimizations are enabled, then this might be a partial log. In
+         * this case, it is possible to complete all objects before missing
+         * objects are all recovered (since we are recovering to a later
+         * version). Here we refuse to move last_complete beyond the last
+         * entry of the log until all missing have been recovered.
+         */
+        if (!missing_empty &&
+            !log.log.empty() &&
+            log.complete_to->version == log.log.back().version)
+          break;
 	if (info.last_complete < log.complete_to->version)
 	  info.last_complete = log.complete_to->version;
 	++log.complete_to;
@@ -940,7 +1009,10 @@ public:
         ++log.complete_to;
 	// partial writes allow a shard which did not participate in a write to
 	// have a missing version that is newer that the most recent log entry
-	if (ec_optimizations_enabled && (log.complete_to == log.log.end())) {
+	if (log.complete_to == log.log.end()) {
+	  // keep complete_to one entry behind the end of the log to stop
+	  // code incorrectly using it to deduce that recovery has completed
+	  --log.complete_to;
 	  break;
 	}
         ceph_assert(log.complete_to != log.log.end());
@@ -1332,11 +1404,7 @@ public:
       invalidate_stats = invalidate_stats || !p->is_error();
       if (log) {
 	ldpp_dout(dpp, 20) << "update missing, append " << *p << dendl;
-        // Skip the log entry if it is a partial write that did not involve
-        // this shard
-        if (!pool.is_nonprimary_shard(shard) || p->is_written_shard(shard)) {
-	  log->add(*p);
-	}
+	log->add(*p);
       }
       if (p->soid <= last_backfill &&
 	  !p->is_error()) {
@@ -1471,12 +1539,14 @@ public:
     const pg_info_t &info,
     std::ostringstream &oss,
     bool tolerate_divergent_missing_log,
+    bool ec_optimizations_enabled, // Relax asserts for partial writes
     bool debug_verify_stored_missing = false
     ) {
     return read_log_and_missing(
       cct, store, ch, pgmeta_oid, info,
       log, missing, oss,
       tolerate_divergent_missing_log,
+      ec_optimizations_enabled,
       &clear_divergent_priors,
       this,
       (pg_log_debug ? &log_keys_debug : nullptr),
@@ -1494,6 +1564,7 @@ public:
     missing_type &missing,
     std::ostringstream &oss,
     bool tolerate_divergent_missing_log,
+    bool ec_optimizations_enabled, // Relax asserts for partial writes
     bool *clear_divergent_priors = nullptr,
     const DoutPrefixProvider *dpp = nullptr,
     std::set<std::string> *log_keys_debug = nullptr,
@@ -1614,6 +1685,11 @@ public:
 	    continue;
 	  if (i->is_error())
 	    continue;
+	  if (!i->is_written_shard(info.pgid.shard)) {
+	    // optimized EC - partial write that this shard didn't participate in
+	    ceph_assert(ec_optimizations_enabled);
+	    continue;
+	  }
 	  if (did.count(i->soid)) continue;
 	  did.insert(i->soid);
 
@@ -1636,10 +1712,18 @@ public:
 	      if (debug_verify_stored_missing) {
 		auto miter = missing.get_items().find(i->soid);
 		ceph_assert(miter != missing.get_items().end());
-		ceph_assert(miter->second.need == i->version);
 		// the 'have' version is reset if an object is deleted,
 		// then created again
-		ceph_assert(miter->second.have == oi.version || miter->second.have == eversion_t());
+		if (ec_optimizations_enabled) {
+		  // non-primary shards in an optimized pool may not have updates
+		  // because of partial writes, which may result in oi.version being
+		  // less than have
+		  ceph_assert(miter->second.need >= i->version);
+		  ceph_assert(miter->second.have >= oi.version || miter->second.have == eversion_t());
+		} else {
+		  ceph_assert(miter->second.need == i->version);
+		  ceph_assert(miter->second.have == oi.version || miter->second.have == eversion_t());
+		}
 		checked.insert(i->soid);
 	      } else {
 		missing.add(i->soid, i->version, oi.version, i->is_delete());
@@ -1655,7 +1739,15 @@ public:
 			miter->second.have == eversion_t()));
 	      } else {
 		ceph_assert(miter != missing.get_items().end());
-		ceph_assert(miter->second.need == i->version);
+		if (ec_optimizations_enabled) {
+		  // Optimized pools do not store log entries for shards that
+		  // did not participate in the write, however missing entries
+		  // are calculated from full log so may be for a newer version
+		  // that the latest log entry
+		  ceph_assert(miter->second.need >= i->version);
+		} else {
+		  ceph_assert(miter->second.need == i->version);
+		}
 		ceph_assert(miter->second.have == eversion_t());
 	      }
 	      checked.insert(i->soid);

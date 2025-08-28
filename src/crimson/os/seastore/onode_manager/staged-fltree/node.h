@@ -284,7 +284,7 @@ class Node
           // good
         } else {
           assert(p_cursor->is_invalid());
-          ceph_abort("impossible");
+          ceph_abort_msg("impossible");
         }
       }
 #endif
@@ -383,7 +383,7 @@ class Node
 
  protected:
   virtual eagain_ifuture<> test_clone_non_root(context_t, Ref<InternalNode>) const {
-    ceph_abort("impossible path");
+    ceph_abort_msg("impossible path");
   }
   virtual eagain_ifuture<search_result_t> lower_bound_tracked(
       context_t, const key_hobj_t&, MatchHistory&) = 0;

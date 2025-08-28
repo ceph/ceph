@@ -1,0 +1,208 @@
+roles:
+# Three node ceph cluster for smb + ctdb
+- - host.a
+  - mon.a
+  - mgr.x
+  - osd.0
+  - osd.1
+  - client.0
+- - host.b
+  - mon.b
+  - osd.2
+  - osd.3
+- - host.c
+  - mon.c
+  - osd.4
+  - osd.5
+# Reserve a host for acting as a domain controller and smb client
+- - host.d
+  - cephadm.exclude
+overrides:
+  ceph:
+    log-only-match:
+      - CEPHADM_
+tasks:
+- cephadm.deploy_samba_ad_dc:
+    role: host.d
+- vip:
+    count: 3
+- pexec:
+    all:
+      - sudo setsebool -P virt_sandbox_use_netlink 1 || true
+- cephadm:
+
+- cephadm.shell:
+    host.a:
+      - ceph fs volume create cephfs
+- cephadm.wait_for_service:
+    service: mds.cephfs
+
+- cephadm.shell:
+    host.a:
+      # add subvolgroup & subvolumes for test
+      - cmd: ceph fs subvolumegroup create cephfs smb
+      - cmd: ceph fs subvolume create cephfs sv1 --group-name=smb --mode=0777
+      - cmd: ceph fs subvolume create cephfs sv2 --group-name=smb --mode=0777
+      - cmd: ceph fs subvolume create cephfs sv3 --group-name=smb --mode=0777
+      # set up smb cluster and shares
+      - cmd: ceph mgr module enable smb
+      # TODO: replace sleep with poll of mgr state?
+      - cmd: sleep 30
+      - cmd: ceph smb apply -i -
+        stdin: |
+          # --- Begin Embedded YAML
+          - resource_type: ceph.smb.cluster
+            cluster_id: ac1
+            auth_mode: active-directory
+            domain_settings:
+              realm: DOMAIN1.SINK.TEST
+              join_sources:
+                - source_type: resource
+                  ref: join1-admin
+            custom_dns:
+              - "{{ctx.samba_ad_dc_ip}}"
+            public_addrs:
+              - address: {{VIP0}}/{{VIPPREFIXLEN}}
+              - address: {{VIP1}}/{{VIPPREFIXLEN}}
+            placement:
+              count: 3
+          - resource_type: ceph.smb.join.auth
+            auth_id: join1-admin
+            auth:
+              username: Administrator
+              password: Passw0rd
+          - resource_type: ceph.smb.share
+            cluster_id: ac1
+            share_id: share1
+            cephfs:
+              volume: cephfs
+              subvolumegroup: smb
+              subvolume: sv1
+              path: /
+          - resource_type: ceph.smb.share
+            cluster_id: ac1
+            share_id: share2
+            cephfs:
+              volume: cephfs
+              subvolumegroup: smb
+              subvolume: sv2
+              path: /
+          # cluster two
+          - resource_type: ceph.smb.cluster
+            cluster_id: ac2
+            auth_mode: active-directory
+            domain_settings:
+              realm: DOMAIN1.SINK.TEST
+              join_sources:
+                - source_type: resource
+                  ref: join1-admin
+            custom_dns:
+              - "{{ctx.samba_ad_dc_ip}}"
+            custom_ports:
+              smb: 4455
+              smbmetrics: 9909
+              ctdb: 9999
+            public_addrs:
+              - address: {{VIP2}}/{{VIPPREFIXLEN}}
+            placement:
+              count: 3
+          - resource_type: ceph.smb.share
+            cluster_id: ac2
+            share_id: s1ac2
+            cephfs:
+              volume: cephfs
+              subvolumegroup: smb
+              subvolume: sv3
+              path: /
+          # --- End Embedded YAML
+# Wait for the smb service to start
+- cephadm.wait_for_service:
+    service: smb.ac1
+- cephadm.wait_for_service:
+    service: smb.ac2
+
+# debugging breadcrumbs
+- cephadm.shell:
+    host.a:
+      # dump clustermeta objects from rados
+      - cmd: rados --pool=.smb -N ac1 get cluster.meta.json /dev/stdout
+      - cmd: rados --pool=.smb -N ac2 get cluster.meta.json /dev/stdout
+
+# Check if shares exist
+- cephadm.exec:
+    host.d:
+      - sleep 30
+      - "{{ctx.samba_client_container_cmd|join(' ')}} smbclient -U DOMAIN1\\\\ckent%1115Rose. //{{'host.a'|role_to_remote|attr('ip_address')}}/share1 -c ls"
+      - "{{ctx.samba_client_container_cmd|join(' ')}} smbclient -U DOMAIN1\\\\ckent%1115Rose. //{{'host.a'|role_to_remote|attr('ip_address')}}/share2 -c ls"
+      - "{{ctx.samba_client_container_cmd|join(' ')}} smbclient -p4455 -U DOMAIN1\\\\ckent%1115Rose. //{{'host.a'|role_to_remote|attr('ip_address')}}/s1ac2 -c ls"
+
+# verify CTDB is healthy, cluster 1 is well formed
+- cephadm.exec:
+    host.a:
+      - "{{ctx.cephadm}} ls --no-detail  | {{ctx.cephadm}} shell jq -r 'map(select(.name | startswith(\"smb.ac1\")))[-1].name' > /tmp/svcname"
+      - "{{ctx.cephadm}} enter -n $(cat /tmp/svcname) ctdb status > /tmp/ctdb_status"
+      - cat /tmp/ctdb_status
+      - grep 'pnn:0 .*OK' /tmp/ctdb_status
+      - grep 'pnn:1 .*OK' /tmp/ctdb_status
+      - grep 'pnn:2 .*OK' /tmp/ctdb_status
+      - grep 'Number of nodes:3' /tmp/ctdb_status
+      - rm -rf /tmp/svcname /tmp/ctdb_status
+# verify CTDB is healthy, cluster 2 is well formed
+- cephadm.exec:
+    host.a:
+      - "{{ctx.cephadm}} ls --no-detail  | {{ctx.cephadm}} shell jq -r 'map(select(.name | startswith(\"smb.ac2\")))[-1].name' > /tmp/svcname"
+      - "{{ctx.cephadm}} enter -n $(cat /tmp/svcname) ctdb status > /tmp/ctdb_status"
+      - cat /tmp/ctdb_status
+      - grep 'pnn:0 .*OK' /tmp/ctdb_status
+      - grep 'pnn:1 .*OK' /tmp/ctdb_status
+      - grep 'pnn:2 .*OK' /tmp/ctdb_status
+      - grep 'Number of nodes:3' /tmp/ctdb_status
+      - rm -rf /tmp/svcname /tmp/ctdb_status
+
+# Test the two assigned VIPs on cluster 1
+- cephadm.exec:
+    host.d:
+      - sleep 30
+      - "{{ctx.samba_client_container_cmd|join(' ')}} smbclient -U DOMAIN1\\\\ckent%1115Rose. //{{VIP0}}/share1 -c ls"
+      - "{{ctx.samba_client_container_cmd|join(' ')}} smbclient -U DOMAIN1\\\\ckent%1115Rose. //{{VIP1}}/share1 -c ls"
+      - "{{ctx.samba_client_container_cmd|join(' ')}} smbclient -U DOMAIN1\\\\ckent%1115Rose. //{{VIP0}}/share2 -c ls"
+      - "{{ctx.samba_client_container_cmd|join(' ')}} smbclient -U DOMAIN1\\\\ckent%1115Rose. //{{VIP1}}/share2 -c ls"
+# Test the assigned VIP on cluster 2
+- cephadm.exec:
+    host.d:
+      - sleep 30
+      - "{{ctx.samba_client_container_cmd|join(' ')}} smbclient -p4455 -U DOMAIN1\\\\ckent%1115Rose. //{{VIP2}}/s1ac2 -c ls"
+
+- cephadm.shell:
+    host.a:
+      - cmd: ceph smb apply -i -
+        stdin: |
+          # --- Begin Embedded YAML
+          # cluster1
+          - resource_type: ceph.smb.cluster
+            cluster_id: ac1
+            intent: removed
+          - resource_type: ceph.smb.share
+            cluster_id: ac1
+            share_id: share1
+            intent: removed
+          - resource_type: ceph.smb.share
+            cluster_id: ac1
+            share_id: share2
+            intent: removed
+          # cluster2
+          - resource_type: ceph.smb.cluster
+            cluster_id: ac2
+            intent: removed
+          - resource_type: ceph.smb.share
+            cluster_id: ac2
+            share_id: s1ac2
+            intent: removed
+          # common
+          - resource_type: ceph.smb.join.auth
+            auth_id: join1-admin
+            intent: removed
+          # --- End Embedded YAML
+# Wait for the smb service to be removed
+- cephadm.wait_for_service_not_present:
+    service: smb.ac1

@@ -124,6 +124,7 @@ void RGWRealmReloader::reload()
 	  *env.site,
           cct->_conf->rgw_enable_gc_threads,
           cct->_conf->rgw_enable_lc_threads,
+	  cct->_conf->rgw_enable_restore_threads,
           cct->_conf->rgw_enable_quota_threads,
           cct->_conf->rgw_run_sync_thread,
           cct->_conf.get_val<bool>("rgw_dynamic_resharding"),

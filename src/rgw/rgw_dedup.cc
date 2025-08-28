@@ -1297,7 +1297,7 @@ namespace rgw::dedup {
     // the hash table size is rounded to the nearest 4KB and will wrap after 16G
     if (unlikely(src_rec.s.obj_bytes_size != p_tgt_rec->s.obj_bytes_size)) {
       p_stats->size_mismatch++;
-      ldpp_dout(dpp, 10) << __func__ << "::WARN: differnt byte size for objects::"
+      ldpp_dout(dpp, 10) << __func__ << "::WARN: different byte size for objects::"
                          << src_rec.obj_name << "::" << src_rec.s.obj_bytes_size
                          << "::" << p_tgt_rec->obj_name << "::"
                          << p_tgt_rec->s.obj_bytes_size << dendl;

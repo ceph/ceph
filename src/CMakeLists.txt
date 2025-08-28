@@ -113,6 +113,10 @@ if(NOT MSVC)
   add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-Wno-ignored-qualifiers>)
 endif()
 
+if (CMAKE_CXX_COMPILER_ID STREQUAL Clang)
+  add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-Wsign-compare>)
+endif()
+
 add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-ftemplate-depth-1024>)
 
 # Because Boost can't be bothered to not include its own deprecated headers
@@ -131,7 +135,7 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL GNU)
     if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS 10)
       message(FATAL_ERROR "C++20 support for win32 requires a minimum GCC version of 10.")
     endif()
-  elseif(HAVE_SEASTAR)
+  elseif(WITH_CRIMSON)
     if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS 13)
       # see https://tracker.ceph.com/issues/64375 for details
       message(FATAL_ERROR "crimson/seastar require minimum GCC version of 13 for C++20 and coroutine support")
@@ -153,7 +157,7 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL GNU)
   # cmake does not add '-pie' for executables even if
   # CMAKE_POSITION_INDEPENDENT_CODE is TRUE.
   if(EXE_LINKER_USE_PIE)
-    if (NOT WITH_OSD_INSTRUMENT_FUNCTIONS AND NOT HAVE_SEASTAR)
+    if (NOT WITH_OSD_INSTRUMENT_FUNCTIONS AND NOT WITH_CRIMSON)
       string(APPEND CMAKE_EXE_LINKER_FLAGS " -pie")
     endif()
   endif()
@@ -241,8 +245,8 @@ if(HAVE_INTEL)
   endif()
 endif()
 
-# require c++20
-set(CMAKE_CXX_STANDARD 20)
+# require c++23
+set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_C_STANDARD 99)
@@ -471,20 +475,22 @@ if(WITH_CRIMSON)
       build_dpdk(${CMAKE_BINARY_DIR}/src/dpdk)
     endif()
   endif()
-  list(APPEND Seastar_CXX_FLAGS
-    "-DSEASTAR_NO_EXCEPTION_HACK"
-    "-Wno-error"
-    "-Wno-sign-compare"
-    "-Wno-attributes"
-    "-Wno-pessimizing-move"
-    "-Wno-address-of-packed-member"
-    "-Wno-non-virtual-dtor")
-  set(Seastar_CXX_FLAGS "${Seastar_CXX_FLAGS}" CACHE STRING "" FORCE)
   add_subdirectory(seastar)
   # create the directory so cmake won't complain when looking at the imported
   # target: Seastar exports this directory created at build-time
   file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/seastar/gen/include")
   file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/seastar/gen/src")
+  target_compile_options(seastar
+  PUBLIC
+    # required by any target that links to seastar
+    "-Wno-non-virtual-dtor"
+  PRIVATE
+    "-DSEASTAR_NO_EXCEPTION_HACK"
+    "-Wno-error"
+    "-Wno-sign-compare"
+    "-Wno-attributes"
+    "-Wno-pessimizing-move"
+    "-Wno-address-of-packed-member")
   add_subdirectory(crimson)
 endif()
 
@@ -498,7 +504,14 @@ set(libcommon_files
   ceph_ver.c
   global/global_context.cc
   xxHash/xxhash.c
+  include/filepath.cc
+  include/invoke_date.cc
+  include/object.cc
+  include/types.cc
+  include/utime.cc
+  include/uuid.cc
   common/error_code.cc
+  common/frag.cc
   common/tracer.cc
   log/Log.cc
   mon/MonCap.cc

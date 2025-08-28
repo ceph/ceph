@@ -161,7 +161,7 @@ void ECUtil::stripe_info_t::trim_shard_extent_set_for_ro_offset(
       ro_offset, raw_shard_id_t(0));
     for (auto &&iter = shard_extent_set.begin(); iter != shard_extent_set.end()
          ;) {
-      iter->second.erase_after(align_page_next(shard_offset));
+      iter->second.erase_after(align_next(shard_offset));
       if (iter->second.empty()) iter = shard_extent_set.erase(iter);
       else ++iter;
     }
@@ -179,7 +179,7 @@ void ECUtil::stripe_info_t::ro_size_to_stripe_aligned_read_mask(
 void ECUtil::stripe_info_t::ro_size_to_read_mask(
     uint64_t ro_size,
     shard_extent_set_t &shard_extent_set) const {
-  ro_range_to_shard_extent_set_with_parity(0, align_page_next(ro_size),
+  ro_range_to_shard_extent_set_with_parity(0, align_next(ro_size),
                                            shard_extent_set);
 }
 
@@ -187,9 +187,9 @@ void ECUtil::stripe_info_t::ro_size_to_zero_mask(
     uint64_t ro_size,
     shard_extent_set_t &shard_extent_set) const {
   // There should never be any zero padding on the parity.
-  ro_range_to_shard_extent_set(align_page_next(ro_size),
+  ro_range_to_shard_extent_set(align_next(ro_size),
                                ro_offset_to_next_stripe_ro_offset(ro_size) -
-                               align_page_next(ro_size),
+                               align_next(ro_size),
                                shard_extent_set);
   trim_shard_extent_set_for_ro_offset(ro_size, shard_extent_set);
 }
@@ -206,12 +206,11 @@ void shard_extent_map_t::erase_after_ro_offset(uint64_t ro_offset) {
                                       ro_to_erase);
   for (auto &&[shard, eset] : ro_to_erase) {
     if (extent_maps.contains(shard)) {
-      extent_maps[shard].erase(eset.range_start(), eset.range_end());
-    }
-
-    // If the result is empty, delete the extent map.
-    if (extent_maps[shard].empty()) {
-      extent_maps.erase(shard);
+      auto &emap = extent_maps.at(shard);
+      emap.erase(eset.range_start(), eset.range_end());
+      if (emap.empty()) {
+        extent_maps.erase(shard);
+      }
     }
   }
 
@@ -355,7 +354,7 @@ void shard_extent_map_t::insert_in_shard(shard_id_t shard, uint64_t off,
   extent_maps[shard].insert(off, bl.length(), bl);
   raw_shard_id_t raw_shard = sinfo->get_raw_shard(shard);
 
-  if (raw_shard > sinfo->get_k()) {
+  if (raw_shard >= sinfo->get_k()) {
     return;
   }
 
@@ -470,25 +469,29 @@ void shard_extent_map_t::insert_parity_buffers() {
           continue;
       }
       bufferlist bl;
-      bl.push_back(buffer::create_aligned(length, CEPH_PAGE_SIZE));
+      bl.push_back(buffer::create_aligned(length, EC_ALIGN_SIZE));
       extent_maps[shard].insert(offset, length, bl);
     }
   }
 }
 
-slice_iterator<shard_id_t, extent_map> shard_extent_map_t::begin_slice_iterator(
-    const shard_id_set &out) {
-  return slice_iterator(extent_maps, out);
+slice_iterator shard_extent_map_t::begin_slice_iterator(
+    const shard_id_set &out,
+    DoutPrefixProvider *dpp,
+    const shard_id_set *dedup_zeros) {
+  return slice_iterator(extent_maps, out, dpp, dedup_zeros);
 }
 
 /* Encode parity chunks, using the encode_chunks interface into the
  * erasure coding. This generates all parity using full stripe writes.
  */
-int shard_extent_map_t::_encode(const ErasureCodeInterfaceRef &ec_impl) {
+int shard_extent_map_t::encode(const ErasureCodeInterfaceRef &ec_impl,
+    DoutPrefixProvider *dpp,
+    shard_id_set *dedup_zeros) {
   shard_id_set out_set = sinfo->get_parity_shards();
   bool rebuild_req = false;
 
-  for (auto iter = begin_slice_iterator(out_set); !iter.is_end(); ++iter) {
+  for (auto iter = begin_slice_iterator(out_set, dpp, dedup_zeros); !iter.is_end(); ++iter) {
     if (!iter.is_page_aligned()) {
       rebuild_req = true;
       break;
@@ -503,37 +506,11 @@ int shard_extent_map_t::_encode(const ErasureCodeInterfaceRef &ec_impl) {
   }
 
   if (rebuild_req) {
-    pad_and_rebuild_to_page_align();
-    return _encode(ec_impl);
+    pad_and_rebuild_to_ec_align();
+    return encode(ec_impl, dpp, dedup_zeros);
   }
 
   return 0;
-}
-
-/* Encode parity chunks, using the encode_chunks interface into the
- * erasure coding. This generates all parity using full stripe writes.
- */
-int shard_extent_map_t::encode(const ErasureCodeInterfaceRef &ec_impl,
-                               const HashInfoRef &hinfo,
-                               uint64_t before_ro_size) {
-  int r = _encode(ec_impl);
-
-  if (!r && hinfo && ro_start >= before_ro_size) {
-    /* NEEDS REVIEW:  The following calculates the new hinfo CRCs. This is
-     *                 currently considering ALL the buffers, including the
-     *                 parity buffers.  Is this really right?
-     *                 Also, does this really belong here? Its convenient
-     *                 because have just built the buffer list...
-     */
-    shard_id_set full_set;
-    full_set.insert_range(shard_id_t(0), sinfo->get_k_plus_m());
-    for (auto iter = begin_slice_iterator(full_set); !iter.is_end(); ++iter) {
-      ceph_assert(ro_start == before_ro_size);
-      hinfo->append(iter.get_offset(), iter.get_in_bufferptrs());
-    }
-  }
-
-  return r;
 }
 
 /* Encode parity chunks, using the parity delta write interfaces on plugins
@@ -541,11 +518,12 @@ int shard_extent_map_t::encode(const ErasureCodeInterfaceRef &ec_impl,
  */
 int shard_extent_map_t::encode_parity_delta(
     const ErasureCodeInterfaceRef &ec_impl,
-    shard_extent_map_t &old_sem) {
+    shard_extent_map_t &old_sem,
+    DoutPrefixProvider *dpp) {
   shard_id_set out_set = sinfo->get_parity_shards();
 
-  pad_and_rebuild_to_page_align();
-  old_sem.pad_and_rebuild_to_page_align();
+  pad_and_rebuild_to_ec_align();
+  old_sem.pad_and_rebuild_to_ec_align();
 
   for (auto data_shard : sinfo->get_data_shards()) {
     shard_extent_map_t s(sinfo);
@@ -562,15 +540,15 @@ int shard_extent_map_t::encode_parity_delta(
 
     s.compute_ro_range();
 
-    for (auto iter = s.begin_slice_iterator(out_set); !iter.is_end(); ++iter) {
+    for (auto iter = s.begin_slice_iterator(out_set, dpp); !iter.is_end(); ++iter) {
       ceph_assert(iter.is_page_aligned());
       shard_id_map<bufferptr> &data_shards = iter.get_in_bufferptrs();
       shard_id_map<bufferptr> &parity_shards = iter.get_out_bufferptrs();
 
       unsigned int size = iter.get_length();
-      ceph_assert(size % 4096 == 0);
+      ceph_assert(size % EC_ALIGN_SIZE == 0);
       ceph_assert(size > 0);
-      bufferptr delta = buffer::create_aligned(size, CEPH_PAGE_SIZE);
+      bufferptr delta = buffer::create_aligned(size, EC_ALIGN_SIZE);
 
       if (data_shards[shard_id_t(0)].length() != 0 && data_shards[shard_id_t(1)]
         .length() != 0) {
@@ -593,22 +571,35 @@ void shard_extent_map_t::pad_on_shards(const shard_extent_set_t &pad_to,
     if (!pad_to.contains(shard)) {
       continue;
     }
-    for (auto &[off, length] : pad_to.at(shard)) {
-      bufferlist bl;
-      bl.push_back(buffer::create_aligned(length, CEPH_PAGE_SIZE));
-      insert_in_shard(shard, off, bl);
-    }
+    pad_on_shard(pad_to.at(shard), shard);
+  }
+}
+
+void shard_extent_map_t::pad_on_shard(const extent_set &pad_to,
+                                       const shard_id_t shard) {
+
+  if (pad_to.size() == 0) {
+    return;
+  }
+
+  for (auto &[off, length] : pad_to) {
+    bufferlist bl;
+    uint64_t start = align_prev(off);
+    uint64_t end = align_next(off + length);
+
+    bl.push_back(buffer::create_aligned(end - start, EC_ALIGN_SIZE));
+    insert_in_shard(shard, start, bl);
   }
 }
 
 void shard_extent_map_t::pad_on_shards(const extent_set &pad_to,
                                        const shard_id_set &shards) {
+
+  if (pad_to.size() == 0) {
+    return;
+  }
   for (auto &shard : shards) {
-    for (auto &[off, length] : pad_to) {
-      bufferlist bl;
-      bl.push_back(buffer::create_aligned(length, CEPH_PAGE_SIZE));
-      insert_in_shard(shard, off, bl);
-    }
+    pad_on_shard(pad_to, shard);
   }
 }
 
@@ -647,7 +638,9 @@ void shard_extent_map_t::trim(const shard_extent_set_t &trim_to) {
 
 int shard_extent_map_t::decode(const ErasureCodeInterfaceRef &ec_impl,
                                const shard_extent_set_t &want,
-                               uint64_t object_size) {
+                               uint64_t object_size,
+                               DoutPrefixProvider *dpp,
+                               bool dedup_zeros) {
   shard_id_set want_set;
   shard_id_set have_set;
   want.populate_shard_id_set(want_set);
@@ -660,31 +653,45 @@ int shard_extent_map_t::decode(const ErasureCodeInterfaceRef &ec_impl,
     return 0;
   }
 
-  if (add_zero_padding_for_decode(object_size, need_set)) {
-    // We added some zero buffers, which means our have and need set may change
-    extent_maps.populate_bitset_set(have_set);
-    need_set = shard_id_set::difference(want_set, have_set);
-  }
-
   shard_id_set decode_set = shard_id_set::intersection(need_set, sinfo->get_data_shards());
   shard_id_set encode_set = shard_id_set::intersection(need_set, sinfo->get_parity_shards());
+
+  if (!encode_set.empty()) {
+    shard_extent_set_t read_mask(sinfo->get_k_plus_m());
+    sinfo->ro_size_to_read_mask(object_size, read_mask);
+
+    /* The function has been asked to "decode" parity. To achieve this, we
+     * need all the data shards to be present... So first see if there are
+     * any missing...
+     */
+    shard_id_set decode_for_parity_shards = shard_id_set::difference(sinfo->get_data_shards(), have_set);
+    decode_for_parity_shards = shard_id_set::intersection(decode_for_parity_shards, read_mask.get_shard_id_set());
+
+    if (!decode_for_parity_shards.empty()) {
+      /* So there are missing data shards which need decoding before we encode,
+       * We need to add these to the decode set and insert buffers for the
+       * decode to happen.
+       */
+      decode_set.insert(decode_for_parity_shards);
+      need_set.insert(decode_for_parity_shards);
+      extent_set decode_for_parity = get_extent_superset();
+
+      for (auto shard : decode_for_parity_shards) {
+        extent_set parity_pad;
+        parity_pad.intersection_of(decode_for_parity, read_mask.at(shard));
+        pad_on_shard(decode_for_parity, shard);
+      }
+    }
+  }
+
   int r = 0;
   if (!decode_set.empty()) {
     pad_on_shards(want, decode_set);
-    /* If we are going to be encoding, we need to make sure all the necessary
-     * shards are decoded. The get_min_available functions should have already
-     * worked out what needs to be read for this.
-     */
-    extent_set decode_for_parity;
-    for (auto shard : encode_set) {
-      decode_for_parity.insert(want.at(shard));
-    }
-    pad_on_shards(decode_for_parity, decode_set);
-    r = _decode(ec_impl, want_set, decode_set);
+    r = _decode(ec_impl, want_set, decode_set, dpp);
   }
   if (!r && !encode_set.empty()) {
-    pad_on_shards(want, encode_set);
-    r = _encode(ec_impl);
+    pad_on_shards(get_extent_superset(), sinfo->get_parity_shards());
+    r = encode(ec_impl, dpp, dedup_zeros?&need_set:nullptr);
   }
 
   // If we failed to decode, then bail out, or the trimming below might fail.
@@ -703,15 +710,22 @@ int shard_extent_map_t::decode(const ErasureCodeInterfaceRef &ec_impl,
 
 int shard_extent_map_t::_decode(const ErasureCodeInterfaceRef &ec_impl,
                                 const shard_id_set &want_set,
-                                const shard_id_set &need_set) {
+                                const shard_id_set &need_set,
+                                DoutPrefixProvider *dpp) {
   bool rebuild_req = false;
-  for (auto iter = begin_slice_iterator(need_set); !iter.is_end(); ++iter) {
+
+  for (auto iter = begin_slice_iterator(need_set, dpp); !iter.is_end(); ++iter) {
     if (!iter.is_page_aligned()) {
       rebuild_req = true;
       break;
     }
+
     shard_id_map<bufferptr> &in = iter.get_in_bufferptrs();
     shard_id_map<bufferptr> &out = iter.get_out_bufferptrs();
+
+    if (out.empty()) {
+      continue;
+    }
 
     if (int ret = ec_impl->decode_chunks(want_set, in, out)) {
       return ret;
@@ -719,8 +733,8 @@ int shard_extent_map_t::_decode(const ErasureCodeInterfaceRef &ec_impl,
   }
 
   if (rebuild_req) {
-    pad_and_rebuild_to_page_align();
-    return _decode(ec_impl, want_set, need_set);
+    pad_and_rebuild_to_ec_align();
+    return _decode(ec_impl, want_set, need_set, dpp);
   }
 
   compute_ro_range();
@@ -728,7 +742,7 @@ int shard_extent_map_t::_decode(const ErasureCodeInterfaceRef &ec_impl,
   return 0;
 }
 
-void shard_extent_map_t::pad_and_rebuild_to_page_align() {
+void shard_extent_map_t::pad_and_rebuild_to_ec_align() {
   bool resized = false;
   for (auto &&[shard, emap] : extent_maps) {
     extent_map aligned;
@@ -742,21 +756,21 @@ void shard_extent_map_t::pad_and_rebuild_to_page_align() {
       uint64_t start = i.get_off();
       uint64_t end = start + i.get_len();
 
-      if ((start & ~CEPH_PAGE_MASK) != 0) {
-        bl.prepend_zero(start - (start & CEPH_PAGE_MASK));
-        start = start & CEPH_PAGE_MASK;
+      if ((start & ~EC_ALIGN_MASK) != 0) {
+        bl.prepend_zero(start - (start & EC_ALIGN_MASK));
+        start = start & EC_ALIGN_MASK;
         resized_i = true;
       }
-      if ((end & ~CEPH_PAGE_MASK) != 0) {
-        bl.append_zero((end & CEPH_PAGE_MASK) + CEPH_PAGE_SIZE - end);
-        end = (end & CEPH_PAGE_MASK) + CEPH_PAGE_SIZE;
+      if ((end & ~EC_ALIGN_MASK) != 0) {
+        bl.append_zero((end & EC_ALIGN_MASK) + EC_ALIGN_SIZE - end);
+        end = (end & EC_ALIGN_MASK) + EC_ALIGN_SIZE;
         resized_i = true;
       }
 
       // Perhaps we can get away without page aligning here and only SIMD
       // align. However, typical workloads are actually page aligned already,
       // so this should not cause problems on any sensible workload.
-      if (bl.rebuild_aligned_size_and_memory(bl.length(), CEPH_PAGE_SIZE) ||
+      if (bl.rebuild_aligned_size_and_memory(bl.length(), EC_ALIGN_SIZE) ||
         resized_i) {
         // We are not permitted to modify the emap while iterating.
         aligned.insert(start, end - start, bl);
@@ -1071,57 +1085,8 @@ void shard_extent_set_t::insert(const shard_extent_set_t &other) {
 }
 }
 
-void ECUtil::HashInfo::append(uint64_t old_size,
-                              shard_id_map<bufferptr> &to_append) {
-  ceph_assert(old_size == total_chunk_size);
-  uint64_t size_to_append = to_append.begin()->second.length();
-  if (has_chunk_hash()) {
-    ceph_assert(to_append.size() == cumulative_shard_hashes.size());
-    for (auto &&[shard, ptr] : to_append) {
-      ceph_assert(size_to_append == ptr.length());
-      ceph_assert(shard < static_cast<int>(cumulative_shard_hashes.size()));
-      cumulative_shard_hashes[int(shard)] =
-          ceph_crc32c(cumulative_shard_hashes[int(shard)],
-                      (unsigned char*)ptr.c_str(), ptr.length());
-    }
-  }
-  total_chunk_size += size_to_append;
-}
-
-void ECUtil::HashInfo::encode(bufferlist &bl) const {
-  ENCODE_START(1, 1, bl);
-  encode(total_chunk_size, bl);
-  encode(cumulative_shard_hashes, bl);
-  ENCODE_FINISH(bl);
-}
-
-void ECUtil::HashInfo::decode(bufferlist::const_iterator &bl) {
-  DECODE_START(1, bl);
-  decode(total_chunk_size, bl);
-  decode(cumulative_shard_hashes, bl);
-  DECODE_FINISH(bl);
-}
-
-void ECUtil::HashInfo::dump(Formatter *f) const {
-  f->dump_unsigned("total_chunk_size", total_chunk_size);
-  f->open_array_section("cumulative_shard_hashes");
-  for (unsigned i = 0; i != cumulative_shard_hashes.size(); ++i) {
-    f->open_object_section("hash");
-    f->dump_unsigned("shard", i);
-    f->dump_unsigned("hash", cumulative_shard_hashes[i]);
-    f->close_section();
-  }
-  f->close_section();
-}
 
 namespace ECUtil {
-std::ostream &operator<<(std::ostream &out, const HashInfo &hi) {
-  ostringstream hashes;
-  for (auto hash : hi.cumulative_shard_hashes) {
-    hashes << " " << hex << hash;
-  }
-  return out << "tcs=" << hi.total_chunk_size << hashes.str();
-}
 
 std::ostream &operator<<(std::ostream &out, const shard_extent_map_t &rhs) {
   // sinfo not thought to be needed for debug, as it is constant.
@@ -1154,34 +1119,16 @@ std::ostream &operator<<(std::ostream &out, const log_entry_t &rhs) {
   }
   return out << "[" << rhs.shard << "]->" << rhs.io << "\n";
 }
-}
 
-void ECUtil::HashInfo::generate_test_instances(list<HashInfo*> &o) {
-  o.push_back(new HashInfo(3));
-  {
-    bufferlist bl;
-    bl.append_zero(20);
-
-    bufferptr bp = bl.begin().get_current_ptr();
-
-    // We don't have the k+m here, but this is not critical performance, so
-    // create an oversized map.
-    shard_id_map<bufferptr> buffers(128);
-    buffers[shard_id_t(0)] = bp;
-    buffers[shard_id_t(1)] = bp;
-    buffers[shard_id_t(2)] = bp;
-    o.back()->append(0, buffers);
-    o.back()->append(20, buffers);
-  }
-  o.push_back(new HashInfo(4));
-}
-
+// Upgraded pools can still have keys, so there are a few functions that still
+// require these keys.
 const string HINFO_KEY = "hinfo_key";
 
-bool ECUtil::is_hinfo_key_string(const string &key) {
+bool is_hinfo_key_string(const string &key) {
   return key == HINFO_KEY;
 }
 
-const string &ECUtil::get_hinfo_key() {
+const string &get_hinfo_key() {
   return HINFO_KEY;
+}
 }

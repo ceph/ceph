@@ -74,7 +74,7 @@ class IoSequence {
 
   virtual bool is_supported(Sequence sequence) const;
   static std::unique_ptr<IoSequence> generate_sequence(
-      Sequence s, std::pair<int, int> obj_size_range, int seed);
+      Sequence s, std::pair<int, int> obj_size_range, int seed, bool check_consistency);
 
  protected:
   uint64_t min_obj_size;
@@ -83,13 +83,17 @@ class IoSequence {
   bool barrier;
   bool done;
   bool remove;
+  bool consistency;
+  bool consistency_in_progress;
+  bool consistency_request_sent;
+  bool check_consistency;
   uint64_t obj_size;
   int step;
   int seed;
   ceph::util::random_number_generator<int> rng =
       ceph::util::random_number_generator<int>();
 
-  IoSequence(std::pair<int, int> obj_size_range, int seed);
+  IoSequence(std::pair<int, int> obj_size_range, int seed, bool check_consistency);
 
   virtual std::unique_ptr<IoOp> _next() = 0;
 
@@ -97,11 +101,12 @@ class IoSequence {
   void set_max_object_size(uint64_t size);
   void select_random_object_size();
   std::unique_ptr<IoOp> increment_object_size();
+  std::unique_ptr<IoOp> process_remove();
 };
 
 class Seq0 : public IoSequence {
  public:
-  Seq0(std::pair<int, int> obj_size_range, int seed);
+  Seq0(std::pair<int, int> obj_size_range, int seed, bool check_consistency);
 
   Sequence get_id() const override;
   std::string get_name() const override;
@@ -114,7 +119,7 @@ class Seq0 : public IoSequence {
 
 class Seq1 : public IoSequence {
  public:
-  Seq1(std::pair<int, int> obj_size_range, int seed);
+  Seq1(std::pair<int, int> obj_size_range, int seed, bool check_consistency);
 
   Sequence get_id() const override;
   std::string get_name() const override;
@@ -126,7 +131,7 @@ class Seq1 : public IoSequence {
 
 class Seq2 : public IoSequence {
  public:
-  Seq2(std::pair<int, int> obj_size_range, int seed);
+  Seq2(std::pair<int, int> obj_size_range, int seed, bool check_consistency);
 
   Sequence get_id() const override;
   std::string get_name() const override;
@@ -139,7 +144,7 @@ class Seq2 : public IoSequence {
 
 class Seq3 : public IoSequence {
  public:
-  Seq3(std::pair<int, int> obj_size_range, int seed);
+  Seq3(std::pair<int, int> obj_size_range, int seed, bool check_consistency);
 
   Sequence get_id() const override;
   std::string get_name() const override;
@@ -152,7 +157,7 @@ class Seq3 : public IoSequence {
 
 class Seq4 : public IoSequence {
  public:
-  Seq4(std::pair<int, int> obj_size_range, int seed);
+  Seq4(std::pair<int, int> obj_size_range, int seed, bool check_consistency);
 
   Sequence get_id() const override;
   std::string get_name() const override;
@@ -165,7 +170,7 @@ class Seq4 : public IoSequence {
 
 class Seq5 : public IoSequence {
  public:
-  Seq5(std::pair<int, int> obj_size_range, int seed);
+  Seq5(std::pair<int, int> obj_size_range, int seed, bool check_consistency);
 
   Sequence get_id() const override;
   std::string get_name() const override;
@@ -180,7 +185,7 @@ class Seq5 : public IoSequence {
 
 class Seq6 : public IoSequence {
  public:
-  Seq6(std::pair<int, int> obj_size_range, int seed);
+  Seq6(std::pair<int, int> obj_size_range, int seed, bool check_consistency);
 
   Sequence get_id() const override;
   std::string get_name() const override;
@@ -195,7 +200,7 @@ class Seq6 : public IoSequence {
 
 class Seq7 : public IoSequence {
  public:
-  Seq7(std::pair<int, int> obj_size_range, int seed);
+  Seq7(std::pair<int, int> obj_size_range, int seed, bool check_consistency);
 
   Sequence get_id() const override;
   std::string get_name() const override;
@@ -209,7 +214,7 @@ class Seq7 : public IoSequence {
 
 class Seq8 : public IoSequence {
  public:
-  Seq8(std::pair<int, int> obj_size_range, int seed);
+  Seq8(std::pair<int, int> obj_size_range, int seed, bool check_consistency);
 
   Sequence get_id() const override;
   std::string get_name() const override;
@@ -230,7 +235,7 @@ class Seq9 : public IoSequence {
   bool donebarrier = false;
 
  public:
-  Seq9(std::pair<int, int> obj_size_range, int seed);
+  Seq9(std::pair<int, int> obj_size_range, int seed, bool check_consistency);
 
       Sequence get_id() const override;
       std::string get_name() const override;
@@ -244,7 +249,7 @@ class Seq11 : public IoSequence {
   bool donebarrier = false;
 
  public:
-  Seq11(std::pair<int, int> obj_size_range, int seed);
+  Seq11(std::pair<int, int> obj_size_range, int seed, bool check_consistency);
 
   Sequence get_id() const override;
   std::string get_name() const override;
@@ -259,7 +264,7 @@ class Seq12 : public IoSequence {
   bool donebarrier = false;
 
  public:
-  Seq12(std::pair<int, int> obj_size_range, int seed);
+  Seq12(std::pair<int, int> obj_size_range, int seed, bool check_consistency);
 
   Sequence get_id() const override;
   std::string get_name() const override;
@@ -274,7 +279,7 @@ class Seq13 : public IoSequence {
   bool donebarrier = false;
 
  public:
-  Seq13(std::pair<int, int> obj_size_range, int seed);
+  Seq13(std::pair<int, int> obj_size_range, int seed, bool check_consistency);
 
   Sequence get_id() const override;
   std::string get_name() const override;
@@ -293,7 +298,7 @@ class Seq14 : public IoSequence {
   bool doneread = false;
 
  public:
-  Seq14(std::pair<int, int> obj_size_range, int seed);
+  Seq14(std::pair<int, int> obj_size_range, int seed, bool check_consistency);
 
   void setup_starts();
   Sequence get_id() const override;

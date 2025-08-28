@@ -124,15 +124,11 @@ export class RgwStorageClassListComponent extends ListWithDetails implements OnI
         (data: ZoneGroupDetails) => {
           this.storageClassList = [];
           const tierObj = BucketTieringUtils.filterAndMapTierTargets(data);
-          const tierConfig = tierObj.map((item) => ({
-            ...item,
-            tier_type:
-              item.tier_type?.toLowerCase() === TIER_TYPE.CLOUD_TIER
-                ? TIER_TYPE_DISPLAY.CLOUD_TIER
-                : item.tier_type?.toLowerCase() === TIER_TYPE.LOCAL
-                ? TIER_TYPE_DISPLAY.LOCAL
-                : item.tier_type
+          const tierConfig = tierObj.map((tier) => ({
+            ...tier,
+            tier_type: this.mapTierTypeDisplay(tier.tier_type)
           }));
+
           this.transformTierData(tierConfig);
           this.storageClassList.push(...tierConfig);
           resolve();
@@ -142,6 +138,19 @@ export class RgwStorageClassListComponent extends ListWithDetails implements OnI
         }
       );
     });
+  }
+
+  private mapTierTypeDisplay(tierType: string): string {
+    switch (tierType?.toLowerCase()) {
+      case TIER_TYPE.CLOUD_TIER:
+        return TIER_TYPE_DISPLAY.CLOUD_TIER;
+      case TIER_TYPE.LOCAL:
+        return TIER_TYPE_DISPLAY.LOCAL;
+      case TIER_TYPE.GLACIER:
+        return TIER_TYPE_DISPLAY.GLACIER;
+      default:
+        return tierType;
+    }
   }
 
   transformTierData(tierConfig: any[]) {

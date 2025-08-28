@@ -11,14 +11,21 @@ import { Icons } from '~/app/shared/enum/icons.enum';
   styleUrls: ['./copy2clipboard-button.component.scss']
 })
 export class Copy2ClipboardButtonComponent {
+  // The text to be copied
   @Input()
   private source: string;
 
+  // Optional: Extracts text to be copied by "id" attribute
   @Input()
   byId = true;
 
+  // Size of the button
   @Input()
-  showIconOnly = false;
+  size = 'md';
+
+  // Optional: Adds text to the left of copy icon
+  @Input()
+  text?: string;
 
   icons = Icons;
 

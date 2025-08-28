@@ -37,4 +37,28 @@ describe('HealthService', () => {
     const req = httpTesting.expectOne('api/health/minimal');
     expect(req.request.method).toBe('GET');
   });
+
+  it('should call getHealthSnapshot', () => {
+    service.getHealthSnapshot().subscribe();
+    const req = httpTesting.expectOne('api/health/snapshot');
+    expect(req.request.method).toBe('GET');
+  });
+
+  it('should call getClusterFsid', () => {
+    service.getClusterFsid().subscribe();
+    const req = httpTesting.expectOne('api/health/get_cluster_fsid');
+    expect(req.request.method).toBe('GET');
+  });
+
+  it('should call getOrchestratorName', () => {
+    service.getOrchestratorName().subscribe();
+    const req = httpTesting.expectOne('api/health/get_orchestrator_name');
+    expect(req.request.method).toBe('GET');
+  });
+
+  it('should call getTelemetryStatus', () => {
+    service.getTelemetryStatus().subscribe();
+    const req = httpTesting.expectOne('api/health/get_telemetry_status');
+    expect(req.request.method).toBe('GET');
+  });
 });

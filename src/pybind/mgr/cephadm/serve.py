@@ -1,4 +1,4 @@
-from datetime import datetime
+import datetime
 import ipaddress
 import hashlib
 import json
@@ -26,7 +26,7 @@ import orchestrator
 from orchestrator import OrchestratorError, set_exception_subject, OrchestratorEvent, \
     DaemonDescriptionStatus, daemon_type_to_service
 from cephadm.services.cephadmservice import CephadmDaemonDeploySpec
-from cephadm.schedule import HostAssignment
+from cephadm.schedule import HostAssignment, HostSelector
 from cephadm.autotune import MemoryAutotuner
 from cephadm.utils import forall_hosts, cephadmNoImage, is_repo_digest, \
     CephadmNoImage, CEPH_TYPES, ContainerInspectInfo, SpecialHostLabels
@@ -64,7 +64,7 @@ class CephadmServe:
     def __init__(self, mgr: "CephadmOrchestrator"):
         self.mgr: "CephadmOrchestrator" = mgr
         self.log = logger
-        self.last_certificates_check: Optional[datetime] = None
+        self.last_certificates_check: Optional[datetime.datetime] = None
 
     def serve(self) -> None:
         """
@@ -89,6 +89,7 @@ class CephadmServe:
                 self._check_for_strays()
 
                 self._update_paused_health()
+                self.mgr.update_maintenance_healthcheck()
 
                 if self.mgr.need_connect_dashboard_rgw and self.mgr.config_dashboard:
                     self.mgr.need_connect_dashboard_rgw = False
@@ -172,6 +173,7 @@ class CephadmServe:
                 self.mgr.facts_cache_timeout,
                 self.mgr.daemon_cache_timeout,
                 self.mgr.device_cache_timeout,
+                self.mgr.stray_daemon_check_interval,
             )
         )
         self.log.debug('Sleeping for %d seconds', sleep_interval)
@@ -465,6 +467,9 @@ class CephadmServe:
             (self.mgr.scheduled_async_actions.pop(0))()
 
     def _check_for_strays(self) -> None:
+        cutoff = datetime_now() - datetime.timedelta(seconds=self.mgr.stray_daemon_check_interval)
+        if self.mgr.last_stray_daemon_check is not None and self.mgr.last_stray_daemon_check >= cutoff:
+            return
         self.log.debug('_check_for_strays')
         for k in ['CEPHADM_STRAY_HOST',
                   'CEPHADM_STRAY_DAEMON']:
@@ -515,6 +520,7 @@ class CephadmServe:
             if self.mgr.warn_on_stray_daemons and daemon_detail:
                 self.mgr.set_health_warning(
                     'CEPHADM_STRAY_DAEMON', f'{len(daemon_detail)} stray daemon(s) not managed by cephadm', len(daemon_detail), daemon_detail)
+            self.mgr.last_stray_daemon_check = datetime_now()
 
     def _service_reference_name(self, service_type: str, daemon_id: str) -> str:
         if service_type not in ['rbd-mirror', 'cephfs-mirror', 'rgw', 'rgw-nfs']:
@@ -811,6 +817,7 @@ class CephadmServe:
         rank_map = None
         if svc.ranked(spec):
             rank_map = self.mgr.spec_store[spec.service_name()].rank_map or {}
+        host_selector = _host_selector(svc)
         ha = HostAssignment(
             spec=spec,
             hosts=self.mgr.cache.get_non_draining_hosts() if spec.service_name(
@@ -826,6 +833,8 @@ class CephadmServe:
             primary_daemon_type=svc.primary_daemon_type(spec),
             per_host_daemon_type=svc.per_host_daemon_type(spec),
             rank_map=rank_map,
+            upgrade_in_progress=(self.mgr.upgrade.upgrade_state is not None),
+            host_selector=host_selector,
         )
 
         try:
@@ -1830,3 +1839,9 @@ class CephadmServe:
         self.log.info(f"Deploying cephadm binary to {host}")
         await self.mgr.ssh._write_remote_file(host, self.mgr.cephadm_binary_path,
                                               self.mgr._cephadm, addr=addr)
+
+
+def _host_selector(svc: Any) -> Optional[HostSelector]:
+    if hasattr(svc, 'filter_host_candidates'):
+        return cast(HostSelector, svc)
+    return None

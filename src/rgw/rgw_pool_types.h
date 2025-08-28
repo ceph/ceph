@@ -95,9 +95,11 @@ struct rgw_pool {
     f->dump_string("ns", ns);
   }
 
-  static void generate_test_instances(std::list<rgw_pool*>& o) {
-    o.push_back(new rgw_pool);
-    o.push_back(new rgw_pool("pool", "ns"));
+  static std::list<rgw_pool> generate_test_instances() {
+    std::list<rgw_pool> o;
+    o.push_back(rgw_pool{});
+    o.push_back(rgw_pool("pool", "ns"));
+    return o;
   }
 
   rgw_pool& operator=(const rgw_pool&) = default;

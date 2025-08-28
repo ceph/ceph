@@ -1617,6 +1617,15 @@ bool PG::can_discard_op(const MOSDOp& m) const {
       // (us).
       return true;
     }
+
+  // Note: the Objecter will resend on pg split
+  // hence we can discard ops here.
+  // Refer: https://github.com/ceph/ceph/pull/13235
+  if (m.get_map_epoch() < peering_state.get_info().history.last_epoch_split) {
+    logger().debug("{} pg split in {} dropping!", __func__,
+        peering_state.get_info().history.last_epoch_split);
+    return true;
+  }
   return __builtin_expect(m.get_map_epoch()
       < peering_state.get_info().history.same_primary_since, false);
 }

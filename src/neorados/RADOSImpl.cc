@@ -16,10 +16,6 @@
 
 #include <boost/system/system_error.hpp>
 
-#include "common/common_init.h"
-
-#include "global/global_init.h"
-
 namespace neorados {
 namespace detail {
 
@@ -83,17 +79,7 @@ RADOS::RADOS(boost::asio::io_context& ioctx,
 }
 
 RADOS::~RADOS() {
-  if (objecter && objecter->initialized) {
-    objecter->shutdown();
-  }
-
-  mgrclient.shutdown();
-  monclient.shutdown();
-
-  if (messenger) {
-    messenger->shutdown();
-    messenger->wait();
-  }
+  shutdown();
 }
 
 bool RADOS::ms_dispatch(Message *m)
@@ -116,5 +102,19 @@ bool RADOS::ms_handle_refused(Connection *con) {
   return false;
 }
 
+void RADOS::shutdown() {
+  if (objecter && objecter->initialized) {
+    objecter->shutdown();
+  }
+
+  // These shutdowns are idempotent
+  mgrclient.shutdown();
+  monclient.shutdown();
+
+  if (messenger) {
+    messenger->shutdown();
+    messenger->wait();
+  }
+}
 } // namespace detail
 } // namespace neorados

@@ -1007,5 +1007,14 @@ public:
 template<typename T, template<typename, typename, typename ...> class C, bool strict>
 struct fmt::is_range<interval_set<T, C, strict>, char> : std::false_type {};
 
+template <typename T>
+struct is_interval_set : std::false_type {};
+
+template <typename T, template<typename, typename, typename ...> class C, bool strict>
+struct is_interval_set<interval_set<T, C, strict>> : std::true_type {};
+
+template <typename T>
+inline constexpr bool is_interval_set_v = is_interval_set<T>::value;
+
 #undef strict_mode_assert
 #endif

@@ -14,6 +14,7 @@ import {
   BreadcrumbModule,
   ToggleModule,
   ButtonModule
+  ModalModule
 } from 'carbon-components-angular';
 
 import { AppRoutingModule } from '~/app/app-routing.module';
@@ -46,6 +47,7 @@ import ObservabilityIcon from '@carbon/icons/es/observed--hail/20';
 import AdminIcon from '@carbon/icons/es/network--admin-control/20';
 import LockedIcon from '@carbon/icons/es/locked/16';
 import LogoutIcon from '@carbon/icons/es/logout/16';
+import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 
 @NgModule({
   imports: [
@@ -65,6 +67,7 @@ import LogoutIcon from '@carbon/icons/es/logout/16';
     BreadcrumbModule,
     ToggleModule,
     ButtonModule
+    ModalModule
   ],
   declarations: [
     AboutComponent,
@@ -80,6 +83,8 @@ import LogoutIcon from '@carbon/icons/es/logout/16';
   ],
   exports: [NavigationComponent, BreadcrumbsComponent],
   schemas: [CUSTOM_ELEMENTS_SCHEMA]
+  providers: [ModalCdsService],
+  exports: [NavigationComponent, BreadcrumbsComponent]
 })
 export class NavigationModule {
   constructor(private iconService: IconService) {

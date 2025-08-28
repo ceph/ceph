@@ -31,6 +31,7 @@
 );
 @use '@carbon/styles';
 @use '@carbon/type';
+@use '@carbon/styles/scss/utilities/text-truncate' as textTruncate;
 
 /******************************************
 Custom theme
@@ -40,6 +41,9 @@ Custom theme
 /******************************************
 Datatable
 ******************************************/
+:root {
+  @include type.type-classes();
+}
 
 tr.cds--expandable-row > td:first-of-type {
   background-color: vv.$white !important;
@@ -164,10 +168,23 @@ Tooltip
 /******************************************
 Carbon Popover
 ******************************************/
+.cds--popover {
+  .cds--popover-caret {
+    background-color: theme.$background;
+  }
+}
+
 .cds--popover-content {
-  background-color: theme.$layer-02;
+  background-color: theme.$background;
+  padding: layout.$spacing-05;
+}
+
+// inner container class for overflow
+.cds--popover-scroll-container {
   max-height: layout.$spacing-13;
-  overflow: auto;
+  overflow-y: auto;
+  margin-right: -1rem;
+  padding-right: 1rem;
 }
 
 /******************************************
@@ -175,10 +192,6 @@ Tabs
 ******************************************/
 .cds--tab-content {
   background: var(--cds-layer-01);
-}
-
-.cds-success-color {
-  fill: theme.$support-success;
 }
 
 .cds-danger-color {
@@ -211,4 +224,8 @@ Tabs
 
 .cds-mb-4 {
   margin-bottom: layout.$spacing-02;
+}
+
+.cds--text-truncate--end {
+  @include textTruncate.text-truncate-end;
 }

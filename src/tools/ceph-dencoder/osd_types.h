@@ -72,22 +72,15 @@ TYPE(eversion_t)
 //TYPE(compact_interval_t) declared in .cc
 //TYPE(pg_missing_t::item)
 
-#include "osd/ECUtil.h"
+#include "osd/ECUtilL.h"
 // TYPE(stripe_info_t) non-standard encoding/decoding functions
-TYPE(ECUtil::HashInfo)
+TYPE(ECLegacy::ECUtilL::HashInfo)
 
 #include "osd/ECMsgTypes.h"
 TYPE_NOCOPY(ECSubWrite)
 TYPE(ECSubWriteReply)
 TYPE_FEATUREFUL(ECSubRead)
 TYPE(ECSubReadReply)
-
-#include "osd/HitSet.h"
-TYPE_NONDETERMINISTIC(ExplicitHashHitSet)
-TYPE_NONDETERMINISTIC(ExplicitObjectHitSet)
-TYPE(BloomHitSet)
-TYPE_NONDETERMINISTIC(HitSet)   // because some subclasses are
-TYPE(HitSet::Params)
 
 #include "osd/SnapMapper.h"
 TYPE(SnapMapper::Mapping)

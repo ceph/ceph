@@ -42,6 +42,8 @@ struct RGWZoneParams {
 
   JSONFormattable tier_config;
 
+  rgw_pool restore_pool;
+
   RGWZoneParams() {}
   explicit RGWZoneParams(const std::string& _name) : name(_name){}
   RGWZoneParams(const rgw_zone_id& _id, const std::string& _name) : id(_id.id), name(_name) {}
@@ -60,7 +62,7 @@ struct RGWZoneParams {
   const std::string& get_compression_type(const rgw_placement_rule& placement_rule) const;
   
   void encode(bufferlist& bl) const {
-    ENCODE_START(16, 1, bl);
+    ENCODE_START(17, 1, bl);
     encode(domain_root, bl);
     encode(control_pool, bl);
     encode(gc_pool, bl);
@@ -96,12 +98,13 @@ struct RGWZoneParams {
     encode(topics_pool, bl);
     encode(account_pool, bl);
     encode(group_pool, bl);
+    encode(restore_pool, bl);
     encode(dedup_pool, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(16, bl);
+    DECODE_START(17, bl);
     decode(domain_root, bl);
     decode(control_pool, bl);
     decode(gc_pool, bl);
@@ -187,6 +190,11 @@ struct RGWZoneParams {
       group_pool = name + ".rgw.meta:groups";
     }
     if (struct_v >= 16) {
+      decode(restore_pool, bl);
+    } else {
+      restore_pool = log_pool.name + ":restore";
+    }
+    if (struct_v >= 17) {
       decode(dedup_pool, bl);
     } else {
       dedup_pool = name + ".rgw.dedup";
@@ -195,7 +203,7 @@ struct RGWZoneParams {
   }
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
-  static void generate_test_instances(std::list<RGWZoneParams*>& o);
+  static std::list<RGWZoneParams> generate_test_instances();
 
   bool get_placement(const std::string& placement_id, RGWZonePlacementInfo *placement) const {
     auto iter = placement_pools.find(placement_id);
@@ -367,7 +375,7 @@ struct RGWZoneGroup {
 
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
-  static void generate_test_instances(std::list<RGWZoneGroup*>& o);
+  static std::list<RGWZoneGroup> generate_test_instances();
 
   bool supports(std::string_view feature) const {
     return enabled_features.contains(feature);
@@ -505,7 +513,7 @@ public:
 
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
-  static void generate_test_instances(std::list<RGWRealm*>& o);
+  static std::list<RGWRealm> generate_test_instances();
 
   const std::string& get_current_period() const {
     return current_period;
@@ -545,7 +553,7 @@ struct RGWPeriodLatestEpochInfo {
 
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
-  static void generate_test_instances(std::list<RGWPeriodLatestEpochInfo*>& o);
+  static std::list<RGWPeriodLatestEpochInfo> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(RGWPeriodLatestEpochInfo)
 
@@ -699,7 +707,7 @@ public:
   }
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
-  static void generate_test_instances(std::list<RGWPeriod*>& o);
+  static std::list<RGWPeriod> generate_test_instances();
 
   static std::string get_staging_id(const std::string& realm_id) {
     return realm_id + ":staging";
