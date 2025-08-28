@@ -199,6 +199,12 @@ class LFUDAPolicy : public CachePolicy {
       quit = true;
       cond.notify_all();
       if (tc.joinable()) { tc.join(); }
+      for (auto& it : entries_map) {
+        delete it.second;
+      }
+      for (auto& it : o_entries_map) {
+        delete it.second.first;
+      }
     } 
 
     virtual int init(CephContext *cct, const DoutPrefixProvider* dpp, asio::io_context& io_context, rgw::sal::Driver *_driver);
