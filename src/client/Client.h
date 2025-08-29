@@ -1384,14 +1384,6 @@ private:
     void finish(int r) override {
       CRF->finish_io(r);
     }
-
-    // For _read_async, we may not finish in one go, so be prepared for multiple
-    // calls to complete. All the handling though is in C_Read_Finisher.
-    void complete(int r) override {
-      finish(r);
-      if (CRF->iofinished)
-        delete this;
-    }
   };
 
   class C_Read_Sync_NonBlocking : public Context {
@@ -1460,6 +1452,21 @@ private:
     Inode *in;
     uint64_t off;
     uint64_t len;
+
+    void finish(int r) override;
+  };
+
+  // A wrapper callback which takes the 'client_lock' and finishes the context.
+  // One of the usecase is the filer->write_trunc which doesn't hold client_lock
+  // in the call back passed. So, use this wrapper in such cases.
+  class C_Lock_Client_Finisher : public Context {
+  public:
+    C_Lock_Client_Finisher(Client *clnt, Context *onfinish)
+      : clnt(clnt), onfinish(onfinish) {}
+
+  private:
+    Client *clnt;
+    Context *onfinish;
 
     void finish(int r) override;
   };
