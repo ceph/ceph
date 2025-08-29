@@ -70,6 +70,25 @@
    - https://tracker.ceph.com/issues/67179
    - https://tracker.ceph.com/issues/66867
 
+* RADOS: The default plugin for erasure coded pools has been changed
+  from Jerasure to ISA-L. Clusters created on T or later releases will
+  use ISA-L as the default plugin when creating a new pool. Clusters that upgrade
+  to the T release will continue to use their existing default values.
+  The default values can be overriden by creating a new erasure code profile and
+  selecting it when creating a new pool.
+  ISA-L is recommended for new pools because the Jerasure library is
+  no longer maintained.
+
+* CephFS: Format of name of pool namespace for CephFS volumes has been changed
+  from `fsvolumens__<subvol-name>` to `fsvolumens__<subvol-grp-name>_<subvol-name>`
+  to avoid namespace collision when two subvolumes located in different
+  subvolume groups have the same name. Even with namespace collision, there were
+  no security issues since the MDS auth cap is restricted to the subvolume path.
+  Now, with this change, the namespaces are completely isolated.
+
+* RGW: Added support for the `RestrictPublicBuckets` property of the S3 `PublicAccessBlock`
+  configuration.
+
 * RBD: Moving an image that is a member of a group to trash is no longer
   allowed.  `rbd trash mv` command now behaves the same way as `rbd rm` in this
   scenario.
