@@ -697,8 +697,10 @@ void MetricAggregator::handle_mds_metrics(const cref_t<MMDSMetrics> &m) {
   auto seq = metrics_message.seq;
   auto rank = metrics_message.rank;
   auto &client_metrics_map = metrics_message.client_metrics_map;
+  auto &subvolume_metrics = metrics_message.subvolume_metrics;
 
-  dout(20) << ": applying " << client_metrics_map.size() << " updates for rank="
+  dout(20) << ": applying " << client_metrics_map.size() << "+"
+	   << subvolume_metrics.size() << " updates for rank="
            << rank << " with sequence number " << seq << dendl;
 
   std::scoped_lock locker(lock);
@@ -723,7 +725,7 @@ void MetricAggregator::handle_mds_metrics(const cref_t<MMDSMetrics> &m) {
     }
   }
 
-  refresh_subvolume_metrics_for_rank(rank, metrics_message.subvolume_metrics);
+  refresh_subvolume_metrics_for_rank(rank, subvolume_metrics);
 }
 
 void MetricAggregator::cull_metrics_for_rank(mds_rank_t rank) {
