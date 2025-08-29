@@ -40,7 +40,7 @@ def install_sysctl(
     conf = Path(ctx.sysctl_dir).joinpath(f'90-ceph-{fsid}-{daemon_type}.conf')
 
     for conf_file in Path(ctx.sysctl_dir).glob('90-ceph-*.conf'):
-        if conf_file.name == f'90-ceph-{fsid}-{daemon_type}.conf':
+        if conf_file.name.startswith(f'90-ceph-{fsid}-'):
             continue
         logger.warning(
             f'Found a sysctl config file for a cluster with a different FSID '
