@@ -147,7 +147,7 @@ export class DashboardV3Component extends PrometheusListHelper implements OnInit
     this.getDetailsCardData();
     this.getTelemetryReport();
     this.getCapacityCardData();
-    this.prometheusAlertService.getAlerts(true);
+    this.prometheusAlertService.getGroupedAlerts(true);
   }
 
   getTelemetryText(): string {

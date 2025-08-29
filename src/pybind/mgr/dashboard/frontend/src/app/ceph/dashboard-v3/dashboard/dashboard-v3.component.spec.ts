@@ -119,7 +119,8 @@ describe('Dashbord Component', () => {
         inhibitedBy: null
       },
       receivers: ['ceph2'],
-      fingerprint: 'fingerprint'
+      fingerprint: 'fingerprint',
+      alert_count: 1
     },
     {
       labels: {
@@ -141,7 +142,8 @@ describe('Dashbord Component', () => {
         inhibitedBy: null
       },
       receivers: ['default'],
-      fingerprint: 'fingerprint'
+      fingerprint: 'fingerprint',
+      alert_count: 1
     },
     {
       labels: {
@@ -163,7 +165,8 @@ describe('Dashbord Component', () => {
         inhibitedBy: null
       },
       receivers: ['ceph'],
-      fingerprint: 'fingerprint'
+      fingerprint: 'fingerprint',
+      alert_count: 1
     }
   ];
 
@@ -201,7 +204,7 @@ describe('Dashbord Component', () => {
     component.prometheusAlertService.alerts = alertsPayload;
     component.isAlertmanagerConfigured = true;
     let prometheusAlertService = TestBed.inject(PrometheusAlertService);
-    spyOn(prometheusAlertService, 'getAlerts').and.callFake(() => of([]));
+    spyOn(prometheusAlertService, 'getGroupedAlerts').and.callFake(() => of([]));
     prometheusAlertService.activeCriticalAlerts = 2;
     prometheusAlertService.activeWarningAlerts = 1;
   });

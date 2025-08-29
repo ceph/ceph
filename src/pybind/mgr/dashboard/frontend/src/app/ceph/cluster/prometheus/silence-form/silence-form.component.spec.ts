@@ -102,7 +102,7 @@ describe('SilenceFormComponent', () => {
 
     prometheus = new PrometheusHelper();
     prometheusService = TestBed.inject(PrometheusService);
-    spyOn(prometheusService, 'getAlerts').and.callFake(() => {
+    spyOn(prometheusService, 'getGroupedAlerts').and.callFake(() => {
       const name = _.split(router.url, '/').pop();
       return of([prometheus.createAlert(name)]);
     });
@@ -285,7 +285,7 @@ describe('SilenceFormComponent', () => {
       params = { id: 'alert0' };
       expectMode('alertAdd', false, false, 'Create');
       expect(prometheusService.getSilences).not.toHaveBeenCalled();
-      expect(prometheusService.getAlerts).toHaveBeenCalled();
+      expect(prometheusService.getGroupedAlerts).toHaveBeenCalled();
       expect(component.matchers).toEqual([createMatcher('alertname', 'alert0', false)]);
       expect(component.matcherMatch).toEqual({
         cssClass: 'has-success',
