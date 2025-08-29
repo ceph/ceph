@@ -300,12 +300,15 @@
             <div class="card-body ps-0 pe-1 pb-1 pt-0">
               <h6 class="card-title bold">{{ alert.labels.alertname }}</h6>
               <p class="card-text me-3 mb-0 text-truncate"
-                 [innerHtml]="alert.annotations.description"
-                 [ngbTooltip]="alert.annotations.description"></p>
+                 [innerHtml]="alert.annotations.summary"
+                 [ngbTooltip]="alert.annotations.summary"></p>
               <p class="card-text text-muted me-3">
                 <small class="date"
                        [title]="alert.startsAt | cdDate"
                        i18n>Active since: {{ alert.startsAt  | relativeDate }}</small>
+                <small class="alert_count"
+                       [title]="alert.alert_count"
+                       i18n>Total occurrences: {{ alert.alert_count }}</small>
               </p>
             </div>
           </div>
