@@ -277,7 +277,7 @@ void MDLog::cancel_entry(LogEvent *le)
   delete le;
 }
 
-void MDLog::_submit_entry(LogEvent *le, MDSLogContextBase *c)
+LogSegment::seq_t MDLog::_submit_entry(LogEvent *le, MDSLogContextBase* c)
 {
   ceph_assert(ceph_mutex_is_locked_by_me(submit_mutex));
   ceph_assert(!mds->is_any_replay());
@@ -305,7 +305,7 @@ void MDLog::_submit_entry(LogEvent *le, MDSLogContextBase *c)
   }
 
   unflushed++;
-  
+
   uint64_t period = journaler->get_layout_period();
   // start a new segment?
   if (le->get_type() == EVENT_SUBTREEMAP ||
@@ -328,6 +328,8 @@ void MDLog::_submit_entry(LogEvent *le, MDSLogContextBase *c)
     sle->set_type(EVENT_SUBTREEMAP_TEST);
     _submit_entry(sle, NULL);
   }
+
+  return event_seq;
 }
 
 /**
