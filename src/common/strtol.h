@@ -69,7 +69,7 @@ auto consume(std::string_view& s, int base = 10)
 }
 } // namespace ceph
 
-bool strict_strtob(const char* str, std::string *err);
+bool strict_strtob(std::string_view str, std::string *err);
 
 long long strict_strtoll(std::string_view str, int base, std::string *err);
 
