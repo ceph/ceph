@@ -10,7 +10,6 @@ from mgr_module import CLICheckNonemptyFileInput, CLICommand, CLIReadCommand, \
     CLIWriteCommand, HandleCommandResult, HandlerFuncType
 from prettytable import PrettyTable
 
-from ..exceptions import DashboardException
 from ..model.nvmeof import CliFlags, CliHeader
 from ..rest_client import RequestException
 from .nvmeof_conf import ManagedByOrchestratorException, \
@@ -267,5 +266,5 @@ class NvmeofCLICommand(CLICommand):
                 return HandleCommandResult(-errno.EINVAL, '',
                                            f"format '{out_format}' is not implemented")
             return HandleCommandResult(0, out, '')
-        except DashboardException as e:
+        except Exception as e:  # pylint: disable=broad-except
             return HandleCommandResult(-errno.EINVAL, '', str(e))
