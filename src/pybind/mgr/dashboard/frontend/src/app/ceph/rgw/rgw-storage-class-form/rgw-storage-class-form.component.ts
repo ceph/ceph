@@ -1,11 +1,5 @@
 import { ChangeDetectorRef, Component, OnInit } from '@angular/core';
-import {
-  AbstractControl,
-  FormArray,
-  FormControl,
-  ValidationErrors,
-  Validators
-} from '@angular/forms';
+import { AbstractControl, FormArray, FormControl, FormGroup, ValidationErrors, Validators } from '@angular/forms';
 import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
 import { CdForm } from '~/app/shared/forms/cd-form';
 import { CdFormBuilder } from '~/app/shared/forms/cd-form-builder';
@@ -299,16 +293,16 @@ export class RgwStorageClassFormComponent extends CdForm implements OnInit {
       dest_id: new FormControl('')
     });
 
-    const sourceId = group.get('source_id');
-    const destId = group.get('dest_id');
+    // const sourceId = group.get('source_id');
+    // const destId = group.get('dest_id');
 
-    const validators = this.getValidatorsType(AclTypeConst.ID);
+    // const validators = this.getValidatorsType(AclTypeConst.ID);
 
-    sourceId.setValidators(validators);
-    destId.setValidators(validators);
+    // sourceId.setValidators(validators);
+    // destId.setValidators(validators);
 
-    sourceId.updateValueAndValidity();
-    destId.updateValueAndValidity();
+    // sourceId.updateValueAndValidity();
+    // destId.updateValueAndValidity();
 
     group.get('type')?.valueChanges.subscribe((newType: AclType) => {
       const sourceId = group.get('source_id');
@@ -479,6 +473,8 @@ export class RgwStorageClassFormComponent extends CdForm implements OnInit {
 
   submitAction() {
     const component = this;
+      console.log(this.storageClassForm, this.acls, "rawFormValue")
+      
     const requestModel = this.buildRequest();
     const storageclassName = this.storageClassForm.get('storage_class').value;
     if (this.editing) {
@@ -539,10 +535,75 @@ export class RgwStorageClassFormComponent extends CdForm implements OnInit {
     return types.includes(tierType);
   }
 
-  buildRequest() {
-    if (this.storageClassForm.errors) return null;
+validateAclFields(): void {
+  const rawFormValue = _.cloneDeep(this.storageClassForm.value);
+  const aclsArray = this.acls;
+  let hasErrors = false;
 
+  aclsArray.controls.forEach((group: FormGroup, index: number) => {
+    const value = rawFormValue.acls[index];
+    const sourceId = group.get('source_id') as FormControl;
+    const destId = group.get('dest_id') as FormControl;
+    const type = group.get('type')?.value;
+
+    sourceId.setErrors(null);
+    destId.setErrors(null);
+
+    if ((type === 'ID' || rawFormValue.acls.length > 1) && !value.source_id) {
+      sourceId.setErrors({ required: true });
+      hasErrors = true;
+    }
+
+    if ((type === 'ID' || rawFormValue.acls.length > 1) && !value.dest_id) {
+      destId.setErrors({ required: true });
+      hasErrors = true;
+    }
+
+    if (sourceId.errors || destId.errors) {
+      group.setErrors({ invalidAcl: true });
+    } else {
+      group.setErrors(null);
+    }
+    group.updateValueAndValidity({ emitEvent: false });
+  });
+
+  if (hasErrors) {
+    aclsArray.setErrors({ invalidAcl: true });
+  } else {
+    aclsArray.setErrors(null);
+  }
+  aclsArray.markAsTouched({ onlySelf: false });
+  aclsArray.updateValueAndValidity({ emitEvent: true });
+
+  if (aclsArray.invalid) {
+    this.storageClassForm.setErrors({ invalidAcl: true });
+  } else {
+    if (
+      this.storageClassForm.errors &&
+      this.storageClassForm.errors['invalidAcl']
+    ) {
+      const { invalidAcl, ...remainingErrors } = this.storageClassForm.errors;
+      const hasOtherErrors = Object.keys(remainingErrors).length > 0;
+      this.storageClassForm.setErrors(hasOtherErrors ? remainingErrors : null);
+    }
+  }
+
+  this.storageClassForm.updateValueAndValidity();
+  
+  console.log(this.storageClassForm.valid, "Is form valid?");  ///its false here
+}
+
+
+  buildRequest() {
+    
     const rawFormValue = _.cloneDeep(this.storageClassForm.value);
+console.log(rawFormValue, rawFormValue?.acls[0]?.source, rawFormValue?.acls[0]?.destination, "rawFormValue.acls2");
+
+this.validateAclFields();
+
+console.log(this.storageClassForm, "Is form valid?");
+
+    if (this.storageClassForm.errors) return null;
     const zoneGroup = this.storageClassForm.get('zonegroup').value;
     const storageClass = this.storageClassForm.get('storage_class').value;
     const placementId = this.storageClassForm.get('placement_target').value;

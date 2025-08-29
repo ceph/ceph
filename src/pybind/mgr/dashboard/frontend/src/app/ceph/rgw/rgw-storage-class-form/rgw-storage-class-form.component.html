@@ -497,7 +497,7 @@
                               acl.get('source_id')?.invalid && acl.get('source_id')?.touched
                             "
                             [invalidText]="
-                            acl.get('source_id')?.errors?.['required'] ? 'This field is required.' :
+                            acls.hasError('invalidAcl') ? 'This field is required.' :
                             acl.get('source_id')?.errors?.['email'] ? 'Please enter a valid email address.' :
                             acl.get('source_id')?.errors?.['invalidUrl'] ? 'Please enter a valid URL.' : ''
                           "
@@ -508,7 +508,7 @@
                               type="text"
                               formControlName="source_id"
                               [invalidText]="
-                            acl.get('source_id')?.errors?.['required'] ? 'This field is required.' :
+                            acls.hasError('invalidAcl')? 'This field is required.' :
                             acl.get('source_id')?.errors?.['email'] ? 'Please enter a valid email address.' :
                             acl.get('source_id')?.errors?.['invalidUrl'] ? 'Please enter a valid URL.' : ''
                           "
