@@ -62,28 +62,16 @@ static void alloc_aligned_buffer(ceph::buffer::list &data, unsigned len, unsigne
  **/
 
 ProtocolV1::ProtocolV1(AsyncConnection *connection)
-    : Protocol(1, connection),
-      temp_buffer(nullptr),
-      can_write(WriteStatus::NOWRITE),
-      keepalive(false),
-      connect_seq(0),
-      peer_global_seq(0),
-      msg_left(0),
-      cur_msg_size(0),
-      replacing(false),
-      is_reset_from_peer(false),
-      once_ready(false),
-      state(NONE),
-      global_seq(0),
-      wait_for_seq(false) {
-  temp_buffer = new char[4096];
+    : Protocol(1, connection)
+{
+  ldout(cct, 5) << "con" << dendl;
 }
 
-ProtocolV1::~ProtocolV1() {
+ProtocolV1::~ProtocolV1()
+{
+  ldout(cct, 5) << "des" << dendl;
   ceph_assert(out_q.empty());
   ceph_assert(sent.empty());
-
-  delete[] temp_buffer;
 }
 
 void ProtocolV1::connect() {
@@ -439,7 +427,8 @@ void ProtocolV1::run_continuation(CtPtr pcontinuation) {
 CtPtr ProtocolV1::read(CONTINUATION_RX_TYPE<ProtocolV1> &next,
                        int len, char *buffer) {
   if (!buffer) {
-    buffer = temp_buffer;
+    /* FIXME: why not len = sizeof temp_buffer??? */
+    buffer = temp_buffer.data();
   }
   ssize_t r = connection->read(len, buffer,
                                [&next, this](char *buffer, int r) {

@@ -104,10 +104,10 @@ protected:
     return statenames[state];
   }
 
-  char *temp_buffer;
+  std::array<char, 4096> temp_buffer;
 
   enum class WriteStatus { NOWRITE, REPLACING, CANWRITE, CLOSED };
-  std::atomic<WriteStatus> can_write;
+  std::atomic<WriteStatus> can_write = WriteStatus::NOWRITE;
   std::deque<MessageRef> sent;  // the first ceph::buffer::list need to inject seq
   //struct for outbound msgs
   struct out_q_entry_t {
@@ -122,10 +122,11 @@ protected:
    */
   std::map<int, std::deque<out_q_entry_t>, std::greater<int>> out_q;
 
-  bool keepalive;
+  bool keepalive = false;
   bool write_in_progress = false;
 
-  __u32 connect_seq, peer_global_seq;
+  __u32 connect_seq = 0;
+  __u32 peer_global_seq = 0;
   std::atomic<uint64_t> in_seq{0};
   std::atomic<uint64_t> out_seq{0};
   std::atomic<uint64_t> ack_left{0};
@@ -141,23 +142,23 @@ protected:
   utime_t backoff;  // backoff time
   utime_t recv_stamp;
   utime_t throttle_stamp;
-  unsigned msg_left;
-  uint64_t cur_msg_size;
+  unsigned msg_left = 0;
+  uint64_t cur_msg_size = 0;
   ceph_msg_header current_header;
   ceph::buffer::list data_buf;
   ceph::buffer::list::iterator data_blp;
   ceph::buffer::list front, middle, data;
 
-  bool replacing;  // when replacing process happened, we will reply connect
+  bool replacing = false;  // when replacing process happened, we will reply connect
                    // side with RETRY tag and accept side will clear replaced
                    // connection. So when connect side reissue connect_msg,
                    // there won't exists conflicting connection so we use
                    // "replacing" to skip RESETSESSION to avoid detect wrong
                    // presentation
-  bool is_reset_from_peer;
-  bool once_ready;
+  bool is_reset_from_peer = false;
+  bool once_ready = false;
 
-  State state;
+  State state = NONE;
 
   void run_continuation(CtPtr pcontinuation);
   CtPtr read(CONTINUATION_RX_TYPE<ProtocolV1> &next, int len,
@@ -243,7 +244,7 @@ public:
 
   // Client Protocol
 private:
-  int global_seq;
+  int global_seq = 0;
 
   CONTINUATION_DECL(ProtocolV1, send_client_banner);
   WRITE_HANDLER_CONTINUATION_DECL(ProtocolV1, handle_client_banner_write);
@@ -275,7 +276,7 @@ private:
 
   // Server Protocol
 protected:
-  bool wait_for_seq;
+  bool wait_for_seq = false;
 
   CONTINUATION_DECL(ProtocolV1, send_server_banner);
   WRITE_HANDLER_CONTINUATION_DECL(ProtocolV1, handle_server_banner_write);
