@@ -69,7 +69,6 @@ import { ModalComponent } from './modal/modal.component';
 import { NotificationsSidebarComponent } from './notifications-sidebar/notifications-sidebar.component';
 import { OrchestratorDocPanelComponent } from './orchestrator-doc-panel/orchestrator-doc-panel.component';
 import { PwdExpirationNotificationComponent } from './pwd-expiration-notification/pwd-expiration-notification.component';
-import { RefreshSelectorComponent } from './refresh-selector/refresh-selector.component';
 import { SelectBadgesComponent } from './select-badges/select-badges.component';
 import { SelectComponent } from './select/select.component';
 import { SparklineComponent } from './sparkline/sparkline.component';
@@ -159,7 +158,6 @@ import CloseIcon from '@carbon/icons/es/close/16';
     GrafanaComponent,
     SelectComponent,
     BackButtonComponent,
-    RefreshSelectorComponent,
     ConfigOptionComponent,
     AlertPanelComponent,
     FormModalComponent,
@@ -204,7 +202,6 @@ import CloseIcon from '@carbon/icons/es/close/16';
     LanguageSelectorComponent,
     GrafanaComponent,
     SelectComponent,
-    RefreshSelectorComponent,
     ConfigOptionComponent,
     AlertPanelComponent,
     PwdExpirationNotificationComponent,

@@ -4631,9 +4631,6 @@ paths:
                   cephfs:
                     description: ''
                     type: boolean
-                  dashboard:
-                    description: ''
-                    type: boolean
                   iscsi:
                     description: ''
                     type: boolean
@@ -4656,7 +4653,6 @@ paths:
                 - cephfs
                 - rgw
                 - nfs
-                - dashboard
                 type: object
           description: OK
         '400':
@@ -5527,6 +5523,9 @@ paths:
                     required:
                     - num_mons
                     type: object
+                  num_hosts:
+                    description: Count of hosts
+                    type: integer
                   num_iscsi_gateways:
                     description: Iscsi gateways status
                     properties:
@@ -5607,6 +5606,7 @@ paths:
                 - fsmap
                 - num_rgw_gateways
                 - num_iscsi_gateways
+                - num_hosts
                 type: object
           description: OK
         '400':

@@ -26,7 +26,6 @@ class Features(Enum):
     CEPHFS = 'cephfs'
     RGW = 'rgw'
     NFS = 'nfs'
-    DASHBOARD = 'dashboard'
 
     # if we want to add any custom warning message when enabling a feature
     # we can add it here as key-value pair in warn_msg.
@@ -153,7 +152,6 @@ class FeatureToggles(I.CanMgr, I.Setupable, I.HasOptions,
             "cephfs": (bool, ''),
             "rgw": (bool, ''),
             "nfs": (bool, ''),
-            "dashboard": (bool, '')
         }
 
         @APIRouter('/feature_toggles')

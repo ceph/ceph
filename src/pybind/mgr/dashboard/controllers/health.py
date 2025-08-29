@@ -157,6 +157,7 @@ HEALTH_SNAPSHOT_SCHEMA = ({
         'up': (int, 'Count of iSCSI gateways running'),
         'down': (int, 'Count of iSCSI gateways not running')
     }, 'Iscsi gateways status'),
+    'num_hosts': (int, 'Count of hosts')
 })
 
 

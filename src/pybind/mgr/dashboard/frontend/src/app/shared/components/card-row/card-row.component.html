@@ -6,6 +6,7 @@
     <a [routerLink]="link"
        *ngIf="link && total > 0; else noLinkTitle"
        [ngPlural]="total"
+       data-testid="title"
       i18n>
         {{ total }}
       <ng-template ngPluralCase="=0">{{ title }}</ng-template>
