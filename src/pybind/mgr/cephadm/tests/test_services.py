@@ -3896,7 +3896,12 @@ class TestSMB:
                 'keyring': '[client.smb.config.tango.briskly]\nkey = None\n',
                 'config_auth_entity': 'client.smb.config.tango.briskly',
                 'metrics_image': 'quay.io/samba.org/samba-metrics:ceph20-centos-amd64',
-                'service_ports': {'smb': 445, 'smbmetrics': 9922, 'ctdb': 4379},
+                'service_ports': {
+                    'smb': 445,
+                    'smbmetrics': 9922,
+                    'ctdb': 4379,
+                    'remote-control': 54445,
+                },
             },
         }
         with with_host(cephadm_module, 'hostx'):
@@ -3971,7 +3976,12 @@ class TestSMB:
                 ),
                 'config_auth_entity': 'client.smb.config.tango.briskly',
                 'metrics_image': 'quay.io/samba.org/samba-metrics:ceph20-centos-amd64',
-                'service_ports': {'smb': 445, 'smbmetrics': 9922, 'ctdb': 4379},
+                'service_ports': {
+                    'smb': 445,
+                    'smbmetrics': 9922,
+                    'ctdb': 4379,
+                    'remote-control': 54445,
+                },
             },
         }
         with with_host(cephadm_module, 'hostx'):

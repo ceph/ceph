@@ -828,3 +828,104 @@ def test_apply_password_filter_in_out(tmodule):
     assert len(out['values']['users']) == 2
     assert out['values']['users'][0]['password'] == 'abracadabra'
     assert out['values']['users'][1]['password'] == 'xyzzy'
+
+
+cert1 = """
+-----BEGIN CERTIFICATE-----
+MIIGFjCCA/6gAwIBAgIUZLL4QTx5ESBYQYS761DcZ7S1c24wDQYJKoZIhvcNAQEN
+BQAwgYgxCzAJBgNVBAYTAlVTMQswCQYDVQQIDAJNQTEPMA0GA1UEBwwGTG93ZWxs
+MR8wHQYDVQQKDBZCaXJjaCBTdHJlZXQgQ29tcHV0aW5nMRYwFAYDVQQDDA1Kb2hu
+IE11bGxpZ2FuMSIwIAYJKoZIhvcNAQkBFhNqb2hubUBhc3luY2hyb25vLnVzMB4X
+DTI1MDYzMDE5MzAwM1oXDTI2MDcyNDE5MzAwM1owbjELMAkGA1UEBhMCVVMxCzAJ
+BgNVBAgMAk1BMQ8wDQYDVQQHDAZMb3dlbGwxHzAdBgNVBAoMFkJpcmNoIFN0cmVl
+dCBDb21wdXRpbmcxIDAeBgNVBAMMF0ROUzpjZXBoMC5jeC5mZG9wZW4ubmV0MIIC
+IjANBgkqhkiG9w0BAQEFAAOCAg8AMIICCgKCAgEApZYqA73a8ojX7QsCJHiXh0J2
+KKEqDU6k0Yjoie9raYCP/aaiJpffSjhKl1rYuIqjBUG5D0tdT3sRw3m96Nw6gkhM
+5J8r02muQpJqmzPmfAn75IVjRkJ9OsHyS1Mf9GADTfv3pMBkwqqrGb8NxWQXeS4s
+PLPBv8SI4ozFNwwlEvZ0kesI4Qf0VRZ1ieSzAArjDWWFX8kURMt6UzN8opnxGvzT
+cfY4J0iKCYBK6Vqmf/OrMg3IjDojKaQqBlMPAQURyiYeF1hfDrcqGQC6S4Iz5mDt
+ZsMywFQFlEhkWkhJdMMkY4bqvn01BKXl3WY0HY5pPslRWWfj4aQeBb8DFH+rFeTf
+I/S02ECE/SKc+O7JJa23HtzJspiaK/MV6XQUDDWYdFQEfLhQb3y3RuYJ7C0WZDMc
+EmJHuB1D0/RS5xWiukTyRbOFf0Dbzn07PPUycE5BaCJ/ekwpMBvYQ6uCZq19CRAE
+v5j7oyC1+rjOCKpTBPGCFWbODJmf5LrfcZLX/VtR+vu3a28OKmbxvdQ3uzLPwjFx
+szzsJRn4URyI5hxl3K0w5Yptd/mvdnSeQTnX9TmMFE/G+EdlGxZtc695mOvWX6gK
+ezwSqwtxVAZ18x/we6NZUkeuaC4+Xec8HoowHYmfRUH1P69ZXAuKKSIZizuvDYIF
+tfcDeDY6s0wp3SKQ1bUCAwEAAaOBkDCBjTAJBgNVHRMEAjAAMEAGA1UdEQQ5MDeC
+E2NlcGgwLmN4LmZkb3Blbi5uZXSCGnJjLnNtYi5jZXBoMC5jeC5mZG9wZW4ubmV0
+hwTAqEzIMB0GA1UdDgQWBBR9bOCw+6pMkeS1HnAuCFhmoM7NPzAfBgNVHSMEGDAW
+gBRsCQk9OUjWypZgtyH+5LxzZ4eBJDANBgkqhkiG9w0BAQ0FAAOCAgEAF6u76+6C
+JkQEqBSYU09JQT8JDWX3AUZDXoCIpv2F1UD26ueAIaYD1dkpKDFg0UOOBwC7TiR9
+uf210HtY5ic++Bm5xavhRk65FGwypv65SqjfehqTiRU+b0my0LG2OaAVrUcKWdbn
+ZvwiBr1I7Wyn0MV1Ko7sqZh0j7Y4kPXCa2D8QG1inr9YBQQpid7CUwNeS5eYAVbP
+gI4zTYKKvJMYPr4lTqsweCDOpctC7fwVb43XGTRVhVXQdOux9n5emROx/Ok0d2xX
+mi5rlUfMxlrWjs7KK336x8z31i3w+1xc1ESaF0eP1byikvpbYBN1dEYahilMaSVl
+3IpDYCwCFMU+ZZUZdqVyQQL+lTxqsc2orzzFgfv594hkEdYNlJ/z/f1b8idYk3g1
+WTrixgd+KYcHoCCS8pHFVs8lankBqQGMckZmIyzfP7RxY43j6XTV+4791O4o0waZ
+I5AwhUmgJj7G2Mp1jacMlHtZPqC0iDlci5fh6KpzVjPzrqA2sIN+9yJAlX8teJnC
+adKnxoY+AbqwLLTHfGx/W0W8jUxmea0eYufgUqxoQv5qdREafcuchGM36bKukVYb
+L3pqleYyvguwxxcc2MJvXjgAiZ5EsNJ2TCr4Mt0mZP406BhEQxfvpBSdRXTiHGJ/
+KNDwOknnnEhdXshW5M8G8ZhkahG8YABHTBw=
+-----END CERTIFICATE-----
+"""
+
+
+def test_tls_credential(tmodule):
+    _example_cfg_1(tmodule)
+
+    txt = json.dumps(
+        {
+            'resource_type': 'ceph.smb.tls.credential',
+            'tls_credential_id': 'tc1',
+            'intent': 'present',
+            'credential_type': 'cert',
+            'value': cert1,
+        }
+    )
+
+    rg = tmodule.apply_resources(txt)
+    assert rg.success, rg.to_simplified()
+    ts = rg.to_simplified()
+    assert len(ts['results']) == 1
+    r = ts['results'][0]['resource']
+    assert r['resource_type'] == 'ceph.smb.tls.credential'
+    out = tmodule.show()
+    res = out.get('resources')
+    assert res
+    assert len(res) == 5
+    clusters = [r for r in res if r['resource_type'] == 'ceph.smb.cluster']
+    assert len(clusters) == 1
+    shares = [r for r in res if r['resource_type'] == 'ceph.smb.share']
+    assert len(shares) == 2
+    jauths = [r for r in res if r['resource_type'] == 'ceph.smb.join.auth']
+    assert len(jauths) == 1
+    tcs = [r for r in res if r['resource_type'] == 'ceph.smb.tls.credential']
+    assert len(tcs) == 1
+    assert tcs[0]['credential_type'] == 'cert'
+    assert tcs[0]['value'] == cert1
+
+
+def test_tls_credential_yaml_show(tmodule):
+    _example_cfg_1(tmodule)
+
+    txt = json.dumps(
+        {
+            'resource_type': 'ceph.smb.tls.credential',
+            'tls_credential_id': 'tc1',
+            'intent': 'present',
+            'credential_type': 'cert',
+            'value': cert1,
+        }
+    )
+
+    rg = tmodule.apply_resources(txt)
+    assert rg.success, rg.to_simplified()
+    ts = rg.to_simplified()
+    assert len(ts['results']) == 1
+    r = ts['results'][0]['resource']
+    assert r['resource_type'] == 'ceph.smb.tls.credential'
+    res, body, status = tmodule.show.command(
+        ['ceph.smb.tls.credential'], format='yaml'
+    )
+    assert res == 0
+    body = body.strip()
+    assert 'value: |' in body
