@@ -3,12 +3,13 @@ from cephadm.service_discovery import Root
 
 
 class FakeDaemonDescription:
-    def __init__(self, ip, ports, hostname, service_name='', daemon_type=''):
+    def __init__(self, ip, ports, hostname, service_name='', daemon_type='', daemon_id=''):
         self.ip = ip
         self.ports = ports
         self.hostname = hostname
         self._service_name = service_name
         self.daemon_type = daemon_type
+        self.daemon_id = daemon_id if daemon_id else hostname
 
     def service_name(self):
         return self._service_name
@@ -76,19 +77,6 @@ class FakeMgr:
     def get_mgr_id(self):
         return 'mgr-1'
 
-    def list_servers(self):
-
-        servers = [
-            {'hostname': 'node0',
-             'ceph_version': '16.2',
-             'services': [{'type': 'mgr', 'id': 'mgr-1'}, {'type': 'mon'}]},
-            {'hostname': 'node1',
-             'ceph_version': '16.2',
-             'services': [{'type': 'mgr', 'id': 'mgr-2'}, {'type': 'mon'}]}
-        ]
-
-        return servers
-
     def _check_mon_command(self, cmd_dict, inbuf=None):
         prefix = cmd_dict.get('prefix')
         if prefix == 'get-cmd':
@@ -100,6 +88,14 @@ class FakeMgr:
 
     def get_module_option_ex(self, module, option, default_value):
         return "9283"
+
+    def daemon_is_self(self, d_type, d_id) -> bool:
+        if d_type == 'mgr' and d_id == 'fake_active_mgr':
+            return True
+        return False
+
+    def get_fqdn(self, hostname: str) -> str:
+        return hostname
 
 
 class TestServiceDiscovery:
