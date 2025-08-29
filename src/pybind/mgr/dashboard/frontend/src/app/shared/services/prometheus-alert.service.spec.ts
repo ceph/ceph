@@ -52,7 +52,7 @@ describe('PrometheusAlertService', () => {
         done();
       }
 
-      service.getAlerts();
+      service.getGroupedAlerts();
     };
 
     it('disables on 504 error which is thrown if the mgr failed', (done) => {

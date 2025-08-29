@@ -201,7 +201,7 @@ describe('Dashbord Component', () => {
     component.prometheusAlertService.alerts = alertsPayload;
     component.isAlertmanagerConfigured = true;
     let prometheusAlertService = TestBed.inject(PrometheusAlertService);
-    spyOn(prometheusAlertService, 'getAlerts').and.callFake(() => of([]));
+    spyOn(prometheusAlertService, 'getGroupedAlerts').and.callFake(() => of([]));
     prometheusAlertService.activeCriticalAlerts = 2;
     prometheusAlertService.activeWarningAlerts = 1;
   });
