@@ -1,16 +1,10 @@
-import { ManagerModulesPageHelper } from '../cluster/mgr-modules.po';
 import { DashboardV3PageHelper } from './dashboard-v3.po';
 
 describe('Dashboard-v3 Main Page', () => {
   const dashboard = new DashboardV3PageHelper();
-  const mgrmodules = new ManagerModulesPageHelper();
 
   before(() => {
     cy.login();
-    mgrmodules.navigateTo();
-    mgrmodules.navigateEdit('dashboard');
-    cy.get('#FEATURE_TOGGLE_DASHBOARD').check();
-    cy.contains('button', 'Update').click();
   });
 
   beforeEach(() => {

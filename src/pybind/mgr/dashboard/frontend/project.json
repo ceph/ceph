@@ -111,6 +111,7 @@
       },
       "configurations": {
         "production": {
+          "localize": ["en-US"],
           "budgets": [
             {
               "type": "anyComponentStyle",
