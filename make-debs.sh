@@ -80,14 +80,22 @@ fi
 # b) do not sign the packages
 # c) use half of the available processors
 #
-: ${NPROC:=$(($(nproc) / 2))}
-if test $NPROC -gt 1 ; then
-    j=-j${NPROC}
+: ${NPROC:=$(nproc)}
+RAM_MB=$(vmstat --stats --unit m | grep 'total memory' | awk '{print $1}')
+if test "$NPROC" -gt 50; then
+    MAX_JOBS=$((${RAM_MB} / 4000))
+else
+    MAX_JOBS=$((${RAM_MB} / 3000))
+fi
+if test "$NPROC" -gt "$MAX_JOBS"; then
+    JOBS_FLAG="-j${MAX_JOBS}"
+else
+    JOBS_FLAG="-j${NPROC}"
 fi
 if [ "$SCCACHE" != "true" ] ; then
     PATH=/usr/lib/ccache:$PATH
 fi
-PATH=$PATH dpkg-buildpackage $j -uc -us
+PATH=$PATH dpkg-buildpackage $JOBS_FLAG -uc -us
 cd ../..
 mkdir -p $VERSION_CODENAME/conf
 cat > $VERSION_CODENAME/conf/distributions <<EOF
