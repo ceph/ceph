@@ -173,7 +173,13 @@ class Prometheus(PrometheusRESTController):
         return self.alert_proxy('DELETE', '/silence/' + s_id) if s_id else None
 
     @RESTController.Collection(method='GET', path='/alertgroup')
-    def get_alertgroup(self, **params):
+    def get_alertgroup(self, cluster_filter=False, **params):
+        if cluster_filter:
+            try:
+                fsid = mgr.get('config')['fsid']
+            except KeyError:
+                raise DashboardException("Cluster fsid not found", component='prometheus')
+            return self.alert_proxy('GET', f'/alerts/groups?filter=cluster={fsid}', params)
         return self.alert_proxy('GET', '/alerts/groups', params)
 
     @RESTController.Collection(method='GET', path='/prometheus_query_data')
