@@ -749,7 +749,7 @@ CephContext::CephContext(uint32_t module_type_,
   _heartbeat_map = new HeartbeatMap(this);
 
   _plugin_registry = new PluginRegistry(this);
-
+  canary = 0xcabba6ec0ffee;
   _admin_hook = new CephContextHook(this);
   _admin_socket->register_command("assert", _admin_hook, "");
   _admin_socket->register_command("abort", _admin_hook, "");

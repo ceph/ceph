@@ -242,6 +242,7 @@ public:
 					  std::ostream *message);
 
   ceph::PluginRegistry *get_plugin_registry() {
+    ceph_assert(canary == 0xcabba6ec0ffee);
     return _plugin_registry;
   }
 
@@ -410,6 +411,8 @@ private:
   PerfCounters *_cct_perf = nullptr;
   PerfCounters* _mempool_perf = nullptr;
   std::vector<std::string> _mempool_perf_names, _mempool_perf_descriptions;
+
+  uint64_t canary;
 
   /**
    * Enable the performance counters.
