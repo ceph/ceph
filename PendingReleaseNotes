@@ -8,6 +8,7 @@
 * DASHBOARD: Removed the older landing page which was deprecated in Quincy.
   Admins can no longer enable the older, deprecated landing page layout by
   adjusting FEATURE_TOGGLE_DASHBOARD.
+* CephFS: The `peer_add` command is deprecated in favor of the `peer_bootstrap` command.
 
 >=20.0.0
 
