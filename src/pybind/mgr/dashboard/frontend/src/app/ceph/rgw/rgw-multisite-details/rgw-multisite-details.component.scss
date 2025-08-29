@@ -17,3 +17,9 @@
   padding-block: 0.5rem;
   width: 100%;
 }
+
+::ng-deep cds-overflow-menu .cds--btn--icon-only {
+  position: relative;
+  top: 4px;
+  width: auto;
+}

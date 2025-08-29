@@ -21,8 +21,7 @@
             [cdsOverflowMenu]="overflowMenuTpl"
             data-testid="table-action-btn">
       <svg
-           [cdsIcon]="icons.downArrow"
-           [size]="icons.size16"></svg>
+           [cdsIcon]="icons.chevronDown"></svg>
     </button>
     <ng-template #overflowMenuTpl>
       <ng-container *ngFor="let action of dropDownActions">
@@ -47,15 +46,14 @@
   <button [cdsButton]="currentAction.buttonKind"
           class="caret-btn">
     <svg class="cds--btn__icon"
-         cdsIcon="caret--down"
-         size="16"></svg>
+         [cdsIcon]="icons.chevronDown"></svg>
   </button>
 </ng-template>
 
 <ng-template #dropDownOnlyTpl>
   <cds-overflow-menu [customTrigger]="customTrigger"
                      [flip]="true"
-                     [offset]="{ x: 105, y: 0 }"
+                     [offset]="dropDownOnlyOffset"
                      data-testid="table-action-btn"
                      class="d-flex justify-content-end">
     <ng-container *ngFor="let action of dropDownActions">
@@ -76,10 +74,9 @@
 </ng-template>
 
 <ng-template #customTrigger>
-  <button cdsButton="tertiary">
+  <button [cdsButton]="dropDownOnlyBtnColor">
     <span i18n>{{ dropDownOnly }}</span>
-    <svg class="cds--btn__icon"
-         cdsIcon="caret--down"
-         size="16"></svg>
+    <svg class="override-position-static cds--btn__icon"
+         [cdsIcon]="icons.chevronDown"></svg>
   </button>
 </ng-template>
