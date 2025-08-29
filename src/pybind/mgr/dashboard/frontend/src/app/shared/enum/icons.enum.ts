@@ -85,6 +85,7 @@ export enum Icons {
   dataTable = 'data-table',
   idea = 'idea',
   userAccessLocked = 'user--access-locked', // User access locked
+  chevronDown = 'chevron--down',
   /* Icons for special effect */
   size16 = '16',
   size20 = '20',
