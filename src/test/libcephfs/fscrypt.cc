@@ -98,11 +98,11 @@ void generate_remove_key_arg(ceph_fscrypt_key_identifier kid, fscrypt_remove_key
 }
 
 void populate_policy(struct ceph_fscrypt_key_identifier kid, struct fscrypt_policy_v2* policy) {
+  memset(policy, 0, sizeof(*policy));
   policy->version = 2;
   policy->contents_encryption_mode = FSCRYPT_MODE_AES_256_XTS;
   policy->filenames_encryption_mode = FSCRYPT_MODE_AES_256_CTS;
   policy->flags = FSCRYPT_POLICY_FLAGS_PAD_32;
-  memset(policy->__reserved, 0, sizeof(policy->__reserved));
   memcpy(policy->master_key_identifier, kid.raw, FSCRYPT_KEY_IDENTIFIER_SIZE);
 }
 
@@ -371,9 +371,9 @@ TEST(FSCrypt, SetPolicyNotEmptyDir) {
   ASSERT_EQ(0, r);
 
   string dir_path = "dir1";
-  ceph_mkdir(cmount, dir_path.c_str(), 0777);
+  ASSERT_EQ(0, ceph_mkdir(cmount, dir_path.c_str(), 0777));
   string dir2_path = "dir1/dir2";
-  ceph_mkdir(cmount, dir2_path.c_str(), 0777);
+  ASSERT_EQ(0, ceph_mkdir(cmount, dir2_path.c_str(), 0777));
 
   string file_path = "dir1/file1";
   int fd = ceph_open(cmount, file_path.c_str(), O_RDWR|O_CREAT|O_TRUNC, 0600);
@@ -390,7 +390,8 @@ TEST(FSCrypt, SetPolicyNotEmptyDir) {
   r = ceph_set_fscrypt_policy_v2(cmount, fd2, &policy);
   ASSERT_EQ(-ENOTEMPTY, r);
 
-  ceph_unlink(cmount, file_path.c_str());
+  ASSERT_EQ(0, ceph_unlink(cmount, file_path.c_str()));
+  ASSERT_EQ(0, ceph_rmdir(cmount, dir2_path.c_str()));
 
   fscrypt_remove_key_arg arg;
   generate_remove_key_arg(kid, &arg);
@@ -399,7 +400,7 @@ TEST(FSCrypt, SetPolicyNotEmptyDir) {
   ASSERT_EQ(0, r);
   ASSERT_EQ(0, arg.removal_status_flags);
 
-  ceph_rmdir(cmount, dir_path.c_str());
+  ASSERT_EQ(0, ceph_rmdir(cmount, dir_path.c_str()));
   ceph_shutdown(cmount);
 }
 
@@ -411,7 +412,7 @@ TEST(FSCrypt, SetPolicyAlreadyExistSamePolicy) {
   ASSERT_EQ(0, r);
 
   string dir_path = "dir2";
-  ceph_mkdir(cmount, dir_path.c_str(), 0777);
+  ASSERT_EQ(0, ceph_mkdir(cmount, dir_path.c_str(), 0777));
 
   int fd = ceph_open(cmount, dir_path.c_str(), O_DIRECTORY, 0);
 
@@ -426,7 +427,7 @@ TEST(FSCrypt, SetPolicyAlreadyExistSamePolicy) {
   r = ceph_set_fscrypt_policy_v2(cmount, fd, &policy);
   ASSERT_EQ(0, r);
 
-  ceph_rmdir(cmount, dir_path.c_str());
+  ASSERT_EQ(0, ceph_rmdir(cmount, dir_path.c_str()));
   ceph_shutdown(cmount);
 }
 
@@ -438,7 +439,7 @@ TEST(FSCrypt, SetPolicyAlreadyExistDifferentPolicy) {
   ASSERT_EQ(0, r);
 
   string dir_path = "dir2";
-  ceph_mkdir(cmount, dir_path.c_str(), 0777);
+  ASSERT_EQ(0, ceph_mkdir(cmount, dir_path.c_str(), 0777));
 
   int fd = ceph_open(cmount, dir_path.c_str(), O_DIRECTORY, 0);
 
@@ -463,7 +464,7 @@ TEST(FSCrypt, SetPolicyAlreadyExistDifferentPolicy) {
   r = ceph_set_fscrypt_policy_v2(cmount, fd, &policy2);
   ASSERT_EQ(-EEXIST, r);
 
-  ceph_rmdir(cmount, dir_path.c_str());
+  ASSERT_EQ(0, ceph_rmdir(cmount, dir_path.c_str()));
   ceph_shutdown(cmount);
 }
 
@@ -489,6 +490,8 @@ TEST(FSCrypt, SetPolicyNonDir) {
   //symlink
   string symlink_path = "symlink1";
   r = ceph_symlink(cmount, file_path.c_str(), symlink_path.c_str());
+  ASSERT_EQ(0, r);
+
   fd = ceph_open(cmount, symlink_path.c_str(), O_RDWR|O_CREAT|O_TRUNC, 0600);
   r = ceph_set_fscrypt_policy_v2(cmount, fd, &policy);
   ASSERT_EQ(-ENOTDIR, r);
@@ -500,7 +503,11 @@ TEST(FSCrypt, SetPolicyNonDir) {
   fd = ceph_open(cmount, mknod_path.c_str(), O_RDWR, 0600);
   r = ceph_set_fscrypt_policy_v2(cmount, fd, &policy);
   ASSERT_EQ(-ENOTDIR, r);
+
   ceph_close(cmount, fd);
+  ASSERT_EQ(0, ceph_unlink(cmount, file_path.c_str()));
+  ASSERT_EQ(0, ceph_unlink(cmount, symlink_path.c_str()));
+  ASSERT_EQ(0, ceph_unlink(cmount, mknod_path.c_str()));
   ceph_shutdown(cmount);
 }
 
@@ -512,7 +519,7 @@ TEST(FSCrypt, SetPolicyNotSupported) {
   ASSERT_EQ(0, r);
 
   string dir_path = "dir2";
-  ceph_mkdir(cmount, dir_path.c_str(), 0777);
+  ASSERT_EQ(0, ceph_mkdir(cmount, dir_path.c_str(), 0777));
 
   int fd = ceph_open(cmount, dir_path.c_str(), O_DIRECTORY, 0);
 
@@ -539,7 +546,7 @@ TEST(FSCrypt, SetPolicyNotSupported) {
   r = ceph_set_fscrypt_policy_v2(cmount, fd, &policy);
   ASSERT_EQ(-EINVAL, r);
 
-  ceph_rmdir(cmount, dir_path.c_str());
+  ASSERT_EQ(0, ceph_rmdir(cmount, dir_path.c_str()));
   ceph_shutdown(cmount);
 }
 
@@ -552,7 +559,7 @@ TEST(FSCrypt, LockedListDir) {
   ASSERT_EQ(0, r);
 
   string dir_path = "dir1";
-  ceph_mkdir(cmount, dir_path.c_str(), 0777);
+  ASSERT_EQ(0, ceph_mkdir(cmount, dir_path.c_str(), 0777));
 
   string file_path = "dir1/file5";
   int fd = ceph_open(cmount, dir_path.c_str(), O_DIRECTORY, 0);
@@ -605,8 +612,8 @@ TEST(FSCrypt, LockedListDir) {
   ASSERT_EQ(0,-1); //will fail
 
 done:
-  ceph_unlink(cmount, file_path.c_str());
-  ceph_rmdir(cmount, dir_path.c_str());
+  ASSERT_EQ(0, ceph_unlink(cmount, file_path.c_str()));
+  ASSERT_EQ(0, ceph_rmdir(cmount, dir_path.c_str()));
   ceph_shutdown(cmount);
 }
 
@@ -618,7 +625,7 @@ TEST(FSCrypt, ReadLockedDir) {
   ASSERT_EQ(0, r);
 
   string dir_path = "dir1";
-  ceph_mkdir(cmount, dir_path.c_str(), 0777);
+  ASSERT_EQ(0, ceph_mkdir(cmount, dir_path.c_str(), 0777));
 
   string file_path = "dir1/file5";
   int fd = ceph_open(cmount, dir_path.c_str(), O_DIRECTORY, 0);
@@ -668,8 +675,8 @@ read:
   fd2 = ceph_open(cmount, file_path.c_str(), O_RDWR, 0600);
   ASSERT_EQ(-ENOKEY, fd2);
 
-  ceph_unlink(cmount, file_path.c_str());
-  ceph_rmdir(cmount, dir_path.c_str());
+  ASSERT_EQ(0, ceph_unlink(cmount, file_path.c_str()));
+  ASSERT_EQ(0, ceph_rmdir(cmount, dir_path.c_str()));
   ceph_shutdown(cmount);
 }
 
@@ -682,7 +689,7 @@ TEST(FSCrypt, WriteLockedDir) {
 
   string dir_path = "dir1";
   string dir_path2 = "dir1/dir3";
-  ceph_mkdir(cmount, dir_path.c_str(), 0777);
+  ASSERT_EQ(0, ceph_mkdir(cmount, dir_path.c_str(), 0777));
 
   string file_path = "dir1/file5";
   int fd = ceph_open(cmount, dir_path.c_str(), O_DIRECTORY, 0);
@@ -734,8 +741,8 @@ write:
 
   ASSERT_EQ(-ENOKEY, ceph_mkdir(cmount, dir_path2.c_str(), 0777));
 
-  ceph_unlink(cmount, file_path.c_str());
-  ceph_rmdir(cmount, dir_path.c_str());
+  ASSERT_EQ(0, ceph_unlink(cmount, file_path.c_str()));
+  ASSERT_EQ(0, ceph_rmdir(cmount, dir_path.c_str()));
   ceph_shutdown(cmount);
 }
 
@@ -747,7 +754,7 @@ TEST(FSCrypt, LockedCreateSnap) {
   ASSERT_EQ(0, r);
 
   string dir_path = "dir1";
-  ceph_mkdir(cmount, dir_path.c_str(), 0777);
+  ASSERT_EQ(0, ceph_mkdir(cmount, dir_path.c_str(), 0777));
 
   string file_path = "dir1/file5";
   int fd = ceph_open(cmount, dir_path.c_str(), O_DIRECTORY, 0);
@@ -766,7 +773,7 @@ TEST(FSCrypt, LockedCreateSnap) {
   ceph_close(cmount, fd);
   ceph_close(cmount, fd2);
 
-  ceph_unlink(cmount, file_path.c_str());
+  ASSERT_EQ(0, ceph_unlink(cmount, file_path.c_str()));
 
   fscrypt_remove_key_arg arg;
   generate_remove_key_arg(kid, &arg);
@@ -776,8 +783,9 @@ TEST(FSCrypt, LockedCreateSnap) {
   ASSERT_EQ(0, arg.removal_status_flags);
 
   string snap_name = "snap1";
-  ASSERT_EQ(-ENOKEY, ceph_mksnap(cmount, dir_path.c_str(), snap_name.c_str(), 0755, nullptr, 0));
-  ceph_rmdir(cmount, dir_path.c_str());
+  ASSERT_EQ(0, ceph_mksnap(cmount, dir_path.c_str(), snap_name.c_str(), 0755, nullptr, 0));
+  ASSERT_EQ(0, ceph_rmsnap(cmount, dir_path.c_str(), snap_name.c_str()));
+  ASSERT_EQ(0, ceph_rmdir(cmount, dir_path.c_str()));
   ceph_shutdown(cmount);
 }
 
@@ -789,7 +797,7 @@ TEST(FSCrypt, RenameLockedSource) {
   ASSERT_EQ(0, r);
 
   string dir_path = "dir1";
-  ceph_mkdir(cmount, dir_path.c_str(), 0777);
+  ASSERT_EQ(0, ceph_mkdir(cmount, dir_path.c_str(), 0777));
 
   string src_path = "dir1/file5";
   int fd = ceph_open(cmount, dir_path.c_str(), O_DIRECTORY, 0);
@@ -840,8 +848,8 @@ TEST(FSCrypt, RenameLockedSource) {
 
   ASSERT_EQ(ceph_rename(cmount, src_path.c_str(), dest_path.c_str()), -ENOKEY);
 
-  ceph_unlink(cmount, src_path.c_str());
-  ceph_rmdir(cmount, dir_path.c_str());
+  ASSERT_EQ(0, ceph_unlink(cmount, src_path.c_str()));
+  ASSERT_EQ(0, ceph_rmdir(cmount, dir_path.c_str()));
   ceph_shutdown(cmount);
 }
 
@@ -853,7 +861,7 @@ TEST(FSCrypt, RenameLockedDest) {
   ASSERT_EQ(0, r);
 
   string dir_path = "dir1";
-  ceph_mkdir(cmount, dir_path.c_str(), 0777);
+  ASSERT_EQ(0, ceph_mkdir(cmount, dir_path.c_str(), 0777));
 
   string src_path = "file_src";
   string dest_path = "dir1/file_dest";
@@ -882,8 +890,8 @@ TEST(FSCrypt, RenameLockedDest) {
 
   ASSERT_EQ(ceph_rename(cmount, src_path.c_str(), dest_path.c_str()), -ENOKEY);
 
-  ceph_unlink(cmount, src_path.c_str());
-  ceph_rmdir(cmount, dir_path.c_str());
+  ASSERT_EQ(0, ceph_unlink(cmount, src_path.c_str()));
+  ASSERT_EQ(0, ceph_rmdir(cmount, dir_path.c_str()));
   ceph_shutdown(cmount);
 }
 
@@ -895,7 +903,8 @@ TEST(FSCrypt, RemoveBusyFile) {
   ASSERT_EQ(0, r);
 
   string dir_path = "dir1";
-  ceph_mkdir(cmount, dir_path.c_str(), 0777);
+  ASSERT_EQ(0, ceph_mkdir(cmount, dir_path.c_str(), 0777));
+
   int fd = ceph_open(cmount, dir_path.c_str(), O_DIRECTORY, 0);
 
   r = ceph_add_fscrypt_key(cmount, fscrypt_key, sizeof(fscrypt_key), &kid, 1299);
@@ -923,7 +932,7 @@ TEST(FSCrypt, RemoveBusyFile) {
   ASSERT_EQ(FSCRYPT_KEY_REMOVAL_STATUS_FLAG_FILES_BUSY, arg.removal_status_flags);
   ceph_close(cmount, fd2);
 
-  ceph_unlink(cmount, src_path.c_str());
+  ASSERT_EQ(0, ceph_unlink(cmount, path.c_str()));
 
   //actually remove the key
   generate_remove_key_arg(kid, &arg);
@@ -932,7 +941,7 @@ TEST(FSCrypt, RemoveBusyFile) {
   ASSERT_EQ(0, arg.removal_status_flags);
 
   ceph_close(cmount, fd2);
-  ceph_rmdir(cmount, dir_path.c_str());
+  ASSERT_EQ(0, ceph_rmdir(cmount, dir_path.c_str()));
   ceph_shutdown(cmount);
 }
 
@@ -943,8 +952,8 @@ TEST(FSCrypt, RemoveBusyCreate) {
   int r = init_mount(&cmount);
   ASSERT_EQ(0, r);
 
-  string dir_path = "dir1";
-  ceph_mkdir(cmount, dir_path.c_str(), 0777);
+  string dir_path = "dir_busy";
+  ASSERT_EQ(0, ceph_mkdir(cmount, dir_path.c_str(), 0777));
   int fd = ceph_open(cmount, dir_path.c_str(), O_DIRECTORY, 0);
 
   r = ceph_add_fscrypt_key(cmount, fscrypt_key, sizeof(fscrypt_key), &kid, 1299);
@@ -973,15 +982,16 @@ TEST(FSCrypt, RemoveBusyCreate) {
 
   ceph_close(cmount, fd2);
 
-  src_path = "file2_src";
-  path = "";
-  path.append(dir_path);
-  path.append("/");
-  path.append(src_path);
-  int fd3 = ceph_open(cmount, path.c_str(), O_RDWR|O_CREAT|O_TRUNC, 0600);
+  string src_path2 = "file2_src";
+  string path2 = "";
+  path2 = "";
+  path2.append(dir_path);
+  path2.append("/");
+  path2.append(src_path2);
+  int fd3 = ceph_open(cmount, path2.c_str(), O_RDWR|O_CREAT|O_TRUNC, 0600);
   ASSERT_EQ(-ENOKEY, fd3);
   
-  ceph_unlink(cmount, src_path.c_str());
+  ASSERT_EQ(0, ceph_unlink(cmount, path.c_str()));
 
   //actually remove the key
   generate_remove_key_arg(kid, &arg);
@@ -989,7 +999,7 @@ TEST(FSCrypt, RemoveBusyCreate) {
   ASSERT_EQ(0, r);
   ASSERT_EQ(0, arg.removal_status_flags);
 
-  ceph_rmdir(cmount, dir_path.c_str());
+  ASSERT_EQ(0, ceph_rmdir(cmount, dir_path.c_str()));
   ceph_unmount(cmount);
   ceph_shutdown(cmount);
 }
@@ -1006,7 +1016,8 @@ TEST(FSCrypt, FallocateNotImplemented) {
 
   // init fscrypt on dir
   string dir_path = "dir1";
-  ceph_mkdir(cmount, dir_path.c_str(), 0777);
+  ASSERT_EQ(0, ceph_mkdir(cmount, dir_path.c_str(), 0777));
+
   int fd = ceph_open(cmount, dir_path.c_str(), O_DIRECTORY, 0);
   r = ceph_add_fscrypt_key(cmount, fscrypt_key, sizeof(fscrypt_key), &kid, 1299);
   struct fscrypt_policy_v2 policy;
@@ -1035,8 +1046,8 @@ TEST(FSCrypt, FallocateNotImplemented) {
 
   // cleanup
   ceph_close(cmount, fd);
-  ceph_unlink(cmount, file_path.c_str());
-  ceph_rmdir(cmount, dir_path.c_str());
+  ASSERT_EQ(0, ceph_unlink(cmount, file_path.c_str()));
+  ASSERT_EQ(0, ceph_rmdir(cmount, dir_path.c_str()));
 
   ceph_shutdown(cmount);
 }
@@ -1048,8 +1059,8 @@ TEST(FSCrypt, SetPolicyAlreadyExistSamePolicyNotEmpty) {
   int r = init_mount(&cmount);
   ASSERT_EQ(0, r);
 
-  string dir_path = "dir1";
-  ceph_mkdir(cmount, dir_path.c_str(), 0777);
+  string dir_path = "dir3";
+  ASSERT_EQ(0, ceph_mkdir(cmount, dir_path.c_str(), 0777));
 
   int fd2 = ceph_open(cmount, dir_path.c_str(), O_DIRECTORY, 0);
 
@@ -1062,7 +1073,7 @@ TEST(FSCrypt, SetPolicyAlreadyExistSamePolicyNotEmpty) {
 
   ASSERT_EQ(0, r);
 
-  string file_path = "dir1/file1";
+  string file_path = "dir3/file1";
   int fd = ceph_open(cmount, file_path.c_str(), O_RDWR|O_CREAT|O_TRUNC, 0600);
   r = ceph_write(cmount, fd, fscrypt_key, sizeof(fscrypt_key), 0);
   ceph_close(cmount, fd);
@@ -1071,7 +1082,7 @@ TEST(FSCrypt, SetPolicyAlreadyExistSamePolicyNotEmpty) {
 
   ASSERT_EQ(0, r);
 
-  ceph_unlink(cmount, file_path.c_str());
+  ASSERT_EQ(0, ceph_unlink(cmount, file_path.c_str()));
 
   fscrypt_remove_key_arg arg;
   generate_remove_key_arg(kid, &arg);
@@ -1080,7 +1091,7 @@ TEST(FSCrypt, SetPolicyAlreadyExistSamePolicyNotEmpty) {
   ASSERT_EQ(0, r);
   ASSERT_EQ(0, arg.removal_status_flags);
 
-  ceph_rmdir(cmount, dir_path.c_str());
+  ASSERT_EQ(0, ceph_rmdir(cmount, dir_path.c_str()));
   ceph_shutdown(cmount);
 }
 
@@ -1092,7 +1103,7 @@ TEST(FSCrypt, SetPolicyAlreadyExistDifferentPolicyNotEmpty) {
   ASSERT_EQ(0, r);
 
   string dir_path = "dir1";
-  ceph_mkdir(cmount, dir_path.c_str(), 0777);
+  ASSERT_EQ(0, ceph_mkdir(cmount, dir_path.c_str(), 0777));
 
   int fd2 = ceph_open(cmount, dir_path.c_str(), O_DIRECTORY, 0);
 
@@ -1124,7 +1135,7 @@ TEST(FSCrypt, SetPolicyAlreadyExistDifferentPolicyNotEmpty) {
 
   ASSERT_EQ(-EEXIST, r);
 
-  ceph_unlink(cmount, file_path.c_str());
+  ASSERT_EQ(0, ceph_unlink(cmount, file_path.c_str()));
 
   fscrypt_remove_key_arg arg;
   generate_remove_key_arg(kid, &arg);
@@ -1133,7 +1144,7 @@ TEST(FSCrypt, SetPolicyAlreadyExistDifferentPolicyNotEmpty) {
   ASSERT_EQ(0, r);
   ASSERT_EQ(0, arg.removal_status_flags);
 
-  ceph_rmdir(cmount, dir_path.c_str());
+  ASSERT_EQ(0, ceph_rmdir(cmount, dir_path.c_str()));
   ceph_shutdown(cmount);
 }
 
