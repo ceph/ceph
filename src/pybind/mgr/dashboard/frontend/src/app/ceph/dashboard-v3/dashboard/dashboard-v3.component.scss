@@ -30,4 +30,13 @@
     -webkit-line-clamp: 2;
     white-space: normal;
   }
+
+  .card-text .date {
+    display: inline-block;
+    min-width: 14rem;
+  }
+
+  .card-text .alert_count {
+    display: inline-block;
+  }
 }

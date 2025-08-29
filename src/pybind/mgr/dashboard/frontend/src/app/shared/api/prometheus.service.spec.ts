@@ -29,8 +29,8 @@ describe('PrometheusService', () => {
   });
 
   it('should get alerts', () => {
-    service.getAlerts().subscribe();
-    const req = httpTesting.expectOne('api/prometheus?cluster_filter=false');
+    service.getGroupedAlerts().subscribe();
+    const req = httpTesting.expectOne('api/prometheus/alertgroup?cluster_filter=false');
     expect(req.request.method).toBe('GET');
   });
 
