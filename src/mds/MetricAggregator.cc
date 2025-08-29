@@ -166,6 +166,7 @@ Dispatcher::dispatch_result_t MetricAggregator::ms_dispatch2(const ref_t<Message
 void MetricAggregator::refresh_subvolume_metrics_for_rank(
         mds_rank_t rank, const std::vector<SubvolumeMetric> &metrics) {
   for (const auto &m : metrics) {
+    dout(20) << ": subvolume_metric=" << m << dendl;
     // Register labeled PerfCounters if needed
     if (!subvolume_perf_counters.contains(m.subvolume_path)) {
       std::string labels = ceph::perf_counters::key_create(
