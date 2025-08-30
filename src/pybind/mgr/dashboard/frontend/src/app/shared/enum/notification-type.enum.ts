@@ -1,5 +1,6 @@
 export enum NotificationType {
-  error,
-  info,
-  success
+  error = 'error',
+  info = 'info',
+  success = 'success',
+  warning = 'warning'
 }
