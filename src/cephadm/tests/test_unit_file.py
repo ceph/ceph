@@ -15,6 +15,7 @@ from tests.fixtures import (
     mock_podman,
     with_cephadm_ctx,
 )
+from typing import Optional
 
 from cephadmlib import context
 from cephadmlib import systemd_unit
@@ -23,8 +24,8 @@ from cephadmlib.constants import CGROUPS_SPLIT_PODMAN_VERSION
 _cephadm = import_cephadm()
 
 
-def _get_unit_file(ctx, fsid):
-    return str(systemd_unit._get_unit_file(ctx, fsid))
+def _get_unit_file(ctx, fsid, limit_core_infinity: Optional[bool] = False):
+    return str(systemd_unit._get_unit_file(ctx, fsid, limit_core_infinity))
 
 
 def test_docker_engine_wants_docker():
@@ -147,3 +148,13 @@ def test_new_podman():
         '[Install]',
         'WantedBy=ceph-9b9d7609-f4d5-4aba-94c8-effa764d96c9.target',
     ]
+
+
+def test_limit_core_infinity():
+    ctx = context.CephadmContext()
+    ctx.container_engine = mock_podman()
+    ctx.container_engine.version = CGROUPS_SPLIT_PODMAN_VERSION
+    ru = _get_unit_file(ctx, '9b9d7609-f4d5-4aba-94c8-effa764d96c9', limit_core_infinity=False)
+    assert 'LimitCORE=infinity' not in ru
+    ru = _get_unit_file(ctx, '9b9d7609-f4d5-4aba-94c8-effa764d96c9', limit_core_infinity=True)
+    assert 'LimitCORE=infinity' in ru
