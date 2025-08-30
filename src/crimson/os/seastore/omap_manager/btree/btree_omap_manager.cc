@@ -230,6 +230,25 @@ BtreeOMapManager::omap_rm_key(
 
 }
 
+BtreeOMapManager::omap_rm_keys_ret
+BtreeOMapManager::omap_rm_keys(
+  omap_root_t &omap_root,
+  Onode &onode,
+  Transaction &t,
+  std::set<std::string>& keys)
+{
+  auto type = omap_root.get_type();
+  return trans_intr::do_for_each(
+    keys.begin(),
+    keys.end(),
+    [&t, &omap_root, &onode, type, this](auto &p)
+  {
+    LOG_PREFIX(BtreeOMapManager::omap_rm_keys);
+    DEBUGT("{} remove key={} ...", t, type, p);
+    return omap_rm_key(omap_root, onode, t, p);
+  });
+}
+
 BtreeOMapManager::omap_rm_key_range_ret
 BtreeOMapManager::omap_rm_key_range(
   omap_root_t &omap_root,

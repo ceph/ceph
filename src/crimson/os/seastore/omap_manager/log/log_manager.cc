@@ -359,6 +359,40 @@ LogManager::omap_rm_key(
   co_return;
 }
 
+LogManager::omap_rm_keys_ret
+LogManager::omap_rm_keys(
+  omap_root_t& log_root,
+  Onode& onode,
+  Transaction& t,
+  std::set<std::string>& keys)
+{
+  LOG_PREFIX(LogManager::omap_rm_key);
+  DEBUGT("key size={}", t, keys.size());
+  assert(log_root.get_type() == omap_type_t::LOG);
+  auto omap_root = onode.get_root(omap_type_t::OMAP).get(
+        onode.get_metadata_hint(tm.get_block_size()));
+  bool done = false;
+  // Deletion of pg_log_entry_t entries is performed by omap_rm_keys using a set.
+  // For example, omap_rm_keys might be called with a set containing
+  // pg_log_entry_t entries ranging from 0011.0001 to 0011.0010.
+  // In this case, calling omap_rm_key individually for each entry is inefficient,
+  // because each call triggers a traversal of the entire list.
+  for (auto iter = keys.rbegin(); iter != keys.rend(); ++iter) {
+    if (can_handle_by_logleaf(*iter) && !done) {
+      co_await remove_kvs(t, log_root.addr, std::string(), *iter, nullptr);
+      done = true;
+    } else if (can_handle_by_logleaf(*iter) && done) {
+      continue;
+    }
+    crimson::os::seastore::omap_manager::BtreeOMapManager omap_manager(tm);
+    co_await std::move(omap_manager).omap_rm_key(omap_root, onode, t, *iter);
+  }
+  if (!omap_root.is_null() && omap_root.must_update()) {
+    onode.update_omap_root(t, omap_root);
+  }
+  co_return;
+}
+
 LogManager::omap_rm_key_range_ret 
 LogManager::omap_rm_key_range(
   omap_root_t &log_root,
