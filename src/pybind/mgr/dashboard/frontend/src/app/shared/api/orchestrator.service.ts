@@ -2,15 +2,18 @@ import { HttpClient } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 
 import _ from 'lodash';
-import { Observable } from 'rxjs';
+import { BehaviorSubject, Observable } from 'rxjs';
 
 import { OrchestratorFeature } from '../models/orchestrator.enum';
 import { OrchestratorStatus } from '../models/orchestrator.interface';
+import { tap } from 'rxjs/operators';
 
 @Injectable({
   providedIn: 'root'
 })
 export class OrchestratorService {
+  public status$ = new BehaviorSubject<OrchestratorStatus>(null);
+
   private url = 'ui-api/orchestrator';
 
   disableMessages = {
@@ -21,7 +24,10 @@ export class OrchestratorService {
   constructor(private http: HttpClient) {}
 
   status(): Observable<OrchestratorStatus> {
-    return this.http.get<OrchestratorStatus>(`${this.url}/status`);
+    if (this.status$.value) {
+      return this.status$.asObservable();
+    }
+    return this.http.get<OrchestratorStatus>(`${this.url}/status`).pipe(tap(status => this.status$.next(status)));
   }
 
   hasFeature(status: OrchestratorStatus, features: OrchestratorFeature[]): boolean {
