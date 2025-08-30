@@ -1436,6 +1436,14 @@ record_t Cache::prepare_record(
 	  extent->get_length(),
 	  extent->get_type()));
     } else if (is_backref_node(extent->get_type())) {
+      // The retire alloc deltas are used to identify the invalid backref extent
+      // deltas during replay when using CircularBoundedJournal, see
+      // build_paddr_seq_map in CBJournal::replay().
+      rel_delta.alloc_blk_ranges.emplace_back(
+	alloc_blk_t::create_retire(
+	  extent->get_paddr(),
+	  extent->get_length(),
+	  extent->get_type()));
       remove_backref_extent(extent->get_paddr());
     } else {
       ERRORT("Got unexpected extent type: {}", t, *extent);
@@ -2042,6 +2050,14 @@ Cache::replay_delta(
     decode(alloc_delta, delta.bl);
     backref_entry_refs_t backref_entries;
     for (auto &alloc_blk : alloc_delta.alloc_blk_ranges) {
+      if (is_backref_node(alloc_blk.type)) {
+	// On startup, BackrefManager::scan_mapped_space() will scan all
+	// mappings and internal entries to rebuild the space management.
+	// It's unnecessary to apply the alloc deltas of backref extents
+	// to the cached backref entries and these deltas are only used
+	// to skip invalid deltas for RBM backends.
+	continue;
+      }
       if (alloc_blk.paddr.is_record_relative()) {
 	alloc_blk.paddr = record_base.add_relative(alloc_blk.paddr);
       } else {
