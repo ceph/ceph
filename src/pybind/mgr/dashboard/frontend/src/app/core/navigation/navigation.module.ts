@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { NgModule } from '@angular/core';
+import { NgModule, CUSTOM_ELEMENTS_SCHEMA } from '@angular/core';
 import { RouterModule } from '@angular/router';
 
 import { NgbCollapseModule, NgbDropdownModule } from '@ng-bootstrap/ng-bootstrap';
@@ -12,6 +12,8 @@ import {
   DialogModule,
   GridModule,
   BreadcrumbModule,
+  ToggleModule,
+  ButtonModule,
   ModalModule
 } from 'carbon-components-angular';
 
@@ -26,6 +28,8 @@ import { DashboardHelpComponent } from './dashboard-help/dashboard-help.componen
 import { IdentityComponent } from './identity/identity.component';
 import { NavigationComponent } from './navigation/navigation.component';
 import { NotificationsComponent } from './notifications/notifications.component';
+import { NotificationPanelComponent } from './notification-panel/notification-panel.component';
+import { NotificationHeaderComponent } from './notification-panel/header/notification-header.component';
 
 // Icons
 import UserFilledIcon from '@carbon/icons/es/user--filled/20';
@@ -61,6 +65,8 @@ import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
     DialogModule,
     GridModule,
     BreadcrumbModule,
+    ToggleModule,
+    ButtonModule,
     ModalModule
   ],
   declarations: [
@@ -69,12 +75,15 @@ import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
     BreadcrumbsComponent,
     NavigationComponent,
     NotificationsComponent,
+    NotificationPanelComponent,
+    NotificationHeaderComponent,
     DashboardHelpComponent,
     AdministrationComponent,
     IdentityComponent
   ],
-  providers: [ModalCdsService],
-  exports: [NavigationComponent, BreadcrumbsComponent]
+  exports: [NavigationComponent, BreadcrumbsComponent],
+  schemas: [CUSTOM_ELEMENTS_SCHEMA],
+  providers: [ModalCdsService]
 })
 export class NavigationModule {
   constructor(private iconService: IconService) {
