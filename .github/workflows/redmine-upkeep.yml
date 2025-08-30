@@ -37,8 +37,7 @@ concurrency:
 jobs:
   redmine-upkeep:
     runs-on: ubuntu-latest
-    # This condition ensures the job only runs in the main ceph/ceph repository and only on the specified branches.
-    if: github.repository == 'ceph/ceph' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/feature/redmine-upkeep')
+    if: github.repository == 'ceph/ceph'
     steps:
       - name: Checkout main branch for pull_request_target
         if: github.event_name == 'pull_request_target'
