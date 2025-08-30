@@ -1293,8 +1293,10 @@ cdef class LibCephFS(object):
 
         cdef:
             char* _path = path
-            uid_t _uid = uid
-            gid_t _gid = gid
+            # Avoid "OverflowError: can't convert negative value to uid_t."
+            uid_t _uid = uid if uid >= 0 else -1
+            # Avoid "OverflowError: can't convert negative value to gid_t."
+            gid_t _gid = gid if gid >= 0 else -1
         if follow_symlink:
             with nogil:
                 ret = ceph_chown(self.cluster, _path, _uid, _gid)
@@ -1332,8 +1334,10 @@ cdef class LibCephFS(object):
 
         cdef:
             int _fd = fd
-            uid_t _uid = uid
-            gid_t _gid = gid
+            # Avoid "OverflowError: can't convert negative value to uid_t."
+            uid_t _uid = uid if uid >= 0 else -1
+            # Avoid "OverflowError: can't convert negative value to gid_t."
+            gid_t _gid = gid if gid >= 0 else -1
         with nogil:
             ret = ceph_fchown(self.cluster, _fd, _uid, _gid)
         if ret < 0:
