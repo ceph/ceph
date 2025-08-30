@@ -25,16 +25,22 @@
 #include "Stack.h"
 
 class PosixWorker : public Worker {
-  ceph::NetHandler net;
+  std::unique_ptr<ceph::NetHandler> net;
   void initialize() override;
  public:
   PosixWorker(CephContext *c, unsigned i)
-      : Worker(c, i), net(c) {}
+      : Worker(c, i) {
+    net.reset(new ceph::NetHandler(c));
+  }
   int listen(entity_addr_t &sa,
 	     unsigned addr_slot,
 	     const SocketOptions &opt,
 	     ServerSocket *socks) override;
   int connect(const entity_addr_t &addr, const SocketOptions &opts, ConnectedSocket *socket) override;
+
+  void resetNetHandler(ceph::NetHandler* newNet) {
+    net.reset(newNet);
+  }
 };
 
 class PosixNetworkStack : public NetworkStack {
