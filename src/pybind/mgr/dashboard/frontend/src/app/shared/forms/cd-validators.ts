@@ -14,6 +14,7 @@ import { RgwBucketService } from '~/app/shared/api/rgw-bucket.service';
 import { DimlessBinaryPipe } from '~/app/shared/pipes/dimless-binary.pipe';
 import { FormatterService } from '~/app/shared/services/formatter.service';
 import validator from 'validator';
+import isCidr from 'is-cidr';
 
 export function isEmptyInputValue(value: any): boolean {
   return value == null || value.length === 0;
@@ -57,6 +58,25 @@ export class CdValidators {
     } else {
       return Validators.pattern(new RegExp(ipv4Rgx.source + '|' + ipv6Rgx.source));
     }
+  }
+
+  /**
+   * Validator function in order to validate network addresses e.g 192.168.1.0/24.
+   * @param {boolean} required determinates if this is a required input field to avoid setting pending form otherwise
+   * @returns {ValidatorFn} A validator function that returns an error map containing `invalidAddress`
+   *   if the validation check fails, otherwise `null`.
+   */
+  static networkAddress(required: boolean = false): ValidatorFn {
+    return (control: AbstractControl): ValidationErrors | null => {
+      // required avoids setting pending form on non required fields when imput is empty
+      if (!control.value) {
+        return required ? { invalidAddress: true } : null;
+      }
+      if (isCidr(control.value) === 0) {
+        return { invalidAddress: true };
+      }
+      return null;
+    };
   }
 
   /**
