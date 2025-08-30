@@ -7,6 +7,7 @@
 #include "tools/rbd/ArgumentTypes.h"
 #include "tools/rbd/Shell.h"
 #include "tools/rbd/Utils.h"
+#include "include/byte_u_t.h"
 #include "include/rbd_types.h"
 #include "include/stringify.h"
 #include "librbd/cache/Types.h"

@@ -18,6 +18,7 @@
 
 #include "include/rados/librados.hpp"
 #include "include/encoding.h"
+#include "include/encoding_string.h"
 #include "test/librados/test_cxx.h"
 #include "gtest/gtest.h"
 #include "json_spirit/json_spirit.h"
@@ -81,10 +82,9 @@ TEST(ClsHello, RecordHello) {
 
 static std::string _get_required_osd_release(Rados& cluster)
 {
-  bufferlist inbl;
   std::string cmd = std::string("{\"prefix\": \"osd dump\",\"format\":\"json\"}");
   bufferlist outbl;
-  int r = cluster.mon_command(cmd, inbl, &outbl, NULL);
+  int r = cluster.mon_command(std::move(cmd), {}, &outbl, NULL);
   ceph_assert(r >= 0);
   std::string outstr(outbl.c_str(), outbl.length());
   json_spirit::Value v;

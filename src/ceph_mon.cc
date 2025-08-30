@@ -14,12 +14,15 @@
 
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <dirent.h>
 #include <fcntl.h>
 
 #include <iostream>
+#include <sstream>
 #include <string>
 
 #include "common/config.h"
+#include "include/byte_u_t.h"
 #include "include/ceph_features.h"
 
 #include "mon/MonMap.h"

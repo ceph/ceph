@@ -4,6 +4,8 @@
 #ifndef CEPH_MGR_TYPES_H
 #define CEPH_MGR_TYPES_H
 
+#include <vector>
+
 typedef int MetricQueryID;
 
 typedef std::pair<uint64_t,uint64_t> PerformanceCounter;

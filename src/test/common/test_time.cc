@@ -15,6 +15,8 @@
 
 #include <ctime>
 
+#include <math.h> // for pow()
+
 #include "common/ceph_time.h"
 #include "include/rados.h"
 #include "gtest/gtest.h"

@@ -17,6 +17,7 @@
 #include "common/errno.h"
 #include "mon/MonClient.h"
 #include "include/stringify.h"
+#include "include/str_map.h"
 #include "global/global_context.h"
 #include "global/signal_handler.h"
 
@@ -36,6 +37,7 @@
 
 #include "MgrContext.h"
 #include "DaemonServer.h"
+#include "JSONCommand.h"
 #include "PyModule.h"
 #include "Mgr.h"
 

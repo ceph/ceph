@@ -7,24 +7,26 @@
 #include <map>
 #include <set>
 #include <thread>
+#include <unordered_set>
 
-#include "msg/msg_types.h"
 #include "msg/Dispatcher.h"
 #include "common/ceph_mutex.h"
-#include "common/perf_counters.h"
 #include "include/common_fwd.h"
 
-#include "mgr/MetricTypes.h"
+#include "mgr/Types.h" // for PerformanceCounters
+#include "mgr/MetricTypes.h" // for MetricPayload
 #include "mgr/MDSPerfMetricTypes.h"
 
-#include "mdstypes.h"
 #include "MDSPinger.h"
 
+struct entity_inst_t;
 class MDSMap;
 class MDSRank;
 class MMDSMetrics;
 struct Metrics;
 class MgrClient;
+struct MDSPerfMetricQuery;
+namespace TOPNSPC::common { class PerfCounters; }
 
 class MetricAggregator : public Dispatcher {
 public:
@@ -70,8 +72,8 @@ private:
 
   bool stopping = false;
 
-  PerfCounters *m_perf_counters;
-  std::map<std::pair<entity_inst_t, mds_rank_t>, PerfCounters*> client_perf_counters;
+  TOPNSPC::common::PerfCounters *m_perf_counters;
+  std::map<std::pair<entity_inst_t, mds_rank_t>, TOPNSPC::common::PerfCounters*> client_perf_counters;
 
   void handle_mds_metrics(const cref_t<MMDSMetrics> &m);
 

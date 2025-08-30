@@ -2,8 +2,9 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "Finisher.h"
+#include "common/Clock.h" // for ceph_clock_now()
 #include "common/perf_counters.h"
-#include "include/types.h" // for operator<<(std::vector)
+#include "include/container_ios.h"
 
 #ifdef WITH_CRIMSON
 #include "crimson/common/perf_counters_collection.h"
@@ -41,6 +42,12 @@ Finisher::~Finisher() {
     cct->get_perfcounters_collection()->remove(logger);
     delete logger;
   }
+}
+
+void Finisher::LoggerInc(int idx, uint64_t v)
+{
+    if (logger)
+      logger->inc(idx, v);
 }
 
 void Finisher::start()

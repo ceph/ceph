@@ -15,12 +15,19 @@
 #ifndef CEPH_SNAPSERVER_H
 #define CEPH_SNAPSERVER_H
 
+#include <list>
+#include <map>
+#include <set>
+
 #include "MDSTableServer.h"
+#include "include/encoding.h"
+#include "include/object.h" // for struct snapid_t
 #include "snap.h"
 
 class MDSRank;
 class MRemoveSnaps;
 class MonClient;
+struct SnapInfo;
 
 class SnapServer : public MDSTableServer {
 public:
@@ -52,9 +59,7 @@ public:
 
   void check_osd_map(bool force);
 
-  bool can_allow_multimds_snaps() const {
-    return snaps.empty() || snaps.begin()->first >= snaprealm_v2_since;
-  }
+  bool can_allow_multimds_snaps() const;
 
   void encode(bufferlist& bl) const {
     encode_server_state(bl);
@@ -70,49 +75,8 @@ public:
 		    std::map<snapid_t, SnapInfo>& _snaps);
 
 protected:
-  void encode_server_state(bufferlist& bl) const override {
-    ENCODE_START(5, 3, bl);
-    encode(last_snap, bl);
-    encode(snaps, bl);
-    encode(need_to_purge, bl);
-    encode(pending_update, bl);
-    encode(pending_destroy, bl);
-    encode(pending_noop, bl);
-    encode(last_created, bl);
-    encode(last_destroyed, bl);
-    encode(snaprealm_v2_since, bl);
-    ENCODE_FINISH(bl);
-  }
-  void decode_server_state(bufferlist::const_iterator& bl) override {
-    DECODE_START_LEGACY_COMPAT_LEN(5, 3, 3, bl);
-    decode(last_snap, bl);
-    decode(snaps, bl);
-    decode(need_to_purge, bl);
-    decode(pending_update, bl);
-    if (struct_v >= 2)
-      decode(pending_destroy, bl);
-    else {
-      std::map<version_t, snapid_t> t;
-      decode(t, bl);
-      for (auto& [ver, snapid] : t) {
-	pending_destroy[ver].first = snapid;
-      }
-    }
-    decode(pending_noop, bl);
-    if (struct_v >= 4) {
-      decode(last_created, bl);
-      decode(last_destroyed, bl);
-    } else {
-      last_created = last_snap;
-      last_destroyed = last_snap;
-    }
-    if (struct_v >= 5)
-      decode(snaprealm_v2_since, bl);
-    else
-      snaprealm_v2_since = CEPH_NOSNAP;
-
-    DECODE_FINISH(bl);
-  }
+  void encode_server_state(bufferlist& bl) const override;
+  void decode_server_state(bufferlist::const_iterator& bl) override;
 
   // server bits
   void _prepare(const bufferlist &bl, uint64_t reqid, mds_rank_t bymds, bufferlist &out) override;

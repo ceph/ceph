@@ -10,6 +10,7 @@
 
 #include "common/ceph_argparse.h"
 #include "common/ceph_mutex.h"
+#include "common/Clock.h" // for ceph_clock_now()
 #include "common/common_init.h"
 #include "common/config.h"
 #include "common/snap_types.h"

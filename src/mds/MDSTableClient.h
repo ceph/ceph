@@ -15,9 +15,9 @@
 #ifndef CEPH_MDSTABLECLIENT_H
 #define CEPH_MDSTABLECLIENT_H
 
+#include "include/buffer.h"
 #include "include/types.h"
-#include "mds_table_types.h"
-#include "mdstypes.h" // for mds_rank_t
+#include "include/cephfs/rank.h" // for mds_rank_t
 #include "common/ref.h" // for cref_t
 #include "LogSegmentRef.h"
 
@@ -30,6 +30,8 @@ class MMDSTableRequest;
 class MMDSTableQuery;
 class MDSRank;
 class LogSegment;
+using ceph::bufferlist;
+using ceph::cref_t;
 
 class MDSTableClient {
 public:

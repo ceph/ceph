@@ -3,8 +3,12 @@
 
 #include "mon/Monitor.h"
 #include "mon/KVMonitor.h"
+#include "include/encoding_map.h"
+#include "include/encoding_optional.h"
+#include "include/encoding_string.h"
 #include "include/stringify.h"
 #include "messages/MKVData.h"
+#include "messages/MMonCommand.h"
 
 #define dout_subsys ceph_subsys_mon
 #undef dout_prefix

@@ -15,15 +15,22 @@
 #ifndef OPEN_FILE_TABLE_H
 #define OPEN_FILE_TABLE_H
 
+#include <cstdint>
 #include <map>
+#include <set>
 #include <string>
 #include <vector>
 
-#include "mdstypes.h"
-
 #include "common/config_proxy.h" // for class ConfigProxy
 #include "global/global_context.h" // for g_conf()
+#include "include/buffer_fwd.h"
+#include "include/cephfs/rank.h" // for mds_rank_t"
+#include "include/frag.h"
+#include "include/fs_types.h" // for inodeno_t
+#include "include/object.h"
+#include "include/types.h" // for version_t
 
+namespace TOPNSPC::common { class PerfCounters; }
 struct inode_backpointer_t;
 class Context;
 class CDir;
@@ -155,7 +162,7 @@ protected:
   std::map<uint64_t, std::vector<inodeno_t> > logseg_destroyed_inos;
   std::set<inodeno_t> destroyed_inos_set;
 
-  std::unique_ptr<PerfCounters> logger;
+  std::unique_ptr<TOPNSPC::common::PerfCounters> logger;
 
   std::map<uint64_t, std::vector<Context*>> waiting_for_commit;
 };

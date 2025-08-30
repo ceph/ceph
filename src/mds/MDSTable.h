@@ -15,9 +15,10 @@
 #ifndef CEPH_MDSTABLE_H
 #define CEPH_MDSTABLE_H
 
-#include "include/buffer_fwd.h"
+#include "include/buffer.h"
+#include "include/object.h" // for object_t
 #include "include/types.h" // for version_t
-#include "include/cephfs/types.h" // for mds_rank_t
+#include "include/cephfs/rank.h" // for mds_rank_t
 
 #include <map>
 #include <string>

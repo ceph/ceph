@@ -22,6 +22,7 @@
 #define CEPH_PGMAP_H
 
 #include "include/buffer.h"
+#include "include/ceph_fs.h" // for ceph_statfs
 #include "common/debug.h" // for cmdmap_t
 #include "common/cmdparse.h"
 #include "common/Formatter.h"
@@ -44,7 +45,9 @@ class TextTable;
 class PGMapDigest {
 public:
   MEMPOOL_CLASS_HELPERS();
-  virtual ~PGMapDigest() {}
+
+  PGMapDigest() noexcept;
+  virtual ~PGMapDigest() noexcept;
 
   mempool::pgmap::vector<uint64_t> osd_last_seq;
 
@@ -386,10 +389,8 @@ public:
   static const int STUCK_STALE = (1<<4);
   static const int STUCK_PEERING = (1<<5);
 
-  PGMap()
-    : version(0),
-      last_osdmap_epoch(0), last_pg_scan(0)
-  {}
+  PGMap() noexcept;
+  ~PGMap() noexcept;
 
   version_t get_version() const {
     return version;

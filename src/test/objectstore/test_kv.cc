@@ -21,6 +21,7 @@
 #include "kv/RocksDBStore.h"
 #include "include/Context.h"
 #include "common/ceph_argparse.h"
+#include "common/Clock.h" // for ceph_clock_now()
 #include "global/global_init.h"
 #include "common/Cond.h"
 #include "common/errno.h"

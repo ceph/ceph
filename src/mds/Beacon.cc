@@ -32,6 +32,8 @@
 #include "mds/mdstypes.h"
 #include "osdc/Objecter.h"
 
+#include "messages/MMDSBeacon.h"
+
 #include <chrono>
 
 #define dout_context g_ceph_context

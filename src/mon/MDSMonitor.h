@@ -25,10 +25,11 @@
 #include "include/types.h"
 #include "PaxosFSMap.h"
 #include "PaxosService.h"
-#include "msg/Messenger.h"
-#include "messages/MMDSBeacon.h"
+#include "mds/MDSMap.h"
+#include "mds/MDSHealth.h" // for mds_metric_t
 #include "CommandHandler.h"
 
+class Monitor;
 class FileSystemCommandHandler;
 
 class MDSMonitor : public PaxosService, public PaxosFSMap, protected CommandHandler {
@@ -79,7 +80,7 @@ class MDSMonitor : public PaxosService, public PaxosFSMap, protected CommandHand
    */
   bool fail_mds_gid(FSMap &fsmap, mds_gid_t gid);
 
-  bool is_leader() const override { return mon.is_leader(); }
+  bool is_leader() const override;
 
  protected:
   using mds_info_t = MDSMap::mds_info_t;

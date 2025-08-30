@@ -25,6 +25,7 @@
 #include "common/ostream_temp.h"
 #include "common/ref.h"
 #include "include/health.h"
+#include "include/uuid.h"
 
 class LogClient;
 class MLog;

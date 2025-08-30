@@ -41,6 +41,7 @@ enum {
   l_mdl_last,
 };
 
+#include "include/fs_types.h" // for inodeno_t
 #include "include/types.h"
 #include "include/Context.h"
 
@@ -50,12 +51,16 @@ enum {
 
 #include "LogSegment.h"
 #include "SegmentBoundary.h"
-#include "mdstypes.h"
 #include "LogSegmentRef.h"
 
+#include <atomic>
 #include <list>
 #include <map>
+#include <set>
+#include <string>
+#include <vector>
 
+struct EstimatedReplayTime;
 class Journaler;
 class JournalPointer;
 class LogEvent;

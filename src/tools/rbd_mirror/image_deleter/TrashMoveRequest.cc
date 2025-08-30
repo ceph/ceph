@@ -4,6 +4,7 @@
 #include "tools/rbd_mirror/image_deleter/TrashMoveRequest.h"
 #include "include/rbd_types.h"
 #include "cls/rbd/cls_rbd_client.h"
+#include "common/Clock.h" // for ceph_clock_now()
 #include "common/debug.h"
 #include "common/errno.h"
 #include "common/WorkQueue.h"

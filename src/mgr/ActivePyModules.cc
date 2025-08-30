@@ -22,6 +22,7 @@
 #include "common/perf_counters_key.h"
 #include "crush/CrushWrapper.h"
 #include "include/stringify.h"
+#include "json_spirit/json_spirit_writer.h"
 
 #include "mon/MonMap.h"
 #include "osd/OSDMap.h"
@@ -29,9 +30,11 @@
 #include "mgr/MgrContext.h"
 #include "mgr/TTLCache.h"
 #include "mgr/mgr_perf_counters.h"
+#include "messages/MMgrReport.h" // for class PerfCounterType
 
 #include "DaemonKey.h"
 #include "DaemonServer.h"
+#include "PerfCounterInstance.h"
 #include "mgr/MgrContext.h"
 #include "PyFormatter.h"
 // For ::mgr_store_prefix
@@ -1576,7 +1579,7 @@ void ActivePyModules::set_device_wear_level(const std::string& devid,
     "}";
 
   Command set_cmd;
-  set_cmd.run(&monc, cmd, json);
+  set_cmd.run(&monc, std::move(cmd), std::move(json));
   set_cmd.wait();
 }
 

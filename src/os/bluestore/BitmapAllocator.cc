@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "BitmapAllocator.h"
+#include "include/byte_u_t.h"
 
 #define dout_context cct
 #define dout_subsys ceph_subsys_bluestore

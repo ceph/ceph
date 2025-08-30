@@ -16,6 +16,7 @@
 #include "common/Formatter.h"
 #include "common/debug.h"
 #include "common/errno.h"
+#include "include/container_ios.h"
 #include "librbd/Utils.h"
 
 #define dout_context g_ceph_context

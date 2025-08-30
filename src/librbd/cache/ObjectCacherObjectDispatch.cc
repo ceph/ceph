@@ -4,6 +4,7 @@
 #include "librbd/cache/ObjectCacherObjectDispatch.h"
 #include "include/neorados/RADOS.hpp"
 #include "common/errno.h"
+#include "common/perf_counters.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/Journal.h"
 #include "librbd/Utils.h"

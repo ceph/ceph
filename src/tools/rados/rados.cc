@@ -12,7 +12,7 @@
  *
  */
 
-#include "include/types.h"
+#include "include/byte_u_t.h"
 
 #include "include/rados/buffer.h"
 #include "include/rados/librados.hpp"
@@ -24,13 +24,14 @@
  using namespace libradosstriper;
 #endif
 
+#include "common/Clock.h" // for ceph_clock_now()
 #include "common/config.h"
 #include "common/ceph_argparse.h"
 #include "global/global_init.h"
 #include "common/Cond.h"
 #include "common/debug.h"
 #include "common/errno.h"
-#include "common/Formatter.h"
+#include "common/JSONFormatter.h"
 #include "common/obj_bencher.h"
 #include "common/strtol.h" // for strict_strtoll()
 #include "common/TextTable.h"

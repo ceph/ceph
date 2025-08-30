@@ -22,20 +22,26 @@
 #include <string>
 #include <ranges>
 #include <string_view>
+#include <vector>
 
 #include <errno.h>
 
 #include "include/types.h"
 #include "include/ceph_features.h"
+#include "include/cephfs/cluster_id.h" // for fs_cluster_id_t
+#include "include/cephfs/gid.h" // for mds_gid_t
+#include "include/cephfs/rank.h" // for mds_rank_t
+#include "include/cephfs/types.h" // for MAX_MDS
 #include "include/health.h"
 #include "include/CompatSet.h"
 #include "include/common_fwd.h"
+#include "include/encoding_unordered_set.h"
 
 #include "common/Clock.h"
 #include "common/ceph_releases.h"
 #include "common/config.h"
 
-#include "mds/mdstypes.h"
+#include "mds/mdstypes.h" // feature_bitset_t
 
 namespace ceph { class Formatter; }
 

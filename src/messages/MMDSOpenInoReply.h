@@ -15,6 +15,10 @@
 #ifndef CEPH_MDSOPENINOREPLY_H
 #define CEPH_MDSOPENINOREPLY_H
 
+#include <ostream>
+#include <vector>
+
+#include "include/encoding_vector.h"
 #include "messages/MMDSOp.h"
 
 class MMDSOpenInoReply final : public MMDSOp {

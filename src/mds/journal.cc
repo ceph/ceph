@@ -39,9 +39,14 @@
 #include "events/ESegment.h"
 #include "events/ELid.h"
 
+#include "include/cephfs/encoding.h"
 #include "include/denc.h"
+#include "include/encoding_small_vector.h" // for encoding frag_vec_t
+#include "include/encoding_tuple.h"
 #include "include/random.h" // for ceph::util::generate_random_number()
 #include "include/stringify.h"
+
+#include "messages/MMDSTableRequest.h"
 
 #include "LogSegment.h"
 

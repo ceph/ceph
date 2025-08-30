@@ -16,6 +16,11 @@
 
 #include "common/Formatter.h"
 #include "include/denc.h"
+#include "include/encoding_set.h"
+#include "include/encoding_string.h"
+#include "include/encoding_tuple.h"
+
+#include <dirent.h> // for DT_DIR
 
 void Anchor::encode(bufferlist &bl) const
 {
