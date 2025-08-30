@@ -2704,6 +2704,8 @@ int librados::Rados::get_pool_stats(std::list<string>& v,
       pstat.get_user_omap_bytes(1.0, per_pool);
 
     object_stat_sum_t *sum = &p->second.stats.sum;
+
+    // num_bytes will be used as ALLOCATED
     pv.num_kb = shift_round_up(allocated_bytes, 10);
     pv.num_bytes = allocated_bytes;
     pv.num_objects = sum->num_objects;
