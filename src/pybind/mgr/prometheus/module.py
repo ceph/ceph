@@ -1884,15 +1884,28 @@ class Module(MgrModule, OrchestratorClientMixin):
     def configure(self, server_addr: str, server_port: int) -> None:
         cmd = {'prefix': 'orch get-security-config'}
         ret, out, _ = self.mon_command(cmd)
-        if ret == 0 and out is not None:
-            try:
-                security_config = json.loads(out)
-                if security_config.get('security_enabled', False):
-                    self.setup_tls_config(server_addr, server_port)
-                    return
-            except Exception as e:
-                self.log.exception(f'Failed to setup cephadm based secure monitoring stack: {e}\n',
-                                   'Falling back to default configuration')
+
+        try:
+            if ret == 0 and out and out.strip():
+                try:
+                    security_config = json.loads(out)
+                except json.JSONDecodeError:
+                    self.log.debug(
+                        "Non-JSON payload from 'orch get-security-config': %r", out
+                    )
+                else:
+                    if security_config.get('security_enabled', False):
+                        self.setup_tls_config(server_addr, server_port)
+                        return
+            else:
+                self.log.debug(
+                    "Empty payload from 'orch get-security-config' (ret=%s, out=%r)",
+                    ret, out,
+                )
+        except Exception as e:
+            self.log.exception(
+                'Failed to setup cephadm-based secure monitoring stack: %s; falling back to default configuration',e,
+            )
 
         # In any error fallback to plain http mode
         self.setup_default_config(server_addr, server_port)
