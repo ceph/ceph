@@ -1,0 +1,128 @@
+name: Pull Request Job Dispatcher
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  pr-job-dispatcher:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: read
+      contents: read
+    outputs:
+      only_docs: ${{ steps.check-if-docs-only-pr.outputs.only_docs }}
+      only_container: ${{ steps.check-if-container-only-pr.outputs.only_container }}
+      pr_number: ${{ steps.get-pr-metadata.outputs.pr_number }}
+      pr_sha: ${{ steps.get-pr-metadata.outputs.pr_sha }}
+
+    steps:
+      - name: Get PR metadata
+        id: get-pr-metadata
+        run: |
+          echo "pr_number=${{ github.event.pull_request.number }}" >> "$GITHUB_OUTPUT"
+          echo "pr_sha=${{ github.event.pull_request.head.sha }}" >> "$GITHUB_OUTPUT"
+
+      - name: Get list of changed files
+        id: get-pr-changed-files
+        uses: tj-actions/changed-files@ed68ef82c095e0d48ec87eccea555d944a631a4c
+
+      - name: Check if only docs-related files changed
+        id: check-if-docs-only-pr
+        run: |
+          is_docs_file() {
+            local f="$1"
+            [[ "$f" == doc/* ||
+               "$f" == admin/* ||
+               "$f" == src/sample.ceph.conf ||
+               "$f" == CodingStyle ||
+               "$f" == *.rst ||
+               "$f" == *.md ||
+               "$f" == COPYING* ||
+               "$f" == README.* ||
+               "$f" == SubmittingPatches ||
+               "$f" == .readthedocs.yml ||
+               "$f" == PendingReleaseNotes ]] && return 0
+            return 1
+          }
+      
+          only_docs=true
+
+          changed_files="${{ steps.get-pr-changed-files.outputs.all_changed_files }}"
+          for file in $changed_files; do
+            echo "Checking: [$file]"
+            if ! is_docs_file "$file"; then
+              echo "$file is not a docs file"
+              only_docs=false
+              break
+            fi
+          done
+
+          echo "only_docs=$only_docs" >> "$GITHUB_OUTPUT"
+
+      - name: Check if only container-related files changed
+        id: check-if-container-only-pr
+        run: |
+          is_container_file() {
+            local f="$1"
+            [[ "$f" == container/* ||
+               "$f" == Dockerfile.build ||
+               "$f" == src/script/buildcontainer-setup.sh ||
+               "$f" == src/script/build-with-container.py ]] && return 0
+            return 1
+          }
+      
+          only_container=true
+
+          changed_files="${{ steps.get-pr-changed-files.outputs.all_changed_files }}"
+          for file in $changed_files; do
+            echo "Checking: [$file]"
+            if ! is_container_file "$file"; then
+              echo "$file is not a container file"
+              only_container=false
+              break
+            fi
+          done
+
+          echo "only_container=$only_container" >> "$GITHUB_OUTPUT"
+
+  trigger-fake-status-checks:
+    if: needs.pr-job-dispatcher.outputs.only_docs == 'true' || needs.pr-job-dispatcher.outputs.only_container == 'true'
+    permissions:
+      pull-requests: read
+      statuses: write
+    needs: pr-job-dispatcher
+    uses: ./.github/workflows/pr-checks-faker.yml
+    with:
+      pr_number: ${{ needs.pr-job-dispatcher.outputs.pr_number }}
+      pr_sha: ${{ needs.pr-job-dispatcher.outputs.pr_sha }}
+      triggered_by: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+  trigger-jenkins-jobs:
+    if: needs.pr-job-dispatcher.outputs.only_docs != 'true' && needs.pr-job-dispatcher.outputs.only_container != 'true'
+    permissions:
+      contents: read
+      pull-requests: read
+    needs: pr-job-dispatcher
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Jenkins jobs with parameters
+        run: |
+          GH_PULL_REQUEST_ID="${{ needs.pr-job-dispatcher.outputs.pr_number }}"
+          GH_PULL_REQUEST_SHA="${{ needs.pr-job-dispatcher.outputs.pr_sha }}"
+          
+          for job in ceph-pull-requests ceph-pull-requests-arm64 ceph-windows-pull-requests ceph-api; do
+            echo "Triggering $job ..."
+            for attempt in {1..5}; do
+              curl --fail --retry 4 --retry-delay 5 --retry-connrefused \
+                -X POST "https://jenkins.ceph.com/job/$job/buildWithParameters" \
+                --user "${{ secrets.JENKINS_USER }}:${{ secrets.JENKINS_API_TOKEN }}" \
+                --data-urlencode "GH_PULL_REQUEST_ID=$GH_PULL_REQUEST_ID" \
+                --data-urlencode "GH_PULL_REQUEST_SHA=$GH_PULL_REQUEST_SHA" \
+                --data-urlencode "TRIGGER_METHOD=Branch push" \
+                --data-urlencode "TRIGGERED_BY=https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}" && break
+          
+              echo "Attempt $attempt for $job failed. Retrying..."
+              sleep 3
+            done
+          done
