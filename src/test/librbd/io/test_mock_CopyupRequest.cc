@@ -343,8 +343,8 @@ struct TestMockIoCopyupRequest : public TestMockFixture {
       EXPECT_CALL(*mock_image_ctx.object_map,
                   aio_update(snap_id, object_no, object_no + 1, state,
                              boost::optional<uint8_t>(), _,
-                             (snap_id != CEPH_NOSNAP), _))
-        .WillOnce(WithArg<7>(Invoke([&mock_image_ctx, updated, ret_val](Context *ctx) {
+                             (snap_id != CEPH_NOSNAP), false, _))
+        .WillOnce(WithArg<8>(Invoke([&mock_image_ctx, updated, ret_val](Context *ctx) {
                                if (updated) {
                                  mock_image_ctx.op_work_queue->queue(ctx, ret_val);
                                }
