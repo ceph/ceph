@@ -26,6 +26,7 @@
 
 #include <random>
 #include <vector>
+#include <experimental/random>
 
 #include <boost/program_options/parsers.hpp>
 #include <boost/program_options/variables_map.hpp>
@@ -43,6 +44,7 @@
 #include "crimson/common/config_proxy.h"
 #include "crimson/common/coroutine.h"
 #include "crimson/common/log.h"
+#include "crimson/common/metrics_helpers.h"
 
 #include "crimson/os/futurized_collection.h"
 #include "crimson/os/futurized_store.h"
@@ -61,25 +63,24 @@ SET_SUBSYS(osd);
  * num_operations by 1 Each delete increases the number of operations by 1
  */
 struct results_t {
-  int num_operations = 0;
-  std::chrono::duration<double> tot_latency_sec = 0s;
+  uint64_t ios_completed = 0;
+  std::chrono::duration<double> total_latency = 0s;
   std::chrono::duration<double> duration = 0s;
 
   results_t &operator += (const results_t &other_result) {
-    num_operations += other_result.num_operations;
-    tot_latency_sec += other_result.tot_latency_sec;
+    ios_completed += other_result.ios_completed;
+    total_latency += other_result.total_latency;
     return *this;
   }
 
   void dump(ceph::Formatter *f) const {
-    f->open_object_section("results_t");
-    f->dump_int("number of operations done", num_operations);
+    f->dump_int("ios_completed", ios_completed);
     f->dump_float(
-        "the total latency aka time for these operations",
-        tot_latency_sec.count());
-    f->dump_float("the time the workload took to run is ",
-                  duration.count());
-    f->close_section();
+      "total_latency_s",
+      total_latency.count());
+    f->dump_float(
+      "total_duration_s",
+      duration.count());
   }
 };
 
@@ -88,6 +89,7 @@ private:
   unsigned duration = 0;
 public:
   unsigned num_concurrent_io = 16;
+  bool dump_metrics = false;
   std::chrono::duration<uint64_t> get_duration() const {
     return std::chrono::seconds(duration);
   }
@@ -100,6 +102,8 @@ public:
       ("duration", po::value<unsigned>(&duration)->required(),
        "how long in seconds the actual testing loop runs "
        "for")
+      ("dump-metrics", po::bool_switch(&dump_metrics),
+       "Dump JSON formatted metrics to stdout")
       ;
     return ret;
   }
@@ -108,7 +112,7 @@ public:
 class StoreBenchWorkload {
 public:
   virtual po::options_description get_options() = 0;
-  virtual seastar::future<> run(
+  virtual seastar::future<results_t> run(
     const common_options_t &common,
     crimson::os::FuturizedStore &global_store) = 0;
   virtual ~StoreBenchWorkload() {}
@@ -134,7 +138,7 @@ public:
       ;
     return ret;
   }
-  seastar::future<> run(
+  seastar::future<results_t> run(
     const common_options_t &common,
     crimson::os::FuturizedStore &global_store) final;
   ~PGLogWorkload() final {}
@@ -172,7 +176,7 @@ public:
     ;
     return ret;
   }
-  seastar::future<> run(
+  seastar::future<results_t> run(
     const common_options_t &common,
     crimson::os::FuturizedStore &global_store) final;
   ~RGWIndexWorkload() final {}
@@ -242,10 +246,6 @@ run_concurrent_ios(
   for (const auto res : all_io_res) {
     total_result_all_io += res;
   }
-  ceph::JSONFormatter jf;
-  total_result_all_io.dump(&jf);
-  jf.flush(std::cout);
-  std::cout << std::endl;
   co_return total_result_all_io;
 };
 
@@ -258,7 +258,7 @@ run_concurrent_ios(
  * (b) writing and removing logs ,this is considered 1 I/O
  * (c) doing N I/o's concurrently on 1 thread
  */
-seastar::future<> PGLogWorkload::run(
+seastar::future<results_t> PGLogWorkload::run(
   const common_options_t &common,
   crimson::os::FuturizedStore &global_store)
 {
@@ -309,7 +309,7 @@ seastar::future<> PGLogWorkload::run(
    * takes to add and remove each key
    */
   auto add_remove_entry = [&]() -> seastar::future<results_t> {
-    int num_ops = 0;
+    uint64_t num_ops = 0;
     std::chrono::duration<double> tot_latency =
         std::chrono::duration<double>(0.0);
     auto start = ceph::mono_clock::now();
@@ -350,9 +350,8 @@ seastar::future<> PGLogWorkload::run(
     co_return results_t{num_ops, tot_latency, common.get_duration()};
   };
   co_await pre_fill_logs();
-  co_await run_concurrent_ios(
+  co_return co_await run_concurrent_ios(
     common.get_duration(), common.num_concurrent_io, add_remove_entry);
-  co_return;
 }
 
 // rgw start
@@ -455,7 +454,7 @@ delete_random_key(crimson::os::FuturizedStore::Shard &shard_ref,
  * based on the chosen bucets size,aka if its within acceptable range (c) doing
  * N I/o's concurrently on 1 thread
  */
-seastar::future<> RGWIndexWorkload::run(
+seastar::future<results_t> RGWIndexWorkload::run(
   const common_options_t &common,
   crimson::os::FuturizedStore &global_store)
 {
@@ -525,10 +524,8 @@ seastar::future<> RGWIndexWorkload::run(
    * delete or randomly pick to write or delete a key
    */
   auto rgw_actual_test = [&]() -> seastar::future<results_t> {
-    int num_ops = 0;
-    std::chrono::duration<double> tot_latency =
-        std::chrono::duration<double>(0.0);
     auto start = ceph::mono_clock::now();
+    results_t results;
 
     while (ceph::mono_clock::now() - start <= common.get_duration()) {
 
@@ -543,46 +540,230 @@ seastar::future<> RGWIndexWorkload::run(
       // this case happens when the size of the bucket is min size and we choose
       // to delete
       if (size_bucket_we_choose <= min_size) {
-        results_t result = co_await write_unique_key(
+        results += co_await write_unique_key(
             local_store, coll_id, coll_ref, bucket, keys_in_that_bucket,
             key_size, value_size);
         size_per_bucket[bucket_num_we_choose] += 1;
-        tot_latency += result.tot_latency_sec;
-        num_ops += result.num_operations;
 
       } else if (size_bucket_we_choose >= max_size) {
-        results_t result = co_await delete_random_key(
+        results += co_await delete_random_key(
             local_store, coll_id, coll_ref, bucket, keys_in_that_bucket);
         size_per_bucket[bucket_num_we_choose] -= 1;
-        tot_latency += result.tot_latency_sec;
-        num_ops += result.num_operations;
       } else {
         int choice = std::rand() % 2;
         // choice 0 is write, choice 1 is delete
         if (choice == 0) {
-          results_t result = co_await write_unique_key(
+          results += co_await write_unique_key(
               local_store, coll_id, coll_ref, bucket, keys_in_that_bucket,
               key_size, value_size);
           size_per_bucket[bucket_num_we_choose] += 1;
-          tot_latency += result.tot_latency_sec;
-          num_ops += result.num_operations;
         } else {
-          results_t result = co_await delete_random_key(
+          results += co_await delete_random_key(
               local_store, coll_id, coll_ref, bucket, keys_in_that_bucket);
           size_per_bucket[bucket_num_we_choose] -= 1;
-          tot_latency += result.tot_latency_sec;
-          num_ops += result.num_operations;
         }
       };
     }
-    co_return results_t{num_ops, tot_latency, common.get_duration()};
+    results.duration = ceph::mono_clock::now() - start;
+    co_return results;
   };
 
   co_await pre_fill_buckets();
-  co_await run_concurrent_ios(
+  co_return co_await run_concurrent_ios(
     common.get_duration(), common.num_concurrent_io, rgw_actual_test);
-  co_return;
 };
+
+
+/**
+ * RandomWriteWorkload 
+ *
+ * Performs a simple random write workload.
+ */
+class RandomWriteWorkload : public StoreBenchWorkload {
+  uint64_t prefill_size = 128<<10;
+  uint64_t io_size = 4<<10;
+  uint64_t size_per_shard = 64<<20;
+  uint64_t size_per_obj = 4<<20;
+  uint64_t colls_per_shard = 16;
+  uint64_t io_concurrency_per_shard = 16;
+  uint64_t get_obj_per_shard() const {
+    return size_per_shard / size_per_obj;
+  }
+  uint64_t get_obj_per_coll() const {
+    return get_obj_per_shard() / colls_per_shard;
+  }
+public:
+  po::options_description get_options() final {
+    po::options_description ret{"RandomWriteWorkload"};
+    ret.add_options()
+      ("prefill-size", po::value<uint64_t>(&prefill_size),
+       "IO size to use when prefilling objets")
+      ("io-size", po::value<uint64_t>(&io_size),
+       "IO size")
+      ("size-per-shard", po::value<uint64_t>(&size_per_shard),
+       "Total size per shard")
+      ("size-per-obj", po::value<uint64_t>(&size_per_obj),
+       "Object Size")
+      ("colls-per-shard", po::value<uint64_t>(&colls_per_shard),
+       "Collections per shard")
+      ("io-concurrency-per-shard", po::value<uint64_t>(&io_concurrency_per_shard),
+       "IO Concurrency Per Shard")
+      ;
+    return ret;
+  }
+  seastar::future<results_t> run(
+    const common_options_t &common,
+    crimson::os::FuturizedStore &global_store) final;
+  ~RandomWriteWorkload() final {}
+};
+
+seastar::future<bufferptr> generate_random_bp(uint64_t size)
+{
+  bufferptr bp(ceph::buffer::create_page_aligned(size));
+  auto f = co_await seastar::open_file_dma(
+    "/dev/urandom", seastar::open_flags::ro);
+  static constexpr uint64_t STRIDE = 256<<10;
+  for (uint64_t off = 0; off < size; off += STRIDE) {
+    co_await f.dma_read(off, bp.c_str() + off, STRIDE);
+  }
+  co_return bp;
+}
+
+
+seastar::future<results_t> RandomWriteWorkload::run(
+  const common_options_t &common,
+  crimson::os::FuturizedStore &global_store)
+{
+  LOG_PREFIX(random_write);
+  auto &local_store = global_store.get_sharded_store();
+
+  auto random_buffer = co_await generate_random_bp(16<<20);
+  auto get_random_buffer = [&random_buffer](uint64_t size) {
+    assert((size % CEPH_PAGE_SIZE) == 0);
+    bufferptr bp(
+      random_buffer,
+      std::experimental::randint<uint64_t>(
+        0,
+        (random_buffer.length() - size) / CEPH_PAGE_SIZE) *
+      CEPH_PAGE_SIZE,
+      size);
+    assert(bp.is_page_aligned());
+    bufferlist bl;
+    bl.append(bp);
+    return bl;
+  };
+
+  auto create_hobj = [](uint64_t obj_id) {
+    return ghobject_t(
+      shard_id_t::NO_SHARD,
+      0,     // pool id
+      obj_id, // hash, normally rjenkins of name, but let's just set it to id
+      "",    // namespace, empty here
+      "",    // name, empty here
+      0,     // snapshot
+      ghobject_t::NO_GEN);
+  };
+
+  std::vector<
+    std::pair<coll_t, crimson::os::CollectionRef>
+    > coll_refs;
+  for (uint64_t collidx = 0; collidx < colls_per_shard; ++collidx) {
+   coll_t cid(
+     spg_t(pg_t(0, (seastar::this_shard_id() * colls_per_shard) + collidx))
+   );
+   auto ref = co_await local_store.create_new_collection(
+     cid);
+   coll_refs.emplace_back(std::make_pair(cid, std::move(ref)));
+  }
+  auto get_coll_id = [&](uint64_t obj_id) {
+    return coll_refs[obj_id % get_obj_per_coll()].first;
+  };
+  auto get_coll_ref = [&](uint64_t obj_id) {
+    return coll_refs[obj_id % get_obj_per_coll()].second;
+  };
+
+  unsigned running = 0;
+  std::optional<seastar::promise<>> complete;
+
+  static constexpr unsigned io_concurrency_per_shard = 16;
+  seastar::semaphore sem{io_concurrency_per_shard};
+  results_t results;
+  auto submit_transaction = [&](
+    crimson::os::CollectionRef &col_ref,
+    ceph::os::Transaction &&t) -> seastar::future<> {
+    ++running;
+    co_await sem.wait(1);
+    std::ignore = local_store.do_transaction(
+      col_ref,
+      std::move(t)
+    ).finally([&, start = ceph::mono_clock::now()] {
+      --running;
+      if (running == 0 && complete) {
+        complete->set_value();
+      }
+      sem.signal(1);
+      results.ios_completed++;
+      results.total_latency += ceph::mono_clock::now() - start;
+    });
+  };
+
+  for (uint64_t obj_id = 0; obj_id < get_obj_per_shard(); ++obj_id) {
+    auto hobj = create_hobj(obj_id);
+    auto coll_id = get_coll_id(obj_id);
+    auto coll_ref = get_coll_ref(obj_id);
+    
+    {
+      ceph::os::Transaction t;
+      t.create(coll_id, hobj);
+      co_await submit_transaction(coll_ref, std::move(t));
+    }
+    for (uint64_t off = 0; off < size_per_obj; off += prefill_size) {
+      ceph::os::Transaction t;
+      t.write(coll_id, hobj, off, prefill_size, get_random_buffer(prefill_size));
+      co_await submit_transaction(coll_ref, std::move(t));
+    }
+    INFO("wrote obj {} of {}", obj_id, get_obj_per_shard());
+  }
+
+  INFO("finished populating");
+
+  auto start = ceph::mono_clock::now();
+  uint64_t writes_started = 0;
+  while (ceph::mono_clock::now() - start < common.get_duration()) {
+    auto obj_id = std::experimental::randint<uint64_t>(0, get_obj_per_shard() - 1);
+    auto hobj = create_hobj(obj_id);
+    auto coll_id = get_coll_id(obj_id);
+    auto coll_ref = get_coll_ref(obj_id);
+
+    auto offset = std::experimental::randint<uint64_t>(
+      0,
+      (size_per_obj / io_size) - 1) * io_size;
+    
+    ceph::os::Transaction t;
+    t.write(
+      coll_id,
+      hobj,
+      offset,
+      io_size,
+      get_random_buffer(io_size));
+    co_await submit_transaction(coll_ref, std::move(t));
+    ++writes_started;
+  }
+
+  INFO("writes_started {}", writes_started);
+  for (auto &[id, ref]: coll_refs) {
+    INFO("flushing {}", id);
+    co_await local_store.flush(ref);
+  }
+
+  if (running > 0) {
+    complete = seastar::promise<>();
+    co_await complete->get_future();
+  }
+
+  results.duration = ceph::mono_clock::now() - start;
+  co_return results;
+}
 
 int main(int argc, char **argv) {
   LOG_PREFIX(main);
@@ -619,6 +800,7 @@ int main(int argc, char **argv) {
     
   workloads.emplace("pg_log", std::make_unique<PGLogWorkload>());
   workloads.emplace("rgw_index", std::make_unique<RGWIndexWorkload>());
+  workloads.emplace("random_write", std::make_unique<RandomWriteWorkload>());
   
   desc.add(common_options.get_options());
   for (auto &[name, workload] : workloads) {
@@ -736,23 +918,48 @@ int main(int argc, char **argv) {
                 std::format("error mounting object store type {} in {}",
                             store_type, store_path)
                     .c_str()));
-        std::vector<seastar::future<>> per_shard_futures;
+        std::vector<seastar::future<results_t>> per_shard_futures;
 
-        auto named_lambda = [&, &store_ref = *store]() -> seastar::future<> {
+        auto named_lambda = [&, &store_ref = *store]()
+          -> seastar::future<results_t> {
           DEBUG("running example_io on reactor {}", seastar::this_shard_id());
           auto iter = workloads.find(work_load_type);
           if (iter != workloads.end()) {
-            co_await iter->second->run(common_options, store_ref);
+            co_return co_await iter->second->run(common_options, store_ref);
+          } else {
+            co_return results_t{};
           }
-          co_return;
         };
         for (unsigned i = 0; i < seastar::smp::count; ++i) {
           per_shard_futures.push_back(
               seastar::smp::submit_to(i, std::move(named_lambda)));
         }
 
-        co_await seastar::when_all(per_shard_futures.begin(),
-                                   per_shard_futures.end());
+        JSONFormatter f(true /* pretty */);
+        f.open_object_section("store-bench");
+        {
+          f.dump_float("duration_s", common_options.get_duration().count());
+          f.open_array_section("results");
+          for (unsigned i = 0; i < per_shard_futures.size(); ++i) {
+            auto results = co_await std::move(per_shard_futures[i]);
+            f.open_object_section("result");
+            results.dump(&f);
+            f.dump_string("shard", std::to_string(i));
+            f.close_section();
+          }
+          f.close_section();
+        }
+        if (common_options.dump_metrics) {
+          f.open_array_section("metrics_values");
+          crimson::metrics::dump_metric_value_map(
+            seastar::scollectd::get_value_map(),
+            &f,
+            [](const auto &) { return true; });
+          f.close_section();
+        }
+        f.close_section();
+        f.flush(std::cout);
+
         co_await store->umount();
         co_await store->stop();
         co_await crimson::common::sharded_conf().stop();
