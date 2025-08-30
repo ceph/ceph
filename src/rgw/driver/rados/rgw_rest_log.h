@@ -147,34 +147,6 @@ public:
   }
 };
 
-class RGWOp_MDLog_Lock : public RGWRESTOp {
-public:
-  RGWOp_MDLog_Lock() {}
-  ~RGWOp_MDLog_Lock() override {}
-
-  int check_caps(const RGWUserCaps& caps) override {
-    return caps.check_cap("mdlog", RGW_CAP_WRITE);
-  }
-  void execute(optional_yield y) override;
-  const char* name() const override {
-    return "lock_mdlog_object";
-  }
-};
-
-class RGWOp_MDLog_Unlock : public RGWRESTOp {
-public:
-  RGWOp_MDLog_Unlock() {}
-  ~RGWOp_MDLog_Unlock() override {}
-
-  int check_caps(const RGWUserCaps& caps) override {
-    return caps.check_cap("mdlog", RGW_CAP_WRITE);
-  }
-  void execute(optional_yield y) override;
-  const char* name() const override {
-    return "unlock_mdlog_object";
-  }
-};
-
 class RGWOp_MDLog_Notify : public RGWRESTOp {
 public:
   RGWOp_MDLog_Notify() {}
