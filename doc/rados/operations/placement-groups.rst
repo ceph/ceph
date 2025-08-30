@@ -161,6 +161,12 @@ The output will resemble the following::
 
      ceph osd pool set threshold 2.0
 
+  To get the current ``threshold`` value, run the following command:
+
+  .. prompt:: bash #
+
+     ceph osd pool get threshold
+
 - **AUTOSCALE** is the pool's ``pg_autoscale_mode`` and is set to ``on``,
   ``off``, or ``warn``.
 
