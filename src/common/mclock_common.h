@@ -42,6 +42,7 @@ enum class scheduler_class_t : uint8_t {
 
 #ifdef WITH_CRIMSON
 using SchedulerClass = scheduler_class_t;
+using MonClient = crimson::mon::Client;
 #else
 using SchedulerClass = op_scheduler_class;
 #endif
@@ -142,22 +143,8 @@ private:
   double osd_bandwidth_cost_per_io;
   double osd_bandwidth_capacity_per_shard;
   ClientRegistry& client_registry;
-  #ifndef WITH_CRIMSON
   MonClient *monc;
-  #endif
 public:
-  #ifdef WITH_CRIMSON
-  MclockConfig(CephContext *cct, ClientRegistry& creg,
-               uint32_t num_shards, bool is_rotational, int shard_id,
-	       int whoami):cct(cct),
-                           num_shards(num_shards),
-                           is_rotational(is_rotational),
-			   logger(nullptr),shard_id(shard_id),
-                           whoami(whoami), osd_bandwidth_cost_per_io(0.0),
-	                   osd_bandwidth_capacity_per_shard(0.0),
-	                   client_registry(creg)
-  {}
-  #else
   MclockConfig(CephContext *cct, ClientRegistry& creg,
                MonClient *monc, uint32_t num_shards, bool is_rotational,
 	       int shard_id, int whoami):cct(cct),
@@ -169,7 +156,6 @@ public:
 	                                 osd_bandwidth_capacity_per_shard(0.0),
 	                                 client_registry(creg), monc(monc)
   {}
-#endif
   ~MclockConfig();
   void set_config_defaults_from_profile();
   void set_osd_capacity_params_from_config();
