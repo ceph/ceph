@@ -515,6 +515,11 @@ int D4NFilterBucket::list(const DoutPrefixProvider* dpp, ListParams& params, int
     }
   } //d4n_write_cache_enabled = true
 
+  if (cache_request) {
+    results = std::move(cache_results);
+    return 0;
+  }
+
   //Get objects from backend store
   auto ret = next->list(dpp, params, max, store_results, y);
   if (ret < 0) {
@@ -2051,6 +2056,10 @@ int D4NFilterObject::D4NFilterReadOp::iterate(const DoutPrefixProvider* dpp, int
             ldpp_dout(dpp, 10) << "D4NFilterObject::iterate:: " << __func__ << "(): Error: failed to drain, ret=" << r << dendl;
             return r;
           }
+
+	  if (cache_request) {
+	    return -ENOENT;
+	  }
           break;
         }
       } //end - else
