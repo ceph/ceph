@@ -210,6 +210,28 @@ class TestSubvolume(CephFSTestCase):
         self.mount_a.run_shell(['rm', '-rf', 'group/subvol3'])
 
 
+    def test_subvolume_vxattr_retrieval(self):
+        """
+        To verify that the ceph.dir.subvolume vxattr can be acquired using getfattr
+        """
+
+        # create subvolume dir
+        subvol_dir:str = 'group/subvol5'
+        self.mount_a.run_shell(['mkdir', subvol_dir])
+        with self.assertRaises(CommandFailedError):
+            self.mount_a.getfattr(subvol_dir, 'ceph.dir.subvolume')
+
+        self.mount_a.setfattr(subvol_dir, 'ceph.dir.subvolume', '1')
+        new_fattr:str = self.mount_a.getfattr(subvol_dir, 'ceph.dir.subvolume')
+        self.assertEqual('1', new_fattr)
+
+        # clear subvolume flag
+        self.mount_a.removexattr(subvol_dir, 'ceph.dir.subvolume')
+
+        # cleanup
+        self.mount_a.run_shell(['rm', '-rf', subvol_dir])
+
+
 class TestSubvolumeReplicated(CephFSTestCase):
     CLIENTS_REQUIRED = 1
     MDSS_REQUIRED = 2
