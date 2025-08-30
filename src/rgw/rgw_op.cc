@@ -372,21 +372,33 @@ static int get_obj_policy_from_attr(const DoutPrefixProvider *dpp,
   return ret;
 }
 
-static boost::optional<PublicAccessBlockConfiguration>
+static PublicAccessBlockConfiguration
 get_public_access_conf_from_attr(const map<string, bufferlist>& attrs)
 {
+  PublicAccessBlockConfiguration configuration;
   if (auto aiter = attrs.find(RGW_ATTR_PUBLIC_ACCESS);
       aiter != attrs.end()) {
     bufferlist::const_iterator iter{&aiter->second};
-    PublicAccessBlockConfiguration access_conf;
     try {
-      access_conf.decode(iter);
-    } catch (const buffer::error& e) {
-      return boost::none;
+      configuration.decode(iter);
+    } catch (const buffer::error&) {
+      // reset to default
+      configuration = PublicAccessBlockConfiguration{};
     }
-    return access_conf;
   }
-  return boost::none;
+  return configuration;
+}
+
+static PublicAccessBlockConfiguration
+get_public_access_conf(const map<string, bufferlist>& bucket_attrs,
+                       const std::optional<RGWAccountInfo>& account)
+{
+  auto bucket_config = get_public_access_conf_from_attr(bucket_attrs);
+  if (!account) {
+    return bucket_config;
+  }
+  auto account_config = get_public_access_conf_from_attr(account->attrs);
+  return config_union(bucket_config, account_config);
 }
 
 static int read_bucket_policy(const DoutPrefixProvider *dpp, 
@@ -615,7 +627,8 @@ int rgw_build_bucket_policies(const DoutPrefixProvider *dpp, rgw::sal::Driver* d
       return -EINVAL;
     }
 
-    s->bucket_access_conf = get_public_access_conf_from_attr(s->bucket->get_attrs());
+    s->public_access_block = get_public_access_conf(s->bucket->get_attrs(),
+                                                    s->auth.identity->get_account());
   }
 
   /* handle user ACL only for those APIs which support it */
@@ -1637,9 +1650,8 @@ int get_owner_quota_info(const DoutPrefixProvider* dpp,
       },
       [&] (const rgw_account_id& account_id) {
         RGWAccountInfo info;
-        rgw::sal::Attrs attrs; // ignored
         RGWObjVersionTracker objv; // ignored
-        int r = driver->load_account_by_id(dpp, y, account_id, info, attrs, objv);
+        int r = driver->load_account_by_id(dpp, y, account_id, info, objv);
         if (r >= 0) {
           quotas.user_quota = info.quota;
           quotas.bucket_quota = info.bucket_quota;
@@ -3385,10 +3397,9 @@ static int get_account_max_buckets(const DoutPrefixProvider* dpp,
                                    int32_t& max_buckets)
 {
   RGWAccountInfo info;
-  rgw::sal::Attrs attrs;
   RGWObjVersionTracker objv;
 
-  int ret = driver->load_account_by_id(dpp, y, id, info, attrs, objv);
+  int ret = driver->load_account_by_id(dpp, y, id, info, objv);
   if (ret < 0) {
     ldpp_dout(dpp, 4) << "failed to load account owner: " << cpp_strerror(ret) << dendl;
     return ret;
@@ -3458,6 +3469,17 @@ int RGWCreateBucket::verify_permission(optional_yield y)
   bucket.tenant = s->bucket_tenant;
   ARN arn = ARN(bucket);
   if (!verify_user_permission(this, s, arn, rgw::IAM::s3CreateBucket, false)) {
+    return -EACCES;
+  }
+
+  // CreateBucket doesn't call rgw_build_bucket_policies() to initialize this
+  s->public_access_block = get_public_access_conf(s->bucket_attrs,
+                                                  s->auth.identity->get_account());
+  // reject public canned acls
+  if (s->public_access_block.BlockPublicAcls &&
+      (s->canned_acl == "public-read" ||
+       s->canned_acl == "public-read-write" ||
+       s->canned_acl == "authenticated-read")) {
     return -EACCES;
   }
 
@@ -4114,7 +4136,7 @@ int RGWPutObj::init_processing(optional_yield y) {
   } /* copy_source */
 
   // reject public canned acls
-  if (s->bucket_access_conf && s->bucket_access_conf->block_public_acls() &&
+  if (s->public_access_block.BlockPublicAcls &&
       (s->canned_acl == "public-read" ||
        s->canned_acl == "public-read-write" ||
        s->canned_acl == "authenticated-read")) {
@@ -6379,8 +6401,7 @@ void RGWPutACLs::execute(optional_yield y)
     *_dout << dendl;
   }
 
-  if (s->bucket_access_conf &&
-      s->bucket_access_conf->block_public_acls() &&
+  if (s->public_access_block.BlockPublicAcls &&
       new_policy.is_public(this)) {
     op_ret = -EACCES;
     return;
@@ -8776,8 +8797,7 @@ void RGWPutBucketPolicy::execute(optional_yield y)
       s->cct, &s->bucket_tenant, data.to_str(),
       s->cct->_conf.get_val<bool>("rgw_policy_reject_invalid_principals"));
     rgw::sal::Attrs attrs(s->bucket_attrs);
-    if (s->bucket_access_conf &&
-        s->bucket_access_conf->block_public_policy() &&
+    if (s->public_access_block.BlockPublicPolicy &&
         rgw::IAM::is_public(p)) {
       op_ret = -EACCES;
       return;
