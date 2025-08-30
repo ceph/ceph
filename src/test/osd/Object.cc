@@ -65,9 +65,19 @@ void VarLenGenerator::get_ranges_map(
   uint64_t limit = get_length(cont);
   bool include = false;
   while (pos < limit) {
-    uint64_t segment_length = (rand() % (max_stride_size - min_stride_size)) + min_stride_size;
-    ceph_assert(segment_length < max_stride_size);
-    ceph_assert(segment_length >= min_stride_size);
+    uint64_t segment_length = 0;
+    if (rand() % 2 == 0)
+    {
+      segment_length = (rand() % (max_stride_size - min_stride_size)) + min_stride_size;
+      ceph_assert(segment_length < max_stride_size);
+      ceph_assert(segment_length >= min_stride_size);
+    }
+    else
+    {
+      segment_length = ((rand() % 8192) + 1);
+      std::cout << "Generating short write of length "
+                << segment_length << std::endl;
+    }
     if (segment_length + pos > limit) {
       segment_length = limit - pos;
     }
