@@ -56,6 +56,11 @@ export class AlertmanagerAlert extends CommonAlertmanagerAlert {
   fingerprint: string;
 }
 
+export class GroupAlertmanagerAlert extends CommonAlertmanagerAlert {
+  alerts: AlertmanagerAlert[];
+  receiver: object;
+}
+
 export class AlertmanagerNotificationAlert extends CommonAlertmanagerAlert {
   status: 'firing' | 'resolved';
 }

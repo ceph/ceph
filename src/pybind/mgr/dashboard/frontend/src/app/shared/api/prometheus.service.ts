@@ -8,6 +8,7 @@ import { AlertmanagerSilence } from '../models/alertmanager-silence';
 import {
   AlertmanagerAlert,
   AlertmanagerNotification,
+  GroupAlertmanagerAlert,
   PrometheusRuleGroup
 } from '../models/prometheus-alerts';
 import moment from 'moment';
@@ -77,6 +78,10 @@ export class PrometheusService {
   getAlerts(clusterFilteredAlerts = false, params = {}): Observable<AlertmanagerAlert[]> {
     params['cluster_filter'] = clusterFilteredAlerts;
     return this.http.get<AlertmanagerAlert[]>(this.baseURL, { params });
+  }
+
+  getGroupedAlerts() {
+    return this.http.get<GroupAlertmanagerAlert[]>(`${this.baseURL}/alertgroup`);
   }
 
   getSilences(params = {}): Observable<AlertmanagerSilence[]> {

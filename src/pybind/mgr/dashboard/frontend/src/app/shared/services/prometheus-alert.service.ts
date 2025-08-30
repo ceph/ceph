@@ -6,7 +6,8 @@ import { PrometheusService } from '../api/prometheus.service';
 import {
   AlertmanagerAlert,
   PrometheusCustomAlert,
-  PrometheusRule
+  PrometheusRule,
+  GroupAlertmanagerAlert
 } from '../models/prometheus-alerts';
 import { PrometheusAlertFormatter } from './prometheus-alert-formatter';
 import { BehaviorSubject } from 'rxjs';
@@ -28,9 +29,9 @@ export class PrometheusAlertService {
     private prometheusService: PrometheusService
   ) {}
 
-  getAlerts(clusterFilteredAlerts?: boolean) {
+  getGroupedAlerts() {
     this.prometheusService.ifAlertmanagerConfigured(() => {
-      this.prometheusService.getAlerts(clusterFilteredAlerts).subscribe(
+      this.prometheusService.getGroupedAlerts().subscribe(
         (alerts) => this.handleAlerts(alerts),
         (resp) => {
           if ([404, 504].includes(resp.status)) {
@@ -57,11 +58,12 @@ export class PrometheusAlertService {
     });
   }
 
-  refresh(clusterFilteredAlerts?: boolean) {
-    this.getAlerts(clusterFilteredAlerts);
+  refresh() {
+    this.getGroupedAlerts();
   }
 
-  private handleAlerts(alerts: AlertmanagerAlert[]) {
+  private handleAlerts(alertGroups: GroupAlertmanagerAlert[]) {
+    const alerts: AlertmanagerAlert[] = alertGroups.flatMap((group) => group.alerts);
     if (this.canAlertsBeNotified) {
       this.notifyOnAlertChanges(alerts, this.alerts);
     }
