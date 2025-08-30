@@ -61,13 +61,13 @@ struct block_sm_superblock_t {
     ceph_assert(block_size > 0);
     ceph_assert(segment_size > 0 &&
                 segment_size % block_size == 0);
-    ceph_assert_always(segment_size <= SEGMENT_OFF_MAX);
+    ceph_assert(segment_size <= SEGMENT_OFF_MAX);
     for (unsigned int i = 0; i < seastar::smp::count; i ++) {
       ceph_assert(shard_infos[i].size > segment_size &&
                   shard_infos[i].size % block_size == 0);
-      ceph_assert_always(shard_infos[i].size <= DEVICE_OFF_MAX);
+      ceph_assert(shard_infos[i].size <= DEVICE_OFF_MAX);
       ceph_assert(shard_infos[i].segments > 0);
-      ceph_assert_always(shard_infos[i].segments <= DEVICE_SEGMENT_ID_MAX);
+      ceph_assert(shard_infos[i].segments <= DEVICE_SEGMENT_ID_MAX);
       ceph_assert(shard_infos[i].tracker_offset > 0 &&
                   shard_infos[i].tracker_offset % block_size == 0);
       ceph_assert(shard_infos[i].first_segment_offset > shard_infos[i].tracker_offset &&
