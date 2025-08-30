@@ -229,9 +229,12 @@ cdef make_ex(ret, msg):
     """
     ret = abs(ret)
     if ret in errno_to_exception:
-        return errno_to_exception[ret](ret, msg)
+        e = errno_to_exception[ret](ret, msg)
     else:
-        return OSError(ret, msg)
+        e = OSError(ret, msg)
+
+    e.errno = ceph_to_hostos_errno(e.errno)
+    return e
 
 
 class DirEntry(namedtuple('DirEntry',
@@ -512,7 +515,8 @@ cdef class LibCephFS(object):
         with nogil:
             ret = ceph_create_from_rados(&self.cluster, rados_inst.cluster)
         if ret != 0:
-            raise Error("libcephfs_initialize failed with error code: %d" % ret)
+            ret = ceph_to_hostos_errno(ret)
+            raise Error(f"libcephfs_initialize failed with error code: {ret}")
         self.state = "configuring"
 
     NO_CONF_FILE = -1
@@ -541,7 +545,8 @@ cdef class LibCephFS(object):
         with nogil:
             ret = ceph_create(&self.cluster, <const char*>_auth_id)
         if ret != 0:
-            raise Error("libcephfs_initialize failed with error code: %d" % ret)
+            ret = ceph_to_hostos_errno(ret)
+            raise Error(f"libcephfs_initialize failed with error code: {ret}")
 
         self.state = "configuring"
         if conffile in (self.NO_CONF_FILE, None):
