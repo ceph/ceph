@@ -19,7 +19,7 @@ void cls_user_set_buckets_op::dump(Formatter *f) const
 list<cls_user_set_buckets_op> cls_user_set_buckets_op::generate_test_instances()
 {
   list<cls_user_set_buckets_op> ls;
-  ls.push_back(cls_user_set_buckets_op{});
+  ls.emplace_back();
   cls_user_set_buckets_op op;
   for (int i = 0; i < 3; i++) {
     cls_user_bucket_entry e;
@@ -40,7 +40,7 @@ void cls_user_remove_bucket_op::dump(Formatter *f) const
 list<cls_user_remove_bucket_op> cls_user_remove_bucket_op::generate_test_instances()
 {
   list<cls_user_remove_bucket_op> ls;
-  ls.push_back(cls_user_remove_bucket_op{});
+  ls.emplace_back();
   cls_user_remove_bucket_op op;
   cls_user_gen_test_bucket(&op.bucket, 0);
   ls.push_back(std::move(op));
@@ -56,7 +56,7 @@ void cls_user_list_buckets_op::dump(Formatter *f) const
 list<cls_user_list_buckets_op> cls_user_list_buckets_op::generate_test_instances()
 {
   list<cls_user_list_buckets_op> ls;
-  ls.push_back(cls_user_list_buckets_op{});
+  ls.emplace_back();
   cls_user_list_buckets_op op;;
   op.marker = "marker";
   op.max_entries = 1000;
@@ -74,7 +74,7 @@ void cls_user_list_buckets_ret::dump(Formatter *f) const
 list<cls_user_list_buckets_ret> cls_user_list_buckets_ret::generate_test_instances()
 {
   list<cls_user_list_buckets_ret> ls;
-  ls.push_back(cls_user_list_buckets_ret{});
+  ls.emplace_back();
   cls_user_list_buckets_ret ret;;
   for (int i = 0; i < 3; i++) {
     cls_user_bucket_entry e;
@@ -95,7 +95,7 @@ void cls_user_get_header_op::dump(Formatter *f) const
 list<cls_user_get_header_op> cls_user_get_header_op::generate_test_instances()
 {
   list<cls_user_get_header_op> ls;
-  ls.push_back(cls_user_get_header_op{});
+  ls.emplace_back();
   return ls;
 }
 
@@ -107,7 +107,7 @@ void cls_user_get_header_ret::dump(Formatter *f) const
 list<cls_user_get_header_ret> cls_user_get_header_ret::generate_test_instances()
 {
   list<cls_user_get_header_ret> ls;
-  ls.push_back(cls_user_get_header_ret{});
+  ls.emplace_back();
   cls_user_get_header_ret ret;
   cls_user_gen_test_header(&ret.header);
   ls.push_back(std::move(ret));
@@ -122,7 +122,7 @@ void cls_user_complete_stats_sync_op::dump(Formatter *f) const
 list<cls_user_complete_stats_sync_op> cls_user_complete_stats_sync_op::generate_test_instances()
 {
   list<cls_user_complete_stats_sync_op> ls;
-  ls.push_back(cls_user_complete_stats_sync_op{});
+  ls.emplace_back();
   cls_user_complete_stats_sync_op op;
   op.time = utime_t(12345, 0).to_real_time();
   ls.push_back(std::move(op));
@@ -140,7 +140,7 @@ void cls_user_account_resource_add_op::dump(Formatter *f) const
 std::list<cls_user_account_resource_add_op> cls_user_account_resource_add_op::generate_test_instances()
 {
   std::list<cls_user_account_resource_add_op> ls;
-  ls.push_back(cls_user_account_resource_add_op{});
+  ls.emplace_back();
   cls_user_account_resource_add_op op;
   cls_user_gen_test_resource(op.entry);
   ls.push_back(std::move(op));
@@ -155,7 +155,7 @@ void cls_user_account_resource_get_op::dump(Formatter *f) const
 std::list<cls_user_account_resource_get_op> cls_user_account_resource_get_op::generate_test_instances()
 {
   std::list<cls_user_account_resource_get_op> ls;
-  ls.push_back(cls_user_account_resource_get_op{});
+  ls.emplace_back();
   cls_user_account_resource_get_op op;
   op.name = "name";
   ls.push_back(std::move(op));
@@ -170,7 +170,7 @@ void cls_user_account_resource_get_ret::dump(Formatter *f) const
 std::list<cls_user_account_resource_get_ret> cls_user_account_resource_get_ret::generate_test_instances()
 {
   std::list<cls_user_account_resource_get_ret> ls;
-  ls.push_back(cls_user_account_resource_get_ret{});
+  ls.emplace_back();
   cls_user_account_resource_get_ret ret;
   cls_user_gen_test_resource(ret.entry);
   ls.push_back(std::move(ret));
@@ -185,7 +185,7 @@ void cls_user_account_resource_rm_op::dump(Formatter *f) const
 std::list<cls_user_account_resource_rm_op> cls_user_account_resource_rm_op::generate_test_instances()
 {
   std::list<cls_user_account_resource_rm_op> ls;
-  ls.push_back(cls_user_account_resource_rm_op{});
+  ls.emplace_back();
   cls_user_account_resource_rm_op op;
   op.name = "name";
   ls.push_back(std::move(op));
@@ -202,7 +202,7 @@ void cls_user_account_resource_list_op::dump(Formatter *f) const
 std::list<cls_user_account_resource_list_op> cls_user_account_resource_list_op::generate_test_instances()
 {
   std::list<cls_user_account_resource_list_op> ls;
-  ls.push_back(cls_user_account_resource_list_op{});
+  ls.emplace_back();
   cls_user_account_resource_list_op op;
   op.marker = "marker";
   op.path_prefix = "path";
@@ -221,7 +221,7 @@ void cls_user_account_resource_list_ret::dump(Formatter *f) const
 std::list<cls_user_account_resource_list_ret> cls_user_account_resource_list_ret::generate_test_instances()
 {
   std::list<cls_user_account_resource_list_ret> ls;
-  ls.push_back(cls_user_account_resource_list_ret{});
+  ls.emplace_back();
   cls_user_account_resource_list_ret ret;
   cls_user_gen_test_resource(ret.entries.emplace_back());
   ret.truncated = true;

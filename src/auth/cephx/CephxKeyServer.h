@@ -80,8 +80,8 @@ struct KeyServerData {
   }
   static std::list<KeyServerData> generate_test_instances() {
     std::list<KeyServerData> ls;
-    ls.push_back(KeyServerData{});
-    ls.push_back(KeyServerData{});
+    ls.emplace_back();
+    ls.emplace_back();
     ls.back().version = 1;
     return ls;
   }
@@ -180,11 +180,11 @@ struct KeyServerData {
     }
     static std::list<Incremental> generate_test_instances() {
       std::list<Incremental> ls;
-      ls.push_back(Incremental{});
+      ls.emplace_back();
       ls.back().op = AUTH_INC_DEL;
-      ls.push_back(Incremental{});
+      ls.emplace_back();
       ls.back().op = AUTH_INC_ADD;
-      ls.push_back(Incremental{});
+      ls.emplace_back();
       ls.back().op = AUTH_INC_SET_ROTATING;
       return ls;
     }
