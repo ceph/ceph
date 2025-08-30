@@ -41,6 +41,7 @@ describe('RgwStorageClassService', () => {
           placement_id: 'default-placement',
           storage_class: 'test1',
           tier_type: 'cloud-s3',
+          tier_config_rm: { 'acls.source_id': 'test1' },
           tier_config: {
             endpoint: 'http://198.162.100.100:80',
             access_key: 'test56',
