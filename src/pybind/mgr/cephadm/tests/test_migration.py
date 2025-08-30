@@ -383,3 +383,27 @@ def test_migrate_cert_store(cephadm_module: CephadmOrchestrator):
     assert cephadm_module.cert_mgr.get_cert('grafana_cert', host='host2')
     assert cephadm_module.cert_mgr.get_key('grafana_key', host='host1')
     assert cephadm_module.cert_mgr.get_key('grafana_key', host='host2')
+
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
+def test_migrate_promtail_to_alloy(cephadm_module: CephadmOrchestrator):
+    with with_host(cephadm_module, "host1"), with_host(cephadm_module, "host2"):
+        cephadm_module.cache.daemons["promtail.host1"] = DaemonDescription(
+            daemon_type="promtail",
+            daemon_id="host1",
+            hostname="host1",
+        )
+        cephadm_module.cache.daemons["promtail.host2"] = DaemonDescription(
+            daemon_type="promtail",
+            daemon_id="host2",
+            hostname="host2",
+        )
+
+        cephadm_module.migration_current = 7
+
+        cephadm_module.migration.migrate()
+
+        services = list(cephadm_module.spec_store.all_specs.keys())
+        assert "alloy" in services
+        assert "promtail" not in services
+
+        assert cephadm_module.migration_current == LAST_MIGRATION
