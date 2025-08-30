@@ -58,15 +58,15 @@ class NodeProxy(CephService):
             raise OrchestratorError(
                 'Cannot deploy node-proxy daemons until cephadm endpoint has finished generating certs')
 
-        listener_cert, listener_key = self.mgr.cert_mgr.generate_cert(daemon_spec.host, self.mgr.inventory.get_addr(daemon_spec.host))
+        tls_pair = self.get_certificates(daemon_spec)
         cfg = {
             'target_ip': self.mgr.get_mgr_ip(),
             'target_port': self.agent_endpoint.server_port,
             'name': f'node-proxy.{daemon_spec.host}',
             'keyring': daemon_spec.keyring,
             'root_cert.pem': self.mgr.cert_mgr.get_root_ca(),
-            'listener.crt': listener_cert,
-            'listener.key': listener_key,
+            'listener.crt': tls_pair.cert,
+            'listener.key': tls_pair.key,
         }
         config = {'node-proxy.json': json.dumps(cfg)}
 

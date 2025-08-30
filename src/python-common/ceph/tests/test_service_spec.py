@@ -335,6 +335,7 @@ networks:
 - 10.0.0.0/8
 - 192.168.0.0/16
 spec:
+  certificate_source: cephadm-signed
   rgw_exit_timeout_secs: 60
   rgw_frontend_type: civetweb
   rgw_realm: default-rgw-realm
@@ -358,7 +359,9 @@ spec:
 service_type: alertmanager
 service_name: alertmanager
 spec:
+  certificate_source: cephadm-signed
   port: 1234
+  ssl: true
   user_data:
     default_webhook_urls:
     - foo
@@ -367,16 +370,20 @@ service_type: grafana
 service_name: grafana
 spec:
   anonymous_access: true
+  certificate_source: cephadm-signed
   port: 1234
   protocol: https
+  ssl: true
 ---
 service_type: grafana
 service_name: grafana
 spec:
   anonymous_access: true
+  certificate_source: cephadm-signed
   initial_admin_password: secure
   port: 1234
   protocol: https
+  ssl: true
 ---
 service_type: ingress
 service_id: rgw.foo
@@ -388,6 +395,7 @@ placement:
   - host3
 spec:
   backend_service: rgw.foo
+  certificate_source: cephadm-signed
   first_virtual_router_id: 50
   frontend_port: 8080
   monitor_port: 8081
@@ -414,6 +422,7 @@ spec:
   api_password: admin
   api_port: 5000
   api_user: admin
+  certificate_source: cephadm-signed
   pool: pool
   trusted_ip_list:
   - ::1
@@ -496,8 +505,10 @@ placement:
   count: 1
 spec:
   anonymous_access: false
+  certificate_source: cephadm-signed
   initial_admin_password: password
   protocol: https
+  ssl: true
 """.split('---\n'))
 def test_yaml(y):
     data = yaml.safe_load(y)
