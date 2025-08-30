@@ -154,8 +154,6 @@ export class RgwStorageClassFormComponent extends CdForm implements OnInit {
             secret_key: response?.secret,
             target_path: response?.target_path,
             retain_head_object: this.tierTargetInfo?.val?.retain_head_object || false,
-            multipart_sync_threshold: response?.multipart_sync_threshold || '',
-            multipart_min_part_size: response?.multipart_min_part_size || '',
             allow_read_through: this.tierTargetInfo?.val?.allow_read_through || false,
             restore_storage_class: this.tierTargetInfo?.val?.restore_storage_class,
             read_through_restore_days: this.tierTargetInfo?.val?.read_through_restore_days
@@ -229,16 +227,6 @@ export class RgwStorageClassFormComponent extends CdForm implements OnInit {
   }
 
   createForm() {
-    const self = this;
-
-    const lockDaysValidator = CdValidators.custom('lockDays', () => {
-      if (!self.storageClassForm || !self.storageClassForm.getRawValue()) {
-        return false;
-      }
-
-      const lockDays = Number(self.storageClassForm.getValue('read_through_restore_days'));
-      return !Number.isInteger(lockDays) || lockDays === 0;
-    });
     this.storageClassForm = this.formBuilder.group({
       storage_class: new FormControl('', {
         validators: [Validators.required]
@@ -270,8 +258,7 @@ export class RgwStorageClassFormComponent extends CdForm implements OnInit {
       ]),
       glacier_restore_days: new FormControl(STORAGE_CLASS_CONSTANTS.DEFAULT_GLACIER_RESTORE_DAYS, [
         CdValidators.composeIf({ storageClassType: TIER_TYPE.GLACIER || TIER_TYPE.CLOUD_TIER }, [
-          CdValidators.number(false),
-          lockDaysValidator
+          CdValidators.number(false)
         ])
       ]),
       restore_storage_class: new FormControl(STORAGE_CLASS_CONSTANTS.DEFAULT_STORAGE_CLASS),
@@ -285,7 +272,7 @@ export class RgwStorageClassFormComponent extends CdForm implements OnInit {
             const type = form.get('storageClassType')?.value;
             return type === TIER_TYPE.GLACIER || type === TIER_TYPE.CLOUD_TIER;
           },
-          [CdValidators.number(false), lockDaysValidator]
+          [CdValidators.number(false)]
         )
       ),
       multipart_sync_threshold: new FormControl(
@@ -413,7 +400,6 @@ export class RgwStorageClassFormComponent extends CdForm implements OnInit {
 
   buildRequest() {
     if (this.storageClassForm.errors) return null;
-
     const rawFormValue = _.cloneDeep(this.storageClassForm.value);
     const zoneGroup = this.storageClassForm.get('zonegroup').value;
     const storageClass = this.storageClassForm.get('storage_class').value;
