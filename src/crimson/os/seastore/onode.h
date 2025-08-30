@@ -57,6 +57,8 @@ struct onode_layout_t {
 } __attribute__((packed));
 
 class Transaction;
+class OMapManager;
+class TransactionManager;
 
 /**
  * Onode
@@ -109,6 +111,7 @@ public:
   const omap_root_le_t& get_root(omap_type_t type) const {
     return get_layout().get_root(type);
   }
+  std::unique_ptr<OMapManager> get_manager(TransactionManager& tm);
   friend std::ostream& operator<<(std::ostream &out, const Onode &rhs);
 };
 
