@@ -467,6 +467,9 @@ ExtentPlacementManager::dispatch_delayed_extents(Transaction &t)
   }
 
   for (auto &extent : res.delayed_extents) {
+    if (!extent->is_valid()) {
+      continue;
+    }
     if (dispatch_delayed_extent(extent)) {
       res.usage.inline_usage += extent->get_length();
       res.usage.cleaner_usage.main_usage += extent->get_length();
