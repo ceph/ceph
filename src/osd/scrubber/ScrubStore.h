@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 #pragma once
 
+#include <expected>
 #include <string>
 #include <vector>
 
@@ -122,7 +123,7 @@ class Store {
 
   using CacherPosData =
       MapCacher::MapCacher<std::string, ceph::buffer::list>::PosAndData;
-  using ExpCacherPosData = tl::expected<CacherPosData, int>;
+  using ExpCacherPosData = std::expected<CacherPosData, int>;
 
   /// access to the owning Scrubber object, for logging mostly
   PgScrubber& m_scrubber;
