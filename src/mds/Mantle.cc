@@ -17,6 +17,7 @@
 #include "Mantle.h"
 #include "msg/Messenger.h"
 #include "common/Clock.h"
+#include "common/dout.h"
 #include "CInode.h"
 
 /* Note, by default debug_mds_balancer is 1/5. For debug messages 1<lvl<=5,

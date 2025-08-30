@@ -7,6 +7,7 @@
 #include <string>
 
 #include "common/ceph_time.h"
+#include "include/ceph_fs.h" // for ceph_mon_subscribe_item
 #include "include/types.h"
 
 // mon subscriptions

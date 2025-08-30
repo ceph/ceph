@@ -15,10 +15,16 @@
 #ifndef CEPH_MDSTABLESERVER_H
 #define CEPH_MDSTABLESERVER_H
 
+#include <map>
+#include <set>
+
 #include "MDSTable.h"
 #include "mdstypes.h" // for mds_table_pending_t
+#include "mds_table_types.h" // for get_mdstable_name()
 
 #include "messages/MMDSTableRequest.h"
+
+#include "common/ref.h" // for cref_t
 
 class MDSContext;
 

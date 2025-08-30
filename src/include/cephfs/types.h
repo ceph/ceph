@@ -20,12 +20,14 @@
 #include <ostream>
 #include <string>
 #include <string_view>
+#include <variant>
 #include <vector>
 
 #include "include/compact_set.h"
 #include "include/encoding.h"
 #include "include/fs_types.h"
 #include "include/ceph_fs.h"
+#include "include/object.h" // for snapid_t
 #include "include/types.h" // for version_t
 #include "include/utime.h"
 

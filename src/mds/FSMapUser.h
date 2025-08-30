@@ -15,10 +15,17 @@
 #define CEPH_FSMAPCOMPACT_H
 
 #include <map>
+#include <iosfwd>
 #include <string>
 #include <string_view>
 
 #include "mds/mdstypes.h"
+
+#include "include/encoding.h"
+#include "include/cephfs/types.h" // for fs_cluster_id_t
+#include "include/types.h" // for epoch_t
+
+namespace ceph { class Formatter; }
 
 class FSMapUser {
 public:

@@ -23,6 +23,7 @@
 #include <string>
 #include <fmt/format.h>
 
+#include "include/encoding.h"
 #include "include/types.h"
 #include "common/Formatter.h"
 

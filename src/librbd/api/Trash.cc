@@ -3,6 +3,7 @@
 
 #include "librbd/api/Trash.h"
 #include "include/rados/librados.hpp"
+#include "common/Clock.h" // for ceph_clock_now()
 #include "common/dout.h"
 #include "common/errno.h"
 #include "common/Cond.h"

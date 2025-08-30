@@ -3,6 +3,7 @@
 
 #include "compressor_registry.h"
 #include "common/dout.h"
+#include "include/types.h" // for operator<<(std::vector)
 
 using namespace std::literals;
 

@@ -19,6 +19,7 @@
 
 #include <boost/tuple/tuple.hpp>
 #include "include/ceph_assert.h"
+#include "include/types.h" // for client_t
 #include "DynamicPerfStats.h"
 #include "OSD.h"
 #include "PG.h"

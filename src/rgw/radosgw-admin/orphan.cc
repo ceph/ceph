@@ -8,7 +8,7 @@
 #include "radosgw-admin/orphan.h"
 #include <string>
 
-
+#include "common/Clock.h" // for ceph_clock_now()
 #include "common/config.h"
 #include "common/Formatter.h"
 #include "common/errno.h"

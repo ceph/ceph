@@ -14,6 +14,7 @@
 
 #include <algorithm>
 #include "common/debug.h"
+#include "include/ceph_fs.h" // for CEPH_AUTH_*
 #include "include/str_list.h"
 
 #include "AuthMethodList.h"

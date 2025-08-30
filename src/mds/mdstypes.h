@@ -17,6 +17,8 @@
 #include "include/frag.h"
 #include "include/interval_set.h"
 #include "include/fs_types.h"
+#include "include/types.h" // for ceph_tid_t, version_t
+#include "include/utime.h"
 
 #include "include/ceph_assert.h"
 #include "include/cephfs/dump.h"

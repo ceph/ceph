@@ -26,6 +26,7 @@
 #include "mon/MonCommand.h"
 #include "mon/mon_types.h"
 #include "mon/ConfigMap.h"
+#include "mgr/MDSPerfMetricTypes.h"
 #include "mgr/TTLCache.h"
 
 #include "DaemonState.h"
@@ -33,6 +34,7 @@
 #include "OSDPerfMetricTypes.h"
 
 #include <map>
+#include <optional>
 #include <set>
 #include <string>
 

@@ -49,6 +49,7 @@
 #include "messages/MClientReclaim.h"
 #include "messages/MClientReclaimReply.h"
 #include "messages/MLock.h"
+#include "messages/MMDSPeerRequest.h"
 #include "msg/Messenger.h"
 
 #include "osdc/Objecter.h"

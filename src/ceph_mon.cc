@@ -14,9 +14,11 @@
 
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <dirent.h>
 #include <fcntl.h>
 
 #include <iostream>
+#include <sstream>
 #include <string>
 
 #include "common/config.h"
