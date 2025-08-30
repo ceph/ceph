@@ -115,6 +115,13 @@ public:
     Transaction &t,
     const std::string &key) = 0;
 
+  using omap_rm_keys_iertr = base_iertr;
+  using omap_rm_keys_ret = omap_rm_keys_iertr::future<>;
+  virtual omap_rm_keys_ret omap_rm_keys(
+    omap_root_t& root,
+    Transaction& t,
+    std::set<std::string>& keys) = 0;
+
   /**
    * omap_iterate
    *

@@ -408,6 +408,57 @@ LogManager::omap_rm_key(
   co_return;
 }
 
+static inline bool add_decimal_string(std::string& s, size_t add)
+{
+  for (size_t step = 0; step < add; ++step) {
+    for (int i = (int)s.size() - 1; i >= 0; --i) {
+      if (s[i] < '0' || s[i] > '9') return false;
+      if (s[i] != '9') {
+        ++s[i];
+        break;
+      }
+      s[i] = '0';
+      if (i == 0) return false; // overflow
+    }
+  }
+  return true;
+}
+
+bool is_continuous_fixed_width(const std::set<std::string>& keys) {
+  const auto& first = *keys.begin();
+  const auto& last  = *keys.rbegin();
+  if (first.size() != last.size()) return false;
+  std::string expected = first;
+  if (!add_decimal_string(expected, keys.size() - 1)) return false;
+  return expected == last;
+}
+
+LogManager::omap_rm_keys_ret
+LogManager::omap_rm_keys(
+  omap_root_t& log_root,
+  Transaction& t,
+  std::set<std::string>& keys)
+{
+  LOG_PREFIX(LogManager::omap_rm_key);
+  DEBUGT("key size={}", t, keys.size());
+  assert(log_root.get_type() == omap_type_t::LOG);
+  // Deletion of pg_log_entry_t entries is performed by omap_rm_keys using a set.
+  // For example, omap_rm_keys might be called with a set containing
+  // pg_log_entry_t entries ranging from 0011.0001 to 0011.0010.
+  // In this case, calling omap_rm_key individually for each entry is inefficient,
+  // because each call triggers a traversal of the entire list.
+  bool continous = is_continuous_fixed_width(keys);
+  if (continous) {
+    // fast path
+    co_await remove_kvs(t, log_root.addr, *keys.begin(), *keys.rbegin(), nullptr);
+  } else {
+    for (auto &p : keys) {
+      co_await remove_kv(t, log_root.addr, p, nullptr);
+    }
+  }
+  co_return;
+}
+
 LogManager::omap_rm_key_range_ret 
 LogManager::omap_rm_key_range(
   omap_root_t &log_root,

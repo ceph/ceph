@@ -2909,17 +2909,11 @@ SeaStore::Shard::omaptree_rm_keys(
       std::move(manager),
       std::move(root),
       std::move(keys),
-      [&t, &onode, type]
+      [&t, &onode]
       (auto &manager, auto &root, auto &keys)
     {
-      return trans_intr::do_for_each(
-	keys.begin(),
-	keys.end(),
-	[&manager, &t, &root, FNAME, type](auto &p)
-      {
-	DEBUGT("{} remove key={} ...", t, type, p);
-	return manager.omap_rm_key(root, t, p);
-      }).si_then([&t, &root, &onode] {
+      return manager.omap_rm_keys(root, t, keys
+      ).si_then([&t, &root, &onode] {
 	if (root.must_update()) {
 	  omaptree_update_root(t, root, onode);
 	}

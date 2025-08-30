@@ -123,6 +123,12 @@ public:
     Transaction &t,
     const std::string &key) final;
 
+
+  omap_rm_keys_ret omap_rm_keys(
+    omap_root_t &omap_root,
+    Transaction &t,
+    std::set<std::string>& keys) final;
+
   /**
    * omap_clear
    *

@@ -112,6 +112,11 @@ public:
   omap_clear_ret omap_clear(
     omap_root_t &omap_root,
     Transaction &t) final;
+
+  omap_rm_keys_ret omap_rm_keys(
+    omap_root_t &omap_root,
+    Transaction &t,
+    std::set<std::string>& keys) final;
 };
 using BtreeOMapManagerRef = std::unique_ptr<BtreeOMapManager>;
 
