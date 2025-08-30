@@ -8,6 +8,13 @@ function(build_uadk)
     set(configure_cmd env ./configure --prefix=${UADK_INSTALL_DIR})
     list(APPEND configure_cmd --with-pic --enable-static --disable-shared --with-static_drv)
 
+    # command prefix to unset DESTDIR; otherwise debhelper and
+    # CMake fight about installation directories, and since
+    # everything here stays in the source tree, packaging
+    # is not necessary
+
+    set(UNSET_DESTDIR /usr/bin/env --unset=DESTDIR)
+
     include(ExternalProject)
     ExternalProject_Add(uadk_ext
         UPDATE_COMMAND "" # this disables rebuild on each run
@@ -17,10 +24,10 @@ function(build_uadk)
         SOURCE_DIR "${PROJECT_SOURCE_DIR}/src/uadk"
         BUILD_IN_SOURCE 1
         CMAKE_ARGS -DCMAKE_CXX_COMPILER=which g++
-        CONFIGURE_COMMAND ./autogen.sh COMMAND ${configure_cmd}
-        BUILD_COMMAND make
+        CONFIGURE_COMMAND ${UNSET_DESTDIR} ./autogen.sh COMMAND ${configure_cmd}
+        BUILD_COMMAND ${UNSET_DESTDIR} make
         BUILD_BYPRODUCTS ${UADK_WD_LIBRARY} ${UADK_WD_COMP_LIBRARY} ${UADK_WD_ZIP_LIBRARY}
-        INSTALL_COMMAND make install
+        INSTALL_COMMAND ${UNSET_DESTDIR} make install
         LOG_CONFIGURE ON
         LOG_BUILD ON
         LOG_INSTALL ON
