@@ -71,7 +71,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         self._priv_store = priv_store or mon_store.MonKeyConfigStore(self)
         # self._public_store = public_store or mon_store.MonKeyConfigStore(self)
         self._public_store = (
-            public_store or rados_store.RADOSConfigStore.init(self)
+            public_store or rados_store.RADOSConfigStore.lazy_init(self)
         )
         path_resolver = path_resolver or fs.CachingCephFSPathResolver(self)
         earmark_resolver = earmark_resolver or CephFSEarmarkResolver(self)
