@@ -12,6 +12,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 
+#include "common/admin_socket.h"
 #include "rocksdb/db.h"
 #include "rocksdb/table.h"
 #include "rocksdb/env.h"
@@ -464,11 +465,13 @@ int RocksDBStore::create_and_open(ostream &out,
 }
 
 std::shared_ptr<rocksdb::Cache> RocksDBStore::create_block_cache(
-    const std::string& cache_type, size_t cache_size, double cache_prio_high) {
+  const std::string& name,
+  const std::string& cache_type, size_t cache_size, double cache_prio_high)
+{
   std::shared_ptr<rocksdb::Cache> cache;
   auto shard_bits = cct->_conf->rocksdb_cache_shard_bits;
   if (cache_type == "binned_lru") {
-    cache = rocksdb_cache::NewBinnedLRUCache(cct, cache_size, shard_bits, false, cache_prio_high);
+    cache = rocksdb_cache::NewBinnedLRUCache(cct, this, name, cache_size, shard_bits, false, cache_prio_high);
   } else if (cache_type == "lru") {
     cache = rocksdb::NewLRUCache(cache_size, shard_bits);
   } else if (cache_type == "clock") {
@@ -554,7 +557,8 @@ int RocksDBStore::load_rocksdb_options(bool create_if_missing, rocksdb::Options&
   uint64_t row_cache_size = cache_size * cct->_conf->rocksdb_cache_row_ratio;
   uint64_t block_cache_size = cache_size - row_cache_size;
 
-  bbt_opts.block_cache = create_block_cache(cct->_conf->rocksdb_cache_type, block_cache_size);
+  bbt_opts.block_cache = create_block_cache(
+    rocksdb::kDefaultColumnFamilyName, cct->_conf->rocksdb_cache_type, block_cache_size);
   if (!bbt_opts.block_cache) {
     return -EINVAL;
   }
@@ -1013,7 +1017,7 @@ int RocksDBStore::apply_block_cache_options(const std::string& column_name,
     column_bbt_opts.no_block_cache = true;
   } else {
     if (require_new_block_cache) {
-      block_cache = create_block_cache(cache_type, cache_size, high_pri_pool_ratio);
+      block_cache = create_block_cache(column_name, cache_type, cache_size, high_pri_pool_ratio);
       if (!block_cache) {
 	dout(5) << __func__ << " failed to create block cache for params: " << block_cache_opt << dendl;
 	return -EINVAL;
@@ -1284,12 +1288,82 @@ int RocksDBStore::_test_init(const string& dir)
   return status.ok() ? 0 : -EIO;
 }
 
+class RocksDBStore::SocketHook : public AdminSocketHook
+{
+  RocksDBStore& store;
+  public:
+  SocketHook(RocksDBStore& _store)
+  : store(_store) {
+    [[maybe_unused]] auto cct = store.cct;
+    AdminSocket *admin_socket = cct->get_admin_socket();
+    if (admin_socket) {
+      int r = admin_socket->register_command(
+        "rocksdb log cache", this, "show log of operations in cache");
+      if (r != 0) {
+        dout(1) << __func__ << " cannot register SocketHook" << dendl;
+        return;
+      }
+      r = admin_socket->register_command(
+        "rocksdb stats", this, "show rocksdb performance stats");
+      ceph_assert(r == 0);
+    }
+  }
+  ~SocketHook() {
+    AdminSocket *admin_socket = store.cct->get_admin_socket();
+    if (admin_socket) {
+      admin_socket->unregister_commands(this);
+    }
+  };
+  int call(std::string_view command,
+           const cmdmap_t& cmdmap,
+           const bufferlist& inbl,
+           Formatter *f,
+           std::ostream& ss,
+           bufferlist& out)
+  {
+    int r = 0;
+    if (command == "rocksdb log cache") {
+      if (store.cct->_conf->rocksdb_binned_lru_log == 0) {
+        out.append("log is 0 size\n");
+      } else {
+        store.get_log(out);
+      }
+    } else if (command == "rocksdb stats") {
+      store.get_statistics(f);
+    } else {
+     ss << "Invalid command" << std::endl;
+      r = -ENOSYS;
+    }
+    return r;
+  };
+};
+
+RocksDBStore::RocksDBStore(CephContext *c, const std::string &path, std::map<std::string,std::string> opt, void *p) :
+  cct(c),
+  logger(NULL),
+  path(path),
+  kv_options(opt),
+  priv(p),
+  db(NULL),
+  env(static_cast<rocksdb::Env*>(p)),
+  comparator(nullptr),
+  dbstats(NULL),
+  compact_queue_stop(false),
+  compact_thread(this),
+  compact_on_mount(false),
+  disableWAL(false)
+{
+  asok = new SocketHook(*this);
+}
+
 RocksDBStore::~RocksDBStore()
 {
+  delete asok;
   close();
   if (priv) {
     delete static_cast<rocksdb::Env*>(priv);
   }
+
 }
 
 void RocksDBStore::close()
@@ -1503,6 +1577,24 @@ void RocksDBStore::get_statistics(Formatter *f)
     db->GetProperty("rocksdb.estimate-table-readers-mem", &str);
     f->dump_string("rocksdb_index_filter_blocks_usage", str);
     f->close_section();
+  }
+}
+
+void RocksDBStore::log(std::string&& line) {
+  std::lock_guard l(log_lock);
+
+  while (loglines.size() > cct->_conf->rocksdb_binned_lru_log) {
+    loglines.erase(loglines.begin());
+  }
+  loglines.push_back(line);
+}
+
+void RocksDBStore::get_log(ceph::bufferlist& out)
+{
+  std::lock_guard l(log_lock);
+  for (auto& x : loglines) {
+    out.append(x);
+    out.append("\n");
   }
 }
 
