@@ -37,6 +37,26 @@ class MirrorHealth(IntEnum):
     MIRROR_HEALTH_DISABLED = 4
     MIRROR_HEALTH_INFO = 5
 
+
+MIRROR_IMAGE_STATUS_MAP = {
+    rbd.MIRROR_IMAGE_STATUS_STATE_UNKNOWN: "Unknown",
+    rbd.MIRROR_IMAGE_STATUS_STATE_ERROR: "Error",
+    rbd.MIRROR_IMAGE_STATUS_STATE_SYNCING: "Syncing",
+    rbd.MIRROR_IMAGE_STATUS_STATE_STARTING_REPLAY: "Starting Replay",
+    rbd.MIRROR_IMAGE_STATUS_STATE_REPLAYING: "Replaying",
+    rbd.MIRROR_IMAGE_STATUS_STATE_STOPPING_REPLAY: "Stopping Replay",
+    rbd.MIRROR_IMAGE_STATUS_STATE_STOPPED: "Stopped",
+}
+
+
+def get_mirror_status_label(code: int) -> str:
+    default_code = rbd.MIRROR_IMAGE_STATUS_STATE_UNKNOWN
+    return MIRROR_IMAGE_STATUS_MAP.get(
+        code,
+        MIRROR_IMAGE_STATUS_MAP[default_code]
+    )
+
+
 # pylint: disable=not-callable
 
 
@@ -220,6 +240,31 @@ def _get_pool_stats(pool_names):
     return pool_stats
 
 
+def _get_mirroring_status(pool_name, image_name):
+    ioctx = mgr.rados.open_ioctx(pool_name)
+    mode = rbd.RBD().mirror_mode_get(ioctx)
+    status = rbd.Image(ioctx, image_name).mirror_image_get_status()
+    for remote in status.get("remote_statuses", []):
+        remote["state"] = get_mirror_status_label(remote["state"])
+        desc = remote.get("description")
+
+        if not desc.startswith("replaying, "):
+            continue
+
+        try:
+            metrics = json.loads(desc.split(", ", 1)[1])
+            remote["description"] = metrics
+        except (IndexError, json.JSONDecodeError):
+            continue
+
+        if mode == rbd.RBD_MIRROR_MODE_POOL:
+            primary_tid = metrics["primary_position"]["entry_tid"]
+            non_primary_tid = metrics["non_primary_position"]["entry_tid"]
+            percent_done = (non_primary_tid / primary_tid) * 100 if primary_tid else 0
+            remote["syncing_percent"] = round(percent_done, 2)
+    return status
+
+
 @ViewCache()
 def get_daemons_and_pools():  # pylint: disable=R0915
     daemons = get_daemons()
@@ -387,8 +432,10 @@ def _get_content_data():  # pylint: disable=R0914
             }
 
             if mirror_image['health'] == 'ok':
+                status = _get_mirroring_status(pool_name, mirror_image['name'])
                 image.update({
-                    'description': mirror_image['description']
+                    'description': mirror_image['description'],
+                    'remote_status': status.get("remote_statuses", [])
                 })
                 image_ready.append(image)
             elif mirror_image['health'] == 'syncing':
@@ -485,6 +532,17 @@ class RbdMirroringSummary(BaseController):
         return {'site_name': site_name,
                 'status': status,
                 'content_data': content_data}
+
+
+@APIRouter('/block/mirroring/{pool_name}/{image_name}/summary', Scope.RBD_MIRRORING)
+@APIDoc("RBD Mirroring Summary Management API", "RbdMirroringSummary")
+class RbdImageMirroringSummary(BaseController):
+
+    @Endpoint()
+    @handle_rbd_mirror_error()
+    @ReadPermission
+    def __call__(self, pool_name, image_name):
+        return _get_mirroring_status(pool_name, image_name)
 
 
 @APIRouter('/block/mirroring/pool', Scope.RBD_MIRRORING)
