@@ -1381,7 +1381,6 @@ omap_root_t SeaStore::Shard::select_log_omap_root(Onode& onode) const
   if (log_root.is_null()) {
     return get_omap_root(omap_type_t::OMAP, onode);
   } else {
-    ceph_assert(get_omap_root(omap_type_t::OMAP, onode).is_null());
     return log_root;
   }
 }
