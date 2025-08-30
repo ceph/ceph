@@ -152,6 +152,12 @@ public:
     Transaction &t,
     const std::string &key) final;
 
+
+  omap_rm_keys_ret omap_rm_keys(
+    omap_root_t &omap_root,
+    Transaction &t,
+    std::set<std::string>& keys) final;
+
   /**
    * omap_clear
    *
@@ -321,5 +327,7 @@ inline bool is_ow_key(const std::string &s) {
 inline std::string get_ow_key() {
   return std::string(fastinfo_key);
 }
+
+bool is_continuous_fixed_width(const std::set<std::string>& keys);
 
 }
