@@ -1,0 +1,23 @@
+---
+- name: Remove OSDs
+  ansible.builtin.import_playbook: remove-osds.yml
+
+- hosts: osd0
+  become: true
+  tasks:
+    - name: Build a list of devices to zap
+      ansible.builtin.set_fact:
+        devices: "{{ osd_devices | map('dict2items') | flatten | map(attribute='value') | flatten }}"
+
+    - name: Zap devices
+      ansible.builtin.command: "cephadm ceph-volume lvm zap {{ item }} --destroy"
+      loop: "{{ devices }}"
+      environment:
+        CEPH_VOLUME_DEBUG: '1'
+
+    - name: Work around a BlueStore breaking change
+      ansible.builtin.command: "dd if=/dev/zero of={{ item.1 }} skip={{ item.0 }} bs=1M count=1"
+      loop: "{{ [0, 1073741824, 10737418240] | product(devices) | list }}"
+
+- name: Redeploy OSDs
+  ansible.builtin.import_playbook: deploy-osds.yml
