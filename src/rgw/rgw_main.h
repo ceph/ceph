@@ -59,6 +59,7 @@ namespace dedup{ class Background; }
 namespace sal { class ConfigStore; }
 
 class RGWLib;
+class RGWExporter;
 class AppMain {
   /* several components should be initalized only if librgw is
     * also serving HTTP */
@@ -88,6 +89,7 @@ class AppMain {
   RGWProcessEnv env;
   void need_context_pool();
   std::optional<ceph::async::io_context_pool> context_pool;
+  std::unique_ptr<RGWExporter> usage_exporter;
 public:
   AppMain(const DoutPrefixProvider* dpp);
   ~AppMain();
@@ -114,6 +116,7 @@ public:
   void cond_init_apis();
   void init_ldap();
   void init_opslog();
+  void init_usage_exporter();
   int init_frontends2(RGWLib* rgwlib = nullptr);
   void init_tracepoints();
   void init_lua();
