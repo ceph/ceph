@@ -296,27 +296,29 @@ class TestCertMgr(object):
     @mock.patch("cephadm.module.CephadmOrchestrator.set_store")
     def test_tlsobject_store_save_cert(self, _set_store, cephadm_module: CephadmOrchestrator):
 
+        cephadm_module._init_cert_mgr()
+
         rgw_frontend_rgw_foo_host2_cert = 'fake-rgw-cert'
         nvmeof_client_cert = 'fake-nvmeof-client-cert'
-        nvmeof_server_cert = 'fake-nvmeof-server-cert'
+        nvmeof_ssl_cert = 'fake-nvmeof-ssl-cert'
         nvmeof_root_ca_cert = 'fake-nvmeof-root-ca-cert'
         grafana_cert_host_1 = 'grafana-cert-host-1'
         grafana_cert_host_2 = 'grafana-cert-host-2'
-        cephadm_module.cert_mgr.save_cert('rgw_frontend_ssl_cert', rgw_frontend_rgw_foo_host2_cert, service_name='rgw.foo', user_made=True)
-        cephadm_module.cert_mgr.save_cert('nvmeof_server_cert', nvmeof_server_cert, service_name='nvmeof.foo', user_made=True)
+        cephadm_module.cert_mgr.save_cert('rgw_ssl_cert', rgw_frontend_rgw_foo_host2_cert, service_name='rgw.foo', user_made=True)
+        cephadm_module.cert_mgr.save_cert('nvmeof_ssl_cert', nvmeof_ssl_cert, service_name='nvmeof.self-signed.foo', user_made=False)
         cephadm_module.cert_mgr.save_cert('nvmeof_client_cert', nvmeof_client_cert, service_name='nvmeof.foo', user_made=True)
         cephadm_module.cert_mgr.save_cert('nvmeof_root_ca_cert', nvmeof_root_ca_cert, service_name='nvmeof.foo', user_made=True)
-        cephadm_module.cert_mgr.save_cert('grafana_cert', grafana_cert_host_1, host='host-1', user_made=True)
-        cephadm_module.cert_mgr.save_cert('grafana_cert', grafana_cert_host_2, host='host-2', user_made=True)
+        cephadm_module.cert_mgr.save_cert('grafana_ssl_cert', grafana_cert_host_1, host='host-1', user_made=True)
+        cephadm_module.cert_mgr.save_cert('grafana_ssl_cert', grafana_cert_host_2, host='host-2', user_made=True)
 
         expected_calls = [
-            mock.call(f'{TLSOBJECT_STORE_CERT_PREFIX}rgw_frontend_ssl_cert', json.dumps({'rgw.foo': Cert(rgw_frontend_rgw_foo_host2_cert, True).to_json()})),
-            mock.call(f'{TLSOBJECT_STORE_CERT_PREFIX}nvmeof_server_cert', json.dumps({'nvmeof.foo': Cert(nvmeof_server_cert, True).to_json()})),
+            mock.call(f'{TLSOBJECT_STORE_CERT_PREFIX}rgw_ssl_cert', json.dumps({'rgw.foo': Cert(rgw_frontend_rgw_foo_host2_cert, True).to_json()})),
+            mock.call(f'{TLSOBJECT_STORE_CERT_PREFIX}nvmeof_ssl_cert', json.dumps({'nvmeof.self-signed.foo': Cert(nvmeof_ssl_cert, False).to_json()})),
             mock.call(f'{TLSOBJECT_STORE_CERT_PREFIX}nvmeof_client_cert', json.dumps({'nvmeof.foo': Cert(nvmeof_client_cert, True).to_json()})),
             mock.call(f'{TLSOBJECT_STORE_CERT_PREFIX}nvmeof_root_ca_cert', json.dumps({'nvmeof.foo': Cert(nvmeof_root_ca_cert, True).to_json()})),
-            mock.call(f'{TLSOBJECT_STORE_CERT_PREFIX}grafana_cert', json.dumps({'host-1': Cert(grafana_cert_host_1, True).to_json()})),
-            mock.call(f'{TLSOBJECT_STORE_CERT_PREFIX}grafana_cert', json.dumps({'host-1': Cert(grafana_cert_host_1, True).to_json(),
-                                                                                'host-2': Cert(grafana_cert_host_2, True).to_json()}))
+            mock.call(f'{TLSOBJECT_STORE_CERT_PREFIX}grafana_ssl_cert', json.dumps({'host-1': Cert(grafana_cert_host_1, True).to_json()})),
+            mock.call(f'{TLSOBJECT_STORE_CERT_PREFIX}grafana_ssl_cert', json.dumps({'host-1': Cert(grafana_cert_host_1, True).to_json(),
+                                                                                    'host-2': Cert(grafana_cert_host_2, True).to_json()}))
         ]
         _set_store.assert_has_calls(expected_calls)
 
@@ -362,7 +364,7 @@ class TestCertMgr(object):
             }
 
         def compare_certls_dicts(expected_ls):
-            actual_ls = cephadm_module.cert_mgr.cert_ls(include_datails=True)
+            actual_ls = cephadm_module.cert_mgr.cert_ls(include_details=True, include_cephadm_signed=True)
             assert actual_ls.keys() == expected_ls.keys()
             for svc_cert_name, value in expected_ls.items():
                 expected_certs_entry = value['certificates']
@@ -410,9 +412,9 @@ class TestCertMgr(object):
         compare_certls_dicts(expected_ls)
 
         # Services with sevice_name target/scope
-        cephadm_module.cert_mgr.save_cert('rgw_frontend_ssl_cert', CEPHADM_SELF_GENERATED_CERT_1, service_name='rgw.foo', user_made=True)
-        cephadm_module.cert_mgr.save_cert('rgw_frontend_ssl_cert', CEPHADM_SELF_GENERATED_CERT_2, service_name='rgw.bar', user_made=True)
-        expected_ls["rgw_frontend_ssl_cert"] = {
+        cephadm_module.cert_mgr.save_cert('rgw_ssl_cert', CEPHADM_SELF_GENERATED_CERT_1, service_name='rgw.foo', user_made=True)
+        cephadm_module.cert_mgr.save_cert('rgw_ssl_cert', CEPHADM_SELF_GENERATED_CERT_2, service_name='rgw.bar', user_made=True)
+        expected_ls["rgw_ssl_cert"] = {
             "scope": "service",
             "certificates": {
                 "rgw.foo": get_generated_cephadm_cert_info_1(),
@@ -422,37 +424,36 @@ class TestCertMgr(object):
         compare_certls_dicts(expected_ls)
 
         # Services with host target/scope
-        cephadm_module.cert_mgr.save_cert('grafana_cert', CEPHADM_SELF_GENERATED_CERT_1, host='host1', user_made=True)
-        cephadm_module.cert_mgr.save_cert('grafana_cert', CEPHADM_SELF_GENERATED_CERT_2, host='host2', user_made=True)
-        expected_ls['grafana_cert'] = {
+        cephadm_module.cert_mgr.save_cert('grafana_ssl_cert', CEPHADM_SELF_GENERATED_CERT_1, host='host1', user_made=True)
+        cephadm_module.cert_mgr.save_cert('grafana_ssl_cert', CEPHADM_SELF_GENERATED_CERT_2, host='host2', user_made=True)
+        cephadm_module.cert_mgr.save_cert('oauth2_proxy_ssl_cert', CEPHADM_SELF_GENERATED_CERT_1, host='host1', user_made=True)
+        expected_ls['grafana_ssl_cert'] = {
             'scope': 'host',
             'certificates': {
                 'host1': get_generated_cephadm_cert_info_1(),
                 'host2': get_generated_cephadm_cert_info_2(),
             },
         }
+        expected_ls['oauth2_proxy_ssl_cert'] = {
+            'scope': 'host',
+            'certificates': {
+                'host1': get_generated_cephadm_cert_info_1(),
+            }
+        }
         compare_certls_dicts(expected_ls)
 
         # Services with global target/scope
-        cephadm_module.cert_mgr.save_cert('mgmt_gw_cert', CEPHADM_SELF_GENERATED_CERT_1, user_made=True)
-        cephadm_module.cert_mgr.save_cert('oauth2_proxy_cert', CEPHADM_SELF_GENERATED_CERT_2, user_made=True)
-        expected_ls['mgmt_gw_cert'] = {'scope': 'global', 'certificates': get_generated_cephadm_cert_info_1()}
-        expected_ls['oauth2_proxy_cert'] = {'scope': 'global', 'certificates': get_generated_cephadm_cert_info_2()}
+        cephadm_module.cert_mgr.save_cert('mgmt_gateway_ssl_cert', CEPHADM_SELF_GENERATED_CERT_1, user_made=True)
+        expected_ls['mgmt_gateway_ssl_cert'] = {'scope': 'global', 'certificates': get_generated_cephadm_cert_info_1()}
         compare_certls_dicts(expected_ls)
 
         # nvmeof certificates
         cephadm_module.cert_mgr.save_cert('nvmeof_client_cert', CEPHADM_SELF_GENERATED_CERT_1, service_name='nvmeof.foo', user_made=True)
-        cephadm_module.cert_mgr.save_cert('nvmeof_server_cert', CEPHADM_SELF_GENERATED_CERT_1, service_name='nvmeof.foo', user_made=True)
         cephadm_module.cert_mgr.save_cert('nvmeof_root_ca_cert', CEPHADM_SELF_GENERATED_CERT_2, service_name='nvmeof.foo', user_made=True)
+        cephadm_module.cert_mgr.save_cert('nvmeof_ssl_cert', CEPHADM_SELF_GENERATED_CERT_1, service_name='nvmeof.self-signed.foo', user_made=False)
         expected_ls.update(
             {
                 "nvmeof_client_cert": {
-                    "scope": "service",
-                    "certificates": {
-                        "nvmeof.foo": get_generated_cephadm_cert_info_1(),
-                    },
-                },
-                "nvmeof_server_cert": {
                     "scope": "service",
                     "certificates": {
                         "nvmeof.foo": get_generated_cephadm_cert_info_1(),
@@ -462,6 +463,12 @@ class TestCertMgr(object):
                     "scope": "service",
                     "certificates": {
                         "nvmeof.foo": get_generated_cephadm_cert_info_2(),
+                    },
+                },
+                "nvmeof_ssl_cert": {
+                    "scope": "service",
+                    "certificates": {
+                        "nvmeof.self-signed.foo": get_generated_cephadm_cert_info_1(),
                     },
                 },
             }
@@ -474,31 +481,28 @@ class TestCertMgr(object):
         grafana_host1_key = 'fake-grafana-host1-key'
         grafana_host2_key = 'fake-grafana-host2-key'
         nvmeof_client_key = 'nvmeof-client-key'
-        nvmeof_server_key = 'nvmeof-server-key'
-        nvmeof_encryption_key = 'nvmeof-encryption-key'
-        cephadm_module.cert_mgr.save_key('grafana_key', grafana_host1_key, host='host1')
-        cephadm_module.cert_mgr.save_key('grafana_key', grafana_host2_key, host='host2')
+        nvmeof_ssl_key = 'nvmeof-ssl-key'
+        cephadm_module.cert_mgr.save_key('grafana_ssl_key', grafana_host1_key, host='host1')
+        cephadm_module.cert_mgr.save_key('grafana_ssl_key', grafana_host2_key, host='host2')
         cephadm_module.cert_mgr.save_key('nvmeof_client_key', nvmeof_client_key, service_name='nvmeof.foo')
-        cephadm_module.cert_mgr.save_key('nvmeof_server_key', nvmeof_server_key, service_name='nvmeof.foo')
-        cephadm_module.cert_mgr.save_key('nvmeof_encryption_key', nvmeof_encryption_key, service_name='nvmeof.foo')
+        cephadm_module.cert_mgr.save_key('nvmeof_ssl_key', nvmeof_ssl_key, service_name='nvmeof.self-signed.foo')
 
         expected_calls = [
-            mock.call(f'{TLSOBJECT_STORE_KEY_PREFIX}grafana_key', json.dumps({'host1': PrivKey(grafana_host1_key).to_json()})),
-            mock.call(f'{TLSOBJECT_STORE_KEY_PREFIX}grafana_key', json.dumps({'host1': PrivKey(grafana_host1_key).to_json(),
-                                                                              'host2': PrivKey(grafana_host2_key).to_json()})),
+            mock.call(f'{TLSOBJECT_STORE_KEY_PREFIX}grafana_ssl_key', json.dumps({'host1': PrivKey(grafana_host1_key).to_json()})),
+            mock.call(f'{TLSOBJECT_STORE_KEY_PREFIX}grafana_ssl_key', json.dumps({'host1': PrivKey(grafana_host1_key).to_json(),
+                                                                                  'host2': PrivKey(grafana_host2_key).to_json()})),
             mock.call(f'{TLSOBJECT_STORE_KEY_PREFIX}nvmeof_client_key', json.dumps({'nvmeof.foo': PrivKey(nvmeof_client_key).to_json()})),
-            mock.call(f'{TLSOBJECT_STORE_KEY_PREFIX}nvmeof_server_key', json.dumps({'nvmeof.foo': PrivKey(nvmeof_server_key).to_json()})),
-            mock.call(f'{TLSOBJECT_STORE_KEY_PREFIX}nvmeof_encryption_key', json.dumps({'nvmeof.foo': PrivKey(nvmeof_encryption_key).to_json()})),
+            mock.call(f'{TLSOBJECT_STORE_KEY_PREFIX}nvmeof_ssl_key', json.dumps({'nvmeof.self-signed.foo': PrivKey(nvmeof_ssl_key).to_json()})),
         ]
         _set_store.assert_has_calls(expected_calls)
 
     @mock.patch("cephadm.module.CephadmOrchestrator.set_store")
     def test_tlsobject_store_key_ls(self, _set_store, cephadm_module: CephadmOrchestrator):
         expected_ls = {
-            'nvmeof_server_key': {
+            'nvmeof_ssl_key': {
                 'scope': 'service',
                 'keys': {
-                    'nvmeof.foo': {
+                    'nvmeof.self-signed.foo': {
                         'key_type': 'RSA',
                         'key_size': 4096
                     }
@@ -512,21 +516,11 @@ class TestCertMgr(object):
                         'key_size': 4096
                     }
                 }
-            },
-            'nvmeof_encryption_key': {
-                'scope': 'service',
-                'keys': {
-                    'nvmeof.foo': {
-                        'key_type': 'RSA',
-                        'key_size': 2048
-                    }
-                }
             }
         }
 
         cephadm_module.cert_mgr.save_key('nvmeof_client_key', CEPHADM_SELF_GENERATED_KEY_4096, service_name='nvmeof.foo')
-        cephadm_module.cert_mgr.save_key('nvmeof_server_key', CEPHADM_SELF_GENERATED_KEY_4096, service_name='nvmeof.foo')
-        cephadm_module.cert_mgr.save_key('nvmeof_encryption_key', CEPHADM_SELF_GENERATED_KEY_2048, service_name='nvmeof.foo')
+        cephadm_module.cert_mgr.save_key('nvmeof_ssl_key', CEPHADM_SELF_GENERATED_KEY_4096, service_name='nvmeof.self-signed.foo')
         assert cephadm_module.cert_mgr.key_ls() == expected_ls
 
         cephadm_module.cert_mgr.save_key('ingress_ssl_key', 'invalid_key', service_name='ingress.foo')
@@ -537,15 +531,15 @@ class TestCertMgr(object):
 
         # Define certs and keys with their corresponding scopes
         certs = {
-            'rgw_frontend_ssl_cert': ('rgw.foo', 'fake-rgw-cert', TLSObjectScope.SERVICE),
-            'nvmeof_server_cert': ('nvmeof.foo', 'nvmeof-server-cert', TLSObjectScope.SERVICE),
+            'rgw_ssl_cert': ('rgw.foo', 'fake-rgw-cert', TLSObjectScope.SERVICE),
+            'nvmeof_ssl_cert': ('nvmeof.self-signed.foo', 'nvmeof-ssl-cert', TLSObjectScope.SERVICE),
             'nvmeof_client_cert': ('nvmeof.foo', 'nvmeof-client-cert', TLSObjectScope.SERVICE),
             'nvmeof_root_ca_cert': ('nvmeof.foo', 'nvmeof-root-ca-cert', TLSObjectScope.SERVICE),
             'ingress_ssl_cert': ('ingress', 'ingress-ssl-cert', TLSObjectScope.SERVICE),
             'iscsi_ssl_cert': ('iscsi', 'iscsi-ssl-cert', TLSObjectScope.SERVICE),
-            'grafana_cert': ('host1', 'grafana-cert', TLSObjectScope.HOST),
-            'mgmt_gw_cert': ('mgmt-gateway', 'mgmt-gw-cert', TLSObjectScope.GLOBAL),
-            'oauth2_proxy_cert': ('oauth2-proxy', 'oauth2-proxy-cert', TLSObjectScope.GLOBAL),
+            'grafana_ssl_cert': ('host1', 'grafana-cert', TLSObjectScope.HOST),
+            'oauth2_proxy_ssl_cert': ('host1', 'oauth2-proxy', TLSObjectScope.HOST),
+            'mgmt_gateway_ssl_cert': ('mgmt-gateway', 'mgmt-gw-cert', TLSObjectScope.GLOBAL),
         }
         unknown_certs = {
             'unknown_per_service_cert': ('unknown-svc.foo', 'unknown-cert', TLSObjectScope.SERVICE),
@@ -555,12 +549,11 @@ class TestCertMgr(object):
         }
 
         keys = {
-            'grafana_key': ('host1', 'fake-grafana-host1-key', TLSObjectScope.HOST),
-            'nvmeof_server_key': ('nvmeof.foo', 'nvmeof-server-key', TLSObjectScope.SERVICE),
+            'grafana_ssl_key': ('host1', 'fake-grafana-host1-key', TLSObjectScope.HOST),
+            'nvmeof_ssl_key': ('nvmeof.self-signed.foo', 'nvmeof-ssl-key', TLSObjectScope.SERVICE),
             'nvmeof_client_key': ('nvmeof.foo', 'nvmeof-client-key', TLSObjectScope.SERVICE),
-            'nvmeof_encryption_key': ('nvmeof.foo', 'nvmeof-encryption-key', TLSObjectScope.SERVICE),
-            'mgmt_gw_key': ('mgmt-gateway', 'mgmt-gw-key', TLSObjectScope.GLOBAL),
-            'oauth2_proxy_key': ('oauth2-proxy', 'oauth2-proxy-key', TLSObjectScope.GLOBAL),
+            'mgmt_gateway_ssl_key': ('mgmt-gateway', 'mgmt-gw-key', TLSObjectScope.GLOBAL),
+            'oauth2_proxy_ssl_key': ('host1', 'oauth2-proxy', TLSObjectScope.HOST),
             'ingress_ssl_key': ('ingress', 'ingress-ssl-key', TLSObjectScope.SERVICE),
             'iscsi_ssl_key': ('iscsi', 'iscsi-ssl-key', TLSObjectScope.SERVICE),
         }
@@ -599,96 +592,90 @@ class TestCertMgr(object):
 
         # Validate certificates in cert_store
         for cert_name, (target, cert_value, scope) in certs.items():
-            assert cert_name in cephadm_module.cert_mgr.cert_store.known_entities
+            assert cert_name in cephadm_module.cert_mgr.cert_store.objects_by_name
             if scope == TLSObjectScope.GLOBAL:
-                assert cephadm_module.cert_mgr.cert_store.known_entities[cert_name] == Cert(cert_value, True)
+                assert cephadm_module.cert_mgr.cert_store.objects_by_name[cert_name] == Cert(cert_value, True)
             else:
-                assert cephadm_module.cert_mgr.cert_store.known_entities[cert_name][target] == Cert(cert_value, True)
+                assert cephadm_module.cert_mgr.cert_store.objects_by_name[cert_name][target] == Cert(cert_value, True)
 
         # Validate keys in key_store
         for key_name, (target, key_value, scope) in keys.items():
-            assert key_name in cephadm_module.cert_mgr.key_store.known_entities
+            assert key_name in cephadm_module.cert_mgr.key_store.objects_by_name
             if scope == TLSObjectScope.GLOBAL:
-                assert cephadm_module.cert_mgr.key_store.known_entities[key_name] == PrivKey(key_value)
+                assert cephadm_module.cert_mgr.key_store.objects_by_name[key_name] == PrivKey(key_value)
             else:
-                assert cephadm_module.cert_mgr.key_store.known_entities[key_name][target] == PrivKey(key_value)
+                assert cephadm_module.cert_mgr.key_store.objects_by_name[key_name][target] == PrivKey(key_value)
 
         # Check unknown certificates are not loaded
         for unknown_cert in unknown_certs:
-            assert unknown_cert not in cephadm_module.cert_mgr.cert_store.known_entities
+            assert unknown_cert not in cephadm_module.cert_mgr.cert_store.objects_by_name
 
         # Check unknown keys are not loaded
         for unknown_key in unknown_keys:
-            assert unknown_key not in cephadm_module.cert_mgr.key_store.known_entities
+            assert unknown_key not in cephadm_module.cert_mgr.key_store.objects_by_name
 
     def test_tlsobject_store_get_cert_key(self, cephadm_module: CephadmOrchestrator):
 
         rgw_frontend_rgw_foo_host2_cert = 'fake-rgw-cert'
         nvmeof_client_cert = 'fake-nvmeof-client-cert'
-        nvmeof_server_cert = 'fake-nvmeof-server-cert'
-        cephadm_module.cert_mgr.save_cert('rgw_frontend_ssl_cert', rgw_frontend_rgw_foo_host2_cert, service_name='rgw.foo', user_made=True)
-        cephadm_module.cert_mgr.save_cert('nvmeof_server_cert', nvmeof_server_cert, service_name='nvmeof.foo', user_made=True)
+        nvmeof_ssl_cert = 'fake-nvmeof-ssl-cert'
+        cephadm_module.cert_mgr.save_cert('rgw_ssl_cert', rgw_frontend_rgw_foo_host2_cert, service_name='rgw.foo', user_made=True)
+        cephadm_module.cert_mgr.save_cert('nvmeof_ssl_cert', nvmeof_ssl_cert, service_name='nvmeof.self-signed.foo', user_made=False)
         cephadm_module.cert_mgr.save_cert('nvmeof_client_cert', nvmeof_client_cert, service_name='nvmeof.foo', user_made=True)
 
-        assert cephadm_module.cert_mgr.get_cert('rgw_frontend_ssl_cert', service_name='rgw.foo') == rgw_frontend_rgw_foo_host2_cert
-        assert cephadm_module.cert_mgr.get_cert('nvmeof_server_cert', service_name='nvmeof.foo') == nvmeof_server_cert
+        assert cephadm_module.cert_mgr.get_cert('rgw_ssl_cert', service_name='rgw.foo') == rgw_frontend_rgw_foo_host2_cert
+        assert cephadm_module.cert_mgr.get_cert('nvmeof_ssl_cert', service_name='nvmeof.self-signed.foo') == nvmeof_ssl_cert
         assert cephadm_module.cert_mgr.get_cert('nvmeof_client_cert', service_name='nvmeof.foo') == nvmeof_client_cert
-        assert cephadm_module.cert_mgr.get_cert('grafana_cert', host='host1') is None
+        assert cephadm_module.cert_mgr.get_cert('grafana_ssl_cert', host='host1') is None
         assert cephadm_module.cert_mgr.get_cert('iscsi_ssl_cert', service_name='iscsi.foo') is None
         assert cephadm_module.cert_mgr.get_cert('nvmeof_root_ca_cert', service_name='nvmeof.foo') is None
 
-        with pytest.raises(TLSObjectException, match='Attempted to access cert for unknown entity'):
-            cephadm_module.cert_mgr.get_cert('unknown_entity')
-        with pytest.raises(TLSObjectException, match='Need host to access cert for entity'):
-            cephadm_module.cert_mgr.get_cert('grafana_cert')
-        with pytest.raises(TLSObjectException, match='Need service name to access cert for entity'):
-            cephadm_module.cert_mgr.get_cert('rgw_frontend_ssl_cert', host='foo')
+        with pytest.raises(TLSObjectException, match='Attempted to access cert for unknown TLS object name unknown_consumer'):
+            cephadm_module.cert_mgr.get_cert('unknown_consumer')
+        with pytest.raises(TLSObjectException, match='Need host to access cert for TLS object grafana_ssl_cert'):
+            cephadm_module.cert_mgr.get_cert('grafana_ssl_cert')
+        with pytest.raises(TLSObjectException, match='Need service name to access cert for TLS object rgw_ssl_cert'):
+            cephadm_module.cert_mgr.get_cert('rgw_ssl_cert', host='foo')
 
         grafana_host1_key = 'fake-grafana-host1-cert'
-        nvmeof_server_key = 'nvmeof-server-key'
-        nvmeof_encryption_key = 'nvmeof-encryption-key'
-        cephadm_module.cert_mgr.save_key('grafana_key', grafana_host1_key, host='host1')
-        cephadm_module.cert_mgr.save_key('grafana_key', grafana_host1_key, host='host1')
-        cephadm_module.cert_mgr.save_key('nvmeof_server_key', nvmeof_server_key, service_name='nvmeof.foo')
-        cephadm_module.cert_mgr.save_key('nvmeof_encryption_key', nvmeof_encryption_key, service_name='nvmeof.foo')
+        nvmeof_client_key = 'nvmeof-client-key'
+        nvmeof_ssl_key = 'nvmeof-ssl-key'
+        cephadm_module.cert_mgr.save_key('grafana_ssl_key', grafana_host1_key, host='host1')
+        cephadm_module.cert_mgr.save_key('nvmeof_client_key', nvmeof_client_key, service_name='nvmeof.foo')
+        cephadm_module.cert_mgr.save_key('nvmeof_ssl_key', nvmeof_ssl_key, service_name='nvmeof.self-signed.foo')
 
-        assert cephadm_module.cert_mgr.get_key('grafana_key', host='host1') == grafana_host1_key
-        assert cephadm_module.cert_mgr.get_key('nvmeof_server_key', service_name='nvmeof.foo') == nvmeof_server_key
-        assert cephadm_module.cert_mgr.get_key('nvmeof_client_key', service_name='nvmeof.foo') is None
-        assert cephadm_module.cert_mgr.get_key('nvmeof_encryption_key', service_name='nvmeof.foo') == nvmeof_encryption_key
+        assert cephadm_module.cert_mgr.get_key('grafana_ssl_key', host='host1') == grafana_host1_key
+        assert cephadm_module.cert_mgr.get_key('nvmeof_client_key', service_name='nvmeof.foo') == nvmeof_client_key
+        assert cephadm_module.cert_mgr.get_key('nvmeof_ssl_key', service_name='nvmeof.self-signed.foo') == nvmeof_ssl_key
 
-        with pytest.raises(TLSObjectException, match='Attempted to access privkey for unknown entity'):
-            cephadm_module.cert_mgr.get_key('unknown_entity')
-        with pytest.raises(TLSObjectException, match='Need host to access privkey for entity'):
-            cephadm_module.cert_mgr.get_key('grafana_key')
+        with pytest.raises(TLSObjectException, match='Attempted to access privkey for unknown TLS object name unknown_consumer'):
+            cephadm_module.cert_mgr.get_key('unknown_consumer')
+        with pytest.raises(TLSObjectException, match='Need host to access privkey for TLS object grafana_ssl_key'):
+            cephadm_module.cert_mgr.get_key('grafana_ssl_key')
 
     def test_tlsobject_store_rm_cert(self, cephadm_module: CephadmOrchestrator):
 
         # Save some certificates and ensure certificates are present
-        cephadm_module.cert_mgr.save_cert('rgw_frontend_ssl_cert', 'fake-rgw-cert', service_name='rgw.foo', user_made=True)
-        cephadm_module.cert_mgr.save_cert('nvmeof_server_cert', 'fake-nvmeof-server-cert', service_name='nvmeof.foo', user_made=True)
-        assert cephadm_module.cert_mgr.get_cert('rgw_frontend_ssl_cert', service_name='rgw.foo') == 'fake-rgw-cert'
-        assert cephadm_module.cert_mgr.get_cert('nvmeof_server_cert', service_name='nvmeof.foo') == 'fake-nvmeof-server-cert'
+        cephadm_module.cert_mgr.save_cert('rgw_ssl_cert', 'fake-rgw-cert', service_name='rgw.foo', user_made=True)
+        cephadm_module.cert_mgr.save_cert('nvmeof_ssl_cert', 'fake-nvmeof-ssl-cert', service_name='nvmeof.self-signed.foo', user_made=False)
+        assert cephadm_module.cert_mgr.get_cert('rgw_ssl_cert', service_name='rgw.foo') == 'fake-rgw-cert'
+        assert cephadm_module.cert_mgr.get_cert('nvmeof_ssl_cert', service_name='nvmeof.self-signed.foo') == 'fake-nvmeof-ssl-cert'
 
         # Remove certificates and ensure certificates are removed
-        cephadm_module.cert_mgr.rm_cert('rgw_frontend_ssl_cert', service_name='rgw.foo')
-        cephadm_module.cert_mgr.rm_cert('nvmeof_server_cert', service_name='nvmeof.foo')
-        assert cephadm_module.cert_mgr.get_cert('rgw_frontend_ssl_cert', service_name='rgw.foo') is None
-        assert cephadm_module.cert_mgr.get_cert('nvmeof_server_cert', service_name='nvmeof.foo') is None
+        assert cephadm_module.cert_mgr.rm_cert('rgw_ssl_cert', service_name='rgw.foo') is True
+        assert cephadm_module.cert_mgr.rm_cert('nvmeof_ssl_cert', service_name='nvmeof.self-signed.foo') is True
+        assert cephadm_module.cert_mgr.get_cert('rgw_ssl_cert', service_name='rgw.foo') is None
+        assert cephadm_module.cert_mgr.get_cert('nvmeof_ssl_cert', service_name='nvmeof.self-signed.foo') is None
 
     def test_tlsobject_store_rm_key(self, cephadm_module: CephadmOrchestrator):
 
         # Save some keys and ensure keys are present
-        cephadm_module.cert_mgr.save_key('grafana_key', 'fake-grafana-host1-key', host='host1')
-        cephadm_module.cert_mgr.save_key('nvmeof_server_key', 'fake-nvmeof-server-key', service_name='nvmeof.foo')
-        assert cephadm_module.cert_mgr.get_key('grafana_key', host='host1') == 'fake-grafana-host1-key'
-        assert cephadm_module.cert_mgr.get_key('nvmeof_server_key', service_name='nvmeof.foo') == 'fake-nvmeof-server-key'
+        cephadm_module.cert_mgr.save_key('grafana_ssl_key', 'fake-grafana-host1-key', host='host1')
+        assert cephadm_module.cert_mgr.get_key('grafana_ssl_key', host='host1') == 'fake-grafana-host1-key'
 
         # Remove keys and ensure keys are removed
-        cephadm_module.cert_mgr.rm_key('grafana_key', host='host1')
-        cephadm_module.cert_mgr.rm_key('nvmeof_server_key', service_name='nvmeof.foo')
-        assert cephadm_module.cert_mgr.get_key('grafana_key', host='host1') is None
-        assert cephadm_module.cert_mgr.get_key('nvmeof_server_key', service_name='nvmeof.foo') is None
+        cephadm_module.cert_mgr.rm_key('grafana_ssl_key', host='host1')
+        assert cephadm_module.cert_mgr.get_key('grafana_ssl_key', host='host1') is None
 
     @mock.patch("cephadm.module.CephadmOrchestrator.set_store")
     def test_expired_certificate_detection(self, _set_store, cephadm_module: CephadmOrchestrator):
@@ -719,8 +706,8 @@ class TestCertMgr(object):
         cert_mgr = cephadm_module.cert_mgr
 
         # for services with host scope
-        cert_mgr.save_cert('grafana_cert', EXPIRED_CERT, host="test_host", user_made=True)
-        cert_info = CertInfo("grafana_cert", "test_host", is_valid=True, is_close_to_expiration=True, days_to_expiration=5)
+        cert_mgr.save_cert('grafana_ssl_cert', EXPIRED_CERT, host="test_host", user_made=True)
+        cert_info = CertInfo('grafana_ssl_cert', "test_host", is_valid=True, is_close_to_expiration=True, days_to_expiration=5)
         cert_obj = Cert(EXPIRED_CERT, user_made=False)
         with mock.patch.object(cert_mgr.ssl_certs, "renew_cert", return_value=("mock_new_cert", "mock_new_key")) as renew_mock:
             cert_mgr._renew_self_signed_certificate(cert_info, cert_obj)
@@ -735,8 +722,8 @@ class TestCertMgr(object):
             renew_mock.assert_called_once()
 
         # for services with global scope
-        cert_mgr.save_cert('mgmt_gw_cert', EXPIRED_CERT, user_made=True)
-        cert_info = CertInfo('mgmt_gw_cert', "test_service", is_valid=True, is_close_to_expiration=True, days_to_expiration=5)
+        cert_mgr.save_cert('mgmt_gateway_ssl_cert', EXPIRED_CERT, user_made=True)
+        cert_info = CertInfo('mgmt_gateway_ssl_cert', "test_service", is_valid=True, is_close_to_expiration=True, days_to_expiration=5)
         cert_obj = Cert(EXPIRED_CERT, user_made=False)
         with mock.patch.object(cert_mgr.ssl_certs, "renew_cert", return_value=("mock_new_cert", "mock_new_key")) as renew_mock:
             cert_mgr._renew_self_signed_certificate(cert_info, cert_obj)
@@ -814,20 +801,21 @@ class TestCertMgr(object):
 class MockTLSObject(TLSObjectProtocol):
     STORAGE_PREFIX = "mocktls"
 
-    def __init__(self, data: str = "", user_made: bool = False):
+    def __init__(self, data: str = "", user_made: bool = False, editable: bool = False):
         self.data = data
         self.user_made = user_made
+        self.editable = editable
 
     def __bool__(self):
         return bool(self.data)
 
     @staticmethod
     def to_json(obj):
-        return {"data": obj.data, "user_made": obj.user_made}
+        return {"data": obj.data, "user_made": obj.user_made, "editable": obj.editable}
 
     @staticmethod
     def from_json(json_data):
-        return MockTLSObject(json_data["data"], json_data["user_made"])
+        return MockTLSObject(json_data["data"], json_data["user_made"], json_data["editable"])
 
 
 class MockCephadmOrchestrator:
@@ -842,14 +830,18 @@ class MockCephadmOrchestrator:
 
 
 class TestTLSObjectStore(unittest.TestCase):
+
+    def is_cephadm_signed_entity(self, entity: str) -> bool:
+        return entity.startswith('cephadm-signed')
+
     def setUp(self):
-        known_entities = {
+        objects_by_name = {
             TLSObjectScope.GLOBAL: ["global_cert_1", "global_cert_2"],
             TLSObjectScope.SERVICE: ["per_service1", "per_service2"],
             TLSObjectScope.HOST: ["per_host1", "per_host2"],
         }
         self.mgr = MockCephadmOrchestrator()
-        self.store = TLSObjectStore(self.mgr, MockTLSObject, known_entities)
+        self.store = TLSObjectStore(self.mgr, MockTLSObject, objects_by_name, self.is_cephadm_signed_entity)
 
     def test_save_and_get_tlsobject(self):
         self.store.save_tlsobject("per_service1", "my_cert_data", service_name="my_service")
@@ -894,10 +886,10 @@ class TestTLSObjectStore(unittest.TestCase):
         with self.assertRaises(TLSObjectException):
             self.store.get_tlsobject("unknown_entity")
 
-    def test_validate_tlsobject_entity(self):
+    def test_validate_tlsobject_name(self):
         with self.assertRaises(TLSObjectException):
-            self.store._validate_tlsobject_entity("unknown_entity")
+            self.store._validate_tlsobject_name("unknown_object")
         with self.assertRaises(TLSObjectException):
-            self.store._validate_tlsobject_entity("per_host1")
+            self.store._validate_tlsobject_name("per_host1")
         with self.assertRaises(TLSObjectException):
-            self.store._validate_tlsobject_entity("per_service1")
+            self.store._validate_tlsobject_name("per_service1")

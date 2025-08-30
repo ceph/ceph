@@ -1,7 +1,6 @@
 import errno
 import logging
 import os
-import socket
 from typing import List, Any, Tuple, Dict, Optional, cast, TYPE_CHECKING
 import ipaddress
 import time
@@ -37,11 +36,6 @@ def get_field_from_spec(spec: ServiceSpec, attr: str, default: Any) -> Any:
 class GrafanaService(CephadmService):
     TYPE = 'grafana'
     DEFAULT_SERVICE_PORT = 3000
-
-    def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
-        assert self.TYPE == daemon_spec.daemon_type
-        daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
-        return daemon_spec
 
     def generate_data_sources(self, security_enabled: bool, mgmt_gw_enabled: bool, cert: str, pkey: str) -> str:
         prometheus_user, prometheus_password = self.mgr._get_prometheus_credentials()
@@ -149,12 +143,16 @@ class GrafanaService(CephadmService):
 
         return ''
 
+    def get_grafana_certificates(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[str, str]:
+        host_ips = [self.mgr.inventory.get_addr(daemon_spec.host)]
+        host_fqdns = [self.mgr.get_fqdn(daemon_spec.host), 'grafana_servers']
+        cert, key = self.get_certificates(daemon_spec, host_ips, host_fqdns)
+        return cert, key
+
     def generate_config(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[Dict[str, Any], List[str]]:
         assert self.TYPE == daemon_spec.daemon_type
 
-        host_fqdns = [socket.getfqdn(daemon_spec.host), 'grafana_servers']
-        host_ips = self.mgr.inventory.get_addr(daemon_spec.host)
-        cert, pkey = self.mgr.cert_mgr.prepare_certificate('grafana_cert', 'grafana_key', host_fqdns, host_ips, target_host=daemon_spec.host)
+        cert, pkey = self.get_grafana_certificates(daemon_spec)
         if not cert or not pkey:
             logger.error(f'Cannot generate the needed certificates to deploy Grafana on {daemon_spec.host}')
             cert, pkey = ('', '')  # this will lead to an error in the daemon as certificates are needed
@@ -265,10 +263,6 @@ class GrafanaService(CephadmService):
         """
         Called before grafana daemon is removed.
         """
-        if daemon.hostname is not None:
-            # delete cert/key entires for this grafana daemon
-            self.mgr.cert_mgr.rm_cert('grafana_cert', host=daemon.hostname)
-            self.mgr.cert_mgr.rm_key('grafana_key', host=daemon.hostname)
         self.reset_config(daemon)
 
     def ok_to_stop(self,
@@ -292,15 +286,10 @@ class AlertmanagerService(CephadmService):
     def needs_monitoring(self) -> bool:
         return True
 
-    def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
-        assert self.TYPE == daemon_spec.daemon_type
-        daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
-        return daemon_spec
-
     def get_alertmanager_certificates(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[str, str]:
-        node_ip = self.mgr.inventory.get_addr(daemon_spec.host)
-        host_fqdn = self.mgr.get_fqdn(daemon_spec.host)
-        cert, key = self.mgr.cert_mgr.generate_cert([host_fqdn, "alertmanager_servers"], node_ip)
+        host_ips = [self.mgr.inventory.get_addr(daemon_spec.host)]
+        host_fqdns = [self.mgr.get_fqdn(daemon_spec.host), 'alertmanager_servers']
+        cert, key = self.get_certificates(daemon_spec, host_ips, host_fqdns)
         return cert, key
 
     @classmethod
@@ -493,14 +482,6 @@ class PrometheusService(CephadmService):
     USER_CFG_KEY = 'prometheus/web_user'
     PASS_CFG_KEY = 'prometheus/web_password'
 
-    def prepare_create(
-            self,
-            daemon_spec: CephadmDaemonDeploySpec,
-    ) -> CephadmDaemonDeploySpec:
-        assert self.TYPE == daemon_spec.daemon_type
-        daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
-        return daemon_spec
-
     def config(self, spec: ServiceSpec) -> None:
         # make sure module is enabled
         mgr_map = self.mgr.get('mgr_map')
@@ -513,9 +494,9 @@ class PrometheusService(CephadmService):
             # harm done if we do.
 
     def get_prometheus_certificates(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[str, str]:
-        node_ip = self.mgr.inventory.get_addr(daemon_spec.host)
-        host_fqdn = self.mgr.get_fqdn(daemon_spec.host)
-        cert, key = self.mgr.cert_mgr.generate_cert([host_fqdn, 'prometheus_servers'], node_ip)
+        host_ips = [self.mgr.inventory.get_addr(daemon_spec.host)]
+        host_fqdns = [self.mgr.get_fqdn(daemon_spec.host), 'prometheus_servers']
+        cert, key = self.get_certificates(daemon_spec, host_ips, host_fqdns)
         return cert, key
 
     def get_service_discovery_cfg(self, security_enabled: bool, mgmt_gw_enabled: bool) -> Dict[str, List[str]]:
@@ -793,17 +774,6 @@ class NodeExporterService(CephadmService):
         deps += mgr.cache.get_daemons_by_types(['mgmt-gateway'])
         return sorted(deps)
 
-    def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
-        assert self.TYPE == daemon_spec.daemon_type
-        daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
-        return daemon_spec
-
-    def get_node_exporter_certificates(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[str, str]:
-        node_ip = self.mgr.inventory.get_addr(daemon_spec.host)
-        host_fqdn = self.mgr.get_fqdn(daemon_spec.host)
-        cert, key = self.mgr.cert_mgr.generate_cert(host_fqdn, node_ip)
-        return cert, key
-
     def generate_config(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[Dict[str, Any], List[str]]:
         assert self.TYPE == daemon_spec.daemon_type
         deps = []
@@ -811,7 +781,7 @@ class NodeExporterService(CephadmService):
         deps += [f'secure_monitoring_stack:{self.mgr.secure_monitoring_stack}']
         security_enabled, mgmt_gw_enabled, _ = self.mgr._get_security_config()
         if security_enabled:
-            cert, key = self.get_node_exporter_certificates(daemon_spec)
+            cert, key = self.get_certificates(daemon_spec)
             r = {
                 'files': {
                     'web.yml': self.mgr.template.render('services/node-exporter/web.yml.j2',
@@ -842,11 +812,6 @@ class LokiService(CephadmService):
     TYPE = 'loki'
     DEFAULT_SERVICE_PORT = 3100
 
-    def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
-        assert self.TYPE == daemon_spec.daemon_type
-        daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
-        return daemon_spec
-
     def generate_config(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[Dict[str, Any], List[str]]:
         assert self.TYPE == daemon_spec.daemon_type
         deps: List[str] = []
@@ -869,11 +834,6 @@ class PromtailService(CephadmService):
                          spec: Optional[ServiceSpec] = None,
                          daemon_type: Optional[str] = None) -> List[str]:
         return sorted(mgr.cache.get_daemons_by_types(['loki']))
-
-    def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
-        assert self.TYPE == daemon_spec.daemon_type
-        daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
-        return daemon_spec
 
     def generate_config(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[Dict[str, Any], List[str]]:
         assert self.TYPE == daemon_spec.daemon_type
@@ -900,11 +860,6 @@ class PromtailService(CephadmService):
 @register_cephadm_service
 class SNMPGatewayService(CephadmService):
     TYPE = 'snmp-gateway'
-
-    def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
-        assert self.TYPE == daemon_spec.daemon_type
-        daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
-        return daemon_spec
 
     def generate_config(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[Dict[str, Any], List[str]]:
         assert self.TYPE == daemon_spec.daemon_type
