@@ -10,7 +10,8 @@ from typing import Callable
 class TestLvm:
     @patch('ceph_volume.objectstore.lvm.prepare_utils.create_key', Mock(return_value=['AQCee6ZkzhOrJRAAZWSvNC3KdXOpC2w8ly4AZQ==']))
     def setup_method(self, m_create_key):
-        self.lvm = Lvm([])
+        args = Namespace(dmcrypt_format_opts=None, dmcrypt_open_opts=None)
+        self.lvm = Lvm(args)
 
     @patch('ceph_volume.conf.cluster', 'ceph')
     @patch('ceph_volume.api.lvm.get_single_lv')
@@ -28,6 +29,7 @@ class TestLvm:
                                               lv_tags='',
                                               lv_uuid='fake-uuid')
         self.lvm.encrypted = True
+        self.lvm.with_tpm = 0
         self.lvm.dmcrypt_key = 'fake-dmcrypt-key'
         self.lvm.args = args
         self.lvm.objectstore = 'seastore'
@@ -108,6 +110,7 @@ class TestLvm:
                                                            lv_uuid='fake-uuid')
         self.lvm.encrypted = True
         self.lvm.dmcrypt_key = 'fake-dmcrypt-key'
+        self.lvm.with_tpm = 0
         self.lvm.args = args
         self.lvm.objectstore = 'seastore'
         self.lvm.pre_prepare()
