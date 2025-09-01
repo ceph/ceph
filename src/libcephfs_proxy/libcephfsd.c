@@ -114,11 +114,11 @@ static int32_t libcephfsd_version(proxy_client_t *client, proxy_req_t *req,
 	text = ceph_version(&major, &minor, &patch);
 	TRACE("ceph_version(%d, %d, %d) -> %s", major, minor, patch, text);
 
-	ans.v0.major = major;
-	ans.v0.minor = minor;
-	ans.v0.patch = patch;
+	ans.major = major;
+	ans.minor = minor;
+	ans.patch = patch;
 
-	CEPH_STR_ADD(ans, v0.text, text);
+	CEPH_STR_ADD(ans, text, text);
 
 	return CEPH_RET(client->sd, 0, ans);
 }
@@ -134,16 +134,15 @@ static int32_t libcephfsd_userperm_new(proxy_client_t *client, proxy_req_t *req,
 		return -EOPNOTSUPP;
 	}
 
-	userperm = ceph_userperm_new(req->userperm_new.v0.uid,
-				     req->userperm_new.v0.gid,
-				     req->userperm_new.v0.groups,
-				     (gid_t *)data);
+	userperm = ceph_userperm_new(req->userperm_new.uid,
+				     req->userperm_new.gid,
+				     req->userperm_new.groups, (gid_t *)data);
 	TRACE("ceph_userperm_new(%u, %u, %u) -> %p", req->userperm_new.uid,
 	      req->userperm_new.gid, req->userperm_new.groups, userperm);
 
 	err = -ENOMEM;
 	if (userperm != NULL) {
-		ans.v0.userperm = ptr_checksum(&global_random, userperm);
+		ans.userperm = ptr_checksum(&global_random, userperm);
 		err = 0;
 	}
 
@@ -162,7 +161,7 @@ static int32_t libcephfsd_userperm_destroy(proxy_client_t *client,
 		return -EOPNOTSUPP;
 	}
 
-	err = ptr_check(&global_random, req->userperm_destroy.v0.userperm,
+	err = ptr_check(&global_random, req->userperm_destroy.userperm,
 			(void **)&perms);
 
 	if (err >= 0) {
@@ -181,13 +180,13 @@ static int32_t libcephfsd_create(proxy_client_t *client, proxy_req_t *req,
 	const char *id;
 	int32_t err;
 
-	id = CEPH_STR_GET(req->create, v0.id, data);
+	id = CEPH_STR_GET(req->create, id, data);
 
 	err = proxy_mount_create(&mount, id);
 	TRACE("ceph_create(%p, '%s') -> %d", mount, id, err);
 
 	if (err >= 0) {
-		ans.v0.cmount = ptr_checksum(&client->random, mount);
+		ans.cmount = ptr_checksum(&client->random, mount);
 	}
 
 	return CEPH_COMPLETE(client, err, ans);
@@ -200,8 +199,7 @@ static int32_t libcephfsd_release(proxy_client_t *client, proxy_req_t *req,
 	proxy_mount_t *mount;
 	int32_t err;
 
-	err = ptr_check(&client->random, req->release.v0.cmount,
-			(void **)&mount);
+	err = ptr_check(&client->random, req->release.cmount, (void **)&mount);
 	if (err >= 0) {
 		err = proxy_mount_release(mount);
 		TRACE("ceph_release(%p) -> %d", mount, err);
@@ -219,10 +217,10 @@ static int32_t libcephfsd_conf_read_file(proxy_client_t *client,
 	const char *path;
 	int32_t err;
 
-	err = ptr_check(&client->random, req->conf_read_file.v0.cmount,
+	err = ptr_check(&client->random, req->conf_read_file.cmount,
 			(void **)&mount);
 	if (err >= 0) {
-		path = CEPH_STR_GET(req->conf_read_file, v0.path, data);
+		path = CEPH_STR_GET(req->conf_read_file, path, data);
 
 		err = proxy_mount_config(mount, path);
 		TRACE("ceph_conf_read_file(%p, '%s') ->%d", mount, path, err);
@@ -243,21 +241,20 @@ static int32_t libcephfsd_conf_get(proxy_client_t *client, proxy_req_t *req,
 
 	buffer = client->buffer;
 	size = client->buffer_size;
-	if (req->conf_get.v0.size < size) {
-		size = req->conf_get.v0.size;
+	if (req->conf_get.size < size) {
+		size = req->conf_get.size;
 	}
-	err = ptr_check(&client->random, req->conf_get.v0.cmount,
+	err = ptr_check(&client->random, req->conf_get.cmount,
 			(void **)&mount);
 	if (err >= 0) {
-		option = CEPH_STR_GET(req->conf_get, v0.option, data);
+		option = CEPH_STR_GET(req->conf_get, option, data);
 
 		err = proxy_mount_get(mount, option, buffer, size);
 		TRACE("ceph_conf_get(%p, '%s', '%s') -> %d", mount, option,
 		      (char *)buffer, err);
 
 		if (err >= 0) {
-			CEPH_DATA_ADD(ans, v0.value, buffer,
-				      strlen(buffer) + 1);
+			CEPH_DATA_ADD(ans, value, buffer, strlen(buffer) + 1);
 		}
 	}
 
@@ -272,12 +269,11 @@ static int32_t libcephfsd_conf_set(proxy_client_t *client, proxy_req_t *req,
 	const char *option, *value;
 	int32_t err;
 
-	err = ptr_check(&client->random, req->conf_set.v0.cmount,
-			(void **)&mount);
+	err = ptr_check(&client->random, req->conf_set.cmount, (void **)&mount);
 	if (err >= 0) {
-		option = CEPH_STR_GET(req->conf_set, v0.option, data);
-		value = CEPH_STR_GET(req->conf_set, v0.value,
-				     (const char *)(data) + req->conf_set.v0.option);
+		option = CEPH_STR_GET(req->conf_set, option, data);
+		value = CEPH_STR_GET(req->conf_set, value,
+				     (const char *)(data) + req->conf_set.option);
 
 		err = proxy_mount_set(mount, option, value);
 		TRACE("ceph_conf_set(%p, '%s', '%s') -> %d", mount, option,
@@ -294,7 +290,7 @@ static int32_t libcephfsd_init(proxy_client_t *client, proxy_req_t *req,
 	proxy_mount_t *mount;
 	int32_t err;
 
-	err = ptr_check(&client->random, req->init.v0.cmount, (void **)&mount);
+	err = ptr_check(&client->random, req->init.cmount, (void **)&mount);
 	if (err >= 0) {
 		err = proxy_mount_init(mount);
 		TRACE("ceph_init(%p) -> %d", mount, err);
@@ -312,10 +308,10 @@ static int32_t libcephfsd_select_filesystem(proxy_client_t *client,
 	const char *fs;
 	int32_t err;
 
-	err = ptr_check(&client->random, req->select_filesystem.v0.cmount,
+	err = ptr_check(&client->random, req->select_filesystem.cmount,
 			(void **)&mount);
 	if (err >= 0) {
-		fs = CEPH_STR_GET(req->select_filesystem, v0.fs, data);
+		fs = CEPH_STR_GET(req->select_filesystem, fs, data);
 
 		err = proxy_mount_select(mount, fs);
 		TRACE("ceph_select_filesystem(%p, '%s') -> %d", mount, fs, err);
@@ -332,9 +328,9 @@ static int32_t libcephfsd_mount(proxy_client_t *client, proxy_req_t *req,
 	const char *root;
 	int32_t err;
 
-	err = ptr_check(&client->random, req->mount.v0.cmount, (void **)&mount);
+	err = ptr_check(&client->random, req->mount.cmount, (void **)&mount);
 	if (err >= 0) {
-		root = CEPH_STR_GET(req->mount, v0.root, data);
+		root = CEPH_STR_GET(req->mount, root, data);
 
 		err = proxy_mount_mount(mount, root);
 		TRACE("ceph_mount(%p, '%s') -> %d", mount, root, err);
@@ -350,8 +346,7 @@ static int32_t libcephfsd_unmount(proxy_client_t *client, proxy_req_t *req,
 	proxy_mount_t *mount;
 	int32_t err;
 
-	err = ptr_check(&client->random, req->unmount.v0.cmount,
-			(void **)&mount);
+	err = ptr_check(&client->random, req->unmount.cmount, (void **)&mount);
 
 	if (err >= 0) {
 		err = proxy_mount_unmount(mount);
@@ -370,10 +365,10 @@ static int32_t libcephfsd_ll_statfs(proxy_client_t *client, proxy_req_t *req,
 	struct Inode *inode;
 	int32_t err;
 
-	err = ptr_check(&client->random, req->ll_statfs.v0.cmount,
+	err = ptr_check(&client->random, req->ll_statfs.cmount,
 			(void **)&mount);
 	if (err >= 0) {
-		err = ptr_check(&client->random, req->ll_statfs.v0.inode,
+		err = ptr_check(&client->random, req->ll_statfs.inode,
 				(void **)&inode);
 	}
 
@@ -402,23 +397,23 @@ static int32_t libcephfsd_ll_lookup(proxy_client_t *client, proxy_req_t *req,
 
 	embedded = false;
 
-	name = CEPH_STR_GET(req->ll_lookup, v0.name, data);
-	data = (const char *)data + req->ll_lookup.v0.name;
+	name = CEPH_STR_GET(req->ll_lookup, name, data);
+	data = (const char *)data + req->ll_lookup.name;
 
-	err = ptr_check(&client->random, req->ll_lookup.v0.cmount,
+	err = ptr_check(&client->random, req->ll_lookup.cmount,
 			(void **)&mount);
 	if (err >= 0) {
-		err = ptr_check(&client->random, req->ll_lookup.v0.parent,
+		err = ptr_check(&client->random, req->ll_lookup.parent,
 				(void **)&parent);
 	}
 	if (err >= 0) {
-		err = validate_perms(client, &req->ll_lookup.v0.userperm,
-				     req->ll_lookup.v1.ngroups, data, &perms,
+		err = validate_perms(client, &req->ll_lookup.userperm,
+				     req->ll_lookup.ngroups, data, &perms,
 				     &embedded);
 	}
 	if (err >= 0) {
-		want = req->ll_lookup.v0.want;
-		flags = req->ll_lookup.v0.flags;
+		want = req->ll_lookup.want;
+		flags = req->ll_lookup.flags;
 
 		CEPH_BUFF_ADD(ans, &stx, sizeof(stx));
 
@@ -440,7 +435,7 @@ static int32_t libcephfsd_ll_lookup(proxy_client_t *client, proxy_req_t *req,
 		      mount, parent, name, out, want, flags, perms, err);
 
 		if (err >= 0) {
-			ans.v0.inode = ptr_checksum(&client->random, out);
+			ans.inode = ptr_checksum(&client->random, out);
 		}
 	}
 
@@ -461,17 +456,17 @@ static int32_t libcephfsd_ll_lookup_inode(proxy_client_t *client,
 	struct inodeno_t ino;
 	int32_t err;
 
-	err = ptr_check(&client->random, req->ll_lookup_inode.v0.cmount,
+	err = ptr_check(&client->random, req->ll_lookup_inode.cmount,
 			(void **)&mount);
 	if (err >= 0) {
-		ino = req->ll_lookup_inode.v0.ino;
+		ino = req->ll_lookup_inode.ino;
 
 		err = ceph_ll_lookup_inode(proxy_cmount(mount), ino, &inode);
 		TRACE("ceph_ll_lookup_inode(%p, %lu, %p) -> %d", mount, ino.val,
 		      inode, err);
 
 		if (err >= 0) {
-			ans.v0.inode = ptr_checksum(&client->random, inode);
+			ans.inode = ptr_checksum(&client->random, inode);
 		}
 	}
 
@@ -486,7 +481,7 @@ static int32_t libcephfsd_ll_lookup_root(proxy_client_t *client,
 	proxy_mount_t *mount;
 	int32_t err;
 
-	err = ptr_check(&client->random, req->ll_lookup_root.v0.cmount,
+	err = ptr_check(&client->random, req->ll_lookup_root.cmount,
 			(void **)&mount);
 	if (err >= 0) {
 		/* The libcephfs view of the root of the mount could be
@@ -498,8 +493,7 @@ static int32_t libcephfsd_ll_lookup_root(proxy_client_t *client,
 		      err);
 
 		if (err >= 0) {
-			ans.v0.inode = ptr_checksum(&client->random,
-						    mount->root);
+			ans.inode = ptr_checksum(&client->random, mount->root);
 		}
 	}
 
@@ -514,10 +508,9 @@ static int32_t libcephfsd_ll_put(proxy_client_t *client, proxy_req_t *req,
 	struct Inode *inode;
 	int32_t err;
 
-	err = ptr_check(&client->random, req->ll_put.v0.cmount,
-			(void **)&mount);
+	err = ptr_check(&client->random, req->ll_put.cmount, (void **)&mount);
 	if (err >= 0) {
-		err = ptr_check(&client->random, req->ll_put.v0.inode,
+		err = ptr_check(&client->random, req->ll_put.inode,
 				(void **)&inode);
 	}
 
@@ -544,19 +537,18 @@ static int32_t libcephfsd_ll_walk(proxy_client_t *client, proxy_req_t *req,
 
 	embedded = false;
 
-	path = CEPH_STR_GET(req->ll_walk, v0.path, data);
-	data = (const char *)data + req->ll_walk.v0.path;
+	path = CEPH_STR_GET(req->ll_walk, path, data);
+	data = (const char *)data + req->ll_walk.path;
 
-	err = ptr_check(&client->random, req->ll_walk.v0.cmount,
-			(void **)&mount);
+	err = ptr_check(&client->random, req->ll_walk.cmount, (void **)&mount);
 	if (err >= 0) {
-		err = validate_perms(client, &req->ll_walk.v0.userperm,
-				     req->ll_walk.v1.ngroups, data, &perms,
+		err = validate_perms(client, &req->ll_walk.userperm,
+				     req->ll_walk.ngroups, data, &perms,
 				     &embedded);
 	}
 	if (err >= 0) {
-		want = req->ll_walk.v0.want;
-		flags = req->ll_walk.v0.flags;
+		want = req->ll_walk.want;
+		flags = req->ll_walk.flags;
 
 		CEPH_BUFF_ADD(ans, &stx, sizeof(stx));
 
@@ -566,7 +558,7 @@ static int32_t libcephfsd_ll_walk(proxy_client_t *client, proxy_req_t *req,
 		      path, inode, want, flags, perms, err);
 
 		if (err >= 0) {
-			ans.v0.inode = ptr_checksum(&client->random, inode);
+			ans.inode = ptr_checksum(&client->random, inode);
 		}
 	}
 
@@ -588,9 +580,9 @@ static int32_t libcephfsd_chdir(proxy_client_t *client, proxy_req_t *req,
 	char *realpath;
 	int32_t err;
 
-	err = ptr_check(&client->random, req->chdir.v0.cmount, (void **)&mount);
+	err = ptr_check(&client->random, req->chdir.cmount, (void **)&mount);
 	if (err >= 0) {
-		path = CEPH_STR_GET(req->chdir, v0.path, data);
+		path = CEPH_STR_GET(req->chdir, path, data);
 
 		/* Since the libcephfs mount may be shared, we can't really
 		 * change the current directory to avoid interferences with
@@ -625,14 +617,13 @@ static int32_t libcephfsd_getcwd(proxy_client_t *client, proxy_req_t *req,
 	const char *path;
 	int32_t err;
 
-	err = ptr_check(&client->random, req->getcwd.v0.cmount,
-			(void **)&mount);
+	err = ptr_check(&client->random, req->getcwd.cmount, (void **)&mount);
 
 	if (err >= 0) {
 		/* We just return the cached name from the last chdir(). */
 		path = mount->cwd_path;
 		TRACE("ceph_getcwd(%p) -> '%s'", mount, path);
-		CEPH_STR_ADD(ans, v0.path, path);
+		CEPH_STR_ADD(ans, path, path);
 		err = 0;
 	}
 
@@ -648,10 +639,10 @@ static int32_t libcephfsd_readdir(proxy_client_t *client, proxy_req_t *req,
 	struct ceph_dir_result *dirp;
 	int32_t err;
 
-	err = ptr_check(&client->random, req->readdir.v0.cmount,
+	err = ptr_check(&client->random, req->readdir.cmount,
 			(void **)&mount);
 	if (err >= 0) {
-		err = ptr_check(&client->random, req->readdir.v0.dir,
+		err = ptr_check(&client->random, req->readdir.dir,
 				(void **)&dirp);
 	}
 
@@ -659,9 +650,9 @@ static int32_t libcephfsd_readdir(proxy_client_t *client, proxy_req_t *req,
 		err = ceph_readdir_r(proxy_cmount(mount), dirp, &de);
 		TRACE("ceph_readdir_r(%p, %p, %p) -> %d", mount, dirp, &de,
 		      err);
-		ans.v0.eod = true;
+		ans.eod = true;
 		if (err > 0) {
-			ans.v0.eod = false;
+			ans.eod = false;
 			CEPH_BUFF_ADD(ans, &de,
 				      offset_of(struct dirent, d_name) +
 					      strlen(de.d_name) + 1);
@@ -679,10 +670,10 @@ static int32_t libcephfsd_rewinddir(proxy_client_t *client, proxy_req_t *req,
 	struct ceph_dir_result *dirp;
 	int32_t err;
 
-	err = ptr_check(&client->random, req->rewinddir.v0.cmount,
+	err = ptr_check(&client->random, req->rewinddir.cmount,
 			(void **)&mount);
 	if (err >= 0) {
-		err = ptr_check(&client->random, req->rewinddir.v0.dir,
+		err = ptr_check(&client->random, req->rewinddir.dir,
 				(void **)&dirp);
 	}
 
@@ -707,19 +698,18 @@ static int32_t libcephfsd_ll_open(proxy_client_t *client, proxy_req_t *req,
 
 	embedded = false;
 
-	err = ptr_check(&client->random, req->ll_open.v0.cmount,
-			(void **)&mount);
+	err = ptr_check(&client->random, req->ll_open.cmount, (void **)&mount);
 	if (err >= 0) {
-		err = ptr_check(&client->random, req->ll_open.v0.inode,
+		err = ptr_check(&client->random, req->ll_open.inode,
 				(void **)&inode);
 	}
 	if (err >= 0) {
-		err = validate_perms(client, &req->ll_open.v0.userperm,
-				     req->ll_open.v1.ngroups, data, &perms,
+		err = validate_perms(client, &req->ll_open.userperm,
+				     req->ll_open.ngroups, data, &perms,
 				     &embedded);
 	}
 	if (err >= 0) {
-		flags = req->ll_open.v0.flags;
+		flags = req->ll_open.flags;
 
 		err = ceph_ll_open(proxy_cmount(mount), inode, flags, &fh,
 				   perms);
@@ -727,7 +717,7 @@ static int32_t libcephfsd_ll_open(proxy_client_t *client, proxy_req_t *req,
 		      flags, fh, perms, err);
 
 		if (err >= 0) {
-			ans.v0.fh = ptr_checksum(&client->random, fh);
+			ans.fh = ptr_checksum(&client->random, fh);
 		}
 	}
 
@@ -755,25 +745,25 @@ static int32_t libcephfsd_ll_create(proxy_client_t *client, proxy_req_t *req,
 
 	embedded = false;
 
-	name = CEPH_STR_GET(req->ll_create, v0.name, data);
-	data = (const char *)data + req->ll_create.v0.name;
+	name = CEPH_STR_GET(req->ll_create, name, data);
+	data = (const char *)data + req->ll_create.name;
 
-	err = ptr_check(&client->random, req->ll_create.v0.cmount,
+	err = ptr_check(&client->random, req->ll_create.cmount,
 			(void **)&mount);
 	if (err >= 0) {
-		err = ptr_check(&client->random, req->ll_create.v0.parent,
+		err = ptr_check(&client->random, req->ll_create.parent,
 				(void **)&parent);
 	}
 	if (err >= 0) {
-		err = validate_perms(client, &req->ll_create.v0.userperm,
-				     req->ll_create.v1.ngroups, data, &perms,
+		err = validate_perms(client, &req->ll_create.userperm,
+				     req->ll_create.ngroups, data, &perms,
 				     &embedded);
 	}
 	if (err >= 0) {
-		mode = req->ll_create.v0.mode;
-		oflags = req->ll_create.v0.oflags;
-		want = req->ll_create.v0.want;
-		flags = req->ll_create.v0.flags;
+		mode = req->ll_create.mode;
+		oflags = req->ll_create.oflags;
+		want = req->ll_create.want;
+		flags = req->ll_create.flags;
 
 		CEPH_BUFF_ADD(ans, &stx, sizeof(stx));
 
@@ -786,8 +776,8 @@ static int32_t libcephfsd_ll_create(proxy_client_t *client, proxy_req_t *req,
 		      perms, err);
 
 		if (err >= 0) {
-			ans.v0.fh = ptr_checksum(&client->random, fh);
-			ans.v0.inode = ptr_checksum(&client->random, inode);
+			ans.fh = ptr_checksum(&client->random, fh);
+			ans.inode = ptr_checksum(&client->random, inode);
 		}
 	}
 
@@ -815,25 +805,24 @@ static int32_t libcephfsd_ll_mknod(proxy_client_t *client, proxy_req_t *req,
 
 	embedded = false;
 
-	name = CEPH_STR_GET(req->ll_mknod, v0.name, data);
-	data = (const char *)data + req->ll_mknod.v0.name;
+	name = CEPH_STR_GET(req->ll_mknod, name, data);
+	data = (const char *)data + req->ll_mknod.name;
 
-	err = ptr_check(&client->random, req->ll_mknod.v0.cmount,
-			(void **)&mount);
+	err = ptr_check(&client->random, req->ll_mknod.cmount, (void **)&mount);
 	if (err >= 0) {
-		err = ptr_check(&client->random, req->ll_mknod.v0.parent,
+		err = ptr_check(&client->random, req->ll_mknod.parent,
 				(void **)&parent);
 	}
 	if (err >= 0) {
-		err = validate_perms(client, &req->ll_mknod.v0.userperm,
-				     req->ll_mknod.v1.ngroups, data, &perms,
+		err = validate_perms(client, &req->ll_mknod.userperm,
+				     req->ll_mknod.ngroups, data, &perms,
 				     &embedded);
 	}
 	if (err >= 0) {
-		mode = req->ll_mknod.v0.mode;
-		rdev = req->ll_mknod.v0.rdev;
-		want = req->ll_mknod.v0.want;
-		flags = req->ll_mknod.v0.flags;
+		mode = req->ll_mknod.mode;
+		rdev = req->ll_mknod.rdev;
+		want = req->ll_mknod.want;
+		flags = req->ll_mknod.flags;
 
 		CEPH_BUFF_ADD(ans, &stx, sizeof(stx));
 
@@ -845,7 +834,7 @@ static int32_t libcephfsd_ll_mknod(proxy_client_t *client, proxy_req_t *req,
 		      perms, err);
 
 		if (err >= 0) {
-			ans.v0.inode = ptr_checksum(&client->random, inode);
+			ans.inode = ptr_checksum(&client->random, inode);
 		}
 	}
 
@@ -864,10 +853,9 @@ static int32_t libcephfsd_ll_close(proxy_client_t *client, proxy_req_t *req,
 	struct Fh *fh;
 	int32_t err;
 
-	err = ptr_check(&client->random, req->ll_close.v0.cmount,
-			(void **)&mount);
+	err = ptr_check(&client->random, req->ll_close.cmount, (void **)&mount);
 	if (err >= 0) {
-		err = ptr_check(&client->random, req->ll_close.v0.fh,
+		err = ptr_check(&client->random, req->ll_close.fh,
 				(void **)&fh);
 	}
 
@@ -892,24 +880,24 @@ static int32_t libcephfsd_ll_rename(proxy_client_t *client, proxy_req_t *req,
 
 	embedded = false;
 
-	old_name = CEPH_STR_GET(req->ll_rename, v0.old_name, data);
-	data = (const char *)data + req->ll_rename.v0.old_name;
-	new_name = CEPH_STR_GET(req->ll_rename, v0.new_name, data);
-	data = (const char *)data + req->ll_rename.v0.new_name;
+	old_name = CEPH_STR_GET(req->ll_rename, old_name, data);
+	data = (const char *)data + req->ll_rename.old_name;
+	new_name = CEPH_STR_GET(req->ll_rename, new_name, data);
+	data = (const char *)data + req->ll_rename.new_name;
 
-	err = ptr_check(&client->random, req->ll_rename.v0.cmount,
+	err = ptr_check(&client->random, req->ll_rename.cmount,
 			(void **)&mount);
 	if (err >= 0) {
-		err = ptr_check(&client->random, req->ll_rename.v0.old_parent,
+		err = ptr_check(&client->random, req->ll_rename.old_parent,
 				(void **)&old_parent);
 	}
 	if (err >= 0) {
-		err = ptr_check(&client->random, req->ll_rename.v0.new_parent,
+		err = ptr_check(&client->random, req->ll_rename.new_parent,
 				(void **)&new_parent);
 	}
 	if (err >= 0) {
-		err = validate_perms(client, &req->ll_rename.v0.userperm,
-				     req->ll_rename.v1.ngroups, data, &perms,
+		err = validate_perms(client, &req->ll_rename.userperm,
+				     req->ll_rename.ngroups, data, &perms,
 				     &embedded);
 	}
 	if (err >= 0) {
@@ -935,15 +923,14 @@ static int32_t libcephfsd_ll_lseek(proxy_client_t *client, proxy_req_t *req,
 	off_t offset, pos;
 	int32_t whence, err;
 
-	err = ptr_check(&client->random, req->ll_lseek.v0.cmount,
-			(void **)&mount);
+	err = ptr_check(&client->random, req->ll_lseek.cmount, (void **)&mount);
 	if (err >= 0) {
-		err = ptr_check(&client->random, req->ll_lseek.v0.fh,
+		err = ptr_check(&client->random, req->ll_lseek.fh,
 				(void **)&fh);
 	}
 	if (err >= 0) {
-		offset = req->ll_lseek.v0.offset;
-		whence = req->ll_lseek.v0.whence;
+		offset = req->ll_lseek.offset;
+		whence = req->ll_lseek.whence;
 
 		pos = ceph_ll_lseek(proxy_cmount(mount), fh, offset, whence);
 		err = -errno;
@@ -951,7 +938,7 @@ static int32_t libcephfsd_ll_lseek(proxy_client_t *client, proxy_req_t *req,
 		      offset, whence, pos, -err);
 
 		if (pos >= 0) {
-			ans.v0.offset = pos;
+			ans.offset = pos;
 			err = 0;
 		}
 	}
@@ -973,15 +960,14 @@ static int32_t libcephfsd_ll_read(proxy_client_t *client, proxy_req_t *req,
 
 	buffer = client->buffer;
 
-	err = ptr_check(&client->random, req->ll_read.v0.cmount,
-			(void **)&mount);
+	err = ptr_check(&client->random, req->ll_read.cmount, (void **)&mount);
 	if (err >= 0) {
-		err = ptr_check(&client->random, req->ll_read.v0.fh,
+		err = ptr_check(&client->random, req->ll_read.fh,
 				(void **)&fh);
 	}
 	if (err >= 0) {
-		offset = req->ll_read.v0.offset;
-		len = req->ll_read.v0.len;
+		offset = req->ll_read.offset;
+		len = req->ll_read.len;
 
 		size = client->buffer_size;
 		if (len > size) {
@@ -1021,15 +1007,14 @@ static int32_t libcephfsd_ll_write(proxy_client_t *client, proxy_req_t *req,
 	int64_t offset;
 	int32_t err;
 
-	err = ptr_check(&client->random, req->ll_write.v0.cmount,
-			(void **)&mount);
+	err = ptr_check(&client->random, req->ll_write.cmount, (void **)&mount);
 	if (err >= 0) {
-		err = ptr_check(&client->random, req->ll_write.v0.fh,
+		err = ptr_check(&client->random, req->ll_write.fh,
 				(void **)&fh);
 	}
 	if (err >= 0) {
-		offset = req->ll_write.v0.offset;
-		len = req->ll_write.v0.len;
+		offset = req->ll_write.offset;
+		len = req->ll_write.len;
 
 		err = ceph_ll_write(proxy_cmount(mount), fh, offset, len, data);
 		TRACE("ceph_ll_write(%p, %p, %ld, %lu) -> %d", mount, fh,
@@ -1052,22 +1037,21 @@ static int32_t libcephfsd_ll_link(proxy_client_t *client, proxy_req_t *req,
 
 	embedded = false;
 
-	name = CEPH_STR_GET(req->ll_link, v0.name, data);
-	data = (const char *)data + req->ll_link.v0.name;
+	name = CEPH_STR_GET(req->ll_link, name, data);
+	data = (const char *)data + req->ll_link.name;
 
-	err = ptr_check(&client->random, req->ll_link.v0.cmount,
-			(void **)&mount);
+	err = ptr_check(&client->random, req->ll_link.cmount, (void **)&mount);
 	if (err >= 0) {
-		err = ptr_check(&client->random, req->ll_link.v0.inode,
+		err = ptr_check(&client->random, req->ll_link.inode,
 				(void **)&inode);
 	}
 	if (err >= 0) {
-		err = ptr_check(&client->random, req->ll_link.v0.parent,
+		err = ptr_check(&client->random, req->ll_link.parent,
 				(void **)&parent);
 	}
 	if (err >= 0) {
-		err = validate_perms(client, &req->ll_link.v0.userperm,
-				     req->ll_link.v1.ngroups, data, &perms,
+		err = validate_perms(client, &req->ll_link.userperm,
+				     req->ll_link.ngroups, data, &perms,
 				     &embedded);
 	}
 	if (err >= 0) {
@@ -1097,18 +1081,18 @@ static int32_t libcephfsd_ll_unlink(proxy_client_t *client, proxy_req_t *req,
 
 	embedded = false;
 
-	name = CEPH_STR_GET(req->ll_unlink, v0.name, data);
-	data = (const char *)data + req->ll_unlink.v0.name;
+	name = CEPH_STR_GET(req->ll_unlink, name, data);
+	data = (const char *)data + req->ll_unlink.name;
 
-	err = ptr_check(&client->random, req->ll_unlink.v0.cmount,
+	err = ptr_check(&client->random, req->ll_unlink.cmount,
 			(void **)&mount);
 	if (err >= 0) {
-		err = ptr_check(&client->random, req->ll_unlink.v0.parent,
+		err = ptr_check(&client->random, req->ll_unlink.parent,
 				(void **)&parent);
 	}
 	if (err >= 0) {
-		err = validate_perms(client, &req->ll_unlink.v0.userperm,
-				     req->ll_unlink.v1.ngroups, data, &perms,
+		err = validate_perms(client, &req->ll_unlink.userperm,
+				     req->ll_unlink.ngroups, data, &perms,
 				     &embedded);
 	}
 	if (err >= 0) {
@@ -1138,20 +1122,20 @@ static int32_t libcephfsd_ll_getattr(proxy_client_t *client, proxy_req_t *req,
 
 	embedded = false;
 
-	err = ptr_check(&client->random, req->ll_getattr.v0.cmount,
+	err = ptr_check(&client->random, req->ll_getattr.cmount,
 			(void **)&mount);
 	if (err >= 0) {
-		err = ptr_check(&client->random, req->ll_getattr.v0.inode,
+		err = ptr_check(&client->random, req->ll_getattr.inode,
 				(void **)&inode);
 	}
 	if (err >= 0) {
-		err = validate_perms(client, &req->ll_getattr.v0.userperm,
-				     req->ll_getattr.v1.ngroups, data, &perms,
+		err = validate_perms(client, &req->ll_getattr.userperm,
+				     req->ll_getattr.ngroups, data, &perms,
 				     &embedded);
 	}
 	if (err >= 0) {
-		want = req->ll_getattr.v0.want;
-		flags = req->ll_getattr.v0.flags;
+		want = req->ll_getattr.want;
+		flags = req->ll_getattr.flags;
 
 		CEPH_BUFF_ADD(ans, &stx, sizeof(stx));
 
@@ -1180,19 +1164,19 @@ static int32_t libcephfsd_ll_setattr(proxy_client_t *client, proxy_req_t *req,
 
 	embedded = false;
 
-	err = ptr_check(&client->random, req->ll_setattr.v0.cmount,
+	err = ptr_check(&client->random, req->ll_setattr.cmount,
 			(void **)&mount);
 	if (err >= 0) {
-		err = ptr_check(&client->random, req->ll_setattr.v0.inode,
+		err = ptr_check(&client->random, req->ll_setattr.inode,
 				(void **)&inode);
 	}
 	if (err >= 0) {
-		err = validate_perms(client, &req->ll_setattr.v0.userperm,
-				     req->ll_setattr.v1.ngroups, data, &perms,
+		err = validate_perms(client, &req->ll_setattr.userperm,
+				     req->ll_setattr.ngroups, data, &perms,
 				     &embedded);
 	}
 	if (err >= 0) {
-		mask = req->ll_setattr.v0.mask;
+		mask = req->ll_setattr.mask;
 
 		err = ceph_ll_setattr(proxy_cmount(mount), inode, (void *)data,
 				      mask, perms);
@@ -1217,16 +1201,16 @@ static int32_t libcephfsd_ll_fallocate(proxy_client_t *client, proxy_req_t *req,
 	mode_t mode;
 	int32_t err;
 
-	err = ptr_check(&client->random, req->ll_fallocate.v0.cmount,
+	err = ptr_check(&client->random, req->ll_fallocate.cmount,
 			(void **)&mount);
 	if (err >= 0) {
-		err = ptr_check(&client->random, req->ll_fallocate.v0.fh,
+		err = ptr_check(&client->random, req->ll_fallocate.fh,
 				(void **)&fh);
 	}
 	if (err >= 0) {
-		mode = req->ll_fallocate.v0.mode;
-		offset = req->ll_fallocate.v0.offset;
-		len = req->ll_fallocate.v0.length;
+		mode = req->ll_fallocate.mode;
+		offset = req->ll_fallocate.offset;
+		len = req->ll_fallocate.length;
 
 		err = ceph_ll_fallocate(proxy_cmount(mount), fh, mode, offset,
 					len);
@@ -1245,14 +1229,13 @@ static int32_t libcephfsd_ll_fsync(proxy_client_t *client, proxy_req_t *req,
 	struct Fh *fh;
 	int32_t dataonly, err;
 
-	err = ptr_check(&client->random, req->ll_fsync.v0.cmount,
-			(void **)&mount);
+	err = ptr_check(&client->random, req->ll_fsync.cmount, (void **)&mount);
 	if (err >= 0) {
-		err = ptr_check(&client->random, req->ll_fsync.v0.fh,
+		err = ptr_check(&client->random, req->ll_fsync.fh,
 				(void **)&fh);
 	}
 	if (err >= 0) {
-		dataonly = req->ll_fsync.v0.dataonly;
+		dataonly = req->ll_fsync.dataonly;
 
 		err = ceph_ll_fsync(proxy_cmount(mount), fh, dataonly);
 		TRACE("ceph_ll_fsync(%p, %p, %d) -> %d", mount, fh, dataonly,
@@ -1275,19 +1258,19 @@ static int32_t libcephfsd_ll_listxattr(proxy_client_t *client, proxy_req_t *req,
 
 	embedded = false;
 
-	err = ptr_check(&client->random, req->ll_listxattr.v0.cmount,
+	err = ptr_check(&client->random, req->ll_listxattr.cmount,
 			(void **)&mount);
 	if (err >= 0) {
-		err = ptr_check(&client->random, req->ll_listxattr.v0.inode,
+		err = ptr_check(&client->random, req->ll_listxattr.inode,
 				(void **)&inode);
 	}
 	if (err >= 0) {
-		err = validate_perms(client, &req->ll_listxattr.v0.userperm,
-				     req->ll_listxattr.v1.ngroups, data, &perms,
+		err = validate_perms(client, &req->ll_listxattr.userperm,
+				     req->ll_listxattr.ngroups, data, &perms,
 				     &embedded);
 	}
 	if (err >= 0) {
-		size = req->ll_listxattr.v0.size;
+		size = req->ll_listxattr.size;
 		if (size > client->buffer_size) {
 			size = client->buffer_size;
 		}
@@ -1297,7 +1280,7 @@ static int32_t libcephfsd_ll_listxattr(proxy_client_t *client, proxy_req_t *req,
 		      size, perms, err);
 
 		if (err >= 0) {
-			ans.v0.size = size;
+			ans.size = size;
 			CEPH_BUFF_ADD(ans, client->buffer, size);
 		}
 	}
@@ -1323,22 +1306,22 @@ static int32_t libcephfsd_ll_getxattr(proxy_client_t *client, proxy_req_t *req,
 
 	embedded = false;
 
-	name = CEPH_STR_GET(req->ll_getxattr, v0.name, data);
-	data = (const char *)data + req->ll_getxattr.v0.name;
+	name = CEPH_STR_GET(req->ll_getxattr, name, data);
+	data = (const char *)data + req->ll_getxattr.name;
 
-	err = ptr_check(&client->random, req->ll_getxattr.v0.cmount,
+	err = ptr_check(&client->random, req->ll_getxattr.cmount,
 			(void **)&mount);
 	if (err >= 0) {
-		err = ptr_check(&client->random, req->ll_getxattr.v0.inode,
+		err = ptr_check(&client->random, req->ll_getxattr.inode,
 				(void **)&inode);
 	}
 	if (err >= 0) {
-		err = validate_perms(client, &req->ll_getxattr.v0.userperm,
-				     req->ll_getxattr.v1.ngroups, data, &perms,
+		err = validate_perms(client, &req->ll_getxattr.userperm,
+				     req->ll_getxattr.ngroups, data, &perms,
 				     &embedded);
 	}
 	if (err >= 0) {
-		size = req->ll_getxattr.v0.size;
+		size = req->ll_getxattr.size;
 
 		if (size > client->buffer_size) {
 			size = client->buffer_size;
@@ -1374,25 +1357,25 @@ static int32_t libcephfsd_ll_setxattr(proxy_client_t *client, proxy_req_t *req,
 
 	embedded = false;
 
-	name = CEPH_STR_GET(req->ll_setxattr, v0.name, data);
-	data = (const char *)data + req->ll_setxattr.v0.name;
+	name = CEPH_STR_GET(req->ll_setxattr, name, data);
+	data = (const char *)data + req->ll_setxattr.name;
 	value = data;
-	size = req->ll_setxattr.v0.size;
+	size = req->ll_setxattr.size;
 	data = (const char *)data + size;
 
-	err = ptr_check(&client->random, req->ll_setxattr.v0.cmount,
+	err = ptr_check(&client->random, req->ll_setxattr.cmount,
 			(void **)&mount);
 	if (err >= 0) {
-		err = ptr_check(&client->random, req->ll_setxattr.v0.inode,
+		err = ptr_check(&client->random, req->ll_setxattr.inode,
 				(void **)&inode);
 	}
 	if (err >= 0) {
-		err = validate_perms(client, &req->ll_setxattr.v0.userperm,
-				     req->ll_setxattr.v1.ngroups, data, &perms,
+		err = validate_perms(client, &req->ll_setxattr.userperm,
+				     req->ll_setxattr.ngroups, data, &perms,
 				     &embedded);
 	}
 	if (err >= 0) {
-		flags = req->ll_setxattr.v0.flags;
+		flags = req->ll_setxattr.flags;
 
 		err = ceph_ll_setxattr(proxy_cmount(mount), inode, name, value,
 				       size, flags, perms);
@@ -1421,18 +1404,18 @@ static int32_t libcephfsd_ll_removexattr(proxy_client_t *client,
 
 	embedded = false;
 
-	name = CEPH_STR_GET(req->ll_removexattr, v0.name, data);
-	data = (const char *)data + req->ll_removexattr.v0.name;
+	name = CEPH_STR_GET(req->ll_removexattr, name, data);
+	data = (const char *)data + req->ll_removexattr.name;
 
-	err = ptr_check(&client->random, req->ll_removexattr.v0.cmount,
+	err = ptr_check(&client->random, req->ll_removexattr.cmount,
 			(void **)&mount);
 	if (err >= 0) {
-		err = ptr_check(&client->random, req->ll_removexattr.v0.inode,
+		err = ptr_check(&client->random, req->ll_removexattr.inode,
 				(void **)&inode);
 	}
 	if (err >= 0) {
-		err = validate_perms(client, &req->ll_removexattr.v0.userperm,
-				     req->ll_removexattr.v1.ngroups, data,
+		err = validate_perms(client, &req->ll_removexattr.userperm,
+				     req->ll_removexattr.ngroups, data,
 				     &perms, &embedded);
 	}
 	if (err >= 0) {
@@ -1462,19 +1445,19 @@ static int32_t libcephfsd_ll_readlink(proxy_client_t *client, proxy_req_t *req,
 
 	embedded = false;
 
-	err = ptr_check(&client->random, req->ll_readlink.v0.cmount,
+	err = ptr_check(&client->random, req->ll_readlink.cmount,
 			(void **)&mount);
 	if (err >= 0) {
-		err = ptr_check(&client->random, req->ll_readlink.v0.inode,
+		err = ptr_check(&client->random, req->ll_readlink.inode,
 				(void **)&inode);
 	}
 	if (err >= 0) {
-		err = validate_perms(client, &req->ll_readlink.v0.userperm,
-				     req->ll_readlink.v1.ngroups, data, &perms,
+		err = validate_perms(client, &req->ll_readlink.userperm,
+				     req->ll_readlink.ngroups, data, &perms,
 				     &embedded);
 	}
 	if (err >= 0) {
-		size = req->ll_readlink.v0.size;
+		size = req->ll_readlink.size;
 
 		if (size > client->buffer_size) {
 			size = client->buffer_size;
@@ -1507,25 +1490,25 @@ static int32_t libcephfsd_ll_symlink(proxy_client_t *client, proxy_req_t *req,
 
 	embedded = false;
 
-	name = CEPH_STR_GET(req->ll_symlink, v0.name, data);
-	data = (const char *)data + req->ll_symlink.v0.name;
-	value = CEPH_STR_GET(req->ll_symlink, v0.target, data);
-	data = (const char *)data + req->ll_symlink.v0.target;
+	name = CEPH_STR_GET(req->ll_symlink, name, data);
+	data = (const char *)data + req->ll_symlink.name;
+	value = CEPH_STR_GET(req->ll_symlink, target, data);
+	data = (const char *)data + req->ll_symlink.target;
 
-	err = ptr_check(&client->random, req->ll_symlink.v0.cmount,
+	err = ptr_check(&client->random, req->ll_symlink.cmount,
 			(void **)&mount);
 	if (err >= 0) {
-		err = ptr_check(&client->random, req->ll_symlink.v0.parent,
+		err = ptr_check(&client->random, req->ll_symlink.parent,
 				(void **)&parent);
 	}
 	if (err >= 0) {
-		err = validate_perms(client, &req->ll_symlink.v0.userperm,
-				     req->ll_symlink.v1.ngroups, data, &perms,
+		err = validate_perms(client, &req->ll_symlink.userperm,
+				     req->ll_symlink.ngroups, data, &perms,
 				     &embedded);
 	}
 	if (err >= 0) {
-		want = req->ll_symlink.v0.want;
-		flags = req->ll_symlink.v0.flags;
+		want = req->ll_symlink.want;
+		flags = req->ll_symlink.flags;
 
 		CEPH_BUFF_ADD(ans, &stx, sizeof(stx));
 
@@ -1537,7 +1520,7 @@ static int32_t libcephfsd_ll_symlink(proxy_client_t *client, proxy_req_t *req,
 		      err);
 
 		if (err >= 0) {
-			ans.v0.inode = ptr_checksum(&client->random, inode);
+			ans.inode = ptr_checksum(&client->random, inode);
 		}
 	}
 
@@ -1561,15 +1544,15 @@ static int32_t libcephfsd_ll_opendir(proxy_client_t *client, proxy_req_t *req,
 
 	embedded = false;
 
-	err = ptr_check(&client->random, req->ll_opendir.v0.cmount,
+	err = ptr_check(&client->random, req->ll_opendir.cmount,
 			(void **)&mount);
 	if (err >= 0) {
-		err = ptr_check(&client->random, req->ll_opendir.v0.inode,
+		err = ptr_check(&client->random, req->ll_opendir.inode,
 				(void **)&inode);
 	}
 	if (err >= 0) {
-		err = validate_perms(client, &req->ll_opendir.v0.userperm,
-				     req->ll_opendir.v1.ngroups, data, &perms,
+		err = validate_perms(client, &req->ll_opendir.userperm,
+				     req->ll_opendir.ngroups, data, &perms,
 				     &embedded);
 	}
 
@@ -1579,7 +1562,7 @@ static int32_t libcephfsd_ll_opendir(proxy_client_t *client, proxy_req_t *req,
 		      dirp, perms, err);
 
 		if (err >= 0) {
-			ans.v0.dir = ptr_checksum(&client->random, dirp);
+			ans.dir = ptr_checksum(&client->random, dirp);
 		}
 	}
 
@@ -1606,23 +1589,23 @@ static int32_t libcephfsd_ll_mkdir(proxy_client_t *client, proxy_req_t *req,
 
 	embedded = false;
 
-	name = CEPH_STR_GET(req->ll_mkdir, v0.name, data);
-	data = (const char *)data + req->ll_mkdir.v0.name;
+	name = CEPH_STR_GET(req->ll_mkdir, name, data);
+	data = (const char *)data + req->ll_mkdir.name;
 
-	err = ptr_check(&client->random, req->ll_mkdir.v0.cmount, (void **)&mount);
+	err = ptr_check(&client->random, req->ll_mkdir.cmount, (void **)&mount);
 	if (err >= 0) {
-		err = ptr_check(&client->random, req->ll_mkdir.v0.parent,
+		err = ptr_check(&client->random, req->ll_mkdir.parent,
 				(void **)&parent);
 	}
 	if (err >= 0) {
-		err = validate_perms(client, &req->ll_mkdir.v0.userperm,
-				     req->ll_mkdir.v1.ngroups, data, &perms,
+		err = validate_perms(client, &req->ll_mkdir.userperm,
+				     req->ll_mkdir.ngroups, data, &perms,
 				     &embedded);
 	}
 	if (err >= 0) {
-		mode = req->ll_mkdir.v0.mode;
-		want = req->ll_mkdir.v0.want;
-		flags = req->ll_mkdir.v0.flags;
+		mode = req->ll_mkdir.mode;
+		want = req->ll_mkdir.want;
+		flags = req->ll_mkdir.flags;
 
 		CEPH_BUFF_ADD(ans, &stx, sizeof(stx));
 
@@ -1633,7 +1616,7 @@ static int32_t libcephfsd_ll_mkdir(proxy_client_t *client, proxy_req_t *req,
 		      err);
 
 		if (err >= 0) {
-			ans.v0.inode = ptr_checksum(&client->random, inode);
+			ans.inode = ptr_checksum(&client->random, inode);
 		}
 	}
 
@@ -1657,18 +1640,17 @@ static int32_t libcephfsd_ll_rmdir(proxy_client_t *client, proxy_req_t *req,
 
 	embedded = false;
 
-	name = CEPH_STR_GET(req->ll_rmdir, v0.name, data);
-	data = (const char *)data + req->ll_rmdir.v0.name;
+	name = CEPH_STR_GET(req->ll_rmdir, name, data);
+	data = (const char *)data + req->ll_rmdir.name;
 
-	err = ptr_check(&client->random, req->ll_rmdir.v0.cmount,
-			(void **)&mount);
+	err = ptr_check(&client->random, req->ll_rmdir.cmount, (void **)&mount);
 	if (err >= 0) {
-		err = ptr_check(&client->random, req->ll_rmdir.v0.parent,
+		err = ptr_check(&client->random, req->ll_rmdir.parent,
 				(void **)&parent);
 	}
 	if (err >= 0) {
-		err = validate_perms(client, &req->ll_rmdir.v0.userperm,
-				     req->ll_rmdir.v1.ngroups, data, &perms,
+		err = validate_perms(client, &req->ll_rmdir.userperm,
+				     req->ll_rmdir.ngroups, data, &perms,
 				     &embedded);
 	}
 	if (err >= 0) {
@@ -1693,10 +1675,10 @@ static int32_t libcephfsd_ll_releasedir(proxy_client_t *client,
 	struct ceph_dir_result *dirp;
 	int32_t err;
 
-	err = ptr_check(&client->random, req->ll_releasedir.v0.cmount,
+	err = ptr_check(&client->random, req->ll_releasedir.cmount,
 			(void **)&mount);
 	if (err >= 0) {
-		err = ptr_check(&client->random, req->ll_releasedir.v0.dir,
+		err = ptr_check(&client->random, req->ll_releasedir.dir,
 				(void **)&dirp);
 	}
 
@@ -1720,13 +1702,13 @@ static int32_t libcephfsd_mount_perms(proxy_client_t *client, proxy_req_t *req,
 		return -EOPNOTSUPP;
 	}
 
-	err = ptr_check(&client->random, req->mount_perms.v0.cmount,
+	err = ptr_check(&client->random, req->mount_perms.cmount,
 			(void **)&mount);
 	if (err >= 0) {
 		perms = ceph_mount_perms(proxy_cmount(mount));
 		TRACE("ceph_mount_perms(%p) -> %p", mount, perms);
 
-		ans.v0.userperm = ptr_checksum(&global_random, perms);
+		ans.userperm = ptr_checksum(&global_random, perms);
 	}
 
 	return CEPH_COMPLETE(client, err, ans);
@@ -1742,11 +1724,11 @@ static void libcephfsd_ll_nonblocking_rw_cbk(struct ceph_ll_io_info *cb_info)
 	async_io = container_of(cb_info, proxy_async_io_t, io_info);
 	async = async_io->async;
 
-	cbk.v0.info = (uintptr_t)cb_info->priv;
-	cbk.v0.res = cb_info->result;
+	cbk.info = (uintptr_t)cb_info->priv;
+	cbk.res = cb_info->result;
 
-	if ((cbk.v0.res >= 0) && !cb_info->write) {
-		CEPH_BUFF_ADD(cbk, cb_info->iov->iov_base, cbk.v0.res);
+	if ((cbk.res >= 0) && !cb_info->write) {
+		CEPH_BUFF_ADD(cbk, cb_info->iov->iov_base, cbk.res);
 	}
 
 	err = CEPH_CALL_CBK(async->fd, LIBCEPHFSD_CBK_LL_NONBLOCKING_RW, cbk);
@@ -1778,7 +1760,7 @@ static int32_t libcephfsd_ll_nonblocking_rw(proxy_client_t *client,
 		return -EOPNOTSUPP;
 	}
 
-	err = ptr_check(&client->random, req->ll_nonblocking_rw.v0.cmount,
+	err = ptr_check(&client->random, req->ll_nonblocking_rw.cmount,
 			(void **)&mount);
 	if (err < 0) {
 		goto done;
@@ -1793,15 +1775,15 @@ static int32_t libcephfsd_ll_nonblocking_rw(proxy_client_t *client,
 
 	memset(io_info, 0, sizeof(struct ceph_ll_io_info));
 	io_info->callback = libcephfsd_ll_nonblocking_rw_cbk;
-	io_info->priv = (void *)(uintptr_t)req->ll_nonblocking_rw.v0.info;
+	io_info->priv = (void *)(uintptr_t)req->ll_nonblocking_rw.info;
 	io_info->iov = &async_io->iov;
 	io_info->iovcnt = 1;
-	io_info->off = req->ll_nonblocking_rw.v0.off;
-	io_info->write = req->ll_nonblocking_rw.v0.write;
-	io_info->fsync = req->ll_nonblocking_rw.v0.fsync;
-	io_info->syncdataonly = req->ll_nonblocking_rw.v0.syncdataonly;
+	io_info->off = req->ll_nonblocking_rw.off;
+	io_info->write = req->ll_nonblocking_rw.write;
+	io_info->fsync = req->ll_nonblocking_rw.fsync;
+	io_info->syncdataonly = req->ll_nonblocking_rw.syncdataonly;
 
-	err = ptr_check(&client->random, req->ll_nonblocking_rw.v0.fh,
+	err = ptr_check(&client->random, req->ll_nonblocking_rw.fh,
 			(void **)&io_info->fh);
 	if (err < 0) {
 		goto done;
@@ -1811,7 +1793,7 @@ static int32_t libcephfsd_ll_nonblocking_rw(proxy_client_t *client,
 		async_io->iov.iov_len = data_size;
 		async_io->iov.iov_base = (void *)data;
 	} else {
-		async_io->iov.iov_len = req->ll_nonblocking_rw.v0.size;
+		async_io->iov.iov_len = req->ll_nonblocking_rw.size;
 		async_io->iov.iov_base = proxy_malloc(async_io->iov.iov_len);
 		if (async_io->iov.iov_base == NULL) {
 			proxy_free(async_io);
@@ -1825,7 +1807,7 @@ static int32_t libcephfsd_ll_nonblocking_rw(proxy_client_t *client,
 	res = ceph_ll_nonblocking_readv_writev(proxy_cmount(mount), io_info);
 	TRACE("ceph_ll_nonblocking_readv_writev(%p) -> %ld", mount, res);
 
-	ans.v0.res = res;
+	ans.res = res;
 	if (res < 0) {
 		if (!io_info->write) {
 			proxy_free(async_io->iov.iov_base);
