@@ -6,7 +6,7 @@
 #include <stdlib.h>
 #include <system_error>
 #include <unistd.h>
-
+#include "rgw_usage_perf.h"
 #include <sstream>
 #include <string_view>
 
@@ -2243,6 +2243,80 @@ int RGWGetObj::handle_user_manifest(const char *prefix, optional_yield y)
   }
 
   return r;
+}
+
+void RGWOp::update_usage_stats_if_needed() {
+  auto* usage_counters = rgw::get_usage_perf_counters();
+  if (!usage_counters) {
+    return;
+  }
+
+  // Only update for successful object operations
+  if (op_ret != 0) {
+    return;
+  }
+
+  // Check if this is an operation that changes usage
+  bool is_put_op = (dynamic_cast<RGWPutObj*>(this) != nullptr) ||
+                   (dynamic_cast<RGWPostObj*>(this) != nullptr) ||
+                   (dynamic_cast<RGWCopyObj*>(this) != nullptr) ||
+                   (dynamic_cast<RGWCompleteMultipart*>(this) != nullptr);
+  
+  bool is_delete_op = (dynamic_cast<RGWDeleteObj*>(this) != nullptr) ||
+                      (dynamic_cast<RGWDeleteMultiObj*>(this) != nullptr);
+
+  if (!is_put_op && !is_delete_op) {
+    return;  // Not an operation that changes usage
+  }
+
+  // In rgw_op.cc, update the usage counters with real data
+
+if (s->bucket && usage_counters) {
+  // Get actual bucket statistics
+  RGWBucketEnt bucket_ent;
+  int ret = store->get_bucket_entrypoint_info(s->obj_ctx, 
+                                               s->bucket->get_tenant(),
+                                               s->bucket->get_name(),
+                                               bucket_ent,
+                                               null_yield,
+                                               s->bucket->get_attrs());
+  if (ret >= 0) {
+    // Get bucket stats
+    RGWBucketInfo bucket_info;
+    ret = store->get_bucket_info(s->obj_ctx,
+                                  s->bucket->get_tenant(), 
+                                  s->bucket->get_name(),
+                                  bucket_info,
+                                  nullptr,
+                                  null_yield,
+                                  s->bucket->get_attrs());
+    if (ret >= 0) {
+      // Get actual bucket stats
+      RGWBucketStats stats;
+      int r = store->get_bucket_stats(bucket_info, stats, null_yield);
+      if (r >= 0) {
+        usage_counters->update_bucket_stats(
+          s->bucket->get_name(),
+          stats.total_bytes,    // Actual bytes used
+          stats.num_objects     // Actual number of objects
+        );
+      }
+    }
+  }
+}
+
+  if (s->user && usage_counters) {
+    // Get actual user statistics
+    RGWStorageStats user_stats;
+    int ret = store->get_user_stats(s->user->get_id(), user_stats, null_yield);
+    if (ret >= 0) {
+      usage_counters->update_user_stats(
+        s->user->get_id().id,
+        user_stats.size_utilized,     // Actual bytes used by user
+        user_stats.num_objects         // Actual number of objects
+      );
+    }
+  }
 }
 
 int RGWGetObj::handle_slo_manifest(bufferlist& bl, optional_yield y)

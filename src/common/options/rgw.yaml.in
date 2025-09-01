@@ -4498,3 +4498,43 @@ options:
   default: false
   services:
   - rgw
+ 
+- name: rgw_enable_usage_perf_counters
+  type: bool
+  level: advanced
+  desc: Enable per-user and per-bucket usage performance counters
+  long_desc: When enabled, RGW will track and expose usage metrics (bytes and objects) 
+    for users and buckets through the Ceph performance counter framework
+  default: true
+  services:
+  - rgw
+  with_legacy: true
+
+- name: rgw_usage_cache_path
+  type: str
+  level: advanced
+  desc: Path to LMDB database file for usage statistics cache
+  default: /var/lib/ceph/radosgw/usage_cache.mdb
+  services:
+  - rgw
+  with_legacy: true
+
+- name: rgw_usage_cache_max_size
+  type: size
+  level: advanced
+  desc: Maximum size of the LMDB usage cache database
+  default: 1_G
+  services:
+  - rgw
+  with_legacy: true
+
+- name: rgw_usage_cache_ttl
+  type: uint
+  level: advanced
+  desc: Time-to-live in seconds for cached usage statistics
+  default: 300
+  min: 60
+  max: 3600
+  services:
+  - rgw
+  with_legacy: true

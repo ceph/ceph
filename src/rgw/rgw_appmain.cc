@@ -59,6 +59,7 @@
 #include "rgw_kmip_client_impl.h"
 #include "rgw_perf_counters.h"
 #include "rgw_signal.h"
+#include "rgw_usage_perf.h"
 #ifdef WITH_ARROW_FLIGHT
 #include "rgw_flight_frontend.h"
 #endif
@@ -266,6 +267,33 @@ int rgw::AppMain::init_storage()
 void rgw::AppMain::init_perfcounters()
 {
   (void) rgw_perf_start(dpp->get_cct());
+
+  // Initialize usage performance counters
+  if (g_conf()->rgw_enable_usage_perf_counters) {
+    rgw::UsageCache::Config cache_config;
+    cache_config.db_path = g_conf()->rgw_usage_cache_path;
+    if (cache_config.db_path.empty()) {
+      // Use default path with instance id
+      cache_config.db_path = "/var/lib/ceph/radosgw/" + 
+                            g_conf()->name.get_id() + "/usage_cache.mdb";
+    }
+    cache_config.max_db_size = g_conf().get_val<Option::size_t>("rgw_usage_cache_max_size");
+    cache_config.ttl = std::chrono::seconds(g_conf()->rgw_usage_cache_ttl);
+    
+    usage_perf_counters = std::make_unique<rgw::UsagePerfCounters>(
+        dpp->get_cct(), cache_config);
+    
+    int r = usage_perf_counters->init();
+    if (r < 0) {
+      ldpp_dout(dpp, 1) << "WARNING: Failed to initialize usage perf counters: " 
+                       << cpp_strerror(r) << " (continuing without them)" << dendl;
+      usage_perf_counters.reset();
+    } else {
+      usage_perf_counters->start();
+      rgw::set_usage_perf_counters(usage_perf_counters.get());
+      ldpp_dout(dpp, 10) << "Usage performance counters initialized successfully" << dendl;
+    }
+  }
 } /* init_perfcounters */
 
 void rgw::AppMain::init_http_clients()
@@ -662,6 +690,13 @@ void rgw::AppMain::shutdown(std::function<void(void)> finalize_async_signals)
     delete fec;
   }
 
+  if (usage_perf_counters) {
+    ldpp_dout(dpp, 10) << "Shutting down usage performance counters" << dendl;
+    usage_perf_counters->shutdown();
+    rgw::set_usage_perf_counters(nullptr);
+    usage_perf_counters.reset();
+  }
+  
   finalize_async_signals(); // callback
 
   rgw_tools_cleanup();

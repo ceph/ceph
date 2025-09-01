@@ -344,6 +344,44 @@ target_link_libraries(unittest_log_backing
   ${rgw_libs})
 endif()
 
+# Adding the usage cache unit test
+if(WITH_TESTS)
+
+  add_executable(unittest_rgw_usage_cache
+  test_rgw_usage_cache.cc
+  ${CMAKE_SOURCE_DIR}/src/rgw/rgw_usage_cache.cc
+  ${CMAKE_SOURCE_DIR}/src/rgw/rgw_usage_perf.cc)
+
+  target_include_directories(unittest_rgw_usage_cache PRIVATE
+    ${CMAKE_SOURCE_DIR}/src
+    ${CMAKE_SOURCE_DIR}/src/rgw
+    ${LMDB_INCLUDE_DIR}
+  )
+
+  target_link_libraries(unittest_rgw_usage_cache
+    ceph-common
+    global
+    ${LMDB_LIBRARIES}
+    GTest::gtest
+    GTest::gtest_main
+  )
+
+  add_ceph_unittest(unittest_rgw_usage_cache)
+
+# Add performance counter test
+add_executable(unittest_rgw_usage_perf_counters
+               test_rgw_usage_perf_counters.cc
+               ${CMAKE_SOURCE_DIR}/src/rgw/rgw_usage_cache.cc)
+
+target_link_libraries(unittest_rgw_usage_perf_counters
+                      ${UNITTEST_LIBS}
+                      global
+                      ceph-common
+                      lmdb)
+
+add_ceph_unittest(unittest_rgw_usage_perf_counters)
+endif()
+
 add_executable(unittest_rgw_lua test_rgw_lua.cc)
 add_ceph_unittest(unittest_rgw_lua)
 target_include_directories(unittest_rgw_lua

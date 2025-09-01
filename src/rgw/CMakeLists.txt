@@ -33,6 +33,21 @@ endfunction()
 
 find_package(ICU 52.0 COMPONENTS uc REQUIRED)
 
+find_package(PkgConfig QUIET)
+if(PkgConfig_FOUND)
+  pkg_check_modules(LMDB QUIET lmdb)
+endif()
+
+if(NOT LMDB_FOUND)
+  find_path(LMDB_INCLUDE_DIR NAMES lmdb.h)
+  find_library(LMDB_LIBRARIES NAMES lmdb)
+  if(LMDB_INCLUDE_DIR AND LMDB_LIBRARIES)
+    set(LMDB_FOUND TRUE)
+  else()
+    message(FATAL_ERROR "LMDB not found. Please install liblmdb-dev or lmdb-devel")
+  endif()
+endif()
+
 set(librgw_common_srcs
   spdk/crc64.c
   madler/crc64nvme.c
@@ -148,7 +163,10 @@ set(librgw_common_srcs
   rgw_realm_watcher.cc
   rgw_bucket_logging.cc
   rgw_rest_bucket_logging.cc
-  rgw_bucket_sync.cc)
+  rgw_bucket_sync.cc
+  rgw_usage_cache.cc
+  rgw_usage_perf.cc
+)
 
 list(APPEND librgw_common_srcs
   driver/immutable_config/store.cc
@@ -326,7 +344,8 @@ target_link_libraries(rgw_common
 target_include_directories(rgw_common
   PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw/services"
   PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw"
-  PUBLIC "${LUA_INCLUDE_DIR}")
+  PUBLIC "${LUA_INCLUDE_DIR}"
+  PRIVATE "${LMDB_INCLUDE_DIR}")
 
 # work around https://github.com/Cyan4973/xxHash/issues/943 for debug builds
 target_compile_definitions(rgw_common PUBLIC
