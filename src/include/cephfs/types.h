@@ -1164,11 +1164,11 @@ int inode_t<Allocator>::compare(const inode_t<Allocator> &other, bool *divergent
         truncate_size != other.truncate_size ||
         truncate_from != other.truncate_from ||
         truncate_pending != other.truncate_pending ||
-	change_attr != other.change_attr ||
         mtime != other.mtime ||
         atime != other.atime ||
         time_warp_seq != other.time_warp_seq ||
         inline_data != other.inline_data ||
+	change_attr != other.change_attr ||
         client_ranges != other.client_ranges ||
         !(dirstat == other.dirstat) ||
         !(rstat == other.rstat) ||
