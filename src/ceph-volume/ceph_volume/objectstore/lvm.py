@@ -181,7 +181,8 @@ class Lvm(BaseObjectStore):
         # format data device
         encryption_utils.luks_format(
             self.dmcrypt_key,
-            device
+            device,
+            self.args.dmcrypt_format_opts,
         )
 
         if self.with_tpm:
@@ -191,7 +192,8 @@ class Lvm(BaseObjectStore):
             self.dmcrypt_key,
             device,
             uuid,
-            self.with_tpm)
+            self.with_tpm,
+            self.args.dmcrypt_open_opts)
 
         return '/dev/mapper/%s' % uuid
 
