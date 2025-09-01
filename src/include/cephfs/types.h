@@ -673,6 +673,20 @@ static inline void decode(optmetadata_multiton<Singleton,Allocator>& o, ::ceph::
 }
 
 template<template<typename> class Allocator = std::allocator>
+static inline bool operator==(
+    const optmetadata_multiton<optmetadata_singleton<optmetadata_server_t<Allocator>,Allocator>,Allocator>& l,
+    const optmetadata_multiton<optmetadata_singleton<optmetadata_server_t<Allocator>,Allocator>,Allocator>& r) {
+  return memcmp(&l, &r, sizeof(l)) == 0;
+}
+
+template<template<typename> class Allocator = std::allocator>
+static inline bool operator!=(
+    const optmetadata_multiton<optmetadata_singleton<optmetadata_server_t<Allocator>,Allocator>,Allocator>& l,
+    const optmetadata_multiton<optmetadata_singleton<optmetadata_server_t<Allocator>,Allocator>,Allocator>& r) {
+  return memcmp(&l, &r, sizeof(l)) != 0;
+}
+
+template<template<typename> class Allocator = std::allocator>
 struct inode_t {
   /**
    * ***************
@@ -932,6 +946,18 @@ private:
   bool older_is_consistent(const inode_t &other) const;
 };
 
+template<template<typename> class Allocator>
+inline bool operator==(std::vector<uint8_t,Allocator<uint8_t>> l,
+	          std::vector<uint8_t,Allocator<uint8_t>> r) {
+  return memcmp(&l, &r, sizeof(l)) == 0;
+}
+
+template<template<typename> class Allocator>
+inline bool operator!=(std::vector<uint8_t,Allocator<uint8_t>> l,
+	          std::vector<uint8_t,Allocator<uint8_t>> r) {
+  return memcmp(&l, &r, sizeof(l)) != 0;
+}
+
 // These methods may be moved back to mdstypes.cc when we have pmr
 template<template<typename> class Allocator>
 void inode_t<Allocator>::encode(ceph::buffer::list &bl, uint64_t features) const
@@ -1144,7 +1170,6 @@ auto inode_t<Allocator>::generate_test_instances() -> std::list<inode_t>
 template<template<typename> class Allocator>
 int inode_t<Allocator>::compare(const inode_t<Allocator> &other, bool *divergent) const
 {
-  // TODO: fscrypt / optmetadata: https://tracker.ceph.com/issues/70188
   ceph_assert(ino == other.ino);
   *divergent = false;
   if (version == other.version) {
@@ -1176,6 +1201,10 @@ int inode_t<Allocator>::compare(const inode_t<Allocator> &other, bool *divergent
         file_data_version != other.file_data_version ||
         xattr_version != other.xattr_version ||
         backtrace_version != other.backtrace_version ||
+	fscrypt_auth != other.fscrypt_auth ||
+        fscrypt_file != other.fscrypt_file ||
+	fscrypt_last_block != other.fscrypt_last_block ||
+	optmetadata != other.optmetadata ||
 	remote_ino != other.remote_ino ||
 	referent_inodes != other.referent_inodes) {
       *divergent = true;
