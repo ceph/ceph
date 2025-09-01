@@ -38,6 +38,7 @@ class CachePolicy {
       std::string version;
       bool dirty;
       uint64_t refcount{0};
+      Entry() = default;
       Entry(const std::string& key, uint64_t offset, uint64_t len, const std::string& version, bool dirty, uint64_t refcount) : key(key), offset(offset), 
 											        len(len), version(version), dirty(dirty), refcount(refcount) {}
       };
@@ -120,7 +121,7 @@ class LFUDAPolicy : public CachePolicy {
       int localWeight;
       using handle_type = boost::heap::fibonacci_heap<LFUDAEntry*, boost::heap::compare<EntryComparator<LFUDAEntry>>>::handle_type;
       handle_type handle;
-
+      LFUDAEntry() = default;
       LFUDAEntry(const std::string& key, uint64_t offset, uint64_t len, const std::string& version, bool dirty, uint64_t refcount, int localWeight) : Entry(key, offset, len, version, dirty, refcount), 
 														       localWeight(localWeight) {}
       
@@ -149,7 +150,9 @@ class LFUDAPolicy : public CachePolicy {
     std::mutex lfuda_cleaning_lock;
     std::condition_variable cond;
     std::condition_variable state_cond;
+    std::condition_variable lw_cond;
     inline static std::atomic<bool> quit{false};
+    inline static std::atomic<bool> lw_quit{false};
 
     int age = 1, weightSum = 0, postedSum = 0;
     optional_yield y = null_yield;
@@ -161,6 +164,10 @@ class LFUDAPolicy : public CachePolicy {
     std::optional<asio::steady_timer> rthread_timer;
     rgw::sal::Driver* driver;
     std::thread tc;
+    std::thread lwthread;
+    //data structure for accumulating updated blocks
+    std::vector<std::pair<std::string, uint64_t>> updated_blocks;
+    static constexpr size_t LOCALWEIGHT_BATCH_SIZE = 10000;
 
     CacheBlock* get_victim_block(const DoutPrefixProvider* dpp, optional_yield y);
     int age_sync(const DoutPrefixProvider* dpp, optional_yield y); 
@@ -197,15 +204,18 @@ class LFUDAPolicy : public CachePolicy {
       delete blockDir;
       delete objDir;
       quit = true;
+      lw_quit = true;
       cond.notify_all();
+      lw_cond.notify_all();
       if (tc.joinable()) { tc.join(); }
+      if (lwthread.joinable()) { lwthread.join(); }
       for (auto& it : entries_map) {
         delete it.second;
       }
       for (auto& it : o_entries_map) {
         delete it.second.first;
       }
-    } 
+    }
 
     virtual int init(CephContext *cct, const DoutPrefixProvider* dpp, asio::io_context& io_context, rgw::sal::Driver *_driver);
     virtual int exist_key(const std::string& key) override;
@@ -228,6 +238,7 @@ class LFUDAPolicy : public CachePolicy {
       return it->second.first;
     }
     void save_y(optional_yield y) { this->y = y; }
+    void localweight_writer(const DoutPrefixProvider* dpp);
 };
 
 class LRUPolicy : public CachePolicy {
