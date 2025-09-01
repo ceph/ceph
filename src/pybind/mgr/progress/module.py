@@ -795,7 +795,6 @@ class Module(MgrModule):
             self._complete(ev)
         except KeyError:
             self.log.warning("complete: ev {0} does not exist".format(ev_id))
-            pass
 
     def fail(self, ev_id, message):
         """
