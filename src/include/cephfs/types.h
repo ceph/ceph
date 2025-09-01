@@ -1170,9 +1170,9 @@ int inode_t<Allocator>::compare(const inode_t<Allocator> &other, bool *divergent
         inline_data != other.inline_data ||
 	change_attr != other.change_attr ||
         client_ranges != other.client_ranges ||
-        !(dirstat == other.dirstat) ||
-        !(rstat == other.rstat) ||
-        !(accounted_rstat == other.accounted_rstat) ||
+        dirstat != other.dirstat ||
+        rstat != other.rstat ||
+        accounted_rstat != other.accounted_rstat ||
         file_data_version != other.file_data_version ||
         xattr_version != other.xattr_version ||
         backtrace_version != other.backtrace_version ||
