@@ -89,7 +89,7 @@ static int32_t validate_perms(proxy_client_t *client, embedded_perms_t *embed,
 
 	if ((client->neg.v1.enabled & PROXY_FEAT_EMBEDDED_PERMS) == 0) {
 		*embedded = false;
-		return ptr_check(&client->random, embed->ptr, (void **)pperms);
+		return ptr_check(&global_random, embed->ptr, (void **)pperms);
 	}
 
 	perms = ceph_userperm_new(embed->uid, embed->gid, count,
