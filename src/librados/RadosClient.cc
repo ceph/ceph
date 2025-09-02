@@ -1117,6 +1117,15 @@ int librados::RadosClient::service_daemon_update_status(
   return mgrclient.service_daemon_update_status(std::move(status));
 }
 
+int librados::RadosClient::service_daemon_update_health(
+  std::vector<DaemonHealthMetric>&& health_metrics)
+{
+  if (state != CONNECTED) {
+    return -ENOTCONN;
+  }
+  return mgrclient.update_daemon_health(std::move(health_metrics));
+}
+
 mon_feature_t librados::RadosClient::get_required_monitor_features() const
 {
   return monclient.with_monmap([](const MonMap &monmap) {
