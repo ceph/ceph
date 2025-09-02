@@ -104,6 +104,21 @@ class filepath {
     trimmed = true;
   }
 
+  /* Trim given path to final 10 components and return it by prefixing it with
+   * "..."  to indicate that the path has been trimmed. */
+  std::string get_trimmed_path() const
+  {
+    std::size_t n = 0;
+    for (int i = 1; i <= 10; ++i) {
+      n = path.rfind("/", n - 1);
+      if (n == std::string::npos) {
+	return std::string(path);
+      }
+    }
+
+    return std::string("..." + path.substr(n, -1));
+  }
+
   void set_path(std::string_view s, inodeno_t b) {
     path = s;
     ino = b;
