@@ -179,7 +179,7 @@ _LOCK_NAME = "cluster_meta"
 def rados_object(mgr: 'MgrModule', uri: str) -> Iterator[ClusterMeta]:
     """Return a cluster meta object that will store persistent data in rados."""
     pool, ns, objname = rados_store.parse_uri(uri)
-    store = rados_store.RADOSConfigStore.init(mgr, pool)
+    store = rados_store.RADOSConfigStore.lazy_init(mgr, pool)
 
     cmeta = ClusterMeta()
     previous = {}
