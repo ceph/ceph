@@ -260,6 +260,7 @@ if(WITH_RADOSGW_POSIX)
   list(APPEND librgw_common_srcs
 	      driver/posix/rgw_sal_posix.cc
 	      driver/posix/lmdb-safe.cc
+	      driver/posix/posixDB.cc
 	      driver/posix/notify.cpp)
 endif()
 if(WITH_JAEGER)
@@ -367,6 +368,10 @@ if(WITH_JAEGER)
 endif()
 
 if(WITH_RADOSGW_DBSTORE)
+  target_link_libraries(rgw_common PRIVATE global dbstore)
+endif()
+
+if(WITH_RADOSGW_POSIX)
   target_link_libraries(rgw_common PRIVATE global dbstore)
 endif()
 
