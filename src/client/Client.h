@@ -1872,6 +1872,8 @@ private:
   void update_io_stat_read(utime_t latency);
   void update_io_stat_write(utime_t latency);
 
+  std::string get_trimmed_path(std::string path);
+
   bool should_check_perms() const {
     return (is_fuse && !fuse_default_permissions) || (!is_fuse && client_permissions);
   }
