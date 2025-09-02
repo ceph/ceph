@@ -278,7 +278,7 @@ int Mirror::init(std::string &reason) {
     return r;
   }
 
-  m_service_daemon = std::make_unique<ServiceDaemon>(m_cct, m_local);
+  m_service_daemon = std::make_unique<ServiceDaemon>(m_cct, m_local, m_msgr, m_monc);
   r = m_service_daemon->init();
   if (r < 0) {
     derr << ": error registering service daemon: " << cpp_strerror(r) << dendl;
@@ -300,6 +300,9 @@ int Mirror::init(std::string &reason) {
 		      "mirror_enable_failures", "Mirroring enable failures", "mirf", prio);
   m_perf_counters = plb.create_perf_counters();
   m_cct->get_perfcounters_collection()->add(m_perf_counters);
+
+  std::scoped_lock h_lock(m_service_daemon->get_health_timer_lock());
+  m_service_daemon->schedule_health_tick();
 
   return 0;
 }

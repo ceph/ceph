@@ -419,7 +419,6 @@ void MgrClient::_send_report()
   }
 
   report->daemon_health_metrics = std::move(daemon_health_metrics);
-
   cct->_conf.get_config_bl(last_config_bl_version, &report->config_bl,
 			    &last_config_bl_version);
 
@@ -653,9 +652,9 @@ int MgrClient::service_daemon_update_task_status(
   return 0;
 }
 
-void MgrClient::update_daemon_health(std::vector<DaemonHealthMetric>&& metrics)
+int MgrClient::update_daemon_health(std::vector<DaemonHealthMetric>&& metrics)
 {
   std::lock_guard l(lock);
   daemon_health_metrics = std::move(metrics);
+  return 0;
 }
-
