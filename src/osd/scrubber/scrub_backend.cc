@@ -253,16 +253,20 @@ void ScrubBackend::collect_omap_stats(
 {
   m_omap_stats.omap_bytes += obj_in_smap.object_omap_bytes;
   m_omap_stats.omap_keys += obj_in_smap.object_omap_keys;
+
   if (obj_in_smap.large_omap_object_found) {
     m_omap_stats.large_omap_objects++;
-    std::string erm = fmt::format(
-	"Large omap object found. Object: {} PG: {} ({}) Key count: {} Size "
-	"(bytes): {}\n",
-	ho, m_pg_id, m_pg_id, obj_in_smap.large_omap_object_key_count,
-	obj_in_smap.large_omap_object_value_size);
+    if (!this_chunk->m_large_omap_warning_issued) {
+      this_chunk->m_large_omap_warning_issued = true;
+      std::string erm = fmt::format(
+	  "Large omap object found. Object: {} PG: {} Key count: {} Size "
+	  "(bytes): {}\n",
+	  ho, m_pg_id, obj_in_smap.large_omap_object_key_count,
+	  obj_in_smap.large_omap_object_value_size);
 
-    clog.do_log(CLOG_WARN, erm);
-    dout(5) << __func__ << ": " << erm << dendl;
+      clog.do_log(CLOG_WARN, erm);
+      dout(5) << __func__ << ": " << erm << dendl;
+    }
   }
 }
 
