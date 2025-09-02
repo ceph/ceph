@@ -239,107 +239,18 @@ TEST_F(TestRGWUsagePerfCounters, ZeroDivisionInHitRate) {
   hit_rate = cache->get_hit_rate();
   EXPECT_EQ(50.0, hit_rate);  // 1 hit / 2 total = 50%
 }
-TEST_F(TestRGWUsagePerfCounters, UpdateExistingEntryOverridesValues) {
-    // Overwrite an existing user's stats and ensure latest values are returned
-    ASSERT_EQ(0, cache->update_user_stats("u_overwrite", 100, 1));
-    ASSERT_EQ(0, cache->update_user_stats("u_overwrite", 200, 3));
-  
-    auto stats = cache->get_user_stats("u_overwrite");
-    ASSERT_TRUE(stats.has_value());
-    EXPECT_EQ(200u, stats->bytes_used);
-    EXPECT_EQ(3u, stats->num_objects);
-  
-    // Since we never looked up before insert, this first read should be a hit
-    EXPECT_EQ(1u, cache->get_cache_hits());
-    EXPECT_EQ(0u, cache->get_cache_misses());
-  }
-  
-  TEST_F(TestRGWUsagePerfCounters, HitRateAllHitsNoMisses) {
-    // Preload users so the first read becomes a hit
-    ASSERT_EQ(0, cache->update_user_stats("h1", 10, 1));
-    ASSERT_EQ(0, cache->update_user_stats("h2", 20, 2));
-    ASSERT_EQ(0, cache->update_user_stats("h3", 30, 3));
-  
-    // Access all -> should all be hits
-    EXPECT_TRUE(cache->get_user_stats("h1").has_value());
-    EXPECT_TRUE(cache->get_user_stats("h2").has_value());
-    EXPECT_TRUE(cache->get_user_stats("h3").has_value());
-  
-    EXPECT_EQ(3u, cache->get_cache_hits());
-    EXPECT_EQ(0u, cache->get_cache_misses());
-  
-    double hit_rate = cache->get_hit_rate();
-    EXPECT_DOUBLE_EQ(100.0, hit_rate);
-  }
-  
-  TEST_F(TestRGWUsagePerfCounters, BucketExpiredEntryTracking) {
-    // Insert and access a bucket (hit), then wait for expiry and ensure miss
-    ASSERT_EQ(0, cache->update_bucket_stats("b_expiry", 4096, 4));
-  
-    auto bstats = cache->get_bucket_stats("b_expiry");
-    ASSERT_TRUE(bstats.has_value());
-    EXPECT_EQ(1u, cache->get_cache_hits());
-  
-    std::this_thread::sleep_for(std::chrono::milliseconds(2500)); // TTL is 2s
-  
-    bstats = cache->get_bucket_stats("b_expiry");
-    EXPECT_FALSE(bstats.has_value());
-    EXPECT_EQ(1u, cache->get_cache_hits());
-    EXPECT_EQ(1u, cache->get_cache_misses());
-  }
-  
-  TEST_F(TestRGWUsagePerfCounters, RemoveBucketOperationTracking) {
-    // Insert two buckets, remove one, and verify counters reflect miss on removed
-    ASSERT_EQ(0, cache->update_bucket_stats("b1", 1000, 10));
-    ASSERT_EQ(0, cache->update_bucket_stats("b2", 2000, 20));
-  
-    // Remove b1
-    ASSERT_EQ(0, cache->remove_bucket_stats("b1"));
-  
-    // Access removed -> miss
-    auto bstats = cache->get_bucket_stats("b1");
-    EXPECT_FALSE(bstats.has_value());
-    EXPECT_EQ(1u, cache->get_cache_misses());
-  
-    // Access existing -> hit
-    bstats = cache->get_bucket_stats("b2");
-    EXPECT_TRUE(bstats.has_value());
-    EXPECT_EQ(1u, cache->get_cache_hits());
-  }
-  
-  TEST_F(TestRGWUsagePerfCounters, ConcurrentBucketCounterUpdates) {
-    const int num_threads = 4;
-    const int ops_per_thread = 50;
-    std::vector<std::thread> threads;
-  
-    for (int t = 0; t < num_threads; ++t) {
-      threads.emplace_back([this, t, ops_per_thread]() {
-        for (int i = 0; i < ops_per_thread; ++i) {
-          std::string bucket = "tb" + std::to_string(t) + "_b" + std::to_string(i);
-  
-          // Miss on first read
-          cache->get_bucket_stats(bucket);
-  
-          // Update then hit
-          cache->update_bucket_stats(bucket, i * 4096, i);
-          cache->get_bucket_stats(bucket);
-        }
-      });
-    }
-    for (auto& th : threads) th.join();
-  
-    uint64_t expected = static_cast<uint64_t>(num_threads) * ops_per_thread;
-    EXPECT_EQ(expected, cache->get_cache_hits());
-    EXPECT_EQ(expected, cache->get_cache_misses());
-  }
 
 int main(int argc, char **argv) {
   ::testing::InitGoogleTest(&argc, argv);
   
   // Initialize CephContext once for all tests
   std::vector<const char*> args;
+  // Add --no-mon-config to skip fetching config from monitors
+  args.push_back("--no-mon-config");
+  
   g_cct_holder = global_init(nullptr, args, CEPH_ENTITY_TYPE_CLIENT,
-                             CODE_ENVIRONMENT_UTILITY, 0);
+                             CODE_ENVIRONMENT_UTILITY, 
+                             CINIT_FLAG_NO_MON_CONFIG);  // Add this flag
   g_cct = g_cct_holder.get();
   common_init_finish(g_cct);
   

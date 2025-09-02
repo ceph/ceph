@@ -62,6 +62,7 @@
 #include "rgw_sal.h"
 #include "rgw_sal_rados.h"
 #include "rgw_torrent.h"
+#include "rgw_usage_perf.h"
 #include "rgw_cksum_pipe.h"
 #include "rgw_lua_data_filter.h"
 #include "rgw_lua.h"
@@ -2250,12 +2251,12 @@ void RGWOp::update_usage_stats_if_needed() {
   if (!usage_counters) {
     return;
   }
-
-  // Only update for successful object operations
+  
+  // Only update for successful operations
   if (op_ret != 0) {
     return;
   }
-
+  
   // Check if this is an operation that changes usage
   bool is_put_op = (dynamic_cast<RGWPutObj*>(this) != nullptr) ||
                    (dynamic_cast<RGWPostObj*>(this) != nullptr) ||
@@ -2264,60 +2265,70 @@ void RGWOp::update_usage_stats_if_needed() {
   
   bool is_delete_op = (dynamic_cast<RGWDeleteObj*>(this) != nullptr) ||
                       (dynamic_cast<RGWDeleteMultiObj*>(this) != nullptr);
-
+  
   if (!is_put_op && !is_delete_op) {
     return;  // Not an operation that changes usage
   }
-
-  // In rgw_op.cc, update the usage counters with real data
-
-if (s->bucket && usage_counters) {
-  // Get actual bucket statistics
-  RGWBucketEnt bucket_ent;
-  int ret = store->get_bucket_entrypoint_info(s->obj_ctx, 
-                                               s->bucket->get_tenant(),
-                                               s->bucket->get_name(),
-                                               bucket_ent,
-                                               null_yield,
-                                               s->bucket->get_attrs());
-  if (ret >= 0) {
-    // Get bucket stats
-    RGWBucketInfo bucket_info;
-    ret = store->get_bucket_info(s->obj_ctx,
-                                  s->bucket->get_tenant(), 
-                                  s->bucket->get_name(),
-                                  bucket_info,
-                                  nullptr,
-                                  null_yield,
-                                  s->bucket->get_attrs());
-    if (ret >= 0) {
-      // Get actual bucket stats
-      RGWBucketStats stats;
-      int r = store->get_bucket_stats(bucket_info, stats, null_yield);
-      if (r >= 0) {
+  
+  // Update bucket statistics if we have bucket info
+  if (s->bucket && usage_counters) {
+    try {
+      // Use the bucket's sync_owner_stats to get current stats
+      // This updates the bucket's internal stats
+      RGWBucketEnt ent;
+      int ret = s->bucket->sync_owner_stats(this, null_yield, &ent);
+      
+      if (ret >= 0) {
+        // Update bucket usage statistics using the entry data
         usage_counters->update_bucket_stats(
           s->bucket->get_name(),
-          stats.total_bytes,    // Actual bytes used
-          stats.num_objects     // Actual number of objects
+          ent.size,          // Total bytes used
+          ent.count          // Total number of objects
         );
+        
+        ldout(s->cct, 20) << "Updated bucket stats for " << s->bucket->get_name()
+                         << ": bytes=" << ent.size
+                         << ", objects=" << ent.count << dendl;
+      } else {
+        ldout(s->cct, 10) << "Failed to sync bucket stats for " 
+                         << s->bucket->get_name() 
+                         << ": " << cpp_strerror(-ret) << dendl;
       }
+    } catch (const std::exception& e) {
+      ldout(s->cct, 5) << "Exception updating bucket stats: " << e.what() << dendl;
+    }
+  }
+  
+  // Update user statistics if we have user info
+  if (s->user && usage_counters) {
+    try {
+      // For user stats, we'll use the bucket owner stats as a proxy
+      // since there's no direct get_user_stats method
+      if (s->bucket) {
+        RGWBucketEnt ent;
+        int ret = s->bucket->sync_owner_stats(this, null_yield, &ent);
+        
+        if (ret >= 0) {
+          // This gives us at least partial user stats
+          // In production, you might want to aggregate across all user's buckets
+          usage_counters->update_user_stats(
+            s->user->get_id().id,
+            ent.size,          // Using bucket size as proxy
+            ent.count          // Using bucket object count as proxy
+          );
+          
+          ldout(s->cct, 20) << "Updated user stats for " << s->user->get_id().id
+                           << " (based on bucket " << s->bucket->get_name() << ")"
+                           << ": bytes=" << ent.size
+                           << ", objects=" << ent.count << dendl;
+        }
+      }
+    } catch (const std::exception& e) {
+      ldout(s->cct, 5) << "Exception updating user stats: " << e.what() << dendl;
     }
   }
 }
 
-  if (s->user && usage_counters) {
-    // Get actual user statistics
-    RGWStorageStats user_stats;
-    int ret = store->get_user_stats(s->user->get_id(), user_stats, null_yield);
-    if (ret >= 0) {
-      usage_counters->update_user_stats(
-        s->user->get_id().id,
-        user_stats.size_utilized,     // Actual bytes used by user
-        user_stats.num_objects         // Actual number of objects
-      );
-    }
-  }
-}
 
 int RGWGetObj::handle_slo_manifest(bufferlist& bl, optional_yield y)
 {
@@ -4000,6 +4011,29 @@ void RGWCreateBucket::execute(optional_yield y)
       op_ret = -ERR_BUCKET_EXISTS;
     }
   } /* if (need_metadata_upload() && existed) */
+  
+  if (op_ret >= 0 || op_ret == -ERR_BUCKET_EXISTS) {
+    auto* usage_counters = rgw::get_usage_perf_counters();
+    if (usage_counters && s->bucket) {
+      // For new buckets, initialize with 0 bytes and 0 objects
+      usage_counters->update_bucket_stats(s->bucket->get_name(), 0, 0);
+      
+      // Update user stats - use sync_owner_stats to get current info
+      if (s->user) {
+        RGWBucketEnt ent;
+        int ret = s->bucket->sync_owner_stats(this, y, &ent);
+        if (ret >= 0) {
+          // This updates with the user's total across this bucket
+          usage_counters->update_user_stats(
+            s->user->get_id().id,
+            ent.size,
+            ent.count
+          );
+        }
+      }
+    }
+  }
+
 } /* RGWCreateBucket::execute() */
 
 int RGWDeleteBucket::verify_permission(optional_yield y)
@@ -4077,6 +4111,24 @@ void RGWDeleteBucket::execute(optional_yield y)
   rgw::op_counters::inc(counters, l_rgw_op_del_bucket, 1);
   rgw::op_counters::tinc(counters, l_rgw_op_del_bucket_lat, s->time_elapsed());
 
+  rgw::op_counters::inc(counters, l_rgw_op_del_bucket, 1);
+  rgw::op_counters::tinc(counters, l_rgw_op_del_bucket_lat, s->time_elapsed());
+
+  // Add usage counter update here, right before return
+  if (op_ret >= 0) {
+    auto* usage_counters = rgw::get_usage_perf_counters();
+    if (usage_counters && s->bucket) {
+      // Remove bucket from cache since it's deleted
+      usage_counters->evict_from_cache("", s->bucket->get_name());
+      
+      // Update user stats - bucket count has changed
+      // Since bucket is deleted, we can't use it to get stats
+      // Just evict the user from cache to force refresh next time
+      if (s->user) {
+        usage_counters->evict_from_cache(s->user->get_id().id, "");
+      }
+    }
+  }
   return;
 }
 

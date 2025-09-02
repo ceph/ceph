@@ -6,6 +6,7 @@
 #include "common/perf_counters.h"
 #include "common/dout.h"
 #include "common/perf_counters_collection.h"
+#include "common/errno.h" 
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -24,7 +25,8 @@ void set_usage_perf_counters(UsagePerfCounters* counters) {
 
 UsagePerfCounters::UsagePerfCounters(CephContext* cct, 
                                      const UsageCache::Config& cache_config)
-  : cct(cct), cache(std::make_unique<UsageCache>(cache_config)) {
+  : cct(cct), cache(std::make_unique<UsageCache>(cct, cache_config)),
+    global_counters(nullptr) {
   create_global_counters();
 }
 
@@ -35,22 +37,17 @@ UsagePerfCounters::~UsagePerfCounters() {
 void UsagePerfCounters::create_global_counters() {
   PerfCountersBuilder b(cct, "rgw_usage", l_rgw_usage_first, l_rgw_usage_last);
   
-  // These counters need to be defined for ALL enum values between first and last
-  // Even if we don't use them in global counters, they need placeholders
-  
-  // User counters (not used in global, but need placeholders)
+  // Placeholder counters for indices that aren't globally used
   b.add_u64(l_rgw_user_used_bytes, "user_used_bytes", 
            "User bytes placeholder", nullptr, 0, unit_t(UNIT_BYTES));
   b.add_u64(l_rgw_user_num_objects, "user_num_objects",
            "User objects placeholder", nullptr, 0, unit_t(0));
-  
-  // Bucket counters (not used in global, but need placeholders)  
   b.add_u64(l_rgw_bucket_used_bytes, "bucket_used_bytes",
            "Bucket bytes placeholder", nullptr, 0, unit_t(UNIT_BYTES));
   b.add_u64(l_rgw_bucket_num_objects, "bucket_num_objects",
            "Bucket objects placeholder", nullptr, 0, unit_t(0));
   
-  // Cache metrics (these are the actual global counters)
+  // Global cache metrics
   b.add_u64_counter(l_rgw_usage_cache_hit, "cache_hit", 
                    "Number of cache hits", nullptr, 0, unit_t(0));
   b.add_u64_counter(l_rgw_usage_cache_miss, "cache_miss",
@@ -60,59 +57,122 @@ void UsagePerfCounters::create_global_counters() {
   b.add_u64_counter(l_rgw_usage_cache_evict, "cache_evict",
                    "Number of cache evictions", nullptr, 0, unit_t(0));
   
-  PerfCounters* raw_counters = b.create_perf_counters();
-  cct->get_perfcounters_collection()->add(raw_counters);
-  global_counters = std::shared_ptr<PerfCounters>(raw_counters, [](PerfCounters*){});
+  global_counters = b.create_perf_counters();
+  cct->get_perfcounters_collection()->add(global_counters);
 }
 
-std::shared_ptr<PerfCounters> UsagePerfCounters::create_user_counters(const std::string& user_id) {
-    std::string name = "rgw_user_" + user_id;
-    PerfCountersBuilder b(cct, name, l_rgw_usage_first, l_rgw_usage_last);
-    
-    b.add_u64(l_rgw_user_used_bytes, "used_bytes",
-             "Bytes used by user", nullptr, 0, unit_t(UNIT_BYTES));
-    b.add_u64(l_rgw_user_num_objects, "num_objects",
-             "Number of objects owned by user", nullptr, 0, unit_t(0));
-    
-    PerfCounters* raw_counters = b.create_perf_counters();
-    cct->get_perfcounters_collection()->add(raw_counters);
-
-    return std::shared_ptr<PerfCounters>(raw_counters, [](PerfCounters*){});
+PerfCounters* UsagePerfCounters::create_user_counters(const std::string& user_id) {
+  std::string name = "rgw_user_" + user_id;
+  
+  // Sanitize name for perf counters (replace non-alphanumeric with underscore)
+  for (char& c : name) {
+    if (!std::isalnum(c) && c != '_') {
+      c = '_';
+    }
   }
   
-  std::shared_ptr<PerfCounters> UsagePerfCounters::create_bucket_counters(const std::string& bucket_name) {
-    std::string name = "rgw_bucket_" + bucket_name;
-    PerfCountersBuilder b(cct, name, l_rgw_usage_first, l_rgw_usage_last);
-    
-    b.add_u64(l_rgw_bucket_used_bytes, "used_bytes",
-             "Bytes used in bucket", nullptr, 0, unit_t(UNIT_BYTES));
-    b.add_u64(l_rgw_bucket_num_objects, "num_objects",
-             "Number of objects in bucket", nullptr, 0, unit_t(0));
-    
-    PerfCounters* raw_counters = b.create_perf_counters();
-    cct->get_perfcounters_collection()->add(raw_counters);
-    
-    // Wrap in shared_ptr with custom deleter that doesn't delete
-    return std::shared_ptr<PerfCounters>(raw_counters, [](PerfCounters*){});
+  PerfCountersBuilder b(cct, name, l_rgw_usage_first, l_rgw_usage_last);
+  
+  // Add placeholder counters for unused indices
+  for (int i = l_rgw_usage_first + 1; i < l_rgw_user_used_bytes; ++i) {
+    b.add_u64(i, "placeholder", "placeholder", nullptr, 0, unit_t(0));
   }
+  
+  b.add_u64(l_rgw_user_used_bytes, "used_bytes",
+           "Bytes used by user", nullptr, 0, unit_t(UNIT_BYTES));
+  b.add_u64(l_rgw_user_num_objects, "num_objects",
+           "Number of objects owned by user", nullptr, 0, unit_t(0));
+  
+  // Add remaining placeholder counters
+  for (int i = l_rgw_user_num_objects + 1; i < l_rgw_usage_last; ++i) {
+    b.add_u64(i, "placeholder", "placeholder", nullptr, 0, unit_t(0));
+  }
+  
+  PerfCounters* counters = b.create_perf_counters();
+  cct->get_perfcounters_collection()->add(counters);
+  
+  return counters;
+}
+
+PerfCounters* UsagePerfCounters::create_bucket_counters(const std::string& bucket_name) {
+  std::string name = "rgw_bucket_" + bucket_name;
+  
+  // Sanitize name for perf counters
+  for (char& c : name) {
+    if (!std::isalnum(c) && c != '_') {
+      c = '_';
+    }
+  }
+  
+  PerfCountersBuilder b(cct, name, l_rgw_usage_first, l_rgw_usage_last);
+  
+  // Add placeholder counters for unused indices
+  for (int i = l_rgw_usage_first + 1; i < l_rgw_bucket_used_bytes; ++i) {
+    b.add_u64(i, "placeholder", "placeholder", nullptr, 0, unit_t(0));
+  }
+  
+  b.add_u64(l_rgw_bucket_used_bytes, "used_bytes",
+           "Bytes used in bucket", nullptr, 0, unit_t(UNIT_BYTES));
+  b.add_u64(l_rgw_bucket_num_objects, "num_objects",
+           "Number of objects in bucket", nullptr, 0, unit_t(0));
+  
+  // Add remaining placeholder counters
+  for (int i = l_rgw_bucket_num_objects + 1; i < l_rgw_usage_last; ++i) {
+    b.add_u64(i, "placeholder", "placeholder", nullptr, 0, unit_t(0));
+  }
+  
+  PerfCounters* counters = b.create_perf_counters();
+  cct->get_perfcounters_collection()->add(counters);
+  
+  return counters;
+}
+
+void UsagePerfCounters::cleanup_worker() {
+  ldout(cct, 10) << "Starting usage cache cleanup worker thread" << dendl;
+  
+  while (!shutdown_flag.load()) {
+    // Sleep with periodic checks for shutdown
+    for (int i = 0; i < cleanup_interval.count(); ++i) {
+      if (shutdown_flag.load()) {
+        break;
+      }
+      std::this_thread::sleep_for(std::chrono::seconds(1));
+    }
+    
+    if (!shutdown_flag.load()) {
+      cleanup_expired_entries();
+    }
+  }
+  
+  ldout(cct, 10) << "Usage cache cleanup worker thread exiting" << dendl;
+}
 
 int UsagePerfCounters::init() {
   int ret = cache->init();
   if (ret < 0) {
+    ldout(cct, 0) << "Failed to initialize usage cache: " << cpp_strerror(-ret) << dendl;
     return ret;
   }
-
+  
+  ldout(cct, 10) << "Usage performance counters initialized successfully" << dendl;
   return 0;
 }
 
 void UsagePerfCounters::start() {
   ldout(cct, 10) << "Starting usage perf counters" << dendl;
-  // Could start background cleanup thread here if needed
+  
+  // Start cleanup thread
+  cleanup_thread = std::thread(&UsagePerfCounters::cleanup_worker, this);
 }
 
 void UsagePerfCounters::stop() {
   ldout(cct, 10) << "Stopping usage perf counters" << dendl;
-  // Stop any background threads
+  
+  // Stop cleanup thread
+  shutdown_flag = true;
+  if (cleanup_thread.joinable()) {
+    cleanup_thread.join();
+  }
 }
 
 void UsagePerfCounters::shutdown() {
@@ -124,23 +184,32 @@ void UsagePerfCounters::shutdown() {
     
     auto* collection = cct->get_perfcounters_collection();
     
-    for (const auto& [_, counters] : user_perf_counters) {
-      collection->remove(counters.get());
+    // Remove and delete user counters
+    for (auto& [_, counters] : user_perf_counters) {
+      collection->remove(counters);
+      delete counters;
     }
     user_perf_counters.clear();
     
-    for (const auto& [_, counters] : bucket_perf_counters) {
-      collection->remove(counters.get());
+    // Remove and delete bucket counters
+    for (auto& [_, counters] : bucket_perf_counters) {
+      collection->remove(counters);
+      delete counters;
     }
     bucket_perf_counters.clear();
     
+    // Remove global counters
     if (global_counters) {
-      collection->remove(global_counters.get());
-      global_counters.reset();
+      collection->remove(global_counters);
+      delete global_counters;
+      global_counters = nullptr;
     }
   }
   
+  // Shutdown cache
   cache->shutdown();
+  
+  ldout(cct, 10) << "Usage perf counters shutdown complete" << dendl;
 }
 
 void UsagePerfCounters::update_user_stats(const std::string& user_id,
@@ -152,6 +221,9 @@ void UsagePerfCounters::update_user_stats(const std::string& user_id,
     int ret = cache->update_user_stats(user_id, bytes_used, num_objects);
     if (ret == 0) {
       global_counters->inc(l_rgw_usage_cache_update);
+    } else {
+      ldout(cct, 5) << "Failed to update user cache for " << user_id 
+                    << ": " << cpp_strerror(-ret) << dendl;
     }
   }
   
@@ -161,7 +233,7 @@ void UsagePerfCounters::update_user_stats(const std::string& user_id,
     
     auto it = user_perf_counters.find(user_id);
     if (it == user_perf_counters.end()) {
-      auto counters = create_user_counters(user_id);
+      PerfCounters* counters = create_user_counters(user_id);
       user_perf_counters[user_id] = counters;
       it = user_perf_counters.find(user_id);
     }
@@ -184,6 +256,9 @@ void UsagePerfCounters::update_bucket_stats(const std::string& bucket_name,
     int ret = cache->update_bucket_stats(bucket_name, bytes_used, num_objects);
     if (ret == 0) {
       global_counters->inc(l_rgw_usage_cache_update);
+    } else {
+      ldout(cct, 5) << "Failed to update bucket cache for " << bucket_name
+                    << ": " << cpp_strerror(-ret) << dendl;
     }
   }
   
@@ -193,7 +268,7 @@ void UsagePerfCounters::update_bucket_stats(const std::string& bucket_name,
     
     auto it = bucket_perf_counters.find(bucket_name);
     if (it == bucket_perf_counters.end()) {
-      auto counters = create_bucket_counters(bucket_name);
+      PerfCounters* counters = create_bucket_counters(bucket_name);
       bucket_perf_counters[bucket_name] = counters;
       it = bucket_perf_counters.find(bucket_name);
     }
@@ -255,7 +330,7 @@ void UsagePerfCounters::evict_from_cache(const std::string& user_id,
   }
 }
 
-std::optional<UsageStats> UsagePerfCounters::get_user_stats(const std::string& user_id) const {
+std::optional<UsageStats> UsagePerfCounters::get_user_stats(const std::string& user_id) {
   if (!cache) {
     return std::nullopt;
   }
@@ -270,7 +345,7 @@ std::optional<UsageStats> UsagePerfCounters::get_user_stats(const std::string& u
   return stats;
 }
 
-std::optional<UsageStats> UsagePerfCounters::get_bucket_stats(const std::string& bucket_name) const {
+std::optional<UsageStats> UsagePerfCounters::get_bucket_stats(const std::string& bucket_name) {
   if (!cache) {
     return std::nullopt;
   }
@@ -288,7 +363,9 @@ std::optional<UsageStats> UsagePerfCounters::get_bucket_stats(const std::string&
 void UsagePerfCounters::cleanup_expired_entries() {
   if (cache) {
     int removed = cache->clear_expired_entries();
-    ldout(cct, 10) << "Cleaned up " << removed << " expired cache entries" << dendl;
+    if (removed > 0) {
+      ldout(cct, 10) << "Cleaned up " << removed << " expired cache entries" << dendl;
+    }
   }
 }
 

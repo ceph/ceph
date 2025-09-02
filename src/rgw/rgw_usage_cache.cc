@@ -7,6 +7,9 @@
 #include "common/perf_counters.h"
 #include "common/ceph_context.h"
 #include "common/perf_counters_collection.h"
+#include "common/errno.h" 
+#include <sys/stat.h>
+#include <sys/types.h>
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -66,6 +69,8 @@ UsageCache::UsageCache(UsageCache&& other) noexcept {
   initialized.store(other.initialized.load());
   cct = other.cct;
   perf_counters = other.perf_counters;
+  cache_hits.store(other.cache_hits.load());
+  cache_misses.store(other.cache_misses.load());
   
   other.env = nullptr;
   other.user_dbi = 0;
@@ -88,6 +93,8 @@ UsageCache& UsageCache::operator=(UsageCache&& other) noexcept {
     initialized.store(other.initialized.load());
     cct = other.cct;
     perf_counters = other.perf_counters;
+    cache_hits.store(other.cache_hits.load());
+    cache_misses.store(other.cache_misses.load());
     
     other.env = nullptr;
     other.user_dbi = 0;
@@ -101,13 +108,12 @@ UsageCache& UsageCache::operator=(UsageCache&& other) noexcept {
 
 void UsageCache::init_perf_counters() {
   if (!cct || perf_counters) {
-    return;  // No context or already initialized
+    return;
   }
   
   PerfCountersBuilder pcb(cct, "rgw_usage_cache", 
                           PERF_CACHE_FIRST, PERF_CACHE_LAST);
   
-  // Add counter definitions - nick must be 4 chars or less!
   pcb.add_u64_counter(PERF_CACHE_HIT, "cache_hits", 
                      "Total number of cache hits", "hit",
                      PerfCountersBuilder::PRIO_USEFUL);
@@ -127,16 +133,16 @@ void UsageCache::init_perf_counters() {
              "Current cache size", "size",
              PerfCountersBuilder::PRIO_USEFUL);
   pcb.add_u64_counter(PERF_CACHE_USER_HIT, "user_cache_hits", 
-                     "User cache hits", "uhit",  // Changed from "u_hit" to "uhit" (4 chars)
+                     "User cache hits", "uhit",
                      PerfCountersBuilder::PRIO_DEBUGONLY);
   pcb.add_u64_counter(PERF_CACHE_USER_MISS, "user_cache_misses", 
-                     "User cache misses", "umis",  // Changed from "u_miss" to "umis" (4 chars)
+                     "User cache misses", "umis",
                      PerfCountersBuilder::PRIO_DEBUGONLY);
   pcb.add_u64_counter(PERF_CACHE_BUCKET_HIT, "bucket_cache_hits", 
-                     "Bucket cache hits", "bhit",  // Changed from "b_hit" to "bhit" (4 chars)
+                     "Bucket cache hits", "bhit",
                      PerfCountersBuilder::PRIO_DEBUGONLY);
   pcb.add_u64_counter(PERF_CACHE_BUCKET_MISS, "bucket_cache_misses", 
-                     "Bucket cache misses", "bmis",  // Changed from "b_miss" to "bmis" (4 chars)
+                     "Bucket cache misses", "bmis",
                      PerfCountersBuilder::PRIO_DEBUGONLY);
   
   perf_counters = pcb.create_perf_counters();
@@ -165,7 +171,32 @@ void UsageCache::set_counter(int counter, uint64_t value) {
 
 int UsageCache::init() {
   if (initialized.exchange(true)) {
-    return 0;  // Already initialized
+    return 0;
+  }
+  
+  // Validate database directory exists
+  if (cct) {
+    std::string db_dir = config.db_path;
+    size_t pos = db_dir.find_last_of('/');
+    if (pos != std::string::npos) {
+      db_dir = db_dir.substr(0, pos);
+    }
+    
+    struct stat st;
+    if (stat(db_dir.c_str(), &st) != 0) {
+      // Try to create directory
+      if (mkdir(db_dir.c_str(), 0755) != 0) {
+        ldout(cct, 0) << "ERROR: Failed to create usage cache directory: " 
+                      << db_dir << " - " << cpp_strerror(errno) << dendl;
+        initialized = false;
+        return -errno;
+      }
+    } else if (!S_ISDIR(st.st_mode)) {
+      ldout(cct, 0) << "ERROR: Usage cache path is not a directory: " 
+                    << db_dir << dendl;
+      initialized = false;
+      return -ENOTDIR;
+    }
   }
   
   int ret = open_database();
@@ -174,7 +205,6 @@ int UsageCache::init() {
     return ret;
   }
   
-  // Update cache size counter
   set_counter(PERF_CACHE_SIZE, get_cache_size());
   
   return 0;
@@ -189,11 +219,17 @@ void UsageCache::shutdown() {
 int UsageCache::open_database() {
   int rc = mdb_env_create(&env);
   if (rc != 0) {
+    if (cct) {
+      ldout(cct, 0) << "LMDB env_create failed: " << mdb_strerror(rc) << dendl;
+    }
     return -EIO;
   }
 
   rc = mdb_env_set_mapsize(env, config.max_db_size);
   if (rc != 0) {
+    if (cct) {
+      ldout(cct, 0) << "LMDB set_mapsize failed: " << mdb_strerror(rc) << dendl;
+    }
     mdb_env_close(env);
     env = nullptr;
     return -EIO;
@@ -201,13 +237,19 @@ int UsageCache::open_database() {
 
   rc = mdb_env_set_maxreaders(env, config.max_readers);
   if (rc != 0) {
+    if (cct) {
+      ldout(cct, 0) << "LMDB set_maxreaders failed: " << mdb_strerror(rc) << dendl;
+    }
     mdb_env_close(env);
     env = nullptr;
     return -EIO;
   }
 
-  rc = mdb_env_set_maxdbs(env, 2);  // user_stats and bucket_stats
+  rc = mdb_env_set_maxdbs(env, 2);
   if (rc != 0) {
+    if (cct) {
+      ldout(cct, 0) << "LMDB set_maxdbs failed: " << mdb_strerror(rc) << dendl;
+    }
     mdb_env_close(env);
     env = nullptr;
     return -EIO;
@@ -215,6 +257,10 @@ int UsageCache::open_database() {
 
   rc = mdb_env_open(env, config.db_path.c_str(), MDB_NOSUBDIR | MDB_NOTLS, 0644);
   if (rc != 0) {
+    if (cct) {
+      ldout(cct, 0) << "LMDB env_open failed for " << config.db_path 
+                    << ": " << mdb_strerror(rc) << dendl;
+    }
     mdb_env_close(env);
     env = nullptr;
     return -EIO;
@@ -224,6 +270,9 @@ int UsageCache::open_database() {
   MDB_txn* txn = nullptr;
   rc = mdb_txn_begin(env, nullptr, 0, &txn);
   if (rc != 0) {
+    if (cct) {
+      ldout(cct, 0) << "LMDB txn_begin failed: " << mdb_strerror(rc) << dendl;
+    }
     mdb_env_close(env);
     env = nullptr;
     return -EIO;
@@ -231,6 +280,10 @@ int UsageCache::open_database() {
 
   rc = mdb_dbi_open(txn, "user_stats", MDB_CREATE, &user_dbi);
   if (rc != 0) {
+    if (cct) {
+      ldout(cct, 0) << "LMDB dbi_open(user_stats) failed: " 
+                    << mdb_strerror(rc) << dendl;
+    }
     mdb_txn_abort(txn);
     mdb_env_close(env);
     env = nullptr;
@@ -239,6 +292,10 @@ int UsageCache::open_database() {
 
   rc = mdb_dbi_open(txn, "bucket_stats", MDB_CREATE, &bucket_dbi);
   if (rc != 0) {
+    if (cct) {
+      ldout(cct, 0) << "LMDB dbi_open(bucket_stats) failed: " 
+                    << mdb_strerror(rc) << dendl;
+    }
     mdb_txn_abort(txn);
     mdb_env_close(env);
     env = nullptr;
@@ -247,9 +304,16 @@ int UsageCache::open_database() {
 
   rc = mdb_txn_commit(txn);
   if (rc != 0) {
+    if (cct) {
+      ldout(cct, 0) << "LMDB txn_commit failed: " << mdb_strerror(rc) << dendl;
+    }
     mdb_env_close(env);
     env = nullptr;
     return -EIO;
+  }
+
+  if (cct) {
+    ldout(cct, 10) << "LMDB database opened successfully: " << config.db_path << dendl;
   }
 
   return 0;
@@ -279,17 +343,29 @@ int UsageCache::put_stats(MDB_dbi dbi, const std::string& key, const T& stats) {
   MDB_txn* txn = nullptr;
   int rc = mdb_txn_begin(env, nullptr, 0, &txn);
   if (rc != 0) {
+    if (cct) {
+      ldout(cct, 5) << "LMDB txn_begin failed in put_stats: " 
+                    << mdb_strerror(rc) << dendl;
+    }
     return -EIO;
   }
   
   rc = mdb_put(txn, dbi, &mdb_key, &mdb_val, 0);
   if (rc != 0) {
+    if (cct) {
+      ldout(cct, 5) << "LMDB put failed for key " << key 
+                    << ": " << mdb_strerror(rc) << dendl;
+    }
     mdb_txn_abort(txn);
     return -EIO;
   }
   
   rc = mdb_txn_commit(txn);
   if (rc != 0) {
+    if (cct) {
+      ldout(cct, 5) << "LMDB txn_commit failed in put_stats: " 
+                    << mdb_strerror(rc) << dendl;
+    }
     return -EIO;
   }
   
@@ -297,7 +373,7 @@ int UsageCache::put_stats(MDB_dbi dbi, const std::string& key, const T& stats) {
 }
 
 template<typename T>
-std::optional<T> UsageCache::get_stats(MDB_dbi dbi, const std::string& key) const {
+std::optional<T> UsageCache::get_stats(MDB_dbi dbi, const std::string& key) {
   if (!initialized) {
     return std::nullopt;
   }
@@ -308,6 +384,10 @@ std::optional<T> UsageCache::get_stats(MDB_dbi dbi, const std::string& key) cons
   MDB_txn* txn = nullptr;
   int rc = mdb_txn_begin(env, nullptr, MDB_RDONLY, &txn);
   if (rc != 0) {
+    if (cct) {
+      ldout(cct, 10) << "LMDB txn_begin failed in get_stats: " 
+                     << mdb_strerror(rc) << dendl;
+    }
     return std::nullopt;
   }
   
@@ -315,6 +395,10 @@ std::optional<T> UsageCache::get_stats(MDB_dbi dbi, const std::string& key) cons
   mdb_txn_abort(txn);
   
   if (rc != 0) {
+    if (rc != MDB_NOTFOUND && cct) {
+      ldout(cct, 10) << "LMDB get failed for key " << key 
+                     << ": " << mdb_strerror(rc) << dendl;
+    }
     return std::nullopt;
   }
   
@@ -329,13 +413,16 @@ std::optional<T> UsageCache::get_stats(MDB_dbi dbi, const std::string& key) cons
     // Check TTL
     auto now = ceph::real_clock::now();
     if (now - stats.last_updated > config.ttl) {
-      // Entry expired
-      const_cast<UsageCache*>(this)->inc_counter(PERF_CACHE_EXPIRED);
+      inc_counter(PERF_CACHE_EXPIRED);
       return std::nullopt;
     }
     
     return stats;
   } catch (const buffer::error& e) {
+    if (cct) {
+      ldout(cct, 5) << "Failed to decode stats for key " << key 
+                    << ": " << e.what() << dendl;
+    }
     return std::nullopt;
   }
 }
@@ -359,17 +446,19 @@ int UsageCache::update_user_stats(const std::string& user_id,
   return ret;
 }
 
-std::optional<UsageStats> UsageCache::get_user_stats(const std::string& user_id) const {
+std::optional<UsageStats> UsageCache::get_user_stats(const std::string& user_id) {
   std::shared_lock lock(db_mutex);
   auto result = get_stats<UsageStats>(user_dbi, user_id);
   
   // Update performance counters
   if (result.has_value()) {
-    const_cast<UsageCache*>(this)->inc_counter(PERF_CACHE_HIT);
-    const_cast<UsageCache*>(this)->inc_counter(PERF_CACHE_USER_HIT);
+    cache_hits++;
+    inc_counter(PERF_CACHE_HIT);
+    inc_counter(PERF_CACHE_USER_HIT);
   } else {
-    const_cast<UsageCache*>(this)->inc_counter(PERF_CACHE_MISS);
-    const_cast<UsageCache*>(this)->inc_counter(PERF_CACHE_USER_MISS);
+    cache_misses++;
+    inc_counter(PERF_CACHE_MISS);
+    inc_counter(PERF_CACHE_USER_MISS);
   }
   
   return result;
@@ -387,17 +476,29 @@ int UsageCache::remove_user_stats(const std::string& user_id) {
   MDB_txn* txn = nullptr;
   int rc = mdb_txn_begin(env, nullptr, 0, &txn);
   if (rc != 0) {
+    if (cct) {
+      ldout(cct, 5) << "LMDB txn_begin failed in remove_user_stats: " 
+                    << mdb_strerror(rc) << dendl;
+    }
     return -EIO;
   }
   
   rc = mdb_del(txn, user_dbi, &mdb_key, nullptr);
   if (rc != 0 && rc != MDB_NOTFOUND) {
+    if (cct) {
+      ldout(cct, 5) << "LMDB del failed for user " << user_id 
+                    << ": " << mdb_strerror(rc) << dendl;
+    }
     mdb_txn_abort(txn);
     return -EIO;
   }
   
   rc = mdb_txn_commit(txn);
   if (rc != 0) {
+    if (cct) {
+      ldout(cct, 5) << "LMDB txn_commit failed in remove_user_stats: " 
+                    << mdb_strerror(rc) << dendl;
+    }
     return -EIO;
   }
   
@@ -426,17 +527,19 @@ int UsageCache::update_bucket_stats(const std::string& bucket_name,
   return ret;
 }
 
-std::optional<UsageStats> UsageCache::get_bucket_stats(const std::string& bucket_name) const {
+std::optional<UsageStats> UsageCache::get_bucket_stats(const std::string& bucket_name) {
   std::shared_lock lock(db_mutex);
   auto result = get_stats<UsageStats>(bucket_dbi, bucket_name);
   
   // Update performance counters
   if (result.has_value()) {
-    const_cast<UsageCache*>(this)->inc_counter(PERF_CACHE_HIT);
-    const_cast<UsageCache*>(this)->inc_counter(PERF_CACHE_BUCKET_HIT);
+    cache_hits++;
+    inc_counter(PERF_CACHE_HIT);
+    inc_counter(PERF_CACHE_BUCKET_HIT);
   } else {
-    const_cast<UsageCache*>(this)->inc_counter(PERF_CACHE_MISS);
-    const_cast<UsageCache*>(this)->inc_counter(PERF_CACHE_BUCKET_MISS);
+    cache_misses++;
+    inc_counter(PERF_CACHE_MISS);
+    inc_counter(PERF_CACHE_BUCKET_MISS);
   }
   
   return result;
@@ -454,17 +557,29 @@ int UsageCache::remove_bucket_stats(const std::string& bucket_name) {
   MDB_txn* txn = nullptr;
   int rc = mdb_txn_begin(env, nullptr, 0, &txn);
   if (rc != 0) {
+    if (cct) {
+      ldout(cct, 5) << "LMDB txn_begin failed in remove_bucket_stats: " 
+                    << mdb_strerror(rc) << dendl;
+    }
     return -EIO;
   }
   
   rc = mdb_del(txn, bucket_dbi, &mdb_key, nullptr);
   if (rc != 0 && rc != MDB_NOTFOUND) {
+    if (cct) {
+      ldout(cct, 5) << "LMDB del failed for bucket " << bucket_name 
+                    << ": " << mdb_strerror(rc) << dendl;
+    }
     mdb_txn_abort(txn);
     return -EIO;
   }
   
   rc = mdb_txn_commit(txn);
   if (rc != 0) {
+    if (cct) {
+      ldout(cct, 5) << "LMDB txn_commit failed in remove_bucket_stats: " 
+                    << mdb_strerror(rc) << dendl;
+    }
     return -EIO;
   }
   
@@ -491,11 +606,18 @@ int UsageCache::clear_expired_entries() {
     
     int rc = mdb_txn_begin(env, nullptr, 0, &txn);
     if (rc != 0) {
+      if (cct) {
+        ldout(cct, 5) << "LMDB txn_begin failed in clear_expired_entries: " 
+                      << mdb_strerror(rc) << dendl;
+      }
       return -EIO;
     }
     
     rc = mdb_cursor_open(txn, dbi, &cursor);
     if (rc != 0) {
+      if (cct) {
+        ldout(cct, 5) << "LMDB cursor_open failed: " << mdb_strerror(rc) << dendl;
+      }
       mdb_txn_abort(txn);
       return -EIO;
     }
@@ -519,6 +641,9 @@ int UsageCache::clear_expired_entries() {
         }
       } catch (const buffer::error& e) {
         // Skip malformed entries
+        if (cct) {
+          ldout(cct, 10) << "Skipping malformed entry: " << e.what() << dendl;
+        }
       }
     }
     
@@ -526,6 +651,10 @@ int UsageCache::clear_expired_entries() {
     
     rc = mdb_txn_commit(txn);
     if (rc != 0) {
+      if (cct) {
+        ldout(cct, 5) << "LMDB txn_commit failed in clear_expired_entries: " 
+                      << mdb_strerror(rc) << dendl;
+      }
       return -EIO;
     }
     
@@ -542,8 +671,11 @@ int UsageCache::clear_expired_entries() {
     total_removed += ret;
   }
   
-  // Update cache size counter
   set_counter(PERF_CACHE_SIZE, get_cache_size_internal());
+  
+  if (cct) {
+    ldout(cct, 10) << "Cleared " << total_removed << " expired cache entries" << dendl;
+  }
   
   return total_removed;
 }
@@ -558,7 +690,6 @@ size_t UsageCache::get_cache_size() const {
 }
 
 size_t UsageCache::get_cache_size_internal() const {
-  // This method assumes the caller already holds a lock
   if (!initialized) {
     return 0;
   }
@@ -587,29 +718,23 @@ size_t UsageCache::get_cache_size_internal() const {
 }
 
 uint64_t UsageCache::get_cache_hits() const {
-  if (!perf_counters) {
-    return 0;
-  }
-  return perf_counters->get(PERF_CACHE_HIT);
+  return cache_hits.load();
 }
 
 uint64_t UsageCache::get_cache_misses() const {
-  if (!perf_counters) {
-    return 0;
-  }
-  return perf_counters->get(PERF_CACHE_MISS);
+  return cache_misses.load();
 }
 
 double UsageCache::get_hit_rate() const {
-  if (!perf_counters) {
-    return 0.0;
-  }
-  
-  uint64_t hits = perf_counters->get(PERF_CACHE_HIT);
-  uint64_t misses = perf_counters->get(PERF_CACHE_MISS);
+  uint64_t hits = cache_hits.load();
+  uint64_t misses = cache_misses.load();
   uint64_t total = hits + misses;
   
   return (total > 0) ? (double)hits / total * 100.0 : 0.0;
 }
+
+// Explicit template instantiations
+template int UsageCache::put_stats(MDB_dbi, const std::string&, const UsageStats&);
+template std::optional<UsageStats> UsageCache::get_stats(MDB_dbi, const std::string&);
 
 } // namespace rgw

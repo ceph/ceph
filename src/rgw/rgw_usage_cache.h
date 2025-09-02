@@ -40,14 +40,14 @@ public:
     std::chrono::seconds ttl;
     
     Config() 
-      : db_path("/var/lib/ceph/rgw/usage_cache.mdb"),
+      : db_path("/var/lib/ceph/radosgw/usage_cache.mdb"),
         max_db_size(1 << 30),  // 1GB default
         max_readers(126),
         ttl(300) {}  // 5 min TTL
   };
 
   explicit UsageCache(const Config& config);
-  UsageCache(CephContext* cct, const Config& config);  // Constructor with CephContext for perf counters
+  UsageCache(CephContext* cct, const Config& config);
   ~UsageCache();
   
   // Move semantics
@@ -62,25 +62,25 @@ public:
   int init();
   void shutdown();
   
-  // User stats operations
+  // User stats operations (non-const to update counters)
   int update_user_stats(const std::string& user_id, 
                        uint64_t bytes_used, 
                        uint64_t num_objects);
-  std::optional<UsageStats> get_user_stats(const std::string& user_id) const;
+  std::optional<UsageStats> get_user_stats(const std::string& user_id);
   int remove_user_stats(const std::string& user_id);
   
-  // Bucket stats operations
+  // Bucket stats operations (non-const to update counters)
   int update_bucket_stats(const std::string& bucket_name,
                          uint64_t bytes_used,
                          uint64_t num_objects);
-  std::optional<UsageStats> get_bucket_stats(const std::string& bucket_name) const;
+  std::optional<UsageStats> get_bucket_stats(const std::string& bucket_name);
   int remove_bucket_stats(const std::string& bucket_name);
   
   // Maintenance
   int clear_expired_entries();
   size_t get_cache_size() const;
   
-  // Performance metrics (available when initialized with CephContext)
+  // Performance metrics
   uint64_t get_cache_hits() const;
   uint64_t get_cache_misses() const;
   double get_hit_rate() const;
@@ -94,7 +94,7 @@ private:
   int put_stats(MDB_dbi dbi, const std::string& key, const T& stats);
   
   template<typename T>
-  std::optional<T> get_stats(MDB_dbi dbi, const std::string& key) const;
+  std::optional<T> get_stats(MDB_dbi dbi, const std::string& key);
   
   // Performance counter helpers
   void init_perf_counters();
@@ -116,6 +116,10 @@ private:
   // Performance counters
   CephContext* cct;
   PerfCounters* perf_counters;
+  
+  // Mutable atomic counters for thread-safe statistics
+  mutable std::atomic<uint64_t> cache_hits{0};
+  mutable std::atomic<uint64_t> cache_misses{0};
 };
 
 } // namespace rgw

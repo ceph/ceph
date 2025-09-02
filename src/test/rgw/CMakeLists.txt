@@ -12,6 +12,28 @@ if(WITH_RADOSGW_KAFKA_ENDPOINT)
   add_library(kafka_stub STATIC ${kafka_stub_src})
 endif()
 
+# Find LMDB if not already found
+if(NOT LMDB_FOUND)
+  find_package(PkgConfig QUIET)
+  if(PkgConfig_FOUND)
+    pkg_check_modules(LMDB QUIET lmdb)
+  endif()
+  
+  if(NOT LMDB_FOUND)
+    find_path(LMDB_INCLUDE_DIR NAMES lmdb.h
+      PATHS /usr/include /usr/local/include)
+    find_library(LMDB_LIBRARIES NAMES lmdb
+      PATHS /usr/lib /usr/local/lib /usr/lib64 /usr/local/lib64)
+    
+    if(LMDB_INCLUDE_DIR AND LMDB_LIBRARIES)
+      set(LMDB_FOUND TRUE)
+      message(STATUS "Found LMDB: ${LMDB_LIBRARIES}")
+    else()
+      message(FATAL_ERROR "LMDB not found. Please install liblmdb-dev or lmdb-devel")
+    endif()
+  endif()
+endif()
+
 if(WITH_RADOSGW_LUA_PACKAGES)
   list(APPEND rgw_libs Boost::filesystem)
 endif()
@@ -359,19 +381,23 @@ if(WITH_TESTS)
   )
 
   target_link_libraries(unittest_rgw_usage_cache
-    ceph-common
     global
+    gtest
+    gtest_main
+    gmock_main
+    gmock
     ${LMDB_LIBRARIES}
-    GTest::gtest
-    GTest::gtest_main
+    ceph-common
+    ${CMAKE_DL_LIBS}
   )
 
   add_ceph_unittest(unittest_rgw_usage_cache)
 
-# Add performance counter test
+# Test for usage perf counters  
 add_executable(unittest_rgw_usage_perf_counters
-               test_rgw_usage_perf_counters.cc
-               ${CMAKE_SOURCE_DIR}/src/rgw/rgw_usage_cache.cc)
+                test_rgw_usage_perf_counters.cc
+                ${CMAKE_SOURCE_DIR}/src/rgw/rgw_usage_cache.cc
+                ${CMAKE_SOURCE_DIR}/src/rgw/rgw_usage_perf.cc)
 
 target_link_libraries(unittest_rgw_usage_perf_counters
                       ${UNITTEST_LIBS}
