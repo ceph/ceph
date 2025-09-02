@@ -549,21 +549,27 @@ public:
     }
   };
 
+  struct FileReaderOpts {
+    bool ignore_eof;
+    bool buffered;
+  };
   struct FileReader {
     MEMPOOL_CLASS_HELPERS();
 
     FileRef file;
     FileReaderBuffer buf;
     bool ignore_eof;        ///< used when reading our log file
+    bool buffered;
     ceph::shared_mutex lock {
      ceph::make_shared_mutex(std::string(), false, false, false)
     };
 
 
-    FileReader(FileRef f, uint64_t mpf, bool ie)
+    FileReader(FileRef f, uint64_t mpf, const FileReaderOpts opts)
       : file(f),
 	buf(mpf),
-	ignore_eof(ie) {
+	ignore_eof(opts.ignore_eof),
+        buffered(opts.buffered) {
       ++file->num_readers;
     }
     ~FileReader() {
