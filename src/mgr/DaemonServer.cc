@@ -793,8 +793,9 @@ bool DaemonServer::handle_report(const ref_t<MMgrReport>& m)
         update_task_status(key, *m->task_status);
         daemon->last_service_beacon = now;
       }
-      if (m->get_connection()->peer_is_osd() || m->get_connection()->peer_is_mon()) {
-        // only OSD and MON send health_checks to me now
+      if (m->get_connection()->peer_is_osd() || m->get_connection()->peer_is_mon() ||
+          (m->get_connection()->peer_is_client() && daemon->service_daemon &&
+           daemon->key.type == "cephfs-mirror")) {
         daemon->daemon_health_metrics = std::move(m->daemon_health_metrics);
         dout(10) << "daemon_health_metrics " << daemon->daemon_health_metrics
                  << dendl;
@@ -2752,7 +2753,7 @@ void DaemonServer::send_report()
     });
 
   std::map<daemon_metric, unique_ptr<DaemonHealthMetricCollector>> accumulated;
-  for (auto service : {"osd", "mon"} ) {
+  for (auto service : {"osd", "mon", "cephfs-mirror"} ) {
     auto daemons = daemon_state.get_by_service(service);
     for (const auto& [key,state] : daemons) {
       std::lock_guard l{state->lock};
