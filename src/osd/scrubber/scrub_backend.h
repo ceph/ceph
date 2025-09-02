@@ -294,6 +294,9 @@ struct scrub_chunk_t {
 
   // EC-related:
   shard_id_map<bufferlist> m_ec_digest_map;
+
+  /// only one 'large OMAP' warning per chunk
+  bool m_large_omap_warning_issued{false};
 };
 
 
