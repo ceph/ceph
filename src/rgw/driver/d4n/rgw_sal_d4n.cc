@@ -147,14 +147,14 @@ void D4NFilterBucket::d4n_init_transaction(const DoutPrefixProvider* dpp)
 	//start transaction
 	m_d4n_trx->start_trx();
 
-	ldout(g_ceph_context, 0) << "D4NFilterBucket::d4n_init_transaction " << __func__ << " D4NTransaction = " << m_d4n_trx.get() << dendl; 
+	ldout(g_ceph_context, 0) << "D4NFilterBucket::d4n_init_transaction  D4NTransaction = " << m_d4n_trx.get() << dendl; 
 }
 
 void D4NFilterBucket::finalize_transaction(const DoutPrefixProvider* dpp, int& result_code)
 {
 	//end transaction (what about the optional_yield?)
 	if (m_d4n_trx == nullptr) {
-		ldpp_dout(dpp, 0) << "D4NFilterBucket::" << __func__ << "(): D4NTransaction is not initialized!" << dendl;
+		ldpp_dout(dpp, 0) << "D4NFilterBucket::finalize_transaction D4NTransaction is not initialized!" << dendl;
 		result_code = -EINVAL;
 		return;
 	}
@@ -163,9 +163,9 @@ void D4NFilterBucket::finalize_transaction(const DoutPrefixProvider* dpp, int& r
 	auto rc = m_d4n_trx->end_trx(dpp, this->filter->get_connection(), null_yield);
 	if (rc < 0) {
 		result_code = rc;
-		ldout(g_ceph_context, 0) << "D4NFilterBucket:: " << m_d4n_trx.get() << __func__ << "(): had failed, returned rc: " << rc << dendl;
+		ldout(g_ceph_context, 0) << "D4NFilterBucket::finalize_transaction " << m_d4n_trx.get() << " had failed, returned rc: " << rc << dendl;
 	} else {
-		ldout(g_ceph_context, 0) << "D4NFilterBucket:: " << m_d4n_trx.get() << __func__ << "(): had completed successfully " << dendl; 
+		ldout(g_ceph_context, 0) << "D4NFilterBucket::finalize_transaction " << m_d4n_trx.get() << " had completed successfully " << dendl; 
 		result_code = 0;
 	}
 	//delete the Directory* objects. (if driver create Directory* objects, it should delete them)
@@ -680,14 +680,14 @@ void D4NFilterObject::d4n_init_transaction(const DoutPrefixProvider* dpp)
     m_bucketDir->set_d4n_trx(m_d4n_trx.get());
     //start transaction
     m_d4n_trx->start_trx();
-    ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): " << m_d4n_trx.get() << dendl;	
+    ldpp_dout(dpp, 0) << "D4NFilterObject::d4n_init_transaction " << m_d4n_trx.get() << dendl;	
 }
 
 void D4NFilterObject::finalize_transaction(const DoutPrefixProvider* dpp, int& result_code)
 {
   //end transaction (what about the optional_yield?)
   if (m_d4n_trx == nullptr) {
-		ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): D4NTransaction is not initialized!" << dendl;
+		ldpp_dout(dpp, 0) << "D4NFilterObject::finalize_transaction D4NTransaction is not initialized!" << dendl;
 		result_code = -EINVAL;
 		return;
   }
@@ -696,9 +696,9 @@ void D4NFilterObject::finalize_transaction(const DoutPrefixProvider* dpp, int& r
   auto rc = m_d4n_trx->end_trx(dpp, driver->get_connection(), null_yield);
   if (rc < 0) {
 		result_code = rc;
-		ldout(g_ceph_context, 0) << "D4NFilterObject:: " << m_d4n_trx.get() << __func__ << "(): had failed, returned rc: " << rc << dendl;
+		ldout(g_ceph_context, 0) << "D4NFilterObject::finalize_transaction " << m_d4n_trx.get() << " had failed, returned rc: " << rc << dendl;
   } else {
-		ldout(g_ceph_context, 0) << "D4NFilterObject:: " << m_d4n_trx.get() << __func__ << "(): had completed successfully " << dendl; 
+		ldout(g_ceph_context, 0) << "D4NFilterObject::finalize_transaction " << m_d4n_trx.get() << " had completed successfully " << dendl; 
 		result_code = 0;
   }
   m_objDir.reset();

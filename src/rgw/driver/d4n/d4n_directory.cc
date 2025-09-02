@@ -1406,7 +1406,7 @@ int D4NTransaction::end_trx(const DoutPrefixProvider* dpp, std::shared_ptr<conne
   //running the loaded script 
   try {
     boost::system::error_code ec;
-    response<std::string> resp;
+    response<int,std::string> resp;
     request req;
 
     unsigned int num_keys = m_temp_read_keys.size() + m_temp_write_keys.size() + m_temp_test_write_keys.size();
@@ -1437,21 +1437,49 @@ int D4NTransaction::end_trx(const DoutPrefixProvider* dpp, std::shared_ptr<conne
       return 0;
     }
 
+    //the keys that are passed to the script are the keys that are related to the unique transaction.
     req.push_range("EVALSHA",m_evalsha_end_trx, trx_keys);
-
     redis_exec(conn, ec, req, resp, y);
 
+    //error handling
       if (ec) {
-	ldout(g_ceph_context, 0) << "Directory::end_trx the end-trx script had failed this = " << this << "with ec =" << ec  << dendl;
+	std::ostringstream err_msg;
+	err_msg	<< "Directory::end_trx the end-trx script had failed this = " << this ;
+
+	//system level error
+	if (ec.category().name() == std::string("system")) {
+        		ldout(g_ceph_context, 0) << err_msg.str() << " System error: " << ec.message()
+                  		<< " (errno=" << ec.value() << dendl; 
+	//boost redis error
+    	} else if (ec.category().name() == std::string("boost.redis")) {
+        		ldout(g_ceph_context,0) << err_msg.str() << "Redis error: " << ec.message()
+                  		<< " (boost.redis code=" << ec.value() << dendl;
+
+   	} else {//TODO what are the other error categories?
+        		ldout(g_ceph_context,0) << err_msg.str() << "Other error: " << ec.message()
+                  		<< " (category=" << ec.category().name()
+                  		<< ", value=" << ec.value() << dendl;
+    	}
+
 	return -ec.value();
       }
 
-      // the response contain whether the transaction was successful or not
-      auto result = std::get<0>(resp).value();
-      if (result.starts_with("ERR") || result.starts_with("NOSCRIPT")) {
+      // the response contain whether the transaction was successful or not <int status, string result>
+      int status = std::get<0>(resp).value();
+      std::string result = std::get<1>(resp).value();
+
+      //could be compile-time error or no matching script.
+      if (result.starts_with("ERR") || result.starts_with("NOSCRIPT") || result.starts_with("WRONGTYPE")) {
 	 ldout(g_ceph_context, 0) << "Directory::end_trx the end-trx script had failed this = " << this << "with result =" << result << dendl;
          return -EINVAL;
       }
+
+      if(status == 0) {
+	//the transaction had failed, it was rolled back.
+	ldout(g_ceph_context, 0) << "Directory::end_trx the end-trx script had rolled back the transaction this = " << this << "  " << result << dendl;
+	return -EINVAL;
+      }
+
 
     } catch (std::exception &e) {
       ldout(g_ceph_context, 0) << "Directory::end_trx the end-trx script had failed this = " << this << "with exception = " << e.what() << dendl;
