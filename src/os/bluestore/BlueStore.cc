@@ -3759,11 +3759,13 @@ void BlueStore::ExtentMap::reshard_action(
            << shard_index_end << ")" << dendl;
 
   // Fault the range
-  fault_range(db, needs_reshard_begin, (needs_reshard_end - needs_reshard_begin));
+  if (db) {
+    fault_range(db, needs_reshard_begin, (needs_reshard_end - needs_reshard_begin));
+  }
 
   // Remove old shard keys
   string key;
-  for (unsigned i = shard_index_begin; i < shard_index_end; ++i) {
+  for (unsigned i = shard_index_begin; t && i < shard_index_end; ++i) {
     generate_extent_shard_key_and_apply(
       onode->key, shards[i].shard_info->offset, &key,
       [&](const string& final_key) {
@@ -3818,13 +3820,15 @@ void BlueStore::ExtentMap::reshard_action(
     // identify new spanning blobs
     dout(20) << __func__ << " checking spanning blobs 0x[" << std::hex
 	     << spanning_scan_begin << "," << spanning_scan_end << ")" << dendl;
-    if (spanning_scan_begin < needs_reshard_begin) {
-      fault_range(db, spanning_scan_begin,
-		  needs_reshard_begin - spanning_scan_begin);
-    }
-    if (spanning_scan_end > needs_reshard_end) {
-      fault_range(db, needs_reshard_end,
-		  spanning_scan_end - needs_reshard_end);
+    if (db) {
+      if (spanning_scan_begin < needs_reshard_begin) {
+        fault_range(db, spanning_scan_begin,
+		    needs_reshard_begin - spanning_scan_begin);
+      }
+      if (spanning_scan_end > needs_reshard_end) {
+        fault_range(db, needs_reshard_end,
+		       spanning_scan_end - needs_reshard_end);
+      }
     }
     auto current_shard = extent_map_shards.begin() + shard_index_begin;
     auto end_shard = extent_map_shards.end();
