@@ -520,15 +520,17 @@ public:
     FileRef file;
     FileReaderBuffer buf;
     bool ignore_eof;        ///< used when reading our log file
+    bool buffered;
     ceph::shared_mutex lock {
      ceph::make_shared_mutex(std::string(), false, false, false)
     };
 
 
-    FileReader(FileRef f, uint64_t mpf, bool ie)
+    FileReader(FileRef f, uint64_t mpf, bool ie, bool _buffered)
       : file(f),
 	buf(mpf),
-	ignore_eof(ie) {
+	ignore_eof(ie),
+        buffered(_buffered) {
       ++file->num_readers;
     }
     ~FileReader() {

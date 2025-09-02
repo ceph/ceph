@@ -1366,7 +1366,8 @@ int BlueFS::_replay(bool noop, bool to_stdout)
 
   FileReader *log_reader = new FileReader(
     log_file, cct->_conf->bluefs_max_prefetch,
-    true);  // ignore eof
+    true,   // ignore eof
+    false); // non-buffered
 
   bool seen_recs = false;
 
@@ -2388,10 +2389,10 @@ int64_t BlueFS::_read_random(
       int r;
       if (!cct->_conf->bluefs_check_for_zeros) {
 	r = _bdev_read_random(p->bdev, p->offset + x_off, l, out,
-			      cct->_conf->bluefs_buffered_io);
+			      h->buffered);
       } else {
 	r = _read_random_and_check(p->bdev, p->offset + x_off, l, out,
-			cct->_conf->bluefs_buffered_io);
+			           h->buffered);
       }
       ceph_assert(r == 0);
       off += l;
@@ -2466,7 +2467,7 @@ void BlueFS::_envmode_index_file(
   File::envelope_t flush;
   bool envelope_good;
   uint64_t file_size = file->fnode.size;
-  FileReader *h = new FileReader(file, 4096, true);
+  FileReader *h = new FileReader(file, 4096, true, false);
   ceph_assert(h);
   while(scan_ofs < file->fnode.allocated) {
     envelope_good = _read_envelope(h, scan_ofs, env_ofs, &flush);
@@ -2699,14 +2700,13 @@ int64_t BlueFS::_read(
 	int r;
 	// when reading BlueFS log (only happens on startup) use non-buffered io
 	// it makes it in sync with logic in _flush_range()
-	bool use_buffered_io = h->file->fnode.ino == 1 ? false : cct->_conf->bluefs_buffered_io;
 	if (!cct->_conf->bluefs_check_for_zeros) {
 	  r = _bdev_read(p->bdev, p->offset + x_off, l, &buf->bl, ioc[p->bdev],
-			 use_buffered_io);
+			 h->buffered);
 	} else {
 	  r = _read_and_check(
 	    p->bdev, p->offset + x_off, l, &buf->bl, ioc[p->bdev],
-	    use_buffered_io);
+	    h->buffered);
 	}
 	logger->inc(l_bluefs_read_disk_count, 1);
 	logger->inc(l_bluefs_read_disk_bytes, l);
@@ -4757,11 +4757,13 @@ int BlueFS::open_for_read(
     return -ENOENT;
   }
   File *file = q->second.get();
-  if (file->envelope_mode() && !file->envelopes_indexed) {
+  bool envelope = file->envelope_mode();
+  if (envelope && !file->envelopes_indexed) {
     _envmode_index_file(file);
   }
   *h = new FileReader(file, random ? 4096 : cct->_conf->bluefs_max_prefetch,
-                      file->envelope_mode());
+                      envelope,
+                      envelope ? false : cct->_conf->bluefs_buffered_io);
   dout(10) << __func__ << " h " << *h << " on " << file->fnode << dendl;
   return 0;
 }
