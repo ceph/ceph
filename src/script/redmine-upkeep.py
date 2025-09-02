@@ -993,7 +993,6 @@ class RedmineUpkeep:
 
                 if self.pull_request_id:
                     comment_body = f"""
-
                         This is an automated message by src/script/redmine-upkeep.py.
 
                         I have resolved the following tracker ticket due to the merge of this PR:
@@ -1002,11 +1001,11 @@ class RedmineUpkeep:
 
                         No backports are pending for the ticket. If this is incorrect, please update the tracker
                         ticket and reset to `Pending Backport` state.
-
                     """
                     if GITHUB_ACTIONS:
                         comment_body += f"""
-                            Update Log: {GITHUB_ACTION_LOG}
+
+                        Update Log: {GITHUB_ACTION_LOG}
                         """
 
                     comment_body = textwrap.dedent(comment_body)
@@ -1251,7 +1250,6 @@ h2. Update Payload
 
         tracker_links = "\n".join([f"* https://tracker.ceph.com/issues/{tid}" for tid in found_tracker_ids])
         comment_body = f"""
-
             This is an automated message by src/script/redmine-upkeep.py.
 
             I found one or more `Fixes:` tags in the commit messages in
@@ -1263,10 +1261,12 @@ h2. Update Payload
             {tracker_links}
 
             Those tickets do not reference this merged Pull Request. If this Pull Request merge resolves any of those tickets, please update the "Pull Request ID" field on each ticket. A future run of this script will appropriately update them.
+        """
+        if GITHUB_ACTIONS:
+            comment_body += f"""
 
             Update Log: {GITHUB_ACTION_LOG}
-
-        """
+            """
         comment_body = textwrap.dedent(comment_body)
         log.debug(f"Leaving comment:\n{comment_body}")
 
