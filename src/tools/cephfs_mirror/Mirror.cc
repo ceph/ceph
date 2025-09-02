@@ -278,7 +278,7 @@ int Mirror::init(std::string &reason) {
     return r;
   }
 
-  m_service_daemon = std::make_unique<ServiceDaemon>(m_cct, m_local);
+  m_service_daemon = std::make_unique<ServiceDaemon>(m_cct, m_local, m_msgr, m_monc);
   r = m_service_daemon->init();
   if (r < 0) {
     derr << ": error registering service daemon: " << cpp_strerror(r) << dendl;
@@ -557,7 +557,13 @@ void Mirror::update_fs_mirrors() {
 
   {
     std::scoped_lock locker(m_lock);
+    int num_failed = 0;
     for (auto &[filesystem, mirror_action] : m_mirror_actions) {
+      if (mirror_action.fs_mirror && mirror_action.fs_mirror->is_failed()) {
+        std::vector<DaemonHealthMetric> health_metrics;
+        health_metrics.emplace_back(daemon_metric::CEPHFS_MIRROR_FAILURE, ++num_failed, ceph_clock_now());
+        m_service_daemon->update_mirror_health(health_metrics);
+      }
       auto failed_restart = mirror_action.fs_mirror && mirror_action.fs_mirror->is_failed() &&
         (failed_interval.count() > 0 && duration_cast<seconds>(clock::now() - mirror_action.fs_mirror->get_failed_ts()).count() > failed_interval.count());
       auto blocklisted_restart = mirror_action.fs_mirror && mirror_action.fs_mirror->is_blocklisted() &&
