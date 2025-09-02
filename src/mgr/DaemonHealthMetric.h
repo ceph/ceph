@@ -14,6 +14,8 @@ namespace ceph { class Formatter; }
 enum class daemon_metric : uint8_t {
   SLOW_OPS,
   PENDING_CREATING_PGS,
+  CEPHFS_MIRROR_FAILURE,
+  CEPHFS_MIRROR_SNAP_SYNC_FAILURE,
   NONE,
 };
 
@@ -21,6 +23,8 @@ static inline const char *daemon_metric_name(daemon_metric t) {
   switch (t) {
   case daemon_metric::SLOW_OPS: return "SLOW_OPS";
   case daemon_metric::PENDING_CREATING_PGS: return "PENDING_CREATING_PGS";
+  case daemon_metric::CEPHFS_MIRROR_FAILURE: return "CEPHFS_MIRROR_FAILURE";
+  case daemon_metric::CEPHFS_MIRROR_SNAP_SYNC_FAILURE: return "CEPHFS_MIRROR_SNAP_SYNC_FAILURE";
   case daemon_metric::NONE: return "NONE";
   default: return "???";
   }
