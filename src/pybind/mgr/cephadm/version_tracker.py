@@ -13,8 +13,8 @@ class VersionTracker:
     def __init__(self, mgr: "CephadmOrchestrator") -> None:
         self.mgr = mgr
         
-        if self.cluster_version_history_is_empty():
-            self.add_cluster_version(self.mgr._version)
+        #if self.cluster_version_history_is_empty():
+            #self.add_cluster_version(self.mgr._version)
 
 
     def cluster_version_history_is_empty(self) -> bool:
@@ -51,6 +51,9 @@ class VersionTracker:
             ORDER BY creation_time ASC;
         '''
 
+        if not self.mgr.db_ready():
+            return -errno.EAGAIN, "", "mgr db not yet available"
+        
         res = dict()
 
         with self.mgr._db_lock, self.mgr.db:
@@ -76,7 +79,10 @@ class VersionTracker:
         DELETE FROM ClusterVersionInfo;
         '''
 
-        if self.cluster_version_info_is_empty():
+        if not self.mgr.db_ready():
+            return -errno.EAGAIN, "", "mgr db not yet available"
+        
+        if self.cluster_version_history_is_empty():
             return 0, 'No Cluster Version History', ''
         
         with self.mgr._db_lock, self.mgr.db:
