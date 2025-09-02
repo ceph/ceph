@@ -86,6 +86,7 @@ class filepath {
   inodeno_t get_ino() const { return ino; }
   const std::string& get_path() const { return path; }
   void set_trimmed();
+  std::string get_trimmed_path() const;
   const char *c_str() const { return path.c_str(); }
 
   int length() const { return path.length(); }
