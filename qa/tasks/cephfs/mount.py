@@ -5,6 +5,7 @@ import datetime
 import os
 import re
 import time
+import sys
 
 from io import StringIO
 from contextlib import contextmanager
@@ -20,6 +21,10 @@ from teuthology.exceptions import CommandFailedError, ConnectionLostError
 from tasks.cephfs.filesystem import Filesystem
 
 log = logging.getLogger(__name__)
+stderr_handler = logging.StreamHandler(sys.stderr)
+stderr_formatter = logging.Formatter('%(levelname)s: %(message)s')
+stderr_handler.setFormatter(stderr_formatter)
+log.addHandler(stderr_handler)
 
 UMOUNT_TIMEOUT = 300
 
@@ -100,28 +105,54 @@ class CephFSMountBase(object):
     # last failed test cases.
     @staticmethod
     def cleanup_stale_netnses_and_bridge(remote):
-        p = remote.run(args=['ip', 'netns', 'list'],
-                       stdout=StringIO(), timeout=(5*60))
-        p = p.stdout.getvalue().strip()
+        try:
+            print("About to run 'ip netns list'...", file=sys.stderr, flush=True)
+            log.info("About to run 'ip netns list'...")
+            p = remote.run(args=['sudo','ip', 'netns', 'list'],
+                        stderr=sys.stderr, stdout=sys.stdout,
+                        timeout=(15), omit_sudo=False)
+            netns_stdout = p.stdout.getvalue().strip()
+            netns_stderr = p.stderr.getvalue().strip()
+            print(f"'ip netns list' completed in stdout: {netns_stdout}", file=sys.stderr, flush=True)
+            log.info("'ip netns list' completed in stdout: %s", netns_stdout)
+            if netns_stderr:
+                print(f"'ip netns list' stderr: {netns_stderr}", file=sys.stderr, flush=True)
+                log.warning("'ip netns list' stderr: %s", netns_stderr)
+        except Exception as e:
+            print(f"FAILED to list namespaces: {e}", file=sys.stderr, flush=True)
+            log.error("Failed to list namespaces: %r", e)
+            return
 
-        # Get the netns name list
-        netns_list = re.findall(r'ceph-ns-[^()\s][-.\w]+[^():\s]', p)
+        print("Getting namespace list...", file=sys.stderr, flush=True)
+        log.info("Get namespace list")
+        netns_list = re.findall(r'ceph-ns-[^()\s][-.\w]+[^():\s]', netns_stdout)
+        print(f"Found namespaces: {', '.join(netns_list) if netns_list else '[none]'}", file=sys.stderr, flush=True)
+        log.info("Found namespaces: %s", ', '.join(netns_list) if netns_list else '[none]')
 
-        # Remove the stale netnses
+        print("Removing stale namespaces...", file=sys.stderr, flush=True)
+        log.info("Remove stale netnses")
         for ns in netns_list:
             ns_name = ns.split()[0]
-            args = ['sudo', 'ip', 'netns', 'delete', '{0}'.format(ns_name)]
+            args = ['sudo', 'ip', 'netns', 'delete', ns_name]
             try:
+                print(f"Deleting namespace: {ns_name}", file=sys.stderr, flush=True)
+                log.info("Deleting namespace: %s", ns_name)
                 remote.run(args=args, timeout=(5*60), omit_sudo=False)
-            except Exception:
-                pass
+            except Exception as e:
+                print(f"Failed to delete namespace {ns_name}: {e}", file=sys.stderr, flush=True)
+                log.warning("Failed to delete namespace %s: %r", ns_name, e)
 
-        # Remove the stale 'ceph-brx'
         try:
+            print("Removing stale 'ceph-brx' bridge...", file=sys.stderr, flush=True)
+            log.info("Remove the stale 'ceph-brx'")
             args = ['sudo', 'ip', 'link', 'delete', 'ceph-brx']
             remote.run(args=args, timeout=(5*60), omit_sudo=False)
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"Failed to delete ceph-brx: {e}", file=sys.stderr, flush=True)
+            log.warning("Failed to delete ceph-brx: %r", e)
+
+        print("cleanup_stale_netnses_and_bridge complete", file=sys.stderr, flush=True)
+        log.info("cleanup_stale_netnses_and_bridge complete")
 
     def _parse_netns_name(self):
         self._netns_name = '-'.join(["ceph-ns",

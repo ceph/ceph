@@ -98,12 +98,20 @@ def init_log(log_level=logging.INFO):
     global logpath
     logpath = './vstart_runner.log'
 
+    # File handler
     handler = logging.FileHandler(logpath)
     formatter = logging.Formatter(
         fmt=u'%(asctime)s.%(msecs)03d %(levelname)s:%(name)s:%(message)s',
         datefmt='%Y-%m-%dT%H:%M:%S')
     handler.setFormatter(formatter)
     log.addHandler(handler)
+
+    # Stderr handler
+    stderr_handler = logging.StreamHandler(sys.stderr)
+    stderr_formatter = logging.Formatter('%(levelname)s: %(message)s')
+    stderr_handler.setFormatter(stderr_formatter)
+    log.addHandler(stderr_handler)
+
     log.setLevel(log_level)
 
 log = None
@@ -135,7 +143,8 @@ def launch_subprocess(args, cwd=None, env=None, shell=True,
                       executable='/bin/bash'):
     return subprocess.Popen(args, cwd=cwd, env=env, shell=shell,
                             executable=executable, stdout=subprocess.PIPE,
-                            stderr=subprocess.PIPE, stdin=subprocess.PIPE)
+                            stderr=subprocess.PIPE, stdin=subprocess.PIPE,
+                            bufsize=1,text=True,)
 
 
 # Let's use some sensible defaults
