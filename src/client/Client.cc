@@ -7003,6 +7003,17 @@ int Client::mount(const std::string &mount_root, const UserPerm& perms,
     }
   }
 
+  // dummy encryption?
+  if (cct->_conf.get_val<bool>("client_fscrypt_dummy_encryption")) {
+    client_lock.unlock();
+
+    r = fscrypt_dummy_encryption();
+    if (r < 0) {
+      return r;
+    }
+
+    client_lock.lock();
+  }
   /*
   ldout(cct, 3) << "op: // client trace data structs" << dendl;
   ldout(cct, 3) << "op: struct stat st;" << dendl;
@@ -7312,6 +7323,43 @@ void Client::abort_conn()
   _unmount(true);
 }
 
+int Client::fscrypt_dummy_encryption() {
+    // get add key
+    char key[20];
+    memset(key, 0, sizeof(key));
+    ceph_fscrypt_key_identifier kid;
+
+    int r = add_fscrypt_key(key, FSCRYPT_KEY_IDENTIFIER_SIZE, &kid);
+    if (r < 0) {
+      goto err;
+    }
+
+    // set dummy encryption policy
+    struct fscrypt_policy_v2 policy;
+    
+    memset(&policy, 0, sizeof(policy));
+    policy.version = 2;
+    policy.contents_encryption_mode = FSCRYPT_MODE_AES_256_XTS;
+    policy.filenames_encryption_mode = FSCRYPT_MODE_AES_256_CTS;
+    policy.flags = FSCRYPT_POLICY_FLAGS_PAD_32;
+    memcpy(policy.master_key_identifier, kid.raw, FSCRYPT_KEY_IDENTIFIER_SIZE);
+    r = ll_set_fscrypt_policy_v2(root.get(), policy);
+    if (r < 0) {
+      goto err;
+    }
+
+    return 0;
+  err:
+    fscrypt_remove_key_arg arg;
+    fscrypt_key_specifier key_spec;
+    key_spec.type = FSCRYPT_KEY_SPEC_TYPE_IDENTIFIER;
+    key_spec.__reserved = 0;
+    memcpy(key_spec.u.identifier, kid.raw, 16);
+    arg.removal_status_flags = 0;
+    arg.key_spec = key_spec;
+    r = remove_fscrypt_key(&arg);
+    return r;
+}
 void Client::flush_cap_releases()
 {
   uint64_t nr_caps = 0;

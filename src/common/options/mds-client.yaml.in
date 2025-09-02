@@ -628,3 +628,13 @@ options:
   - mds_client
   flags:
   - runtime
+- name: client_fscrypt_dummy_encryption
+  type: bool
+  level: dev
+  desc: Enable fscrypt dummy encryption
+  long_desc: Enable fscrypt dummy encryption
+  default: false
+  services:
+  - mds_client
+  flags:
+  - runtime

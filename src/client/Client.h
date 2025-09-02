@@ -369,6 +369,8 @@ public:
   }
   void abort_conn();
 
+  int fscrypt_dummy_encryption();
+
   void set_uuid(const std::string& uuid);
   void set_session_timeout(unsigned timeout);
   int start_reclaim(const std::string& uuid, unsigned flags,
