@@ -1225,9 +1225,20 @@ int inode_t<Allocator>::compare(const inode_t<Allocator> &other, bool *divergent
         dirstat != other.dirstat ||
         rstat != other.rstat ||
         accounted_rstat != other.accounted_rstat ||
+	quota != other.quota ||
+	export_pin != other.export_pin ||
+        export_ephemeral_random_pin != other.export_ephemeral_random_pin ||
+	flags != other.flags ||
+	// adding following line here makes no sense???
+	//version != other.version ||
         file_data_version != other.file_data_version ||
         xattr_version != other.xattr_version ||
+	// adding following 2 lines here makes no sense???
+	//last_scrub_stamp != other.last_scrub_stamp ||
+	//last_scrub_version != other.last_scrub_version ||
         backtrace_version != other.backtrace_version ||
+	oldest_snap != other.oldest_snap ||
+	stray_prior_path != other.stray_prior_path ||
 	fscrypt_auth != other.fscrypt_auth ||
         fscrypt_file != other.fscrypt_file ||
 	fscrypt_last_block != other.fscrypt_last_block ||
