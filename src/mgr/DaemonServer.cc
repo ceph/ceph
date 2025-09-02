@@ -781,6 +781,10 @@ bool DaemonServer::handle_report(const ref_t<MMgrReport>& m)
         if (m->daemon_status) {
           daemon->service_status_stamp = now;
           daemon->service_status = *m->daemon_status;
+	  std::string sdaemon(daemon->key.type);
+	  if (sdaemon == "cephfs-mirror") {
+	    dout(0) << " service status: " << daemon->service_status << dendl;
+	  }
         }
         daemon->last_service_beacon = now;
       } else if (m->daemon_status) {
@@ -791,8 +795,9 @@ bool DaemonServer::handle_report(const ref_t<MMgrReport>& m)
         update_task_status(key, *m->task_status);
         daemon->last_service_beacon = now;
       }
-      if (m->get_connection()->peer_is_osd() || m->get_connection()->peer_is_mon()) {
-        // only OSD and MON send health_checks to me now
+      if (m->get_connection()->peer_is_osd() || m->get_connection()->peer_is_mon() ||
+	  m->get_connection()->peer_is_cephfs_mirror()) {
+        // only OSD, MON and cephfs-mirror send health_checks to me now
         daemon->daemon_health_metrics = std::move(m->daemon_health_metrics);
         dout(10) << "daemon_health_metrics " << daemon->daemon_health_metrics
                  << dendl;
@@ -2750,28 +2755,35 @@ void DaemonServer::send_report()
     });
 
   std::map<daemon_metric, unique_ptr<DaemonHealthMetricCollector>> accumulated;
-  for (auto service : {"osd", "mon"} ) {
+  for (auto service : {"osd", "mon", "cephfs-mirror"} ) {
     auto daemons = daemon_state.get_by_service(service);
     for (const auto& [key,state] : daemons) {
       std::lock_guard l{state->lock};
-      for (const auto& metric : state->daemon_health_metrics) {
-        auto acc = accumulated.find(metric.get_type());
-        if (acc == accumulated.end()) {
-          auto collector = DaemonHealthMetricCollector::create(metric.get_type());
-          if (!collector) {
-            derr << __func__ << " " << key
-		 << " sent me an unknown health metric: "
-		 << std::hex << static_cast<uint8_t>(metric.get_type())
-		 << std::dec << dendl;
-            continue;
-          }
-          tie(acc, std::ignore) = accumulated.emplace(metric.get_type(),
-              std::move(collector));
-        }
-        acc->second->update(key, metric);
+      /*      if (std::string(service) == "cephfs-mirror") {
+	//accumulate daemon statuses
+	} else {*/
+	 for (const auto& metric : state->daemon_health_metrics) {
+	   auto acc = accumulated.find(metric.get_type());
+	   if (acc == accumulated.end()) {
+	     auto collector = DaemonHealthMetricCollector::create(metric.get_type());
+	     if (!collector) {
+	       derr << __func__ << " " << key
+		    << " sent me an unknown health metric: "
+		    << std::hex << static_cast<uint8_t>(metric.get_type())
+		    << std::dec << dendl;
+	       continue;
+	     } else {
+	     tie(acc, std::ignore) = accumulated.emplace(metric.get_type(),
+		 std::move(collector));
+	     }
+	   }
+	   acc->second->update(key, metric);
+	 }
       }
     }
   }
+  //auto daemons = daemon_state.get_by_service("cephfs-mirror");
+  
   for (const auto& acc : accumulated) {
     acc.second->summarize(m->health_checks);
   }
