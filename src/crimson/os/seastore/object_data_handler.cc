@@ -1685,29 +1685,41 @@ ObjectDataHandler::clone_ret
 ObjectDataHandler::copy_on_write(
   context_t ctx)
 {
-  return with_object_data(
+  return with_objects_data(
     ctx,
-    [ctx, this](auto &object_data) -> clone_ret {
+    [ctx, this](auto &object_data, auto &d_object_data) -> clone_ret
+  {
     auto mapping = co_await ctx.tm.get_pin(
       ctx.t, object_data.get_reserved_data_base()
     ).handle_error_interruptible(
       clone_iertr::pass_further{},
       crimson::ct_error::assert_all{"unexpected enoent"}
     );
-    object_data_t d_object_data = get_null_object_data();
     co_await do_clone(ctx, object_data, d_object_data, mapping, false);
     auto old_base = object_data.get_reserved_data_base();
     auto old_len = object_data.get_reserved_data_len();
-    object_data.update_reserved(
-      d_object_data.get_reserved_data_base(),
-      d_object_data.get_reserved_data_len());
-    ctx.onode.unset_need_cow(ctx.t);
+    assert(ctx.d_onode->need_cow());
+    ctx.d_onode->unset_need_cow(ctx.t);
     co_await ctx.tm.remove_mappings_in_range(
       ctx.t, old_base, old_len, std::move(mapping), {false, true}
     ).handle_error_interruptible(
       clone_iertr::pass_further{},
       crimson::ct_error::assert_all{"unexpected enoent"}
     ).discard_result();
+
+    auto old_md_start = old_base.with_metadata().with_offset_by_blocks(0);
+    auto md_mapping = co_await ctx.tm.lower_bound_pin(ctx.t, old_md_start);
+    if (md_mapping.is_end() ||
+	md_mapping.get_key().get_clone_prefix() !=
+	old_md_start.get_clone_prefix()) {
+      co_return;
+    }
+    auto new_prefix = d_object_data
+	.get_reserved_data_base()
+	.get_clone_prefix()
+	.with_metadata();
+    auto md_dst_mapping = co_await ctx.tm.lower_bound_pin(ctx.t, new_prefix);
+    co_await ctx.tm.move_region(ctx.t, md_mapping, md_dst_mapping, new_prefix);
   });
 }
 
@@ -1726,6 +1738,8 @@ ObjectDataHandler::do_clone(
   auto mapping = co_await prepare_data_reservation(
     ctx, *ctx.d_onode, d_object_data, old_len);
   ceph_assert(mapping.has_value());
+  assert(old_base.get_object_prefix() == mapping->get_key().get_object_prefix());
+  assert(old_base.get_clone_prefix() != mapping->get_key().get_clone_prefix());
   DEBUGT("new obj reserve_data_base: {}, len 0x{:x}",
     ctx.t,
     d_object_data.get_reserved_data_base(),

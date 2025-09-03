@@ -403,6 +403,10 @@ public:
       internal_context_t &ctx,
       Onode &onode,
       Onode &d_onode);
+    tm_ret _maybe_copy_on_write(
+      internal_context_t &ctx,
+      Onode &onode,
+      ObjectDataHandler &handler);
     tm_ret _rename(
       internal_context_t &ctx,
       OnodeRef &onode,

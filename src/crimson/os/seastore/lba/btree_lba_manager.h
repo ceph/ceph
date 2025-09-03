@@ -75,6 +75,10 @@ public:
     Transaction &t,
     LogicalChildNode &extent) final;
 
+  lower_bound_ret lower_bound(
+    Transaction &t,
+    laddr_t laddr) final;
+
   alloc_extent_ret reserve_region(
     Transaction &t,
     LBAMapping pos,

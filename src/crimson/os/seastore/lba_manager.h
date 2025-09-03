@@ -63,6 +63,11 @@ public:
     laddr_t offset,
     bool search_containing = false) = 0;
 
+  using lower_bound_ret = base_iertr::future<LBAMapping>;
+  virtual lower_bound_ret lower_bound(
+    Transaction &t,
+    laddr_t laddr) = 0;
+
   /*
    * Fetches the mapping corresponding to the "extent"
    *

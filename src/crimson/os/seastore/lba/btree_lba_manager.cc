@@ -319,6 +319,29 @@ BtreeLBAManager::get_mapping(
   });
 }
 
+BtreeLBAManager::lower_bound_ret
+BtreeLBAManager::lower_bound(
+  Transaction &t,
+  laddr_t laddr)
+{
+  auto c = get_context(t);
+  return with_btree<LBABtree>(
+    cache,
+    c,
+    [c, laddr](LBABtree &btree)
+  {
+    return btree.lower_bound(c, laddr
+    ).si_then([c](LBABtree::iterator iter) {
+      auto cursor = iter.get_cursor(c);
+      if (cursor->is_indirect()) {
+	return LBAMapping::create_indirect(nullptr, std::move(cursor));
+      } else {
+	return LBAMapping::create_direct(std::move(cursor));
+      }
+    });
+  });
+}
+
 BtreeLBAManager::alloc_extent_ret
 BtreeLBAManager::reserve_region(
   Transaction &t,
