@@ -148,6 +148,11 @@ public:
     Transaction &t,
     laddr_t laddr) final;
 
+  promote_extent_ret promote_extent(
+    Transaction &t,
+    LBACursor &cursor,
+    std::vector<LogicalChildNodeRef> extents) final;
+
    // ---------------------------------------------------------------------------
    // Allocation operations - insert new mappings into the LBA tree.
    // ---------------------------------------------------------------------------
