@@ -38,6 +38,7 @@ TransactionManager::TransactionManager(
     journal(std::move(_journal)),
     epm(std::move(_epm)),
     backref_manager(std::move(_backref_manager)),
+    logical_bucket(nullptr),
     full_extent_integrity_check(
       crimson::common::get_conf<bool>(
         "seastore_full_integrity_check")),
@@ -798,6 +799,14 @@ TransactionManager::rewrite_logical_extent(
     ceph_abort();
   }
 
+  bool is_tracked =
+    support_logical_bucket() &&
+    // lextent is from hot tier
+    !epm->is_cold_device(extent->get_paddr().get_device_id()) &&
+    // lextent is cached by non volatile cache
+    logical_bucket->is_cached(
+      extent->get_laddr().get_object_prefix());
+
   if (get_extent_category(extent->get_type()) == data_category_t::METADATA) {
     assert(extent->is_fully_loaded());
     cache->retire_extent(t, extent);
@@ -807,7 +816,8 @@ TransactionManager::rewrite_logical_extent(
       extent->get_length(),
       extent->get_user_hint(),
       // get target rewrite generation
-      extent->get_rewrite_generation())->cast<LogicalChildNode>();
+      extent->get_rewrite_generation(),
+      is_tracked)->cast<LogicalChildNode>();
     nextent->rewrite(t, *extent, 0);
 
     DEBUGT("rewriting meta -- {} to {}", t, *extent, *nextent);
@@ -842,7 +852,7 @@ TransactionManager::rewrite_logical_extent(
     auto length = extent->get_length();
     return cache->read_extent_maybe_partial(
       t, std::move(extent), 0, length
-    ).si_then([this, FNAME, &t](auto extent) {
+    ).si_then([this, FNAME, &t, is_tracked](auto extent) {
       assert(extent->is_fully_loaded());
       cache->retire_extent(t, extent);
       auto extents = cache->alloc_new_data_extents_by_type(
@@ -851,7 +861,8 @@ TransactionManager::rewrite_logical_extent(
         extent->get_length(),
         extent->get_user_hint(),
         // get target rewrite generation
-        extent->get_rewrite_generation());
+        extent->get_rewrite_generation(),
+        is_tracked);
       return seastar::do_with(
         std::move(extents),
         0,
@@ -1017,7 +1028,8 @@ TransactionManager::promote_extent(
     orig_ext->get_type(),
     orig_ext->get_length(),
     placement_hint_t::HOT,
-    INIT_GENERATION);
+    INIT_GENERATION,
+    true);
 
   std::vector<LogicalChildNodeRef> promoted_extents;
   promoted_extents.reserve(promoted_raw_extents.size());

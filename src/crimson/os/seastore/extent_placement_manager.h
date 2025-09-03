@@ -336,6 +336,7 @@ public:
   struct alloc_option_t {
     placement_hint_t hint;
     rewrite_gen_t gen;
+    bool is_tracked;
 #ifdef UNIT_TESTS_BUILT
     std::optional<paddr_t> external_paddr = std::nullopt;
 #endif
@@ -356,7 +357,7 @@ public:
     assert(opt.gen == INIT_GENERATION || opt.hint == placement_hint_t::REWRITE);
 
     data_category_t category = get_extent_category(type);
-    opt.gen = adjust_generation(category, type, opt.hint, opt.gen);
+    opt.gen = adjust_generation(category, type, opt.hint, opt.gen, opt.is_tracked);
 
     paddr_t addr;
 #ifdef UNIT_TESTS_BUILT
@@ -396,7 +397,7 @@ public:
     assert(opt.gen == INIT_GENERATION || opt.hint == placement_hint_t::REWRITE);
 
     data_category_t category = get_extent_category(type);
-    opt.gen = adjust_generation(category, type, opt.hint, opt.gen);
+    opt.gen = adjust_generation(category, type, opt.hint, opt.gen, opt.is_tracked);
     assert(opt.gen != INLINE_GENERATION);
 
     // XXX: bp might be extended to point to different memory (e.g. PMem)
@@ -585,7 +586,8 @@ private:
       data_category_t category,
       extent_types_t type,
       placement_hint_t hint,
-      rewrite_gen_t gen) {
+      rewrite_gen_t gen,
+      bool is_tracked) {
     assert(is_real_type(type));
     if (is_root_type(type)) {
       gen = INLINE_GENERATION;
@@ -618,6 +620,11 @@ private:
       }
     } else if (background_process.has_cold_tier()) {
       gen = background_process.adjust_generation(gen);
+    }
+
+    if (is_tracked && gen >= hot_tier_generations &&
+        hint != placement_hint_t::REWRITE) {
+      gen = hot_tier_generations - 1;
     }
 
     if (gen > dynamic_max_rewrite_generation) {

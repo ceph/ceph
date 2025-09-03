@@ -23,6 +23,7 @@
 #include "crimson/os/seastore/logging.h"
 #include "crimson/os/seastore/seastore_types.h"
 #include "crimson/os/seastore/cache.h"
+#include "crimson/os/seastore/logical_bucket.h"
 #include "crimson/os/seastore/root_meta.h"
 #include "crimson/os/seastore/lba_manager.h"
 #include "crimson/os/seastore/backref_manager.h"
@@ -1204,6 +1205,10 @@ public:
     co_return mapping;
   }
 
+  bool support_logical_bucket() const {
+    return logical_bucket != nullptr;
+  }
+
   ~TransactionManager();
 
 private:
@@ -1216,6 +1221,7 @@ private:
   BackrefManagerRef backref_manager;
 
   WritePipeline write_pipeline;
+  LogicalBucket *logical_bucket;
 
   bool full_extent_integrity_check = true;
 
