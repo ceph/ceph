@@ -2772,6 +2772,9 @@ def command_bootstrap(ctx):
 
     enable_cephadm_mgr_module(cli, wait_for_mgr_restart)
 
+    # store bootstrap Ceph version
+    cli(['cephadm', 'set-bootstrap-ceph-version', image_ver])
+
     # ssh
     if not ctx.skip_ssh:
         prepare_ssh(ctx, cli, wait_for_mgr_restart)
