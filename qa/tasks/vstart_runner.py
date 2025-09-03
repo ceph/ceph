@@ -1414,6 +1414,7 @@ def exec_test():
             opt_exit_on_test_failure = False
         elif f == '--debug':
             logging.root.setLevel(logging.DEBUG)
+            set -x
         elif f == '--config-mode':
             mode = Mode.config
         else:
