@@ -139,6 +139,7 @@ public:
   virtual void set_need_cow(Transaction&) = 0;
   virtual void unset_need_cow(Transaction&) = 0;
   virtual void swap_layout(Transaction&, Onode&) = 0;
+  virtual boost::intrusive_ptr<Onode> offload_data_and_md(Transaction&) = 0;
 
   laddr_hint_t get_metadata_hint(uint64_t block_size = laddr_t::UNIT_SIZE) const {
     return get_hint(block_size, /*is_metadata*/true);
