@@ -1220,6 +1220,7 @@ CachedExtentRef Cache::alloc_new_non_data_extent_by_type(
   extent_len_t length,   ///< [in] length
   placement_hint_t hint, ///< [in] user hint
   rewrite_gen_t gen,     ///< [in] rewrite generation
+  paddr_t paddr_hint,
   bool is_tracked
 )
 {
@@ -1227,7 +1228,7 @@ CachedExtentRef Cache::alloc_new_non_data_extent_by_type(
   SUBDEBUGT(seastore_cache, "allocate {} 0x{:x}B, hint={}, gen={}",
             t, type, length, hint, rewrite_gen_printer_t{gen});
   ceph_assert(get_extent_category(type) == data_category_t::METADATA);
-  auto opt = alloc_option_t{hint, gen, is_tracked};
+  auto opt = alloc_option_t{hint, gen, is_tracked, paddr_hint};
   switch (type) {
   case extent_types_t::ROOT:
     ceph_assert(0 == "ROOT is never directly alloc'd");

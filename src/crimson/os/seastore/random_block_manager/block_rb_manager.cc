@@ -66,11 +66,13 @@ paddr_t BlockRBManager::alloc_extent(size_t size)
 }
 
 BlockRBManager::allocate_ret_bare
-BlockRBManager::alloc_extents(size_t size)
+BlockRBManager::alloc_extents(size_t size, paddr_t hint)
 {
   LOG_PREFIX(BlockRBManager::alloc_extents);
   assert(allocator);
-  auto alloc = allocator->alloc_extents(size);
+  rbm_abs_addr rbm_hint =
+    (hint == P_ADDR_NULL ? 0 : convert_paddr_to_abs_addr(hint));
+  auto alloc = allocator->alloc_extents(size, rbm_hint);
   if (!alloc) {
     return {};
   }
