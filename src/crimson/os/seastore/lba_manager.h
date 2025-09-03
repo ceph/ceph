@@ -55,6 +55,11 @@ public:
     Transaction &t,
     LogicalChildNode &extent) = 0;
 
+  using lower_bound_ret = base_iertr::future<LBACursorRef>;
+  virtual lower_bound_ret lower_bound(
+    Transaction &t,
+    laddr_t laddr) = 0;
+
 #ifdef UNIT_TESTS_BUILT
   using get_end_mapping_iertr = base_iertr;
   using get_end_mapping_ret = get_end_mapping_iertr::future<LBACursorRef>;
