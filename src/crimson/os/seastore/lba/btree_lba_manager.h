@@ -159,7 +159,7 @@ public:
     Transaction &t,
     laddr_t begin,
     laddr_t end,
-    scan_mappings_func_t &&f) final;
+    scan_mappings_func_t f) final;
 
   rewrite_extent_ret rewrite_extent(
     Transaction &t,
