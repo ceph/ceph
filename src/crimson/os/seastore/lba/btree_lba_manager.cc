@@ -323,6 +323,20 @@ BtreeLBAManager::reserve_region(
   co_return LBAMapping::create_direct(iter.get_cursor(c));
 }
 
+BtreeLBAManager::alloc_extent_ret
+BtreeLBAManager::reserve_region(
+  Transaction &t,
+  laddr_t hint,
+  extent_len_t len)
+{
+  std::vector<alloc_mapping_info_t> alloc_infos = {
+    alloc_mapping_info_t::create_zero(len)};
+  auto cursors = co_await alloc_contiguous_mappings(
+    t, hint, alloc_infos, alloc_policy_t::linear_search);
+  assert(cursors.size() == 1);
+  co_return LBAMapping::create_direct(std::move(cursors.front()));
+}
+
 BtreeLBAManager::alloc_extents_ret
 BtreeLBAManager::alloc_extents(
   Transaction &t,
@@ -391,6 +405,145 @@ BtreeLBAManager::alloc_extents(
       });
     });
   });
+}
+
+BtreeLBAManager::alloc_extent_ret
+BtreeLBAManager::alloc_extent(
+  Transaction &t,
+  laddr_t hint,
+  LogicalChildNode &ext,
+  extent_ref_count_t refcount)
+{
+  // The real checksum will be updated upon transaction commit
+  assert(ext.get_last_committed_crc() == 0);
+  assert(!ext.has_laddr());
+  std::vector<alloc_mapping_info_t> alloc_infos = {
+    alloc_mapping_info_t::create_direct(
+      L_ADDR_NULL,
+      ext.get_length(),
+      ext.get_paddr(),
+      refcount,
+      ext.get_last_committed_crc(),
+      ext)};
+  auto cursors = co_await alloc_contiguous_mappings(
+    t, hint, alloc_infos, alloc_policy_t::linear_search);
+  assert(cursors.size() == 1);
+  co_return LBAMapping::create_direct(std::move(cursors.front()));
+}
+
+BtreeLBAManager::alloc_extents_ret
+BtreeLBAManager::alloc_extents(
+  Transaction &t,
+  laddr_t hint,
+  std::vector<LogicalChildNodeRef> extents,
+  extent_ref_count_t refcount)
+{
+  std::vector<alloc_mapping_info_t> alloc_infos;
+  assert(!extents.empty());
+  auto has_laddr = extents.front()->has_laddr();
+  for (auto &extent : extents) {
+    assert(extent);
+    assert(extent->has_laddr() == has_laddr);
+    alloc_infos.emplace_back(
+      alloc_mapping_info_t::create_direct(
+	extent->has_laddr() ? extent->get_laddr() : L_ADDR_NULL,
+	extent->get_length(),
+	extent->get_paddr(),
+	refcount,
+	extent->get_last_committed_crc(),
+	*extent));
+  }
+
+  auto cursors = has_laddr
+      ? co_await alloc_sparse_mappings(
+	t, hint, alloc_infos, alloc_policy_t::deterministic)
+      : co_await alloc_contiguous_mappings(
+	t, hint, alloc_infos, alloc_policy_t::linear_search);
+#ifndef NDEBUG
+  if (has_laddr) {
+    assert(alloc_infos.size() == cursors.size());
+    auto info_p = alloc_infos.begin();
+    auto cursor_p = cursors.begin();
+    for (; info_p != alloc_infos.end(); info_p++, cursor_p++) {
+      auto &cursor = *cursor_p;
+      assert(cursor->get_laddr() == info_p->key);
+    }
+  }
+#endif
+  std::vector<LBAMapping> ret;
+  for (auto &cursor : cursors) {
+    ret.emplace_back(LBAMapping::create_direct(std::move(cursor)));
+  }
+  co_return ret;
+}
+
+BtreeLBAManager::ref_ret
+BtreeLBAManager::remove_mapping(
+  Transaction &t,
+  laddr_t addr)
+{
+  auto res = co_await update_refcount(t, addr, -1);
+  ceph_assert(res.refcount == 0);
+  if (res.addr.is_paddr()) {
+    co_return ref_update_result_t{std::move(res), std::nullopt};
+  }
+  auto direct_result = co_await update_refcount(t, res.key, -1);
+  co_await res.mapping.refresh();
+  co_return ref_update_result_t{std::move(res), std::move(direct_result)};
+}
+
+BtreeLBAManager::ref_ret
+BtreeLBAManager::remove_indirect_mapping_only(
+  Transaction &t,
+  LBAMapping mapping)
+{
+  assert(mapping.is_viewable());
+  assert(mapping.is_indirect());
+  auto res = co_await update_refcount(t, mapping.indirect_cursor.get(), -1);
+  co_return ref_update_result_t{std::move(res), std::nullopt};
+}
+
+BtreeLBAManager::ref_ret
+BtreeLBAManager::remove_mapping(
+  Transaction &t,
+  LBAMapping mapping)
+{
+  assert(mapping.is_viewable());
+  assert(mapping.is_complete());
+
+  auto res = co_await update_refcount(t, &mapping.get_effective_cursor(), -1);
+  ceph_assert(res.refcount == 0);
+  if (res.addr.is_paddr()) {
+    assert(!mapping.is_indirect());
+    co_return ref_update_result_t{std::move(res), std::nullopt};
+  }
+
+  assert(mapping.is_indirect());
+  auto &cursor = *mapping.direct_cursor;
+  co_await cursor.refresh();
+  auto direct_result = co_await update_refcount(t, &cursor, -1);
+  res.mapping = co_await res.mapping.refresh();
+  co_return ref_update_result_t{std::move(res), std::move(direct_result)};
+}
+
+BtreeLBAManager::ref_ret
+BtreeLBAManager::incref_extent(
+  Transaction &t,
+  laddr_t addr)
+{
+  auto res = co_await update_refcount(t, addr, 1);
+  co_return ref_update_result_t(std::move(res), std::nullopt);
+}
+
+BtreeLBAManager::ref_ret
+BtreeLBAManager::incref_extent(
+  Transaction &t,
+  LBAMapping mapping)
+{
+  assert(mapping.is_viewable());
+  auto &cursor = mapping.get_effective_cursor();
+  auto res = co_await update_refcount(t, &cursor, 1);
+  co_return ref_update_result_t(std::move(res), std::nullopt);
 }
 
 BtreeLBAManager::clone_mapping_ret
