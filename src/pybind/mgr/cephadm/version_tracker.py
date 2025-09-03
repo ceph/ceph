@@ -12,12 +12,9 @@ class VersionTracker:
 
     def __init__(self, mgr: "CephadmOrchestrator") -> None:
         self.mgr = mgr
-        
-        #if self.cluster_version_history_is_empty():
-            #self.add_cluster_version(self.mgr._version)
 
 
-    def cluster_version_history_is_empty(self) -> bool:
+    def _cluster_version_history_is_empty(self) -> bool:
         SQL_QUERY = '''
         SELECT 1
             FROM ClusterVersionInfo
@@ -34,6 +31,12 @@ class VersionTracker:
             return False
         
 
+    def _set_bootstrap_ceph_version(self, version: str) -> Tuple[int, str, str]:
+        self.mgr.set_store('bootstrap-ceph-version', version)
+
+        return 0, '', ''
+    
+
     def add_cluster_version(self, version: str) -> None:
         SQL_QUERY = '''
         INSERT OR IGNORE INTO ClusterVersionInfo (cluster_version)
@@ -43,7 +46,7 @@ class VersionTracker:
         with self.mgr._db_lock, self.mgr.db:
             self.mgr.db.execute(SQL_QUERY, (version,))
 
-
+        
     def get_cluster_version_history(self) -> Tuple[int, str, str]:
         SQL_QUERY = '''
         SELECT cluster_version, creation_time
@@ -54,6 +57,9 @@ class VersionTracker:
         if not self.mgr.db_ready():
             return -errno.EAGAIN, "", "mgr db not yet available"
         
+        if self._cluster_version_history_is_empty():
+            self.add_cluster_version(self.mgr.get_store('bootstrap_ceph_version'))
+
         res = dict()
 
         with self.mgr._db_lock, self.mgr.db:
@@ -82,7 +88,7 @@ class VersionTracker:
         if not self.mgr.db_ready():
             return -errno.EAGAIN, "", "mgr db not yet available"
         
-        if self.cluster_version_history_is_empty():
+        if self._cluster_version_history_is_empty():
             return 0, 'No Cluster Version History', ''
         
         with self.mgr._db_lock, self.mgr.db:

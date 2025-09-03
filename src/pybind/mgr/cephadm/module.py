@@ -4293,6 +4293,13 @@ Then run the following:
         self.need_connect_dashboard_rgw = True
         self.event.set()
 
+    @CLIWriteCommand('cephadm set-bootstrap-ceph-version')
+    def _do_set_bootstrap_ceph_version(self, version: str) -> Tuple[int, str, str]:
+        '''
+        Stores the bootstrap Ceph version in KV store
+        '''
+        return self.version_tracker._set_bootstrap_ceph_version(version)
+    
     @CLIRequiresDB
     @CLIReadCommand('cephadm get-cluster-version-history')
     @MgrModuleRecoverDB
