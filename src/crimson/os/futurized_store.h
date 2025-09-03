@@ -13,6 +13,7 @@
 #include <seastar/core/sharded.hh>
 
 #include "os/Transaction.h"
+#include "crimson/common/config_proxy.h"
 #include "crimson/common/local_shared_foreign_ptr.h"
 #include "crimson/common/smp_helpers.h"
 #include "crimson/common/smp_helpers.h"
@@ -269,6 +270,9 @@ auto with_store(crimson::os::FuturizedStore::StoreShardRef store, Args&&... args
   constexpr bool is_seastar_future = seastar::is_future<raw_return_type>::value && !is_errorator;
   constexpr bool is_plain = !is_errorator && !is_seastar_future;
   const auto original_core = seastar::this_shard_id();
+  if(crimson::common::get_conf<bool>("seastore_require_partition_count_match_reactor_count")) {
+    ceph_assert(store.get_owner_shard() == seastar::this_shard_id());
+  }
   if (store.get_owner_shard() == seastar::this_shard_id()) {
     if constexpr (is_plain) {
       return seastar::make_ready_future<raw_return_type>(

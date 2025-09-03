@@ -127,38 +127,42 @@ seastar::future<std::pair<core_id_t, unsigned int>> PGShardMapping::get_or_creat
         ceph_assert_always(primary_mapping.core_to_num_pgs.end() != count_iter);
         ++(count_iter->second);
 
-        if (seastar::smp::count > store_shard_nums ) {
-          auto alien_iter = primary_mapping.core_alien_to_num_pgs.find(core_to_update);
-          auto core_iter = std::min_element(
-            alien_iter->second.begin(),
-            alien_iter->second.end(),
-            [](const auto &left, const auto &right) {
-              return left.second < right.second;
-            }
-          );
-          core_iter->second++;
-          core_to_update = core_iter->first;
-        }
-        if (seastar::smp::count >= store_shard_nums) {
-          shard_index_update = 0; // use the first store shard index on this core
+        if(crimson::common::get_conf<bool>("seastore_require_partition_count_match_reactor_count")) {
+          shard_index_update = 0;
         } else {
-          core_shard_iter = primary_mapping.core_shard_to_num_pgs.find(core_to_update);
-          ceph_assert_always(core_shard_iter != primary_mapping.core_shard_to_num_pgs.end());
-          if (shard_index_update == NULL_STORE_INDEX) {
-            // find the store shard index with the least number of pgs
-            // on this core
-            shard_iter = std::min_element(
-              core_shard_iter->second.begin(),
-              core_shard_iter->second.end(),
+          if (seastar::smp::count > store_shard_nums ) {
+            auto alien_iter = primary_mapping.core_alien_to_num_pgs.find(core_to_update);
+            auto core_iter = std::min_element(
+              alien_iter->second.begin(),
+              alien_iter->second.end(),
               [](const auto &left, const auto &right) {
                 return left.second < right.second;
               }
             );
-            shard_index_update = shard_iter->first; //find the store shard index on this core
-          } else {
-            shard_iter = core_shard_iter->second.find(shard_index_update);
+            core_iter->second++;
+            core_to_update = core_iter->first;
           }
-          ++(shard_iter->second);
+          if (seastar::smp::count >= store_shard_nums) {
+            shard_index_update = 0; // use the first store shard index on this core
+          } else {
+            core_shard_iter = primary_mapping.core_shard_to_num_pgs.find(core_to_update);
+            ceph_assert_always(core_shard_iter != primary_mapping.core_shard_to_num_pgs.end());
+            if (shard_index_update == NULL_STORE_INDEX) {
+              // find the store shard index with the least number of pgs
+              // on this core
+              shard_iter = std::min_element(
+                core_shard_iter->second.begin(),
+                core_shard_iter->second.end(),
+                [](const auto &left, const auto &right) {
+                  return left.second < right.second;
+                }
+              );
+              shard_index_update = shard_iter->first; //find the store shard index on this core
+            }  else {
+              shard_iter = core_shard_iter->second.find(shard_index_update);
+            }
+            ++(shard_iter->second);
+          }
         }
         [[maybe_unused]] auto [insert_iter, inserted] =
           primary_mapping.pg_to_core.emplace(pgid, std::make_pair(core_to_update, shard_index_update));
