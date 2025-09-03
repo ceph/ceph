@@ -1273,7 +1273,8 @@ public:
     extent_types_t type,   ///< [in] type tag
     extent_len_t length,   ///< [in] length
     placement_hint_t hint, ///< [in] user hint
-    rewrite_gen_t gen      ///< [in] rewrite generation
+    rewrite_gen_t gen,     ///< [in] rewrite generation
+    bool is_tracked
     );
 
   /**
@@ -1286,7 +1287,8 @@ public:
     extent_types_t type,   ///< [in] type tag
     extent_len_t length,   ///< [in] length
     placement_hint_t hint, ///< [in] user hint
-    rewrite_gen_t gen      ///< [in] rewrite generation
+    rewrite_gen_t gen,     ///< [in] rewrite generation
+    bool is_tracked
     );
 
   /**
