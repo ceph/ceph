@@ -8,6 +8,8 @@ overrides:
       - CEPHADM_STRAY_HOST
       - CEPHADM_STRAY_DAEMON
       - CEPHADM_FAILED_DAEMON
+      - OSD_DOWN
+      - OSD_HOST_DOWN
     log-only-match:
       - CEPHADM_
 roles:
