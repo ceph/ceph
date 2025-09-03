@@ -491,7 +491,7 @@ BlueStore::BlobRef BlueStore::Writer::_blob_create_with_data(
   uint32_t min_alloc_size = bstore->min_alloc_size;
   ceph_assert(p2phase(in_blob_offset, block_size) == 0);
   ceph_assert(p2phase(disk_data.length(), block_size) == 0);
-  BlobRef blob = onode->c->new_blob();
+  BlobRef blob = onode->new_blob();
   bluestore_blob_t &bblob = blob->dirty_blob();
   uint32_t data_length = disk_data.length();
   uint32_t alloc_offset = p2align(in_blob_offset, min_alloc_size);
@@ -537,7 +537,7 @@ BlueStore::BlobRef BlueStore::Writer::_blob_create_full(
   uint32_t min_alloc_size = bstore->min_alloc_size;
   uint32_t blob_length = disk_data.length();
   ceph_assert(p2phase<uint32_t>(blob_length, bstore->min_alloc_size) == 0);
-  BlobRef blob = onode->c->new_blob();
+  BlobRef blob = onode->new_blob();
   bluestore_blob_t &bblob = blob->dirty_blob();
   uint32_t tracked_unit = min_alloc_size;
   uint32_t csum_order = // conv 8 -> 32 so "<<" does not overflow
@@ -626,7 +626,7 @@ BlueStore::BlobRef BlueStore::Writer::_blob_create_full_compressed(
   uint32_t disk_length = disk_data.length();
   uint32_t object_length = object_data.length();
   ceph_assert(p2phase<uint32_t>(disk_length, bstore->min_alloc_size) == 0);
-  BlobRef blob = onode->c->new_blob();
+  BlobRef blob = onode->new_blob();
 
   bluestore_blob_t &bblob = blob->dirty_blob();
   uint32_t csum_order = // conv 8 -> 32 so "<<" does not overflow

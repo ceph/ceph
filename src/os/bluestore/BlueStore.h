@@ -861,13 +861,13 @@ public:
       void decode_extent(Extent* le,
                          __u8 struct_v,
                          bptr_c_it_t& p,
-                         Collection* c);
+                         bluestore::Onode* o);
     public:
       virtual ~ExtentDecoder() {
       }
 
-      unsigned decode_some(const ceph::buffer::list& bl, Collection* c);
-      void decode_spanning_blobs(bptr_c_it_t& p, Collection* c);
+      unsigned decode_some(const ceph::buffer::list& bl, bluestore::Onode* o);
+      void decode_spanning_blobs(bptr_c_it_t& p, bluestore::Onode* o);
     };
 
     class ExtentDecoderFull : public ExtentDecoder {
