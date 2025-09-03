@@ -311,7 +311,9 @@ class DaosBucket : public StoreBucket {
   virtual int sync_owner_stats(const DoutPrefixProvider* dpp,
                                optional_yield y) override;
   virtual int check_bucket_shards(const DoutPrefixProvider* dpp) override;
-  virtual int chown(const DoutPrefixProvider* dpp, const rgw_owner& new_user,
+  virtual int chown(const DoutPrefixProvider* dpp,
+                    const rgw_owner& new_user,
+                    const std::string& new_owner_name,
                     optional_yield y) override;
   virtual int put_info(const DoutPrefixProvider* dpp, bool exclusive,
                        ceph::real_time mtime) override;
