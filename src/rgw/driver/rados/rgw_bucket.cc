@@ -95,6 +95,7 @@ static void dump_mulipart_index_results(list<rgw_obj_index_key>& objs_to_unlink,
 
 void check_bad_owner_bucket_mapping(rgw::sal::Driver* driver,
                                     const rgw_owner& owner,
+                                    const std::string& owner_name,
                                     const std::string& tenant,
                                     bool fix, optional_yield y,
                                     const DoutPrefixProvider *dpp)
@@ -125,7 +126,7 @@ void check_bad_owner_bucket_mapping(rgw::sal::Driver* driver,
             << " got " << bucket << std::endl;
         if (fix) {
           cout << "fixing" << std::endl;
-	  r = bucket->chown(dpp, owner, y);
+          r = bucket->chown(dpp, owner, owner_name, y);
           if (r < 0) {
             cerr << "failed to fix bucket: " << cpp_strerror(-r) << std::endl;
           }
