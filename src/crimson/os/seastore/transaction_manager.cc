@@ -1333,6 +1333,59 @@ TransactionManager::promote_extent(
     t, *mapping.direct_cursor, std::move(promoted_extents));
 }
 
+TransactionManager::promote_extent_ret
+TransactionManager::promote_extents_from_disk(
+  Transaction &t,
+  paddr_t paddr)
+{
+  using scan_device_func_t = BackrefManager::scan_device_func_t;
+  std::size_t size = 0;
+  scan_device_func_t func = [this, &t, &size](
+    paddr_t paddr, extent_len_t length, extent_types_t type, laddr_t laddr)
+      -> base_iertr::future<seastar::stop_iteration> {
+    if (type != extent_types_t::OBJECT_DATA_BLOCK) {
+      co_return seastar::stop_iteration::no;
+    }
+    auto cursor = co_await lba_manager->get_cursor(t, laddr
+      ).handle_error_interruptible(
+        crimson::ct_error::enoent::handle([](auto e) {
+          // Another no_conflict transaction should have removed
+          // the mapping between the backref retrieval and the
+          // lba search, ignore it.
+          return seastar::make_ready_future<LBACursorRef>();
+        }),
+        crimson::ct_error::pass_further_all{}
+      );
+    if (!cursor || cursor->is_end() ||
+        !cursor->get_paddr().is_absolute() ||
+        !cache->is_on_cold_tier(cursor->get_paddr())) {
+      // the mapping has been modified and the extent is
+      // either removed or already on the hot tier, skip it.
+      co_return seastar::stop_iteration::no;
+    }
+    assert(cursor->is_direct());
+    assert(!cursor->has_shadow_paddr());
+    auto extent = co_await read_cursor_by_type(t, std::move(cursor), type);
+    if (extent->is_stable_dirty()) {
+      // dirty extents shouldn't be promoted as is in
+      // the real world
+      co_return seastar::stop_iteration::no;
+    }
+    auto &pinboard = *cache->get_extent_pinboard();
+    pinboard.remove(*extent);
+    extent->set_pin_state(extent_pin_state_t::Promoting);
+    co_await promote_extent(t, extent);
+    size += length;
+    if (size >= crimson::common::get_conf<
+        Option::size_t>("seastore_cache_promotion_size")) {
+      co_return seastar::stop_iteration::yes;
+    } else {
+      co_return seastar::stop_iteration::no;
+    }
+  };
+  co_await backref_manager->scan_device(t, paddr, func);
+}
+
 TransactionManager::rewrite_extents_ret TransactionManager::rewrite_extents(
   Transaction &t,
   std::vector<CachedExtentRef> &extents,
@@ -1657,7 +1710,10 @@ TransactionManagerRef make_transaction_manager(
       store_index,
       *backref_manager, trimmer_config,
       backend_type, roll_start, roll_size,
-      !pure_rbm_backend);
+      !pure_rbm_backend
+        || crimson::common::get_conf<bool>(
+            "seastore_logical_bucket_cache_test_stress")
+    );
 
   AsyncCleanerRef cleaner;
   JournalRef journal;

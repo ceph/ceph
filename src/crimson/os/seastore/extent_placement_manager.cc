@@ -1,6 +1,9 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
 // vim: ts=8 sw=2 sts=2 expandtab expandtab
 
+#include <chrono>
+#include <seastar/core/sleep.hh>
+
 #include "crimson/os/seastore/extent_placement_manager.h"
 
 #include "crimson/common/errorator-utils.h"
@@ -879,7 +882,8 @@ ExtentPlacementManager::BackgroundProcess::run()
 {
   assert(is_running());
   while (is_running()) {
-    if (background_should_run()) {
+    if (background_should_run()
+        || force_run_background()) {
       log_state("run(background)");
       co_await do_background_cycle();
       // Edge-triggered: yield only when a blocked IO was actually woken, so the
@@ -895,9 +899,13 @@ ExtentPlacementManager::BackgroundProcess::run()
       if (cold_cleaner) {
         cold_cleaner->maybe_adjust_thresholds();
       }
+      maybe_reschedule_force_process();
     } else {
       log_state("run(block)");
       assert(!blocking_background);
+      if (unlikely(test_workload)) {
+        set_next_force_process();
+      }
       blocking_background = seastar::promise<>();
       co_await blocking_background->get_future();
       // After waking (typically because arm_blocking_io_and_wake() kicked us),
@@ -1039,12 +1047,24 @@ ExtentPlacementManager::BackgroundProcess::do_background_cycle()
     }
   }
 
+  bool force_trim = false;
+  bool should_abort_cleaner_usage = true;
+  if (unlikely(should_force_trim())) {
+    if (!proceed_trim) {
+      should_abort_cleaner_usage = false;
+    }
+    proceed_trim = true;
+    force_trim = true;
+  }
+
   if (proceed_trim) {
     DEBUG("started trimming...");
-    return trimmer->trim(
-    ).finally([this, trim_usage, FNAME] {
+    return trimmer->trim(force_trim
+    ).finally([this, trim_usage, should_abort_cleaner_usage, FNAME] {
       DEBUG("finished trimming");
-      abort_cleaner_usage(trim_usage, {true, true});
+      if (should_abort_cleaner_usage) {
+        abort_cleaner_usage(trim_usage, {true, true});
+      }
     });
   } else {
     assert(!proceed_trim);
@@ -1079,11 +1099,25 @@ ExtentPlacementManager::BackgroundProcess::do_background_cycle()
       proceed_demote = true;
     }
 
+    bool abort_cold_cleaner_usage = true;
+    if (unlikely(should_force_clean())) {
+      if (!proceed_clean_main) {
+        abort_cold_cleaner_usage = false;
+      }
+      proceed_clean_main = main_cleaner->can_clean_space();
+      if (has_cold_tier()) {
+        proceed_clean_cold = cold_cleaner->can_clean_space();
+      }
+      if (logical_bucket) {
+        proceed_demote = logical_bucket->could_demote();
+      }
+    }
+
     if (!proceed_clean_main && !proceed_clean_cold && !proceed_demote) {
       ceph_abort_msg("no background process will start");
     }
     return seastar::when_all(
-      [this, FNAME, proceed_clean_main,
+      [this, FNAME, proceed_clean_main, abort_cold_cleaner_usage,
        should_clean_main_for_trim, main_cold_usage] {
         if (!proceed_clean_main) {
           return seastar::now();
@@ -1098,9 +1132,11 @@ ExtentPlacementManager::BackgroundProcess::do_background_cycle()
           crimson::ct_error::assert_all(
             "do_background_cycle encountered invalid error in main clean_space"
           )
-        ).finally([this, main_cold_usage, FNAME] {
+        ).finally([this, main_cold_usage, abort_cold_cleaner_usage, FNAME] {
           DEBUG("finished clean main");
-          abort_cold_usage(main_cold_usage, true);
+          if (abort_cold_cleaner_usage) {
+            abort_cold_usage(main_cold_usage, true);
+          }
         });
       },
       [this, FNAME, proceed_clean_cold,
@@ -1160,6 +1196,12 @@ seastar::future<> ExtentPlacementManager::BackgroundProcess::run_promote()
       ceph_assert(!blocking_promote);
       blocking_promote = seastar::promise<>();
       return blocking_promote->get_future();
+    }).then([this] {
+      if (unlikely(test_workload)) {
+        return seastar::sleep(std::chrono::seconds(
+          force_process_half_life));
+      }
+      return seastar::now();
     }).then([] {
       return seastar::stop_iteration::no;
     });

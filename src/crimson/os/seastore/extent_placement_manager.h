@@ -375,7 +375,11 @@ public:
       max_data_allocation_size(crimson::common::get_conf<Option::size_t>(
 	  "seastore_max_data_allocation_size")),
       write_through_size(crimson::common::get_conf<Option::size_t>(
-	  "seastore_write_through_size"))
+	  "seastore_write_through_size")),
+      test_workload(crimson::common::get_conf<bool>(
+          "seastore_logical_bucket_cache_test_stress")),
+      write_through_probability(crimson::common::get_conf<double>(
+          "seastore_test_workload_write_through_probability"))
   {
     LOG_PREFIX(ExtentPlacementManager::ExtentPlacementManager);
     devices_by_id.resize(DEVICE_ID_MAX, nullptr);
@@ -557,8 +561,14 @@ public:
   }
 
   write_policy_t get_write_policy(extent_types_t type, extent_len_t length) const {
-    if (has_cold_tier() && length >= write_through_size && is_data_type(type)) {
-      return write_policy_t::WRITE_THROUGH;
+    if (has_cold_tier() &&  is_data_type(type)) {
+      if (length >= write_through_size
+          || (test_workload
+              && (double(std::rand() % 100) / 100.0) <=
+                  write_through_probability))
+      {
+        return write_policy_t::WRITE_THROUGH;
+      }
     }
     return write_policy_t::WRITE_BACK;
   }
@@ -724,6 +734,10 @@ public:
 
   rewrite_gen_t get_max_hot_gen() const {
     return hot_tier_generations - 1;
+  }
+
+  device_id_t get_cold_device_id() const {
+    return background_process.get_cold_device_id();
   }
 
 private:
@@ -900,6 +914,18 @@ private:
           get_conf<Option::size_t>("seastore_logical_bucket_proceed_size_per_cycle"));
         logical_bucket->set_background_callback(this);
       }
+      LOG_PREFIX(BackgroundProcess::init);
+      test_workload = crimson::common::get_conf<bool>(
+        "seastore_logical_bucket_cache_test_stress");
+      force_process_half_life = crimson::common::get_conf<uint64_t>(
+        "seastore_test_workload_force_process_background_tasks_period");
+      force_background_timer.set_callback([this] { wake_half_life(); });
+      write_through_probability = crimson::common::get_conf<double>(
+        "seastore_test_workload_write_through_probability");
+      SUBINFO(seastore_epm, "crimson test workload supported, enabled: {}", test_workload);
+      if (test_workload) {
+        set_next_force_process();
+      }
     }
 
     LogicalBucket *get_logical_bucket() {
@@ -1014,6 +1040,12 @@ private:
       } else {
         return gen;
       }
+    }
+
+
+    device_id_t get_cold_device_id() const {
+      assert(has_cold_tier());
+      return *cold_cleaner->get_device_ids().begin();
     }
 
     seastar::future<> reserve_projected_usage(io_usage_t usage);
@@ -1322,6 +1354,57 @@ private:
     state_t state = state_t::STOP;
     eviction_state_t eviction_state;
 
+    enum class ForceProcessState : uint8_t{
+      STOP,
+      TRIM,
+      CLEAN,
+    };
+    bool test_workload = false;
+    double write_through_probability = 0;
+    ForceProcessState force_process_state = ForceProcessState::STOP;
+    ForceProcessState last_process_state = ForceProcessState::STOP;
+    seastar::timer<seastar::steady_clock_type> force_background_timer;
+    int force_process_half_life;
+
+    void set_next_force_process() {
+      assert(test_workload);
+      force_background_timer.rearm(
+        seastar::steady_clock_type::now() +
+        std::chrono::seconds(force_process_half_life));
+    }
+
+    void wake_half_life() {
+      assert(test_workload);
+      if (last_process_state == ForceProcessState::TRIM) {
+        force_process_state = ForceProcessState::CLEAN;
+      } else {
+        force_process_state = ForceProcessState::TRIM;
+      }
+
+      do_wake_background();
+    }
+
+    void maybe_reschedule_force_process() {
+      if (unlikely(test_workload &&
+                   force_process_state != ForceProcessState::STOP)) {
+        last_process_state = force_process_state;
+        force_process_state = ForceProcessState::STOP;
+        set_next_force_process();
+      }
+    }
+
+    bool should_force_trim() const {
+      return test_workload && force_process_state == ForceProcessState::TRIM;
+    }
+
+    bool should_force_clean() const {
+      return test_workload && force_process_state == ForceProcessState::CLEAN;
+    }
+
+    bool force_run_background() const {
+      return test_workload && force_process_state != ForceProcessState::STOP
+        && (logical_bucket && logical_bucket->could_demote());
+    }
     friend class ::transaction_manager_test_t;
   };
 
@@ -1345,6 +1428,8 @@ private:
   SegmentSeqAllocatorRef ool_segment_seq_allocator;
   extent_len_t max_data_allocation_size = 0;
   std::size_t write_through_size = 0;
+  bool test_workload = false;
+  double write_through_probability = 0;
 
   friend class ::transaction_manager_test_t;
   friend class Cache;

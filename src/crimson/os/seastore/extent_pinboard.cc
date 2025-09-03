@@ -269,8 +269,14 @@ void ExtentQueue::get_stats(
 
 class ExtentPromoter {
 public:
-  ExtentPromoter(size_t promotion_size, ExtentPlacementManager &epm)
-      : promotion_size(promotion_size), epm(epm) {}
+  ExtentPromoter(
+    size_t promotion_size,
+    ExtentPlacementManager &epm)
+    : promotion_size(promotion_size),
+      epm(epm),
+      test_workload(crimson::common::get_conf<bool>(
+        "seastore_logical_bucket_cache_test_stress"))
+  {}
 
   ~ExtentPromoter() {
     clear();
@@ -285,7 +291,13 @@ public:
   }
 
   size_t get_promotion_size() const {
-    return current_contents;
+    if (unlikely(test_workload)) {
+      return current_contents >= promotion_size
+        ? current_contents
+        : promotion_size;
+    } else {
+      return current_contents;
+    }
   }
 
   void set_background_callback(BackgroundListener *l) {
@@ -297,7 +309,9 @@ public:
   }
 
   bool should_run_promote() const {
-    return enabled() && current_contents >= promotion_size;
+    return enabled() &&
+      (current_contents >= promotion_size
+       || test_workload);
   }
 
   std::size_t get_promoted_size() const {
@@ -346,20 +360,31 @@ public:
     std::size_t promote_size = 0;
     std::list<CachedExtentRef> extents;
     DEBUGT("start promote", t);
-    for (auto &extent : list) {
-      DEBUGT("promote {} to the hot tier", t, extent);
-      ceph_assert(extent.is_stable_clean());
-      ceph_assert(extent.get_pin_state() == extent_pin_state_t::PendingPromote);
-      promote_size += extent.get_length();
-      t.add_to_read_set(&extent);
-      extents.emplace_back(&extent);
-    }
-    for (auto &extent : extents) {
-      remove_extent(*extent, extent_pin_state_t::Fresh);
-    }
-    for (auto &extent : extents) {
-      co_await trans_intr::make_interruptible(extent->wait_io());
-      co_await ecb->promote_extent(t, extent);
+    if (current_contents < promotion_size && test_workload) {
+      auto id = epm.get_cold_device_id();
+      paddr_t start = P_ADDR_NULL;
+      if (device_id_to_paddr_type(id) == paddr_types_t::SEGMENT) {
+	start = paddr_t::make_seg_paddr(id, 0, 0);
+      } else {
+	start = paddr_t::make_blk_paddr(id, 0);
+      }
+      co_await ecb->promote_extents_from_disk(t, start);
+    } else {
+      for (auto &extent : list) {
+        DEBUGT("promote {} to the hot tier", t, extent);
+        ceph_assert(extent.is_stable_clean());
+        ceph_assert(extent.get_pin_state() == extent_pin_state_t::PendingPromote);
+        promote_size += extent.get_length();
+        t.add_to_read_set(&extent);
+        extents.emplace_back(&extent);
+      }
+      for (auto &extent : extents) {
+        remove_extent(*extent, extent_pin_state_t::Fresh);
+      }
+      for (auto &extent : extents) {
+        co_await trans_intr::make_interruptible(extent->wait_io());
+        co_await ecb->promote_extent(t, extent);
+      }
     }
     // existing extents in lru will be retired after transaction submitted
     co_await ecb->submit_transaction_direct(t);
@@ -391,6 +416,7 @@ private:
 
   size_t promoted_count = 0;
   size_t promoted_size = 0;
+  bool test_workload = false;
 };
 
 class ExtentPinboardLRU : public ExtentPinboard {
@@ -688,7 +714,11 @@ public:
       : warm_in(warm_in_capacity),
 	warm_out(warm_out_capacity),
 	hot(hot_capacity),
-	promoter(promotion_size, epm)
+	promoter(promotion_size, epm),
+        test_workload(crimson::common::get_conf<bool>(
+          "seastore_logical_bucket_cache_test_stress")),
+        TwoQ_promote_probability(crimson::common::get_conf<double>(
+          "seastore_test_workload_2Q_promote_probability"))
   {
     LOG_PREFIX(ExtentPinboardTwoQ::ExtentPinboardTwoQ);
     INFO("created, warm_in_capacity=0x{:x}B, warm_out_capacity=0x{:x}B, "
@@ -871,6 +901,12 @@ private:
         // to the warm out queue.
         continue;
       }
+      if (promoter.should_promote_extent(*extent)
+	  && test_workload
+	  && (double(std::rand() % 100) / 100.0) <= TwoQ_promote_probability) {
+	promoter.add_extent(*extent);
+	continue;
+      }
       auto lext = extent->cast<LogicalCachedExtent>();
       auto laddr = lext->get_laddr();
       auto end = extent->get_last_touch_end();
@@ -957,6 +993,8 @@ private:
   // hit and miss indicates if an extent is linked when touching it
   uint64_t hit = 0;
   uint64_t miss = 0;
+  bool test_workload = false;
+  double TwoQ_promote_probability = 0;
 };
 
 void ExtentPinboardTwoQ::get_stats(

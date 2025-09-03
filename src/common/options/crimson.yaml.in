@@ -154,6 +154,13 @@ options:
   desc: CPU cores on which POSIX threads alienized to seastar will run in cpuset(7) format
   flags:
   - startup
+- name: seastore_logical_bucket_cache_test_stress
+  type: bool
+  level: dev
+  desc: Enable SeaStore Logical Bucket Cache stress mode. When enabled, SeaStore exercises cold-tier
+        cache paths by forcing promotion/demotion activity and probabilistic write-through behavior.
+        Intended for testing only.
+  default: false
 
 # Seastore options
 
@@ -393,3 +400,18 @@ options:
   level: dev
   desc: Select write through policy when data length is greater than this value.
   default: 512_K
+- name: seastore_test_workload_write_through_probability
+  type: float
+  level: dev
+  desc: The percentage of writes that are applied directly to slow devices
+  default: 0.5
+- name: seastore_test_workload_2Q_promote_probability
+  type: float
+  level: dev
+  desc: The probability of promoting the extents evicted from the warm_in queue to faster devices
+  default: 0.5
+- name: seastore_test_workload_force_process_background_tasks_period
+  type: uint
+  level: dev
+  desc: Seconds of the period to force process background tasks
+  default: 5

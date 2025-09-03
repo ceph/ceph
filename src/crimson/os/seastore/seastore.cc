@@ -730,6 +730,23 @@ Device::access_ertr::future<> SeaStore::_mkfs(uuid_d new_osd_fsid)
     co_await rdir.close();
   }
 
+  if (sds.empty() && crimson::common::get_conf<bool>(
+        "seastore_logical_bucket_cache_test_stress")) {
+    // lbc test workload enabled while no secondary devices indicated, create one
+    std::string path = fmt::format("{}/block.1", root);
+    co_await seastar::make_directory(path);
+    DeviceRef sec_dev = co_await Device::make_device(path, dtype, btype);
+    auto p_sec_dev = sec_dev.get();
+    secondaries.emplace_back(std::move(sec_dev));
+    co_await p_sec_dev->start(store_shard_nums);
+    magic_t magic = (magic_t)std::rand();
+    device_id_t id = 0x1;
+    sds.emplace(id, device_spec_t{magic, dtype, btype, id});
+    co_await p_sec_dev->mkfs(
+      device_config_t::create_secondary(new_osd_fsid, id, dtype, btype, magic)
+    ).handle_error(crimson::ct_error::assert_all("not possible"));
+    co_await set_secondaries();
+  }
   device_id_t id = 0;
   device_type_t d_type = device->get_device_type();
   backend_type_t b_type = device->get_backend_type();
