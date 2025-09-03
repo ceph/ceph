@@ -770,6 +770,11 @@ public:
     return epm.is_pure_rbm();
   }
 
+  void update_read_ratio(Transaction &t) {
+    stats.read_hit_hot += t.read_hit_hot;
+    stats.read_hit_cold += t.read_hit_cold;
+  }
+
 private:
   using get_extent_ertr = base_ertr;
   template <typename T>
@@ -1847,6 +1852,11 @@ private:
 
     std::array<uint64_t, NUM_SRC_COMB> trans_conflicts_by_srcs;
     counter_by_src_t<uint64_t> trans_conflicts_by_unknown;
+
+    uint64_t write_hit_hot;
+    uint64_t write_hit_cold;
+    uint64_t read_hit_hot;
+    uint64_t read_hit_cold;
 
     rewrite_stats_t trim_rewrites;
     rewrite_stats_t reclaim_rewrites;
