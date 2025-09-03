@@ -76,6 +76,10 @@ public:
     Transaction &t,
     LogicalChildNode &extent) = 0;
 
+  using upper_bound_right_ret = get_mapping_iertr::future<LBAMapping>;
+  virtual upper_bound_right_ret upper_bound_right(
+    Transaction &t,
+    laddr_t laddr) = 0;
 
 #ifdef UNIT_TESTS_BUILT
   using get_end_mapping_iertr = base_iertr;
@@ -190,6 +194,13 @@ public:
     Transaction &t,
     LBAMapping mapping,
     std::vector<LogicalChildNodeRef> extents) = 0;
+
+  using demote_extent_iertr = base_iertr;
+  using demote_extent_ret = demote_extent_iertr::future<LBAMapping>;
+  virtual demote_extent_ret demote_extent(
+    Transaction &t,
+    LBAMapping mapping,
+    LogicalChildNode &extent) = 0;
 
   virtual alloc_extent_ret reserve_region(
     Transaction &t,

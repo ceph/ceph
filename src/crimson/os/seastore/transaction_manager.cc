@@ -473,6 +473,31 @@ TransactionManager::relocate_logical_extent(
   )->cast<LogicalChildNode>();
 }
 
+base_iertr::future<LogicalChildNodeRef>
+TransactionManager::relocate_shadow_extent(
+  Transaction &t, LBAMapping mapping)
+{
+  LOG_PREFIX(TransactionManager::relocate_shadow_extent);
+  SUBDEBUGT(seastore_tm, "relocate {}", t, mapping);
+  assert(mapping.has_shadow_val());
+  assert(!mapping.is_zero_reserved());
+  assert(mapping.is_viewable());
+  auto v = mapping.get_logical_extent(t);
+  if (!v.has_child()) {
+    cache->retire_absent_extent_addr(
+      t, mapping.get_key(), mapping.get_val(), mapping.get_length());
+  } else {
+    auto extent = co_await std::move(v.get_child_fut());
+    cache->retire_extent(t, extent);
+  }
+  cache->retire_absent_extent_addr(
+    t, mapping.get_key(), mapping.get_shadow_val(), mapping.get_length());
+  co_return cache->alloc_remapped_extent_by_type(
+    t, mapping.get_extent_type(), mapping.get_key(),
+    mapping.get_shadow_val(), 0, mapping.get_length(), std::nullopt
+  )->cast<LogicalChildNode>();
+}
+
 TransactionManager::move_region_ret
 TransactionManager::move_region(
   Transaction &t,
@@ -1033,9 +1058,7 @@ TransactionManager::promote_extent(
     promote_extent_iertr::pass_further(),
     crimson::ct_error::assert_all("invalid error"));
   co_return co_await lba_manager->promote_extent(
-    t,
-    orig_ext->get_laddr(),
-    std::move(promoted_extents));
+    t, mapping, std::move(promoted_extents));
 }
 
 TransactionManager::demote_region_ret
@@ -1044,9 +1067,41 @@ TransactionManager::demote_region(
   laddr_t start,
   loffset_t max_proceed_size)
 {
-  // TODO
-  return demote_region_iertr::make_ready_future<demote_region_res_t>(
-    demote_region_res_t{0, false});
+  LOG_PREFIX(TransactionManager::demote_region);
+  auto prefix = start.get_object_prefix();
+  INFOT("start demote {}", t, prefix);
+  auto it = co_await lba_manager->upper_bound_right(
+    t, start
+  ).handle_error_interruptible(
+    demote_region_iertr::pass_further{},
+    crimson::ct_error::assert_all("unexpected enoent"));
+  demote_region_res_t ret{0, 0, false};
+  while ((ret.demoted_size + ret.evicted_size) < max_proceed_size) {
+    if (it.is_end() || it.get_key().get_object_prefix() != prefix) {
+      ret.complete = true;
+      break;
+    }
+    if (it.has_shadow_val()) {
+      DEBUGT("demote shadow {}", t, it);
+      auto extent = co_await relocate_shadow_extent(t, it);
+      ret.demoted_size += extent->get_length();
+      LBAMapping nit = co_await lba_manager->demote_extent(t, it, *extent);
+      it = co_await nit.next();
+    } else if (!it.is_indirect() && !it.is_zero_reserved() &&
+      !epm->is_cold_device(it.get_val().get_device_id())) {
+      DEBUGT("demote hot {}", t, it);
+      auto extent = co_await read_pin_by_type(t, it, it.get_extent_type());
+      ret.evicted_size += extent->get_length();
+      extent->set_target_rewrite_generation(epm->get_max_hot_gen() + 1);
+      co_await rewrite_logical_extent(t, extent);
+      it = co_await it.next();
+    } else {
+      DEBUGT("skip {}", t, it);
+      it = co_await it.next();
+    }
+  }
+
+  co_return ret;
 }
 
 TransactionManager::get_extents_if_live_ret

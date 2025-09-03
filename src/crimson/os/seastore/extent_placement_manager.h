@@ -583,6 +583,10 @@ public:
     return !devices_by_id[addr.get_device_id()]->is_end_to_end_data_protection();
   }
 
+  rewrite_gen_t get_max_hot_gen() const {
+    return hot_tier_generations - 1;
+  }
+
 private:
   rewrite_gen_t adjust_generation(
       data_category_t category,
