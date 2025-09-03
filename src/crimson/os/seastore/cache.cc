@@ -231,6 +231,29 @@ void Cache::register_metrics(store_index_t store_index)
     }
   );
 
+  metrics.add_group("cache", {
+    sm::make_counter(
+      "write_hit_hot",
+      stats.write_hit_hot,
+      sm::description("the number of the lbc hits of data writes"),
+      {sm::label_instance("shard_store_index", std::to_string(store_index))}),
+    sm::make_counter(
+      "write_hit_cold",
+      stats.write_hit_cold,
+      sm::description("the number of the lbc misses of data writes"),
+      {sm::label_instance("shard_store_index", std::to_string(store_index))}),
+    sm::make_counter(
+      "read_hit_hot",
+      stats.read_hit_hot,
+      sm::description("the number of the lbc hits of data reads"),
+      {sm::label_instance("shard_store_index", std::to_string(store_index))}),
+    sm::make_counter(
+      "read_hit_cold",
+      stats.read_hit_cold,
+      sm::description("the number of the lbc misses of data reads"),
+      {sm::label_instance("shard_store_index", std::to_string(store_index))}),
+  });
+
   {
     /*
      * efforts discarded/committed
@@ -2181,6 +2204,9 @@ void Cache::complete_commit(
         i->set_invalid(t);
     }
   }
+
+  stats.write_hit_hot += t.write_hit_hot;
+  stats.write_hit_cold += t.write_hit_cold;
 }
 
 void Cache::init()
