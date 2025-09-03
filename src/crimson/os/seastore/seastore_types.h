@@ -2034,6 +2034,13 @@ constexpr bool is_real_type(extent_types_t type) {
 
 std::ostream &operator<<(std::ostream &out, extent_types_t t);
 
+enum class write_policy_t {
+  WRITE_BACK,
+  WRITE_THROUGH
+};
+
+std::ostream& operator<<(std::ostream& out, write_policy_t w);
+
 /**
  * rewrite_gen_t
  *

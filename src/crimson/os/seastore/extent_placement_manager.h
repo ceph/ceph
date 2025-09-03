@@ -333,7 +333,9 @@ public:
       ool_segment_seq_allocator(
           std::make_unique<SegmentSeqAllocator>(segment_type_t::OOL)),
       max_data_allocation_size(crimson::common::get_conf<Option::size_t>(
-	  "seastore_max_data_allocation_size"))
+	  "seastore_max_data_allocation_size")),
+      write_through_size(crimson::common::get_conf<Option::size_t>(
+	  "seastore_write_through_size"))
   {
     LOG_PREFIX(ExtentPlacementManager::ExtentPlacementManager);
     devices_by_id.resize(DEVICE_ID_MAX, nullptr);
@@ -411,6 +413,7 @@ public:
     placement_hint_t hint;
     rewrite_gen_t gen;
     bool is_tracked;
+    write_policy_t write_policy = write_policy_t::WRITE_BACK;
 #ifdef UNIT_TESTS_BUILT
     std::optional<paddr_t> external_paddr = std::nullopt;
 #endif
@@ -431,7 +434,8 @@ public:
     assert(opt.gen == INIT_GENERATION || opt.hint == placement_hint_t::REWRITE);
 
     data_category_t category = get_extent_category(type);
-    opt.gen = adjust_generation(category, type, opt.hint, opt.gen, opt.is_tracked);
+    opt.gen = adjust_generation(
+      category, type, opt.hint, opt.gen, opt.write_policy, opt.is_tracked);
 
     paddr_t addr;
 #ifdef UNIT_TESTS_BUILT
@@ -471,7 +475,8 @@ public:
     assert(opt.gen == INIT_GENERATION || opt.hint == placement_hint_t::REWRITE);
 
     data_category_t category = get_extent_category(type);
-    opt.gen = adjust_generation(category, type, opt.hint, opt.gen, opt.is_tracked);
+    opt.gen = adjust_generation(
+      category, type, opt.hint, opt.gen, opt.write_policy, opt.is_tracked);
     assert(opt.gen != INLINE_GENERATION);
 
     // XXX: bp might be extended to point to different memory (e.g. PMem)
@@ -507,6 +512,13 @@ public:
       }
     }
     return allocs;
+  }
+
+  write_policy_t get_write_policy(extent_types_t type, extent_len_t length) const {
+    if (has_cold_tier() && length >= write_through_size && is_data_type(type)) {
+      return write_policy_t::WRITE_THROUGH;
+    }
+    return write_policy_t::WRITE_BACK;
   }
 
 #ifdef UNIT_TESTS_BUILT
@@ -661,6 +673,7 @@ private:
       extent_types_t type,
       placement_hint_t hint,
       rewrite_gen_t gen,
+      write_policy_t policy,
       bool is_tracked) {
     assert(is_real_type(type));
     if (is_root_type(type)) {
@@ -690,10 +703,20 @@ private:
         }
       } else {
         assert(category == data_category_t::DATA);
-        gen = OOL_GENERATION;
+        if (background_process.has_cold_tier() &&
+            policy == write_policy_t::WRITE_THROUGH) {
+          gen = hot_tier_generations;
+        } else {
+          assert(policy != write_policy_t::WRITE_THROUGH);
+          gen = OOL_GENERATION;
+        }
       }
     } else if (background_process.has_cold_tier()) {
       gen = background_process.adjust_generation(gen);
+      if (gen <= hot_tier_generations &&
+          policy == write_policy_t::WRITE_THROUGH) {
+        gen = hot_tier_generations;
+      }
     }
 
     if (is_tracked && gen >= hot_tier_generations &&
@@ -1249,6 +1272,7 @@ private:
   // TODO: drop once paddr->journal_seq_t is introduced
   SegmentSeqAllocatorRef ool_segment_seq_allocator;
   extent_len_t max_data_allocation_size = 0;
+  std::size_t write_through_size;
 
   friend class ::transaction_manager_test_t;
   friend class Cache;

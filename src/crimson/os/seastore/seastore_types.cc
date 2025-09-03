@@ -1178,6 +1178,16 @@ std::ostream& operator<<(std::ostream& out, placement_hint_t h)
   }
 }
 
+std::ostream& operator<<(std::ostream& out, write_policy_t w)
+{
+  switch(w) {
+  case write_policy_t::WRITE_BACK:
+    return out << "WRITE_BACK";
+  case write_policy_t::WRITE_THROUGH:
+    return out << "WRITE_THROUGH";
+  }
+}
+
 bool can_delay_allocation(device_type_t type) {
   // Some types of device may not support delayed allocation, for example PMEM.
   // All types of device currently support delayed allocation.

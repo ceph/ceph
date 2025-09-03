@@ -297,3 +297,8 @@ options:
   level: advanced
   desc: Size in bytes of extents to be demoted from logical bucket
   default: 2_M
+- name: seastore_write_through_size
+  type: size
+  level: dev
+  desc: select write through policy when data length is greater than this value.
+  default: 512_K

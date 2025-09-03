@@ -484,7 +484,11 @@ public:
               t, T::TYPE, laddr_hint, len, placement_hint);
     return seastar::do_with(
       cache->alloc_new_data_extents<T>(
-	t, len, {placement_hint, INIT_GENERATION}),
+	t, len,
+	{
+	  placement_hint, INIT_GENERATION, false,
+	  epm->get_write_policy(T::TYPE, len)
+	}),
       [pos=std::move(pos), this, &t,
       FNAME, laddr_hint](auto &exts) mutable {
       // user must initialize the logical extent themselves
