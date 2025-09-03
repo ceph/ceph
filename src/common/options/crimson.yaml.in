@@ -238,4 +238,4 @@ options:
   type: bool
   level: advanced
   desc: enable osd shards changes upon restart.
-  default: true
+  default: false
