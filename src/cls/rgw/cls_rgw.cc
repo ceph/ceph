@@ -1909,86 +1909,96 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
   // op.olh_epoch is provided (> 0) in the case when a remote epoch is coming in as the result of multisite sync;
   uint64_t candidate_epoch = op.olh_epoch ? op.olh_epoch :
     duration_cast<std::chrono::nanoseconds>(obj.mtime().time_since_epoch()).count();
-  if (!olh.start_modify(candidate_epoch)) {
-    ret = obj.write(candidate_epoch, false, header);
-    if (ret < 0) {
-      return ret;
-    }
-    if (removing) {
-      olh.update_log(CLS_RGW_OLH_OP_REMOVE_INSTANCE, op.op_tag, op.key, false, candidate_epoch);
-    }
-    return write_header_while_logrecord(hctx, header);
-  }
-
-  // promote this version to current if it's a newer epoch, or if it matches the
-  // current epoch and sorts after the current instance
-  const bool promote = (olh.get_epoch() > prev_epoch) ||
-      (olh.get_epoch() == prev_epoch &&
-       olh.get_entry().key.instance >= op.key.instance);
-  const bool epoch_collision = olh.get_epoch() == prev_epoch;
-
-  if (olh_found) {
-    const string& olh_tag = olh.get_tag();
-    if (op.olh_tag != olh_tag) {
-      if (!olh.pending_removal()) {
-        CLS_LOG(5, "NOTICE: op.olh_tag (%s) != olh.tag (%s)", op.olh_tag.c_str(), olh_tag.c_str());
-        return -ECANCELED;
+  do {
+    if (!olh.start_modify(candidate_epoch)) {
+      ret = obj.write(candidate_epoch, false, header);
+      if (ret < 0) {
+        return ret;
       }
-      /* if pending removal, this is a new olh instance */
-      olh.set_tag(op.olh_tag);
-    }
-    if (epoch_collision) {
-      auto const &s_key = op.key.to_string();
-      CLS_LOG(1, "NOTICE: versioned epoch collision (%lu) for object %s", prev_epoch, s_key.c_str());
-    }
-    if (promote && olh.exists()) {
-      rgw_bucket_olh_entry& olh_entry = olh.get_entry();
-      /* found olh, previous instance is no longer the latest, need to update */
-      if (!(olh_entry.key == op.key)) {
-        BIVerObjEntry old_obj(hctx, olh_entry.key);
 
-        ret = old_obj.demote_current(header);
-        if (ret < 0) {
-          CLS_LOG(0, "ERROR: could not demote current on previous key ret=%d", ret);
-          return ret;
+      // no point here in adding CLS_RGW_OLH_OP_LINK_OLH to the pending log as we know that
+      // the epoch is already stale compared to the current - so no point in applying it;
+
+      if (removing) {
+        olh.update_log(CLS_RGW_OLH_OP_REMOVE_INSTANCE, op.op_tag, op.key, false, candidate_epoch);
+      }
+
+      // do not return yet - we haven't logged the LINK_OLH op to the bilog yet; not doing so will result in an
+      // orphaned BI instance entry in the peer zone (consuming the bilog) that is never linked into the OLH -> thus
+      // 'radosgw-admin bucket list' command won't report the entry even though data for it has been replicated
+      break;
+    }
+
+    // promote this version to current if it's a newer epoch, or if it matches the
+    // current epoch and sorts after the current instance
+    const bool promote = (olh.get_epoch() > prev_epoch) ||
+        (olh.get_epoch() == prev_epoch &&
+            olh.get_entry().key.instance >= op.key.instance);
+    const bool epoch_collision = olh.get_epoch() == prev_epoch;
+
+    if (olh_found) {
+      const string &olh_tag = olh.get_tag();
+      if (op.olh_tag != olh_tag) {
+        if (!olh.pending_removal()) {
+          CLS_LOG(5, "NOTICE: op.olh_tag (%s) != olh.tag (%s)", op.olh_tag.c_str(), olh_tag.c_str());
+          return -ECANCELED;
+        }
+        /* if pending removal, this is a new olh instance */
+        olh.set_tag(op.olh_tag);
+      }
+      if (epoch_collision) {
+        auto const &s_key = op.key.to_string();
+        CLS_LOG(1, "NOTICE: versioned epoch collision (%lu) for object %s", prev_epoch, s_key.c_str());
+      }
+      if (promote && olh.exists()) {
+        rgw_bucket_olh_entry &olh_entry = olh.get_entry();
+        /* found olh, previous instance is no longer the latest, need to update */
+        if (!(olh_entry.key == op.key)) {
+          BIVerObjEntry old_obj(hctx, olh_entry.key);
+
+          ret = old_obj.demote_current(header);
+          if (ret < 0) {
+            CLS_LOG(0, "ERROR: could not demote current on previous key ret=%d", ret);
+            return ret;
+          }
         }
       }
+      olh.set_pending_removal(false);
+    } else {
+      bool instance_only = (op.key.instance.empty() && op.delete_marker);
+      cls_rgw_obj_key key(op.key.name);
+      ret = convert_plain_entry_to_versioned(hctx, key, promote, instance_only, header);
+      if (ret < 0) {
+        CLS_LOG(0, "ERROR: convert_plain_entry_to_versioned ret=%d", ret);
+        return ret;
+      }
+      olh.set_tag(op.olh_tag);
+      if (op.key.instance.empty()) {
+        obj.set_epoch(1);
+      }
     }
-    olh.set_pending_removal(false);
-  } else {
-    bool instance_only = (op.key.instance.empty() && op.delete_marker);
-    cls_rgw_obj_key key(op.key.name);
-    ret = convert_plain_entry_to_versioned(hctx, key, promote, instance_only, header);
+
+    /* update the olh log */
+    olh.update_log(CLS_RGW_OLH_OP_LINK_OLH, op.op_tag, op.key, op.delete_marker);
+    if (removing) {
+      olh.update_log(CLS_RGW_OLH_OP_REMOVE_INSTANCE, op.op_tag, op.key, false);
+    }
+
+    if (promote) {
+      olh.update(op.key, op.delete_marker);
+    }
+    olh.set_exists(true);
+
+    /* write the instance and list entries */
+    ret = obj.write(olh.get_epoch(), promote, header);
     if (ret < 0) {
-      CLS_LOG(0, "ERROR: convert_plain_entry_to_versioned ret=%d", ret);
       return ret;
     }
-    olh.set_tag(op.olh_tag);
-    if (op.key.instance.empty()){
-      obj.set_epoch(1);
-    }
-  }
-
-  /* update the olh log */
-  olh.update_log(CLS_RGW_OLH_OP_LINK_OLH, op.op_tag, op.key, op.delete_marker);
-  if (removing) {
-    olh.update_log(CLS_RGW_OLH_OP_REMOVE_INSTANCE, op.op_tag, op.key, false);
-  }
-
-  if (promote) {
-    olh.update(op.key, op.delete_marker);
-  }
-  olh.set_exists(true);
+  } while (false);
 
   ret = olh.write(header);
   if (ret < 0) {
     CLS_LOG(0, "ERROR: failed to update olh ret=%d", ret);
-    return ret;
-  }
-
-  /* write the instance and list entries */
-  ret = obj.write(olh.get_epoch(), promote, header);
-  if (ret < 0) {
     return ret;
   }
 
@@ -2003,7 +2013,7 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
   rgw_bucket_dir_entry& entry = obj.get_dir_entry();
 
   rgw_bucket_entry_ver ver;
-  ver.epoch = (op.olh_epoch ? op.olh_epoch : olh.get_epoch());
+  ver.epoch = candidate_epoch;
 
   string *powner = NULL;
   string *powner_display_name = NULL;
@@ -2089,74 +2099,80 @@ static int rgw_bucket_unlink_instance(cls_method_context_t hctx, bufferlist *in,
   // op.olh_epoch is provided (> 0) in the case when a remote epoch is coming in as the result of multisite sync;
   uint64_t candidate_epoch = op.olh_epoch ? op.olh_epoch :
     duration_cast<std::chrono::nanoseconds>(real_clock::now().time_since_epoch()).count();
-  if (!olh.start_modify(candidate_epoch)) {
+  do {
+    if (!olh.start_modify(candidate_epoch)) {
+      ret = obj.unlink_list_entry(header);
+      if (ret < 0) {
+        return ret;
+      }
+
+      if (obj.is_delete_marker()) {
+        return 0;
+      }
+
+      olh.update_log(CLS_RGW_OLH_OP_REMOVE_INSTANCE, op.op_tag, op.key, false, candidate_epoch);
+
+      // do not return yet - we haven't logged the UNLINK_INSTANCE op to the bilog; if we don't log then we will have an
+      // BI instance entry appear in the OLH history in the peer zone that has not been removed from the OLH -> thus
+      // 'radosgw-admin bucket list' command will report the entry even though the data for it has been removed
+      break;
+    }
+
+    rgw_bucket_olh_entry &olh_entry = olh.get_entry();
+    cls_rgw_obj_key &olh_key = olh_entry.key;
+    CLS_LOG(20, "%s: updating olh log: existing olh entry: %s[%s] (delete_marker=%d)", __func__,
+            olh_key.name.c_str(), olh_key.instance.c_str(), olh_entry.delete_marker);
+
+    if (olh_key == dest_key) {
+      /* this is the current head, need to update the OLH! */
+      cls_rgw_obj_key next_key;
+      bool found = false;
+      ret = obj.find_next_key(&next_key, &found);
+      if (ret < 0) {
+        CLS_LOG(0, "ERROR: obj.find_next_key() returned ret=%d", ret);
+        return ret;
+      }
+
+      if (found) {
+        BIVerObjEntry next(hctx, next_key);
+        ret = next.write(olh.get_epoch(), true, header);
+        if (ret < 0) {
+          CLS_LOG(0, "ERROR: next.write() returned ret=%d", ret);
+          return ret;
+        }
+
+        CLS_LOG(20, "%s: updating olh log: link olh -> %s[%s] (is_delete=%d)", __func__,
+                next_key.name.c_str(), next_key.instance.c_str(), (int) next.is_delete_marker());
+
+        olh.update(next_key, next.is_delete_marker());
+        olh.update_log(CLS_RGW_OLH_OP_LINK_OLH, op.op_tag, next_key, next.is_delete_marker());
+      } else {
+        // next_key is empty, but we need to preserve its name in case this entry
+        // gets resharded, because this key is used for hash placement
+        next_key.name = dest_key.name;
+        olh.update(next_key, false);
+        olh.update_log(CLS_RGW_OLH_OP_UNLINK_OLH, op.op_tag, next_key, false);
+        olh.set_exists(false);
+        olh.set_pending_removal(true);
+      }
+    }
+
+    if (!obj.is_delete_marker()) {
+      olh.update_log(CLS_RGW_OLH_OP_REMOVE_INSTANCE, op.op_tag, op.key, false);
+    } else {
+      /* this is a delete marker, it's our responsibility to remove its
+       * instance entry */
+      ret = obj.unlink(header, op.key);
+      if (ret < 0) {
+        return ret;
+      }
+    }
+
     ret = obj.unlink_list_entry(header);
     if (ret < 0) {
       return ret;
     }
-
-    if (obj.is_delete_marker()) {
-      return 0;
-    }
-
-    olh.update_log(CLS_RGW_OLH_OP_REMOVE_INSTANCE, op.op_tag, op.key, false, candidate_epoch);
-    return olh.write(header);
-  }
-
-  rgw_bucket_olh_entry& olh_entry = olh.get_entry();
-  cls_rgw_obj_key& olh_key = olh_entry.key;
-  CLS_LOG(20, "%s: updating olh log: existing olh entry: %s[%s] (delete_marker=%d)", __func__,
-             olh_key.name.c_str(), olh_key.instance.c_str(), olh_entry.delete_marker);
-
-  if (olh_key == dest_key) {
-    /* this is the current head, need to update the OLH! */
-    cls_rgw_obj_key next_key;
-    bool found = false;
-    ret = obj.find_next_key(&next_key, &found);
-    if (ret < 0) {
-      CLS_LOG(0, "ERROR: obj.find_next_key() returned ret=%d", ret);
-      return ret;
-    }
-
-    if (found) {
-      BIVerObjEntry next(hctx, next_key);
-      ret = next.write(olh.get_epoch(), true, header);
-      if (ret < 0) {
-        CLS_LOG(0, "ERROR: next.write() returned ret=%d", ret);
-        return ret;
-      }
-
-      CLS_LOG(20, "%s: updating olh log: link olh -> %s[%s] (is_delete=%d)", __func__,
-              next_key.name.c_str(), next_key.instance.c_str(), (int)next.is_delete_marker());
-
-      olh.update(next_key, next.is_delete_marker());
-      olh.update_log(CLS_RGW_OLH_OP_LINK_OLH, op.op_tag, next_key, next.is_delete_marker());
-    } else {
-      // next_key is empty, but we need to preserve its name in case this entry
-      // gets resharded, because this key is used for hash placement
-      next_key.name = dest_key.name;
-      olh.update(next_key, false);
-      olh.update_log(CLS_RGW_OLH_OP_UNLINK_OLH, op.op_tag, next_key, false);
-      olh.set_exists(false);
-      olh.set_pending_removal(true);
-    }
-  }
-
-  if (!obj.is_delete_marker()) {
-    olh.update_log(CLS_RGW_OLH_OP_REMOVE_INSTANCE, op.op_tag, op.key, false);
-  } else {
-    /* this is a delete marker, it's our responsibility to remove its
-     * instance entry */
-    ret = obj.unlink(header, op.key);
-    if (ret < 0) {
-      return ret;
-    }
-  }
-
-  ret = obj.unlink_list_entry(header);
-  if (ret < 0) {
-    return ret;
-  }
+  } while (false);
 
   ret = olh.write(header);
   if (ret < 0) {
@@ -2172,7 +2188,7 @@ static int rgw_bucket_unlink_instance(cls_method_context_t hctx, bufferlist *in,
   }
 
   rgw_bucket_entry_ver ver;
-  ver.epoch = (op.olh_epoch ? op.olh_epoch : olh.get_epoch());
+  ver.epoch = candidate_epoch;
 
   real_time mtime = obj.mtime(); /* mtime has no real meaning in
                                   * instance removal context */

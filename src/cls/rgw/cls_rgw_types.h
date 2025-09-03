@@ -564,9 +564,14 @@ struct rgw_bucket_olh_entry {
   // the epoch represents the latest modification timestamp for the S3 object identified by the key;
   uint64_t epoch;
   // epoch -> op list mapping: stores pending modifications to the S3 object identified by the key;
+  // this is basically a per-S3-object WAL whose main purpose is crash safety and idempotency; operations
+  // PUT/DELETE that modify S3 object history write to this log first; it is being
+  // replayed by the apply_olh_log() on the same zone;
   // usually there's only 1 op per epoch key but more than 1 op would be associated with an epoch in case
   // of versioned DELETE for the current instance: [remove instance, link]
   std::map<uint64_t, std::vector<struct rgw_bucket_olh_log_entry> > pending_log;
+  // unique tag for this entry; it remains the same until the entry is deleted (like when versioning
+  // is suspended) and then re-created (by re-enabling versioning);
   std::string tag;
   bool exists;
   bool pending_removal;
