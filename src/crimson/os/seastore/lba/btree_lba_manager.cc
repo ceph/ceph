@@ -164,33 +164,19 @@ BtreeLBAManager::get_cursors(
 {
   LOG_PREFIX(BtreeLBAManager::get_cursors);
   TRACET("{}~0x{:x} ...", c.trans, laddr, length);
-  return seastar::do_with(
-    std::list<LBACursorRef>(),
-    [FNAME, c, laddr, length, &btree](auto& ret)
-  {
-    return LBABtree::iterate_repeat(
-      c,
-      btree.upper_bound_right(c, laddr),
-      [FNAME, c, laddr, length, &ret](auto& pos)
-    {
-      if (pos.is_end() || pos.get_key() >= (laddr + length)) {
-        TRACET("{}~0x{:x} done with {} results, stop at {}",
-               c.trans, laddr, length, ret.size(), pos);
-        return LBABtree::iterate_repeat_ret_inner(
-          interruptible::ready_future_marker{},
-          seastar::stop_iteration::yes);
-      }
-      TRACET("{}~0x{:x} got {}, repeat ...",
-             c.trans, laddr, length, pos);
-      ceph_assert((pos.get_key() + pos.get_val().len) > laddr);
-      ret.emplace_back(pos.get_cursor(c));
-      return LBABtree::iterate_repeat_ret_inner(
-        interruptible::ready_future_marker{},
-        seastar::stop_iteration::no);
-    }).si_then([&ret] {
-      return std::move(ret);
-    });
-  });
+  std::list<LBACursorRef> ret;
+  auto pos = co_await btree.upper_bound_right(c, laddr);
+  while (!pos.is_end() && pos.get_key() < (laddr + length)) {
+    TRACET("{}~0x{:x} got {}, repeat ...",
+	   c.trans, laddr, length, pos);
+    ceph_assert((pos.get_key() + pos.get_val().len) > laddr);
+    ret.emplace_back(pos.get_cursor(c));
+    pos = co_await pos.next(c);
+  }
+
+  TRACET("{}~0x{:x} done with {} results, stop at {}",
+	 c.trans, laddr, length, ret.size(), pos);
+  co_return ret;
 }
 
 BtreeLBAManager::resolve_indirect_cursor_ret
@@ -666,45 +652,27 @@ BtreeLBAManager::search_insert_position(
   alloc_policy_t policy)
 {
   LOG_PREFIX(BtreeLBAManager::search_insert_position);
-  auto lookup_attempts = stats.num_alloc_extents_iter_nexts;
-  using OptIter = std::optional<LBABtree::iterator>;
-  return seastar::do_with(
-    hint, OptIter(std::nullopt),
-    [this, c, &btree, hint, length, lookup_attempts, policy, FNAME]
-    (laddr_t &last_end, OptIter &insert_iter)
-  {
-    return LBABtree::iterate_repeat(
-      c,
-      btree.upper_bound_right(c, hint),
-      [this, c, hint, length, lookup_attempts, policy,
-       &last_end, &insert_iter, FNAME](auto &iter)
-    {
-      ++stats.num_alloc_extents_iter_nexts;
-      if (iter.is_end() ||
-	  iter.get_key() >= (last_end + length)) {
-	if (policy == alloc_policy_t::deterministic) {
-	  ceph_assert(hint == last_end);
-	}
-	DEBUGT("hint: {}~0x{:x}, allocated laddr: {}, insert position: {}, "
-	       "done with {} attempts",
-	       c.trans, hint, length, last_end, iter,
-	       stats.num_alloc_extents_iter_nexts - lookup_attempts);
-	insert_iter.emplace(iter);
-	return search_insert_position_iertr::make_ready_future<
-	  seastar::stop_iteration>(seastar::stop_iteration::yes);
-      }
-      ceph_assert(policy == alloc_policy_t::linear_search);
-      last_end = (iter.get_key() + iter.get_val().len).checked_to_laddr();
-      TRACET("hint: {}~0x{:x}, current iter: {}, repeat ...",
-	     c.trans, hint, length, iter);
-      return search_insert_position_iertr::make_ready_future<
-	seastar::stop_iteration>(seastar::stop_iteration::no);
-    }).si_then([&last_end, &insert_iter] {
-      ceph_assert(insert_iter);
-      return search_insert_position_iertr::make_ready_future<
-	insert_position_t>(last_end, *std::move(insert_iter));
-    });
-  });
+  auto lookup_attempts = stats.num_alloc_extents_iter_nexts++;
+  auto iter = co_await btree.upper_bound_right(c, hint);
+  auto last_end = hint;
+
+  while (!iter.is_end() && iter.get_key() < (last_end + length)) {
+    ceph_assert(policy == alloc_policy_t::linear_search);
+    last_end = (iter.get_key() + iter.get_val().len).checked_to_laddr();
+    TRACET("hint: {}~0x{:x}, current iter: {}, repeat ...",
+	   c.trans, hint, length, iter);
+    iter = co_await iter.next(c);
+    ++stats.num_alloc_extents_iter_nexts;
+  }
+
+  if (policy == alloc_policy_t::deterministic) {
+    ceph_assert(hint == last_end);
+  }
+  DEBUGT("hint: {}~0x{:x}, allocated laddr: {}, insert position: {}, "
+	 "done with {} attempts",
+	 c.trans, hint, length, last_end, iter,
+	 stats.num_alloc_extents_iter_nexts - lookup_attempts);
+  co_return insert_position_t(last_end, std::move(iter));
 }
 
 BtreeLBAManager::alloc_mappings_ret
@@ -876,34 +844,21 @@ BtreeLBAManager::scan_mappings(
   Transaction &t,
   laddr_t begin,
   laddr_t end,
-  scan_mappings_func_t &&f)
+  scan_mappings_func_t f)
 {
   LOG_PREFIX(BtreeLBAManager::scan_mappings);
   DEBUGT("begin: {}, end: {}", t, begin, end);
 
   auto c = get_context(t);
-  return with_btree<LBABtree>(
-    cache,
-    c,
-    [c, f=std::move(f), begin, end](auto &btree) mutable {
-      return LBABtree::iterate_repeat(
-	c,
-	btree.upper_bound_right(c, begin),
-	[f=std::move(f), begin, end](auto &pos) {
-	  if (pos.is_end() || pos.get_key() >= end) {
-	    return typename LBABtree::iterate_repeat_ret_inner(
-	      interruptible::ready_future_marker{},
-	      seastar::stop_iteration::yes);
-	  }
-	  ceph_assert((pos.get_key() + pos.get_val().len) > begin);
-	  if (pos.get_val().pladdr.is_paddr()) {
-	    f(pos.get_key(), pos.get_val().pladdr.get_paddr(), pos.get_val().len);
-	  }
-	  return LBABtree::iterate_repeat_ret_inner(
-	    interruptible::ready_future_marker{},
-	    seastar::stop_iteration::no);
-	});
-    });
+  auto btree = co_await get_btree(t);
+  auto pos = co_await btree.upper_bound_right(c, begin);
+  while (!pos.is_end() && pos.get_key() < end) {
+    ceph_assert((pos.get_key() + pos.get_val().len) > begin);
+    if (pos.get_val().pladdr.is_paddr()) {
+      f(pos.get_key(), pos.get_val().pladdr.get_paddr(), pos.get_val().len);
+    }
+    pos = co_await pos.next(c);
+  }
 }
 
 BtreeLBAManager::rewrite_extent_ret
