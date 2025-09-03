@@ -101,14 +101,14 @@ using LBAInternalNodeRef = LBAInternalNode::Ref;
  *   checksum   : ceph_le32[1]                4B
  *   size       : ceph_le32[1]                4B
  *   meta       : lba_node_meta_le_t[1]       36B
- *   keys       : laddr_le_t[CAPACITY]        (106*16)B
- *   values     : lba_map_val_le_t[CAPACITY]  (106*21)B
- *                                            = 4077B
+ *   keys       : laddr_le_t[CAPACITY]        (88*16)B
+ *   values     : lba_map_val_le_t[CAPACITY]  (88*30)B
+ *                                            = 4092B
  *
  * TODO: update FixedKVNodeLayout to handle the above calculation
  * TODO: the above alignment probably isn't portable without further work
  */
-constexpr size_t LEAF_NODE_CAPACITY = 106;
+constexpr size_t LEAF_NODE_CAPACITY = 88;
 
 struct LBALeafNode
   : FixedKVLeafNode<
@@ -478,10 +478,20 @@ struct LBACursor : BtreeCursor<laddr_t, lba::lba_map_val_t, LBALeafNode> {
   }
 
   extent_types_t get_extent_type() const {
+    assert(iter.get_val().type != extent_types_t::NONE);
     assert(is_viewable());
     assert(!is_end());
     assert(iter.get_val().type != extent_types_t::NONE);
     return iter.get_val().type;
+  }
+
+  bool has_shadow_paddr() const {
+    return iter.get_val().shadow_paddr != P_ADDR_NULL;
+  }
+
+  paddr_t get_shadow_paddr() const {
+    assert(has_shadow_paddr());
+    return iter.get_val().shadow_paddr;
   }
 
   base_iertr::future<> refresh();

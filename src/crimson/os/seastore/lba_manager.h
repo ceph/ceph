@@ -253,7 +253,7 @@ public:
   using scan_mappings_iertr = base_iertr;
   using scan_mappings_ret = scan_mappings_iertr::future<>;
   using scan_mappings_func_t = std::function<
-    void(laddr_t, paddr_t, extent_len_t)>;
+    void(laddr_t, paddr_t, paddr_t, extent_len_t)>;
   virtual scan_mappings_ret scan_mappings(
     Transaction &t,
     laddr_t begin,

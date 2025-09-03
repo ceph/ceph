@@ -229,12 +229,33 @@ TransactionManager::ref_ret TransactionManager::remove(
   extent_ref_count_t refcount = cursor->get_refcount();
   auto laddr = cursor->get_laddr();
   auto length = cursor->get_length();
+  paddr_t shadow_addr = P_ADDR_NULL;
+  if (cursor->has_shadow_paddr()) {
+    shadow_addr = cursor->get_shadow_paddr();
+  }
   assert(refcount > 0);
   --refcount;
   co_await lba_manager->update_mapping_refcount(
     t, std::move(cursor), -1);
   if (refcount == 0) {
     cache->retire_extent(t, ref);
+    if (shadow_addr != P_ADDR_NULL) {
+      if (auto shadow = ref->get_shadow(); shadow) {
+        cache->retire_extent(t, shadow);
+      } else {
+        auto laddr = ref->get_laddr();
+        cache->retire_absent_extent_addr_by_type(
+          t, laddr, shadow_addr, length, ref->get_type(),
+          [laddr](auto &extent) {
+            auto lextent = extent.template cast<LogicalChildNode>();
+            assert(extent.is_logical());
+            assert(!lextent->has_laddr());
+            assert(!extent.has_been_invalidated());
+            lextent->set_laddr(laddr);
+            extent.set_shadow_extent(true);
+          });
+      }
+    }
   }
   DEBUGT("removed {}~0x{:x} refcount={} -- {}",
 	 t, laddr, length,
@@ -316,6 +337,12 @@ TransactionManager::_remove(
           lextent->set_laddr(laddr);
         }
       );
+    }
+    if (mapping.has_shadow_val()) {
+      cache->retire_absent_extent_addr(
+        t, mapping.get_intermediate_base(),
+        mapping.get_shadow_val(),
+        mapping.get_intermediate_length());
     }
   }
 
