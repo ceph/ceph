@@ -114,6 +114,10 @@ public:
     Transaction &t,
     LBAMapping mapping);
 
+  base_iertr::future<LogicalChildNodeRef> relocate_shadow_extent(
+    Transaction &t,
+    LBAMapping mapping);
+
   /**
    * get_pin
    *
