@@ -615,7 +615,7 @@ public:
     auto exts = cache->alloc_new_data_extents<T>(
       t, len,
       {
-        placement_hint, INIT_GENERATION, false,
+        placement_hint, INIT_GENERATION, false, P_ADDR_NULL,
         epm->get_write_policy(T::TYPE, len)
       });
     // user must initialize the logical extent themselves
@@ -951,6 +951,13 @@ public:
   rewrite_extent_ret rewrite_extent(
     Transaction &t,
     CachedExtentRef extent,
+    rewrite_gen_t target_generation,
+    sea_time_point modify_time) final;
+
+  using ExtentCallbackInterface::rewrite_extents_ret;
+  rewrite_extents_ret rewrite_extents(
+    Transaction &t,
+    std::vector<CachedExtentRef> &extents,
     rewrite_gen_t target_generation,
     sea_time_point modify_time) final;
 
@@ -1709,9 +1716,11 @@ private:
     Transaction &t,
     LBAMapping mapping);
 
-  rewrite_extent_ret rewrite_logical_extent(
+  rewrite_extent_iertr::future<std::vector<CachedExtentRef>>
+  rewrite_logical_extent(
     Transaction& t,
-    LogicalChildNodeRef extent);
+    LogicalChildNodeRef extent,
+    paddr_t hint);
 
   submit_transaction_direct_ret do_submit_transaction(
     Transaction &t,

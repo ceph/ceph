@@ -1388,15 +1388,11 @@ do_reclaim_space_ret do_reclaim_space(
 		    &reclaimed, &t, modify_time, target_generation] {
           DEBUGT("reclaim {} extents", t, extents.size());
           // rewrite live extents
-          return trans_intr::do_for_each(
-            extents,
-            [&extent_callback, modify_time, &t,
-	    &reclaimed, target_generation](auto ext)
-          {
-            reclaimed += ext->get_length();
-            return extent_callback.rewrite_extent(
-                t, ext, target_generation, modify_time);
-          });
+	  for (auto &ext : extents) {
+	    reclaimed += ext->get_length();
+	  }
+	  return extent_callback.rewrite_extents(
+	    t, extents, target_generation, modify_time);
         });
       }).si_then([&extent_callback, &t] {
         return extent_callback.submit_transaction_direct(t);

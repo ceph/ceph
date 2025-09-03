@@ -126,7 +126,9 @@ public:
 
   virtual paddr_t alloc_paddr(extent_len_t length) = 0;
 
-  virtual std::list<alloc_paddr_result> alloc_paddrs(extent_len_t length) = 0;
+  virtual std::list<alloc_paddr_result> alloc_paddrs(
+    extent_len_t length,
+    paddr_t hint) = 0;
 
   using alloc_write_ertr = base_ertr;
   using alloc_write_iertr = trans_iertr<alloc_write_ertr>;
@@ -189,7 +191,7 @@ public:
     return make_delayed_temp_paddr(0);
   }
 
-  std::list<alloc_paddr_result> alloc_paddrs(extent_len_t length) final {
+  std::list<alloc_paddr_result> alloc_paddrs(extent_len_t length, paddr_t) final {
     return {alloc_paddr_result{make_delayed_temp_paddr(0), length}};
   }
 
@@ -256,9 +258,10 @@ public:
     return rb_cleaner->alloc_paddr(length);
   }
 
-  std::list<alloc_paddr_result> alloc_paddrs(extent_len_t length) final {
+  std::list<alloc_paddr_result> alloc_paddrs(
+    extent_len_t length, paddr_t hint) final {
     assert(rb_cleaner);
-    return rb_cleaner->alloc_paddrs(length);
+    return rb_cleaner->alloc_paddrs(length, hint);
   }
 
   bool can_inplace_rewrite(Transaction& t,
@@ -450,6 +453,7 @@ public:
     placement_hint_t hint;
     rewrite_gen_t gen;
     bool is_tracked;
+    paddr_t paddr_hint = P_ADDR_NULL;
     write_policy_t write_policy = write_policy_t::WRITE_BACK;
 #ifdef UNIT_TESTS_BUILT
     std::optional<paddr_t> external_paddr = std::nullopt;
@@ -528,7 +532,8 @@ public:
 #endif
     {
       assert(category == data_category_t::DATA);
-      auto addrs = get_writer(opt.hint, category, opt.gen)->alloc_paddrs(length);
+      auto addrs = get_writer(opt.hint, category, opt.gen)->alloc_paddrs(
+        length, opt.paddr_hint);
       for (auto &ext : addrs) {
         auto left = ext.len;
         while (left > 0) {
