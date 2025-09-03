@@ -105,6 +105,11 @@ options:
   desc: CPU cores on which POSIX threads alienized to seastar will run in cpuset(7) format
   flags:
   - startup
+- name: crimson_test_workload
+  type: bool
+  level: dev
+  desc: enable test workload
+  default: false
 
 # Seastore options
 
@@ -302,3 +307,18 @@ options:
   level: dev
   desc: select write through policy when data length is greater than this value.
   default: 512_K
+- name: seastore_test_workload_write_through_probability
+  type: float
+  level: dev
+  desc: the probability of write the incoming data to slow devices
+  default: 0.5
+- name: seastore_test_workload_2Q_promote_probability
+  type: float
+  level: dev
+  desc: the probability of promote the extents to the faster devices
+  default: 0.5
+- name: seastore_test_workload_force_prcess_background_tasks_period
+  type: uint
+  level: dev
+  desc: the seconds of period for force process background tasks
+  default: 5

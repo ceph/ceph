@@ -376,6 +376,12 @@ public:
     Transaction &t,
     CachedExtentRef extent) = 0;
 
+#ifdef CRIMSON_TEST_WORKLOAD
+  virtual promote_extent_ret promote_extents_from_disk(
+    Transaction &t,
+    paddr_t paddr) = 0;
+#endif
+
   /**
    * demote_region
    *
@@ -655,7 +661,7 @@ public:
     reserved_usage -= usage;
   }
 
-  seastar::future<> trim();
+  seastar::future<> trim(bool force);
 
   static JournalTrimmerImplRef create(
       BackrefManager &backref_manager,

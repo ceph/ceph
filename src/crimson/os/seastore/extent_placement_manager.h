@@ -520,8 +520,16 @@ public:
   }
 
   write_policy_t get_write_policy(extent_types_t type, extent_len_t length) const {
-    if (has_cold_tier() && length >= write_through_size && is_data_type(type)) {
-      return write_policy_t::WRITE_THROUGH;
+    if (has_cold_tier() &&  is_data_type(type)) {
+      if (length >= write_through_size
+#ifdef CRIMSON_TEST_WORKLOAD
+          || (crimson::common::get_conf<bool>("crimson_test_workload")
+              && (double(std::rand() % 100) / 100.0) <= crimson::common::get_conf<double>(
+                "seastore_test_workload_write_through_probability"))
+#endif
+          ) {
+        return write_policy_t::WRITE_THROUGH;
+      }
     }
     return write_policy_t::WRITE_BACK;
   }
@@ -671,6 +679,12 @@ public:
   rewrite_gen_t get_max_hot_gen() const {
     return hot_tier_generations - 1;
   }
+
+#ifdef CRIMSON_TEST_WORKLOAD
+  device_id_t get_cold_device_id() const {
+    return background_process.get_cold_device_id();
+  }
+#endif
 
 private:
   rewrite_gen_t adjust_generation(
@@ -845,6 +859,17 @@ private:
           get_conf<Option::size_t>("seastore_logical_bucket_capacity"),
           get_conf<Option::size_t>("seastore_logical_bucket_proceed_size_per_cycle"));
       }
+#ifdef CRIMSON_TEST_WORKLOAD
+      LOG_PREFIX(BackgroundProcess::init);
+      test_workload = crimson::common::get_conf<bool>("crimson_test_workload");
+      force_process_half_life = crimson::common::get_conf<uint64_t>(
+        "seastore_test_workload_force_prcess_background_tasks_period");
+      force_background_timer.set_callback([this] { wake_half_life(); });
+      SUBINFO(seastore_epm, "crimson test workload supported, enabled: {}", test_workload);
+      if (test_workload) {
+        set_next_arm_timepoint();
+      }
+#endif
     }
 
     LogicalBucket *get_logical_bucket() {
@@ -966,6 +991,14 @@ private:
         return gen;
       }
     }
+
+
+#ifdef CRIMSON_TEST_WORKLOAD
+    device_id_t get_cold_device_id() const {
+      assert(has_cold_tier());
+      return *cold_cleaner->get_device_ids().begin();
+    }
+#endif
 
     seastar::future<> reserve_projected_usage(io_usage_t usage);
 
@@ -1256,6 +1289,39 @@ private:
     state_t state = state_t::STOP;
     eviction_state_t eviction_state;
 
+#ifdef CRIMSON_TEST_WORKLOAD
+    enum class ForceProcessState {
+      STOP,
+      TRIM,
+      CLEAN,
+    };
+    bool test_workload = false;
+    ForceProcessState force_process_state = ForceProcessState::STOP;
+    ForceProcessState last_process_state = ForceProcessState::STOP;
+    seastar::timer<seastar::steady_clock_type> force_background_timer;
+    int force_process_half_life;
+
+    void set_next_arm_timepoint() {
+      assert(test_workload);
+      force_background_timer.arm(std::chrono::seconds(force_process_half_life));
+    }
+
+    void wake_half_life() {
+      assert(test_workload);
+      if (last_process_state == ForceProcessState::TRIM) {
+        force_process_state = ForceProcessState::CLEAN;
+      } else {
+        force_process_state = ForceProcessState::TRIM;
+      }
+
+      do_wake_background();
+    }
+
+    bool force_run_background() const {
+      return test_workload && force_process_state != ForceProcessState::STOP;
+      return false;
+    }
+#endif
     friend class ::transaction_manager_test_t;
   };
 

@@ -854,7 +854,13 @@ public:
   using ExtentCallbackInterface::promote_extent_ret;
   promote_extent_ret promote_extent(
     Transaction &t,
-    CachedExtentRef extent);
+    CachedExtentRef extent) final;
+
+#ifdef CRIMSON_TEST_WORKLOAD
+  promote_extent_ret promote_extents_from_disk(
+    Transaction &t,
+    paddr_t paddr) final;
+#endif
 
   using ExtentCallbackInterface::demote_region_res_t;
   using ExtentCallbackInterface::demote_region_ret;

@@ -301,7 +301,13 @@ public:
   }
 
   bool should_run_promote() const {
-    return enabled() && current_contents >= promotion_size;
+    return enabled() &&
+	(current_contents >= promotion_size
+#ifdef CRIMSON_TEST_WORKLOAD
+	 || (crimson::common::get_conf<bool>("crimson_test_workload")
+	     && current_contents != 0)
+#endif
+	 );
   }
 
   std::size_t get_promoted_size() const {
@@ -362,6 +368,19 @@ public:
       co_await trans_intr::make_interruptible(extent->wait_io());
       co_await ecb->promote_extent(t, extent);
     }
+#ifdef CRIMSON_TEST_WORKLOAD
+    if (promoted_size < promotion_size
+	&& crimson::common::get_conf<bool>("crimson_test_workload")) {
+      auto id = epm.get_cold_device_id();
+      paddr_t start = P_ADDR_NULL;
+      if (device_id_to_paddr_type(id) == paddr_types_t::SEGMENT) {
+	start = paddr_t::make_seg_paddr(id, 0, 0);
+      } else {
+	start = paddr_t::make_blk_paddr(id, 0);
+      }
+      co_await ecb->promote_extents_from_disk(t, start);
+    }
+#endif
     // existing extents in lru will be retired after transaction submitted
     co_await ecb->submit_transaction_direct(t);
     promoted_count += extents.size();
@@ -867,6 +886,15 @@ private:
         // to the warm out queue.
         continue;
       }
+#ifdef CRIMSON_TEST_WORKLOAD
+      if (promoter.should_promote_extent(*extent)
+	  && crimson::common::get_conf<bool>("crimson_test_workload")
+	  && (double(std::rand() % 100) / 100.0) <= crimson::common::get_conf<double>(
+	    "seastore_test_workload_2Q_promote_probability")) {
+	promoter.add_extent(*extent);
+	continue;
+      }
+#endif
       auto lext = extent->cast<LogicalCachedExtent>();
       auto laddr = lext->get_laddr();
       auto end = extent->get_last_touch_end();

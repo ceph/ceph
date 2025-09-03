@@ -899,7 +899,7 @@ struct transaction_manager_test_t :
       if (run_clean) {
         return epm->run_background_work_until_halt();
       } else {
-        return epm->background_process.trimmer->trim();
+        return epm->background_process.trimmer->trim(false);
       }
     }).handle_error(
       crimson::ct_error::assert_all{

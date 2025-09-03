@@ -92,6 +92,7 @@
 %endif
 %endif
 %bcond_with crimson
+%bcond_with crimson_test_workload
 %if 0%{?suse_version} || 0%{?openEuler}
 %bcond_with jaeger
 %else
@@ -1550,6 +1551,9 @@ cmake .. \
 %if 0%{with crimson}
     -DWITH_CRIMSON:BOOL=ON \
     -DWITH_JAEGER:BOOL=OFF \
+%endif
+%if 0%{with crimson_test_workload}
+    -DENABLE_CRIMSON_TEST_WORKLOAD:BOOL=ON \
 %endif
     -DWITH_GRAFANA:BOOL=ON \
 %if %{with sccache}

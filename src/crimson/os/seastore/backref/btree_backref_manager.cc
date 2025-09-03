@@ -1,6 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include "crimson/common/coroutine.h"
 #include "crimson/os/seastore/backref/btree_backref_manager.h"
 
 SET_SUBSYS(seastore_backref);
@@ -454,6 +455,34 @@ BtreeBackrefManager::scan_mapped_space(
     });
   });
 }
+
+#ifdef CRIMSON_TEST_WORKLOAD
+BtreeBackrefManager::scan_device_ret
+BtreeBackrefManager::scan_device(
+  Transaction &t,
+  paddr_t paddr,
+  scan_device_func_t &f)
+{
+  auto c = get_context(t);
+  auto croot = co_await cache.get_root(t);
+  auto btree = BackrefBtree(croot);
+  auto iter = co_await btree.lower_bound(c, paddr);
+  while (true) {
+    auto key = iter.get_key();
+    if (key.get_device_id() == paddr.get_device_id()) {
+      auto val = iter.get_val();
+      auto ret = co_await f(key, val.len, val.type, val.laddr);
+      if (ret == seastar::stop_iteration::yes) {
+	break;
+      }
+    } else if (key.get_device_id() > paddr.get_device_id()) {
+      break;
+    }
+    iter = co_await iter.next(c);
+  }
+  co_return;
+}
+#endif
 
 base_iertr::future<> _init_cached_extent(
   op_context_t c,
