@@ -477,6 +477,11 @@ public:
   void set_container(seastar::sharded<ShardServices>& ss) { s_container = &ss; }
 
   seastar::future<> get_remote_store() {
+    if(!crimson::common::get_conf<bool>("seastore_enable_shard_change")) {
+      ceph_assert(store_shard_nums == seastar::smp::count);
+      ceph_assert(local_state.stores.size() == 1);
+      return seastar::now();
+    }
     if (local_state.stores.empty()) {
       return s_container->invoke_on(
         seastar::this_shard_id() % store_shard_nums,
