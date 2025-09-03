@@ -125,6 +125,15 @@ uint64_t bluestore::Blob::get_sbid() const {
 #undef dout_context
 #define dout_context onode->c->store->cct
 
+void bluestore::Blob::put() {
+  if (--nref == 0) {
+    std::destroy_at(this);
+    if (onode) {
+      onode->LocalBlobAllocator.deallocate(this, 1);
+    }
+  }
+}
+
 bluestore::Blob::~Blob()
 {
  again:
@@ -876,7 +885,9 @@ void bluestore::Blob::decode(
 #define dout_prefix *_dout << "bluestore.onode(" << this << ")." << __func__ << " "
 
 BlueStore::BlobRef bluestore::Onode::new_blob() {
-  BlueStore::BlobRef b = new Blob(this);
+  bluestore::Blob* raw = LocalBlobAllocator.allocate(1);
+  std::construct_at(raw, this);
+  BlueStore::BlobRef b(raw);
   if (c){
     b->get_cache()->add_blob();
   }
@@ -893,7 +904,9 @@ bluestore::Onode::Onode(BlueStore::Collection *c, const ghobject_t& o,
 	  extent_map(this,
       c->store->cct->_conf->
       bluestore_extent_map_inline_shard_prealloc_size),
-    bc(*this) {
+    bc(*this),
+    mem_resource(blob_pool, blob_pool_size),
+    LocalBlobAllocator(&mem_resource) {
 }
 bluestore::Onode::Onode(CephContext* cct)
   : c(nullptr),
@@ -902,7 +915,9 @@ bluestore::Onode::Onode(CephContext* cct)
     extent_map(this,
       cct->_conf->
       bluestore_extent_map_inline_shard_prealloc_size),
-    bc(*this) {
+    bc(*this),
+    mem_resource(blob_pool, blob_pool_size),
+    LocalBlobAllocator(&mem_resource) {
 }
 
 bluestore::Onode::~Onode() {

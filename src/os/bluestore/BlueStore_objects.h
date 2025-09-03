@@ -239,10 +239,7 @@ namespace bluestore {
     void get() {
       ++nref;
     }
-    void put() {
-      if (--nref == 0)
-	delete this;
-    }
+    void put();
     bool is_shared_loaded() const;
     BlueStore::BufferCacheShard* get_cache();
     uint64_t get_sbid() const;
