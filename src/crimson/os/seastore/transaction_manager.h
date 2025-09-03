@@ -181,6 +181,12 @@ public:
     });
   }
 
+  base_iertr::future<LBAMapping> lower_bound_pin(
+    Transaction &t,
+    laddr_t laddr) {
+    return lba_manager->lower_bound(t, laddr);
+  }
+
   /**
    * maybe_indirect_extent_t
    *
