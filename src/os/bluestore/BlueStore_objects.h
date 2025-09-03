@@ -38,6 +38,8 @@
 #include <boost/circular_buffer.hpp>
 #include <boost/optional.hpp>
 #include <utility>
+#include <memory_resource>
+#include <new>
 
 #include "include/cpp-btree/btree_set.h"
 
@@ -64,6 +66,60 @@
 #ifdef WITH_BLKIN
 #include "common/zipkin_trace.h"
 #endif
+
+class FixedPoolMemoryResource : public std::pmr::memory_resource {
+  void* arena_start;
+  size_t arena_size;
+  size_t arena_offset;
+
+  struct FreeBlock {
+    FreeBlock* next;
+  };
+  FreeBlock* freelist = nullptr;
+  std::mutex mtx;
+
+public:
+  FixedPoolMemoryResource(void* start, size_t size)
+    : arena_start(start), arena_size(size), arena_offset(0) {}
+
+protected:
+  void* do_allocate(size_t bytes, size_t alignment) override {
+    std::lock_guard<std::mutex> lock(mtx);
+
+    if (freelist) {
+      void* p = freelist;
+      freelist = freelist->next;
+      return p;
+    }
+
+    size_t aligned_offset = (arena_offset + alignment - 1) & ~(alignment - 1);
+    if (aligned_offset + bytes > arena_size) {
+      throw std::bad_alloc();
+    }
+
+    void* result = static_cast<char*>(arena_start) + aligned_offset;
+    arena_offset = aligned_offset + bytes;
+    return result;
+  }
+
+  void do_deallocate(void* p, size_t, size_t) override {
+    std::lock_guard<std::mutex> lock(mtx);
+
+    auto* block = static_cast<FreeBlock*>(p);
+    block->next = freelist;
+    freelist = block;
+  }
+
+  bool do_is_equal(const std::pmr::memory_resource& other) const noexcept override {
+    return this == &other;
+  }
+
+  void reset() {
+    std::lock_guard<std::mutex> lock(mtx);
+    arena_offset = 0;
+    freelist = nullptr;
+  }
+};
 
 namespace bluestore {
 
@@ -258,6 +314,11 @@ namespace bluestore {
     ceph::mutex flush_lock = ceph::make_mutex("BlueStore::Onode::flush_lock");
     ceph::condition_variable flush_cond;   ///< wait here for uncommitted txns
     std::shared_ptr<int64_t> cache_age_bin;  ///< cache age bin
+
+    static constexpr size_t blob_pool_size = sizeof(Blob) * 1024;
+    alignas(Blob) std::byte blob_pool[blob_pool_size];
+    FixedPoolMemoryResource mem_resource;
+    std::pmr::polymorphic_allocator<Blob> LocalBlobAllocator;
 
     Onode(BlueStore::Collection *c, const ghobject_t& o,
 	  const mempool::bluestore_cache_meta::string& k);
