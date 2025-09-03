@@ -75,12 +75,24 @@ struct Page {
   // copy disabled
   Page(const Page&) = delete;
   const Page& operator=(const Page&) = delete;
+  Page(Page&&) = delete;
+  Page& operator=(Page&&) = delete;
 
  private: // private constructor, use create() instead
   Page(char *data, uint64_t offset) : data(data), offset(offset), nrefs(1) {}
 
-  static void operator delete(void *p) {
-    delete[] reinterpret_cast<Page*>(p)->data;
+  // Custom delete operator that uses std::destroying_delete_t to ensure proper cleanup
+  // of the buffer-Page layout. Since Page is placed at the end of a larger allocated buffer
+  // containing both the data array and the Page object itself, we need to:
+  // 1. Store the buffer pointer before destroying the Page object
+  // 2. Call the Page destructor explicitly to destroy the object in-place
+  // 3. Delete the entire buffer containing both data and Page
+  // Without std::destroying_delete_t, the compiler would call the destructor
+  // before our delete operator, leading to unitialized memory access.
+  static void operator delete(Page *p, std::destroying_delete_t) {
+    auto* buffer = p->data;
+    p->~Page();
+    delete[] buffer;
   }
 };
 
