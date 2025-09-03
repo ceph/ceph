@@ -142,7 +142,31 @@ public:
       mlayout.ss_size = 0;
     });
   }
-
+  boost::intrusive_ptr<Onode> offload_data_and_md(Transaction& t) final {
+    auto ret = new TestOnode();
+    {
+      auto data = layout.object_data.get();
+      ret->update_object_data(t, data);
+      auto root = layout.omap_root.get(LADDR_HINT_NULL);
+      ret->update_omap_root(t, root);
+      root = layout.xattr_root.get(LADDR_HINT_NULL);
+      ret->update_xattr_root(t, root);
+      root = layout.log_root.get(LADDR_HINT_NULL);
+      ret->update_log_root(t, root);
+    }
+    {
+      auto data = object_data_t{L_ADDR_NULL, 0};
+      update_object_data(t, data);
+      auto root = omap_root_t{};
+      root.type = omap_type_t::OMAP;
+      update_omap_root(t, root);
+      root.type = omap_type_t::XATTR;
+      update_xattr_root(t, root);
+      root.type = omap_type_t::LOG;
+      update_log_root(t, root);
+    }
+    return ret;
+  }
 };
 
 struct object_data_handler_test_t:
