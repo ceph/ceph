@@ -258,3 +258,8 @@ options:
         internal checksum feature without using sever CPU then enable if available,
         set to true to disable unconditionally.
   default: true
+- name: seastore_require_partition_count_match_reactor_count
+  type: bool
+  level: advanced
+  desc: enable osd shards changes upon restart.
+  default: true
