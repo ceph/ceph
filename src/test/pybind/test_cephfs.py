@@ -266,6 +266,46 @@ def test_create_and_rm_2000_subdir_levels_close_v3(testdir):
         dirpath = stack[-1]
         _rm_or_enstack_dir(dirpath, stack)
 
+def test_create_and_rm_2000_subdir_levels_close_v4(testdir):
+    '''
+    instead of passing long path to rmdir(), in v4, we chdir() to dir we are
+    reading and pass relative paths instead of absolute paths to rmdir()..
+    '''
+    def _rm_or_enstack_dir(dirpath, stack):
+        dir_is_empty = True
+        dh = cephfs.opendir(b'.')
+
+        de = cephfs.readdir(dh)
+        while de:
+            if de.d_name not in (b'.', b'..'):
+                dir_is_empty = False
+                break
+            de = cephfs.readdir(dh)
+
+        if dir_is_empty:
+            cephfs.chdir(b'..')
+            cephfs.rmdir(dirpath)
+            assert stack.pop() == dirpath
+        else:
+            if not de:
+                raise RuntimeError('unexpectedly "de" is None')
+            cephfs.chdir(de.d_name)
+            stack.append(de.d_name)
+
+    LEVELS = 2000
+
+    for i in range(1, LEVELS + 1):
+        dirname = f'dir{i}'
+        cephfs.mkdir(dirname, 0o755)
+        cephfs.chdir(dirname)
+    cephfs.chdir('/')
+
+    stack = collections.deque([b'dir1/',])
+    cephfs.chdir(b'dir1/')
+    while stack:
+        dirpath = stack[-1]
+        _rm_or_enstack_dir(dirpath, stack)
+
 def test_ceph_mirror_xattr(testdir):
     def gen_mirror_xattr():
         cluster_id = str(uuid.uuid4())
