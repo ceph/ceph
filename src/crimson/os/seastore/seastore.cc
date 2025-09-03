@@ -438,9 +438,10 @@ Device::access_ertr::future<> SeaStore::_mkfs(uuid_d new_osd_fsid)
   // todo: read_meta to return errorator
   auto [done, value] = co_await read_meta("mkfs_done");
   if (done == 0) {
-    ERROR("failed");
+    DEBUG("mkfs_done exists, Skipping mkfs");
     co_return;
   }
+  DEBUG("mkfs_done does not exist, starting mkfs");
   secondary_device_set_t sds;
   if (!root.empty()) {
     seastar::file rdir = co_await seastar::open_directory(root);
@@ -2323,7 +2324,7 @@ SeaStore::read_meta(const std::string& key)
       DEBUG("key={}, value={}", key, *v);
       return std::make_tuple(0, std::move(*v));
     } else {
-      ERROR("key={} failed", key);
+      DEBUG("key={} coudln't find key:", key);
       return std::make_tuple(-1, std::string(""));
     }
   }).handle_error(
