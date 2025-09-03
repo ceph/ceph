@@ -1,6 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
+#include <algorithm>
 #include <errno.h>
 #include <optional>
 #include <stdlib.h>
@@ -63,6 +64,7 @@
 #include "rgw_sal_rados.h"
 #include "rgw_torrent.h"
 #include "rgw_usage_perf.h"
+#include "rgw_user.h"
 #include "rgw_cksum_pipe.h"
 #include "rgw_lua_data_filter.h"
 #include "rgw_lua.h"
@@ -2251,41 +2253,40 @@ void RGWOp::update_usage_stats_if_needed() {
   if (!usage_counters) {
     return;
   }
-  
+
   // Only update for successful operations
   if (op_ret != 0) {
     return;
   }
-  
+
   // Check if this is an operation that changes usage
   bool is_put_op = (dynamic_cast<RGWPutObj*>(this) != nullptr) ||
                    (dynamic_cast<RGWPostObj*>(this) != nullptr) ||
                    (dynamic_cast<RGWCopyObj*>(this) != nullptr) ||
                    (dynamic_cast<RGWCompleteMultipart*>(this) != nullptr);
-  
+
   bool is_delete_op = (dynamic_cast<RGWDeleteObj*>(this) != nullptr) ||
                       (dynamic_cast<RGWDeleteMultiObj*>(this) != nullptr);
-  
+
   if (!is_put_op && !is_delete_op) {
-    return;  // Not an operation that changes usage
+    return;
   }
-  
+
   // Update bucket statistics if we have bucket info
   if (s->bucket && usage_counters) {
     try {
-      // Use the bucket's sync_owner_stats to get current stats
-      // This updates the bucket's internal stats
+      // Use sync_owner_stats to get current bucket stats
       RGWBucketEnt ent;
       int ret = s->bucket->sync_owner_stats(this, null_yield, &ent);
-      
+
       if (ret >= 0) {
-        // Update bucket usage statistics using the entry data
+        // Update bucket stats with accurate counts
         usage_counters->update_bucket_stats(
           s->bucket->get_name(),
           ent.size,          // Total bytes used
           ent.count          // Total number of objects
         );
-        
+  
         ldout(s->cct, 20) << "Updated bucket stats for " << s->bucket->get_name()
                          << ": bytes=" << ent.size
                          << ", objects=" << ent.count << dendl;
@@ -2298,29 +2299,72 @@ void RGWOp::update_usage_stats_if_needed() {
       ldout(s->cct, 5) << "Exception updating bucket stats: " << e.what() << dendl;
     }
   }
-  
-  // Update user statistics if we have user info
+
+  // Update user statistics
   if (s->user && usage_counters) {
     try {
-      // For user stats, we'll use the bucket owner stats as a proxy
-      // since there's no direct get_user_stats method
-      if (s->bucket) {
-        RGWBucketEnt ent;
-        int ret = s->bucket->sync_owner_stats(this, null_yield, &ent);
-        
-        if (ret >= 0) {
-          // This gives us at least partial user stats
-          // In production, you might want to aggregate across all user's buckets
-          usage_counters->update_user_stats(
-            s->user->get_id().id,
-            ent.size,          // Using bucket size as proxy
-            ent.count          // Using bucket object count as proxy
-          );
-          
-          ldout(s->cct, 20) << "Updated user stats for " << s->user->get_id().id
-                           << " (based on bucket " << s->bucket->get_name() << ")"
-                           << ": bytes=" << ent.size
-                           << ", objects=" << ent.count << dendl;
+      // Initialize user stats
+      RGWStorageStats user_stats;
+      user_stats.size_utilized = 0;
+      user_stats.num_objects = 0;
+
+      // Try to list buckets and sum up stats
+      rgw::sal::BucketList buckets;
+      rgw_owner owner(s->user->get_id());
+
+      // list_buckets signature: (dpp, owner, marker, end_marker, max, need_stats, buckets, y)
+      int ret = driver->list_buckets(this, owner, "", "", "", 1000, true, buckets, null_yield);
+
+      if (ret >= 0) {
+        // Sum up stats from all buckets
+        // The buckets.buckets container holds RGWBucketEnt objects directly
+        for (const auto& bucket_ent : buckets.buckets) {
+          user_stats.size_utilized += bucket_ent.size;
+          user_stats.num_objects += bucket_ent.count;
+        }
+
+        // Update user stats with the total
+        usage_counters->update_user_stats(
+          s->user->get_id().id,
+          user_stats.size_utilized,
+          user_stats.num_objects
+        );
+
+        ldout(s->cct, 20) << "Updated user stats for " << s->user->get_id().id
+                         << " (from " << buckets.buckets.size() << " buckets)"
+                         << ": bytes=" << user_stats.size_utilized
+                         << ", objects=" << user_stats.num_objects << dendl;
+      } else {
+        // Fallback: Use current bucket stats as approximation
+        if (s->bucket) {
+          RGWBucketEnt ent;
+          ret = s->bucket->sync_owner_stats(this, null_yield, &ent);
+
+          if (ret >= 0) {
+            // Get existing cached user stats
+            auto cached_stats = usage_counters->get_user_stats(s->user->get_id().id);
+
+            uint64_t total_bytes = ent.size;
+            uint64_t total_objects = ent.count;
+
+            // If we have cached stats and this is a different bucket, try to accumulate
+            if (cached_stats.has_value()) {
+              // Use the maximum of cached and current values
+              // This prevents losing data when we can't list all buckets
+              total_bytes = std::max(cached_stats->bytes_used, ent.size);
+              total_objects = std::max(cached_stats->num_objects, ent.count);
+            }
+
+            usage_counters->update_user_stats(
+              s->user->get_id().id,
+              total_bytes,
+              total_objects
+            );
+
+            ldout(s->cct, 20) << "Updated user stats (partial) for " << s->user->get_id().id
+                             << ": bytes=" << total_bytes
+                             << ", objects=" << total_objects << dendl;
+          }
         }
       }
     } catch (const std::exception& e) {
@@ -2328,7 +2372,6 @@ void RGWOp::update_usage_stats_if_needed() {
     }
   }
 }
-
 
 int RGWGetObj::handle_slo_manifest(bufferlist& bl, optional_yield y)
 {
