@@ -415,8 +415,12 @@ void ExtentCommitter::commit_state() {
   prior.last_committed_crc = extent.last_committed_crc;
   prior.dirty_from = extent.dirty_from;
   prior.length = extent.length;
-  prior.loaded_length = extent.loaded_length;
-  prior.buffer_space = std::move(extent.buffer_space);
+  // XXX: at present, zero loaded_length extents here
+  // must have been created by promoting/demoting them.
+  if (likely(extent.loaded_length != 0)) {
+    assert(prior.loaded_length == extent.loaded_length);
+    prior.buffer_space = std::move(extent.buffer_space);
+  }
   // XXX: We can go ahead and change the prior's version because
   // transactions don't hold a local view of the version field,
   // unlike FixedKVLeafNode::modifications

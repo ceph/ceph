@@ -964,7 +964,11 @@ public:
   using ExtentCallbackInterface::promote_extent_ret;
   promote_extent_ret promote_extent(
     Transaction &t,
-    CachedExtentRef extent);
+    CachedExtentRef extent) final;
+
+  promote_extent_ret promote_extents_from_disk(
+    Transaction &t,
+    paddr_t paddr) final;
 
   using ExtentCallbackInterface::demote_region_res_t;
   using ExtentCallbackInterface::demote_region_ret;

@@ -758,7 +758,7 @@ public:
   }
 
   bool can_drop_backref() const {
-    return epm.is_pure_rbm();
+    return epm.is_pure_rbm() && !force_backref;
   }
 
   void update_read_ratio(Transaction &t) {
@@ -1074,6 +1074,24 @@ private:
       res.emplace(it->paddr, it->laddr, it->len, it->type);
     }
     return res;
+  }
+
+  std::optional<backref_entry_t> get_cached_backref_entry(paddr_t addr) {
+    auto it = backref_entry_mset.lower_bound(
+      addr,
+      backref_entry_t::cmp_t());
+    if (it == backref_entry_mset.end()) {
+      return std::nullopt;
+    }
+    while (it->paddr == addr) {
+      auto &backref_entry = *it;
+      ++it;
+      if (it == backref_entry_mset.end() ||
+          it->paddr != addr) {
+        return backref_entry;
+      }
+    }
+    return std::nullopt;
   }
 
   const backref_entry_mset_t& get_backref_entry_mset() {
@@ -1740,6 +1758,8 @@ private:
   std::vector<SegmentProvider*> segment_providers_by_device_id;
 
   transaction_id_t next_id = 0;
+
+  const bool force_backref = false;
 
   /**
    * dirty

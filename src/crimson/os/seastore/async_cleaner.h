@@ -375,6 +375,10 @@ public:
     Transaction &t,
     CachedExtentRef extent) = 0;
 
+  virtual promote_extent_ret promote_extents_from_disk(
+    Transaction &t,
+    paddr_t paddr) = 0;
+
   /**
    * demote_region
    *
@@ -666,7 +670,7 @@ public:
     reserved_usage -= usage;
   }
 
-  seastar::future<> trim();
+  seastar::future<> trim(bool force);
 
   static JournalTrimmerImplRef create(
       store_index_t store_index,
