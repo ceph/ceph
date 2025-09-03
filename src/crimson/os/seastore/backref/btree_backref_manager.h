@@ -55,6 +55,13 @@ public:
     Transaction &t,
     scan_mapped_space_func_t &&f) final;
 
+#ifdef CRIMSON_TEST_WORKLOAD
+  scan_device_ret scan_device(
+    Transaction &t,
+    paddr_t paddr,
+    scan_device_func_t &f) final;
+#endif
+
   init_cached_extent_ret init_cached_extent(
     Transaction &t,
     CachedExtentRef e) final;

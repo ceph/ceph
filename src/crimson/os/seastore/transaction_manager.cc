@@ -1119,6 +1119,50 @@ TransactionManager::promote_extent(
     t, mapping, std::move(promoted_extents));
 }
 
+#ifdef CRIMSON_TEST_WORKLOAD
+TransactionManager::promote_extent_ret
+TransactionManager::promote_extents_from_disk(
+  Transaction &t,
+  paddr_t paddr)
+{
+  using scan_device_func_t = BackrefManager::scan_device_func_t;
+  return seastar::do_with(std::size_t(0), [this, &t, paddr](std::size_t &size) {
+    scan_device_func_t func = [this, &t, &size](
+      paddr_t paddr, extent_len_t length, extent_types_t type, laddr_t laddr)
+	-> base_iertr::future<seastar::stop_iteration> {
+      if (type != extent_types_t::OBJECT_DATA_BLOCK) {
+	return base_iertr::make_ready_future<
+	  seastar::stop_iteration>(seastar::stop_iteration::no);
+      }
+      size += length;
+      return lba_manager->get_cursor(t, laddr
+      ).si_then([this, &t, type](LBACursorRef cursor) {
+        assert(cursor->is_direct());
+	return read_cursor_by_type(t, std::move(cursor), type);
+      }).si_then([this, &t](auto extent) {
+	return promote_extent(t, extent.get());
+      }).si_then([&size] {
+	if (size >= crimson::common::get_conf<
+	    Option::size_t>("seastore_cache_promotion_size")) {
+	  return base_iertr::make_ready_future<
+	    seastar::stop_iteration>(seastar::stop_iteration::yes);
+	} else {
+	  return base_iertr::make_ready_future<
+	    seastar::stop_iteration>(seastar::stop_iteration::no);
+	}
+      }).handle_error_interruptible(
+	crimson::ct_error::enoent::handle([] {
+	  return base_iertr::make_ready_future<
+	    seastar::stop_iteration>(seastar::stop_iteration::no);
+	}), crimson::ct_error::pass_further_all{});
+    };
+    return seastar::do_with(std::move(func), [this, &t, paddr](auto &func) {
+      return backref_manager->scan_device(t, paddr, func);
+    });
+  });
+}
+#endif
+
 TransactionManager::rewrite_extents_ret TransactionManager::rewrite_extents(
   Transaction &t,
   std::vector<CachedExtentRef> &extents,
