@@ -233,8 +233,10 @@ struct ECCrimsonOp : ECCommon::RMWPipeline::Op {
   }
 
   ECCrimsonOp(ceph::os::Transaction&& t,
-              crimson::osd::ObjectContextRef &&obc)
-    : t(transate_transaction(std::move(t), std::move(obc))) {
+              crimson::osd::ObjectContextRef &&obc,
+	      ECCommon::RMWPipeline& rmw_pipeline)
+    : Op(rmw_pipeline),
+      t(transate_transaction(std::move(t), std::move(obc))) {
   }
 
   void generate_transactions(
@@ -247,7 +249,6 @@ struct ECCrimsonOp : ECCommon::RMWPipeline::Op {
       const OSDMapRef &osdmap) final
   {
     assert(t);
-#if 1
     ECTransaction::generate_transactions(
       t.get(),
       plan,
@@ -262,7 +263,6 @@ struct ECCrimsonOp : ECCommon::RMWPipeline::Op {
       &temp_cleared,
       dpp,
       osdmap);
-#endif
   }
 
   bool skip_transaction(
@@ -302,8 +302,8 @@ ECBackend::submit_transaction(const std::set<pg_shard_t> &pg_shards,
 {
   const hobject_t& hoid = obc->obs.oi.soid;
   logger().debug("ECBackend::{} hoid={}", __func__, hoid);
-  logger().debug("ECBackend::{} LINE {}", "_submit_transaction", __LINE__);
-  auto op = std::make_unique<ECCrimsonOp>(std::move(txn), std::move(obc));
+  logger().warn("ECBackend::{} LINE {} obc->attr_cache {}", "_submit_transaction", __LINE__, obc->attr_cache);
+  auto op = std::make_unique<ECCrimsonOp>(std::move(txn), std::move(obc), rmw_pipeline);
   logger().debug("ECBackend::{} LINE {}", "_submit_transaction", __LINE__);
   op->hoid = hoid;
   //op->delta_stats = delta_stats;
