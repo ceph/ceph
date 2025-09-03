@@ -256,6 +256,9 @@ void BlueFS::_init_logger()
   b.add_u64(l_bluefs_slow_used_bytes, "slow_used_bytes",
 	    "Used bytes (slow device)",
 	    "slou", PerfCountersBuilder::PRIO_USEFUL, unit_t(UNIT_BYTES));
+  b.add_u64(l_bluefs_meta_ratio, "meta_ratio_micros",
+	    "Actual metadata/userdata ratio * 1e3",
+	    "mera", PerfCountersBuilder::PRIO_INTERESTING);
   b.add_u64(l_bluefs_num_files, "num_files", "File count",
 	    "f", PerfCountersBuilder::PRIO_USEFUL);
   b.add_u64(l_bluefs_log_bytes, "log_bytes", "Size of the metadata log",
@@ -483,6 +486,22 @@ void BlueFS::_update_logger_stats()
     logger->set(l_bluefs_slow_total_bytes, _get_block_device_size(BDEV_SLOW));
     logger->set(l_bluefs_slow_used_bytes, _get_used(BDEV_SLOW));
   }
+  double r = 0.0;
+  int64_t in_data = 0;
+  int64_t in_meta = 0;
+  in_data = get_used_non_bluefs();
+  in_meta = _get_used(BDEV_SLOW) + _get_used(BDEV_DB) + _get_used(BDEV_WAL);
+  if (in_data > 0) {
+    dout(10) << __func__ << " got meta ratio parameters, "
+            << "data: " << in_data << ", meta: " << in_meta
+            << dendl;
+    r = double(in_meta) / double(in_data);
+  } else {
+    dout(5) << __func__ << " got weird meta ratio parameters, "
+            << "data: " << in_data << ", meta: " << in_meta
+            << dendl;
+  }
+  logger->set(l_bluefs_meta_ratio, r * 1000);
 }
 
 int BlueFS::add_block_device(unsigned id, const string& path, bool trim,
@@ -570,6 +589,17 @@ uint64_t BlueFS::get_used()
     used += _get_used(id);
   }
   return used;
+}
+
+int64_t BlueFS::get_used_non_bluefs()
+{
+  uint64_t ret = 0;
+  if (shared_alloc_id > 0 && shared_alloc && shared_alloc->a) {
+    ret = (int64_t)_get_block_device_size(shared_alloc_id) -
+          shared_alloc->a->get_free() -
+          shared_alloc->bluefs_used;
+  }
+  return ret;
 }
 
 uint64_t BlueFS::_get_used(unsigned id) const
