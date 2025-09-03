@@ -64,7 +64,7 @@ uint64_t bluestore::Blob::get_sbid() const {
 #undef dout_prefix
 #define dout_prefix *_dout << "bluestore.blob(" << this << ") "
 #undef dout_context
-#define dout_context collection->store->cct
+#define dout_context onode->c->store->cct
 
 bluestore::Blob::~Blob()
 {
@@ -700,7 +700,7 @@ uint32_t bluestore::Blob::merge_blob(CephContext* cct, Blob* blob_to_dissolve)
 }
 
 #undef dout_context
-#define dout_context collection->store->cct
+#define dout_context onode->c->store->cct
 
 void bluestore::Blob::split(BlueStore::Collection *coll, uint32_t blob_offset, Blob *r)
 {
@@ -949,7 +949,7 @@ void bluestore::Onode::decode_raw(
   on->onode.decode(p, use_onode_segmentation ? 0 : bluestore_onode_t::FLAG_DEBUG_FORCE_V2);
 
   // initialize extent_map
-  edecoder.decode_spanning_blobs(p, on->c);
+  edecoder.decode_spanning_blobs(p, on);
   ceph_assert(on->prev_spanning_cnt == 0);
   if (on->c) {
     on->prev_spanning_cnt = on->extent_map.spanning_blob_map.size();
@@ -959,7 +959,7 @@ void bluestore::Onode::decode_raw(
   }
   if (on->onode.extent_map_shards.empty()) {
     denc(on->extent_map.inline_bl, p);
-    edecoder.decode_some(on->extent_map.inline_bl, on->c);
+    edecoder.decode_some(on->extent_map.inline_bl, on);
   }
 }
 
