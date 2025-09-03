@@ -2972,15 +2972,12 @@ class NonRecursiveRmtree:
                     raise OpCanceled('rmtree')
 
                 if de.is_dir():
-                    try:
-                        self.curr_dir.try_rmdir(de.d_name, self.suppress_errors)
-                    except ObjectNotEmpty:
-                        if self.add_dir_to_stack(de.d_name):
-                            # since adding new dir to stack was successful, stop
-                            # traversing the current dir and start traversing
-                            # the new dir that has been freshly added to the
-                            # stack.
-                            break
+                    if self.add_dir_to_stack(de.d_name):
+                        # since adding new dir to stack was successful, stop
+                        # traversing the current dir and start traversing
+                        # the new dir that has been freshly added to the
+                        # stack.
+                        break
                 else:
                     self.curr_dir.try_unlink(de.d_name, self.suppress_errors)
 
