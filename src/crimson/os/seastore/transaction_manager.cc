@@ -502,6 +502,57 @@ TransactionManager::relocate_logical_extent(
   }
 }
 
+base_iertr::future<LogicalChildNodeRef>
+TransactionManager::relocate_shadow_extent(
+  Transaction &t, LBAMapping mapping)
+{
+  LOG_PREFIX(TransactionManager::relocate_shadow_extent);
+  SUBDEBUGT(seastore_tm, "relocate {}", t, mapping);
+  assert(mapping.has_shadow_val());
+  assert(!mapping.is_zero_reserved());
+  assert(mapping.is_viewable());
+  assert(!mapping.is_indirect());
+  auto v = get_extent_if_linked(t, *mapping.direct_cursor);
+  CachedExtentRef extent;
+  auto laddr = mapping.get_intermediate_base();
+  if (!v.has_child()) {
+    auto &child_pos = v.get_child_pos();
+    extent = cache->retire_absent_extent_addr_by_type(
+      t,
+      laddr,
+      mapping.get_val(),
+      mapping.get_length(),
+      mapping.get_extent_type(),
+      [laddr, &child_pos](auto &extent) {
+        auto lextent = extent.template cast<LogicalChildNode>();
+        assert(extent.is_logical());
+        assert(!lextent->has_laddr());
+        assert(!extent.has_been_invalidated());
+        child_pos.link_child(lextent.get());
+        lextent->set_laddr(laddr);
+      }
+    );
+  } else {
+    auto extent = co_await std::move(v.get_child_fut());
+    cache->retire_extent(t, extent);
+  }
+  auto shadow_paddr = mapping.get_shadow_val();
+  std::ignore = cache->retire_absent_extent_addr_by_type(
+    t, laddr, shadow_paddr, mapping.get_length(), mapping.get_extent_type(),
+    [laddr](auto &ext) {
+      auto lextent = ext.template cast<LogicalChildNode>();
+      assert(ext.is_logical());
+      assert(!lextent->has_laddr());
+      assert(!ext.has_been_invalidated());
+      lextent->set_laddr(laddr);
+    }
+  );
+  co_return cache->alloc_remapped_extent_by_type(
+    t, mapping.get_extent_type(), laddr,
+    mapping.get_shadow_val(), 0, mapping.get_length(), std::nullopt
+  )->cast<LogicalChildNode>();
+}
+
 TransactionManager::submit_transaction_iertr::future<>
 TransactionManager::submit_transaction(
   Transaction &t)
@@ -1236,9 +1287,49 @@ TransactionManager::demote_region(
   laddr_t start,
   loffset_t max_proceed_size)
 {
-  // TODO
-  return demote_region_iertr::make_ready_future<demote_region_res_t>(
-    demote_region_res_t{0, false});
+  LOG_PREFIX(TransactionManager::demote_region);
+  auto prefix = start.get_object_prefix();
+  DEBUGT("start demote {}", t, prefix);
+  auto cursor = co_await lba_manager->upper_bound_right(
+    t, start
+  ).handle_error_interruptible(
+    demote_region_iertr::pass_further{},
+    crimson::ct_error::assert_all("unexpected enoent"));
+  auto it = co_await resolve_cursor_to_mapping(t, std::move(cursor));
+  demote_region_res_t ret{0, 0, false};
+  while ((ret.demoted_size + ret.evicted_size) < max_proceed_size) {
+    if (it.is_end() || it.get_key().get_object_prefix() != prefix) {
+      ret.complete = true;
+      break;
+    }
+    if (it.is_indirect()) {
+      it = co_await it.next();
+      continue;
+    }
+    if (it.has_shadow_val()) {
+      DEBUGT("demote shadow {}", t, it);
+      auto extent = co_await relocate_shadow_extent(t, it);
+      ret.demoted_size += extent->get_length();
+      auto cursor = co_await lba_manager->demote_extent(
+        t, *it.direct_cursor, *extent);
+      auto nit = co_await resolve_cursor_to_mapping(t, std::move(cursor));
+      it = co_await nit.next();
+    } else if (!it.is_indirect() && !it.is_zero_reserved() &&
+      !epm->is_cold_device(it.get_val().get_device_id())) {
+      DEBUGT("demote hot {}", t, it);
+      auto extent = co_await read_cursor_by_type(
+        t, it.direct_cursor, it.get_extent_type());
+      ret.evicted_size += extent->get_length();
+      extent->set_target_rewrite_generation(epm->get_max_hot_gen() + 1);
+      co_await rewrite_logical_extent(t, extent);
+      it = co_await it.next();
+    } else {
+      DEBUGT("skip {}", t, it);
+      it = co_await it.next();
+    }
+  }
+
+  co_return ret;
 }
 
 TransactionManager::get_extents_if_live_ret

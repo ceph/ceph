@@ -179,7 +179,9 @@ public:
     if (!extent->is_stable_dirty()) {
       return false;
     }
-    assert(t.get_src() == transaction_type_t::TRIM_DIRTY);
+    assert((t.get_src() == transaction_type_t::TRIM_DIRTY) ||
+           (t.get_src() == transaction_type_t::DEMOTE) ||
+           (t.get_src() == transaction_type_t::PROMOTE));
     ceph_assert_always(is_root_type(extent->get_type()) ||
 	extent->get_paddr().is_absolute());
     return crimson::os::seastore::can_inplace_rewrite(extent->get_type());
@@ -614,6 +616,10 @@ public:
 #endif
     assert(addr.is_absolute());
     return !devices_by_id[addr.get_device_id()]->is_end_to_end_data_protection();
+  }
+
+  rewrite_gen_t get_max_hot_gen() const {
+    return hot_tier_generations - 1;
   }
 
 private:
