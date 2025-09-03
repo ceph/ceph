@@ -184,6 +184,13 @@ public:
     LBAMapping dest,
     LogicalChildNode &extent) = 0;
 
+  using promote_extent_iertr = base_iertr;
+  using promote_extent_ret = promote_extent_iertr::future<>;
+  virtual promote_extent_ret promote_extent(
+    Transaction &t,
+    LBAMapping mapping,
+    std::vector<LogicalChildNodeRef> extents) = 0;
+
   virtual alloc_extent_ret reserve_region(
     Transaction &t,
     laddr_hint_t hint,

@@ -11,6 +11,7 @@
 #include "crimson/os/seastore/journal/circular_bounded_journal.h"
 #include "crimson/os/seastore/lba/lba_btree_node.h"
 #include "crimson/os/seastore/random_block_manager/rbm_device.h"
+#include "crimson/os/seastore/object_data_handler.h"
 
 /*
  * TransactionManager logs
@@ -972,8 +973,69 @@ TransactionManager::promote_extent(
   Transaction &t,
   CachedExtentRef extent)
 {
-  // TODO
-  return rewrite_extent_iertr::make_ready_future();
+  LOG_PREFIX(TransactionManager::promote_extent);
+  assert(epm->is_cold_device(extent->get_paddr().get_device_id()));
+  DEBUGT("promote extent: {}", t, *extent);
+  ceph_assert(extent->is_logical());
+
+  // fill extent if it's not fully loaded
+  if (!extent->is_fully_loaded()) {
+    ceph_assert(extent->get_type() == extent_types_t::OBJECT_DATA_BLOCK);
+    extent = co_await cache->read_extent_maybe_partial(
+      t, extent->cast<ObjectDataBlock>(), 0, extent->get_length());
+  }
+
+  cache->retire_extent(t, extent);
+  auto orig_ext = extent->cast<LogicalChildNode>();
+  auto promoted_raw_extents = cache->alloc_new_data_extents_by_type(
+    t,
+    orig_ext->get_type(),
+    orig_ext->get_length(),
+    placement_hint_t::HOT,
+    INIT_GENERATION);
+
+  std::vector<LogicalChildNodeRef> promoted_extents;
+  promoted_extents.reserve(promoted_raw_extents.size());
+
+  extent_len_t offset = 0;
+  auto orig_laddr = orig_ext->get_laddr();
+  auto orig_paddr = orig_ext->get_paddr();
+  auto orig_length = orig_ext->get_length();
+  for (auto &extent : promoted_raw_extents) {
+    auto slice_laddr = (orig_laddr + offset).checked_to_laddr();
+    auto slice_length = extent->get_length();
+
+    auto lext = extent->cast<LogicalChildNode>();
+    lext->set_laddr(slice_laddr);
+    orig_ext->get_bptr().copy_out(
+      offset, slice_length, lext->get_bptr().c_str());
+    lext->set_last_committed_crc(lext->calc_crc32c());
+
+    promoted_extents.push_back(lext);
+
+    auto remapped_cold_extent = cache->alloc_remapped_extent_by_type(
+      t,
+      orig_ext->get_type(),
+      slice_laddr,
+      orig_paddr.add_offset(offset),
+      offset,
+      slice_length,
+      std::nullopt);
+    boost::ignore_unused(remapped_cold_extent);
+
+    offset += slice_length;
+  }
+  ceph_assert(offset == orig_length);
+
+  auto mapping = co_await lba_manager->get_mapping(
+    t, *orig_ext
+  ).handle_error_interruptible(
+    promote_extent_iertr::pass_further(),
+    crimson::ct_error::assert_all("invalid error"));
+  co_return co_await lba_manager->promote_extent(
+    t,
+    orig_ext->get_laddr(),
+    std::move(promoted_extents));
 }
 
 TransactionManager::demote_region_ret

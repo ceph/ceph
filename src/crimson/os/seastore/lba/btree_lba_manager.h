@@ -79,6 +79,11 @@ public:
     Transaction &t,
     laddr_t laddr) final;
 
+  promote_extent_ret promote_extent(
+    Transaction &t,
+    LBAMapping mapping,
+    std::vector<LogicalChildNodeRef> extents) final;
+
   alloc_extent_ret reserve_region(
     Transaction &t,
     LBAMapping pos,
