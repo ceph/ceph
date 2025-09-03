@@ -331,6 +331,22 @@ BtreeLBAManager::lower_bound(
   co_return iter.get_cursor(c);
 }
 
+BtreeLBAManager::upper_bound_right_ret
+BtreeLBAManager::upper_bound_right(
+  Transaction &t,
+  laddr_t laddr)
+{
+  auto c = get_context(t);
+  auto btree = co_await get_btree<LBABtree>(c);
+  auto iter = co_await btree.upper_bound_right(c, laddr);
+  if (iter.is_end()) {
+    co_await upper_bound_right_iertr::future<LBACursorRef>(
+      crimson::ct_error::enoent::make());
+  }
+  assert(iter.get_key() >= laddr);
+  co_return iter.get_cursor(c);
+}
+
 BtreeLBAManager::promote_extent_ret
 BtreeLBAManager::promote_extent(
   Transaction &t,
@@ -381,6 +397,34 @@ BtreeLBAManager::promote_extent(
     }
   }
   co_return;
+}
+BtreeLBAManager::demote_extent_ret
+BtreeLBAManager::demote_extent(
+  Transaction &t,
+  LBACursor &cursor,
+  LogicalChildNode &extent)
+{
+  assert(cursor.is_viewable());
+  assert(!cursor.is_end());
+  assert(!cursor.is_indirect());
+  assert(cursor.has_shadow_paddr());
+  auto c = get_context(t);
+  auto btree = co_await get_btree<LBABtree>(c);
+  auto ret = co_await _update_mapping(
+    t,
+    cursor,
+    [&extent](lba_map_val_t val) {
+      assert(val.pladdr.is_paddr());
+      assert(val.shadow_paddr == extent.get_paddr());
+      val.pladdr = pladdr_t(val.shadow_paddr);
+      val.shadow_paddr = P_ADDR_NULL;
+      return val;
+    },
+    &extent
+  ).handle_error_interruptible(
+    demote_extent_iertr::pass_further{},
+    crimson::ct_error::assert_all("unexpected enoent"));
+  co_return ret;
 }
 
 /**
