@@ -62,39 +62,39 @@ void UsagePerfCounters::create_global_counters() {
 }
 
 PerfCounters* UsagePerfCounters::create_user_counters(const std::string& user_id) {
+
   std::string name = "rgw_user_" + user_id;
-  
+
   // Sanitize name for perf counters (replace non-alphanumeric with underscore)
   for (char& c : name) {
     if (!std::isalnum(c) && c != '_') {
       c = '_';
     }
   }
-  
-  PerfCountersBuilder b(cct, name, l_rgw_usage_first, l_rgw_usage_last);
-  
-  // Add placeholder counters for unused indices
-  for (int i = l_rgw_usage_first + 1; i < l_rgw_user_used_bytes; ++i) {
-    b.add_u64(i, "placeholder", "placeholder", nullptr, 0, unit_t(0));
-  }
-  
-  b.add_u64(l_rgw_user_used_bytes, "used_bytes",
+
+  // Create a separate enum range for user-specific counters
+  enum {
+    l_rgw_user_first = 930000,  // Different range from main counters
+    l_rgw_user_bytes,
+    l_rgw_user_objects,
+    l_rgw_user_last
+  };
+
+  PerfCountersBuilder b(cct, name, l_rgw_user_first, l_rgw_user_last);
+
+  b.add_u64(l_rgw_user_bytes, "used_bytes",
            "Bytes used by user", nullptr, 0, unit_t(UNIT_BYTES));
-  b.add_u64(l_rgw_user_num_objects, "num_objects",
+  b.add_u64(l_rgw_user_objects, "num_objects",
            "Number of objects owned by user", nullptr, 0, unit_t(0));
-  
-  // Add remaining placeholder counters
-  for (int i = l_rgw_user_num_objects + 1; i < l_rgw_usage_last; ++i) {
-    b.add_u64(i, "placeholder", "placeholder", nullptr, 0, unit_t(0));
-  }
-  
+
   PerfCounters* counters = b.create_perf_counters();
   cct->get_perfcounters_collection()->add(counters);
-  
+
   return counters;
 }
 
 PerfCounters* UsagePerfCounters::create_bucket_counters(const std::string& bucket_name) {
+
   std::string name = "rgw_bucket_" + bucket_name;
   
   // Sanitize name for perf counters
@@ -103,27 +103,25 @@ PerfCounters* UsagePerfCounters::create_bucket_counters(const std::string& bucke
       c = '_';
     }
   }
-  
-  PerfCountersBuilder b(cct, name, l_rgw_usage_first, l_rgw_usage_last);
-  
-  // Add placeholder counters for unused indices
-  for (int i = l_rgw_usage_first + 1; i < l_rgw_bucket_used_bytes; ++i) {
-    b.add_u64(i, "placeholder", "placeholder", nullptr, 0, unit_t(0));
-  }
-  
-  b.add_u64(l_rgw_bucket_used_bytes, "used_bytes",
+
+  // Create a separate enum range for bucket-specific counters
+  enum {
+    l_rgw_bucket_first = 940000,  // Different range from main counters
+    l_rgw_bucket_bytes,
+    l_rgw_bucket_objects,
+    l_rgw_bucket_last
+  };
+
+  PerfCountersBuilder b(cct, name, l_rgw_bucket_first, l_rgw_bucket_last);
+
+  b.add_u64(l_rgw_bucket_bytes, "used_bytes",
            "Bytes used in bucket", nullptr, 0, unit_t(UNIT_BYTES));
-  b.add_u64(l_rgw_bucket_num_objects, "num_objects",
+  b.add_u64(l_rgw_bucket_objects, "num_objects",
            "Number of objects in bucket", nullptr, 0, unit_t(0));
-  
-  // Add remaining placeholder counters
-  for (int i = l_rgw_bucket_num_objects + 1; i < l_rgw_usage_last; ++i) {
-    b.add_u64(i, "placeholder", "placeholder", nullptr, 0, unit_t(0));
-  }
-  
+
   PerfCounters* counters = b.create_perf_counters();
   cct->get_perfcounters_collection()->add(counters);
-  
+
   return counters;
 }
 
@@ -227,19 +225,30 @@ void UsagePerfCounters::update_user_stats(const std::string& user_id,
     }
   }
   
+  // Define local enum for user-specific counter indices
+  // This avoids needing placeholders in the global enum
+  enum {
+    l_rgw_user_first = 930000,  // Start at a high number to avoid conflicts
+    l_rgw_user_bytes,           // 930001
+    l_rgw_user_objects,          // 930002
+    l_rgw_user_last              // 930003
+  };
+  
   // Update or create perf counters
   {
     std::unique_lock lock(counters_mutex);
     
     auto it = user_perf_counters.find(user_id);
     if (it == user_perf_counters.end()) {
+      // Counter doesn't exist, create it
       PerfCounters* counters = create_user_counters(user_id);
       user_perf_counters[user_id] = counters;
       it = user_perf_counters.find(user_id);
     }
     
-    it->second->set(l_rgw_user_used_bytes, bytes_used);
-    it->second->set(l_rgw_user_num_objects, num_objects);
+    // Set the values using the local enum indices
+    it->second->set(l_rgw_user_bytes, bytes_used);
+    it->second->set(l_rgw_user_objects, num_objects);
   }
   
   ldout(cct, 20) << "Updated user stats: " << user_id 
@@ -262,19 +271,30 @@ void UsagePerfCounters::update_bucket_stats(const std::string& bucket_name,
     }
   }
   
+  // Define local enum for bucket-specific counter indices
+  // This avoids needing placeholders in the global enum
+  enum {
+    l_rgw_bucket_first = 940000,  // Different range from user counters
+    l_rgw_bucket_bytes,            // 940001
+    l_rgw_bucket_objects,          // 940002
+    l_rgw_bucket_last              // 940003
+  };
+  
   // Update or create perf counters
   {
     std::unique_lock lock(counters_mutex);
     
     auto it = bucket_perf_counters.find(bucket_name);
     if (it == bucket_perf_counters.end()) {
+      // Counter doesn't exist, create it
       PerfCounters* counters = create_bucket_counters(bucket_name);
       bucket_perf_counters[bucket_name] = counters;
       it = bucket_perf_counters.find(bucket_name);
     }
     
-    it->second->set(l_rgw_bucket_used_bytes, bytes_used);
-    it->second->set(l_rgw_bucket_num_objects, num_objects);
+    // Set the values using the local enum indices
+    it->second->set(l_rgw_bucket_bytes, bytes_used);
+    it->second->set(l_rgw_bucket_objects, num_objects);
   }
   
   ldout(cct, 20) << "Updated bucket stats: " << bucket_name
