@@ -52,7 +52,7 @@ Cache::~Cache()
 }
 
 // TODO: this method can probably be removed in the future
-Cache::retire_extent_ret Cache::retire_extent_addr(
+void Cache::retire_extent_addr(
   Transaction &t, paddr_t paddr, extent_len_t length)
 {
   LOG_PREFIX(Cache::retire_extent_addr);
@@ -66,7 +66,7 @@ Cache::retire_extent_ret Cache::retire_extent_addr(
     DEBUGT("retire {}~0x{:x} on t -- {}",
            t, paddr, length, *ext);
     t.add_present_to_retired_set(ext);
-    return retire_extent_iertr::now();
+    return;
   } else if (result == Transaction::get_extent_ret::RETIRED) {
     ERRORT("retire {}~0x{:x} failed, already retired -- {}",
            t, paddr, length, *ext);
@@ -93,7 +93,6 @@ Cache::retire_extent_ret Cache::retire_extent_addr(
     add_extent(ext);
   }
   t.add_absent_to_retired_set(ext);
-  return retire_extent_iertr::now();
 }
 
 CachedExtentRef Cache::retire_absent_extent_addr(

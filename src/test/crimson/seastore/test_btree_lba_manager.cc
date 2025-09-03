@@ -313,7 +313,7 @@ struct lba_btree_test : btree_test_base {
   }
 
   static auto get_map_val(extent_len_t len, extent_types_t type) {
-    return lba_map_val_t{0, (pladdr_t)P_ADDR_NULL, len, 0, type};
+    return lba_map_val_t{0, (pladdr_t)P_ADDR_NULL, P_ADDR_NULL, len, 0, type};
   }
 
   device_off_t next_off = 0;
@@ -622,8 +622,7 @@ struct btree_lba_manager_test : btree_test_base {
 	);
 	EXPECT_EQ(refcount, target->second.refcount);
 	if (refcount == 0) {
-	  co_await cache->retire_extent_addr(
-	    t, paddr, length);
+	  cache->retire_extent_addr(t, paddr, length);
 	}
       })).unsafe_get();
     if (target->second.refcount == 0) {
@@ -693,7 +692,7 @@ struct btree_lba_manager_test : btree_test_base {
 	  *t.t,
 	  L_ADDR_MIN,
 	  L_ADDR_MAX,
-	  [iter=t.mappings.begin(), &t](auto l, auto p, auto len) mutable {
+	  [iter=t.mappings.begin(), &t](auto l, auto p, auto s, auto len) mutable {
 	    EXPECT_NE(iter, t.mappings.end());
 	    EXPECT_EQ(l, iter->first);
 	    EXPECT_EQ(p, iter->second.addr);

@@ -229,12 +229,19 @@ TransactionManager::ref_ret TransactionManager::remove(
   extent_ref_count_t refcount = cursor->get_refcount();
   auto laddr = cursor->get_laddr();
   auto length = cursor->get_length();
+  paddr_t shadow_addr = P_ADDR_NULL;
+  if (cursor->has_shadow_paddr()) {
+    shadow_addr = cursor->get_shadow_paddr();
+  }
   assert(refcount > 0);
   --refcount;
   co_await lba_manager->update_mapping_refcount(
     t, std::move(cursor), -1);
   if (refcount == 0) {
     cache->retire_extent(t, ref);
+    if (shadow_addr != P_ADDR_NULL) {
+      cache->retire_extent_addr(t, shadow_addr, length);
+    }
   }
   DEBUGT("removed {}~0x{:x} refcount={} -- {}",
 	 t, laddr, length,
