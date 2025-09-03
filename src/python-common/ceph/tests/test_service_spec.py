@@ -398,6 +398,7 @@ spec:
   certificate_source: cephadm-signed
   first_virtual_router_id: 50
   frontend_port: 8080
+  monitor_cert_source: reuse_service_cert
   monitor_port: 8081
   virtual_ip: 192.168.20.1/24
 ---
