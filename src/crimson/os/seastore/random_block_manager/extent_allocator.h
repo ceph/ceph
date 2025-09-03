@@ -35,7 +35,7 @@ public:
    *
    */
   virtual std::optional<interval_set<rbm_abs_addr>> alloc_extents(
-    size_t size) = 0;
+    size_t size, rbm_abs_addr hint) = 0;
 
   /**
    * free_extent

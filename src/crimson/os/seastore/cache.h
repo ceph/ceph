@@ -1289,6 +1289,7 @@ public:
     extent_len_t length,   ///< [in] length
     placement_hint_t hint, ///< [in] user hint
     rewrite_gen_t gen,     ///< [in] rewrite generation
+    paddr_t paddr_hint,
     bool is_tracked
     );
 
@@ -1303,6 +1304,7 @@ public:
     extent_len_t length,   ///< [in] length
     placement_hint_t hint, ///< [in] user hint
     rewrite_gen_t gen,     ///< [in] rewrite generation
+    paddr_t paddr_hint,
     bool is_tracked
     );
 
