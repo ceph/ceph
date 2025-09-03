@@ -857,7 +857,8 @@ private:
 	      offset,
 	      PLACEMENT_HINT_NULL,
 	      NULL_GENERATION,
-	      TRANS_ID_NULL);
+	      TRANS_ID_NULL,
+	      write_policy_t::WRITE_BACK);
     SUBDEBUGT(seastore_cache,
 	"{} {}~0x{:x} is absent, add extent and reading range 0x{:x}~0x{:x} ... -- {}",
 	t, T::TYPE, offset, length, partial_off, partial_len, *ret);
@@ -896,7 +897,8 @@ private:
                 offset,
                 PLACEMENT_HINT_NULL,
                 NULL_GENERATION,
-		TRANS_ID_NULL);
+		TRANS_ID_NULL,
+		write_policy_t::WRITE_BACK);
       SUBDEBUG(seastore_cache,
           "{} {}~0x{:x} is absent, add extent and reading range 0x{:x}~0x{:x} ... -- {}",
           T::TYPE, offset, length, partial_off, partial_len, *ret);
@@ -1175,7 +1177,8 @@ public:
               result->paddr,
               opt.hint,
               result->gen,
-	      t.get_trans_id());
+	      t.get_trans_id(),
+	      write_policy_t::WRITE_BACK);
     t.add_fresh_extent(ret);
     SUBDEBUGT(seastore_cache,
               "allocated {} 0x{:x}B extent at {}, hint={}, gen={} -- {}",
@@ -1213,7 +1216,8 @@ public:
                 result.paddr,
                 opt.hint,
                 result.gen,
-                t.get_trans_id());
+                t.get_trans_id(),
+		opt.write_policy);
       t.add_fresh_extent(ret);
       SUBDEBUGT(seastore_cache,
                 "allocated {} 0x{:x}B extent at {}, hint={}, gen={} -- {}",
@@ -1255,7 +1259,8 @@ public:
 	      remap_paddr,
 	      PLACEMENT_HINT_NULL,
 	      NULL_GENERATION,
-              t.get_trans_id());
+              t.get_trans_id(),
+	      write_policy_t::WRITE_BACK);
 
     auto extent = ext->template cast<T>();
     extent->set_laddr(remap_laddr);
@@ -1297,9 +1302,7 @@ public:
     Transaction &t,        ///< [in, out] current transaction
     extent_types_t type,   ///< [in] type tag
     extent_len_t length,   ///< [in] length
-    placement_hint_t hint, ///< [in] user hint
-    rewrite_gen_t gen,     ///< [in] rewrite generation
-    bool is_tracked
+    alloc_option_t opt     ///< [in] allocation options
     );
 
   /**
