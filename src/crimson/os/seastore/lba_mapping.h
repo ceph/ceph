@@ -132,6 +132,18 @@ public:
     return direct_cursor->get_paddr();
   }
 
+  bool has_shadow_val() const {
+    assert(is_linked_direct());
+    assert(!direct_cursor->is_end());
+    return direct_cursor->has_shadow_paddr();
+  }
+
+  paddr_t get_shadow_val() const {
+    assert(is_linked_direct());
+    assert(!direct_cursor->is_end());
+    return direct_cursor->get_shadow_paddr();
+  }
+
   checksum_t get_checksum() const {
     assert(is_linked_direct());
     assert(!direct_cursor->is_end());

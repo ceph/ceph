@@ -205,6 +205,7 @@ public:
     laddr_t key;
     extent_ref_count_t refcount = 0;
     pladdr_t addr;
+    paddr_t shadow_addr;
     extent_len_t length = 0;
     LBAMapping mapping; // the mapping pointing to the updated lba entry if
 			// refcount is non-zero; the next lba entry or the
@@ -319,7 +320,7 @@ public:
   using scan_mappings_iertr = base_iertr;
   using scan_mappings_ret = scan_mappings_iertr::future<>;
   using scan_mappings_func_t = std::function<
-    void(laddr_t, paddr_t, extent_len_t)>;
+    void(laddr_t, paddr_t, paddr_t, extent_len_t)>;
   virtual scan_mappings_ret scan_mappings(
     Transaction &t,
     laddr_t begin,

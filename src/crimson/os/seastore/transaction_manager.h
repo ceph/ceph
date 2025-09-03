@@ -1004,6 +1004,7 @@ public:
     std::array<TransactionManager::remap_entry_t, N> remaps)
   {
     if (!mapping.is_indirect() && mapping.is_zero_reserved()) {
+      ceph_assert(!mapping.has_shadow_val());
       return seastar::do_with(
 	std::vector<TransactionManager::remap_entry_t>(
 	  remaps.begin(), remaps.end()),
@@ -1374,10 +1375,14 @@ private:
 		t, pin.get_key(), original_paddr, original_len
 	      )->template cast<RetiredExtentPlaceholder>();
 	      unlinked_child.child_pos.link_child(retired_placeholder.get());
+	      if (pin.has_shadow_val()) {
+		cache->retire_absent_extent_addr(
+		  t, pin.get_key(), pin.get_shadow_val(), original_len);
+	      }
 	      return base_iertr::make_ready_future<TCachedExtentRef<T>>();
 	    }
 	  }
-	}).si_then([this, &t, &remaps, original_paddr,
+	}).si_then([this, &t, &remaps, original_paddr, &pin,
 		    original_laddr, original_len, FNAME](auto ext) mutable {
 	  ceph_assert(full_extent_integrity_check
 	      ? (ext && ext->is_fully_loaded())
@@ -1399,6 +1404,11 @@ private:
 	    auto remap_len = remap.len;
 	    auto remap_laddr = (original_laddr + remap_offset).checked_to_laddr();
 	    auto remap_paddr = original_paddr.add_offset(remap_offset);
+	    auto shadow_paddr = P_ADDR_NULL;
+	    if (pin.has_shadow_val()) {
+	      assert(pin.get_shadow_val() != P_ADDR_NULL);
+	      shadow_paddr = pin.get_shadow_val().add_offset(remap_offset);
+	    }
 	    SUBDEBUGT(seastore_tm, "remap direct pin into {}~0x{:x} {} ...",
 	              t, remap_laddr, remap_len, remap_paddr);
 	    ceph_assert(remap_len < original_len);
@@ -1413,6 +1423,17 @@ private:
 	      remap_offset,
 	      remap_len,
 	      original_bptr);
+	    if (shadow_paddr != P_ADDR_NULL) {
+	      SUBTRACET(seastore_tm, "remap shadow {}", t, shadow_paddr);
+	      auto cold_ext = cache->alloc_remapped_extent<T>(
+	        t,
+		remap_laddr,
+		shadow_paddr,
+		remap_offset,
+		remap_len,
+		std::nullopt);
+	      boost::ignore_unused(cold_ext);
+	    }
 	    // user must initialize the logical extent themselves.
 	    extent->set_seen_by_users();
 	    remap.extent = extent.get();

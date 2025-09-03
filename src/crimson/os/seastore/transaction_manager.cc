@@ -215,11 +215,18 @@ TransactionManager::ref_ret TransactionManager::remove(
     auto &primary_result = result.result;
     if (primary_result.refcount == 0) {
       cache->retire_extent(t, ref);
+      if (primary_result.shadow_addr != P_ADDR_NULL) {
+	return cache->retire_extent_addr(
+	  t, primary_result.shadow_addr, primary_result.length
+	).si_then([rc=primary_result.refcount] {
+	  return ref_iertr::make_ready_future<extent_ref_count_t>(rc);
+	});
+      }
     }
     DEBUGT("removed {}~0x{:x} refcount={} -- {}",
            t, primary_result.addr, primary_result.length,
            primary_result.refcount, *ref);
-    return primary_result.refcount;
+    return ref_iertr::make_ready_future<extent_ref_count_t>(primary_result.refcount);
   });
 }
 
