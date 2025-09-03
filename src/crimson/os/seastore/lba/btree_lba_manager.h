@@ -361,6 +361,12 @@ public:
 private:
   Cache &cache;
 
+  base_iertr::future<LBABtree> get_btree(Transaction &t) {
+    return cache.get_root(t).si_then([](RootBlockRef root) {
+      return LBABtree(root);
+    });
+  }
+
   struct {
     uint64_t num_alloc_extents = 0;
     uint64_t num_alloc_extents_iter_nexts = 0;
