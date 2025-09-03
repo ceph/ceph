@@ -25,6 +25,94 @@
 #include "bluestore_types.h"
 #include "BlueStore.h"
 
+class FixedPoolMemoryResource : public std::pmr::memory_resource {
+  struct Slab {
+    Slab* next;
+    size_t size;
+    size_t offset;
+
+    void* data() {
+      return reinterpret_cast<char*>(this + 1);
+    }
+  };
+
+  Slab* head = nullptr;
+  Slab* current_slab = nullptr;
+  size_t default_slab_size;
+  struct FreeBlock {
+    FreeBlock* next;
+  };
+  FreeBlock* freelist = nullptr;
+
+public:
+  FixedPoolMemoryResource(void* start, size_t size) : default_slab_size(size) {
+    head = init_slab(start, size);
+    current_slab = head;
+  }
+
+  ~FixedPoolMemoryResource() {
+    Slab* slab = head->next;
+    while (slab) {
+      Slab* next = slab->next;
+      free(slab);
+      slab = next;
+    }
+  }
+
+protected:
+  void* do_allocate(size_t bytes, size_t alignment) override {
+    if (freelist) {
+      void* p = freelist;
+      freelist = freelist->next;
+      return p;
+    }
+
+    size_t aligned_offset = (current_slab->offset + alignment - 1) & ~(alignment - 1);
+    if (aligned_offset + bytes <= current_slab->size) {
+      void* result = static_cast<char*>(current_slab->data()) + aligned_offset;
+      current_slab->offset = aligned_offset + bytes;
+      return result;
+    }
+
+    size_t slab_bytes = sizeof(Slab) + default_slab_size;
+    void* mem = malloc(slab_bytes);
+    if (!mem) throw std::bad_alloc();
+
+    Slab* new_slab = new (mem) Slab{nullptr, default_slab_size, 0};
+    current_slab->next = new_slab;
+    current_slab = new_slab;
+
+    aligned_offset = (alignment - 1) & ~(alignment - 1);
+    void* result = static_cast<char*>(current_slab->data()) + aligned_offset;
+    current_slab->offset = aligned_offset + bytes;
+    return result;
+  }
+
+  void do_deallocate(void* p, size_t, size_t) override {
+    auto* block = static_cast<FreeBlock*>(p);
+    block->next = freelist;
+    freelist = block;
+  }
+
+  bool do_is_equal(const std::pmr::memory_resource& other) const noexcept override {
+    return this == &other;
+  }
+
+  void reset() {
+    for (Slab* s = head; s; s = s->next) {
+      s->offset = 0;
+    }
+    freelist = nullptr;
+  }
+
+private:
+  static Slab* init_slab(void* start, size_t size) {
+    if (size < sizeof(Slab)) throw std::bad_alloc();
+    Slab* slab = new (start) Slab{nullptr, size - sizeof(Slab), 0};
+    return slab;
+  }
+};
+
 namespace bluestore {
 
   /// in-memory blob metadata and associated cached buffers (if any)
@@ -143,10 +231,7 @@ namespace bluestore {
     void get() {
       ++nref;
     }
-    void put() {
-      if (--nref == 0)
-	delete this;
-    }
+    void put();
     bool is_shared_loaded() const;
     BlueStore::BufferCacheShard* get_cache();
     uint64_t get_sbid() const;
@@ -207,7 +292,6 @@ namespace bluestore {
                               /// (it can be pinned and hence physically out
                               /// of it at the moment though)
     uint16_t prev_spanning_cnt = 0; /// spanning blobs count
-    BlueStore::ExtentMap extent_map;
     BlueStore::BufferSpace bc;             ///< buffer cache
 
     // track txc's that have not been committed to kv store (and whose
@@ -218,6 +302,12 @@ namespace bluestore {
     ceph::mutex flush_lock = ceph::make_mutex("BlueStore::Onode::flush_lock");
     ceph::condition_variable flush_cond;   ///< wait here for uncommitted txns
     std::shared_ptr<int64_t> cache_age_bin;  ///< cache age bin
+
+    static constexpr size_t blob_pool_size = sizeof(Blob) * 16;
+    alignas(Blob) std::byte blob_pool[blob_pool_size];
+    FixedPoolMemoryResource mem_resource;
+    std::pmr::polymorphic_allocator<Blob> LocalBlobAllocator;
+    BlueStore::ExtentMap extent_map;
 
     Onode(BlueStore::Collection *c, const ghobject_t& o,
 	  const mempool::bluestore_cache_meta::string& k);
