@@ -1103,6 +1103,7 @@ public:
     if (!mapping.is_indirect() && mapping.is_zero_reserved()) {
       SUBDEBUGT(seastore_tm, "zero reserved, mapping {}, {} remaps",
 		t, mapping, remaps);
+      ceph_assert(!mapping.has_shadow_val());
       //TODO: drop this assert
       assert(mapping.get_extent_type() == extent_types_t::OBJECT_DATA_BLOCK);
       auto type = mapping.get_extent_type();
@@ -1514,6 +1515,20 @@ private:
               lextent->set_laddr(laddr);
             }
           );
+          if (pin.has_shadow_val()) {
+            cache->retire_absent_extent_addr_by_type(
+              t, pin.get_key(), pin.get_shadow_val(),
+              original_len, pin.get_extent_type(),
+              [laddr](auto &extent) {
+                auto lextent = extent.template cast<LogicalChildNode>();
+                assert(extent.is_logical());
+                assert(!lextent->has_laddr());
+                assert(!extent.has_been_invalidated());
+                lextent->set_laddr(laddr);
+              }
+            );
+          }
+
         }
       }
 
@@ -1543,6 +1558,11 @@ private:
         auto remap_len = remap.len;
         auto remap_laddr = (original_laddr + remap_offset).checked_to_laddr();
         auto remap_paddr = pin.get_val().add_offset(remap_offset);
+        auto shadow_paddr = P_ADDR_NULL;
+        if (pin.has_shadow_val()) {
+          assert(pin.get_shadow_val() != P_ADDR_NULL);
+          shadow_paddr = pin.get_shadow_val().add_offset(remap_offset);
+        }
         SUBDEBUGT(seastore_tm, "remap direct pin into {}~0x{:x} {} ...",
                   t, remap_laddr, remap_len, remap_paddr);
         ceph_assert(remap_len < original_len);
@@ -1557,6 +1577,17 @@ private:
           remap_offset,
           remap_len,
           original_bptr);
+        if (shadow_paddr != P_ADDR_NULL) {
+          SUBTRACET(seastore_tm, "remap shadow {}", t, shadow_paddr);
+          auto cold_ext = cache->alloc_remapped_extent<T>(
+            t,
+            remap_laddr,
+            shadow_paddr,
+            remap_offset,
+            remap_len,
+            std::nullopt);
+          boost::ignore_unused(cold_ext);
+        }
         // user must initialize the logical extent themselves.
         remapped_extent->set_seen_by_users();
         remap.extent = remapped_extent.get();

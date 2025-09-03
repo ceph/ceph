@@ -300,6 +300,7 @@ BtreeLBAManager::resolve_indirect_cursor(
   const LBACursor &indirect_cursor)
 {
   ceph_assert(indirect_cursor.is_indirect());
+  ceph_assert(!indirect_cursor.has_shadow_paddr());
   return get_cursors(
     c,
     btree,
@@ -351,6 +352,7 @@ BtreeLBAManager::reserve_region(
   lba_map_val_t val{
     len,
     pladdr_t{P_ADDR_ZERO},
+    P_ADDR_NULL,
     EXTENT_DEFAULT_REF_COUNT,
     0,
     type};
@@ -392,6 +394,7 @@ BtreeLBAManager::alloc_extents(
       lba_map_val_t{
 	ext->get_length(),
 	pladdr_t{ext->get_paddr()},
+        P_ADDR_NULL,
 	EXTENT_DEFAULT_REF_COUNT,
 	ext->get_last_committed_crc(),
         ext->get_type()},
@@ -451,6 +454,7 @@ BtreeLBAManager::clone_mapping(
     lba_map_val_t{
       len,
       pladdr_t{inter_key.get_local_clone_id()},
+      P_ADDR_NULL,
       EXTENT_DEFAULT_REF_COUNT,
       0,
       mapping->get_extent_type()},
@@ -880,7 +884,8 @@ BtreeLBAManager::scan_mappings(
 	  }
 	  ceph_assert((pos.get_key() + pos.get_val().len) > begin);
 	  if (pos.get_val().pladdr.is_paddr()) {
-	    f(pos.get_key(), pos.get_val().pladdr.get_paddr(), pos.get_val().len);
+	    f(pos.get_key(), pos.get_val().pladdr.get_paddr(),
+	      pos.get_val().shadow_paddr, pos.get_val().len);
 	  }
 	  return LBABtree::iterate_repeat_ret_inner(
 	    interruptible::ready_future_marker{},
@@ -956,11 +961,19 @@ BtreeLBAManager::update_mapping(
       assert(!addr.is_null());
       lba_map_val_t ret = in;
       ceph_assert(in.pladdr.is_paddr());
-      ceph_assert(in.pladdr.get_paddr() == prev_addr);
       ceph_assert(in.len == prev_len);
-      ret.pladdr = addr;
-      ret.len = len;
-      ret.checksum = checksum;
+      if (prev_addr == in.pladdr.get_paddr()) {
+        ret.pladdr = addr;
+        ret.len = len;
+        ret.checksum = checksum;
+        if (ret.shadow_paddr != P_ADDR_NULL) {
+          ceph_assert(
+            addr.get_device_id() != ret.shadow_paddr.get_device_id());
+        }
+      } else {
+        ceph_assert(in.shadow_paddr == prev_addr);
+        ret.shadow_paddr = addr;
+      }
       return ret;
     },
     &nextent
@@ -1314,6 +1327,9 @@ BtreeLBAManager::remap_mappings(
       } else {
         auto paddr = val.pladdr.get_paddr();
         val.pladdr = paddr + cur_off;
+        if (val.shadow_paddr != P_ADDR_NULL) {
+          val.shadow_paddr = val.shadow_paddr.add_offset(cur_off);
+        }
       }
       val.len = remap.len;
       val.refcount = EXTENT_DEFAULT_REF_COUNT;
@@ -1539,6 +1555,7 @@ BtreeLBAManager::move_and_clone_direct_mapping(
       lba_map_val_t val = in;
       val.pladdr = ret.dest->get_key().get_local_clone_id();
       val.checksum = 0;
+      val.shadow_paddr = P_ADDR_NULL;
       return val;
     },
     nullptr
