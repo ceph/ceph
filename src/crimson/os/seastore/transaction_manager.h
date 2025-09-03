@@ -239,6 +239,28 @@ public:
     }
   };
 
+  void update_hit_ratio(Transaction& t, device_id_t id) {
+    if (epm->is_cold_device(id)) {
+      t.write_hit_cold++;
+    } else {
+      t.write_hit_hot++;
+    }
+  }
+
+  void update_read_ratio(Transaction& t, device_id_t id) {
+    if (epm->is_cold_device(id)) {
+      t.read_hit_cold++;
+    } else {
+      t.read_hit_hot++;
+    }
+  }
+
+  void submit_read_ratio(Transaction& t) {
+    if (cache) {
+      cache->update_read_ratio(t);
+    }
+  }
+
   template <typename T>
   using lextent_init_func_t = std::function<void (T&)>;
   /**
@@ -1120,6 +1142,9 @@ public:
       return cut_mapping<T>(
 	t, (laddr + aligned_len).checked_to_laddr(), std::move(mapping), false);
     } else {
+      if (mapping.is_linked_direct() && mapping.get_val().is_absolute()) {
+	update_hit_ratio(t, mapping.get_val().get_device_id());
+      }
       return remove(t, std::move(mapping)
       ).handle_error_interruptible(
 	punch_mappings_iertr::pass_further{},

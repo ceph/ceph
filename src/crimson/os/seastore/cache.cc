@@ -243,6 +243,13 @@ void Cache::register_metrics()
     }
   );
 
+  metrics.add_group("cache", {
+    sm::make_counter("write_hit_hot", stats.write_hit_hot, sm::description("")),
+    sm::make_counter("write_hit_cold", stats.write_hit_cold, sm::description("")),
+    sm::make_counter("read_hit_hot", stats.read_hit_hot, sm::description("")),
+    sm::make_counter("read_hit_cold", stats.read_hit_cold, sm::description("")),
+  });
+
   {
     /*
      * efforts discarded/committed
@@ -1974,6 +1981,9 @@ void Cache::complete_commit(
 
   apply_backref_byseq(t.move_backref_entries(), start_seq);
   commit_backref_entries(std::move(backref_entries), start_seq);
+
+  stats.write_hit_hot += t.write_hit_hot;
+  stats.write_hit_cold += t.write_hit_cold;
 }
 
 void Cache::init()
