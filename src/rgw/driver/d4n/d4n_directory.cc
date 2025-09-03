@@ -159,12 +159,11 @@ void redis_exec_connection_pool(const DoutPrefixProvider* dpp,
     	redis_exec_cp(dpp, redis_pool, ec, req, resp, y);
 }
 
-int BucketDirectory::zadd(const DoutPrefixProvider* dpp, const std::string& bucket_id, double score, const std::string& member, optional_yield y, Pipeline* pipeline)
 #ifndef dout_subsys
 #define dout_subsys ceph_subsys_rgw
 #endif
 
-int BucketDirectory::zadd(const DoutPrefixProvider* dpp, const std::string& bucket_id, double score, const std::string& member, optional_yield y, bool multi)
+int BucketDirectory::zadd(const DoutPrefixProvider* dpp, const std::string& bucket_id, double score, const std::string& member, optional_yield y, Pipeline* pipeline)
 {
   try {
     boost::system::error_code ec;
@@ -1490,17 +1489,6 @@ int D4NTransaction::end_trx(const DoutPrefixProvider* dpp, std::shared_ptr<conne
 return 0;
 }
 
-int BlockDirectory::set(const DoutPrefixProvider* dpp, CacheBlock* block, optional_yield y)
-{
-  /* For existing keys, call get method beforehand. 
-     Sets completely overwrite existing values. */
-  m_d4n_trx->get_trx_id(dpp,conn,y);
-  std::string key = build_index(block);
-  m_d4n_trx->is_trx_started(dpp,conn,key,D4NTransaction::redis_operation_type::WRITE_OP,y);
-
-  ldpp_dout(dpp, 10) << "BlockDirectory::" << __func__ << "(): index is: " << key << dendl;
-    
-}
 template<SeqContainer Container>
 int BlockDirectory::set_values(const DoutPrefixProvider* dpp, CacheBlock& block, Container& redisValues, optional_yield y)
 {

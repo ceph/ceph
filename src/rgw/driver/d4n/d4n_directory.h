@@ -196,7 +196,6 @@ class Directory {
       	redis_pool = pool;
     }
     Directory() {}
-    D4NTransaction* m_d4n_trx{nullptr};
    
     //m_d4n_trx is used to manage the transaction state and operations and it is shared among all the Directory objects.
     D4NTransaction* m_d4n_trx{nullptr};//TODO: private
@@ -222,7 +221,7 @@ class Pipeline {
 
 class BucketDirectory: public Directory {
   public:
-    BucketDirectory(std::shared_ptr<connection>& conn) : conn(conn) {}
+    BucketDirectory(std::shared_ptr<connection> conn) : conn(conn) {}
     int zadd(const DoutPrefixProvider* dpp, const std::string& bucket_id, double score, const std::string& member, optional_yield y, Pipeline* pipeline=nullptr);
     int zrem(const DoutPrefixProvider* dpp, const std::string& bucket_id, const std::string& member, optional_yield y);
     int zrange(const DoutPrefixProvider* dpp, const std::string& bucket_id, const std::string& start, const std::string& stop, uint64_t offset, uint64_t count, std::vector<std::string>& members, optional_yield y);

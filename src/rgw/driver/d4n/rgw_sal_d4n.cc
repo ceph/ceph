@@ -58,6 +58,7 @@ int D4NFilterDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
   using boost::redis::config;
 
   conn = std::make_shared<connection>(boost::asio::make_strand(io_context));
+
   policyDriver = std::make_unique<rgw::d4n::PolicyDriver>(conn,
 							  cacheDriver.get(),
 							  "lfuda",
@@ -83,16 +84,11 @@ int D4NFilterDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
 
   //setting the connection pool size and other parameters
   uint64_t rgw_redis_connection_pool_size = dpp->get_cct()->_conf->rgw_redis_connection_pool_size;
-  std::shared_ptr<rgw::d4n::RedisPool>redis_pool = nullptr;
   if(rgw_redis_connection_pool_size>0){
-      redis_pool = std::make_shared<rgw::d4n::RedisPool>(&io_context, cfg, rgw_redis_connection_pool_size);
+      m_redis_pool = std::make_shared<rgw::d4n::RedisPool>(&io_context, cfg, rgw_redis_connection_pool_size);
       ldpp_dout(dpp, 10) << "redis connection pool created with " << rgw_redis_connection_pool_size << " connections "  << dendl;
   }
 
-  objDir->set_redis_pool(redis_pool);
-  blockDir->set_redis_pool(redis_pool);
-  bucketDir->set_redis_pool(redis_pool);
-  
   return 0;
 }
 
@@ -144,6 +140,10 @@ void D4NFilterBucket::d4n_init_transaction(const DoutPrefixProvider* dpp)
 	m_objDir->set_d4n_trx(m_d4n_trx.get());
 	m_blockDir->set_d4n_trx(m_d4n_trx.get());
 	m_bucketDir->set_d4n_trx(m_d4n_trx.get());
+	m_objDir->set_redis_pool(this->filter->get_redis_pool());
+	m_blockDir->set_redis_pool(this->filter->get_redis_pool());
+	m_bucketDir->set_redis_pool(this->filter->get_redis_pool());
+
 	//start transaction
 	m_d4n_trx->start_trx();
 
@@ -491,7 +491,7 @@ int D4NFilterBucket::list(const DoutPrefixProvider* dpp, ListParams& params, int
       } while(num_objs <= max);
     } //end - else
 
-    rgw::d4n::BlockDirectory* blockDir = this->filter->get_block_dir();
+    rgw::d4n::BlockDirectory* blockDir = m_blockDir.get(); //this->filter->get_block_dir();
     int remainder_size = entries.size();
     size_t j = 0, start_j = 0;
     while (remainder_size > 0) {
@@ -678,6 +678,12 @@ void D4NFilterObject::d4n_init_transaction(const DoutPrefixProvider* dpp)
     m_objDir->set_d4n_trx(m_d4n_trx.get());
     m_blockDir->set_d4n_trx(m_d4n_trx.get());
     m_bucketDir->set_d4n_trx(m_d4n_trx.get());
+
+    //set redis pool
+    m_objDir->set_redis_pool(driver->get_redis_pool());
+    m_blockDir->set_redis_pool(driver->get_redis_pool());
+    m_bucketDir->set_redis_pool(driver->get_redis_pool());
+
     //start transaction
     m_d4n_trx->start_trx();
     ldpp_dout(dpp, 0) << "D4NFilterObject::d4n_init_transaction " << m_d4n_trx.get() << dendl;	
@@ -1311,14 +1317,14 @@ int D4NFilterObject::set_head_obj_dir_entry(const DoutPrefixProvider* dpp, std::
       auto mtime = this->get_mtime();
       auto score = ceph::real_clock::to_double(mtime);
       ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): Score of object name: "<< this->get_name() << " version: " << object_version << " is: "  << score << ret << dendl;
-      rgw::d4n::ObjectDirectory* objDir = this->driver->get_obj_dir();
+      rgw::d4n::ObjectDirectory* objDir = m_objDir.get(); //this->driver->get_obj_dir();
       ret = objDir->zadd(dpp, &object, score, object_version, y, &p);
       if (ret < 0) {
         ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): Failed to add version to ordered set with error: " << ret << dendl;
         return ret;
       }
       //add an entry to ordered set containing objects for bucket listing, set score to 0 always to lexicographically order the objects
-      rgw::d4n::BucketDirectory* bucketDir = this->driver->get_bucket_dir();
+      rgw::d4n::BucketDirectory* bucketDir = m_bucketDir.get(); //this->driver->get_bucket_dir();
       ret = bucketDir->zadd(dpp, this->get_bucket()->get_bucket_id(), 0, this->get_name(), y, &p);
       if (ret < 0) {
         ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): Failed to add object to ordered set with error: " << ret << dendl;
@@ -2070,7 +2076,7 @@ int D4NFilterObject::D4NFilterReadOp::iterate(const DoutPrefixProvider* dpp, int
       int ret;
       auto policy = source->driver->get_policy_driver()->get_cache_policy();
       auto cache_driver = source->driver->get_cache_driver();
-      auto block_dir = source->driver->get_block_dir();
+      auto block_dir = source->m_blockDir.get(); //source->driver->get_block_dir();
       if (policy->update_refcount_if_key_exists(dpp, oid_in_cache, rgw::d4n::RefCount::INCR, y) > 0) {
         ldpp_dout(dpp, 20) << "D4NFilterObject::iterate:: " << __func__ << "(): " << __LINE__ << ": READ FROM CACHE: oid_in_cache=" << oid_in_cache << dendl;
         // Read From Cache
@@ -2248,7 +2254,7 @@ int D4NFilterObject::D4NFilterReadOp::D4NFilterGetCB::handle_data(bufferlist& bl
     std::string dest_prefix;
 
     rgw::d4n::CacheBlock block, dest_block;
-    rgw::d4n::BlockDirectory* blockDir = source->driver->get_block_dir();
+    rgw::d4n::BlockDirectory* blockDir = source->m_blockDir.get(); //source->driver->get_block_dir();
     auto policy = filter->get_policy_driver()->get_cache_policy();
     auto cache_driver = filter->get_cache_driver();
     block.cacheObj.objName = source->get_key().get_oid();
