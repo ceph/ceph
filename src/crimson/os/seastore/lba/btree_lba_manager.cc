@@ -237,6 +237,17 @@ BtreeLBAManager::resolve_indirect_cursor(
   });
 }
 
+BtreeLBAManager::lower_bound_ret
+BtreeLBAManager::lower_bound(
+  Transaction &t,
+  laddr_t laddr)
+{
+  auto c = get_context(t);
+  auto btree = co_await get_btree<LBABtree>(cache, c);
+  auto iter = co_await btree.lower_bound(c, laddr);
+  co_return iter.get_cursor(c);
+}
+
 BtreeLBAManager::alloc_extent_ret
 BtreeLBAManager::reserve_region(
   Transaction &t,

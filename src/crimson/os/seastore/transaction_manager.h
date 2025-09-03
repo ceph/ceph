@@ -181,6 +181,13 @@ public:
     co_return ret;
   }
 
+  base_iertr::future<LBAMapping> lower_bound_pin(
+    Transaction &t,
+    laddr_t laddr) {
+    auto cursor = co_await lba_manager->lower_bound(t, laddr);
+    co_return co_await resolve_cursor_to_mapping(t, cursor);
+  }
+
   /**
    * maybe_indirect_extent_t
    *
