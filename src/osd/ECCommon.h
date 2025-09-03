@@ -527,7 +527,10 @@ struct ECCommon {
       std::list<ECExtentCache::OpRef> cache_ops;
       RMWPipeline *pipeline;
 
+      Op(RMWPipeline &pipeline) : tid(), plan(), pipeline(&pipeline) {}
+#ifndef WITH_CRIMSON
       Op() : tid(), plan(), pipeline(nullptr) {}
+#endif
 
       /// Callbacks
       Context *on_all_commit = nullptr;

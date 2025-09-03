@@ -974,6 +974,10 @@ void ECCommon::RMWPipeline::cache_ready(Op &op) {
 }
 
 struct ECDummyOp final : ECCommon::RMWPipeline::Op {
+  ECDummyOp(ECCommon::RMWPipeline &rmw_pipeline)
+    : Op(rmw_pipeline) {
+  }
+
   void generate_transactions(
       ceph::ErasureCodeInterfaceRef &ec_impl,
       pg_t pgid,
@@ -1031,7 +1035,7 @@ void ECCommon::RMWPipeline::finish_rmw(OpRef const &op) {
       dout(20) << __func__ << " cache idle " << op->version << dendl;
       // submit a dummy, transaction-empty op to kick the rollforward
       const auto tid = get_parent()->get_tid();
-      const auto nop = std::make_shared<ECDummyOp>();
+      const auto nop = std::make_shared<ECDummyOp>(*this);
       nop->hoid = op->hoid;
       nop->trim_to = op->trim_to;
       nop->pg_committed_to = op->version;
