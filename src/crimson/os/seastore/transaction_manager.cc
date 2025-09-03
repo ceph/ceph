@@ -880,6 +880,7 @@ TransactionManager::rewrite_logical_extent(
       // get target rewrite generation
       extent->get_rewrite_generation(),
       is_tracked)->cast<LogicalChildNode>();
+    assert(nextent->get_write_policy() != write_policy_t::WRITE_THROUGH);
     nextent->rewrite(t, *extent, 0);
 
     DEBUGT("rewriting meta -- {} to {}", t, *extent, *nextent);
@@ -921,10 +922,15 @@ TransactionManager::rewrite_logical_extent(
       t,
       extent->get_type(),
       extent->get_length(),
-      extent->get_user_hint(),
-      // get target rewrite generation
-      extent->get_rewrite_generation(),
-      is_tracked);
+      {
+        extent->get_user_hint(),
+        // get target rewrite generation
+        extent->get_rewrite_generation(),
+        is_tracked,
+        // WRITH_THROUGH is only effective for client io, so
+        // always set the write policy to WRITE_BACK here
+        write_policy_t::WRITE_BACK
+      });
     extent_len_t off = 0;
     auto left = extent->get_length();
     extent_ref_count_t refcount = 0;
@@ -936,6 +942,7 @@ TransactionManager::rewrite_logical_extent(
     t.force_rewrite_conflict = (extents.size() > 1);
     for (auto &_nextent : extents) {
       auto nextent = _nextent->template cast<LogicalChildNode>();
+      assert(nextent->get_write_policy() != write_policy_t::WRITE_THROUGH);
       bool first_extent = (off == 0);
       ceph_assert(left >= nextent->get_length());
       nextent->rewrite(t, *extent, off);
@@ -1215,9 +1222,12 @@ TransactionManager::promote_extent(
       t,
       orig_ext->get_type(),
       orig_ext->get_length(),
-      placement_hint_t::HOT,
-      INIT_GENERATION,
-      true);
+      {
+        placement_hint_t::HOT,
+        INIT_GENERATION,
+        true,
+        write_policy_t::WRITE_BACK
+      });
 
     promoted_extents.reserve(promoted_raw_extents.size());
 

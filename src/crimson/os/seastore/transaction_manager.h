@@ -591,7 +591,11 @@ public:
     SUBDEBUGT(seastore_tm, "{} hint {}~0x{:x} phint={} ...",
               t, T::TYPE, laddr_hint, len, placement_hint);
     auto exts = cache->alloc_new_data_extents<T>(
-      t, len, {placement_hint, INIT_GENERATION});
+      t, len,
+      {
+        placement_hint, INIT_GENERATION, false,
+        epm->get_write_policy(T::TYPE, len)
+      });
     // user must initialize the logical extent themselves
     assert(is_user_transaction(t.get_src()));
     for (auto& ext : exts) {

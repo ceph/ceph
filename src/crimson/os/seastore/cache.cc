@@ -1264,28 +1264,26 @@ std::vector<CachedExtentRef> Cache::alloc_new_data_extents_by_type(
   Transaction &t,        ///< [in, out] current transaction
   extent_types_t type,   ///< [in] type tag
   extent_len_t length,   ///< [in] length
-  placement_hint_t hint, ///< [in] user hint
-  rewrite_gen_t gen,      ///< [in] rewrite generation
-  bool is_tracked
+  alloc_option_t opt     ///< [in] allocation options
 )
 {
   LOG_PREFIX(Cache::alloc_new_data_extents_by_type);
   SUBDEBUGT(seastore_cache, "allocate {} 0x{:x}B, hint={}, gen={}",
-            t, type, length, hint, rewrite_gen_printer_t{gen});
+            t, type, length, opt.hint, rewrite_gen_printer_t{opt.gen});
   ceph_assert(get_extent_category(type) == data_category_t::DATA);
   std::vector<CachedExtentRef> res;
   switch (type) {
   case extent_types_t::OBJECT_DATA_BLOCK:
     {
       auto extents = alloc_new_data_extents<
-	ObjectDataBlock>(t, length, {hint, gen, is_tracked});
+	ObjectDataBlock>(t, length, std::move(opt));
       res.insert(res.begin(), extents.begin(), extents.end());
     }
     return res;
   case extent_types_t::TEST_BLOCK:
     {
       auto extents = alloc_new_data_extents<
-	TestBlock>(t, length, {hint, gen, is_tracked});
+	TestBlock>(t, length, std::move(opt));
       res.insert(res.begin(), extents.begin(), extents.end());
     }
     return res;
@@ -2200,7 +2198,8 @@ void Cache::init()
              P_ADDR_ROOT,
              PLACEMENT_HINT_NULL,
              NULL_GENERATION,
-             TRANS_ID_NULL);
+             TRANS_ID_NULL,
+	     write_policy_t::WRITE_BACK);
   root->set_modify_time(seastar::lowres_system_clock::now());
   INFO("init root -- {}", *root);
   add_extent(root);
@@ -2624,7 +2623,8 @@ Cache::_get_absent_extent_by_type(
 	    offset,
 	    PLACEMENT_HINT_NULL,
 	    NULL_GENERATION,
-	    TRANS_ID_NULL);
+	    TRANS_ID_NULL,
+	    write_policy_t::WRITE_BACK);
   DEBUGT("{} length=0x{:x} is absent, add extent ... -- {}",
     t, type, length, *ret);
   add_extent(ret);

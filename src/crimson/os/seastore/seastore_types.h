@@ -2070,6 +2070,13 @@ constexpr bool is_real_type(extent_types_t type) {
 
 std::ostream &operator<<(std::ostream &out, extent_types_t t);
 
+enum class write_policy_t {
+  WRITE_BACK,
+  WRITE_THROUGH
+};
+
+std::ostream& operator<<(std::ostream& out, write_policy_t w);
+
 /**
  * rewrite_gen_t
  *
@@ -3656,6 +3663,7 @@ template <> struct fmt::formatter<crimson::os::seastore::transaction_type_t> : f
 template <> struct fmt::formatter<crimson::os::seastore::write_result_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::omap_type_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<ceph::buffer::list> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::os::seastore::write_policy_t> : fmt::ostream_formatter {};
 #endif
 
 namespace fmt {
