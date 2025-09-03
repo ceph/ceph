@@ -39,6 +39,7 @@ TransactionManager::TransactionManager(
     journal(std::move(_journal)),
     epm(std::move(_epm)),
     backref_manager(std::move(_backref_manager)),
+    logical_bucket(nullptr),
     full_extent_integrity_check(
       crimson::common::get_conf<bool>(
         "seastore_full_integrity_check")),
@@ -856,6 +857,14 @@ TransactionManager::rewrite_logical_extent(
     ceph_abort();
   }
 
+  bool is_tracked =
+    support_logical_bucket() &&
+    // lextent is from hot tier
+    !epm->is_cold_device(extent->get_paddr().get_device_id()) &&
+    // lextent is cached by non volatile cache
+    logical_bucket->is_cached(
+      extent->get_laddr().get_object_prefix());
+
   if (get_extent_category(extent->get_type()) == data_category_t::METADATA) {
     assert(extent->is_fully_loaded());
     cache->retire_extent(t, extent);
@@ -865,7 +874,8 @@ TransactionManager::rewrite_logical_extent(
       extent->get_length(),
       extent->get_user_hint(),
       // get target rewrite generation
-      extent->get_rewrite_generation())->cast<LogicalChildNode>();
+      extent->get_rewrite_generation(),
+      is_tracked)->cast<LogicalChildNode>();
     nextent->rewrite(t, *extent, 0);
 
     DEBUGT("rewriting meta -- {} to {}", t, *extent, *nextent);
@@ -909,7 +919,8 @@ TransactionManager::rewrite_logical_extent(
       extent->get_length(),
       extent->get_user_hint(),
       // get target rewrite generation
-      extent->get_rewrite_generation());
+      extent->get_rewrite_generation(),
+      is_tracked);
     extent_len_t off = 0;
     auto left = extent->get_length();
     extent_ref_count_t refcount = 0;
@@ -1201,7 +1212,8 @@ TransactionManager::promote_extent(
       orig_ext->get_type(),
       orig_ext->get_length(),
       placement_hint_t::HOT,
-      INIT_GENERATION);
+      INIT_GENERATION,
+      true);
 
     promoted_extents.reserve(promoted_raw_extents.size());
 
@@ -1245,7 +1257,8 @@ TransactionManager::promote_extent(
       orig_ext->get_type(),
       orig_ext->get_length(),
       placement_hint_t::HOT,
-      INIT_GENERATION);
+      INIT_GENERATION,
+      true);
     auto lext = promoted_extent->cast<LogicalChildNode>();
     lext->set_laddr(orig_ext->get_laddr());
     lext->rewrite(t, *orig_ext, 0);
