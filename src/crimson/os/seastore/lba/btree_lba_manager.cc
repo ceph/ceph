@@ -7,6 +7,7 @@
 #include <seastar/core/metrics.hh>
 
 #include "include/buffer.h"
+#include "crimson/common/coroutine.h"
 #include "crimson/os/seastore/lba/btree_lba_manager.h"
 #include "crimson/os/seastore/lba/lba_btree_node.h"
 #include "crimson/os/seastore/logging.h"
@@ -328,6 +329,58 @@ BtreeLBAManager::lower_bound(
   auto btree = co_await get_btree<LBABtree>(cache, c);
   auto iter = co_await btree.lower_bound(c, laddr);
   co_return iter.get_cursor(c);
+}
+
+BtreeLBAManager::promote_extent_ret
+BtreeLBAManager::promote_extent(
+  Transaction &t,
+  LBACursor &cursor,
+  std::vector<LogicalChildNodeRef> extents)
+{
+  LOG_PREFIX(BtreeLBAManager::promote_extent);
+  auto laddr = cursor.get_laddr();
+  ceph_assert(!extents.empty());
+  ceph_assert(!cursor.is_indirect());
+  ceph_assert(laddr == extents.front()->get_laddr());
+  DEBUGT("promote cursor {} with {} extents",
+	 t, cursor, extents.size());
+  auto c = get_context(t);
+  auto btree = co_await get_btree<LBABtree>(c);
+  auto iter = btree.make_partial_iter(c, cursor);
+  auto orig_val = iter.get_val();
+  if (extents.size() == 1) {
+    auto new_val = orig_val;
+    ceph_assert(new_val.pladdr.is_paddr());
+    new_val.shadow_paddr = new_val.pladdr.get_paddr();
+    auto extent = extents.front().get();
+    auto paddr = extent->get_paddr();
+    new_val.pladdr = pladdr_t(paddr);
+    TRACET("promote {} from {} to {}",
+	   t, iter.get_key(), new_val.shadow_paddr, paddr);
+    assert(extent->is_pending());
+    assert(!extent->has_parent_tracker());
+    iter = btree.update(c, iter, new_val, extent);
+    assert(extent->has_parent_tracker());
+  } else {
+    auto insert_iter = co_await btree.remove(c, std::move(iter));
+    for (auto &extent : extents) {
+      auto offset = extent->get_laddr().get_byte_distance<extent_len_t>(laddr);
+      auto new_val = orig_val;
+      new_val.shadow_paddr = orig_val.pladdr.get_paddr().add_offset(offset);
+      new_val.pladdr = pladdr_t(extent->get_paddr());
+      new_val.len = extent->get_length();
+      new_val.checksum = extent->get_last_committed_crc();
+      TRACET("insert promoted cursor {} {}",
+	     c.trans, extent->get_laddr(), new_val);
+      assert(!extent->has_parent_tracker());
+      auto [iter, inserted] = co_await btree.insert(
+	c, std::move(insert_iter), extent->get_laddr(), new_val, extent.get());
+      ceph_assert(inserted);
+      assert(extent->has_parent_tracker());
+      insert_iter = co_await iter.next(c);
+    }
+  }
+  co_return;
 }
 
 /**
