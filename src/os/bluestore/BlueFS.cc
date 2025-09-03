@@ -4770,6 +4770,7 @@ void BlueFS::collect_alerts(osd_alert_list_t& alerts) {
   if (bdev[BDEV_WAL]) {
     bdev[BDEV_WAL]->collect_alerts(alerts, "WAL");
   }
+  _update_logger_stats(); // just to have it updated more frequently
 }
 
 int BlueFS::open_for_read(
