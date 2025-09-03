@@ -352,6 +352,14 @@ public:
     rewrite_gen_t target_generation,
     sea_time_point modify_time) = 0;
 
+  using rewrite_extents_iertr = base_iertr;
+  using rewrite_extents_ret = rewrite_extents_iertr::future<>;
+  virtual rewrite_extents_ret rewrite_extents(
+    Transaction &t,
+    std::vector<CachedExtentRef> &extents,
+    rewrite_gen_t target_generation,
+    sea_time_point modify_time) = 0;
+
   /**
    * promote_extent
    *
@@ -1835,10 +1843,11 @@ public:
     return paddr;
   }
 
-  std::list<alloc_paddr_result> alloc_paddrs(extent_len_t length) {
+  std::list<alloc_paddr_result> alloc_paddrs(
+    extent_len_t length, paddr_t hint) {
     // TODO: implement allocation strategy (dirty metadata and multiple devices)
     auto rbs = rb_group->get_rb_managers();
-    auto ret = rbs[0]->alloc_extents(length);
+    auto ret = rbs[0]->alloc_extents(length, hint);
     if (!ret.empty()) {
       stats.used_bytes += length;
     }

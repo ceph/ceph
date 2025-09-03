@@ -328,7 +328,7 @@ struct lba_btree_test : btree_test_base {
     lba_btree_update([=, this](auto &btree, auto &t) {
       auto extents = cache->alloc_new_data_extents<TestBlock>(
 	  t, TestBlock::SIZE,
-	  {placement_hint_t::HOT, 0, false,
+	  {placement_hint_t::HOT, 0, false, P_ADDR_NULL,
 	   write_policy_t::WRITE_BACK, get_paddr()});
       return seastar::do_with(
 	std::move(extents),
@@ -550,7 +550,7 @@ struct btree_lba_manager_test : btree_test_base {
       [=, this](auto &t) {
 	auto extents = cache->alloc_new_data_extents<TestBlock>(
 	    t, TestBlock::SIZE,
-	    {placement_hint_t::HOT, 0, false,
+	    {placement_hint_t::HOT, 0, false, P_ADDR_NULL,
 	     write_policy_t::WRITE_BACK, get_paddr()});
 	return seastar::do_with(
 	  std::vector<LogicalChildNodeRef>(

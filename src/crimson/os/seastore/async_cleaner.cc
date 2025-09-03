@@ -1245,15 +1245,12 @@ SegmentCleaner::do_reclaim_space(
 	}).si_then([FNAME, &extents, this, &reclaimed, &t] {
           DEBUGT("reclaim {} extents", t, extents.size());
           // rewrite live extents
-          auto modify_time = segments[reclaim_state->get_segment_id()].modify_time;
-          return trans_intr::do_for_each(
-            extents,
-            [this, modify_time, &t, &reclaimed](auto ext)
-          {
-            reclaimed += ext->get_length();
-            return extent_callback->rewrite_extent(
-                t, ext, reclaim_state->target_generation, modify_time);
-          });
+	  auto modify_time = segments[reclaim_state->get_segment_id()].modify_time;
+	  for (auto &ext : extents) {
+	    reclaimed += ext->get_length();
+	  }
+	  return extent_callback->rewrite_extents(
+	    t, extents, reclaim_state->target_generation, modify_time);
         });
       }).si_then([this, &t] {
         return extent_callback->submit_transaction_direct(t);

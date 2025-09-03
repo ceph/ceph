@@ -147,7 +147,7 @@ public:
 
   using allocate_ret_bare = std::list<alloc_paddr_result>;
   using allo_extents_ret = allocate_ertr::future<allocate_ret_bare>;
-  virtual allocate_ret_bare alloc_extents(size_t size) = 0;
+  virtual allocate_ret_bare alloc_extents(size_t size, paddr_t hint) = 0;
 
   virtual void mark_space_used(paddr_t paddr, size_t len) = 0;
   virtual void mark_space_free(paddr_t paddr, size_t len) = 0;

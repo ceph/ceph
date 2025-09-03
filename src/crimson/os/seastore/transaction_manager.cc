@@ -802,10 +802,12 @@ TransactionManager::get_next_dirty_extents(
   return cache->get_next_dirty_extents(t, seq, max_bytes);
 }
 
-TransactionManager::rewrite_extent_ret
+TransactionManager::rewrite_extent_iertr::future<
+  std::vector<CachedExtentRef>>
 TransactionManager::rewrite_logical_extent(
   Transaction& t,
-  LogicalChildNodeRef extent)
+  LogicalChildNodeRef extent,
+  paddr_t paddr_hint)
 {
   LOG_PREFIX(TransactionManager::rewrite_logical_extent);
   if (extent->has_been_invalidated()) {
@@ -831,6 +833,7 @@ TransactionManager::rewrite_logical_extent(
       extent->get_user_hint(),
       // get target rewrite generation
       extent->get_rewrite_generation(),
+      paddr_hint,
       is_tracked)->cast<LogicalChildNode>();
     nextent->rewrite(t, *extent, 0);
 
@@ -856,7 +859,9 @@ TransactionManager::rewrite_logical_extent(
         extent->get_length(),
         extent->get_paddr(),
         *nextent
-      ).discard_result();
+      ).si_then([nextent](auto) {
+	return std::vector<CachedExtentRef>{nextent};
+      });
     }).handle_error_interruptible(
       rewrite_extent_iertr::pass_further{},
       crimson::ct_error::assert_all{"unexpected enoent"}
@@ -866,7 +871,7 @@ TransactionManager::rewrite_logical_extent(
     auto length = extent->get_length();
     return cache->read_extent_maybe_partial(
       t, std::move(extent), 0, length
-    ).si_then([this, FNAME, &t, is_tracked](auto extent) {
+    ).si_then([this, FNAME, &t, paddr_hint, is_tracked](auto extent) {
       assert(extent->is_fully_loaded());
       cache->retire_extent(t, extent);
       auto extents = cache->alloc_new_data_extents_by_type(
@@ -876,6 +881,7 @@ TransactionManager::rewrite_logical_extent(
         extent->get_user_hint(),
         // get target rewrite generation
         extent->get_rewrite_generation(),
+	paddr_hint,
         is_tracked);
       return seastar::do_with(
         std::move(extents),
@@ -937,7 +943,9 @@ TransactionManager::rewrite_logical_extent(
             left -= nextent->get_length();
             return seastar::now();
           });
-        });
+        }).si_then([&extents] {
+	  return std::move(extents);
+	});
       });
     });
   }
@@ -1006,7 +1014,9 @@ TransactionManager::rewrite_extent_ret TransactionManager::rewrite_extent(
   auto fut = rewrite_extent_iertr::now();
   if (extent->is_logical()) {
     assert(is_logical_type(extent->get_type()));
-    fut = rewrite_logical_extent(t, extent->cast<LogicalChildNode>());
+    fut = rewrite_logical_extent(
+      t, extent->cast<LogicalChildNode>(), P_ADDR_NULL
+    ).discard_result();
   } else if (is_backref_node(extent->get_type())) {
     fut = backref_manager->rewrite_extent(t, extent);
   } else {
@@ -1043,6 +1053,7 @@ TransactionManager::promote_extent(
     orig_ext->get_length(),
     placement_hint_t::HOT,
     INIT_GENERATION,
+    P_ADDR_NULL,
     true);
   t.touch_laddr_prefix(orig_ext->get_laddr().get_object_prefix());
 
@@ -1088,6 +1099,83 @@ TransactionManager::promote_extent(
     t, mapping, std::move(promoted_extents));
 }
 
+TransactionManager::rewrite_extents_ret TransactionManager::rewrite_extents(
+  Transaction &t,
+  std::vector<CachedExtentRef> &extents,
+  rewrite_gen_t target_generation,
+  sea_time_point modify_time)
+{
+  LOG_PREFIX(TransactionManager::rewrite_extents);
+  return seastar::do_with(
+    P_ADDR_NULL,
+    L_ADDR_NULL,
+    [this, &t, target_generation, modify_time, &extents, FNAME]
+    (auto &paddr_hint, auto &next_laddr) {
+    return trans_intr::do_for_each(
+      extents,
+      [this, &t, target_generation, modify_time, FNAME,
+      &paddr_hint, &next_laddr](auto &extent) {
+      {
+        auto updated = cache->update_extent_from_transaction(t, extent);
+        if (!updated) {
+          DEBUGT("extent is already retired, skipping -- {}", t, *extent);
+          return rewrite_extent_iertr::now();
+        }
+        extent = updated;
+        ceph_assert(!extent->is_pending_io());
+      }
+
+      assert(extent->is_valid() && !extent->is_initial_pending());
+      if (extent->is_stable_dirty()) {
+        if (epm->can_inplace_rewrite(t, extent)) {
+          DEBUGT("delta overwriting extent -- {}", t, *extent);
+          t.add_inplace_rewrite_extent(extent);
+          extent->set_inplace_rewrite_generation();
+          return rewrite_extent_iertr::now();
+        }
+	if (extent->get_version() == 1 && extent->has_mutation()) {
+	  t.get_rewrite_stats().account_n_dirty();
+	} else {
+	  // extent->get_version() > 1 or DIRTY
+	  t.get_rewrite_stats().account_dirty(extent->get_version());
+	}
+        extent->set_target_rewrite_generation(INIT_GENERATION);
+      } else {
+        extent->set_target_rewrite_generation(target_generation);
+        ceph_assert(modify_time != NULL_TIME);
+        extent->set_modify_time(modify_time);
+      }
+
+      if (is_backref_node(extent->get_type())) {
+        DEBUGT("rewriting backref extent -- {}", t, *extent);
+        return backref_manager->rewrite_extent(t, extent);
+      }
+
+      if (extent->get_type() == extent_types_t::ROOT) {
+        DEBUGT("rewriting root extent -- {}", t, *extent);
+        cache->duplicate_for_write(t, extent);
+        return rewrite_extent_iertr::now();
+      }
+
+      if (extent->is_logical()) {
+        auto ext = extent->template cast<LogicalChildNode>();
+        if (next_laddr != ext->get_laddr()) {
+          paddr_hint = P_ADDR_NULL;
+        }
+        next_laddr = (ext->get_laddr() + ext->get_length()).checked_to_laddr();
+        return rewrite_logical_extent(t, ext, paddr_hint
+        ).si_then([&paddr_hint](auto nlextents) {
+          for (auto &nlextent : nlextents) {
+            paddr_hint = nlextent->get_paddr() + nlextent->get_length();
+          }
+        });
+      } else {
+        DEBUGT("rewriting physical extent -- {}", t, *extent);
+        return lba_manager->rewrite_extent(t, extent);
+      }
+    });
+  });
+}
 TransactionManager::demote_region_ret
 TransactionManager::demote_region(
   Transaction &t,
@@ -1103,6 +1191,7 @@ TransactionManager::demote_region(
     demote_region_iertr::pass_further{},
     crimson::ct_error::assert_all("unexpected enoent"));
   demote_region_res_t ret{0, 0, false};
+  std::vector<CachedExtentRef> extents;
   while ((ret.demoted_size + ret.evicted_size) < max_proceed_size) {
     if (it.is_end() || it.get_key().get_object_prefix() != prefix) {
       ret.complete = true;
@@ -1119,14 +1208,17 @@ TransactionManager::demote_region(
       DEBUGT("demote hot {}", t, it);
       auto extent = co_await read_pin_by_type(t, it, it.get_extent_type());
       ret.evicted_size += extent->get_length();
-      extent->set_target_rewrite_generation(epm->get_max_hot_gen() + 1);
-      co_await rewrite_logical_extent(t, extent);
+      extents.push_back(extent);
       it = co_await it.next();
     } else {
       DEBUGT("skip {}", t, it);
       it = co_await it.next();
     }
   }
+
+  co_await rewrite_extents(
+    t, extents, epm->get_max_hot_gen() + 1,
+    seastar::lowres_system_clock::now());
 
   co_return ret;
 }

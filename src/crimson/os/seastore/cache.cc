@@ -1141,6 +1141,7 @@ CachedExtentRef Cache::alloc_new_non_data_extent_by_type(
   extent_len_t length,   ///< [in] length
   placement_hint_t hint, ///< [in] user hint
   rewrite_gen_t gen,     ///< [in] rewrite generation
+  paddr_t paddr_hint,
   bool is_tracked
 )
 {
@@ -1148,7 +1149,7 @@ CachedExtentRef Cache::alloc_new_non_data_extent_by_type(
   SUBDEBUGT(seastore_cache, "allocate {} 0x{:x}B, hint={}, gen={}",
             t, type, length, hint, rewrite_gen_printer_t{gen});
   ceph_assert(get_extent_category(type) == data_category_t::METADATA);
-  auto opt = alloc_option_t{hint, gen, is_tracked};
+  auto opt = alloc_option_t{hint, gen, is_tracked, paddr_hint};
   switch (type) {
   case extent_types_t::ROOT:
     ceph_assert(0 == "ROOT is never directly alloc'd");
@@ -1194,6 +1195,7 @@ std::vector<CachedExtentRef> Cache::alloc_new_data_extents_by_type(
   extent_len_t length,   ///< [in] length
   placement_hint_t hint, ///< [in] user hint
   rewrite_gen_t gen,      ///< [in] rewrite generation
+  paddr_t paddr_hint,
   bool is_tracked
 )
 {
@@ -1206,7 +1208,7 @@ std::vector<CachedExtentRef> Cache::alloc_new_data_extents_by_type(
   case extent_types_t::OBJECT_DATA_BLOCK:
     {
       auto extents = alloc_new_data_extents<
-	ObjectDataBlock>(t, length, {hint, gen, is_tracked,
+	ObjectDataBlock>(t, length, {hint, gen, is_tracked, paddr_hint,
 	    epm.get_write_policy(type, length)});
       res.insert(res.begin(), extents.begin(), extents.end());
     }
@@ -1214,7 +1216,7 @@ std::vector<CachedExtentRef> Cache::alloc_new_data_extents_by_type(
   case extent_types_t::TEST_BLOCK:
     {
       auto extents = alloc_new_data_extents<
-	TestBlock>(t, length, {hint, gen, is_tracked,
+	TestBlock>(t, length, {hint, gen, is_tracked, paddr_hint,
 	  epm.get_write_policy(type, length)});
       res.insert(res.begin(), extents.begin(), extents.end());
     }
