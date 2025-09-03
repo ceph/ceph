@@ -265,12 +265,15 @@ private:
   map_t buffer_map;
 };
 
-enum class extent_2q_state_t : uint8_t {
+enum class extent_pin_state_t : uint8_t {
+  // shared state between LRU and 2Q impl
   Fresh = 0,
+  // 2Q impl only
   WarmIn,
   Hot,
   Max
 };
+std::ostream &operator<<(std::ostream &, const extent_pin_state_t &);
 
 class ExtentIndex;
 class CachedExtent
@@ -484,6 +487,7 @@ public:
 	<< std::hex << ", length=0x" << get_length()
 	<< ", loaded=0x" << get_loaded_length() << std::dec
 	<< ", state=" << state
+	<< ", pin_state=" << pin_state
 	<< ", last_committed_crc=" << last_committed_crc
 	<< ", refcount=" << use_count()
 	<< ", user_hint=" << user_hint
@@ -822,17 +826,34 @@ public:
   std::pair<bool, viewable_state_t>
   is_viewable_by_trans(Transaction &t);
 
-  extent_2q_state_t get_2q_state() const {
-    assert("2Q" == crimson::common::get_conf<std::string>
-	   ("seastore_cachepin_type"));
-    return cache_state;
+  extent_pin_state_t get_pin_state() const {
+#ifndef NDEBUG
+    using crimson::common::get_conf;
+    auto type = get_conf<std::string>("seastore_cachepin_type");
+    if (type == "LRU") {
+      assert(pin_state == extent_pin_state_t::Fresh);
+    } else if (type == "2Q") {
+      assert(pin_state < extent_pin_state_t::Max);
+    } else {
+      ceph_abort("invalid seastore_cachepin_type(LRU or 2Q)");
+    }
+#endif
+    return pin_state;
   }
 
-  void set_2q_state(extent_2q_state_t state) {
-    assert("2Q" == crimson::common::get_conf<std::string>
-	   ("seastore_cachepin_type"));
-    assert(state < extent_2q_state_t::Max);
-    cache_state = state;
+  void set_pin_state(extent_pin_state_t state) {
+#ifndef NDEBUG
+    using crimson::common::get_conf;
+    auto type = get_conf<std::string>("seastore_cachepin_type");
+    if (type == "LRU") {
+      assert(pin_state == extent_pin_state_t::Fresh);
+    } else if (type == "2Q") {
+      assert(pin_state < extent_pin_state_t::Max);
+    } else {
+      ceph_abort("invalid seastore_cachepin_type(LRU or 2Q)");
+    }
+#endif
+    pin_state = state;
   }
 
   extent_len_t get_last_touch_end() const {
@@ -954,8 +975,8 @@ private:
   // see Cache::touch_extent_by_range() and ExtentPinboardTwoQ.
   extent_len_t last_touch_end = 0;
 
-  // This field is unused when the ExtentPinboard use LRU algorithm
-  extent_2q_state_t cache_state = extent_2q_state_t::Fresh;
+  // This field is used by ExtentPinboard
+  extent_pin_state_t pin_state = extent_pin_state_t::Fresh;
 
 protected:
   trans_view_set_t mutation_pending_extents;
@@ -1530,25 +1551,5 @@ using lextent_list_t = addr_extent_list_base_t<
 template <> struct fmt::formatter<crimson::os::seastore::CachedExtent> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::CachedExtent::viewable_state_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::LogicalCachedExtent> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::os::seastore::extent_pin_state_t> : fmt::ostream_formatter {};
 #endif
-
-template <>
-struct fmt::formatter<crimson::os::seastore::extent_2q_state_t>
-    : public fmt::formatter<std::string_view> {
-  using State = crimson::os::seastore::extent_2q_state_t;
-  auto format(const State &s, auto &ctx) const {
-    switch (s) {
-    case State::Fresh:
-      return fmt::format_to(ctx.out(), "Fresh");
-    case State::WarmIn:
-      return fmt::format_to(ctx.out(), "WarmIn");
-    case State::Hot:
-      return fmt::format_to(ctx.out(), "Hot");
-    case State::Max:
-      return fmt::format_to(ctx.out(), "Max");
-    default:
-      __builtin_unreachable();
-      return ctx.out();
-    }
-  }
-};

@@ -513,16 +513,16 @@ public:
     double seconds) const final;
 
   void remove(CachedExtent &extent) final {
-    auto s = extent.get_2q_state();
+    auto s = extent.get_pin_state();
     if (extent.is_linked_to_list()) {
-      if (s == extent_2q_state_t::WarmIn) {
+      if (s == extent_pin_state_t::WarmIn) {
 	warm_in.remove(extent);
       } else {
-	ceph_assert(s == extent_2q_state_t::Hot);
+	ceph_assert(s == extent_pin_state_t::Hot);
 	hot.remove(extent);
       }
     } else {
-      ceph_assert(s == extent_2q_state_t::Fresh);
+      ceph_assert(s == extent_pin_state_t::Fresh);
     }
   }
 
@@ -531,14 +531,14 @@ public:
     const Transaction::src_t* p_src,
     extent_len_t load_start,
     extent_len_t load_length) final {
-    auto state = extent.get_2q_state();
+    auto state = extent.get_pin_state();
     auto type = extent.get_type();
     if (extent.is_linked_to_list()) {
-      if (state == extent_2q_state_t::Hot) {
+      if (state == extent_pin_state_t::Hot) {
 	hot.move_to_top(extent, p_src);
 	hit_queue(overall_hits.hot_hits, p_src, type);
       } else {
-	ceph_assert(state == extent_2q_state_t::WarmIn);
+	ceph_assert(state == extent_pin_state_t::WarmIn);
 	hit_queue(overall_hits.warm_in_hits, p_src, type);
 	// warm_in is a FIFO queue, do nothing here
 	// In the standard 2Q algorithm, the extent won't be considerred
@@ -548,28 +548,28 @@ public:
       hit++;
     } else if (!is_logical_type(extent.get_type())) {
       // put physical extents to hot queue directly
-      ceph_assert(state == extent_2q_state_t::Fresh);
-      extent.set_2q_state(extent_2q_state_t::Hot);
+      ceph_assert(state == extent_pin_state_t::Fresh);
+      extent.set_pin_state(extent_pin_state_t::Hot);
       auto trimmed_extents = hot.add_to_top(extent, p_src);
       on_update_hot(trimmed_extents);
       hit_queue(overall_hits.absent, p_src, type);
       miss++;
     } else { // the logical extent which is not in warm_in and not in hot
-      ceph_assert(state == extent_2q_state_t::Fresh);
+      ceph_assert(state == extent_pin_state_t::Fresh);
       auto lext = extent.cast<LogicalCachedExtent>();
       auto m = warm_out.accessed_recently(lext->get_laddr(), load_start);
       using AccessMode = IndexedFifoQueue::AccessMode;
       if (m == AccessMode::Again) {
 	// This extent was accessed recently, consider it's hot enough to
 	// promote to hot queue.
-	extent.set_2q_state(extent_2q_state_t::Hot);
+	extent.set_pin_state(extent_pin_state_t::Hot);
 	auto trimmed_extents = hot.add_to_top(extent, p_src);
 	on_update_hot(trimmed_extents);
 	hit_queue(overall_hits.hot_absent, p_src, type);
       } else {
 	// This extent didn't be accessed recently, put it warm_in queue
 	// by default.
-	extent.set_2q_state(extent_2q_state_t::WarmIn);
+	extent.set_pin_state(extent_pin_state_t::WarmIn);
 	auto trimmed_extents = warm_in.add_to_top(extent, p_src);
 	on_update_warm_in(trimmed_extents);
 	if (m == AccessMode::Missing) {
@@ -592,13 +592,13 @@ public:
     extent_len_t increased_length,
     const Transaction::src_t* p_src) final {
     if (extent.is_linked_to_list()) {
-      auto state = extent.get_2q_state();
-      if (state == extent_2q_state_t::WarmIn) {
+      auto state = extent.get_pin_state();
+      if (state == extent_pin_state_t::WarmIn) {
 	auto trimmed_extents = warm_in.increase_cached_size(
 	  extent, increased_length, p_src);
 	on_update_warm_in(trimmed_extents);
       } else {
-	ceph_assert(state == extent_2q_state_t::Hot);
+	ceph_assert(state == extent_pin_state_t::Hot);
 	auto trimmed_extents = hot.increase_cached_size(
 	  extent, increased_length, p_src);
 	on_update_hot(trimmed_extents);
@@ -623,13 +623,13 @@ public:
 private:
   void on_update_hot(std::list<CachedExtentRef> &extents) {
     for (auto extent : extents) {
-      extent->set_2q_state(extent_2q_state_t::Fresh);
+      extent->set_pin_state(extent_pin_state_t::Fresh);
     }
   }
   void on_update_warm_in(std::list<CachedExtentRef> &extents) {
     for (auto extent : extents) {
       ceph_assert(is_logical_type(extent->get_type()));
-      extent->set_2q_state(extent_2q_state_t::Fresh);
+      extent->set_pin_state(extent_pin_state_t::Fresh);
       auto len = extent->get_loaded_length();
       if (len == 0) {
         // The extent is possibly empty after being initially split/remapped

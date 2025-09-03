@@ -62,6 +62,22 @@ std::ostream &operator<<(std::ostream &out, CachedExtent::extent_state_t state)
   }
 }
 
+std::ostream &operator<<(std::ostream &out, const extent_pin_state_t &s) {
+  switch (s) {
+  case extent_pin_state_t::Fresh:
+    return out << "Fresh";
+  case extent_pin_state_t::WarmIn:
+    return out << "WarmIn";
+  case extent_pin_state_t::Hot:
+    return out << "Hot";
+  case extent_pin_state_t::Max:
+    return out << "Max";
+  default:
+    __builtin_unreachable();
+    return out;
+  }
+}
+
 std::ostream &operator<<(std::ostream &out, const CachedExtent &ext)
 {
   return ext.print(out);
