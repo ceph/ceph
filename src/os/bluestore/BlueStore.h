@@ -1394,8 +1394,6 @@ public:
     void make_blob_shared(uint64_t sbid, BlobRef b);
     uint64_t make_blob_unshared(SharedBlob *sb);
 
-    BlobRef new_blob();
-
     bool contains(const ghobject_t& oid) {
       if (cid.is_meta())
 	return oid.hobj.pool == -1;

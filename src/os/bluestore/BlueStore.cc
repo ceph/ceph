@@ -4224,12 +4224,6 @@ void BlueStore::DeferredBatch::_audit(CephContext *cct)
 
 // Collection
 
-BlueStore::BlobRef BlueStore::Collection::new_blob() {
-  BlobRef b = new Blob(this);
-  b->get_cache()->add_blob();
-  return b;  
-}
-
 #undef dout_prefix
 #define dout_prefix *_dout << "bluestore(" << store->path << ").collection(" << cid << " " << this << ") "
 
