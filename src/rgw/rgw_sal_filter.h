@@ -599,8 +599,10 @@ public:
                        RGWBucketEnt* ent) override;
   int check_bucket_shards(const DoutPrefixProvider* dpp,
                           uint64_t num_objs, optional_yield y) override;
-  virtual int chown(const DoutPrefixProvider* dpp, const rgw_owner& new_owner,
-		    optional_yield y) override;
+  virtual int chown(const DoutPrefixProvider* dpp,
+                    const rgw_owner& new_owner,
+                    const std::string& new_owner_name,
+                    optional_yield y) override;
   virtual int put_info(const DoutPrefixProvider* dpp, bool exclusive,
 		       ceph::real_time mtime, optional_yield y) override;
   virtual const rgw_owner& get_owner() const override;
