@@ -301,6 +301,8 @@ Device::access_ertr::future<> SeaStore::_mount()
 
 seastar::future<> SeaStore::Shard::mount_managers()
 {
+  LOG_PREFIX(SeaStore::mount_managers);
+  INFO("start");
   init_managers();
   return transaction_manager->mount(
   ).handle_error(
@@ -431,7 +433,7 @@ seastar::future<> SeaStore::prepare_meta(uuid_d new_osd_fsid)
 Device::access_ertr::future<> SeaStore::_mkfs(uuid_d new_osd_fsid)
 {
   LOG_PREFIX(SeaStore::_mkfs);
-  INFO("uuid={}, root={} ...", new_osd_fsid, root);
+  DEBUG("uuid={}, root={} ...", new_osd_fsid, root);
   ceph_assert(seastar::this_shard_id() == primary_core);
   // todo: read_meta to return errorator
   auto [done, value] = co_await read_meta("mkfs_done");
@@ -481,11 +483,15 @@ Device::access_ertr::future<> SeaStore::_mkfs(uuid_d new_osd_fsid)
   if (d_type == device_type_t::RANDOM_BLOCK_SSD) {
       id = static_cast<device_id_t>(DEVICE_ID_RANDOM_BLOCK_MIN);
   }
+  DEBUG("creating primary device");
   co_await device->mkfs(device_config_t::create_primary(new_osd_fsid, id, d_type, sds));
+  DEBUG("mounting {} secondaries", secondaries.size());
   for (auto& sec_dev : secondaries) {
       co_await sec_dev->mount();
   }
+  DEBUG("mounting primary device");
   co_await device->mount();
+  DEBUG("mkfs managers");
   co_await shard_stores.invoke_on_all([] (auto &local_store) {
       return local_store.mkfs_managers().handle_error(
       crimson::ct_error::assert_all{"Invalid error in SeaStoreS::mkfs_managers"});
@@ -2341,6 +2347,8 @@ uuid_d SeaStore::Shard::get_fsid() const
 
 void SeaStore::Shard::init_managers()
 {
+  LOG_PREFIX(SeaStore::init_managers);
+  DEBUG("start");
   transaction_manager.reset();
   collection_manager.reset();
   onode_manager.reset();
