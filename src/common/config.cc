@@ -715,6 +715,9 @@ int md_config_t::parse_argv(ConfigValues& values,
     else if (ceph_argparse_witharg(args, i, &val, "--client_mountpoint", "-r", (char*)NULL)) {
       set_val_or_die(values, tracker, "client_mountpoint", val.c_str());
     }
+    else if (ceph_argparse_witharg(args, i, &val, "--daemon_uniquifier", (char*)NULL)) {
+      set_val_or_die(values, tracker, "daemon_uniquifier", val.c_str());
+    }
     else {
       int r = parse_option(values, tracker, args, i, NULL, level);
       if (r < 0) {

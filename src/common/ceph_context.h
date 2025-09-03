@@ -407,9 +407,15 @@ private:
     l_mempool_items,
     l_mempool_last
   };
+  enum {
+    l_daemon_first = 1000000,
+    l_daemon_uniquifier,
+    l_daemon_last
+  };
   PerfCounters *_cct_perf = nullptr;
   PerfCounters* _mempool_perf = nullptr;
   std::vector<std::string> _mempool_perf_names, _mempool_perf_descriptions;
+  PerfCounters* _daemon_perf = nullptr;
 
   /**
    * Enable the performance counters.

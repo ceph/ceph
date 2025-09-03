@@ -6875,3 +6875,19 @@ options:
   level: dev
   default: 0
   desc: When EC writes should generate PDWs (development only) 0=optimal 1=never 2=when possible
+- name: daemon_uniquifier
+  type: uint
+  default: 0
+  level: advanced
+  desc: Unique integer to be returned in PerfCounters
+  fmt_desc: A unique integer to be passed to selected at daemon
+    creation time and passed to the daemon at startup, for the use of
+    the dashboard and other monitoring.
+  note: If this is set to 0 no uniquifier is provided.
+  tags:
+  - service
+  services:
+  - common
+  flags:
+  - no_mon_update
+  - startup

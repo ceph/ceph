@@ -987,6 +987,15 @@ void CephContext::_enable_perf_counter()
   }
   _mempool_perf = plb2.create_perf_counters();
   _perf_counters_collection->add(_mempool_perf);
+
+  auto uniquifier = _conf.get_val<uint64_t>("daemon_uniquifier");
+  if (uniquifier != 0) {
+    PerfCountersBuilder plb(this, "daemon", l_daemon_first, l_daemon_last);
+    plb.add_u64(l_daemon_uniquifier, "uniquifier", "Unique ID for this daemon");
+    _daemon_perf = plb.create_perf_counters();
+    _perf_counters_collection->add(_daemon_perf);
+    _daemon_perf->set(l_daemon_uniquifier, uniquifier);
+  }
 }
 
 void CephContext::_disable_perf_counter()
@@ -1003,6 +1012,12 @@ void CephContext::_disable_perf_counter()
   _mempool_perf = nullptr;
   _mempool_perf_names.clear();
   _mempool_perf_descriptions.clear();
+
+  if (_daemon_perf) {
+    _perf_counters_collection->remove(_daemon_perf);
+    delete _daemon_perf;
+    _daemon_perf = nullptr;
+  }
 }
 
 void CephContext::_refresh_perf_values()
