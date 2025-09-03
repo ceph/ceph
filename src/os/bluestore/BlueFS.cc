@@ -685,12 +685,25 @@ void BlueFS::dump_block_extents(ostream& out)
     }
     auto total = get_block_device_size(i);
     auto free = get_free(i);
-
-    out << i << " : device size 0x" << std::hex << total
-        << "(" << byte_u_t(total) << ")"
-        << " : using 0x" << total - free
-        << "(" << byte_u_t(total - free) << ")"
-        << std::dec << std::endl;
+    if (i != shared_alloc_id) {
+      out << i << " : device size 0x" << std::hex << total
+            << "(" << byte_u_t(total) << ")"
+          << " : using 0x" << total - free
+            << "(" << byte_u_t(total - free) << ")"
+          << std::dec << std::endl;
+    } else {
+      auto bluefs_used = get_used(i);
+      auto non_bluefs_used = get_used_non_bluefs();
+      out << i << " : device size 0x" << std::hex << total
+            << "(" << byte_u_t(total) << ")"
+          << " : using 0x" << total - free
+            << "(" << byte_u_t(total - free) << ")"
+          << " : bluefs used 0x" << bluefs_used
+            << "(" << byte_u_t(bluefs_used) << ")"
+          << " : non-bluefs used 0x" << non_bluefs_used
+            << "(" << byte_u_t(non_bluefs_used) << ")"
+          << std::dec << std::endl;
+    }
   }
 }
 
@@ -5367,10 +5380,7 @@ void OriginalVolumeSelector::get_paths(const std::string& base, paths& res) cons
 #define dout_prefix *_dout << "OriginalVolumeSelector: "
 
 void OriginalVolumeSelector::dump(ostream& sout) {
-  sout<< "wal_total:" << wal_total
-    << ", db_total:" << db_total
-    << ", slow_total:" << slow_total
-    << std::endl;
+  sout << "*** no stats ***" << std::endl;
 }
 
 // ===============================================
