@@ -171,6 +171,29 @@ def test_xattr(testdir):
     assert_equal(9, ret_val)
     assert_equal("user.big\x00", ret_buff.decode('utf-8'))
 
+def test_create_and_rm_2000_subdir_levels_close(testdir):
+    LEVELS = 2000
+
+    for i in range(1, LEVELS + 1):
+        dirname = f'dir{i}'
+        cephfs.mkdir(dirname, 0o755)
+        cephfs.chdir(dirname)
+    cephfs.chdir('/')
+
+    dirpath = 'dir1/'
+    i = 1
+    stack = collections.deque([dirpath,])
+    while stack:
+        dirpath = stack[-1]
+        try:
+            cephfs.rmdir(dirpath)
+            stack.pop()
+        except libcephfs.ObjectNotEmpty:
+            i += 1
+            dirpath += f'dir{i}/'
+            stack.append(dirpath)
+            continue
+
 def test_ceph_mirror_xattr(testdir):
     def gen_mirror_xattr():
         cluster_id = str(uuid.uuid4())
