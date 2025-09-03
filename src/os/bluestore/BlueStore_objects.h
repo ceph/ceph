@@ -34,10 +34,10 @@ namespace bluestore {
     std::atomic_int nref = {0};     ///< reference count
     int16_t id = -1;                ///< id, for spanning blobs only, >= 0
     int16_t last_encoded_id = -1;   ///< (ephemeral) used during encoding only
-    BlueStore::CollectionRef collection;
+    bluestore::Onode* onode;
 
     void set_shared_blob(BlueStore::SharedBlobRef sb);
-    Blob(BlueStore::CollectionRef collection) : collection(collection) {}
+    Blob(bluestore::Onode* onode) : onode(onode) {}
   private:
     BlueStore::SharedBlobRef shared_blob;      ///< shared blob state (if any)
     mutable bluestore_blob_t blob;  ///< decoded blob metadata
@@ -150,9 +150,6 @@ namespace bluestore {
     bool is_shared_loaded() const;
     BlueStore::BufferCacheShard* get_cache();
     uint64_t get_sbid() const;
-    BlueStore::CollectionRef get_collection() const {
-      return collection;
-    }
 
     ~Blob();
 
@@ -259,6 +256,8 @@ namespace bluestore {
       ceph_assert(cached);
       cached = false;
     }
+
+    BlueStore::BlobRef new_blob();
 
     static const std::string& calc_omap_prefix(uint8_t flags);
     static void calc_omap_header(uint8_t flags, const Onode* o,

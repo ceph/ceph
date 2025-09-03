@@ -44,7 +44,7 @@ using ceph::Formatter;
 void bluestore::Blob::set_shared_blob(BlueStore::SharedBlobRef sb) {
   ceph_assert((bool)sb);
   ceph_assert(!shared_blob);
-  ceph_assert(sb->collection = collection);
+  ceph_assert(sb->collection = onode->c);
   shared_blob = sb;
   ceph_assert(get_cache());
 }
@@ -54,7 +54,7 @@ bool bluestore::Blob::is_shared_loaded() const {
 }
 
 BlueStore::BufferCacheShard* bluestore::Blob::get_cache() {
-  return collection ? collection->cache : nullptr;
+  return (onode && onode->c) ? onode->c->cache : nullptr;
 }
 
 uint64_t bluestore::Blob::get_sbid() const {
@@ -815,6 +815,14 @@ void bluestore::Blob::decode(
 
 #undef dout_prefix
 #define dout_prefix *_dout << "bluestore.onode(" << this << ")." << __func__ << " "
+
+BlueStore::BlobRef bluestore::Onode::new_blob() {
+  BlueStore::BlobRef b = new Blob(this);
+  if (c){
+    b->get_cache()->add_blob();
+  }
+  return b;
+}
 
 bluestore::Onode::Onode(BlueStore::Collection *c, const ghobject_t& o,
   const mempool::bluestore_cache_meta::string& k) 
