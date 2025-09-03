@@ -2967,6 +2967,8 @@ class UnlinkTreeWorker:
     def __init__(self, fs, trash_path, should_cancel, suppress_errors=False):
         self.fs = fs
         self.trash_path = trash_path
+        if isinstance(self.trash_path, str):
+            self.trash_path = self.trash_path.encode('utf-8')
 
         self.should_cancel = should_cancel
         self.suppress_errors = suppress_errors
@@ -2990,9 +2992,9 @@ class UnlinkTreeWorker:
         # ensure we are dealing with the dir at the top of the stack.
         assert self.curr_dir is self.stack[-1]
 
-        de_path = os.path.join(self.curr_dir.path, de_name)
         try:
-            self.stack.append(RmtreeDir(self.fs, de_path))
+            rel_path = os.path.join(self.curr_dir.rel_path, de_name)
+            self.stack.append(RmtreeDir(self.fs, rel_path))
             return True
         except Error as e:
             if self.suppress_errors:
@@ -3066,7 +3068,7 @@ class UnlinkTreeWorker:
 
                 if self.curr_dir.is_empty:
                     try:
-                        self.fs.rmdir(self.curr_dir.path)
+                        self.curr_dir.try_rmdir(self.suppress_errors)
                     except ObjectNotEmpty:
                         log.info(f'removing "{self.curr_dir.name}" failed with '
                                   'with ObjectNotEmpty even though dir empty '
@@ -3087,13 +3089,12 @@ class RmtreeDir:
     helper for class NonRecursiveRmtree.
     '''
 
-    def __init__(self, fs, path):
+    def __init__(self, fs, rel_path):
         self.fs = fs
+        self.rel_path = rel_path
 
-        self.path = path
-        if isinstance(self.path, str):
-            self.path = self.path.encode('utf-8')
-        self.name = os.path.basename(self.path)
+        self.name = os.path.basename(self.rel_path)
+
         # XXX: exception (if) raised here should be handled by caller based on
         # the context.
         self.handle = self.fs.opendir(self.path)
@@ -3117,7 +3118,7 @@ class RmtreeDir:
         self.de_has_been_removed = False
 
     def __str__(self):
-        return self.path
+        return self.name
 
     def add_to_de_ignore_list(self, de_name):
         self.de_ignore_list.append(de_name)
@@ -3168,7 +3169,7 @@ class RmtreeDir:
             log.error(f'Exception occured: "{e}"')
             self.set_readdir_error()
 
-    def try_rmdir(self, de_name, suppress_errors=False):
+    def try_rmdir(self, suppress_errors=False):
         '''
         Remove given directory. If that fails because its not empty, raise the
         exception, the caller should handle it.
@@ -3177,9 +3178,8 @@ class RmtreeDir:
         and tell caller whether to continue or break loop based through the
         return value.
         '''
-        de_path = os.path.join(self.path, de_name)
         try:
-            self.fs.rmdir(de_path)
+            self.fs.rmdir(self.rel_path)
             self.de_has_been_removed = True
         except ObjectNotEmpty:
             # XXX: push this dir to stack, done in the caller method
@@ -3187,7 +3187,7 @@ class RmtreeDir:
         except Error as e:
             log.error('Following exception occured while calling rmdir() for '
                       f'dir "{self.name}": "{e}"')
-            self.add_to_de_ignore_list(de_name)
+            self.add_to_de_ignore_list(self.name)
 
             if not suppress_errors:
                 raise
@@ -3196,9 +3196,8 @@ class RmtreeDir:
         '''
         Unlink given file and add it to the ignore list if that fails.
         '''
-        de_path = os.path.join(self.path, de_name)
         try:
-            self.fs.unlink(de_path)
+            self.fs.unlinkat(self.fd, de_name, 0)
             self.de_has_been_removed = True
         except Error as e:
             log.error('Following exception occured while calling unlink() for '
