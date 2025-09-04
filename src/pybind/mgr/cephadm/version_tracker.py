@@ -36,6 +36,10 @@ class VersionTracker:
 
         return 0, '', ''
     
+    
+    def _get_bootstrap_ceph_version(self) -> Tuple[int, str, str]:
+        return 0, self.mgr.get_store('bootstrap-ceph-version'), ''
+    
 
     def add_cluster_version(self, version: str) -> None:
         SQL_QUERY = '''
@@ -58,7 +62,7 @@ class VersionTracker:
             return -errno.EAGAIN, "", "mgr db not yet available"
         
         if self._cluster_version_history_is_empty():
-            self.add_cluster_version(self.mgr.get_store('bootstrap_ceph_version'))
+            self.add_cluster_version(self.mgr.get_store('bootstrap-ceph-version'))
 
         res = dict()
 

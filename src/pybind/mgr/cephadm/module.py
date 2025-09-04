@@ -4300,6 +4300,13 @@ Then run the following:
         '''
         return self.version_tracker._set_bootstrap_ceph_version(version)
     
+    @CLIReadCommand('cephadm get-bootstrap-ceph-version')
+    def _do_get_bootstrap_ceph_version(self) -> Tuple[int, str, str]:
+        '''
+        Gets the bootstrap Ceph version in KV store
+        '''
+        return self.version_tracker._get_bootstrap_ceph_version()
+    
     @CLIRequiresDB
     @CLIReadCommand('cephadm get-cluster-version-history')
     @MgrModuleRecoverDB
