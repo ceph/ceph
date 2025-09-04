@@ -115,6 +115,19 @@ class CLI(MgrModule, metaclass=MgrAPIReflector):
         }
         return HandleCommandResult(stdout=pretty_json(stats))
 
+    @CLICommand('mgr cli cache flush')
+    def erase_cache(self, what: str) -> HandleCommandResult:
+        """
+        Erase a cached map by its name.
+        """
+        r = self.erase(what)
+        if r is False:
+            return HandleCommandResult(
+                errno.EINVAL,
+                stderr=f"no cached map named {what}"
+            )
+        return HandleCommandResult(stdout=f"Cache map {what} erased successfully")
+
 
 class BenchmarkException(Exception):
     pass
