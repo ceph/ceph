@@ -55,6 +55,7 @@ private:
   Context *m_on_finish;
 
   uint64_t m_max_snaps;
+  bool m_has_newer_mirror_snap = false;
   CephContext *m_cct;
 
   std::vector<cls::rbd::GroupSnapshot> m_group_snaps;
@@ -71,7 +72,7 @@ private:
 
   void remove_peer_uuid(cls::rbd::GroupSnapshot group_snap,
                         std::string mirror_peer_uuid);
-  void handle_remove_peer_uuid(int r);
+  void handle_remove_peer_uuid(int r, cls::rbd::GroupSnapshot group_snap);
 
   void remove_group_snapshot(cls::rbd::GroupSnapshot group_snap);
   void handle_remove_group_snapshot(int r);
