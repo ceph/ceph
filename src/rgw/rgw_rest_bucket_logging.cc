@@ -384,23 +384,22 @@ class RGWPostBucketLoggingOp : public RGWDefaultResponseOp {
     std::string obj_name;
     RGWObjVersionTracker objv_tracker;
     op_ret = target_bucket->get_logging_object_name(obj_name, configuration.target_prefix, y, this, &objv_tracker);
-    if (op_ret < 0) {
-      ldpp_dout(this, 1) << "ERROR: failed to get pending logging object name from target bucket '" << target_bucket_id << "'" << dendl;
+    if (op_ret < 0 && op_ret != -ENOENT) {
+      ldpp_dout(this, 1) << "ERROR: failed to get pending logging object name from target bucket '" << target_bucket_id <<
+        "'. error: " << op_ret << dendl;
       return;
+    }
+    if (op_ret == -ENOENT) {
+      // no pending object - nothing to flush
+      ldpp_dout(this, 5) << "INFO: no pending logging object in target bucket '" << target_bucket_id << "'. new object should be created" << dendl;
     }
     const auto region = driver->get_zone()->get_zonegroup().get_api_name();
     op_ret = rgw::bucketlogging::rollover_logging_object(configuration, target_bucket, obj_name, this, region, source_bucket, y, true, &objv_tracker, &old_obj);
     if (op_ret < 0) {
-      if (op_ret == -ENOENT) {
-        ldpp_dout(this, 5) << "WARNING: no pending logging object '" << obj_name << "'. nothing to flush"
-            << " to target bucket '" << target_bucket_id << "'. "
-            << " last committed object is '" << old_obj << "'" << dendl;
-        op_ret = 0;
-      } else {
-        ldpp_dout(this, 1) << "ERROR: failed flush pending logging object '" << obj_name << "'"
-            << " to target bucket '" << target_bucket_id << "'. "
-            << " last committed object is '" << old_obj << "'" << dendl;
-      }
+      ldpp_dout(this, 1) << "ERROR: failed to flush pending logging object '" << obj_name << "'"
+          << " to target bucket '" << target_bucket_id << "'. "
+          << " last committed object is '" << old_obj <<
+          "'. error: " << op_ret << dendl;
       return;
     }
     ldpp_dout(this, 20) << "INFO: flushed pending logging object '" << old_obj
