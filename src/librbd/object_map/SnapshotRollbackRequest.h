@@ -5,6 +5,7 @@
 #define CEPH_LIBRBD_OBJECT_MAP_SNAPSHOT_ROLLBACK_REQUEST_H
 
 #include "include/int_types.h"
+#include "include/rados.h" // for CEPH_NOSNAP
 #include "librbd/object_map/Request.h"
 
 class Context;

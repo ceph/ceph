@@ -17,6 +17,8 @@
 #include "common/Formatter.h"
 #include "include/denc.h"
 
+#include <dirent.h> // for DT_DIR
+
 void Anchor::encode(bufferlist &bl) const
 {
   ENCODE_START(2, 1, bl);

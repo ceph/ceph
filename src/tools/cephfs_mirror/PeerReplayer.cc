@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <sys/time.h>
 #include <sys/file.h>
+#include <boost/optional/optional_io.hpp>
 #include <boost/scope_exit.hpp>
 
 #include "common/admin_socket.h"

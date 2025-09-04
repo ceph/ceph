@@ -37,6 +37,7 @@ class MClientCaps;
 class MClientCapRelease;
 class MClientLease;
 class MClientReply;
+class MInodeFileCaps;
 class MDCache;
 class MLock;
 class MDSContext;

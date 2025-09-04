@@ -17,6 +17,7 @@
 
 #include "MgrSession.h"
 #include "include/stringify.h"
+#include "include/str_map.h"
 #include "common/Clock.h" // for ceph_clock_now()
 #include "common/debug.h"
 #include "common/Formatter.h"

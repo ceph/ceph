@@ -3,6 +3,10 @@
 
 #include "Request.h"
 
+#include "include/intarith.h" // for round_up_to()
+
+#include <ostream>
+
 #define dout_subsys ceph_subsys_rbd_pwl
 #undef dout_prefix
 #define dout_prefix *_dout << "librbd::cache::pwl::ssd::Request: " << this << " " \

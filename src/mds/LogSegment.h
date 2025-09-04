@@ -18,7 +18,9 @@
 #include "include/elist.h"
 #include "include/interval_set.h"
 #include "include/Context.h"
-#include "mdstypes.h"
+#include "include/fs_types.h" // for inodeno_t
+#include "include/types.h" // for version_t
+#include "mdstypes.h" // for dirfrag_t, metareqid_t
 #include "CInode.h"
 #include "CDentry.h"
 #include "CDir.h"

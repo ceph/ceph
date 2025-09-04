@@ -6,7 +6,7 @@
 #include "msg/Message.h"
 #include "mon/Session.h"
 #include "include/encoding.h"
-#include "include/types.h" // for epoch_t
+#include "include/types.h" // for epoch_t, version_t
 
 #include <cstdint>
 #include <string_view>

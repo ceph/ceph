@@ -11,7 +11,13 @@
 
 #include "mgr/Types.h"
 
+#include <iosfwd>
+#include <list>
+#include <map>
 #include <regex>
+#include <set>
+#include <string>
+#include <vector>
 
 typedef std::vector<std::string> OSDPerfMetricSubKey; // array of regex match
 typedef std::vector<OSDPerfMetricSubKey> OSDPerfMetricKey;

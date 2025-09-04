@@ -16,6 +16,9 @@
 #ifndef CEPH_MOSDOPREPLY_H
 #define CEPH_MOSDOPREPLY_H
 
+#include <ostream>
+#include <vector>
+
 #include "msg/Message.h"
 
 #include "MOSDOp.h"

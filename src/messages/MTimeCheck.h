@@ -15,6 +15,14 @@
 #ifndef CEPH_MTIMECHECK_H
 #define CEPH_MTIMECHECK_H
 
+#include <cstdint>
+#include <map>
+
+#include "include/encoding.h"
+#include "include/utime.h"
+#include "include/types.h" // for version_t
+#include "msg/Message.h"
+
 class MTimeCheck final : public Message {
 public:
   static constexpr int HEAD_VERSION = 1;

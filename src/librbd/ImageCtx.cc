@@ -7,6 +7,7 @@
 #include "include/neorados/RADOS.hpp"
 
 #include "common/ceph_context.h"
+#include "common/Clock.h" // for ceph_clock_now()
 #include "common/dout.h"
 #include "common/errno.h"
 #include "common/perf_counters.h"

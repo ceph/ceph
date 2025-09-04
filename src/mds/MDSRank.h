@@ -21,6 +21,7 @@
 #include "common/admin_socket.h" // for asok_finisher
 #include "common/DecayCounter.h"
 #include "common/LogClient.h"
+#include "common/TrackedOp.h" // for class OpTracker
 
 #include "include/common_fwd.h"
 
@@ -36,9 +37,12 @@
 // benefit of those including this header and using MDSRank::logger
 #include "common/perf_counters.h"
 
+#include <boost/intrusive_ptr.hpp>
+
 class MDSContext;
 class MDSMetaRequest;
 class MMDSMap;
+typedef boost::intrusive_ptr<MDRequestImpl> MDRequestRef;
 
 namespace boost::asio { class io_context; }
 

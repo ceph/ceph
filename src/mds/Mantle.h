@@ -24,6 +24,8 @@
 
 #include "mdstypes.h"
 
+#include "include/cephfs/types.h" // for mds_rank_t
+
 class Mantle {
   public:
     Mantle();

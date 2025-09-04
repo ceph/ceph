@@ -15,6 +15,7 @@
 #include "include/Context.h"
 #include "common/ceph_context.h"
 #include "common/ceph_mutex.h"
+#include "common/Clock.h" // for ceph_clock_now()
 #include "common/Cond.h"
 #include "include/utime.h"
 #include "common/ceph_argparse.h"

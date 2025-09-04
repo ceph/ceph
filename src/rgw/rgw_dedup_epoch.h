@@ -13,6 +13,8 @@
  */
 
 #pragma once
+
+#include "common/Clock.h" // for ceph_clock_now()
 #include "common/dout.h"
 #include "rgw_dedup_utils.h"
 

@@ -16,6 +16,7 @@
 #include "librbd/io/Utils.h"
 #include "librbd/journal/Types.h"
 #include "include/rados/librados.hpp"
+#include "common/Clock.h" // for ceph_clock_now()
 #include "common/errno.h"
 #include "common/perf_counters.h"
 #include "osdc/Striper.h"

@@ -15,6 +15,7 @@
 #include "Capability.h"
 #include "BatchOp.h"
 #include "CInode.h"
+#include "Mutation.h" // for struct MDLockCache
 #include "SessionMap.h"
 
 #include "common/debug.h"

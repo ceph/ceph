@@ -21,6 +21,7 @@
 #include <vector>
 
 #include "MDSTableClient.h"
+#include "mds_table_types.h" // for TABLE_SNAP
 #include "snap.h"
 
 class MDSContext;

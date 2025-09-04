@@ -15,8 +15,10 @@
 #ifndef CEPH_MCOMMANDREPLY_H
 #define CEPH_MCOMMANDREPLY_H
 
+#include <string>
 #include <string_view>
 
+#include "include/types.h" // for errorcode32_t
 #include "msg/Message.h"
 #include "MCommand.h"
 
