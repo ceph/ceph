@@ -4,7 +4,6 @@
 #pragma once
 
 #include <string>
-#include <memory>
 #include <optional>
 #include <atomic>
 #include <shared_mutex>
@@ -13,11 +12,8 @@
 
 #include "include/buffer.h"
 #include "include/encoding.h"
+#include "include/common_fwd.h"
 #include "common/ceph_time.h"
-
-// Forward declarations
-class CephContext;
-class PerfCounters;
 
 namespace rgw {
 
