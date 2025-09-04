@@ -220,10 +220,10 @@ ECTransaction::WritePlanObj::WritePlanObj(
           // Some kind of reconstruct is needed for conventional, but NOT for PDW!
           do_parity_delta_write = true;
         } else {
-          /* Everything we need for both is available, opt for which ever is less
-           * reads.
+          /* Everything we need for both is available, opt for whichever is fewer
+           * reads. Choose PDW in a tie as it's slightly more performant at random I/O.
            */
-          do_parity_delta_write = pdw_read_shards.size() < read_shards.size();
+          do_parity_delta_write = pdw_read_shards.size() <= read_shards.size();
         }
 
         if (do_parity_delta_write) {
