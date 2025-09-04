@@ -20,7 +20,7 @@ function(build_uadk)
         UPDATE_COMMAND "" # this disables rebuild on each run
         GIT_REPOSITORY "https://github.com/ceph/uadk.git"
         GIT_CONFIG advice.detachedHead=false
-        GIT_TAG 19f650cae960304e3c674992a4c7d5d56a8f4efa
+        GIT_TAG 8481b582808a252fc29387b84ee319045bc2557b
         SOURCE_DIR "${PROJECT_SOURCE_DIR}/src/uadk"
         BUILD_IN_SOURCE 1
         CMAKE_ARGS -DCMAKE_CXX_COMPILER=which g++
