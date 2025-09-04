@@ -6922,6 +6922,15 @@ boost::statechart::result PeeringState::ReplicaActive::react(
   } else {
     ps->state_set(PG_STATE_PEERED);
   }
+  /* Update the state in the stats. This will normally get overwritten when the next write
+   * transaction is applied, but if the PG is idle then these stats may get copied to the
+   * next primary (see PG::merge_log). The state update ensures that prepare_stats_for_publish
+   * will update last_active when the primary changes and this stops health check generating
+   * false positive stuck in peering alerts.
+   */
+  if (ps->info.stats.state != ps->state) {
+    ps->info.stats.state = ps->state;
+  }
   pl->on_activate_committed();
 
   return discard_event();
