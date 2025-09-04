@@ -8,6 +8,7 @@ import errno
 import dateutil.parser
 from datetime import datetime
 import threading
+from typing import Dict, List, Any
 
 from itertools import combinations
 from itertools import zip_longest
@@ -111,6 +112,12 @@ def bilog_list(zone, bucket, args = None):
     cmd += ['--tenant', config.tenant, '--uid', user.name] if config.tenant else []
     bilog, _ = zone.cluster.admin(cmd, read_only=True)
     return json.loads(bilog)
+
+def bucket_list(zone, bucket, args = None):
+    cmd = ['bucket', 'list', '--bucket', bucket, '--max-entries', '100000'] + (args or [])
+    cmd += ['--tenant', config.tenant, '--uid', user.name] if config.tenant else []
+    output, _ = zone.cluster.admin(cmd, read_only=True)
+    return json.loads(output)
 
 def bilog_autotrim(zone, args = None):
     cmd = ['bilog', 'autotrim'] + (args or []) + zone.zone_args()
@@ -3982,10 +3989,48 @@ def test_timestamp_based_epochs():
     (although there is still a very slim chance of epoch collisions);
     :return:
     """
+    class ObjVersion:
+        def __init__ (self, name: str, instance: str, mtime: datetime, ver_epoch: int):
+            self.name = name
+            self.instance = instance
+            self.mtime = mtime
+            self.ver_epoch = ver_epoch
+
+    def __eq__ (self, other):
+        return (self.name == other.name and
+                self.instance == other.instance and
+                self.mtime == other.mtime and
+                self.ver_epoch == other.ver_epoch)
+
+    def parse_bucket_list_output (data: Any) -> Dict[str, List[ObjVersion]]:
+        """
+        Parses output of the 'radosgw-admin bucket-list --bucket <name> --format json' command.
+        :param output:
+        :return:
+        """
+        if not isinstance(data, list):
+            raise ValueError("Expected a list of entries in JSON input")
+
+        results: Dict[str, List[ObjVersion]] = {}
+        for entry in data:
+            if not isinstance(entry, dict):
+                continue
+
+            name = entry.get("name")
+            instance = entry.get("instance")
+            mtime = entry.get("meta", {}).get("mtime")
+            ver_epoch = entry.get("versioned_epoch")
+
+            obj_ver= ObjVersion(name, instance, mtime, ver_epoch)
+            if results.get(name) is None:
+                results[name] = []
+            results[name].append(obj_ver)
+
+        return results
+
     zonegroup = realm.master_zonegroup()
     zonegroup_conns = ZonegroupConns(zonegroup)
     primary = zonegroup_conns.rw_zones[0]
-    secondary = zonegroup_conns.rw_zones[1]
 
     NUM_OBJECTS = 10
     NUM_VERSIONS = 100
@@ -3993,105 +4038,94 @@ def test_timestamp_based_epochs():
     source_bucket = primary.create_bucket(gen_bucket_name())
     log.info('created bucket=%s', source_bucket.name)
 
-    def create_bucket_objects (client):
+    def create_bucket_objects (zone):
+        client = zone.s3_client
         log.info(f"Creating objects for {client.meta.endpoint_url} in bucket {source_bucket.name}")
-        attempts=0
-        MAX_ATTEMPTS=3
-        while attempts<MAX_ATTEMPTS:
-            try:
-                for i in range(0, NUM_OBJECTS):
-                    for vid in range(0, NUM_VERSIONS):
-                        key=f"obj-{i}.txt"
-                        response=client.put_object(Key=key, Body=f"This is version {vid}", Bucket=source_bucket.name)
-                        log.info(f"Instance {key} ({response['ResponseMetadata']['HTTPHeaders']['x-amz-version-id']}) created @ {client.meta.endpoint_url}")
-                    log.info(f"{NUM_VERSIONS} versions created for object {key} on {client.meta.endpoint_url}")
-                return
-            except client.exceptions.NoSuchBucket as e:
-                attempts+=1
-                log.info(f"Attempt #{attempts}. Got NoSuchBucket exception. {'Will attempt again in 5 sec' if attempts<MAX_ATTEMPTS else 'Giving up'}")
-                time.sleep(5)
-
-        log.info(f"Failed to create objects for bucket {source_bucket.name} @ {client.meta.endpoint_url}")
+        for i in range(0, NUM_OBJECTS):
+            for vid in range(0, NUM_VERSIONS):
+                key=f"obj-{i}.txt"
+                response=client.put_object(Key=key, Body=f"This is version {vid}", Bucket=source_bucket.name)
+                log.info(f"Instance {key} ({response['ResponseMetadata']['HTTPHeaders']['x-amz-version-id']}) created @ {client.meta.endpoint_url}")
+            log.info(f"{NUM_VERSIONS} versions created for object {key} on {client.meta.endpoint_url}")
 
 
     # list all objects/versions in the zone and check that their versions are listed in the
     # chronological order - from the newest to the oldest;
-    def check_modification_history(client, res: dict):
-        for oid in range(0, NUM_OBJECTS):
-            obj_name = f"obj-{oid}.txt"
-            # list all versions of the object from the newest to the oldest
-            response = client.list_object_versions(Bucket=source_bucket.name, Prefix=obj_name)
-            # run the check
-            log.info(f"---------------------------")
-            log.info(f"Checking versions for {obj_name}")
-            log.info(f"---------------------------")
-            prev_date: datetime = None
-            prev_version = ""
-            version_count=0
-            for version in response['Versions']:
-                version_count+=1
-                if prev_date == None:
-                    prev_date = version['LastModified']
-                    prev_version = version['VersionId']
-                    # print(f"remembering {prev_version}")
-                    continue
+    def check_modification_history(zone) -> Dict[str, int]:
+        response = bucket_list(zone, source_bucket.name)
+        obj_versions = parse_bucket_list_output(response)
 
-                cur_date = version['LastModified']
-                # print(f"checking {version['VersionId']}")
-                if cur_date > prev_date:
-                    # TEST FAILED for {obj_name} and {version['VersionId']}
-                    res[client.meta.endpoint_url][obj_name] = version['VersionId']
-                    break
-                else:
-                    prev_date = cur_date
-                    prev_version = version['VersionId']
+        # use this map to keep track of status checks for each object
+        obj_status = {f"obj-{oid}.txt" : -1 for oid in range(NUM_OBJECTS)}
+        expected_num_versions_per_obj = NUM_VERSIONS * len(zonegroup_conns.rw_zones)
+        for obj_name, versions in obj_versions.items():
+            log.info(f"Checking object {obj_name}'s' history - there are {len(versions)} versions")
+            assert len(versions) == expected_num_versions_per_obj, \
+                f"Number of versions ({len(versions)}) for {obj_name} does not match the expected number {expected_num_versions_per_obj}"
+            prev_version = versions[0]
+            out_of_order_versions = 0
+            for idx in range(1, len(versions)):
+                version = versions[idx]
+                # prior to the timestamp-based epochs we used integer based epochs which are not based on the modification time of the
+                # object; so whenever there is an epoch collision we might see that an older object might appear in the bucket
+                # listing before the newer one - which is the problem which timestamp-based epochs solve (by increasing epoch
+                # resolution significantly thus making epoch collisions virtually impossible); nevertheless, if the 2 versions
+                # were created at the exact same time we still rely on the version id to determine which one appears first
+                # (more recent) in the modification history even though both have the same timestamp;
+                if version.ver_epoch == prev_version.ver_epoch and version.mtime > prev_version.mtime:
+                    log.error(f"Version {obj_name}:{version.instance} is newer than {obj_name}:{prev_version.instance} but is listed later in the history")
+                    out_of_order_versions += 1
+                elif version.ver_epoch + 1 == prev_version.ver_epoch:
+                    log.warning(f"Version {version.instance} is just 1ns apart from {prev_version.instance}")
 
-            log.info(f"Zone {client.meta.endpoint_url}: object {obj_name}: history OK for {version_count} versions")
+                prev_version = version
+
+            obj_status[obj_name] = out_of_order_versions
+            if out_of_order_versions==0:
+                log.info(f"{obj_name}: OK")
+            else:
+                log.warning(f"{obj_name}: {out_of_order_versions} versions are out of order")
+
+        return obj_status
 
     def set_bucket_versioning(state: bool):
         primary.s3_client.put_bucket_versioning(Bucket=source_bucket.name, VersioningConfiguration=
         {'Status': 'Enabled' if state else 'Disabled'})
 
-
     set_bucket_versioning(True)
 
-    # let's wait for those changes to propagate to the secondary zone;
-    time.sleep(10)
+    # wait for those changes to propagate to the secondary zone;
+    zonegroup_meta_checkpoint(zonegroup)
 
-    tm = threading.Thread(target=create_bucket_objects, args=[primary.s3_client])
-    ts = threading.Thread(target=create_bucket_objects, args=[secondary.s3_client])
-    tm.start()
-    ts.start()
-    tm.join()
-    ts.join()
+    threads = [threading.Thread(target=create_bucket_objects, args=[zone]) for zone in zonegroup_conns.rw_zones]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
 
-    # now wait for data sync to replicate the instances between zones
-    # TO DO: improve this by checking sync status of each zone instead
-    time.sleep(15)
+    # polls bucket sync status for all zones in the zonegroup until they catch up with the checkpoint
+    zonegroup_bucket_checkpoint(zonegroup_conns, source_bucket.name)
 
     # now check modification history in each zone
-    zone_results={}
-    tm = threading.Thread(target=check_modification_history, args=[primary.s3_client, zone_results])
-    ts = threading.Thread(target=check_modification_history, args=[secondary.s3_client, zone_results])
-    tm.start()
-    ts.start()
-    tm.join()
-    ts.join()
+    threads = [threading.Thread(target=check_modification_history, args=[zone.zone])
+               for zone in zonegroup_conns.rw_zones]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
 
-    # print the results
-    log.info(f"---------------------------")
-    log.info(f"---------------------------")
-    log.info(f"---------------------------")
-    for client in [primary.s3_client, secondary.s3_client]:
-        if not client.meta.endpoint_url in zone_results:
-            log.info(f"Test SUCCEEDED for {client.meta.endpoint_url}")
-        else:
-            log.info(f"Test FAILED for {client.meta.endpoint_url}")
-            failed_objs = zone_results[client.meta.endpoint_url]
-            for obj in failed_objs:
-                log.info(f"{obj} version {failed_objs[obj]} is newer than the previous one")
+    # check the results
+    for zone in zonegroup_conns.rw_zones:
+        log.info(f"Checking modification history for zone {zone.name}")
+        obj_status = check_modification_history(zone.zone)
+        for name, out_of_order_versions in obj_status.items():
+            if out_of_order_versions == 0:
+                log.info(f"Object {name}: history OK")
+            elif out_of_order_versions == -1:
+                assert False, f"Object {name}: has no versions"
+            else:
+                assert False, f"Object {name}: found {out_of_order_versions} versions which are out of order"
 
-    assert len(zone_results)==0
 
 def run_per_zonegroup(func):
     def wrapper(*args, **kwargs):
