@@ -2494,6 +2494,8 @@ void BlueFS::_envmode_index_file(
       if (scan_ofs < file_size) {
         // we want to accept failed envelope if we are below confirmed wal size
         h->file->envelopes.push_back(flush);
+        derr << __func__ << " we are below confirmed wal size:" << scan_ofs << " < " << file_size
+             << dendl;
       }
       break;
     }
@@ -3765,12 +3767,13 @@ ceph::bufferlist BlueFS::FileWriter::flush_buffer(
   ceph_assert(length >= bl.length());
   const auto remaining_len = length - bl.length();
   buffer.splice(0, remaining_len, &bl);
+  unsigned tail = bl.length() & ~super.block_mask();
   if (buffer.length()) {
     dout(20) << " leaving 0x" << std::hex << buffer.length() << std::dec
              << " unflushed" << dendl;
+    ceph_assert(tail == 0);
   }
   // Append padding to fill block
-  unsigned tail = bl.length() & ~super.block_mask();
   if (tail) {
     unsigned padding_len = super.block_size - tail;
     dout(20) << __func__ << " caching tail of 0x"
@@ -3789,6 +3792,14 @@ ceph::bufferlist BlueFS::FileWriter::flush_buffer(
     // The alternative approach would be to place the entire tail and
     // padding on a dedicated, 4 KB long memory chunk. This shouldn't
     // trigger the rebuild while still being less expensive.
+    ceph_assert(buffer.length() == 0);
+    buffer.clear(); // This will cause reallocation for the following
+                    // appender's call. But we need this to avoid a
+                    // case where buffer is almost exhausted
+                    // after adding the tail. WAL v2 envelope header
+                    // needs splitting then which in turn isn't properly
+                    // handled by contiguous_filler and causes unexpected
+                    // gap before that header.
     buffer_appender.substr_of(bl, bl.length() - padding_len - tail, tail);
     buffer.splice(buffer.length() - tail, tail, &tail_block);
   } else {
