@@ -3759,28 +3759,22 @@ ceph::bufferlist BlueFS::FileWriter::flush_buffer(
 {
   ceph_assert(ceph_mutex_is_locked(this->lock) || file->fnode.ino <= 1);
   ceph::bufferlist bl;
-  if (partial) {
-    tail_block.swap(bl);
-  }
-  dout(20) << __func__ << " tail is " << std::hex << bl.length()
+  dout(20) << __func__ << " tail is 0x" << std::hex << remaining_tail
+           << " partial:" << partial
+           << " length: 0x" << length
+           << " buf_len: 0x" << buffer.length()
            << std::dec << dendl;
-  ceph_assert(length >= bl.length());
-  const auto remaining_len = length - bl.length();
-  buffer.splice(0, remaining_len, &bl);
-  unsigned tail = bl.length() & ~super.block_mask();
+  ceph_assert(partial || (!partial && remaining_tail == 0));
+  buffer.splice(0, length, &bl);
+  remaining_tail = bl.length() & ~super.block_mask();
   if (buffer.length()) {
     dout(20) << " leaving 0x" << std::hex << buffer.length() << std::dec
              << " unflushed" << dendl;
-    ceph_assert(tail == 0);
+    ceph_assert(remaining_tail == 0);
   }
   // Append padding to fill block
-  if (tail) {
-    unsigned padding_len = super.block_size - tail;
-    dout(20) << __func__ << " caching tail of 0x"
-             << std::hex << tail
-             << " and padding block with 0x" << padding_len
-             << ", buffer.length() " << buffer.length()
-             << std::dec << dendl;
+  if (remaining_tail) {
+    unsigned padding_len = super.block_size - remaining_tail;
     // We need to go through the `buffer_appender` to get a chance to
     // preserve in-memory contiguity and not mess with the alignment.
     // Otherwise a costly rebuild could happen in e.g. `KernelDevice`.
@@ -3800,10 +3794,13 @@ ceph::bufferlist BlueFS::FileWriter::flush_buffer(
                     // needs splitting then which in turn isn't properly
                     // handled by contiguous_filler and causes unexpected
                     // gap before that header.
-    buffer_appender.substr_of(bl, bl.length() - padding_len - tail, tail);
-    buffer.splice(buffer.length() - tail, tail, &tail_block);
-  } else {
-    tail_block.clear();
+    buffer_appender.substr_of(bl, bl.length() - padding_len - remaining_tail,
+      remaining_tail);
+    dout(20) << __func__ << " caching tail of 0x"
+             << std::hex << remaining_tail
+             << " and padding block with 0x" << padding_len
+             << ", buf_len 0x" << buffer.length()
+             << std::dec << dendl;
   }
   return bl;
 }
@@ -3859,7 +3856,7 @@ int BlueFS::_flush_envelope_F(FileWriter *h)
 {
   ceph_assert(ceph_mutex_is_locked(h->lock));
   ceph_assert(h->file->envelope_mode());
-  uint64_t content_length = h->get_buffer_length() - File::envelope_t::head_size();
+  uint64_t content_length = h->get_fresh_buffer_length() - File::envelope_t::head_size();
   h->append((char*)&h->file->stamp.v[0], File::envelope_t::tail_size());
   uint64_t offset = h->pos;
 
@@ -4071,19 +4068,19 @@ void BlueFS::append_try_flush(FileWriter *h, const char* buf, size_t len)/*_WF_L
   bool flushed_sum = false;
   {
     std::unique_lock hl(h->lock);
-    if (h->file->envelope_mode() && h->get_buffer_length() == 0) {
+    if (h->file->envelope_mode() && h->get_fresh_buffer_length() == 0) {
       h->envelope_head_filler = h->append_hole(File::envelope_t::head_size());
     }
     size_t max_size = 1ull << 30; // cap to 1GB
     while (len > 0) {
       bool need_flush = true;
-      auto l0 = h->get_buffer_length();
+      auto l0 = h->get_fresh_buffer_length();
       if (l0 < max_size) {
 	size_t l = std::min(len, max_size - l0);
 	h->append(buf, l);
 	buf += l;
 	len -= l;
-	need_flush = h->get_buffer_length() >= cct->_conf->bluefs_min_flush_size;
+	need_flush = h->get_fresh_buffer_length() >= cct->_conf->bluefs_min_flush_size;
       }
       if (need_flush) {
 	bool flushed = false;
@@ -4092,7 +4089,7 @@ void BlueFS::append_try_flush(FileWriter *h, const char* buf, size_t len)/*_WF_L
 	flushed_sum |= flushed;
 	// make sure we've made any progress with flush hence the
 	// loop doesn't iterate forever
-	ceph_assert(h->get_buffer_length() < max_size);
+	ceph_assert(h->get_fresh_buffer_length() < max_size);
       }
     }
   }
@@ -4118,7 +4115,7 @@ void BlueFS::flush(FileWriter *h, bool force)/*_WF_LNF_NF_LD_D*/
 int BlueFS::_flush_F(FileWriter *h, bool force, bool *flushed)
 {
   ceph_assert(ceph_mutex_is_locked(h->lock));
-  uint64_t length = h->get_buffer_length();
+  uint64_t length = h->get_fresh_buffer_length();
   uint64_t offset = h->pos;
   if (flushed) {
     *flushed = false;
@@ -4161,7 +4158,7 @@ int BlueFS::_flush_F(FileWriter *h, bool force, bool *flushed)
 uint64_t BlueFS::_flush_special(FileWriter *h)
 {
   ceph_assert(h->file->fnode.ino <= 1);
-  uint64_t length = h->get_buffer_length();
+  uint64_t length = h->get_fresh_buffer_length();
   uint64_t offset = h->pos;
   ceph_assert(length + offset <= h->file->fnode.get_allocated());
   uint64_t new_data = _flush_data(h, offset, length, false);
@@ -4182,12 +4179,12 @@ int BlueFS::truncate(FileWriter *h, uint64_t offset)/*_WF_L*/
 
   // truncate off unflushed data?
   if (h->pos < offset &&
-      h->pos + h->get_buffer_length() > offset) {
+      h->pos + h->get_fresh_buffer_length() > offset) {
     dout(20) << __func__ << " tossing out last " << offset - h->pos
 	     << " unflushed bytes" << dendl;
     ceph_abort_msg("actually this shouldn't happen");
   }
-  if (h->get_buffer_length()) {
+  if (h->get_fresh_buffer_length()) {
     int r = _flush_F(h, true);
     if (r < 0)
       return r;

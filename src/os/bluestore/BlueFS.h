@@ -404,10 +404,16 @@ public:
     uint64_t pos = 0;       ///< start offset for buffer
   private:
     ceph::buffer::list buffer;      ///< new data to write (at end of file)
-    ceph::buffer::list tail_block;  ///< existing partial block at end of file, if any
+    size_t remaining_tail = 0;
   public:
     unsigned get_buffer_length() const {
       return buffer.length();
+    }
+    unsigned get_fresh_buffer_length() const {
+      // This to return the amount of new data in buffer only.
+      // Previous tail part to be omitted..
+      ceph_assert(buffer.length() >= remaining_tail);
+      return buffer.length() - remaining_tail;
     }
     ceph::bufferlist flush_buffer(
       CephContext* cct,
