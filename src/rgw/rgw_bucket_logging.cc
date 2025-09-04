@@ -368,25 +368,40 @@ int rollover_logging_object(const configuration& conf,
       "', bucket= '" << target_bucket->get_key() << "'" << dendl;
     return -EINVAL;
   }
-  const auto old_obj = obj_name;
-  const int ret = new_logging_object(conf, target_bucket, obj_name, dpp, region, source_bucket, y, old_obj, objv_tracker);
-  if (ret == -ECANCELED) {
-    ldpp_dout(dpp, 20) << "INFO: rollover already performed for object '" << old_obj <<  "' to logging bucket '" <<
-      target_bucket->get_key() << "'. ret = " << ret << dendl;
-    return 0;
-  } else if (ret < 0) {
-    ldpp_dout(dpp, 1) << "ERROR: failed to rollover object '" << old_obj << "' to logging bucket '" <<
-      target_bucket->get_key() << "'. ret = " << ret << dendl;
+
+  auto old_obj = obj_name.empty() ? std::nullopt : std::optional<std::string>(obj_name);
+
+  auto handle_error = [&dpp, &old_obj, &target_bucket](int ret) {
+    if (ret == -ECANCELED) {
+      ldpp_dout(dpp, 20) << "INFO: rollover already performed for logging object '" << old_obj <<  "' to logging bucket '" <<
+        target_bucket->get_key() << "'. ret = " << ret << dendl;
+      return 0;
+    }
+    if (ret < 0) {
+      ldpp_dout(dpp, 1) << "ERROR: failed to rollover logging object '" << old_obj << "' to logging bucket '" <<
+        target_bucket->get_key() << "'. ret = " << ret << dendl;
+    }
+    return ret;
+  };
+
+  if (const int ret = handle_error(new_logging_object(conf, target_bucket, obj_name, dpp, region, source_bucket, y, old_obj, objv_tracker)); ret < 0) {
     return ret;
   }
-  if (const int ret = target_bucket->commit_logging_object(old_obj, y, dpp, conf.target_prefix, last_committed); ret < 0) {
+  if (!old_obj) {
+    // first time logging old == new
+    old_obj = obj_name;
+    if (const int ret = handle_error(new_logging_object(conf, target_bucket, obj_name, dpp, region, source_bucket, y, old_obj, objv_tracker)); ret < 0) {
+      return ret;
+    }
+  }
+  if (const int ret = target_bucket->commit_logging_object(*old_obj, y, dpp, conf.target_prefix, last_committed); ret < 0) {
     if (must_commit) {
       return ret;
     }
     ldpp_dout(dpp, 5) << "WARNING: failed to commit object '" << old_obj << "' to logging bucket '" <<
       target_bucket->get_key() << "'. ret = " << ret << dendl;
     // we still want to write the new records to the new object even if commit failed
-    // will try to commit again next time
+    // TODO: should add commit retry mechanism
   }
   return 0;
 }
