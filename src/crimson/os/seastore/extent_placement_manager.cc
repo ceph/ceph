@@ -203,7 +203,6 @@ void ExtentPlacementManager::init(
         "hot_tier_generations{} , cold_tier_generations {}",
         dynamic_max_rewrite_generation, hot_tier_generations,
         cold_tier_generations);
-  // TODO: hot_tier_generations should have a minumum..
   ceph_assert(dynamic_max_rewrite_generation > MIN_REWRITE_GENERATION);
 
   if (trimmer->get_backend_type() == backend_type_t::SEGMENTED) {
