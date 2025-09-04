@@ -378,32 +378,25 @@ will switch to doing writes synchronously. Synchronous writes are quite slow.
 Disconnected+Remounted FS
 =========================
 
-Because CephFS has a "consistent cache", your client is forcibly disconnected
-from the cluster when the network connection has been disrupted for a long
-time. When this happens, the kernel client cannot safely write back dirty data
-and many applications will not handle IO errors correctly on ``close()``.
-Currently, the kernel client will remount the file system, but any outstanding
-file-system IO may not be properly handled. If this is the case, reboot the
-client system.
+Because CephFS has a "consistent cache", the MDS will forcibly evict (and
+blocklist) clients from the cluster when the network connection has been
+disrupted for a long time. When this happens, the kernel client cannot safely
+write back dirty (buffered) data and this results in data loss. However: note
+that this behavior is appropriate and also follows POSIX semantics. The client
+has to be remounted to be able to access the file system again. This is the
+default behavior but it can be overridden by the ``recover_session`` mount
+option. See `the "options" section of the "mount.ceph" man page
+<https://docs.ceph.com/en/latest/man/8/mount.ceph/#options>`_
 
-You are in this situation if the output of ``dmesg/kern.log`` contains
-something like the following::
+You are in this situation if the output of ``dmesg`` contains something like
+the following::
 
-   Jul 20 08:14:38 teuthology kernel: [3677601.123718] ceph: mds0 closed our session
-   Jul 20 08:14:38 teuthology kernel: [3677601.128019] ceph: mds0 reconnect start
-   Jul 20 08:14:39 teuthology kernel: [3677602.093378] ceph: mds0 reconnect denied
-   Jul 20 08:14:39 teuthology kernel: [3677602.098525] ceph:  dropping dirty+flushing Fw state for ffff8802dc150518 1099935956631
-   Jul 20 08:14:39 teuthology kernel: [3677602.107145] ceph:  dropping dirty+flushing Fw state for ffff8801008e8518 1099935946707
-   Jul 20 08:14:39 teuthology kernel: [3677602.196747] libceph: mds0 172.21.5.114:6812 socket closed (con state OPEN)
-   Jul 20 08:14:40 teuthology kernel: [3677603.126214] libceph: mds0 172.21.5.114:6812 connection reset
-   Jul 20 08:14:40 teuthology kernel: [3677603.132176] libceph: reset on mds0
-
-This is an area of ongoing work to improve the behavior. Kernels will soon be
-reliably issuing error codes to in-progress IO, although your application(s)
-may not deal with them well. In the longer term, we hope to allow reconnection
-and reclamation of data in cases where doing so does not violate POSIX
-semantics (generally, data which hasn't been accessed or modified by other
-clients).
+[Fri Aug 15 02:38:10 2025] ceph: mds0 caps stale
+[Fri Aug 15 02:38:28 2025] libceph: mds0 (2)XXX.XX.XX.XX :6800 socket closed (con state OPEN)
+[Fri Aug 15 02:38:28 2025] libceph: mds0 (2)XXX.XX.XX.XX:6800 session reset
+[Fri Aug 15 02:38:28 2025] ceph: mds0 closed our session
+[Fri Aug 15 02:38:28 2025] ceph: mds0 reconnect start
+[Fri Aug 15 02:38:28 2025] ceph: mds0 reconnect denied
 
 Mounting
 ========
