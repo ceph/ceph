@@ -135,17 +135,17 @@ void GroupUnlinkPeerRequest<I>::process_snapshot(cls::rbd::GroupSnapshot group_s
                                                  std::string mirror_peer_uuid) {
   ldout(m_cct, 10) << "snap id: " << group_snap.id << dendl;
   bool found = false;
-  bool has_newer_mirror_snap = false;
 
+  m_has_newer_mirror_snap = false;
   for (auto it = m_group_snaps.begin(); it != m_group_snaps.end(); it++) {
     if (it->id  == group_snap.id) {
       found = true;
     } else if (found) {
       auto ns = std::get_if<cls::rbd::GroupSnapshotNamespaceMirror>(
-	  &it->snapshot_namespace);
+          &it->snapshot_namespace);
       if (ns != nullptr) {
-	has_newer_mirror_snap = true;
-	break;
+        m_has_newer_mirror_snap = true;
+        break;
       }
     }
   }
@@ -153,11 +153,14 @@ void GroupUnlinkPeerRequest<I>::process_snapshot(cls::rbd::GroupSnapshot group_s
   if (!found) {
     ldout(m_cct, 15) << "missing snapshot: snap_id=" << group_snap.id << dendl;
     finish(-ENOENT);
-    return;  
+    return;
   }
 
-  if (has_newer_mirror_snap) {
-    remove_group_snapshot(group_snap); 
+  auto ns = std::get_if<cls::rbd::GroupSnapshotNamespaceMirror>(
+      &group_snap.snapshot_namespace);
+  if (ns->mirror_peer_uuids.empty() ||
+      ns->mirror_peer_uuids.count(mirror_peer_uuid) == 0) {
+    remove_group_snapshot(group_snap);
   } else {
     remove_peer_uuid(group_snap, mirror_peer_uuid);
   }
@@ -170,9 +173,10 @@ void GroupUnlinkPeerRequest<I>::remove_peer_uuid(
                               std::string mirror_peer_uuid) {
   ldout(m_cct, 10) << dendl;
 
-  auto aio_comp = create_rados_callback<
-    GroupUnlinkPeerRequest<I>,
-    &GroupUnlinkPeerRequest<I>::handle_remove_peer_uuid>(this);
+  auto aio_comp = create_rados_callback(
+      new LambdaContext([this, group_snap](int r) {
+        handle_remove_peer_uuid(r, group_snap);
+      }));
 
   auto ns = std::get_if<cls::rbd::GroupSnapshotNamespaceMirror>(
     &group_snap.snapshot_namespace);
@@ -188,7 +192,8 @@ void GroupUnlinkPeerRequest<I>::remove_peer_uuid(
 }
 
 template <typename I>
-void GroupUnlinkPeerRequest<I>::handle_remove_peer_uuid(int r) {
+void GroupUnlinkPeerRequest<I>::handle_remove_peer_uuid(
+    int r, cls::rbd::GroupSnapshot group_snap) {
   ldout(m_cct, 10) << "r=" << r << dendl;
 
   if (r < 0) {
@@ -197,7 +202,12 @@ void GroupUnlinkPeerRequest<I>::handle_remove_peer_uuid(int r) {
     finish(r);
     return;
   }
-  list_group_snaps();
+
+  if (m_has_newer_mirror_snap) {
+    remove_group_snapshot(group_snap);
+  } else {
+    list_group_snaps();
+  }
 }
 
 
