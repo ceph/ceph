@@ -405,6 +405,17 @@ public:
   private:
     ceph::buffer::list buffer;      ///< new data to write (at end of file)
     size_t remaining_tail = 0;
+
+    size_t get_appender_page_count() const {
+      // Forbid less than 2 pages setup as it might result
+      // in improper location of WAL v2 envelope header after
+      // a close-to-page-size tail. Failing to fit the header
+      // after such a tail within a single page buffer would put
+      // the whole header into the next page leaving inappropriate gap
+      // when writing WAL to disk.
+      return std::max<size_t>(
+        g_conf()->bluefs_alloc_size / CEPH_PAGE_SIZE, 2);
+    }
   public:
     unsigned get_buffer_length() const {
       return buffer.length();
@@ -433,7 +444,8 @@ public:
     FileWriter(FileRef f)
       : file(std::move(f)),
        buffer_appender(buffer.get_page_aligned_appender(
-                         g_conf()->bluefs_alloc_size / CEPH_PAGE_SIZE)), envelope_head_filler() {
+                         get_appender_page_count())),
+                       envelope_head_filler() {
       ++file->num_writers;
       iocv.fill(nullptr);
       dirty_devs.fill(false);
