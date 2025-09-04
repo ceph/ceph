@@ -723,11 +723,11 @@ local g = import 'grafonnet/grafana.libsonnet';
         12,
         8
       )
-      + { options: { legend: { calcs: ['lastNotNull'], displayMode: 'list', placement: 'right', showLegend: true, sortBy: 'Last *', sortDesc: true } } },
+      + { options: { legend: { calcs: ['lastNotNull'], displayMode: 'list', placement: 'right', showLegend: true, sortDesc: true } } },
       RgwOverviewPanel(
         'Pending Notifications Size by Topic',
         'Shows the total size of pending notifications stored per Object topic, reflecting how much data is waiting to be delivered.',
-        'deckbytes',
+        'bytes',
         'short',
         |||
           (
@@ -740,7 +740,7 @@ local g = import 'grafonnet/grafana.libsonnet';
         12,
         8
       )
-      + { options: { legend: { calcs: ['lastNotNull'], displayMode: 'list', placement: 'right', showLegend: true, sortBy: 'Last *', sortDesc: true } } },
+      + { options: { legend: { calcs: ['lastNotNull'], displayMode: 'list', placement: 'right', showLegend: true, sortDesc: true } } },
     ]),
   'radosgw-detail.json':
     local RgwDetailsPanel(aliasColors,

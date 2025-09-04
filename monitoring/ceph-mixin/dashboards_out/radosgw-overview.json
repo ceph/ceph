@@ -1254,7 +1254,6 @@
                "displayMode": "list",
                "placement": "right",
                "showLegend": true,
-               "sortBy": "Last *",
                "sortDesc": true
             }
          },
@@ -1325,7 +1324,7 @@
                   "fillOpacity": 8,
                   "showPoints": "never"
                },
-               "unit": "deckbytes"
+               "unit": "bytes"
             }
          },
          "fill": 1,
@@ -1361,7 +1360,6 @@
                "displayMode": "list",
                "placement": "right",
                "showLegend": true,
-               "sortBy": "Last *",
                "sortDesc": true
             }
          },
@@ -1402,7 +1400,7 @@
          },
          "yaxes": [
             {
-               "format": "deckbytes",
+               "format": "bytes",
                "label": null,
                "logBase": 1,
                "max": null,
