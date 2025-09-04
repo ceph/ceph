@@ -19,8 +19,6 @@ overrides:
       - is down
       - TELEMETRY_CHANGED
       - pg .*? is .*?degraded.*?, acting
-      - pg .* is stuck peering
-      - Telemetry requires re-opt-in
 tasks:
 - install:
     branch: reef
