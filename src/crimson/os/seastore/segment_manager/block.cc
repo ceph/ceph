@@ -7,11 +7,13 @@
 #include <fmt/format.h>
 
 #include <seastar/core/metrics.hh>
+#include <seastar/util/defer.hh>
 
 #include "include/buffer.h"
 
 #include "crimson/common/config_proxy.h"
 #include "crimson/common/errorator-loop.h"
+#include "crimson/common/coroutine.h"
 
 #include "crimson/os/seastore/logging.h"
 #include "crimson/os/seastore/segment_manager/block.h"
@@ -513,36 +515,27 @@ BlockSegmentManager::mkfs_ret BlockSegmentManager::primary_mkfs(
   set_device_id(sm_config.spec.id);
   INFO("{} path={}, {}",
        device_id_printer_t{get_device_id()}, device_path, sm_config);
-  return seastar::do_with(
-    seastar::file{},
-    seastar::stat_data{},
-    block_sm_superblock_t{},
-    std::unique_ptr<SegmentStateTracker>(),
-    [=, this](auto &device, auto &stat, auto &sb, auto &tracker)
-  {
-    check_create_device_ret maybe_create = check_create_device_ertr::now();
-    using crimson::common::get_conf;
-    if (get_conf<bool>("seastore_block_create")) {
-      auto size = get_conf<Option::size_t>("seastore_device_size");
-      maybe_create = check_create_device(device_path, size);
-    }
 
-    return maybe_create.safe_then([this] {
-      return open_device(device_path);
-    }).safe_then([&, sm_config](auto p) {
-      device = p.first;
-      stat = p.second;
-      sb = make_superblock(get_device_id(), sm_config, stat);
-      stats.metadata_write.increment(
-          ceph::encoded_sizeof<block_sm_superblock_t>(sb));
-      return write_superblock(get_device_id(), device, sb);
-    }).finally([&] {
-      return device.close();
-    }).safe_then([FNAME, this] {
-      INFO("{} complete", device_id_printer_t{get_device_id()});
-      return mkfs_ertr::now();
-    });
+  seastar::file device;
+  seastar::stat_data stat;
+  block_sm_superblock_t sb;
+  std::unique_ptr<SegmentStateTracker> tracker;
+
+  using crimson::common::get_conf;
+  if (get_conf<bool>("seastore_block_create")) {
+    auto size = get_conf<Option::size_t>("seastore_device_size");
+     co_await check_create_device(device_path, size);
+  }
+  auto p = co_await open_device(device_path);
+  device = p.first;
+  stat = p.second;
+  auto closer = seastar::defer([&device] {
+    std::ignore = device.close();
   });
+  sb = make_superblock(get_device_id(), sm_config, stat);
+  stats.metadata_write.increment(ceph::encoded_sizeof<block_sm_superblock_t>(sb));
+  co_await write_superblock(get_device_id(), device, sb);
+  INFO("{} complete", device_id_printer_t{get_device_id()});
 }
 
 BlockSegmentManager::mkfs_ret BlockSegmentManager::shard_mkfs()
