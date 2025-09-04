@@ -43,6 +43,8 @@
 #include "include/random.h" // for ceph::util::generate_random_number()
 #include "include/stringify.h"
 
+#include "messages/MMDSTableRequest.h"
+
 #include "LogSegment.h"
 
 #include "MDSRank.h"

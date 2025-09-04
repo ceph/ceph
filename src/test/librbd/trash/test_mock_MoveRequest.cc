@@ -8,6 +8,7 @@
 #include "test/librbd/mock/MockImageState.h"
 #include "test/librados_test_stub/MockTestMemIoCtxImpl.h"
 #include "test/librados_test_stub/MockTestMemRadosClient.h"
+#include "common/Clock.h" // for ceph_clock_now()
 #include "include/rbd/librbd.hpp"
 #include "librbd/Utils.h"
 #include "librbd/trash/MoveRequest.h"

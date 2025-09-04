@@ -5,6 +5,7 @@
 #include "common/debug.h"
 #include "common/errno.h"
 #include "common/WorkQueue.h"
+#include "include/rados.h" // for EBLOCKLISTED
 #include "include/stringify.h"
 #include "aio_utils.h"
 #include "watcher/RewatchRequest.h"

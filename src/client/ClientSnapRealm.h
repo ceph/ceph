@@ -4,6 +4,10 @@
 #ifndef CEPH_CLIENT_SNAPREALM_H
 #define CEPH_CLIENT_SNAPREALM_H
 
+#include <iostream>
+#include <set>
+#include <vector>
+
 #include "include/types.h"
 #include "common/snap_types.h"
 #include "include/xlist.h"

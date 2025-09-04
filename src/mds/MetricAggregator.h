@@ -7,14 +7,16 @@
 #include <map>
 #include <set>
 #include <thread>
+#include <unordered_set>
 
-#include "msg/msg_types.h"
+#include "msg/msg_types.h" // for entity_inst_t
 #include "msg/Dispatcher.h"
 #include "common/ceph_mutex.h"
 #include "common/perf_counters.h"
 #include "include/common_fwd.h"
 
-#include "mgr/MetricTypes.h"
+#include "mgr/Types.h" // for PerformanceCounters
+#include "mgr/MetricTypes.h" // for MetricPayload
 #include "mgr/MDSPerfMetricTypes.h"
 
 #include "mdstypes.h"

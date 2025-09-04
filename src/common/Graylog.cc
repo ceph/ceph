@@ -7,6 +7,7 @@
 
 #include "common/Formatter.h"
 #include "common/LogEntry.h"
+#include "include/uuid.h"
 #include "log/Entry.h"
 #include "log/SubsystemMap.h"
 

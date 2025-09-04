@@ -16,9 +16,11 @@
 #ifndef MDS_BATCHOP_H
 #define MDS_BATCHOP_H
 
-#include "common/ref.h"
+#include <iosfwd>
 
 #include "mdstypes.h"
+#include "common/ref.h"
+#include "include/cephfs/types.h" // for mds_rank_t
 
 class BatchOp {
 public:

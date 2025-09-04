@@ -35,6 +35,7 @@ extern "C" {
 #include "statlite.h"
 }
 
+#include <deque>
 #include <string>
 #include <list>
 #include <set>
@@ -47,8 +48,10 @@ extern "C" {
 #include <optional>
 #include <ostream>
 #include <iomanip>
+#include <unordered_map>
 #include <unordered_set>
 
+#include "common/convenience.h" // for ceph::for_each()
 #include "common/Formatter.h"
 
 #include "object.h"

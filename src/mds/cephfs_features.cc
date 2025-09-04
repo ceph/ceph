@@ -3,6 +3,7 @@
 
 #include "cephfs_features.h"
 #include "mdstypes.h"
+#include "common/Formatter.h"
 #include "common/StackStringStream.h"
 
 #include <fmt/format.h>

@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "common.h"
+#include "common/Clock.h" // for ceph_clock_now()
 #include "log/Log.h"
 
 #include <shared_mutex> // for std::shared_lock

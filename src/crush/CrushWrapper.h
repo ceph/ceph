@@ -25,6 +25,7 @@ extern "C" {
 #include "include/err.h"
 #include "include/encoding.h"
 #include "include/mempool.h"
+#include "include/rados.h" // for CEPH_PG_TYPE_*
 
 namespace ceph {
   class Formatter;

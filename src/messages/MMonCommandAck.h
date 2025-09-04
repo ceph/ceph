@@ -19,6 +19,7 @@
 
 #include <sstream>
 #include <string>
+#include <vector>
 
 using ceph::common::cmdmap_from_json;
 using ceph::common::cmd_getval;

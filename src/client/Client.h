@@ -16,6 +16,8 @@
 #ifndef CEPH_CLIENT_H
 #define CEPH_CLIENT_H
 
+#include <dirent.h>
+
 #include "common/admin_socket.h"
 #include "common/CommandTable.h"
 #include "common/Finisher.h"

@@ -15,7 +15,10 @@
 #ifndef CEPH_MMDSBEACON_H
 #define CEPH_MMDSBEACON_H
 
+#include <map>
+#include <string>
 #include <string_view>
+#include <vector>
 
 #include "msg/Message.h"
 #include "messages/PaxosServiceMessage.h"

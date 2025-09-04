@@ -23,12 +23,16 @@
 #include <unordered_map>
 #include <vector>
 
+#include "common/ref.h" // for cref_t
+#include "include/cephfs/types.h" // for mds_rank_t
+#include "include/Context.h"
 #include "include/interval_set.h"
 #include "include/elist.h"
 #include "include/filepath.h"
 
 #include "Capability.h"
 #include "LogSegmentRef.h"
+#include "mdstypes.h" // for dirfrag_t, metareqid_t
 
 #include "common/StackStringStream.h"
 #include "common/TrackedOp.h"

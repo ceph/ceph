@@ -39,6 +39,7 @@
 #include "messages/MCommandReply.h"
 #include "messages/MMgrCommand.h"
 #include "messages/MMgrCommandReply.h"
+#include "messages/MMgrReport.h"
 #include "messages/MPGStats.h"
 #include "messages/MOSDScrub2.h"
 #include "messages/MOSDForceRecovery.h"

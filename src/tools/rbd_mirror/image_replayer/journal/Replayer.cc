@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "Replayer.h"
+#include "common/Clock.h" // for ceph_clock_now()
 #include "common/debug.h"
 #include "common/errno.h"
 #include "common/perf_counters.h"
