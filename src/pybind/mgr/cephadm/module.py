@@ -165,7 +165,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         CREATE TABLE IF NOT EXISTS ClusterVersionInfo(
             cluster_version_id INTEGER PRIMARY KEY, 
             cluster_version TEXT NOT NULL,
-            creation_time TEXT DEFAULT CURRENT_TIMESTAMP
+            creation_time TEXT NOT NULL
         );
         ''',
         '''
@@ -183,7 +183,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             CREATE TABLE IF NOT EXISTS ClusterVersionInfo(
                 cluster_version_id INTEGER PRIMARY KEY, 
                 cluster_version TEXT NOT NULL,
-                creation_time TEXT DEFAULT CURRENT_TIMESTAMP
+                creation_time TEXT NOT NULL
             );
             ''',
             '''
@@ -4293,19 +4293,33 @@ Then run the following:
         self.need_connect_dashboard_rgw = True
         self.event.set()
 
-    @CLIWriteCommand('cephadm set-bootstrap-ceph-version')
-    def _do_set_bootstrap_ceph_version(self, version: str) -> Tuple[int, str, str]:
+    @CLIWriteCommand('cephadm set-bootstrap-version')
+    def _do_set_bootstrap_version(self, version: str) -> Tuple[int, str, str]:
         '''
-        Stores the bootstrap Ceph version in KV store
+        Stores the bootstrap version in KV store
         '''
-        return self.version_tracker._set_bootstrap_ceph_version(version)
+        return self.version_tracker._set_bootstrap_version(version)
     
-    @CLIReadCommand('cephadm get-bootstrap-ceph-version')
-    def _do_get_bootstrap_ceph_version(self) -> Tuple[int, str, str]:
+    @CLIWriteCommand('cephadm set-bootstrap-time')
+    def _do_set_bootstrap_time(self, time: str) -> Tuple[int, str, str]:
         '''
-        Gets the bootstrap Ceph version in KV store
+        Stores the bootstrap time in KV store
         '''
-        return self.version_tracker._get_bootstrap_ceph_version()
+        return self.version_tracker._set_bootstrap_time(time)
+    
+    @CLIReadCommand('cephadm get-bootstrap-version')
+    def _do_get_bootstrap_version(self) -> Tuple[int, str, str]:
+        '''
+        Gets the bootstrap version in KV store
+        '''
+        return self.version_tracker._get_bootstrap_version()
+    
+    @CLIReadCommand('cephadm get-bootstrap-time')
+    def _do_get_bootstrap_time(self) -> Tuple[int, str, str]:
+        '''
+        Gets the bootstrap time in KV store
+        '''
+        return self.version_tracker._get_bootstrap_time()
     
     @CLIRequiresDB
     @CLIReadCommand('cephadm get-cluster-version-history')
