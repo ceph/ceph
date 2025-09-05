@@ -2174,8 +2174,8 @@ bool MDSMonitor::maybe_resize_cluster(FSMap &fsmap, const Filesystem& fs)
     return true;
   } else if (in > max) {
     mds_rank_t target = in - 1;
-    const auto &info = mds_map.get_info(target);
     if (mds_map.is_active(target)) {
+      const auto &info = mds_map.get_info(target);
       dout(1) << "stopping " << target << dendl;
       mon.clog->info() << "stopping " << info.human_name();
       auto f = [](auto& info) {
