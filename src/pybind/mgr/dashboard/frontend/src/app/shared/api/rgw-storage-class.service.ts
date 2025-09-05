@@ -1,12 +1,13 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable } from '@angular/core';
-import { RequestModel } from '~/app/ceph/rgw/models/rgw-storage-class.model';
+import { RequestModel, ZoneRequest } from '~/app/ceph/rgw/models/rgw-storage-class.model';
 
 @Injectable({
   providedIn: 'root'
 })
 export class RgwStorageClassService {
   private baseUrl = 'api/rgw/zonegroup';
+  private zoneUrl = 'api/rgw/zone';
   private url = `${this.baseUrl}/storage-class`;
 
   constructor(private http: HttpClient) {}
@@ -27,5 +28,13 @@ export class RgwStorageClassService {
 
   getPlacement_target(placement_id: string) {
     return this.http.get(`${this.baseUrl}/get_placement_target_by_placement_id/${placement_id}`);
+  }
+
+  createStorageClassZone(zoneRequest: ZoneRequest) {
+    return this.http.post(`${this.zoneUrl}/storage-class`, zoneRequest);
+  }
+
+  editStorageClassZone(zoneRequest: ZoneRequest) {
+    return this.http.put(`${this.zoneUrl}/storage-class`, zoneRequest);
   }
 }
