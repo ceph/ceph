@@ -1469,7 +1469,7 @@ inline void AWSv4ComplMulti::extract_trailing_headers(
 	/* populate trailer map with expected headers and their values, if sent */
 	trailer_map.insert(trailer_map_t::value_type(k, v));
 	/* populate to req_info.env as well */
-	put_prop(ys_header_mangle(k), v);
+	put_prop(ys_header_mangle(fmt::format("HTTP-{}", k)), v);
       });
       consumed += get<2>(ex_header);
     } /* one trailer */
