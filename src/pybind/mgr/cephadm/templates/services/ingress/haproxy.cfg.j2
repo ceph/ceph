@@ -57,7 +57,7 @@ frontend stats
     monitor-uri /health
 
 frontend frontend
-{% if spec.ssl_cert %}
+{% if spec.ssl or spec.ssl_cert %}
     bind {{ ip }}:{{ frontend_port }} ssl crt /var/lib/haproxy/haproxy.pem {{ v4v6_flag }}
 {% else %}
     bind {{ ip }}:{{ frontend_port }} {{ v4v6_flag }}
