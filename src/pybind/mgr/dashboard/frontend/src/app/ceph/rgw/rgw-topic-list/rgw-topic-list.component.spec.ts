@@ -1,4 +1,5 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+
 import { RgwTopicListComponent } from './rgw-topic-list.component';
 import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed, PermissionHelper } from '~/testing/unit-test-helper';
@@ -48,7 +49,7 @@ describe('RgwTopicListComponent', () => {
 
   it('should create', () => {
     expect(component).toBeTruthy();
-    expect(rgwTopicServiceListSpy).toHaveBeenCalledTimes(2);
+    expect(rgwTopicServiceListSpy.calls.count()).toBe(1);
   });
 
   it('should test all TableActions combinations', () => {
