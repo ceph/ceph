@@ -61,13 +61,17 @@ import {
   AclTypeConst,
   ACLVal,
   AclLabel,
-  AclType
+  AclType,
+  ZoneRequest
 } from '../models/rgw-storage-class.model';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { CdValidators } from '~/app/shared/forms/cd-validators';
 import { FormatterService } from '~/app/shared/services/formatter.service';
 import validator from 'validator';
+import { PoolService } from '~/app/shared/api/pool.service';
+import { Pool } from '../../pool/pool';
+import { switchMap } from 'rxjs/operators';
 
 @Component({
   selector: 'cd-rgw-storage-class-form',
@@ -84,6 +88,7 @@ export class RgwStorageClassFormComponent extends CdForm implements OnInit {
   zonegroupNames: ZoneGroup[];
   placementTargets: string[] = [];
   selectedZoneGroup: string;
+  selectedZone: string;
   defaultZonegroup: ZoneGroup;
   zoneGroupDetails: ZoneGroupDetails;
   storageClassInfo: StorageClass;
@@ -103,6 +108,10 @@ export class RgwStorageClassFormComponent extends CdForm implements OnInit {
     const value = control.value;
     return !value || validator.isURL(value) ? null : { invalidUrl: true };
   };
+  pools: Array<Pool>;
+  rgwPools: Pool[];
+  zones: any[];
+
   constructor(
     public actionLabels: ActionLabelsI18n,
     private formBuilder: CdFormBuilder,
@@ -112,7 +121,8 @@ export class RgwStorageClassFormComponent extends CdForm implements OnInit {
     private router: Router,
     private route: ActivatedRoute,
     public formatter: FormatterService,
-    private cdRef: ChangeDetectorRef
+    private cdRef: ChangeDetectorRef,
+    private poolService: PoolService
   ) {
     super();
     this.resource = $localize`Tiering Storage Class`;
@@ -166,6 +176,7 @@ export class RgwStorageClassFormComponent extends CdForm implements OnInit {
           this.storageClassForm.get('zonegroup').disable();
           this.storageClassForm.get('placement_target').disable();
           this.storageClassForm.get('storage_class').disable();
+          this.storageClassForm.get('zone').disable();
           if (
             this.tierTargetInfo?.val?.tier_type === TIER_TYPE.CLOUD_TIER ||
             this.tierTargetInfo?.val?.tier_type === TIER_TYPE.GLACIER
@@ -189,21 +200,28 @@ export class RgwStorageClassFormComponent extends CdForm implements OnInit {
             allow_read_through: this.tierTargetInfo?.val?.allow_read_through || false,
             restore_storage_class: this.tierTargetInfo?.val?.restore_storage_class,
             read_through_restore_days: this.tierTargetInfo?.val?.read_through_restore_days,
-            acl_mappings: this.tierTargetInfo?.val?.s3?.acl_mappings || []
+            acl_mappings: this.tierTargetInfo?.val?.s3?.acl_mappings || [],
+            pool: this.storageClassInfo?.data_pool,
+            zone: this.storageClassInfo?.zone_name || 'default'
           });
-          this.acls?.clear();
-          if (aclMappings.length > 0) {
-            aclMappings.forEach((acl) => {
-              this.acls?.push(
-                this.formBuilder.group({
-                  source_id: [acl.val?.source_id || ''],
-                  dest_id: [acl.val?.dest_id || ''],
-                  type: [acl.val?.type || AclTypeConst.ID, Validators.required]
-                })
-              );
-            });
-          } else {
-            this.addAcls();
+          if (
+            this.storageClassForm.get('storageClassType')?.value === TIER_TYPE.CLOUD_TIER ||
+            this.storageClassForm.get('storageClassType')?.value === TIER_TYPE.GLACIER
+          ) {
+            this.acls?.clear();
+            if (aclMappings.length > 0) {
+              aclMappings.forEach((acl) => {
+                this.acls?.push(
+                  this.formBuilder.group({
+                    source_id: [acl.val?.source_id || ''],
+                    dest_id: [acl.val?.dest_id || ''],
+                    type: [acl.val?.type || AclTypeConst.ID, Validators.required]
+                  })
+                );
+              });
+            } else {
+              this.addAcls();
+            }
           }
           if (this.tierTargetInfo?.val?.tier_type == TIER_TYPE.GLACIER) {
             let glacierResponse = this.tierTargetInfo?.val['s3-glacier'];
@@ -220,75 +238,11 @@ export class RgwStorageClassFormComponent extends CdForm implements OnInit {
     this.storageClassForm.get('allow_read_through').valueChanges.subscribe((value) => {
       this.onAllowReadThroughChange(value);
     });
-  }
 
-  createForm() {
-    const self = this;
-
-    const lockDaysValidator = CdValidators.custom('lockDays', () => {
-      if (!self.storageClassForm || !self.storageClassForm.getRawValue()) {
-        return false;
-      }
-
-      const lockDays = Number(self.storageClassForm.getValue('read_through_restore_days'));
-      return !Number.isInteger(lockDays) || lockDays === 0;
-    });
-    this.storageClassForm = this.formBuilder.group({
-      storage_class: new FormControl('', {
-        validators: [Validators.required]
-      }),
-      zonegroup: new FormControl(this.selectedZoneGroup, {
-        validators: [Validators.required]
-      }),
-      region: new FormControl('', [
-        CdValidators.composeIf({ storageClassType: TIER_TYPE.CLOUD_TIER }, [Validators.required])
-      ]),
-      placement_target: new FormControl('', {
-        validators: [Validators.required]
-      }),
-      access_key: new FormControl(null, [
-        CdValidators.composeIf({ storageClassType: TIER_TYPE.CLOUD_TIER }, [Validators.required])
-      ]),
-      secret_key: new FormControl(null, [
-        CdValidators.composeIf({ storageClassType: TIER_TYPE.CLOUD_TIER }, [Validators.required])
-      ]),
-      target_path: new FormControl('', [
-        CdValidators.composeIf({ storageClassType: TIER_TYPE.CLOUD_TIER }, [Validators.required])
-      ]),
-      retain_head_object: new FormControl(true),
-      glacier_restore_tier_type: new FormControl(STORAGE_CLASS_CONSTANTS.DEFAULT_STORAGE_CLASS, [
-        CdValidators.composeIf({ storageClassType: TIER_TYPE.GLACIER }, [Validators.required])
-      ]),
-      target_endpoint: new FormControl('', [Validators.required, this.urlValidator]),
-      glacier_restore_days: new FormControl(STORAGE_CLASS_CONSTANTS.DEFAULT_GLACIER_RESTORE_DAYS, [
-        CdValidators.composeIf({ storageClassType: TIER_TYPE.GLACIER || TIER_TYPE.CLOUD_TIER }, [
-          CdValidators.number(false),
-          lockDaysValidator
-        ])
-      ]),
-      restore_storage_class: new FormControl(STORAGE_CLASS_CONSTANTS.DEFAULT_STORAGE_CLASS),
-      read_through_restore_days: new FormControl(
-        {
-          value: STORAGE_CLASS_CONSTANTS.DEFAULT_READTHROUGH_RESTORE_DAYS,
-          disabled: true
-        },
-        CdValidators.composeIf(
-          (form: AbstractControl) => {
-            const type = form.get('storageClassType')?.value;
-            return type === TIER_TYPE.GLACIER || type === TIER_TYPE.CLOUD_TIER;
-          },
-          [CdValidators.number(false), lockDaysValidator]
-        )
-      ),
-      multipart_sync_threshold: new FormControl(
-        STORAGE_CLASS_CONSTANTS.DEFAULT_MULTIPART_SYNC_THRESHOLD
-      ),
-      multipart_min_part_size: new FormControl(
-        STORAGE_CLASS_CONSTANTS.DEFAULT_MULTIPART_MIN_PART_SIZE
-      ),
-      allow_read_through: new FormControl(false),
-      storageClassType: new FormControl(TIER_TYPE.LOCAL, Validators.required),
-      acls: new FormArray([this.createAcls()])
+    this.poolService.getList().subscribe((resp: Pool[]) => {
+      this.pools = resp;
+      // Filter only pools with "rgw" in application_metadata
+      this.rgwPools = this.pools.filter((pool) => pool.application_metadata?.includes('rgw'));
     });
   }
 
@@ -427,66 +381,174 @@ export class RgwStorageClassFormComponent extends CdForm implements OnInit {
     });
   }
 
+  createForm() {
+    const self = this;
+
+    const lockDaysValidator = CdValidators.custom('lockDays', () => {
+      if (!self.storageClassForm || !self.storageClassForm.getRawValue()) {
+        return false;
+      }
+
+      const lockDays = Number(self.storageClassForm.getValue('read_through_restore_days'));
+      return !Number.isInteger(lockDays) || lockDays === 0;
+    });
+    this.storageClassForm = this.formBuilder.group({
+      storage_class: new FormControl('', {
+        validators: [Validators.required]
+      }),
+      zonegroup: new FormControl(this.selectedZoneGroup, {
+        validators: [Validators.required]
+      }),
+      region: new FormControl('', [
+        CdValidators.composeIf({ storageClassType: TIER_TYPE.CLOUD_TIER }, [Validators.required])
+      ]),
+      placement_target: new FormControl('', {
+        validators: [Validators.required]
+      }),
+      target_endpoint: new FormControl('', [Validators.required, this.urlValidator]),
+      access_key: new FormControl(null, [
+        CdValidators.composeIf({ storageClassType: TIER_TYPE.CLOUD_TIER }, [Validators.required])
+      ]),
+      secret_key: new FormControl(null, [
+        CdValidators.composeIf({ storageClassType: TIER_TYPE.CLOUD_TIER }, [Validators.required])
+      ]),
+      target_path: new FormControl('', [
+        CdValidators.composeIf({ storageClassType: TIER_TYPE.CLOUD_TIER }, [Validators.required])
+      ]),
+      retain_head_object: new FormControl(true),
+      glacier_restore_tier_type: new FormControl(STORAGE_CLASS_CONSTANTS.DEFAULT_STORAGE_CLASS, [
+        CdValidators.composeIf({ storageClassType: TIER_TYPE.GLACIER }, [Validators.required])
+      ]),
+      glacier_restore_days: new FormControl(STORAGE_CLASS_CONSTANTS.DEFAULT_GLACIER_RESTORE_DAYS, [
+        CdValidators.composeIf({ storageClassType: TIER_TYPE.GLACIER || TIER_TYPE.CLOUD_TIER }, [
+          CdValidators.number(false),
+          lockDaysValidator
+        ])
+      ]),
+      restore_storage_class: new FormControl(STORAGE_CLASS_CONSTANTS.DEFAULT_STORAGE_CLASS),
+      read_through_restore_days: new FormControl(
+        {
+          value: STORAGE_CLASS_CONSTANTS.DEFAULT_READTHROUGH_RESTORE_DAYS,
+          disabled: true
+        },
+        CdValidators.composeIf(
+          (form: AbstractControl) => {
+            const type = form.get('storageClassType')?.value;
+            return type === TIER_TYPE.GLACIER || type === TIER_TYPE.CLOUD_TIER;
+          },
+          [CdValidators.number(false), lockDaysValidator]
+        )
+      ),
+      multipart_sync_threshold: new FormControl(
+        STORAGE_CLASS_CONSTANTS.DEFAULT_MULTIPART_SYNC_THRESHOLD
+      ),
+      multipart_min_part_size: new FormControl(
+        STORAGE_CLASS_CONSTANTS.DEFAULT_MULTIPART_MIN_PART_SIZE
+      ),
+      allow_read_through: new FormControl(false),
+      storageClassType: new FormControl(TIER_TYPE.LOCAL, Validators.required),
+      // acls: new FormArray([this.createAcls()]),
+      pool: new FormControl('', [
+        CdValidators.composeIf({ storageClassType: TIER_TYPE.LOCAL }, [Validators.required])
+      ]),
+      zone: new FormControl('default', [
+        CdValidators.composeIf({ storageClassType: TIER_TYPE.LOCAL }, [Validators.required])
+      ]),
+      acls: new FormArray([])
+    });
+    this.storageClassForm.get('storageClassType')?.valueChanges.subscribe((type: string) => {
+      if (type === TIER_TYPE.CLOUD_TIER) {
+        const aclsArray = this.storageClassForm.get('acls') as FormArray;
+        aclsArray.clear();
+        aclsArray.push(this.createAcls());
+      }
+    });
+  }
+
   loadZoneGroup(): Promise<void> {
     return new Promise((resolve, reject) => {
       this.rgwZoneGroupService.getAllZonegroupsInfo().subscribe(
         (data: ZoneGroupDetails) => {
           this.zoneGroupDetails = data;
           this.zonegroupNames = [];
-          this.placementTargets = [];
+          this.zones = [];
           if (data.zonegroups && data.zonegroups.length > 0) {
-            this.zonegroupNames = data.zonegroups.map((zoneGroup: ZoneGroup) => {
-              return {
-                id: zoneGroup.id,
-                name: zoneGroup.name
-              };
-            });
+            this.zonegroupNames = data.zonegroups.map((zoneGroup: ZoneGroup) => ({
+              id: zoneGroup.id,
+              name: zoneGroup.name,
+              zones: zoneGroup.zones
+            }));
           }
           this.defaultZonegroup = this.zonegroupNames.find(
-            (zonegroups: ZoneGroup) => zonegroups.id === data.default_zonegroup
+            (zonegroup) => zonegroup.id === data?.default_zonegroup
           );
-          this.storageClassForm.get('zonegroup').setValue(this.defaultZonegroup.name);
+          this.storageClassForm.get('zonegroup').setValue(this.defaultZonegroup?.name);
           this.onZonegroupChange();
+
           resolve();
         },
-        (error) => reject(error)
+        (error) => {
+          reject(error);
+        }
       );
     });
   }
 
-  onZonegroupChange() {
+  onZonegroupChange(): void {
     const zoneGroupControl = this.storageClassForm.get('zonegroup').value;
-    const selectedZoneGroup = this.zoneGroupDetails.zonegroups.find(
-      (zonegroup) => zonegroup.name === zoneGroupControl
+    const selectedZoneGroup = this.zoneGroupDetails?.zonegroups?.find(
+      (zonegroup) => zonegroup?.name === zoneGroupControl
     );
-    const defaultPlacementTarget = selectedZoneGroup.placement_targets.find(
+    const defaultPlacementTarget = selectedZoneGroup?.placement_targets?.find(
       (target: Target) => target.name === DEFAULT_PLACEMENT
     );
-    if (selectedZoneGroup) {
-      const placementTargetNames = selectedZoneGroup.placement_targets.map(
+
+    if (selectedZoneGroup?.placement_targets) {
+      this.placementTargets = selectedZoneGroup.placement_targets.map(
         (target: Target) => target.name
       );
-      this.placementTargets = placementTargetNames;
     }
     if (defaultPlacementTarget && !this.editing) {
       this.storageClassForm.get('placement_target').setValue(defaultPlacementTarget.name);
     } else {
       this.storageClassForm
         .get('placement_target')
-        .setValue(this.storageClassInfo.placement_target);
+        .setValue(this.storageClassInfo?.placement_target || null);
     }
+    this.zones = selectedZoneGroup?.zones;
   }
 
   submitAction() {
     const component = this;
     const requestModel = this.buildRequest();
+    const rawFormValue = _.cloneDeep(this.storageClassForm.value);
+    const zoneRequest: ZoneRequest = {
+      zone_name: this.storageClassForm.get('zone').value,
+      placement_targets: [
+        {
+          placement_target: this.storageClassForm.get('placement_target').value,
+          storage_class: this.storageClassForm.get('storage_class').value,
+          data_pool: this.storageClassForm.get('pool')?.value || ''
+        }
+      ]
+    };
+
     const storageclassName = this.storageClassForm.get('storage_class').value;
     if (this.editing) {
-      this.rgwStorageService.editStorageClass(requestModel).subscribe(
+      const editStorageClass$ = this.rgwStorageService.editStorageClass(requestModel);
+
+      const editZone$ =
+        rawFormValue.storageClassType === TIER_TYPE.LOCAL
+          ? editStorageClass$.pipe(
+              switchMap(() => this.rgwStorageService.editStorageClassZone(zoneRequest))
+            )
+          : editStorageClass$;
+
+      editZone$.subscribe(
         () => {
           this.notificationService.show(
             NotificationType.success,
-            $localize`Updated Storage Class '${storageclassName}'`
+            $localize`Edited Storage Class '${storageclassName}'`
           );
           this.goToListView();
         },
@@ -495,7 +557,16 @@ export class RgwStorageClassFormComponent extends CdForm implements OnInit {
         }
       );
     } else {
-      this.rgwStorageService.createStorageClass(requestModel).subscribe(
+      const createStorageClass$ = this.rgwStorageService.createStorageClass(requestModel);
+
+      const createZone$ =
+        rawFormValue.storageClassType === TIER_TYPE.LOCAL
+          ? createStorageClass$.pipe(
+              switchMap(() => this.rgwStorageService.createStorageClassZone(zoneRequest))
+            )
+          : createStorageClass$;
+
+      createZone$.subscribe(
         () => {
           this.notificationService.show(
             NotificationType.success,
@@ -509,7 +580,6 @@ export class RgwStorageClassFormComponent extends CdForm implements OnInit {
       );
     }
   }
-
   goToListView() {
     this.router.navigate([`rgw/tiering`]);
   }

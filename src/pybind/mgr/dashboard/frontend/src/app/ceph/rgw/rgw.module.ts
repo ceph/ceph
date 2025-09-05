@@ -397,6 +397,11 @@ const routes: Routes = [
         data: { breadcrumbs: ActionLabels.CREATE }
       },
       {
+        path: `${URLVerbs.EDIT}/:zonegroup_name/:placement_target/:storage_class/:zone_name/:data_pool`,
+        component: RgwStorageClassFormComponent,
+        data: { breadcrumbs: ActionLabels.EDIT }
+      },
+      {
         path: `${URLVerbs.EDIT}/:zonegroup_name/:placement_target/:storage_class`,
         component: RgwStorageClassFormComponent,
         data: { breadcrumbs: ActionLabels.EDIT }

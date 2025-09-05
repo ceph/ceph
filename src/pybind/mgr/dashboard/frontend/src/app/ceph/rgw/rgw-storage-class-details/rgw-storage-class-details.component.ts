@@ -72,7 +72,7 @@ export class RgwStorageClassDetailsComponent implements OnChanges, OnInit {
   }
 
   ngOnInit() {
-    this.groupedACLs = this.groupByType(this.selection.acl_mappings);
+    this.groupedACLs = this.groupByType(this.selection?.acl_mappings);
   }
 
   isTierMatch(...types: string[]): boolean {
