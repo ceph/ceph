@@ -1,3 +1,22 @@
 cd-form-button-panel {
   width: 100%;
 }
+
+.form-footer {
+  display: flex;
+  width: 100%;
+
+  .submit-button {
+    margin-left: auto;
+    flex: 1 1 50%;
+  }
+
+  .back-button-with-submit {
+    flex: 1 1 50%;
+  }
+
+  .back-button-only {
+    margin-left: auto;
+    flex: 0 0 50%;
+  }
+}

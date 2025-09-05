@@ -255,7 +255,7 @@
   <cds-overflow-menu *ngIf="tableActions?.dropDownActions.length > 1 && selectionType !== 'multiClick'"
                      [flip]="true"
                      data-testid="table-action-btn"
-                     class="d-flex justify-content-end">
+                     class="cds--display-flex cds--justify-content-end">
     <ng-container *ngFor="let action of tableActions?.dropDownActions">
       <cds-overflow-menu-option *ngIf="tableActions.currentAction !== action"
                                 class="{{ tableActions.toClassName(action) }}"

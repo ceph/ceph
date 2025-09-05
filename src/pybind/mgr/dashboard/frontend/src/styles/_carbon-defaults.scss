@@ -229,3 +229,11 @@ Tabs
 .cds--text-truncate--end {
   @include textTruncate.text-truncate-end;
 }
+
+.cds--display-flex {
+  display: flex;
+}
+
+.cds--justify-content-end {
+  justify-content: flex-end;
+}

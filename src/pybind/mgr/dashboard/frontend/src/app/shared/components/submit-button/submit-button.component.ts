@@ -51,6 +51,9 @@ export class SubmitButtonComponent implements OnInit {
   @Input()
   modalForm = false;
 
+  @Input()
+  size: 'sm' | 'md' | 'lg' | 'xl' | '2xl' = 'lg';
+
   @Output()
   submitAction = new EventEmitter();
 
