@@ -2506,11 +2506,13 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
 
         return self._ceph_have_mon_connection()
 
+    @API.perm('w')
+    @API.expose
     def update_progress_event(self,
                               evid: str,
                               desc: str,
                               progress: float,
-                              add_to_ceph_s: bool) -> None:
+                              add_to_ceph_s: bool = False) -> None:
         return self._ceph_update_progress_event(evid, desc, progress, add_to_ceph_s)
 
     @API.perm('w')
