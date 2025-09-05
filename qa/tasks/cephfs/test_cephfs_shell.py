@@ -980,6 +980,13 @@ class TestXattr(TestCephFSShell):
             cmd=['getxattr', self.dir_name, input_val[0]])
         self.negtest_cephfs_shell_cmd(cmd=['listxattr', self.dir_name])
 
+    def test_remove_xattr(self):
+        self.test_set()
+        self.get_cephfs_shell_cmd_output(
+            ['removexattr', self.dir_name, 'user.key'])
+        self.negtest_cephfs_shell_cmd(
+            cmd=['getxattr', self.dir_name, 'user.key'])
+
 
 class TestLS(TestCephFSShell):
     dir_name = 'test_dir'
