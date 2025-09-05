@@ -6875,3 +6875,20 @@ options:
   level: dev
   default: 0
   desc: When EC writes should generate PDWs (development only) 0=optimal 1=never 2=when possible
+- name: service_unique_id
+  type: str
+  level: advanced
+  desc: Unique string to be returned in PerfCounters
+  fmt_desc: A unique id to be created by orchestration software or the
+    administrator upon initial setup of a service. Enforcing uniqueness
+    is entirely the responsibility of the process used to create and
+    manage the cluster. A unique id will be unique within the scope of
+    the entire cluster across all services if they are chosen to be so.
+  note: If this is empty no uniquifier is provided.
+  tags:
+  - service
+  services:
+  - common
+  flags:
+  - no_mon_update
+  - startup
