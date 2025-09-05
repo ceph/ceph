@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, NgZone, OnInit } from '@angular/core';
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
@@ -46,7 +46,8 @@ export class RgwStorageClassListComponent extends ListWithDetails implements OnI
     private authStorageService: AuthStorageService,
     private rgwStorageClassService: RgwStorageClassService,
     private router: Router,
-    private urlBuilder: URLBuilderService
+    private urlBuilder: URLBuilderService,
+    protected ngZone: NgZone
   ) {
     super();
     this.permission = this.authStorageService.getPermissions().rgw;
@@ -60,7 +61,7 @@ export class RgwStorageClassListComponent extends ListWithDetails implements OnI
         isHidden: true
       },
       {
-        name: $localize`Storage Class name`,
+        name: $localize`Name`,
         prop: 'storage_class',
         flexGrow: 2
       },
@@ -85,11 +86,16 @@ export class RgwStorageClassListComponent extends ListWithDetails implements OnI
         flexGrow: 2
       }
     ];
-    const getStorageUri = () =>
-      this.selection.first() &&
-      `${encodeURI(this.selection.first().zonegroup_name)}/${encodeURI(
-        this.selection.first().placement_target
-      )}/${encodeURI(this.selection.first().storage_class)}`;
+    const getStorageUri = () => {
+      const selection = this.selection.first();
+      if (!selection) return '';
+
+      let url = `${encodeURIComponent(selection.zonegroup_name)}/${encodeURIComponent(
+        selection.placement_target
+      )}/${encodeURIComponent(selection.storage_class)}`;
+
+      return url;
+    };
     this.tableActions = [
       {
         name: this.actionLabels.CREATE,
@@ -111,9 +117,11 @@ export class RgwStorageClassListComponent extends ListWithDetails implements OnI
         click: () => this.removeStorageClassModal()
       }
     ];
+    this.setTableRefreshTimeout();
   }
 
   loadStorageClass(): Promise<void> {
+    this.setTableRefreshTimeout();
     return new Promise((resolve, reject) => {
       this.rgwZonegroupService.getAllZonegroupsInfo().subscribe(
         (data: ZoneGroupDetails) => {
@@ -178,9 +186,5 @@ export class RgwStorageClassListComponent extends ListWithDetails implements OnI
 
   updateSelection(selection: CdTableSelection) {
     this.selection = selection;
-  }
-
-  setExpandedRow(expandedRow: any) {
-    super.setExpandedRow(expandedRow);
   }
 }
