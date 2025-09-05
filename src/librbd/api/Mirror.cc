@@ -2597,7 +2597,8 @@ int prepare_group_images(IoCtx& group_ioctx,
   }
 
   group_snap->snapshot_namespace = cls::rbd::GroupSnapshotNamespaceMirror{
-                                     snap_state, *mirror_peer_uuids, {}, {}};
+                                     snap_state, *mirror_peer_uuids, {}, {},
+                                     cls::rbd::MIRROR_GROUP_SNAP_SYNC_INCOMPLETE};
 
   for (auto image_ctx: *image_ctxs) {
     group_snap->snaps.emplace_back(image_ctx->md_ctx.get_id(), image_ctx->id,
@@ -2911,6 +2912,10 @@ int Mirror<I>::group_enable(IoCtx& group_ioctx, const char *group_name,
 
   if (!ret_code) {
     group_snap.state = cls::rbd::GROUP_SNAPSHOT_STATE_COMPLETE;
+    auto &mirror_namespace = std::get<cls::rbd::GroupSnapshotNamespaceMirror>(
+            group_snap.snapshot_namespace);
+    mirror_namespace.complete = cls::rbd::MIRROR_GROUP_SNAP_SYNC_COMPLETE;
+
     r = cls_client::group_snap_set(&group_ioctx, group_header_oid, group_snap);
     if (r < 0) {
       lderr(cct) << "failed to update group snapshot metadata: "
@@ -3132,7 +3137,8 @@ int create_orphan_group_snapshot(IoCtx& group_ioctx,
   cls::rbd::GroupSnapshot group_snap{
       group_snap_id,
       cls::rbd::GroupSnapshotNamespaceMirror{
-        cls::rbd::MIRROR_SNAPSHOT_STATE_NON_PRIMARY, {}, {} , {}},
+        cls::rbd::MIRROR_SNAPSHOT_STATE_NON_PRIMARY, {}, {} , {},
+        cls::rbd::MIRROR_GROUP_SNAP_SYNC_INCOMPLETE},
       prepare_non_primary_mirror_snap_name(cct, global_group_id, group_snap_id),
       cls::rbd::GROUP_SNAPSHOT_STATE_INCOMPLETE};
 
@@ -3146,6 +3152,10 @@ int create_orphan_group_snapshot(IoCtx& group_ioctx,
   }
 
   group_snap.state = cls::rbd::GROUP_SNAPSHOT_STATE_COMPLETE;
+  auto &mirror_namespace = std::get<cls::rbd::GroupSnapshotNamespaceMirror>(
+          group_snap.snapshot_namespace);
+  mirror_namespace.complete = cls::rbd::MIRROR_GROUP_SNAP_SYNC_COMPLETE;
+
   r = cls_client::group_snap_set(&group_ioctx, group_header_oid, group_snap);
   if (r < 0) {
     lderr(cct) << "failed to mark snapshot complete: " << cpp_strerror(r)
@@ -3373,6 +3383,10 @@ int Mirror<I>::group_promote(IoCtx& group_ioctx, const char *group_name,
     remove_group_snap(group_ioctx, group_id, &group_snap, &image_ctxs);
   } else if (!ret_code) {
     group_snap.state = cls::rbd::GROUP_SNAPSHOT_STATE_COMPLETE;
+    auto &mirror_namespace = std::get<cls::rbd::GroupSnapshotNamespaceMirror>(
+            group_snap.snapshot_namespace);
+    mirror_namespace.complete = cls::rbd::MIRROR_GROUP_SNAP_SYNC_COMPLETE;
+
     r = cls_client::group_snap_set(&group_ioctx, group_header_oid, group_snap);
     if (r < 0) {
       lderr(cct) << "failed to update group snapshot metadata: "
@@ -3471,6 +3485,10 @@ int Mirror<I>::group_demote(IoCtx& group_ioctx,
   std::string group_header_oid = librbd::util::group_header_name(group_id);
   if (!ret_code) {
     group_snap.state = cls::rbd::GROUP_SNAPSHOT_STATE_COMPLETE;
+    auto &mirror_namespace = std::get<cls::rbd::GroupSnapshotNamespaceMirror>(
+            group_snap.snapshot_namespace);
+    mirror_namespace.complete = cls::rbd::MIRROR_GROUP_SNAP_SYNC_COMPLETE;
+
     r = cls_client::group_snap_set(&group_ioctx, group_header_oid, group_snap);
     if (r < 0) {
       lderr(cct) << "failed to update group snapshot metadata: "

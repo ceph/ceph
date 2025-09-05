@@ -450,7 +450,7 @@ void GroupCreatePrimaryRequest<I>::generate_group_snap() {
 
   // Create incomplete group snap
   m_group_snap.snapshot_namespace = cls::rbd::GroupSnapshotNamespaceMirror{
-    state, m_mirror_peer_uuids, {}, {}};
+    state, m_mirror_peer_uuids, {}, {}, cls::rbd::MIRROR_GROUP_SNAP_SYNC_INCOMPLETE};
 
   for (auto image_ctx: m_image_ctxs) {
     m_group_snap.snaps.emplace_back(image_ctx->md_ctx.get_id(), image_ctx->id,
@@ -645,6 +645,10 @@ void GroupCreatePrimaryRequest<I>::handle_create_image_snaps(int r) {
     return;
   } else {
     m_group_snap.state = cls::rbd::GROUP_SNAPSHOT_STATE_COMPLETE;
+    auto &mirror_namespace = std::get<cls::rbd::GroupSnapshotNamespaceMirror>(
+            m_group_snap.snapshot_namespace);
+    mirror_namespace.complete = cls::rbd::MIRROR_GROUP_SNAP_SYNC_COMPLETE;
+
     *m_snap_id = m_group_snap.id;
 
     set_snap_metadata();
