@@ -14,6 +14,7 @@ import sys
 from ipaddress import ip_address
 from threading import Lock, Condition, Event
 from typing import no_type_check, NewType
+from traceback import format_exc as tb_format_exc
 import urllib
 from functools import wraps
 if sys.version_info >= (3, 3):
@@ -86,9 +87,9 @@ class RTimer(Timer):
             while not self.finished.is_set():
                 self.finished.wait(self.interval)
                 self.function(*self.args, **self.kwargs)
-            self.finished.set()
-        except Exception as e:
-            logger.error("task exception: %s", e)
+        except Exception:
+            logger.error(f'exception encountered in RTimer instance "{self}":'
+                         f'\n{tb_format_exc()}')
             raise
 
 @contextlib.contextmanager
