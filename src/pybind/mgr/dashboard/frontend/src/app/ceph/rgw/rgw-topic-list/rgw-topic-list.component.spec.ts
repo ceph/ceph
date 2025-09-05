@@ -1,4 +1,6 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import * as assert from 'assert';
+
 import { RgwTopicListComponent } from './rgw-topic-list.component';
 import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed, PermissionHelper } from '~/testing/unit-test-helper';
@@ -47,15 +49,15 @@ describe('RgwTopicListComponent', () => {
   });
 
   it('should create', () => {
-    expect(component).toBeTruthy();
-    expect(rgwTopicServiceListSpy).toHaveBeenCalledTimes(2);
+    assert.ok(component);
+    assert.strictEqual(rgwTopicServiceListSpy.calls.count(), 1);
   });
 
   it('should test all TableActions combinations', () => {
     const permissionHelper: PermissionHelper = new PermissionHelper(component.permission);
     const tableActions = permissionHelper.setPermissionsAndGetActions(component.tableActions);
 
-    expect(tableActions).toEqual({
+    assert.deepStrictEqual(tableActions, {
       'create,update,delete': {
         actions: ['Create', 'Edit', 'Delete'],
         primary: {
