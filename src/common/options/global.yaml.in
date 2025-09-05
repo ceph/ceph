@@ -6598,3 +6598,20 @@ options:
   desc: Enables exception throwing instead of process abort on transaction submission error.
   default: false
   with_legacy: false
+- name: service_unique_id
+  type: str
+  level: advanced
+  desc: Unique string to be returned in PerfCounters
+  fmt_desc: A unique id to be created by orchestration software or the
+    administrator upon initial setup of a service. Enforcing uniqueness
+    is entirely the responsibility of the process used to create and
+    manage the cluster. A unique id will be unique within the scope of
+    the entire cluster across all services if they are chosen to be so.
+  note: If this is empty no uniquifier is provided.
+  tags:
+  - service
+  services:
+  - common
+  flags:
+  - no_mon_update
+  - startup
