@@ -26,6 +26,7 @@
 #include "mds/CInode.h"
 #include "mds/CDentry.h"
 #include "mds/InoTable.h"
+#include "mds/snap.h" // for struct sr_t
 #include "mds/SnapServer.h"
 #include "cls/cephfs/cls_cephfs_client.h"
 
