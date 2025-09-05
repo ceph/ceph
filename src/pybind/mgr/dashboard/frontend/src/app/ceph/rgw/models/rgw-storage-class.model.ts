@@ -54,6 +54,12 @@ export interface ZoneGroup {
   name: string;
   id: string;
   placement_targets?: Target[];
+  zones?: string[];
+}
+
+export interface ZoneRequest {
+  zone_name: string;
+  placement_targets: PlacementTarget[];
 }
 
 export interface S3Details {
@@ -81,7 +87,7 @@ export interface RequestModel {
 }
 
 export interface PlacementTarget {
-  placement_id: string;
+  placement_id?: string;
   tags?: string[];
   tier_type?: TIER_TYPE;
   tier_config?: {
@@ -103,6 +109,8 @@ export interface PlacementTarget {
   storage_class?: string;
   name?: string;
   tier_targets?: TierTarget[];
+  data_pool?: string;
+  placement_target?: string;
 }
 
 export interface StorageClassOption {
