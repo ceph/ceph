@@ -444,7 +444,12 @@ void bluestore_blob_use_tracker_t::allocate(uint32_t au_count)
   ceph_assert(num_au == 0);
   ceph_assert(alloc_au == 0);
   num_au = alloc_au = au_count;
-  bytes_per_au = new uint32_t[alloc_au];
+  if (onode) {
+    bytes_per_au = onode->LocalBytesPerAuAllocator.allocate(alloc_au);
+  }
+  else{
+    bytes_per_au = new uint32_t[alloc_au];
+  }
   mempool::get_pool(
     mempool::pool_index_t(mempool::mempool_bluestore_cache_other)).
       adjust_count(alloc_au, sizeof(uint32_t) * alloc_au);
@@ -456,7 +461,12 @@ void bluestore_blob_use_tracker_t::allocate(uint32_t au_count)
 
 void bluestore_blob_use_tracker_t::release(uint32_t au_count, uint32_t* ptr) {
   if (au_count) {
-    delete[] ptr;
+    if (onode) {
+      onode->LocalBytesPerAuAllocator.deallocate(ptr, au_count);
+    }
+    else {
+      delete[] ptr;
+    }
     mempool::get_pool(
       mempool::pool_index_t(mempool::mempool_bluestore_cache_other)).
         adjust_count(-(int32_t)au_count, -(int32_t)(sizeof(uint32_t) * au_count));
