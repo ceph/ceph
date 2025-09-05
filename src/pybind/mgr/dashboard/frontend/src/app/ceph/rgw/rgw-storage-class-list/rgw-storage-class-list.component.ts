@@ -5,6 +5,7 @@ import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 
 import { ListWithDetails } from '~/app/shared/classes/list-with-details.class';
 import {
+  AllZonesResponse,
   StorageClass,
   TIER_TYPE,
   TIER_TYPE_DISPLAY,
@@ -23,6 +24,7 @@ import { URLBuilderService } from '~/app/shared/services/url-builder.service';
 import { Permission } from '~/app/shared/models/permissions';
 import { BucketTieringUtils } from '../utils/rgw-bucket-tiering';
 import { Router } from '@angular/router';
+import { RgwZoneService } from '~/app/shared/api/rgw-zone.service';
 
 const BASE_URL = 'rgw/tiering';
 @Component({
@@ -45,6 +47,7 @@ export class RgwStorageClassListComponent extends ListWithDetails implements OnI
     private taskWrapper: TaskWrapperService,
     private authStorageService: AuthStorageService,
     private rgwStorageClassService: RgwStorageClassService,
+    private rgwZoneService: RgwZoneService,
     private router: Router,
     private urlBuilder: URLBuilderService
   ) {
@@ -85,11 +88,27 @@ export class RgwStorageClassListComponent extends ListWithDetails implements OnI
         flexGrow: 2
       }
     ];
-    const getStorageUri = () =>
-      this.selection.first() &&
-      `${encodeURI(this.selection.first().zonegroup_name)}/${encodeURI(
-        this.selection.first().placement_target
-      )}/${encodeURI(this.selection.first().storage_class)}`;
+    const getStorageUri = () => {
+      const selection = this.selection.first();
+      if (!selection) return '';
+
+      let url = `${encodeURIComponent(selection.zonegroup_name)}/${encodeURIComponent(
+        selection.placement_target
+      )}/${encodeURIComponent(selection.storage_class)}`;
+
+      if (selection.tier_type?.toLowerCase() === TIER_TYPE.LOCAL) {
+        if (selection.zone_name) {
+          url += `/${encodeURIComponent(selection.zone_name)}`;
+        }
+        if (selection.data_pool) {
+          if (!selection.zone_name) {
+            url += '/';
+          }
+          url += `/${encodeURIComponent(selection.data_pool)}`;
+        }
+      }
+      return url;
+    };
     this.tableActions = [
       {
         name: this.actionLabels.CREATE,
@@ -178,6 +197,25 @@ export class RgwStorageClassListComponent extends ListWithDetails implements OnI
 
   updateSelection(selection: CdTableSelection) {
     this.selection = selection;
+    const selected = this.selection.first();
+
+    const storage_class = selected?.storage_class;
+    const placement_target = selected?.placement_target;
+
+    this.rgwZoneService.getAllZonesInfo().subscribe((data: AllZonesResponse) => {
+      for (const zone of data.zones) {
+        for (const placement of zone.placement_pools) {
+          if (placement.key === placement_target) {
+            const storageClassEntry = placement.val.storage_classes[storage_class];
+
+            if (storageClassEntry) {
+              selected.zone_name = zone.name;
+              selected.data_pool = storageClassEntry.data_pool;
+            }
+          }
+        }
+      }
+    });
   }
 
   setExpandedRow(expandedRow: any) {
