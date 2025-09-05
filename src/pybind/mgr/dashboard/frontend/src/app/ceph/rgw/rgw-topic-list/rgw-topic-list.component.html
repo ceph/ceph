@@ -1,4 +1,9 @@
   <ng-container>
+  <legend>
+  <cd-help-text i18n>
+   A topic specifies where and how event notifications from a bucket are delivered, including the target system (e.g., Kafka or HTTP) and its configuration.
+  </cd-help-text>
+  </legend>
   <cd-table #table
             [autoReload]="false"
             [data]="topics$ | async"
