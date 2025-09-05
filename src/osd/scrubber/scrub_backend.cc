@@ -183,7 +183,7 @@ void ScrubBackend::merge_to_authoritative_set()
   }
 }
 
-ScrubMap& ScrubBackend::my_map()
+const ScrubMap& ScrubBackend::my_map()
 {
   return this_chunk->received_maps[m_pg_whoami];
 }
@@ -459,9 +459,9 @@ auth_selection_t ScrubBackend::select_auth_object(const hobject_t& ho,
 
     // digest_match will only be true if computed digests are the same
     if (auth_version != eversion_t() &&
-        ret_auth.auth->second.objects[ho].digest_present &&
+        ret_auth.auth->second.objects.at(ho).digest_present &&
         shard_ret.digest.has_value() &&
-        ret_auth.auth->second.objects[ho].digest != *shard_ret.digest) {
+        ret_auth.auth->second.objects.at(ho).digest != *shard_ret.digest) {
 
       ret_auth.digest_match = false;
       dout(10) << fmt::format(
@@ -469,7 +469,7 @@ auth_selection_t ScrubBackend::select_auth_object(const hobject_t& ho,
                     "data_digest 0x{:x}",
                     __func__,
                     ho,
-                    ret_auth.auth->second.objects[ho].digest,
+                    ret_auth.auth->second.objects.at(ho).digest,
                     *shard_ret.digest)
                << dendl;
     }
@@ -905,7 +905,7 @@ std::optional<std::string> ScrubBackend::compare_obj_in_maps(
   auto& auth = auth_res.auth;
 
   // an auth source was selected
-  ScrubMap::object& auth_object = auth->second.objects[ho];
+  const ScrubMap::object& auth_object = auth->second.objects.at(ho);
 
   // collect some OMAP statistics based on the selected version of the object
   collect_omap_stats(ho, auth_object);
@@ -959,7 +959,7 @@ std::optional<std::string> ScrubBackend::compare_obj_in_maps(
 std::optional<ScrubBackend::auth_and_obj_errs_t>
 ScrubBackend::for_empty_auth_list(std::list<pg_shard_t>&& auths,
                                   std::set<pg_shard_t>&& obj_errors,
-                                  shard_to_scrubmap_t::iterator auth,
+                                  shard_to_scrubmap_t::const_iterator auth,
                                   const hobject_t& ho,
                                   stringstream& errstream)
 {
@@ -990,7 +990,7 @@ ScrubBackend::for_empty_auth_list(std::list<pg_shard_t>&& auths,
 /// \todo replace the errstream with a member of this_chunk. Better be a
 ///  fmt::buffer. Then - we can use it directly in should_fix_digest()
 void ScrubBackend::inconsistents(const hobject_t& ho,
-                                 ScrubMap::object& auth_object,
+                                 const ScrubMap::object& auth_object,
                                  object_info_t& auth_oi,
                                  auth_and_obj_errs_t&& auth_n_errs,
                                  stringstream& errstream)
@@ -1137,7 +1137,7 @@ ScrubBackend::auth_and_obj_errs_t ScrubBackend::match_in_shards(
   }
   shard_id_map<bufferlist> digests{digest_size};
 
-  for (auto& [srd, smap] : this_chunk->received_maps) {
+  for (const auto& [srd, smap] : this_chunk->received_maps) {
 
     if (srd == auth_sel.auth_shard) {
       auth_sel.shard_map[auth_sel.auth_shard].selected_oi = true;
@@ -1146,15 +1146,15 @@ ScrubBackend::auth_and_obj_errs_t ScrubBackend::match_in_shards(
     if (smap.objects.count(ho)) {
 
       // the scrub-map has our object
-      auth_sel.shard_map[srd].set_object(smap.objects[ho]);
+      auth_sel.shard_map[srd].set_object(smap.objects.at(ho));
 
       // Compare
       stringstream ss;
-      const auto& auth_object = auth_sel.auth->second.objects[ho];
+      const auto& auth_object = auth_sel.auth->second.objects.at(ho);
       const bool discrep_found = compare_obj_details(auth_sel.auth_shard,
                                                      auth_object,
                                                      auth_sel.auth_oi,
-                                                     smap.objects[ho],
+                                                     smap.objects.at(ho),
                                                      auth_sel.shard_map[srd],
                                                      obj_result,
                                                      ss,
@@ -1166,10 +1166,10 @@ ScrubBackend::auth_and_obj_errs_t ScrubBackend::match_in_shards(
         // parity shards Decode the current data shard Add to set<shard_id>
         // incorrectly_decoded_shards if the shard did not decode
 
-        constexpr std::size_t length = sizeof(smap.objects[ho].digest);
+        constexpr std::size_t length = sizeof(smap.objects.at(ho).digest);
         char crc_bytes[length];
         for (std::size_t i = 0; i < length; i++) {
-          crc_bytes[i] = smap.objects[ho].digest >> (8 * i) & 0xFF;
+          crc_bytes[i] = smap.objects.at(ho).digest >> (8 * i) & 0xFF;
         }
         ceph::bufferptr b = ceph::buffer::create_page_aligned(
             m_pg.get_ec_sinfo().get_chunk_size());
@@ -1195,8 +1195,8 @@ ScrubBackend::auth_and_obj_errs_t ScrubBackend::match_in_shards(
 		      "{}: <{}> auth:{} ({}/{}) vs {} ({}/{}) {}", __func__, ho,
 		      auth_sel.auth_shard, auth_object.omap_digest_present,
 		      auth_object.omap_digest, srd,
-		      smap.objects[ho].omap_digest_present ? true : false,
-		      smap.objects[ho].omap_digest, ss.str())
+		      smap.objects.at(ho).omap_digest_present ? true : false,
+		      smap.objects.at(ho).omap_digest, ss.str())
 		 << dendl;
       }
 

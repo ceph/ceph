@@ -217,7 +217,7 @@ struct formatter<shard_as_auth_t> {
 } // namespace fmt
 
 struct auth_selection_t {
-  shard_to_scrubmap_t::iterator auth;  ///< an iter into one of this_chunk->maps
+  shard_to_scrubmap_t::const_iterator auth;  ///< an iter into one of this_chunk->maps
   pg_shard_t auth_shard;               // set to auth->first
   object_info_t auth_oi;
   shard_info_map_t shard_map;
@@ -422,7 +422,7 @@ class ScrubBackend {
   ScrubMap m_cleaned_meta_map{};
 
   /// a reference to the primary map
-  ScrubMap& my_map();
+  const ScrubMap& my_map();
 
   /// shallow/deep error counters
   error_counters_t get_error_counts() const { return this_chunk->m_error_counts; }
@@ -453,7 +453,7 @@ class ScrubBackend {
   std::optional<auth_and_obj_errs_t> for_empty_auth_list(
     std::list<pg_shard_t>&& auths,
     std::set<pg_shard_t>&& obj_errors,
-    shard_to_scrubmap_t::iterator auth,
+    shard_to_scrubmap_t::const_iterator auth,
     const hobject_t& ho,
     std::stringstream& errstream);
 
@@ -509,7 +509,7 @@ class ScrubBackend {
     std::stringstream& errstream);
 
   void inconsistents(const hobject_t& ho,
-                     ScrubMap::object& auth_object,
+                     const ScrubMap::object& auth_object,
                      object_info_t& auth_oi,  // consider moving to object
                      auth_and_obj_errs_t&& auth_n_errs,
                      std::stringstream& errstream);
