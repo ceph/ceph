@@ -324,12 +324,14 @@ class ECBackend : public ECCommon {
     void continue_recovery_op(
         RecoveryBackend::RecoveryOp &op,
         RecoveryMessages *m);
+    void update_object_size_after_read(
+        uint64_t size,
+        read_result_t &res,
+        read_request_t &req);
     void handle_recovery_read_complete(
         const hobject_t &hoid,
-        ECUtil::shard_extent_map_t &&buffers_read,
-        std::optional<std::map<std::string, ceph::buffer::list, std::less<>>>
-          attrs,
-        const ECUtil::shard_extent_set_t &want_to_read,
+        read_result_t &&res,
+        read_request_t &req,
         RecoveryMessages *m);
     void handle_recovery_push(
         const PushOp &op,
@@ -443,10 +445,6 @@ class ECBackend : public ECCommon {
 
   uint64_t get_is_nonprimary_shard(shard_id_t shard) const {
     return sinfo.is_nonprimary_shard(shard);
-  }
-
-  bool get_is_hinfo_required() const {
-    return sinfo.get_is_hinfo_required();
   }
 
   /**

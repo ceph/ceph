@@ -95,7 +95,8 @@ struct ECCommon {
   struct read_request_t {
     const std::list<ec_align_t> to_read;
     const uint32_t flags = 0;
-    const ECUtil::shard_extent_set_t shard_want_to_read;
+    ECUtil::shard_extent_set_t shard_want_to_read;
+    ECUtil::shard_extent_set_t zeros_for_decode;
     shard_id_map<shard_read_t> shard_reads;
     bool want_attrs = false;
     uint64_t object_size;
@@ -107,6 +108,7 @@ struct ECCommon {
       to_read(to_read),
       flags(to_read.front().flags),
       shard_want_to_read(shard_want_to_read),
+      zeros_for_decode(shard_want_to_read.get_max_shards()),
       shard_reads(shard_want_to_read.get_max_shards()),
       want_attrs(want_attrs),
       object_size(object_size) {}
@@ -114,6 +116,7 @@ struct ECCommon {
     read_request_t(const ECUtil::shard_extent_set_t &shard_want_to_read,
                bool want_attrs, uint64_t object_size) :
       shard_want_to_read(shard_want_to_read),
+      zeros_for_decode(shard_want_to_read.get_max_shards()),
       shard_reads(shard_want_to_read.get_max_shards()),
       want_attrs(want_attrs),
       object_size(object_size) {}
@@ -124,6 +127,7 @@ struct ECCommon {
       os << "read_request_t(to_read=[" << to_read << "]"
           << ", flags=" << flags
           << ", shard_want_to_read=" << shard_want_to_read
+          << ", zeros_for_decode=" << zeros_for_decode
           << ", shard_reads=" << shard_reads
           << ", want_attrs=" << want_attrs
           << ")";
@@ -162,6 +166,7 @@ struct ECCommon {
     std::optional<std::map<std::string, ceph::buffer::list, std::less<>>> attrs;
     ECUtil::shard_extent_map_t buffers_read;
     ECUtil::shard_extent_set_t processed_read_requests;
+    shard_id_set zero_length_reads;
 
     read_result_t(const ECUtil::stripe_info_t *sinfo) :
       r(0), buffers_read(sinfo),
@@ -175,7 +180,8 @@ struct ECCommon {
         os << ", noattrs";
       }
       os << ", buffers_read=" << buffers_read;
-      os << ", processed_read_requests=" << processed_read_requests << ")";
+      os << ", processed_read_requests=" << processed_read_requests;
+      os << ", zero_length_reads=" << zero_length_reads << ")";
     }
   };
 
@@ -378,7 +384,7 @@ struct ECCommon {
         read_result_t &read_result,
         read_request_t &read_request,
         bool for_recovery,
-        bool fast_read);
+        bool want_attrs);
 
     void get_all_avail_shards(
         const hobject_t &hoid,
@@ -606,6 +612,7 @@ struct ECCommon {
     ECCommon &ec_backend;
     ECExtentCache extent_cache;
     uint64_t ec_pdw_write_mode;
+    bool next_write_all_shards = false;
 
     RMWPipeline(CephContext *cct,
                 ceph::ErasureCodeInterfaceRef ec_impl,

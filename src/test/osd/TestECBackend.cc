@@ -1285,19 +1285,18 @@ TEST(ECCommon, decode)
   ECCommon::ReadPipeline pipeline(g_ceph_context, ec_impl, s, &listenerStub);
 
   ECUtil::shard_extent_map_t semap(&s);
-  bufferlist bl12k;
-  bl12k.append_zero(12288);
-  bufferlist bl8k;
-  bl8k.append_zero(8192);
-  bufferlist bl16k;
-  bl16k.append_zero(16384);
-  semap.insert_in_shard(shard_id_t(1), 512000, bl12k);
-  semap.insert_in_shard(shard_id_t(1), 634880, bl12k);
-  semap.insert_in_shard(shard_id_t(2), 512000, bl12k);
-  semap.insert_in_shard(shard_id_t(2), 630784, bl16k);
-  semap.insert_in_shard(shard_id_t(3), 516096, bl8k);
-  semap.insert_in_shard(shard_id_t(3), 634880, bl12k);
-  ECUtil::shard_extent_set_t want = semap.get_extent_set();
+  hobject_t hoid;
+  ECCommon::read_request_t read_request(want, false, object_size);
+  ASSERT_EQ(0, pipeline.get_min_avail_to_read_shards(hoid, false, false, read_request));
+  for (auto [shard, read] : read_request.shard_reads) {
+    for (auto [off, len] : read.extents) {
+      semap.insert_in_shard(shard, off, create_buf(len));
+    }
+  }
+
+  semap.add_zero_padding_for_decode(read_request.zeros_for_decode);
+  ASSERT_EQ(0, semap.decode(ec_impl, want, object_size, nullptr, true));
+}
 
   want[shard_id_t(0)].insert(516096, 8192);
   want[shard_id_t(0)].insert(634880, 12288);
