@@ -16,6 +16,7 @@
 #include "common/Formatter.h"
 #include "common/Checksummer.h"
 #include "include/stringify.h"
+#include "BlueStore_objects.h"
 
 using std::list;
 using std::map;
@@ -408,6 +409,7 @@ bluestore_blob_use_tracker_t::bluestore_blob_use_tracker_t(
  : au_size{tracker.au_size},
    num_au(0),
    alloc_au(0),
+   onode(tracker.onode),
    bytes_per_au{nullptr}
 {
   if (tracker.num_au > 0) {
@@ -426,6 +428,7 @@ bluestore_blob_use_tracker_t::operator=(const bluestore_blob_use_tracker_t& rhs)
   }
   clear();
   au_size = rhs.au_size;
+  onode = rhs.onode;
   if (rhs.num_au > 0) {
     allocate( rhs.num_au);
     std::copy(rhs.bytes_per_au, rhs.bytes_per_au + num_au, bytes_per_au);

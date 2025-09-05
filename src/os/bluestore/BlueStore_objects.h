@@ -134,7 +134,9 @@ namespace bluestore {
     bluestore::Onode* onode;
 
     void set_shared_blob(BlueStore::SharedBlobRef sb);
-    Blob(bluestore::Onode* onode) : onode(onode) {}
+    Blob(bluestore::Onode* onode)
+      : onode(onode),
+      used_in_blob(onode) {}
   private:
     BlueStore::SharedBlobRef shared_blob;      ///< shared blob state (if any)
     mutable bluestore_blob_t blob;  ///< decoded blob metadata
@@ -315,6 +317,11 @@ namespace bluestore {
     ceph::mutex flush_lock = ceph::make_mutex("BlueStore::Onode::flush_lock");
     ceph::condition_variable flush_cond;   ///< wait here for uncommitted txns
     std::shared_ptr<int64_t> cache_age_bin;  ///< cache age bin
+
+    static constexpr size_t bytes_per_au_pool_size = sizeof(uint32_t) * 1024;
+    alignas(uint32_t) std::byte bytes_per_au_pool[bytes_per_au_pool_size];
+    FixedPoolMemoryResource bytes_per_au_mem_resource;
+    std::pmr::polymorphic_allocator<uint32_t> LocalBytesPerAuAllocator;
 
     Onode(BlueStore::Collection *c, const ghobject_t& o,
 	  const mempool::bluestore_cache_meta::string& k);
