@@ -19,6 +19,14 @@ from orchestrator import DaemonDescription
 from tests import mock
 
 
+@pytest.fixture(autouse=True)
+def mock_all_mgrs_upgraded(monkeypatch):
+    monkeypatch.setattr(
+        "cephadm.migrations.Migrations.all_mgrs_upgraded",
+        lambda self: True
+    )
+
+
 @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
 def test_migrate_scheduler(cephadm_module: CephadmOrchestrator):
     with with_host(cephadm_module, 'host1', refresh_hosts=False):
