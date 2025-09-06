@@ -1217,13 +1217,16 @@ private:
     // checking the lba child must be atomic with creating
     // and linking the absent child
     if (v.has_child()) {
-      return std::move(v.get_child_fut()
-      ).si_then([type](auto ext) {
-        ceph_assert(ext->get_type() == type);
-        return ext;
-      });
+      auto extent = co_await std::move(v.get_child_fut());
+      auto len = extent->get_length();
+      auto ext = co_await cache->read_extent_maybe_partial(
+	t, std::move(extent), 0, len);
+      ceph_assert(ext->get_type() == type);
+      co_return ext;
     } else {
-      return pin_to_extent_by_type(t, pin, v.get_child_pos(), type);
+      auto extent = co_await pin_to_extent_by_type(
+	t, pin, v.get_child_pos(), type);
+      co_return extent;
     }
   }
 
