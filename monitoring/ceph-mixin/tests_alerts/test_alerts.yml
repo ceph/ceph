@@ -146,7 +146,7 @@ tests:
        exp_samples:
          - labels: '{ceph_daemon="osd.0", hostname="ceph", instance="ceph:9283",
             job="ceph",cluster="mycluster"}'
-           value: 1.2200000000000001E+01
+           value: 1.21E+01
    alert_rule_test:
      - eval_time: 5m
        alertname: CephOSDFlapping
@@ -505,7 +505,7 @@ tests:
            summary: Host filesystem free space is getting low on cluster mycluster
            description: "Mountpoint /rootfs on node-1.unittests.com will be full in less than 5 days based on the 48 hour trailing fill rate."
 
- # MTU Mismatch
+# MTU Mismatch
  - interval: 1m
    input_series:
     - series: 'node_network_mtu_bytes{device="eth0",instance="node-exporter",job="node-exporter",cluster="mycluster"}'
@@ -538,23 +538,13 @@ tests:
       values: '0 0 0 0 0'
    promql_expr_test:
      - expr: |
-          node_network_mtu_bytes * (node_network_up{device!="lo"} > 0) ==
-            scalar(
-              max by (cluster,device) (node_network_mtu_bytes * (node_network_up{device!="lo"} > 0)) !=
-                quantile by (cluster,device) (.5, node_network_mtu_bytes * (node_network_up{device!="lo"} > 0))
-            )
-          or
-          node_network_mtu_bytes * (node_network_up{device!="lo"} > 0) ==
-            scalar(
-              min by (cluster,device) (node_network_mtu_bytes * (node_network_up{device!="lo"} > 0)) !=
-                quantile by (cluster,device) (.5, node_network_mtu_bytes * (node_network_up{device!="lo"} > 0))
-            )
+         node_network_mtu_bytes * (node_network_up{device!="lo"} > 0) != on (cluster, device) group_left quantile by (cluster, device) (0.5, node_network_mtu_bytes * (node_network_up{device!="lo"} > 0))
        eval_time: 1m
        exp_samples:
-         - labels: '{device="eth4", instance="node-exporter", job="node-exporter", cluster="mycluster"}'
-           value: 9000
          - labels: '{device="eth4", instance="hostname1", job="node-exporter", cluster="mycluster"}'
            value: 2200
+         - labels: '{device="eth4", instance="node-exporter", job="node-exporter", cluster="mycluster"}'
+           value: 9000
    alert_rule_test:
      - eval_time: 1m
        alertname: CephNodeInconsistentMTU
