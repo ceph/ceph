@@ -12,3 +12,13 @@ target_include_directories(dmclock PUBLIC
 target_link_libraries(dmclock
   PUBLIC Boost::boost
   PRIVATE Threads::Threads)
+
+if (WITH_CRIMSON)
+  add_library(dmclock_crimson STATIC ${dmc_srcs})
+  add_library(dmclock::crimson ALIAS dmclock_crimson)
+  target_compile_definitions(dmclock_crimson PRIVATE WITH_CRIMSON)
+  target_compile_options(dmclock_crimson PRIVATE -Wno-write-strings -Wall)
+
+  target_include_directories(dmclock_crimson PRIVATE seastar)
+  target_link_libraries(dmclock_crimson PRIVATE seastar)
+endif()
