@@ -23,7 +23,7 @@ overrides:
     log-ignorelist:
       - OSD_DOWN
       - CEPHADM_FAILED_DAEMON
-      - but is still running
+      - but it is still running
       - PG_DEGRADED
     conf:
       osd:
