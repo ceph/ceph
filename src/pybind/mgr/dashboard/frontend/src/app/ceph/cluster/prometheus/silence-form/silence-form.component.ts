@@ -19,7 +19,7 @@ import {
   AlertmanagerSilenceMatcherMatch
 } from '~/app/shared/models/alertmanager-silence';
 import { Permission } from '~/app/shared/models/permissions';
-import { AlertmanagerAlert, PrometheusRule } from '~/app/shared/models/prometheus-alerts';
+import { GroupAlertmanagerAlert, PrometheusRule } from '~/app/shared/models/prometheus-alerts';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { ModalService } from '~/app/shared/services/modal.service';
 import { NotificationService } from '~/app/shared/services/notification.service';
@@ -225,7 +225,7 @@ export class SilenceFormComponent {
           }
         });
       } else {
-        this.prometheusService.getAlerts().subscribe((alerts) => {
+        this.prometheusService.getGroupedAlerts().subscribe((alerts) => {
           const alert = _.find(alerts, ['fingerprint', params.id]);
           if (!_.isUndefined(alert)) {
             this.fillFormByAlert(alert);
@@ -258,7 +258,7 @@ export class SilenceFormComponent {
     this.form.updateValueAndValidity();
   }
 
-  private fillFormByAlert(alert: AlertmanagerAlert) {
+  private fillFormByAlert(alert: GroupAlertmanagerAlert) {
     const labels = alert.labels;
     this.setMatcher({
       name: 'alertname',
