@@ -9,7 +9,6 @@
 template <class Key, class Value>
 void TTLCacheBase<Key, Value>::insert(Key key, Value value) {
   auto now = std::chrono::steady_clock::now();
-
   if (!ttl) return;
   int16_t random_ttl_offset =
       ttl * ttl_spread_ratio * (2l * rand() / float(RAND_MAX) - 1);
@@ -17,6 +16,7 @@ void TTLCacheBase<Key, Value>::insert(Key key, Value value) {
   // the ttl
   int16_t spreaded_ttl = ttl + random_ttl_offset;
   auto expiration_date = now + std::chrono::seconds(spreaded_ttl);
+  Py_INCREF(value);
   cache::insert(key, {value, expiration_date});
 }
 
@@ -41,7 +41,6 @@ template <class Key> PyObject* TTLCache<Key, PyObject*>::get(Key key) {
     this->throw_key_not_found(key);
   }
   PyObject* cached_value = this->get_value(key);
-  Py_INCREF(cached_value);
   return cached_value;
 }
 
@@ -50,8 +49,25 @@ void TTLCacheBase<Key, Value>::erase(Key key) {
   cache::erase(key);
 }
 
+template <class Key> void TTLCache<Key, PyObject*>::insert(Key key, PyObject* value) {
+  if (!this->get_ttl()) return;
+  this->TTLCacheBase<Key, PyObject*>::insert(key, value);
+}
+
+template <class Key> void TTLCache<Key, PyObject*>::clear() {
+  std::vector<Key> keys = this->keys();
+    for (auto& k : keys) {
+      PyObject* v = nullptr;
+      try { v = this->get_value(k, /*count_hit=*/false); }
+      catch (...) { continue; }
+      Py_DECREF(v);
+    }
+    this->ttl_base::clear();
+}
+
 template <class Key> void TTLCache<Key, PyObject*>::erase(Key key) {
-  Py_DECREF(this->get_value(key, false));
+  PyObject* cached_value = this->get_value(key);
+  Py_DECREF(cached_value);
   ttl_base::erase(key);
 }
 
@@ -74,6 +90,7 @@ template <class Key, class Value>
 Value TTLCacheBase<Key, Value>::get_value(Key key, bool count_hit) {
   value_type stored_value = cache::get(key, count_hit);
   Value value = std::get<0>(stored_value);
+  Py_INCREF(value);
   return value;
 }
 
