@@ -283,8 +283,9 @@ void MclockConfig::set_config_defaults_from_profile()
   set_config(
     "osd_mclock_scheduler_background_best_effort_lim",
     profile->background_best_effort.limit);
-
+#ifndef WITH_CRIMSON
   cct->_conf.apply_changes(nullptr);
+#endif
 }
 
 void MclockConfig::set_osd_capacity_params_from_config()
@@ -484,26 +485,39 @@ void MclockConfig::mclock_handle_conf_change(const ConfigProxy& conf,
         };
 
         for (auto osd : osds) {
-          std::string cmd =
+          #ifndef WITH_CRIMSON
+	    std::string cmd =
             "{"
               "\"prefix\": \"config rm\", "
               "\"who\": \"" + osd + "\", "
               "\"name\": \"" + *key + "\""
             "}";
-          std::vector<std::string> vcmd{cmd};
-
-          dout(10) << __func__ << " Removing Key: " << *key
-                   << " for " << osd << " from Mon db" << dendl;
-                   monc->start_mon_command(vcmd, {}, nullptr, nullptr, nullptr);
+            std::vector<std::string> vcmd{cmd};
+            monc->start_mon_command(vcmd, {}, nullptr, nullptr, nullptr);
+	  #else
+	    std::string cmd = fmt::format(
+             R"({{"prefix": "config rm", "who": "{}", "name": "{}"}})", osd, *key);
+	    // requires a seastar::thread
+	    monc->run_command(std::move(cmd), {}).wait();
+	  #endif
+	  dout(10) << __func__ << " Removing Key: " << *key
+                   << " for " << osd << " from Mon db"
+                   << " cmd is " << cmd << dendl;
         }
       }
     }
     // Alternatively, the QoS parameter, if set ephemerally for this OSD via
     // the 'daemon' or 'tell' interfaces must be removed.
+#ifndef WITH_CRIMSON
     if (!cct->_conf.rm_val(*key)) {
       dout(10) << __func__ << " Restored " << *key << " to default" << dendl;
       cct->_conf.apply_changes(nullptr);
     }
+#else
+    // This function runs on all the shards due to the parent handle_conf_change,
+    // so it is safe to call the synchronous version of rm_val_sync here.
+    cct->_conf.rm_val_sync(*key);
+#endif
   }
 }
 
