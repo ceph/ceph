@@ -55,8 +55,8 @@ void Anchor::dump(Formatter *f) const
 std::list<Anchor> Anchor::generate_test_instances()
 {
   std::list<Anchor> ls;
-  ls.push_back(Anchor{});
-  ls.push_back(Anchor{});
+  ls.emplace_back();
+  ls.emplace_back();
   ls.back().ino = 1;
   ls.back().dirino = 2;
   ls.back().d_name = "hello";

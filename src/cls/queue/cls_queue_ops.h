@@ -38,8 +38,8 @@ struct cls_queue_init_op {
 
   static std::list<cls_queue_init_op> generate_test_instances() {
     std::list<cls_queue_init_op> o;
-    o.push_back(cls_queue_init_op{});
-    o.push_back(cls_queue_init_op{});
+    o.emplace_back();
+    o.emplace_back();
     o.back().queue_size = 1024;
     o.back().max_urgent_data_size = 1024;
     o.back().bl_urgent_data.append(std::string_view("data"));
@@ -71,8 +71,8 @@ struct cls_queue_enqueue_op {
 
   static std::list<cls_queue_enqueue_op> generate_test_instances() {
     std::list<cls_queue_enqueue_op> o;
-    o.push_back(cls_queue_enqueue_op{});
-    o.push_back(cls_queue_enqueue_op{});
+    o.emplace_back();
+    o.emplace_back();
     o.back().bl_data_vec.push_back(ceph::buffer::list());
     o.back().bl_data_vec.back().append(std::string_view("data"));
     return o;
@@ -112,8 +112,8 @@ struct cls_queue_list_op {
 
   static std::list<cls_queue_list_op> generate_test_instances() {
     std::list<cls_queue_list_op> o;
-    o.push_back(cls_queue_list_op{});
-    o.push_back(cls_queue_list_op{});
+    o.emplace_back();
+    o.emplace_back();
     o.back().max = 123;
     o.back().start_marker = "foo";
     return o;
@@ -152,7 +152,7 @@ struct cls_queue_list_ret {
 
   static std::list<cls_queue_list_ret> generate_test_instances() {
     std::list<cls_queue_list_ret> o;
-    o.push_back(cls_queue_list_ret{});
+    o.emplace_back();
     o.back().is_truncated = true;
     o.back().next_marker = "foo";
     o.back().entries.push_back(cls_queue_entry());
@@ -186,8 +186,8 @@ struct cls_queue_remove_op {
   }
   static std::list<cls_queue_remove_op> generate_test_instances() {
     std::list<cls_queue_remove_op> o;
-    o.push_back(cls_queue_remove_op{});
-    o.push_back(cls_queue_remove_op{});
+    o.emplace_back();
+    o.emplace_back();
     o.back().end_marker = "foo";
     return o;
   }
@@ -216,7 +216,7 @@ struct cls_queue_get_capacity_ret {
   }
   static std::list<cls_queue_get_capacity_ret> generate_test_instances() {
     std::list<cls_queue_get_capacity_ret> o;
-    o.push_back(cls_queue_get_capacity_ret{});
+    o.emplace_back();
     o.back().queue_capacity = 123;
     return o;
   }

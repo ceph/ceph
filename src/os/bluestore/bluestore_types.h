@@ -164,7 +164,7 @@ struct bluestore_extent_ref_map_t {
     }
     static std::list<record_t> generate_test_instances() {
       std::list<record_t> o;
-      o.push_back(record_t{});
+      o.emplace_back();
       o.push_back(record_t(123, 456));
       return o;
     }

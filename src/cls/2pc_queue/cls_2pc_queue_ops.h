@@ -32,9 +32,9 @@ struct cls_2pc_queue_reserve_op {
 
   static std::list<cls_2pc_queue_reserve_op> generate_test_instances() {
     std::list<cls_2pc_queue_reserve_op> ls;
-    ls.push_back(cls_2pc_queue_reserve_op{});
+    ls.emplace_back();
     ls.back().size = 0;
-    ls.push_back(cls_2pc_queue_reserve_op{});
+    ls.emplace_back();
     ls.back().size = 123;
     ls.back().entries = 456;
     return ls;
@@ -63,7 +63,7 @@ struct cls_2pc_queue_reserve_ret {
 
   static std::list<cls_2pc_queue_reserve_ret> generate_test_instances() {
     std::list<cls_2pc_queue_reserve_ret> ls;
-    ls.push_back(cls_2pc_queue_reserve_ret{});
+    ls.emplace_back();
     ls.back().id = 123;
     return ls;
   }
@@ -95,7 +95,7 @@ struct cls_2pc_queue_commit_op {
 
   static std::list<cls_2pc_queue_commit_op> generate_test_instances() {
     std::list<cls_2pc_queue_commit_op> ls;
-    ls.push_back(cls_2pc_queue_commit_op{});
+    ls.emplace_back();
     ls.back().id = 123;
     ls.back().bl_data_vec.push_back(ceph::buffer::list());
     ls.back().bl_data_vec.back().append("foo");
@@ -125,7 +125,7 @@ struct cls_2pc_queue_abort_op {
   }
   static std::list<cls_2pc_queue_abort_op> generate_test_instances() {
     std::list<cls_2pc_queue_abort_op> ls;
-    ls.push_back(cls_2pc_queue_abort_op{});
+    ls.emplace_back();
     ls.back().id = 1;
     return ls;
   }
@@ -152,8 +152,8 @@ struct cls_2pc_queue_expire_op {
   }
   static std::list<cls_2pc_queue_expire_op> generate_test_instances() {
     std::list<cls_2pc_queue_expire_op> ls;
-    ls.push_back(cls_2pc_queue_expire_op{});
-    ls.push_back(cls_2pc_queue_expire_op{});
+    ls.emplace_back();
+    ls.emplace_back();
     ls.back().stale_time = ceph::coarse_real_time::min();
     return ls;
   }
@@ -187,8 +187,8 @@ struct cls_2pc_queue_reservations_ret {
 
   static std::list<cls_2pc_queue_reservations_ret> generate_test_instances() {
     std::list<cls_2pc_queue_reservations_ret> ls;
-    ls.push_back(cls_2pc_queue_reservations_ret{});
-    ls.push_back(cls_2pc_queue_reservations_ret{});
+    ls.emplace_back();
+    ls.emplace_back();
     ls.back().reservations[1] = cls_2pc_reservation();
     ls.back().reservations[2] = cls_2pc_reservation();
     return ls;

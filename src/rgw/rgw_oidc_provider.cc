@@ -38,6 +38,6 @@ std::list<RGWOIDCProviderInfo> RGWOIDCProviderInfo::generate_test_instances()
   p.client_ids = {"a", "b"};
   p.thumbprints = {"c", "d"};
   l.push_back(std::move(p));
-  l.push_back(RGWOIDCProviderInfo{});
+  l.emplace_back();
   return l;
 }

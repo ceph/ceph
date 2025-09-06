@@ -115,8 +115,8 @@ struct obj_version_cond {
 
   static std::list<obj_version_cond> generate_test_instances() {
     std::list<obj_version_cond> o;
-    o.push_back(obj_version_cond{});
-    o.push_back(obj_version_cond{});
+    o.emplace_back();
+    o.emplace_back();
     o.back().ver.ver = 1;
     o.back().ver.tag = "foo";
     o.back().cond = VER_COND_EQ;

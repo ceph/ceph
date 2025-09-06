@@ -859,16 +859,16 @@ public:
   }
   static std::list<JSONFormattable> generate_test_instances() {
     std::list<JSONFormattable> o;
-    o.push_back(JSONFormattable{});
-    o.push_back(JSONFormattable{});
+    o.emplace_back();
+    o.emplace_back();
     o.back().set_type(FMT_VALUE);
     o.back().value.str = "foo";
     o.back().value.quoted = true;
-    o.push_back(JSONFormattable{});
+    o.emplace_back();
     o.back().set_type(FMT_VALUE);
     o.back().value.str = "foo";
     o.back().value.quoted = false;
-    o.push_back(JSONFormattable{});
+    o.emplace_back();
     o.back().set_type(FMT_ARRAY);
     o.back().arr.push_back(JSONFormattable());
     o.back().arr.back().set_type(FMT_VALUE);
@@ -878,7 +878,7 @@ public:
     o.back().arr.back().set_type(FMT_VALUE);
     o.back().arr.back().value.str = "bar";
     o.back().arr.back().value.quoted = true;
-    o.push_back(JSONFormattable{});
+    o.emplace_back();
     o.back().set_type(FMT_OBJ);
     o.back().obj["foo"] = JSONFormattable();
     o.back().obj["foo"].set_type(FMT_VALUE);
