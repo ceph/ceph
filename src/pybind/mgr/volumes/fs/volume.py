@@ -10,6 +10,7 @@ from urllib.parse import urlsplit, urlunsplit
 import cephfs
 
 from ceph.fs.earmarking import CephFSVolumeEarmarking, EarmarkException
+from ceph.fs.enctag import CephFSVolumeEncryptionTag, EncryptionTagException
 
 from mgr_util import CephfsClient
 
@@ -234,12 +235,13 @@ class VolumeClient(CephfsClient["Module"]):
         earmark    = kwargs['earmark'] or ''  # if not set, default to empty string --> no earmark
         normalization = kwargs['normalization']
         casesensitive = kwargs['casesensitive']
+        enctag = kwargs['enctag'] or '' # if not set, default to empty string
 
         oct_mode = octal_str_to_decimal_int(mode)
 
         try:
             create_subvol(
-                self.mgr, fs_handle, self.volspec, group, subvolname, size, isolate_nspace, pool, oct_mode, uid, gid, earmark, normalization, casesensitive)
+                self.mgr, fs_handle, self.volspec, group, subvolname, size, isolate_nspace, pool, oct_mode, uid, gid, earmark, normalization, casesensitive, enctag)
         except VolumeException as ve:
             # kick the purge threads for async removal -- note that this
             # assumes that the subvolume is moved to trashcan for cleanup on error.
@@ -260,6 +262,7 @@ class VolumeClient(CephfsClient["Module"]):
         earmark    = kwargs['earmark'] or ''  # if not set, default to empty string --> no earmark
         normalization = kwargs['normalization']
         casesensitive = kwargs['casesensitive']
+        enctag    = kwargs['enctag'] or ''  # if not set, default to empty string --> no encryption tag
 
         try:
             with open_volume(self, volname) as fs_handle:
@@ -277,6 +280,7 @@ class VolumeClient(CephfsClient["Module"]):
                                 'earmark': earmark,
                                 'normalization': normalization,
                                 'casesensitive': casesensitive,
+                                'enctag': enctag,
                             }
                             subvolume.set_attrs(subvolume.path, attrs)
                     except VolumeException as ve:
@@ -729,6 +733,68 @@ class VolumeClient(CephfsClient["Module"]):
             ret = self.volume_exception_to_retval(ve)
         except EarmarkException as ee:
             log.error(f"Earmark error occurred: {ee}")
+            ret = ee.to_tuple()  # type: ignore
+        return ret
+
+    def get_enctag(self, **kwargs) -> Tuple[int, Optional[str], str]:
+        ret: Tuple[int, Optional[str], str] = 0, "", ""
+        volname    = kwargs['vol_name']
+        subvolname = kwargs['sub_name']
+        groupname  = kwargs['group_name']
+
+        try:
+            with open_volume(self, volname) as fs_handle:
+                with open_group(fs_handle, self.volspec, groupname) as group:
+                    with open_subvol(self.mgr, fs_handle, self.volspec, group, subvolname, SubvolumeOpType.ENCTAG_GET) as subvolume:
+                        log.info("Getting enctag for subvolume %s", subvolume.path)
+                        fs_enctag = CephFSVolumeEncryptionTag(fs_handle, subvolume.path)
+                        enctag = fs_enctag.get_tag()
+                        ret = 0, enctag, ""
+        except VolumeException as ve:
+            ret = self.volume_exception_to_retval(ve)
+        except EncryptionTagException as ee:
+            log.error(f"EncryptionTag error occurred: {ee}")
+            ret = ee.to_tuple()
+        return ret
+
+    def set_enctag(self, **kwargs):  # type: ignore
+        ret       = 0, "", ""
+        volname   = kwargs['vol_name']
+        subvolname = kwargs['sub_name']
+        groupname = kwargs['group_name']
+        enctag   = kwargs['enctag']
+
+        try:
+            with open_volume(self, volname) as fs_handle:
+                with open_group(fs_handle, self.volspec, groupname) as group:
+                    with open_subvol(self.mgr, fs_handle, self.volspec, group, subvolname, SubvolumeOpType.ENCTAG_SET) as subvolume:
+                        log.info("Setting enctag %s for subvolume %s", enctag, subvolume.path)
+                        fs_enctag = CephFSVolumeEncryptionTag(fs_handle, subvolume.path)
+                        fs_enctag.set_tag(enctag)
+        except VolumeException as ve:
+            ret = self.volume_exception_to_retval(ve)
+        except EncryptionTagException as ee:
+            log.error(f"EncryptionTag error occurred: {ee}")
+            ret = ee.to_tuple()  # type: ignore
+        return ret
+
+    def clear_enctag(self, **kwargs):  # type: ignore
+        ret       = 0, "", ""
+        volname   = kwargs['vol_name']
+        subvolname = kwargs['sub_name']
+        groupname = kwargs['group_name']
+
+        try:
+            with open_volume(self, volname) as fs_handle:
+                with open_group(fs_handle, self.volspec, groupname) as group:
+                    with open_subvol(self.mgr, fs_handle, self.volspec, group, subvolname, SubvolumeOpType.ENCTAG_CLEAR) as subvolume:
+                        log.info("Removing enctag for subvolume %s", subvolume.path)
+                        fs_enctag = CephFSVolumeEncryptionTag(fs_handle, subvolume.path)
+                        fs_enctag.clear_tag()
+        except VolumeException as ve:
+            ret = self.volume_exception_to_retval(ve)
+        except EncryptionTagException as ee:
+            log.error(f"EncryptionTag error occurred: {ee}")
             ret = ee.to_tuple()  # type: ignore
         return ret
 
