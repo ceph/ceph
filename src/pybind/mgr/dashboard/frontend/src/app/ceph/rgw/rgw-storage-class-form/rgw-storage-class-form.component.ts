@@ -50,6 +50,7 @@ import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { CdValidators } from '~/app/shared/forms/cd-validators';
 import { FormatterService } from '~/app/shared/services/formatter.service';
+import { DimlessBinaryPipe } from '~/app/shared/pipes/dimless-binary.pipe';
 
 @Component({
   selector: 'cd-rgw-storage-class-form',
@@ -85,7 +86,8 @@ export class RgwStorageClassFormComponent extends CdForm implements OnInit {
     private rgwZoneGroupService: RgwZonegroupService,
     private router: Router,
     private route: ActivatedRoute,
-    public formatter: FormatterService
+    public formatter: FormatterService,
+    private dimlessBinary: DimlessBinaryPipe
   ) {
     super();
     this.resource = $localize`Tiering Storage Class`;
@@ -160,6 +162,12 @@ export class RgwStorageClassFormComponent extends CdForm implements OnInit {
             restore_storage_class: this.tierTargetInfo?.val?.restore_storage_class,
             read_through_restore_days: this.tierTargetInfo?.val?.read_through_restore_days
           });
+          this.storageClassForm
+            .get('multipart_min_part_size')
+            .setValue(this.dimlessBinary.transform(response?.multipart_min_part_size));
+          this.storageClassForm
+            .get('multipart_sync_threshold')
+            .setValue(this.dimlessBinary.transform(response?.multipart_sync_threshold));
           if (this.tierTargetInfo?.val?.tier_type == TIER_TYPE.GLACIER) {
             let glacierResponse = this.tierTargetInfo?.val['s3-glacier'];
             this.storageClassForm.patchValue({
