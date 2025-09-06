@@ -8,14 +8,38 @@ from gevent.event import Event
 
 log = logging.getLogger(__name__)
 
+class BarkError(Exception):
+    """
+    An exception for the watchdog bark. We can use this as an exception
+    higer up in the stack to give a reason why the test failed
+    """
+
+    def __init__(self, bark_reason):
+        self.message = f"The WatchDog barked due to {bark_reason}"
+        super().__init__(self.message)
+
 class DaemonWatchdog(Greenlet):
     """
     DaemonWatchdog::
 
-    Watch Ceph daemons for failures. If an extended failure is detected (i.e.
-    not intentional), then the watchdog will unmount file systems and send
-    SIGTERM to all daemons. The duration of an extended failure is configurable
-    with watchdog_daemon_timeout.
+    This process monitors 3 classes of running processes for failures:
+    1. Ceph daemons e.g OSDs
+    2. Thrashers - These are test processes used to create errors during
+                   testing e.g. RBDMirrorThrasher in qa/tasks/rbd_mirror_thrash.py
+    3. Processes - Any WatchedProcess that is running as part of a test suite.
+                   These processses are typically things like I/O exercisers
+                   e.g. CephTestRados in qa/tasks/rados.py
+
+    If an extended failure is detected in a daemon process (i.e. not intentional), then
+    the watchdog will bark. It will also bark is an assert is raised during the running
+    of any monitored Thrashers or WatchedProcesses
+    
+    When the watchdog barks it will 
+     - unmount file systems and send SIGTERM to all daemons.
+     - stop all thrasher processes by calling their stop_and_join() method
+     - stop any watched processes by calling their stop() method
+
+    The duration of an extended failure is configurable with watchdog_daemon_timeout.
 
     ceph:
       watchdog:
@@ -26,7 +50,7 @@ class DaemonWatchdog(Greenlet):
                                               watchdog will bark.
     """
 
-    def __init__(self, ctx, config, thrashers):
+    def __init__(self, ctx, config):
         super(DaemonWatchdog, self).__init__()
         self.config = ctx.config.get('watchdog', {})
         self.ctx = ctx
@@ -35,7 +59,8 @@ class DaemonWatchdog(Greenlet):
         self.cluster = config.get('cluster', 'ceph')
         self.name = 'watchdog'
         self.stopping = Event()
-        self.thrashers = thrashers
+        self.thrashers = ctx.ceph[config["cluster"]].thrashers
+        self.watched_processes = ctx.ceph[config["cluster"]].watched_processes
 
     def _run(self):
         try:
@@ -53,7 +78,7 @@ class DaemonWatchdog(Greenlet):
     def stop(self):
         self.stopping.set()
 
-    def bark(self):
+    def bark(self, reason):
         self.log("BARK! unmounting mounts and killing all daemons")
         if hasattr(self.ctx, 'mounts'):
             for mount in self.ctx.mounts.values():
@@ -74,11 +99,21 @@ class DaemonWatchdog(Greenlet):
             except:
                 self.logger.exception("ignoring exception:")
 
+        for thrasher in self.thrashers:
+            self.log("Killing thrasher {name}".format(name=thrasher.name))
+            thrasher.stop_and_join()
+
+        for proc in self.watched_processes:
+            self.log("Killing remote process {process_id}".format(process_id=proc.id))
+            proc.set_exception(BarkError(reason))
+            proc.stop()
+
     def watch(self):
         self.log("watchdog starting")
         daemon_timeout = int(self.config.get('daemon_timeout', 300))
         daemon_restart = self.config.get('daemon_restart', False)
         daemon_failure_time = {}
+        bark_reason: str = ""
         while not self.stopping.is_set():
             bark = False
             now = time.time()
@@ -104,6 +139,7 @@ class DaemonWatchdog(Greenlet):
                 self.log("daemon {name} is failed for ~{t:.0f}s".format(name=name, t=delta))
                 if delta > daemon_timeout:
                     bark = True
+                    bark_reason = f"Daemon {name} has failed"
                 if daemon_restart == 'normal' and daemon.proc.exitstatus == 0:
                     self.log(f"attempting to restart daemon {name}")
                     daemon.restart()
@@ -117,11 +153,17 @@ class DaemonWatchdog(Greenlet):
             for thrasher in self.thrashers:
                 if thrasher.exception is not None:
                     self.log("{name} failed".format(name=thrasher.name))
-                    thrasher.stop_and_join()
+                    bark_reason = f"Thrasher {name} threw exception {thrasher.exception}"
+                    bark = True
+
+            for proc in self.watched_processes:
+                if proc.exception is not None:
+                    self.log("Remote process %s failed" % proc.id)
+                    bark_reason = f"Remote process {proc.id} threw exception {proc.exception}"
                     bark = True
 
             if bark:
-                self.bark()
+                self.bark(bark_reason)
                 return
 
             sleep(5)
