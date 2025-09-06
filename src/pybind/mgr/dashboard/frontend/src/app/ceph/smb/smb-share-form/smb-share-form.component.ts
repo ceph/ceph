@@ -20,6 +20,7 @@ import { NfsService } from '~/app/shared/api/nfs.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { CephfsSubvolumeGroupService } from '~/app/shared/api/cephfs-subvolume-group.service';
 import { CephfsSubvolumeService } from '~/app/shared/api/cephfs-subvolume.service';
+import { CdValidators } from '~/app/shared/forms/cd-validators';
 import { CLUSTER_PATH } from '../smb-cluster-list/smb-cluster-list.component';
 import { SHARE_PATH } from '../smb-share-list/smb-share-list.component';
 
@@ -90,7 +91,17 @@ export class SmbShareFormComponent extends CdForm implements OnInit {
   createForm() {
     this.smbShareForm = this.formBuilder.group({
       share_id: new FormControl('', {
-        validators: [Validators.required]
+        validators: [Validators.required],
+        asyncValidators: [
+          CdValidators.unique(
+            this.smbService.shareExists,
+            this.smbService,
+            null,
+            null,
+            this.clusterId,
+            this.smbShareForm?.get('share_id')?.value
+          )
+        ]
       }),
       volume: new FormControl('', {
         validators: [Validators.required]
