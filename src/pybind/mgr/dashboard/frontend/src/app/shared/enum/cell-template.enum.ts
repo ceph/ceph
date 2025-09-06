@@ -79,5 +79,20 @@ export enum CellTemplate {
   //   ...
   //   cellTransformation: CellTemplate.copy,
   */
-  copy = 'copy'
+  copy = 'copy',
+  /*
+  This template will let you edit the cell value inline. You will have to also
+  pass the form group to through customTemplateConfig so it will work properly.
+  The form control name inside the form group should match the prop name of the
+  item that you are going to apply the transformation.
+  // {
+  //    ...
+  //    cellTransformation: CellTemplate.editing,
+  //    customTemplateConfig: {
+  //       formGroup: this.formGroup
+  //    }
+  //    ...
+  // }
+  */
+  editing = 'editing'
 }
