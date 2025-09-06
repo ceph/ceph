@@ -38,5 +38,4 @@ overrides:
       - pg degraded
       - PG_BACKFILL_FULL
       - Low space hindering backfill .*? backfill_toofull
-      - OSD_HOST_DOWN
-      - OSD_ROOT_DOWN
+      - is active.*backfill_toofull.*
