@@ -23,6 +23,10 @@
 
 #include "MOSDOp.h"
 #include "common/errno.h"
+#include "include/encoding_string.h"
+#include "include/encoding_vector.h"
+#include "include/errorcode32.h"
+#include "include/rados_encoder.h"
 
 /*
  * OSD op reply
@@ -173,6 +177,7 @@ private:
 public:
   void encode_payload(uint64_t features) override {
     using ceph::encode;
+    using ceph::encode_nohead;
     if(false == bdata_encode) {
       OSDOp::merge_osd_op_vector_out_data(ops, data);
       bdata_encode = true;
@@ -193,7 +198,7 @@ public:
       for (unsigned i = 0; i < head.num_ops; i++) {
 	encode(ops[i].op, payload);
       }
-      ceph::encode_nohead(oid.name, payload);
+      encode_nohead(oid.name, payload);
     } else {
       header.version = HEAD_VERSION;
       encode(oid, payload);
@@ -230,6 +235,7 @@ public:
   }
   void decode_payload() override {
     using ceph::decode;
+    using ceph::decode_nohead;
     auto p = payload.cbegin();
 
     // Always keep here the newest version of decoding order/rule
@@ -266,7 +272,7 @@ public:
       for (unsigned i = 0; i < head.num_ops; i++) {
 	decode(ops[i].op, p);
       }
-      ceph::decode_nohead(head.object_len, oid.name, p);
+      decode_nohead(head.object_len, oid.name, p);
       pgid = pg_t(head.layout.ol_pgid);
       result = (int32_t)head.result;
       flags = head.flags;

@@ -13,6 +13,9 @@
  */
 
 #include "HitSet.h"
+#include "ExplicitHashHitSet.h"
+#include "ExplicitObjectHitSet.h"
+#include "BloomHitSet.h"
 #include "common/Formatter.h"
 
 using std::ostream;

@@ -32,12 +32,11 @@
 
 #include "Capability.h"
 #include "LogSegmentRef.h"
-#include "mdstypes.h" // for dirfrag_t, metareqid_t
+#include "mdstypes.h" // for dirfrag_t
+#include "metareqid_t.h"
 
 #include "common/StackStringStream.h"
 #include "common/TrackedOp.h"
-#include "messages/MClientRequest.h"
-#include "messages/MMDSPeerRequest.h"
 
 class LogSegment;
 class BatchOp;
@@ -51,6 +50,9 @@ class ScatterLock;
 class SimpleLock;
 struct sr_t;
 struct MDLockCache;
+class Message;
+class MClientRequest;
+class MMDSPeerRequest;
 
 struct MutationImpl : public TrackedOp {
 public:
@@ -365,7 +367,8 @@ struct MDRequestImpl : public MutationImpl {
   // ---------------------------------------------------
   struct Params {
     // keep these default values synced to MutationImpl's
-    Params() {}
+    Params();
+    ~Params() noexcept;
     const utime_t& get_recv_stamp() const {
       return initiated;
     }
@@ -391,11 +394,7 @@ struct MDRequestImpl : public MutationImpl {
     int internal_op = -1;
     bool continuous = false;
   };
-  MDRequestImpl(const Params* params, OpTracker *tracker) :
-    MutationImpl(tracker, params->initiated,
-		 params->reqid, params->attempt, params->peer_to),
-    item_session_request(this), client_request(params->client_req),
-    internal_op(params->internal_op) {}
+  MDRequestImpl(const Params* params, OpTracker *tracker);
   ~MDRequestImpl() override;
   
   More* more();

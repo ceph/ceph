@@ -13,6 +13,7 @@
  */
 
 #include "include/encoding.h"
+#include "include/encoding_string.h"
 
 /**
  * Value class for the xattr we'll use to accumulate
