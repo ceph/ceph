@@ -2434,7 +2434,6 @@ class RgwMultisite:
                                          http_status_code=500, component='rgw')
         except SubprocessError as error:
             raise DashboardException(error, http_status_code=500, component='rgw')
-        self.update_period()
 
     def edit_zone(self, zone_name: str, new_zone_name: str, zonegroup_name: str, default: str = '',
                   master: str = '', endpoints: str = '', access_key: str = '', secret_key: str = '',
