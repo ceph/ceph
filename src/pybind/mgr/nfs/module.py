@@ -1,6 +1,7 @@
 import logging
 import threading
 from typing import Tuple, Optional, List, Dict, Any
+import yaml
 
 from mgr_module import MgrModule, CLICommand, Option, CLICheckNonemptyFileInput
 import object_format
@@ -39,7 +40,8 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             client_addr: Optional[List[str]] = None,
             squash: str = 'none',
             sectype: Optional[List[str]] = None,
-            cmount_path: Optional[str] = "/"
+            cmount_path: Optional[str] = "/",
+            kmip_key_id: Optional[str] = None
     ) -> Dict[str, Any]:
         """Create a CephFS export"""
         earmark_resolver = CephFSEarmarkResolver(self)
@@ -54,7 +56,8 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             addr=client_addr,
             sectype=sectype,
             cmount_path=cmount_path,
-            earmark_resolver=earmark_resolver
+            earmark_resolver=earmark_resolver,
+            kmip_key_id=kmip_key_id
         )
 
     @CLICommand('nfs export create rgw', perm='rw')
@@ -69,6 +72,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             client_addr: Optional[List[str]] = None,
             squash: str = 'none',
             sectype: Optional[List[str]] = None,
+            kmip_key_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Create an RGW export"""
         return self.export_mgr.create_export(
@@ -81,6 +85,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             squash=squash,
             addr=client_addr,
             sectype=sectype,
+            kmip_key_id=kmip_key_id
         )
 
     @CLICommand('nfs export rm', perm='rw')
@@ -130,11 +135,23 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                                 ingress: Optional[bool] = None,
                                 virtual_ip: Optional[str] = None,
                                 ingress_mode: Optional[IngressType] = None,
-                                port: Optional[int] = None) -> None:
+                                port: Optional[int] = None,
+                                inbuf: Optional[str] = None,
+                                ) -> None:
         """Create an NFS Cluster"""
+        kmip_cert = kmip_key = kmip_ca_cert = kmip_host_list = None
+        if inbuf:
+            kmip_config = yaml.safe_load(inbuf)
+            kmip_cert = kmip_config.get('kmip_cert')
+            kmip_key = kmip_config.get('kmip_key')
+            kmip_ca_cert = kmip_config.get('kmip_ca_cert')
+            kmip_host_list = kmip_config.get('kmip_host_list')
+
         return self.nfs.create_nfs_cluster(cluster_id=cluster_id, placement=placement,
                                            virtual_ip=virtual_ip, ingress=ingress,
-                                           ingress_mode=ingress_mode, port=port)
+                                           ingress_mode=ingress_mode, port=port,
+                                           kmip_cert=kmip_cert, kmip_key=kmip_key,
+                                           kmip_ca_cert=kmip_ca_cert, kmip_host_list=kmip_host_list)
 
     @CLICommand('nfs cluster rm', perm='rw')
     @object_format.EmptyResponder()
