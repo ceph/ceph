@@ -55,6 +55,9 @@ protected:
                         CODE_ENVIRONMENT_UTILITY,
                         CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
     }
+    ~MockSalDriver() {
+      /* CephContext will be automatically cleaned up by boost::intrusive_ptr */
+    }
     /* called by BucketCache layer when a new object is discovered
      * by inotify or similar */
     int mint_listing_entry(
@@ -100,7 +103,16 @@ protected:
   using BucketCache = file::listing::BucketCache<MockSalDriver, MockSalBucket>;
   // keep them in base class, so we don't have to initialize for every fixture
   static MockSalDriver sal_driver;
-  static BucketCache* bucket_cache;
+  static std::unique_ptr<BucketCache> bucket_cache;
+  
+public:
+  static void cleanup_static_resources() {
+    // This function ensures proper cleanup order
+    bucket_cache.reset();
+    // sal_driver destructor will be called automatically at program exit
+  }
+
+protected:
 
   static std::vector<std::string> setup_buckets() {
     int nbuckets = 5;
@@ -136,7 +148,7 @@ protected:
 };
 
 BucketCacheFixtureBase::MockSalDriver BucketCacheFixtureBase::sal_driver;
-BucketCacheFixtureBase::BucketCache* BucketCacheFixtureBase::bucket_cache = nullptr;
+std::unique_ptr<BucketCacheFixtureBase::BucketCache> BucketCacheFixtureBase::bucket_cache;
 
 namespace sf = std::filesystem;
 
@@ -145,6 +157,18 @@ auto func = [](const rgw_bucket_dir_entry& bde) -> bool
     //std::cout << fmt::format("called back with {}", bde.key.name) << std::endl;
     return true;
   };
+
+class GlobalTestEnvironment : public ::testing::Environment {
+public:
+  void SetUp() override {
+    // Global setup if needed
+  }
+
+  void TearDown() override {
+    // Cleanup any remaining static resources
+    BucketCacheFixtureBase::cleanup_static_resources();
+  }
+};
 
 class BucketCacheFixtureDefault : public testing::Test, protected BucketCacheFixtureBase {
   static void setup_dir1() {
@@ -183,12 +207,11 @@ protected:
     setup_dir2();
 
     // default tuning
-    bucket_cache = new BucketCache{&sal_driver, bucket_root, database_root};
+    bucket_cache = std::make_unique<BucketCache>(&sal_driver, bucket_root, database_root);
   }
 
   static void TearDownTestSuite() {
-    delete bucket_cache;
-    bucket_cache = nullptr;
+    bucket_cache.reset();
   }
 };
 
@@ -237,12 +260,11 @@ protected:
 
   static void SetUpTestSuite() {
     bvec = setup_buckets();
-    bucket_cache = new BucketCache{&sal_driver, bucket_root, database_root, 1, 1, 1, 1};
+    bucket_cache = std::make_unique<BucketCache>(&sal_driver, bucket_root, database_root, 1, 1, 1, 1);
   }
 
   static void TearDownTestSuite() {
-    delete bucket_cache;
-    bucket_cache = nullptr;
+    bucket_cache.reset();
   }
 };
 
@@ -265,11 +287,10 @@ protected:
 
   static void SetUpTestSuite() {
     bvec = setup_buckets();
-    bucket_cache = new BucketCache{&sal_driver, bucket_root, database_root, 1, 1, 5 /* max partitions */, 1};
+    bucket_cache = std::make_unique<BucketCache>(&sal_driver, bucket_root, database_root, 1, 1, 5 /* max partitions */, 1);
   }
   static void TearDownTestSuite() {
-    delete bucket_cache;
-    bucket_cache = nullptr;
+    bucket_cache.reset();
   }
 };
 
@@ -305,12 +326,11 @@ protected:
       ofs << "data for " << ttp << std::endl;
       ofs.close();
     }
-    bucket_cache = new BucketCache{&sal_driver, bucket_root, database_root};
+    bucket_cache = std::make_unique<BucketCache>(&sal_driver, bucket_root, database_root);
   }
 
   static void TearDownTestSuite() {
-    delete bucket_cache;
-    bucket_cache = nullptr;
+    bucket_cache.reset();
   }
 };
 
@@ -340,12 +360,11 @@ protected:
     sf::path tp{sf::path{bucket_root} / "inotify1"};
     sf::remove_all(tp);
     sf::create_directory(tp);
-    bucket_cache = new BucketCache{&sal_driver, bucket_root, database_root};
+    bucket_cache = std::make_unique<BucketCache>(&sal_driver, bucket_root, database_root);
   }
 
   void TearDown() override {
-    delete bucket_cache;
-    bucket_cache = nullptr;
+    bucket_cache.reset();
     sf::path tp{sf::path{bucket_root} / "inotify1"};
     sf::remove_all(tp);
     sf::create_directory(tp);
@@ -491,5 +510,9 @@ int main (int argc, char *argv[])
   sf::create_directory(lr);
 
   ::testing::InitGoogleTest(&argc, argv);
+  
+  // Register global test environment for cleanup
+  ::testing::AddGlobalTestEnvironment(new GlobalTestEnvironment);
+  
   return RUN_ALL_TESTS();
 }
