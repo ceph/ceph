@@ -4627,7 +4627,7 @@ options:
   type: bool
   level: advanced
   desc: Discover media optimal IO Size and use for min_alloc_size
-  default: false
+  default: true
   see_also:
   - bluestore_min_alloc_size
   flags:
