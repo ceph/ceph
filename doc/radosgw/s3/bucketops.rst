@@ -919,7 +919,7 @@ Flush Bucket Logging
 --------------------
 
 Flushes logging object for a given source bucket (if not flushed, the logging objects are written lazily to the log bucket).
-Returns the name of the object that was flushed. An empty name will be returned if no object needs to be flushed.
+Returns the name of the object that was flushed. Flushing will happen even if the logging object is empty.
 
 Syntax
 ~~~~~~
