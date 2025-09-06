@@ -210,12 +210,12 @@ BtreeOMapManager::omap_rm_key(
       return seastar::now();
     } else if (mresult.status == mutation_status_t::WAS_SPLIT) {
       return handle_root_split(
-	get_omap_context(t, omap_root), omap_root, mresult);
+        get_omap_context(t, omap_root), omap_root, mresult);
     } else if (mresult.status == mutation_status_t::NEED_MERGE) {
       auto root = *(mresult.need_merge);
       if (root->get_node_size() == 1 && omap_root.depth != 1) {
         return handle_root_merge(
-	  get_omap_context(t, omap_root), omap_root, mresult);
+          get_omap_context(t, omap_root), omap_root, mresult);
       } else {
         return seastar::now(); 
       }
@@ -223,7 +223,6 @@ BtreeOMapManager::omap_rm_key(
       return seastar::now();
     }
   });
-
 }
 
 BtreeOMapManager::omap_rm_key_range_ret
@@ -231,41 +230,52 @@ BtreeOMapManager::omap_rm_key_range(
   omap_root_t &omap_root,
   Transaction &t,
   const std::string &first,
-  const std::string &last,
-  omap_list_config_t config)
+  const std::string &last)
 {
   LOG_PREFIX(BtreeOMapManager::omap_rm_key_range);
   DEBUGT("{} ~ {}", t, first, last);
   assert(first <= last);
+  assert(last != "");
   return seastar::do_with(
-    std::make_optional<std::string>(first),
-    std::make_optional<std::string>(last),
-    [this, &omap_root, &t, config](auto &first, auto &last) {
-    return omap_list(
-      omap_root,
-      t,
-      first,
-      last,
-      config);
-  }).si_then([this, &omap_root, &t](auto results) {
-    LOG_PREFIX(BtreeOMapManager::omap_rm_key_range);
-    auto &[complete, kvs] = results;
-    std::vector<std::string> keys;
-    for (const auto& [k, _] : kvs) {
-      keys.push_back(k);
-    }
-    DEBUGT("total {} keys to remove", t, keys.size());
-    return seastar::do_with(
-      std::move(keys),
-      [this, &omap_root, &t](auto& keys) {
-      return trans_intr::do_for_each(
-	keys.begin(),
-	keys.end(),
-	[this, &omap_root, &t](auto& key) {
-	return omap_rm_key(omap_root, t, key);
+    key_range_t{first, last, 0, false, false},
+    [this, &omap_root, &t](auto &key_range) {
+      return trans_intr::repeat(
+        [this,  &omap_root, &t, &key_range]()
+      {
+        return get_omap_root(
+          get_omap_context(t, omap_root),
+          omap_root
+        ).si_then([this, &omap_root, &t, &key_range](auto root) {
+          key_range.root_depth = omap_root.depth;
+          return root->rm_key_range(get_omap_context(t, omap_root), key_range);
+        }).si_then([this, &omap_root, &t, &key_range](auto mresult) ->omap_rm_key_range_ret {
+          if (mresult.status == mutation_status_t::SUCCESS) {
+            return seastar::now();
+          } else if (mresult.status == mutation_status_t::WAS_SPLIT) {
+            return handle_root_split(
+              get_omap_context(t, omap_root), omap_root, mresult);
+          } else if (mresult.status == mutation_status_t::NEED_MERGE) {
+            auto root = *(mresult.need_merge);
+            if (root->get_node_size() == 1 && omap_root.depth != 1) {
+              return handle_root_merge(
+                get_omap_context(t, omap_root), omap_root, mresult);
+            } else {
+              return seastar::now();
+            }
+          } else {
+            return seastar::now();
+          }
+        }).si_then([&key_range]() -> omap_rm_key_range_iertr::future<seastar::stop_iteration> {
+          if (key_range.total_complete) {
+            return omap_rm_key_range_iertr::make_ready_future<seastar::stop_iteration>(
+              seastar::stop_iteration::yes);
+          } else {
+            return omap_rm_key_range_iertr::make_ready_future<seastar::stop_iteration>(
+              seastar::stop_iteration::no);
+          }
+        });
       });
     });
-  });
 }
 
 BtreeOMapManager::omap_iterate_ret

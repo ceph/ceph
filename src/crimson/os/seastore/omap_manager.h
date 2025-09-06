@@ -225,14 +225,21 @@ public:
    * @param string &first, range start
    * @param string &last, range end
    */
+  struct key_range_t{
+    std::string first;
+    std::string last;
+    depth_t root_depth;
+    bool get_next;
+    bool total_complete;
+  };
+
   using omap_rm_key_range_iertr = base_iertr;
   using omap_rm_key_range_ret = omap_rm_key_range_iertr::future<>;
   virtual omap_rm_key_range_ret omap_rm_key_range(
     omap_root_t &omap_root,
     Transaction &t,
     const std::string &first,
-    const std::string &last,
-    omap_list_config_t config) = 0;
+    const std::string &last) = 0;
 
   /**
    * clear all omap tree key->value mapping
