@@ -24,43 +24,44 @@ namespace crimson::os::seastore::random_block_device::nvme {
 
 NVMeBlockDevice::mkfs_ret NVMeBlockDevice::mkfs(device_config_t config) {
   using crimson::common::get_conf;
-  return shard_devices.local().do_primary_mkfs(config,
+  co_await shard_devices.local().do_primary_mkfs(config,
     seastar::smp::count,
     get_conf<Option::size_t>("seastore_cbjournal_size") 
   );
+  co_return;
 }
 
 open_ertr::future<> NVMeBlockDevice::open(
   const std::string &in_path,
   seastar::open_flags mode) {
-  return seastar::do_with(in_path, [this, mode](auto& in_path) {
-    return seastar::file_stat(in_path).then([this, mode, in_path](auto stat) {
-      return seastar::open_file_dma(in_path, mode).then([=, this](auto file) {
-        device = std::move(file);
-        logger().debug("open");
-        // Get SSD's features from identify_controller and namespace command.
-        // Do identify_controller first, and then identify_namespace.
-        return identify_controller(device).safe_then([this, in_path, mode](
-          auto id_controller_data) {
-	  // TODO: enable multi-stream if the nvme device supports
-          awupf = id_controller_data.awupf + 1;
-          return identify_namespace(device).safe_then([this, in_path, mode] (
-            auto id_namespace_data) {
-            atomic_write_unit = awupf * super.block_size;
-            if (id_namespace_data.nsfeat.opterf == 1){
-              // NPWG and NPWA is 0'based value
-              write_granularity = super.block_size * (id_namespace_data.npwg + 1);
-              write_alignment = super.block_size * (id_namespace_data.npwa + 1);
-            }
-            return open_for_io(in_path, mode);
-          });
-        }).handle_error(crimson::ct_error::input_output_error::handle([this, in_path, mode]{
-          logger().error("open: id ctrlr failed. open without ioctl");
-          return open_for_io(in_path, mode);
-        }), crimson::ct_error::pass_further_all{});
-      });
+  seastar::file file;
+  try {
+    file = co_await seastar::open_file_dma(in_path, mode);
+  } catch (...) {
+    co_return;
+  }
+  // Get SSD's features from identify_controller and namespace command.
+  // Do identify_controller first, and then identify_namespace.
+  //auto id_controller_data = 
+  co_await identify_controller(file
+  ).safe_then([this, in_path, mode](
+    auto id_controller_data) {
+    // TODO: enable multi-stream if the nvme device supports
+    awupf = id_controller_data.awupf + 1;
+    return identify_namespace(device).safe_then([this, in_path, mode] (
+      auto id_namespace_data) {
+      atomic_write_unit = awupf * super.block_size;
+      if (id_namespace_data.nsfeat.opterf == 1){
+	// NPWG and NPWA is 0'based value
+	write_granularity = super.block_size * (id_namespace_data.npwg + 1);
+	write_alignment = super.block_size * (id_namespace_data.npwa + 1);
+      }
+      return open_for_io(in_path, mode);
     });
-  });
+  }).handle_error(crimson::ct_error::input_output_error::handle([this, in_path, mode] {
+    logger().error("open: id ctrlr failed. ohen without ioctl");
+    return open_for_io(in_path, mode);
+  }), crimson::ct_error::pass_further_all{});
 }
 
 open_ertr::future<> NVMeBlockDevice::open_for_io(
