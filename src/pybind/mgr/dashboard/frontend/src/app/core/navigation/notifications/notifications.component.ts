@@ -16,6 +16,9 @@ export class NotificationsComponent implements OnInit, OnDestroy {
   icons = Icons;
   hasRunningTasks = false;
   hasNotifications = false;
+  isPanelOpen = false;
+  useNewPanel = true;
+  notificationCount = 0;
   private subs = new Subscription();
 
   constructor(
@@ -33,8 +36,22 @@ export class NotificationsComponent implements OnInit, OnDestroy {
     this.subs.add(
       this.notificationService.data$.subscribe((notifications: CdNotification[]) => {
         this.hasNotifications = notifications.length > 0;
+        this.notificationCount = notifications.length;
       })
     );
+
+    this.subs.add(
+      this.notificationService.panelState$.subscribe((state) => {
+        this.isPanelOpen = state.isOpen;
+        this.useNewPanel = state.useNewPanel;
+      })
+    );
+  }
+
+  togglePanel(event: Event) {
+    event.preventDefault();
+    event.stopPropagation();
+    this.notificationService.toggleSidebar(!this.isPanelOpen, this.useNewPanel);
   }
 
   ngOnDestroy(): void {

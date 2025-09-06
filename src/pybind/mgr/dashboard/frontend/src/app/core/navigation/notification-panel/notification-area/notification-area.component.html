@@ -1,0 +1,45 @@
+<ng-container *ngIf="todayNotifications.length > 0">
+  <div class="notification-section-heading">Today</div>
+  <div *ngFor="let notification of todayNotifications; let last = last" class="notification-wrapper">
+    <div class="notification-item">
+      <div class="notification-icon">
+        <svg [cdsIcon]="getCarbonIcon(notification.type)" [size]="16" [ngClass]="getIconColorClass(notification.type)">
+        </svg>
+      </div>
+      <div class="notification-content">
+        <div class="notification-timestamp">{{ notification.timestamp | relativeDate }}</div>
+        <div class="notification-title">{{ notification.title }}</div>
+        <div class="notification-message" [innerHTML]="notification.message | sanitizeHtml"></div>
+      </div>
+      <button cdsButton="ghost" size="sm" class="notification-close" (click)="removeNotification(notification, $event)">
+        <svg cdsIcon="close" size="16"></svg>
+      </button>
+    </div>
+    <div *ngIf="!last" class="notification-divider"></div>
+  </div>
+</ng-container>
+
+<ng-container *ngIf="previousNotifications.length > 0">
+  <div class="notification-section-heading" [class.mt-0]="todayNotifications.length === 0">Previous</div>
+  <div *ngFor="let notification of previousNotifications; let last = last" class="notification-wrapper">
+    <div class="notification-item">
+      <div class="notification-icon">
+        <svg [cdsIcon]="getCarbonIcon(notification.type)" [size]="16" [ngClass]="getIconColorClass(notification.type)">
+        </svg>
+      </div>
+      <div class="notification-content">
+        <div class="notification-timestamp">{{ notification.timestamp | relativeDate }}</div>
+        <div class="notification-title">{{ notification.title }}</div>
+        <div class="notification-message" [innerHTML]="notification.message | sanitizeHtml"></div>
+      </div>
+      <button cdsButton="ghost" size="sm" class="notification-close" (click)="removeNotification(notification, $event)">
+        <svg cdsIcon="close" size="16"></svg>
+      </button>
+    </div>
+    <div *ngIf="!last" class="notification-divider"></div>
+  </div>
+</ng-container>
+
+<div *ngIf="todayNotifications.length === 0 && previousNotifications.length === 0" class="notification-empty">
+  <div>No notifications</div>
+</div> 

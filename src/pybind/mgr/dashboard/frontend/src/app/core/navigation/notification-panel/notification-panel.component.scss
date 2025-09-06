@@ -1,0 +1,32 @@
+@use '@carbon/styles/scss/theme';
+@use '@carbon/styles/scss/spacing';
+@use '@carbon/styles/scss/themes';
+@use '@carbon/styles/scss/theme' as *;
+
+.notification-panel {
+  @include theme.theme(themes.$g10);
+
+  position: absolute;
+  top: spacing.$spacing-09;
+  right: 0;
+  width: 400px;
+  height: 700px;
+  background-color: $layer-01;
+  box-shadow: $shadow;
+  border: 1px solid $border-subtle-01;
+  z-index: 6000;
+  color: $text-primary;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+
+  cd-notification-header {
+    flex: 0 0 auto;
+  }
+
+  cd-notification-area {
+    flex: 1 1 auto;
+    overflow-y: auto;
+    min-height: 0; // Failing in firefox without this
+  }
+}
