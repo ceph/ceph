@@ -53,7 +53,8 @@ describe('PrometheusAlertFormatter', () => {
           name: 'Something',
           description: 'Something is active',
           url: 'http://Something',
-          fingerprint: 'Something'
+          fingerprint: 'Something',
+          severity: 'someSeverity'
         } as PrometheusCustomAlert
       ]);
     });
@@ -67,7 +68,8 @@ describe('PrometheusAlertFormatter', () => {
           status: 'active',
           name: 'Something',
           description: 'Something is firing',
-          url: 'http://Something'
+          url: 'http://Something',
+          severity: undefined
         } as PrometheusCustomAlert
       ]);
     });
@@ -79,13 +81,35 @@ describe('PrometheusAlertFormatter', () => {
       name: 'Some alert',
       description: 'Some alert is active',
       url: 'http://some-alert',
-      fingerprint: '42'
+      fingerprint: '42',
+      severity: 'critical'
     };
     expect(service.convertAlertToNotification(alert)).toEqual(
       new CdNotificationConfig(
         NotificationType.error,
         'Some alert (active)',
         'Some alert is active <a href="http://some-alert" target="_blank">' +
+          '<svg cdsIcon="analytics" size="16" ></svg></a>',
+        undefined,
+        'Prometheus'
+      )
+    );
+  });
+
+  it('converts warning alert into warning notification', () => {
+    const alert: PrometheusCustomAlert = {
+      status: 'active',
+      name: 'Warning alert',
+      description: 'Warning alert is active',
+      url: 'http://warning-alert',
+      fingerprint: '43',
+      severity: 'warning'
+    };
+    expect(service.convertAlertToNotification(alert)).toEqual(
+      new CdNotificationConfig(
+        NotificationType.warning,
+        'Warning alert (active)',
+        'Warning alert is active <a href="http://warning-alert" target="_blank">' +
           '<svg cdsIcon="analytics" size="16" ></svg></a>',
         undefined,
         'Prometheus'

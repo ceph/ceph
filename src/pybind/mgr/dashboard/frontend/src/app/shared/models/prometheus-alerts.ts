@@ -82,4 +82,5 @@ export class PrometheusCustomAlert {
   url: string;
   description: string;
   fingerprint?: string | boolean;
+  severity?: string;
 }
