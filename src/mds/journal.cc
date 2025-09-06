@@ -127,7 +127,9 @@ void LogSegment::try_to_expire(MDSRank *mds, MDSGatherBuilder &gather_bld, int o
 
   dout(6) << "LogSegment(" << seq << "/" << offset << ").try_to_expire" << dendl;
 
-  ceph_assert(g_conf()->mds_kill_journal_expire_at != 1);
+  //ceph_assert(g_conf()->mds_kill_journal_expire_at != 1);
+  if (g_conf()->mds_kill_journal_expire_at == 1)
+    _exit(120);
 
   // commit dirs
   for (elist<CDir*>::iterator p = new_dirfrags.begin(); !p.end(); ++p) {
@@ -211,7 +213,9 @@ void LogSegment::try_to_expire(MDSRank *mds, MDSGatherBuilder &gather_bld, int o
     mds->locker->scatter_nudge(&in->nestlock, gather_bld.new_sub());
   }
 
-  ceph_assert(g_conf()->mds_kill_journal_expire_at != 2);
+  //ceph_assert(g_conf()->mds_kill_journal_expire_at != 2);
+  if (g_conf()->mds_kill_journal_expire_at == 2)
+    _exit(120);
 
   // open files and snap inodes 
   if (!open_files.empty()) {
@@ -251,7 +255,9 @@ void LogSegment::try_to_expire(MDSRank *mds, MDSGatherBuilder &gather_bld, int o
     mds->mdcache->open_file_table.wait_for_commit(seq, gather_bld.new_sub());
   }
 
-  ceph_assert(g_conf()->mds_kill_journal_expire_at != 3);
+  //ceph_assert(g_conf()->mds_kill_journal_expire_at != 3);
+  if (g_conf()->mds_kill_journal_expire_at == 3)
+    _exit(120);
 
   std::map<int64_t, std::vector<CInodeCommitOperations>> ops_vec_map;
   // backtraces to be stored/updated
@@ -301,7 +307,9 @@ void LogSegment::try_to_expire(MDSRank *mds, MDSGatherBuilder &gather_bld, int o
     mds->finisher->queue(new BatchCommitBacktrace(mds, gather_bld.new_sub(), std::move(ops_vec)));
   }
 
-  ceph_assert(g_conf()->mds_kill_journal_expire_at != 4);
+  //ceph_assert(g_conf()->mds_kill_journal_expire_at != 4);
+  if (g_conf()->mds_kill_journal_expire_at == 4)
+    _exit(120);
 
   // idalloc
   if (inotablev > mds->inotable->get_committed_version()) {
@@ -369,7 +377,9 @@ void LogSegment::try_to_expire(MDSRank *mds, MDSGatherBuilder &gather_bld, int o
     dout(6) << "LogSegment(" << seq << "/" << offset << ").try_to_expire waiting" << dendl;
     mds->mdlog->flush();
   } else {
-    ceph_assert(g_conf()->mds_kill_journal_expire_at != 5);
+    //ceph_assert(g_conf()->mds_kill_journal_expire_at != 5);
+    if (g_conf()->mds_kill_journal_expire_at == 5)
+      _exit(120);
     dout(6) << "LogSegment(" << seq << "/" << offset << ").try_to_expire success" << dendl;
   }
 }
@@ -1278,7 +1288,9 @@ void EMetaBlob::replay(MDSRank *mds, LogSegmentRef const& logseg, int type, MDPe
 
   ceph_assert(logseg);
 
-  ceph_assert(g_conf()->mds_kill_journal_replay_at != 1);
+  //ceph_assert(g_conf()->mds_kill_journal_replay_at != 1);
+  if (g_conf()->mds_kill_journal_replay_at == 1)
+    _exit(120);
 
   for (auto& p : roots) {
     CInode *in = mds->mdcache->get_inode(p.inode->ino);
@@ -1471,7 +1483,9 @@ void EMetaBlob::replay(MDSRank *mds, LogSegmentRef const& logseg, int type, MDPe
 	in->state_set(CInode::STATE_AUTH);
       else
 	in->state_clear(CInode::STATE_AUTH);
-      ceph_assert(g_conf()->mds_kill_journal_replay_at != 2);
+      //ceph_assert(g_conf()->mds_kill_journal_replay_at != 2);
+      if (g_conf()->mds_kill_journal_replay_at == 2)
+        _exit(120);
 
       {
         auto do_corruption = mds->get_inject_journal_corrupt_dentry_first();
@@ -1641,7 +1655,9 @@ void EMetaBlob::replay(MDSRank *mds, LogSegmentRef const& logseg, int type, MDPe
     }
   }
 
-  ceph_assert(g_conf()->mds_kill_journal_replay_at != 3);
+  //ceph_assert(g_conf()->mds_kill_journal_replay_at != 3);
+  if (g_conf()->mds_kill_journal_replay_at == 3)
+    _exit(120);
 
   if (renamed_dirino) {
     if (renamed_diri) {
@@ -1927,7 +1943,9 @@ void EMetaBlob::replay(MDSRank *mds, LogSegmentRef const& logseg, int type, MDPe
   // update segment
   update_segment(logseg);
 
-  ceph_assert(g_conf()->mds_kill_journal_replay_at != 4);
+  //ceph_assert(g_conf()->mds_kill_journal_replay_at != 4);
+  if (g_conf()->mds_kill_journal_replay_at == 4)
+    _exit(120);
 }
 
 // -----------------------

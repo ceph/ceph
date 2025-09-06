@@ -733,7 +733,12 @@ class TestSkipReplayInoTable(CephFSTestCase):
         time.sleep(5)
         self.fs.wait_for_daemons()
 
-        self.delete_mds_coredump(rank0['name']);
+        #self.delete_mds_coredump(rank0['name']);
+        try:
+            self.mds_cluster.status()
+        except CommandFailedError as e:
+            if e.exitstatus == 120:
+                pass
 
         self.mount_a.run_shell(["mkdir", "test_alloc_ino/dir2"])
 
