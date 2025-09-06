@@ -1145,6 +1145,8 @@ class TestMonitoring:
     @patch("cephadm.module.CephadmOrchestrator._get_mgr_ips", lambda _: ['192.168.100.100', '::1'])
     def test_prometheus_config_security_disabled(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
         _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
+        pool = 'testpool'
+        group = 'mygroup'
         s = RGWSpec(service_id="foo", placement=PlacementSpec(count=1), rgw_frontend_type='beast')
         with with_host(cephadm_module, 'test'):
             # host "test" needs to have networks for keepalive to be placed
@@ -1165,6 +1167,9 @@ class TestMonitoring:
                                                              keepalived_password='12345',
                                                              virtual_ip="1.2.3.4/32",
                                                              backend_service='rgw.foo')) as _, \
+                    with_service(cephadm_module, NvmeofServiceSpec(service_id=f'{pool}.{group}',
+                                                                   group=group,
+                                                                   pool=pool)) as _, \
                     with_service(cephadm_module, PrometheusSpec('prometheus',
                                                                 networks=['1.2.3.0/24'],
                                                                 only_bind_port_on_networks=True)) as _:
@@ -1231,6 +1236,16 @@ class TestMonitoring:
                     - url: http://192.168.100.100:8765/sd/prometheus/sd-config?service=node-exporter
                     - url: http://[::1]:8765/sd/prometheus/sd-config?service=node-exporter
 
+                  - job_name: 'nvmeof'
+                    relabel_configs:
+                    - source_labels: [__address__]
+                      target_label: cluster
+                      replacement: fsid
+                    honor_labels: true
+                    http_sd_configs:
+                    - url: http://192.168.100.100:8765/sd/prometheus/sd-config?service=nvmeof
+                    - url: http://[::1]:8765/sd/prometheus/sd-config?service=nvmeof
+
 
                 """).lstrip()
 
@@ -1282,6 +1297,8 @@ class TestMonitoring:
     def test_prometheus_config_security_enabled(self, _run_cephadm, _get_uname, cephadm_module: CephadmOrchestrator):
         _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
         _get_uname.return_value = 'test'
+        pool = 'testpool'
+        group = 'mygroup'
         s = RGWSpec(service_id="foo", placement=PlacementSpec(count=1), rgw_frontend_type='beast')
         smb_spec = SMBSpec(cluster_id='foxtrot', config_uri='rados://.smb/foxtrot/config.json',)
 
@@ -1312,6 +1329,9 @@ class TestMonitoring:
                                                              keepalived_password='12345',
                                                              virtual_ip="1.2.3.4/32",
                                                              backend_service='rgw.foo')) as _, \
+                    with_service(cephadm_module, NvmeofServiceSpec(service_id=f'{pool}.{group}',
+                                                                   group=group,
+                                                                   pool=pool)) as _, \
                     with_service(cephadm_module, PrometheusSpec('prometheus')) as _:
 
                 web_config = dedent("""
@@ -1434,6 +1454,27 @@ class TestMonitoring:
                     honor_labels: true
                     http_sd_configs:
                     - url: https://[::1]:8765/sd/prometheus/sd-config?service=node-exporter
+                      basic_auth:
+                        username: sd_user
+                        password: sd_password
+                      tls_config:
+                        ca_file: root_cert.pem
+                        cert_file: prometheus.crt
+                        key_file: prometheus.key
+
+                  - job_name: 'nvmeof'
+                    relabel_configs:
+                    - source_labels: [__address__]
+                      target_label: cluster
+                      replacement: fsid
+                    scheme: https
+                    tls_config:
+                      ca_file: root_cert.pem
+                      cert_file: prometheus.crt
+                      key_file: prometheus.key
+                    honor_labels: true
+                    http_sd_configs:
+                    - url: https://[::1]:8765/sd/prometheus/sd-config?service=nvmeof
                       basic_auth:
                         username: sd_user
                         password: sd_password
