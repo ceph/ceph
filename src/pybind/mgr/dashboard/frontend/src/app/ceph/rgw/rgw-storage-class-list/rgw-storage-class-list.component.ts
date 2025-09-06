@@ -60,7 +60,7 @@ export class RgwStorageClassListComponent extends ListWithDetails implements OnI
         isHidden: true
       },
       {
-        name: $localize`Storage Class`,
+        name: $localize`Storage Class name`,
         prop: 'storage_class',
         flexGrow: 2
       },
@@ -72,11 +72,6 @@ export class RgwStorageClassListComponent extends ListWithDetails implements OnI
       {
         name: $localize`Zone Group`,
         prop: 'zonegroup_name',
-        flexGrow: 2
-      },
-      {
-        name: $localize`Placement Target`,
-        prop: 'placement_target',
         flexGrow: 2
       },
       {
