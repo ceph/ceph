@@ -3600,8 +3600,8 @@ void Monitor::handle_command(MonOpRequestRef op)
     dout(10) << __func__ << " proxying mgr command (+" << size
 	     << " -> " << mgr_proxy_bytes << ")" << dendl;
     C_MgrProxyCommand *fin = new C_MgrProxyCommand(this, op, size);
-    mgr_client.start_command(m->cmd,
-			     m->get_data(),
+    mgr_client.start_command(std::move(m->cmd),
+			     std::move(m->get_data()),
 			     &fin->outbl,
 			     &fin->outs,
 			     new C_OnFinisher(fin, &finisher));

@@ -98,10 +98,9 @@ MirrorServices MirrorDaemonServiceInfo::get_mirror_services() const {
 int MirrorDaemonServiceInfo::get_mirror_service_dump() {
   librados::Rados rados(m_io_ctx);
   std::string cmd = R"({"prefix": "service dump", "format": "json"})";
-  bufferlist in_bl;
   bufferlist out_bl;
 
-  int r = rados.mon_command(cmd, in_bl, &out_bl, nullptr);
+  int r = rados.mon_command(std::move(cmd), {}, &out_bl, nullptr);
   if (r < 0) {
     std::cerr << "rbd: failed to query services: " << cpp_strerror(r)
               << std::endl;
@@ -178,10 +177,9 @@ int MirrorDaemonServiceInfo::get_mirror_service_dump() {
 int MirrorDaemonServiceInfo::get_mirror_service_status() {
   librados::Rados rados(m_io_ctx);
   std::string cmd = R"({"prefix": "service status", "format": "json"})";
-  bufferlist in_bl;
   bufferlist out_bl;
 
-  int r = rados.mon_command(cmd, in_bl, &out_bl, nullptr);
+  int r = rados.mon_command(std::move(cmd), {}, &out_bl, nullptr);
   if (r < 0) {
     std::cerr << "rbd: failed to query service status: " << cpp_strerror(r)
               << std::endl;

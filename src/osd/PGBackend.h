@@ -293,7 +293,7 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
      virtual void send_message_osd_cluster(
        Message *m, const ConnectionRef& con) = 0;
      virtual void start_mon_command(
-       const std::vector<std::string>& cmd, const bufferlist& inbl,
+       std::vector<std::string>&& cmd, bufferlist&& inbl,
        bufferlist *outbl, std::string *outs,
        Context *onfinish) = 0;
      virtual ConnectionRef get_con_osd_cluster(int peer, epoch_t from_epoch) = 0;
