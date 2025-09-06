@@ -378,6 +378,38 @@ public:
   }
 };
 
+class DataProcessorFilter : public RGWGetObj_Filter
+{
+  rgw::sal::DataProcessor* processor;
+  off_t ofs = 0;
+
+public:
+  DataProcessorFilter() {}
+  explicit DataProcessorFilter(rgw::sal::DataProcessor* proc) : processor(proc) {}
+  ~DataProcessorFilter() override {}
+
+  void set_processor(rgw::sal::DataProcessor* proc) {
+    processor = proc;
+  }
+
+  int handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len) override {
+    // DataProcessor requires ownership of the entire bufferlist.
+    // RGWGetObj_Filter, however, may reuse the original bufferlist after this call.
+    // To avoid unintended side effects, we create a copy of the relevant portion.
+    bufferlist copy_bl;
+    bl.begin().copy(bl_len, copy_bl);
+
+    int ret = processor->process(std::move(copy_bl), ofs);
+    if (ret < 0) return ret;
+    ofs += bl_len;
+    return bl_len;
+  }
+
+  int flush() override {
+    return processor->process({}, ofs);
+  }
+};
+
 class RGWGetObj : public RGWOp {
 protected:
   const char *range_str;
@@ -1578,6 +1610,7 @@ protected:
   std::string_view copy_source;
   // Not actually required
   std::optional<std::string_view> md_directive;
+  std::map<std::string, std::string> crypt_http_responses;
 
   off_t ofs;
   off_t len;
@@ -2808,3 +2841,12 @@ int rgw_policy_from_attrset(const DoutPrefixProvider *dpp,
                             CephContext *cct,
                             std::map<std::string, bufferlist>& attrset,
                             RGWAccessControlPolicy *policy);
+
+int get_decrypt_filter(
+  std::unique_ptr<RGWGetObj_Filter>* filter,
+  RGWGetObj_Filter* cb,
+  req_state* s,
+  std::map<std::string, bufferlist>& attrs,
+  bufferlist* manifest_bl,
+  std::map<std::string, std::string>* crypt_http_responses,
+  bool copy_source);
