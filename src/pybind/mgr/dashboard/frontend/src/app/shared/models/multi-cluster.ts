@@ -9,3 +9,12 @@ export interface MultiCluster {
   ssl_certificate: string;
   ttl: number;
 }
+
+export interface MultiClusterConfig {
+  current_url: string;
+  current_user: string;
+  hub_url: string;
+  config: {
+    [clusterId: string]: MultiCluster[];
+  };
+}

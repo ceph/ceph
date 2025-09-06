@@ -1,8 +1,8 @@
-import { Component, OnInit } from '@angular/core';
+import { ChangeDetectorRef, Component, OnInit } from '@angular/core';
 import { Location } from '@angular/common';
 import { UntypedFormControl, Validators } from '@angular/forms';
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
-import { Subscription, forkJoin } from 'rxjs';
+import { Observable, Subscription, forkJoin } from 'rxjs';
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { WizardStepModel } from '~/app/shared/models/wizard-steps';
@@ -23,9 +23,34 @@ import { BaseModal, Step } from 'carbon-components-angular';
 import { SummaryService } from '~/app/shared/services/summary.service';
 import { ExecutingTask } from '~/app/shared/models/executing-task';
 import {
+  STEP_TITLES_EXISTING_REALM,
   STEP_TITLES_MULTI_CLUSTER_CONFIGURED,
   STEP_TITLES_SINGLE_CLUSTER
 } from './multisite-wizard-steps.enum';
+import { RgwRealmService } from '~/app/shared/api/rgw-realm.service';
+import { MultiCluster, MultiClusterConfig } from '~/app/shared/models/multi-cluster';
+
+interface DaemonStats {
+  rgw_metadata?: {
+    [key: string]: string;
+  };
+}
+
+interface EndpointInfo {
+  hostname: string;
+  port: number;
+  frontendConfig: string;
+}
+
+enum Protocol {
+  HTTP = 'http',
+  HTTPS = 'https'
+}
+
+enum ConfigType {
+  NewRealm = 'newRealm',
+  ExistingRealm = 'existingRealm'
+}
 
 @Component({
   selector: 'cd-rgw-multisite-wizard',
@@ -43,7 +68,7 @@ export class RgwMultisiteWizardComponent extends BaseModal implements OnInit {
   stepsToSkip: { [steps: string]: boolean } = {};
   daemons: RgwDaemon[] = [];
   selectedCluster = '';
-  clusterDetailsArray: any;
+  clusterDetailsArray: MultiCluster[] = [];
   isMultiClusterConfigured = false;
   exportTokenForm: CdFormGroup;
   realms: any;
@@ -53,6 +78,9 @@ export class RgwMultisiteWizardComponent extends BaseModal implements OnInit {
   rgwEndpoints: { value: any[]; options: any[]; messages: any };
   executingTask: ExecutingTask;
   setupCompleted = false;
+  showConfigType = false;
+  realmList: string[] = [];
+  realmsInfo: { realm: string; token: string }[];
 
   constructor(
     private wizardStepsService: WizardStepsService,
@@ -61,10 +89,12 @@ export class RgwMultisiteWizardComponent extends BaseModal implements OnInit {
     private rgwDaemonService: RgwDaemonService,
     private multiClusterService: MultiClusterService,
     private rgwMultisiteService: RgwMultisiteService,
+    private rgwRealmService: RgwRealmService,
     public notificationService: NotificationService,
     private route: ActivatedRoute,
     private summaryService: SummaryService,
-    private location: Location
+    private location: Location,
+    private cdr: ChangeDetectorRef
   ) {
     super();
     this.pageURL = 'rgw/multisite/configuration';
@@ -87,61 +117,83 @@ export class RgwMultisiteWizardComponent extends BaseModal implements OnInit {
 
   ngOnInit(): void {
     this.open = this.route.outlet === 'modal';
-    this.rgwDaemonService
-      .list()
-      .pipe(
-        switchMap((daemons) => {
-          this.daemons = daemons;
-          const daemonStatsObservables = daemons.map((daemon) =>
-            this.rgwDaemonService.get(daemon.id).pipe(
-              map((daemonStats) => ({
-                hostname: daemon.server_hostname,
-                port: daemon.port,
-                frontendConfig: daemonStats['rgw_metadata']['frontend_config#0']
-              }))
-            )
-          );
-          return forkJoin(daemonStatsObservables);
-        })
-      )
-      .subscribe((daemonStatsArray) => {
-        this.rgwEndpoints.value = daemonStatsArray.map((daemonStats) => {
-          const protocol = daemonStats.frontendConfig.includes('ssl_port') ? 'https' : 'http';
-          return `${protocol}://${daemonStats.hostname}:${daemonStats.port}`;
-        });
-        const options: SelectOption[] = this.rgwEndpoints.value.map(
-          (endpoint: string) => new SelectOption(false, endpoint, '')
-        );
-        this.rgwEndpoints.options = [...options];
-      });
-
-    this.multiClusterService.getCluster().subscribe((clusters) => {
+    this.loadRGWEndpoints();
+    this.multiClusterService.getCluster().subscribe((clusters: MultiClusterConfig) => {
+      const currentUrl = clusters['current_url'];
       this.clusterDetailsArray = Object.values(clusters['config'])
         .flat()
-        .filter((cluster) => cluster['url'] !== clusters['current_url']);
+        .filter((cluster) => cluster['url'] !== currentUrl);
       this.isMultiClusterConfigured = this.clusterDetailsArray.length > 0;
-      if (!this.isMultiClusterConfigured) {
-        this.stepTitles = STEP_TITLES_SINGLE_CLUSTER.map((title) => ({
-          label: title
-        }));
-        this.stepTitles.forEach((steps, index) => {
-          steps.onClick = () => (this.currentStep.stepIndex = index);
-        });
-      } else {
-        this.selectedCluster = this.clusterDetailsArray[0]['name'];
-      }
+      this.stepTitles = (this.isMultiClusterConfigured
+        ? STEP_TITLES_MULTI_CLUSTER_CONFIGURED
+        : STEP_TITLES_SINGLE_CLUSTER
+      ).map((label, index) => ({
+        label,
+        onClick: () => (this.currentStep.stepIndex = index)
+      }));
       this.wizardStepsService.setTotalSteps(this.stepTitles.length);
+      this.selectedCluster = this.isMultiClusterConfigured
+        ? this.clusterDetailsArray[0]['name']
+        : null;
     });
 
     this.summaryService.subscribe((summary) => {
-      this.executingTask = summary.executing_tasks.filter((tasks) =>
-        tasks.name.includes('progress/Multisite-Setup')
-      )[0];
+      this.executingTask = summary.executing_tasks.find((task) =>
+        task.name.includes('progress/Multisite-Setup')
+      );
     });
 
-    this.stepTitles.forEach((stepTitle) => {
-      this.stepsToSkip[stepTitle.label] = false;
+    this.stepTitles.forEach((step) => {
+      this.stepsToSkip[step.label] = false;
     });
+
+    this.rgwRealmService.getRealmTokens().subscribe((data: { realm: string; token: string }[]) => {
+      const base64Matcher = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=|[A-Za-z0-9+/]{4})$/;
+      this.realmsInfo = data.filter((realmInfo) => base64Matcher.test(realmInfo.token));
+      this.showConfigType = this.realmsInfo.length > 0;
+      if (this.showConfigType) {
+        this.multisiteSetupForm.get('selectedRealm')?.setValue(this.realmsInfo[0].realm);
+        this.cdr.detectChanges();
+      }
+    });
+  }
+
+  private loadRGWEndpoints(): void {
+    this.rgwDaemonService
+      .list()
+      .pipe(
+        switchMap((daemons: RgwDaemon[]) => {
+          this.daemons = daemons;
+          return this.fetchDaemonStats(daemons);
+        })
+      )
+      .subscribe((daemonStatsArray: EndpointInfo[]) => {
+        this.populateRGWEndpoints(daemonStatsArray);
+      });
+  }
+
+  private fetchDaemonStats(daemons: RgwDaemon[]): Observable<EndpointInfo[]> {
+    const observables = daemons.map((daemon) =>
+      this.rgwDaemonService.get(daemon.id).pipe(
+        map((daemonStats: DaemonStats) => ({
+          hostname: daemon.server_hostname,
+          port: daemon.port,
+          frontendConfig: daemonStats?.rgw_metadata?.['frontend_config#0'] || ''
+        }))
+      )
+    );
+    return forkJoin(observables);
+  }
+
+  private populateRGWEndpoints(statsArray: EndpointInfo[]): void {
+    this.rgwEndpoints.value = statsArray.map((stats: EndpointInfo) => {
+      const protocol = stats.frontendConfig.includes('ssl_port') ? Protocol.HTTPS : Protocol.HTTP;
+      return `${protocol}://${stats.hostname}:${stats.port}`;
+    });
+    this.rgwEndpoints.options = this.rgwEndpoints.value.map(
+      (endpoint) => new SelectOption(false, endpoint, '')
+    );
+    this.cdr.detectChanges();
   }
 
   createForm() {
@@ -167,7 +219,9 @@ export class RgwMultisiteWizardComponent extends BaseModal implements OnInit {
       }),
       replicationZoneName: new UntypedFormControl('new_replicated_zone', {
         validators: [Validators.required]
-      })
+      }),
+      configType: new UntypedFormControl(ConfigType.NewRealm, {}),
+      selectedRealm: new UntypedFormControl(null, {})
     });
 
     if (!this.isMultiClusterConfigured) {
@@ -244,6 +298,10 @@ export class RgwMultisiteWizardComponent extends BaseModal implements OnInit {
     } else {
       const cluster = values['cluster'];
       const replicationZoneName = values['replicationZoneName'];
+      let selectedRealmName = '';
+      if (this.multisiteSetupForm.get('configType').value === ConfigType.ExistingRealm) {
+        selectedRealmName = this.multisiteSetupForm.get('selectedRealm').value;
+      }
       this.rgwMultisiteService
         .setUpMultisiteReplication(
           realmName,
@@ -254,7 +312,8 @@ export class RgwMultisiteWizardComponent extends BaseModal implements OnInit {
           username,
           cluster,
           replicationZoneName,
-          this.clusterDetailsArray
+          this.clusterDetailsArray,
+          selectedRealmName
         )
         .subscribe(
           () => {
@@ -293,5 +352,26 @@ export class RgwMultisiteWizardComponent extends BaseModal implements OnInit {
 
   closeModal(): void {
     this.location.back();
+  }
+
+  onConfigTypeChange() {
+    const configType = this.multisiteSetupForm.get('configType')?.value;
+    if (configType === ConfigType.ExistingRealm) {
+      this.stepTitles = STEP_TITLES_EXISTING_REALM.map((title) => ({
+        label: title
+      }));
+      this.stepTitles.forEach((steps, index) => {
+        steps.onClick = () => (this.currentStep.stepIndex = index);
+      });
+    } else if (this.isMultiClusterConfigured) {
+      this.stepTitles = STEP_TITLES_MULTI_CLUSTER_CONFIGURED.map((title) => ({
+        label: title
+      }));
+    } else {
+      this.stepTitles = STEP_TITLES_SINGLE_CLUSTER.map((title) => ({
+        label: title
+      }));
+    }
+    this.wizardStepsService.setTotalSteps(this.stepTitles.length);
   }
 }
