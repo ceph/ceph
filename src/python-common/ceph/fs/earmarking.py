@@ -69,20 +69,28 @@ class CephFSVolumeEarmarking:
         self.fs = fs
         self.path = path
 
-    def _handle_cephfs_error(self, e: Exception, action: str) -> Optional[str]:
+    def _handle_cephfs_error(
+        self, e: Exception, action: str
+    ) -> Optional[str]:
         if isinstance(e, ValueError):
-            raise EarmarkException(errno.EINVAL, f"Invalid earmark specified: {e}") from e
+            raise EarmarkException(
+                errno.EINVAL, f"Invalid earmark specified: {e}"
+            ) from e
         elif isinstance(e, OSError):
             if e.errno == errno.ENODATA:
                 # Return empty string when earmark is not set
-                log.info(f"No earmark set for the path while {action}. Returning empty result.")
+                log.info(
+                    f"No earmark set for the path while {action}. Returning empty result."
+                )
                 return ''
             else:
                 log.error(f"Error {action} earmark: {e}")
                 raise EarmarkException(-e.errno, e.strerror) from e
         else:
             log.error(f"Unexpected error {action} earmark: {e}")
-            raise EarmarkException(errno.EFAULT, f"Unexpected error {action} earmark: {e}") from e
+            raise EarmarkException(
+                errno.EFAULT, f"Unexpected error {action} earmark: {e}"
+            ) from e
 
     @staticmethod
     def parse_earmark(value: str) -> Optional[EarmarkContents]:
@@ -109,7 +117,9 @@ class CephFSVolumeEarmarking:
             raise EarmarkParseError("Earmark contains empty sections.")
 
         # Return parsed earmark with top scope and subsections
-        return EarmarkContents(top=EarmarkTopScope(parts[0]), subsections=parts[1:])
+        return EarmarkContents(
+            top=EarmarkTopScope(parts[0]), subsections=parts[1:]
+        )
 
     def _validate_earmark(self, earmark: str) -> bool:
         """
@@ -130,19 +140,23 @@ class CephFSVolumeEarmarking:
         # Specific validation for 'smb' scope
         if parsed.top == EarmarkTopScope.SMB:
             # Valid formats: 'smb' or 'smb.cluster.{cluster_id}'
-            if not (len(parsed.subsections) == 0 or
-                    (len(parsed.subsections) == 2 and
-                    parsed.subsections[0] == 'cluster' and parsed.subsections[1])):
+            if not (
+                len(parsed.subsections) == 0
+                or (
+                    len(parsed.subsections) == 2
+                    and parsed.subsections[0] == 'cluster'
+                    and parsed.subsections[1]
+                )
+            ):
                 return False
 
         return True
 
     def get_earmark(self) -> Optional[str]:
         try:
-            earmark_value = (
-                self.fs.getxattr(self.path, XATTR_SUBVOLUME_EARMARK_NAME)
-                .decode('utf-8')
-            )
+            earmark_value = self.fs.getxattr(
+                self.path, XATTR_SUBVOLUME_EARMARK_NAME
+            ).decode('utf-8')
             return earmark_value
         except Exception as e:
             return self._handle_cephfs_error(e, "getting")
@@ -155,11 +169,16 @@ class CephFSVolumeEarmarking:
                 f"Invalid earmark specified: '{earmark}'. "
                 "A valid earmark should either be empty or start with 'nfs' or 'smb', "
                 "followed by dot-separated non-empty components or simply set "
-                "'smb.cluster.{cluster_id}' for the smb intra-cluster scope."
-                )
+                "'smb.cluster.{cluster_id}' for the smb intra-cluster scope.",
+            )
 
         try:
-            self.fs.setxattr(self.path, XATTR_SUBVOLUME_EARMARK_NAME, earmark.encode('utf-8'), 0)
+            self.fs.setxattr(
+                self.path,
+                XATTR_SUBVOLUME_EARMARK_NAME,
+                earmark.encode('utf-8'),
+                0,
+            )
             log.info(f"Earmark '{earmark}' set on {self.path}.")
         except Exception as e:
             self._handle_cephfs_error(e, "setting")
