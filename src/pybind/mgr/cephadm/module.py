@@ -828,6 +828,20 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         try:
             yield
         except (asyncio.TimeoutError, concurrent.futures.TimeoutError):
+            # raise health warning for timeout issue
+            if host:
+                hosts: list[str] = []
+                if 'CEPHADM_HOST_TIMEOUT_ERROR' in self.health_checks:
+                    hosts = self.health_checks['CEPHADM_HOST_TIMEOUT_ERROR'].get('detail', [])
+                if host not in hosts:
+                    hosts.append(host)
+                    self.set_health_warning(
+                        'CEPHADM_HOST_TIMEOUT_ERROR',
+                        f'SSH command execution failed with TimeoutError for {len(hosts)} hosts',
+                        len(hosts),
+                        hosts
+                    )
+
             err_str: str = ''
             if cmd:
                 err_str = f'Command "{cmd}" timed out '
@@ -850,6 +864,20 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
                 err_str += f'on host {host} '
             err_str += f' - {str(e)}'
             raise OrchestratorError(err_str)
+        else:
+            if host and 'CEPHADM_HOST_TIMEOUT_ERROR' in self.health_checks:
+                hosts = self.health_checks['CEPHADM_HOST_TIMEOUT_ERROR'].get('detail', [])
+                if host in hosts:
+                    hosts.remove(host)
+                    if hosts:
+                        self.set_health_warning(
+                            'CEPHADM_HOST_TIMEOUT_ERROR',
+                            f'SSH command execution failed with TimeoutError for {len(hosts)} hosts',
+                            len(hosts),
+                            hosts
+                        )
+                    else:
+                        self.remove_health_warning('CEPHADM_HOST_TIMEOUT_ERROR')
 
     def set_container_image(self, entity: str, image: str) -> None:
         self.check_mon_command({
