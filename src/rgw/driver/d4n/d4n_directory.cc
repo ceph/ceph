@@ -2,6 +2,7 @@
 #include <boost/asio/consign.hpp>
 #include <boost/algorithm/string.hpp>
 #include <memory>
+//#include <string>
 #include "common/async/blocked_completion.h"
 #include "common/dout.h" 
 #include "d4n_directory.h"
@@ -1405,7 +1406,7 @@ int D4NTransaction::end_trx(const DoutPrefixProvider* dpp, std::shared_ptr<conne
   //running the loaded script 
   try {
     boost::system::error_code ec;
-    response<int,std::string> resp;
+    response<bool,std::string> resp; //the response RESP3 should contain a tuple of <bool status, string result>
     request req;
 
     unsigned int num_keys = m_temp_read_keys.size() + m_temp_write_keys.size() + m_temp_test_write_keys.size();
@@ -1446,7 +1447,7 @@ int D4NTransaction::end_trx(const DoutPrefixProvider* dpp, std::shared_ptr<conne
 	err_msg	<< "Directory::end_trx the end-trx script had failed this = " << this ;
 
 	//system level error
-	if (ec.category().name() == std::string("system")) {
+	if (ec.category() == boost::system::system_category()) {
         		ldout(g_ceph_context, 0) << err_msg.str() << " System error: " << ec.message()
                   		<< " (errno=" << ec.value() << dendl; 
 	//boost redis error
@@ -1463,9 +1464,10 @@ int D4NTransaction::end_trx(const DoutPrefixProvider* dpp, std::shared_ptr<conne
 	return -ec.value();
       }
 
-      // the response contain whether the transaction was successful or not <int status, string result>
-      int status = std::get<0>(resp).value();
-      std::string result = std::get<1>(resp).value();
+      // the response contain whether the transaction was successful or not <bool status, string result>
+      // Extract values
+	bool status        = std::get<0>(resp).value();
+	std::string result = std::get<1>(resp).value();
 
       //could be compile-time error or no matching script.
       if (result.starts_with("ERR") || result.starts_with("NOSCRIPT") || result.starts_with("WRONGTYPE")) {
