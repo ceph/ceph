@@ -43,13 +43,18 @@ int PyModuleRunner::serve()
   // This method is called from a separate OS thread (i.e. a thread not
   // created by Python), so tell Gil to wrap this in a new thread state.
   Gil gil(py_module->pMyThreadState, true);
-
+  auto _start = ceph::mono_clock::now();
+  py_module->perfcounter->set(py_module->l_pym_alive, 1);
   auto pValue = PyObject_CallMethod(pClassInstance,
       const_cast<char*>("serve"), nullptr);
-
   int r = 0;
   if (pValue != NULL) {
     Py_DECREF(pValue);
+    if (py_module->perfcounter) {
+      auto duration = ceph::mono_clock::now() - _start;
+      auto usec = std::chrono::duration_cast<std::chrono::microseconds>(duration).count();
+      py_module->perfcounter->inc(py_module->l_pym_serve_avg_usec, usec);
+    }
   } else {
     // This is not a very informative log message because it's an
     // unknown/unexpected exception that we can't say much about.
@@ -70,6 +75,10 @@ int PyModuleRunner::serve()
     return -EINVAL;
   }
 
+  if (py_module->perfcounter) {
+    py_module->perfcounter->set(py_module->l_pym_alive, 0);
+  }
+
   return r;
 }
 
@@ -88,7 +97,9 @@ void PyModuleRunner::shutdown()
     derr << "Failed to invoke shutdown() on " << get_name() << dendl;
     derr << handle_pyerror(true, get_name(), "PyModuleRunner::shutdown") << dendl;
   }
-
+  if (py_module->perfcounter) {
+    py_module->perfcounter->set(py_module->l_pym_alive, 0);
+  }
   dead = true;
 }
 
@@ -104,7 +115,23 @@ void PyModuleRunner::log(const std::string &record)
 void* PyModuleRunner::PyModuleRunnerThread::entry()
 {
   // No need to acquire the GIL here; the module does it.
-  dout(4) << "Entering thread for " << mod->get_name() << dendl;
+  pid_t current_tid = ceph_gettid();
+  mod->set_native_tid(current_tid);
+  dout(4) << "Entering thread for " << mod->get_name() <<
+    " with tid " << ceph_gettid() << dendl;
+  
+  if (mod->m_thread_monitor) {
+    mod->m_thread_monitor->register_thread(current_tid, mod->get_name(), mod->py_module);
+  } else {
+    dout(4) << "No thread monitor for " << mod->get_name() << dendl;
+  }
+
   mod->serve();
+  
+  if (mod->is_dead() && mod->m_thread_monitor) {
+    dout(4) << "Thread for " << mod->get_name() << " is dead, deregistering thread "
+            << current_tid << dendl;
+    mod->m_thread_monitor->deregister_thread(current_tid);
+  }
   return nullptr;
 }

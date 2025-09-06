@@ -242,6 +242,10 @@ std::pair<int, std::string> PyModuleConfig::set_config(
   }
 }
 
+  PyModule::PyModule(const std::string &module_name_)
+    : module_name(module_name_)
+  { }
+
 PyObject* PyModule::init_ceph_logger()
 {
   auto py_logger = PyModule_Create(&ceph_logger_module);
