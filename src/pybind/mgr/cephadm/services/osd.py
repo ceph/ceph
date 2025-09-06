@@ -397,6 +397,15 @@ class OSDService(CephService):
         if not is_failed_deploy:
             super().post_remove(daemon, is_failed_deploy=is_failed_deploy)
 
+    def generate_config(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[Dict[str, Any], List[str]]:
+        config, parent_deps = super().generate_config(daemon_spec)
+        if daemon_spec.service_name in self.mgr.spec_store:
+            svc_spec = cast(DriveGroupSpec, self.mgr.spec_store[daemon_spec.service_name].spec)
+
+            if hasattr(svc_spec, 'objectstore') and svc_spec.objectstore:
+                config['objectstore'] = svc_spec.objectstore
+        return config, parent_deps
+
 
 class OsdIdClaims(object):
     """
