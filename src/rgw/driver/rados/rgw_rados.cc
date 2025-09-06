@@ -4082,6 +4082,39 @@ int RGWRados::reindex_obj(rgw::sal::Driver* driver,
     (void) decode_policy(dpp, acl_bl, &owner);
   }
 
+  rgw_rados_ref bucket_ref;
+  ret = svc.bi_rados->open_bucket_index_shard(dpp, 
+					      bucket_info, 
+					      head_obj.get_hash_object(), 
+					      &bucket_ref, 
+					      nullptr);
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: failed to determine bucket index shard"
+                      << dendl;
+    return ret;
+  }
+
+  // validate bucket index shard existence before attempting reindex
+  ret = bucket_ref.ioctx.stat(bucket_ref.obj.oid, NULL, NULL);
+  if (ret == -ENOENT) {
+    ldpp_dout(dpp, 10) << "INFO: bucket index shard " << bucket_ref.obj.oid
+                       << " missing, creating..." << dendl;
+    int create_ret = svc.bi_rados->init_index(dpp, 
+					      y, 
+					      bucket_info, 
+					      bucket_info.layout.current_index, 
+					      false);
+
+    if (create_ret < 0) {
+      ldpp_dout(dpp, 0) << "ERROR: failed to create bucket index" << dendl;
+      return create_ret;
+    }
+  } else if (ret < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: failed to stat bucket index shard: "
+                      << cpp_strerror(-ret) << dendl;
+    return ret;
+  }
+
   Bucket bkt(this, bucket_info);
   RGWRados::Bucket::UpdateIndex update_idx(&bkt, head_obj);
 
