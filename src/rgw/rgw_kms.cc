@@ -5,19 +5,44 @@
  * Server-side encryption integrations with Key Management Systems (SSE-KMS)
  */
 
+#include <fmt/format.h>
 #include <sys/stat.h>
+#include "common/async/call_once.h"
+#include "common/ceph_crypto.h"
+#include "common/dout_fmt.h"
+#include "common/keyring.h"
+#include "common/perf_counters.h"
+#include "common/web_cache.h"
+#include "include/expected.hpp"
 #include "include/str_map.h"
 #include "common/safe_io.h"
+#include "include/uuid.h"
 #include "rgw/rgw_crypt.h"
 #include "rgw/rgw_keystone.h"
 #include "rgw/rgw_b64.h"
 #include "rgw/rgw_kms.h"
 #include "rgw/rgw_kmip_client.h"
+#include "rgw/rgw_perf_counters.h"
 #include <rapidjson/allocators.h>
 #include <rapidjson/document.h>
 #include <rapidjson/writer.h>
+#include <algorithm>
+#include <boost/asio/associated_executor.hpp>
+#include <boost/asio/bind_cancellation_slot.hpp>
+#include <boost/asio/bind_executor.hpp>
+#include <boost/asio/cancellation_signal.hpp>
+#include <boost/asio/cancellation_type.hpp>
+#include <boost/asio/error.hpp>
+#include <boost/asio/io_context.hpp>
+#include <boost/asio/spawn.hpp>
+#include <boost/asio/steady_timer.hpp>
+#include <chrono>
+#include <optional>
+#include <system_error>
+#include <thread>
 #include "rapidjson/error/error.h"
 #include "rapidjson/error/en.h"
+#include "rgw_string.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
@@ -1084,11 +1109,174 @@ static int get_actual_key_from_kmip(const DoutPrefixProvider *dpp,
     return -EINVAL;
   }
 }
+
 class KMSContext : public SSEContext {
-  CephContext *cct;
-public:
-  KMSContext(CephContext*_cct) : cct{_cct} {};
-  ~KMSContext() override {};
+  CephContext* cct;
+
+ public:
+  using SharedSecret = std::shared_ptr<LinuxKeyringSecret>;
+  using CacheResult = tl::expected<SharedSecret, int>;
+  using CacheValue = ceph::async::once_result<CacheResult>;
+  using KMSSecretCache = webcache::WebCache<std::string, CacheValue>;
+
+  explicit KMSContext(CephContext* _cct) : cct{_cct} {};
+  ~KMSContext() override = default;
+
+  static std::jthread make_ttl_reaper_thread(
+      CephContext* cct, KMSSecretCache& cache, std::chrono::seconds ttl) {
+    return std::jthread([cct, &cache, ttl](std::stop_token stop) {
+      const std::string thread_name =
+          fmt::format("{}-ttl-reaper", cache.name());
+      ceph_pthread_setname(thread_name.c_str());
+      std::mutex mutex;
+      std::condition_variable cond;
+      std::stop_callback on_stop(stop, [&cond]() { cond.notify_all(); });
+      ldout(cct, 10) << "KMS Cache: Starting TTL reaper thread " << thread_name
+                     << "/" << std::hex << std::this_thread::get_id() << std::dec << ", running every "
+                     << ttl << dendl;
+      while (!stop.stop_requested()) {
+        std::unique_lock<std::mutex> lock(mutex);
+        if (cond.wait_for(lock, ttl, [&stop] { return stop.stop_requested(); })) {
+	  break;
+	}
+        const auto expired_count = cache.expire_erase();
+        ldout(cct, 20) << "KMS Cache: TTL reaper thread expired "
+                       << expired_count << " entries" << dendl;
+      }
+      ldout(cct, 10) << "KMS Cache: Stopping TTL reaper thread " << thread_name
+                     << "/" << std::hex << std::this_thread::get_id()
+                     << std::dec << dendl;
+    });
+  }
+
+  static void make_ttl_reaper_async(
+      CephContext* cct, KMSSecretCache& cache, std::chrono::seconds ttl,
+      boost::asio::yield_context& yield,
+      boost::asio::cancellation_signal& cancel_signal) {
+    auto context = make_strand(yield.get_executor());
+    boost::asio::spawn(
+        context,
+            [cct, &cache, ttl](const asio::yield_context& yield) {
+              ldout(cct, 10)
+                  << "KMS Cache: Starting async TTL reaper, running every "
+                  << ttl << dendl;
+              asio::steady_timer timer(yield.get_executor());
+              while (true) {
+                timer.expires_after(ttl);
+                boost::system::error_code ec;
+                timer.async_wait(yield[ec]);
+                if (ec == asio::error::operation_aborted) {
+                  ldout(cct, 10)
+                      << "KMS Cache: Stopping async TTL reaper" << dendl;
+                  break;
+                }
+                const auto expired_count = cache.expire_erase();
+                ldout(cct, 20) << "KMS Cache: Async TTL reaper expired "
+                               << expired_count << " entries" << dendl;
+              }
+            },
+	boost::asio::bind_cancellation_slot(
+            cancel_signal.slot(), boost::asio::bind_executor(context, boost::asio::detached))
+		       );
+  }
+
+  struct KMSCacheContext {
+    std::unique_ptr<KMSSecretCache> cache;
+    std::jthread ttl_reaper;
+    boost::asio::cancellation_signal ttl_cancel;
+    KMSCacheContext(const KMSCacheContext&) = delete;
+    KMSCacheContext(KMSCacheContext&&) = delete;
+    KMSCacheContext& operator=(const KMSCacheContext&) = delete;
+    KMSCacheContext& operator=(KMSCacheContext&&) = delete;
+    KMSCacheContext(CephContext* cct, size_t capacity, ceph::timespan ttl)
+        : cache(std::make_unique<KMSSecretCache>(
+              cct, "kms-cache", capacity, ttl)) {};
+  };
+
+  // lazy_secrets_cache manages the lazy initialization of the secrets
+  // cache. Do not use directly, use secrets_cache().
+  //
+  // Cache + TTL reaper lifecycle is packaged into KMSCacheContext and
+  // tied to CephContext via an associated object. We keep a static
+  // copy around for faster access. Destroying KMSCacheContext stops
+  // TTL reaper threads, but not the coroutine variant. The async TTL
+  // reaper needs to be stopped explicity before joining the RGW
+  // context pool to allow it to shut down.
+  static KMSCacheContext* lazy_secrets_cache(
+      CephContext* cct, optional_yield y, bool initialize = true) {
+    static std::once_flag initialized;
+    static KMSCacheContext* instance;
+    if (!initialize) {
+      return instance;
+    }
+    std::call_once(initialized, [&]() {
+      ldout(cct, 10)
+          << fmt::format(
+                 "KMS Cache: Initializing size:{} TTL pos:{} "
+                 "neg:{} err:{}",
+                 cct->_conf->rgw_crypt_s3_kms_cache_max_size,
+                 cct->_conf->rgw_crypt_s3_kms_cache_positive_ttl,
+                 cct->_conf->rgw_crypt_s3_kms_cache_negative_ttl,
+                 cct->_conf->rgw_crypt_s3_kms_cache_transient_error_ttl)
+          << dendl;
+
+      instance = &cct->lookup_or_create_singleton_object<KMSCacheContext>(
+          "RGW::KMSContext::secrets_cache", false, cct,
+          cct->_conf->rgw_crypt_s3_kms_cache_max_size,
+          std::chrono::seconds(
+              cct->_conf->rgw_crypt_s3_kms_cache_positive_ttl));
+      std::error_code ec;
+      if (!LinuxKeyringSecret::supported(&ec)) {
+        ldout(cct, 1) << "KMS Cache: Linux Kernel Key Retention Service "
+                         "unsupported (error "
+                      << ec << "). Disabling Cache." << dendl;
+        cct->_conf->rgw_crypt_s3_kms_cache_enabled = false;
+      }
+      const auto min_ttl_secs = std::min(
+          {cct->_conf->rgw_crypt_s3_kms_cache_positive_ttl,
+           cct->_conf->rgw_crypt_s3_kms_cache_negative_ttl,
+           cct->_conf->rgw_crypt_s3_kms_cache_transient_error_ttl});
+      if (y) {
+        make_ttl_reaper_async(
+            cct, *instance->cache, std::chrono::seconds(min_ttl_secs),
+            y.get_yield_context(), instance->ttl_cancel);
+      } else {
+        instance->ttl_reaper = make_ttl_reaper_thread(
+            cct, *instance->cache, std::chrono::seconds(min_ttl_secs));
+      }
+    });
+    return instance;
+  }
+
+  // secrets_cache always initializes the KMS cache on first call. It
+  // may choose to disable the cache in case something goes wrong (via
+  // config). This allows us to toggle the cache at runtime without
+  // worrying about its life cycle.
+  static KMSSecretCache& secrets_cache(CephContext* cct, optional_yield y) {
+    return *lazy_secrets_cache(cct, y, true)->cache;
+  }
+
+  // stop_async_ttl_reaper stops the asio TTL reaper coroutine if the
+  // cache is initialized.
+  static void stop_async_ttl_reaper(CephContext* cct) {
+    auto* ctx = lazy_secrets_cache(cct, null_yield, false);
+    if (ctx != nullptr) {
+      ctx->ttl_cancel.emit(boost::asio::cancellation_type::all);
+    }
+  }
+
+  bool cache_enabled() {
+    return cct->_conf->rgw_crypt_s3_kms_cache_enabled;
+  }
+
+  void disable_cache() {
+    cct->_conf->rgw_crypt_s3_kms_cache_enabled = false;
+  }
+
+  void clear_cache() {
+    secrets_cache(cct, null_yield).clear();
+  }
+
   const std::string & backend() override {
     return cct->_conf->rgw_crypt_s3_kms_backend;
   };
@@ -1177,25 +1365,120 @@ int reconstitute_actual_key_from_kms(const DoutPrefixProvider *dpp,
   ldpp_dout(dpp, 20) << "Getting KMS encryption key for key " << key_id << dendl;
   ldpp_dout(dpp, 20) << "SSE-KMS backend is " << kms_backend << dendl;
 
-  if (RGW_SSE_KMS_BACKEND_BARBICAN == kms_backend) {
-    return get_actual_key_from_barbican(dpp, key_id, y, actual_key);
+  const auto fetch = [&](std::string& out_secret) -> int {
+    PerfGuard perf(perfcounter, l_rgw_kms_fetch_lat);
+    if (RGW_SSE_KMS_BACKEND_BARBICAN == kms_backend) {
+      return get_actual_key_from_barbican(dpp, key_id, y, out_secret);
+    }
+
+    if (RGW_SSE_KMS_BACKEND_VAULT == kms_backend) {
+      return reconstitute_actual_key_from_vault(
+          dpp, kctx, attrs, y, out_secret);
+    }
+
+    if (RGW_SSE_KMS_BACKEND_KMIP == kms_backend) {
+      return get_actual_key_from_kmip(dpp, key_id, y, out_secret);
+    }
+
+    if (RGW_SSE_KMS_BACKEND_TESTING == kms_backend) {
+      std::string key_selector =
+          get_str_attribute(attrs, RGW_ATTR_CRYPT_KEYSEL);
+      std::this_thread::sleep_for(std::chrono::milliseconds(
+          dpp->get_cct()->_conf->rgw_crypt_s3_kms_testing_delay));
+      return get_actual_key_from_conf(dpp, key_id, key_selector, out_secret);
+    }
+    ldpp_dout(dpp, 0) << "ERROR: Invalid rgw_crypt_s3_kms_backend: "
+                      << kms_backend << dendl;
+    return -EINVAL;
+  };
+
+  if (!kctx.cache_enabled()) {
+    const auto ret = fetch(actual_key);
+    if (ret == -ENOENT) {
+      perfcounter->inc(l_rgw_kms_error_permanent);
+    } else if (ret < 0) {
+      perfcounter->inc(l_rgw_kms_error_transient);
+    }
+    return ret;
   }
 
-  if (RGW_SSE_KMS_BACKEND_VAULT == kms_backend) {
-    return reconstitute_actual_key_from_vault(dpp, kctx, attrs, y, actual_key);
-  }
+  auto& cache = kctx.secrets_cache(dpp->get_cct(), y);
+  static std::string_view key_prefix("rgw_sse_kms_");
+  const std::string cache_key =
+      string_cat_reserve(key_prefix, kms_backend, "_", key_id);
+  std::shared_ptr<KMSContext::CacheValue> value =
+      cache.lookup_or(key_id, std::make_shared<KMSContext::CacheValue>());
+  auto result = call_once(*value, y, [&]() -> KMSContext::CacheResult {
+    std::string secret;
+    const int ret = fetch(secret);
+    ldpp_dout(dpp, 20) << "KMS Cache: " << cache_key
+                       << " call_once fetched with ret " << ret << dendl;
 
-  if (RGW_SSE_KMS_BACKEND_KMIP == kms_backend) {
-    return get_actual_key_from_kmip(dpp, key_id, y, actual_key);
-  }
+    if (ret == -ENOENT) {  // key does not exists, treat as permanent error
+      ldpp_dout(dpp, 15) << "KMS Cache: " << cache_key
+                         << " key does not exists. treating as permanent error "
+                         << dendl;
+      cache.update_ttl_if(
+          cache_key, value,
+          std::chrono::seconds(
+              dpp->get_cct()->_conf->rgw_crypt_s3_kms_cache_negative_ttl));
+      perfcounter->inc(l_rgw_kms_error_permanent);
+      return tl::unexpected(ret);
+    } else if (ret < 0) {  // treat other errors as transient
+      ldpp_dout(dpp, 15) << "KMS Cache: " << cache_key << " fetch error ("
+                         << ret << ") " << std::strerror(ret)
+                         << " treating as transient error " << dendl;
+      cache.update_ttl_if(
+          cache_key, value,
+          std::chrono::seconds(
+              dpp->get_cct()
+                  ->_conf->rgw_crypt_s3_kms_cache_transient_error_ttl));
+      perfcounter->inc(l_rgw_kms_error_transient);
+      return tl::unexpected(ret);
+    }
 
-  if (RGW_SSE_KMS_BACKEND_TESTING == kms_backend) {
-    std::string key_selector = get_str_attribute(attrs, RGW_ATTR_CRYPT_KEYSEL);
-    return get_actual_key_from_conf(dpp, key_id, key_selector, actual_key);
-  }
+    // This function might be in flight for the same key_id more than
+    // once. The keyring key must, however, be unique to not refer
+    // (and remove) the same key twice.
+    uuid_d uuid;
+    uuid.generate_random();
+    const std::string keyring_key = string_cat_reserve(
+        key_prefix, kms_backend, "_", key_id, "_v", uuid.to_string());
+    auto keyring_secret = LinuxKeyringSecret::add(keyring_key, secret);
+    ceph::crypto::zeroize_for_security(secret.data(), secret.length());
+    if (!keyring_secret) {
+      ldpp_dout(dpp, 5) << "KMS Cache: " << cache_key << " keyring add error ("
+			<< keyring_secret.error()
+			<< "). removing from cache. disabling cache." << dendl;
+      cache.remove_if(cache_key, value);
+      kctx.disable_cache();
+      perfcounter->inc(l_rgw_kms_error_secret_store);
+      return tl::unexpected(-ERR_INTERNAL_ERROR);
+    }
+    return std::make_shared<LinuxKeyringSecret>(
+        std::move(keyring_secret.value()));
+  });
 
-  ldpp_dout(dpp, 0) << "ERROR: Invalid rgw_crypt_s3_kms_backend: " << kms_backend << dendl;
-  return -EINVAL;
+  ldpp_dout_fmt(
+      dpp, 20, "KMS Cache: {} -> {}/{}", cache_key,
+      result && result.has_value() ? fmt::format("{}", *result.value()) : "-",
+      !result ? result.error() : 0);
+
+  if (result) {
+    if (auto ret = result.value()->read(actual_key); ret.value() != 0) {
+      ldpp_dout(dpp, 5) << "KMS Cache: " << cache_key << " keyring "
+                        << *result.value() << " read error (" << ret
+                        << "). removing from cache. disabling cache."
+                        << dendl;
+      cache.remove_if(cache_key, value);
+      kctx.disable_cache();
+      perfcounter->inc(l_rgw_kms_error_secret_store);
+      return -ERR_INTERNAL_ERROR;
+    }
+    return 0;
+  } else {
+    return result.error();
+  }
 }
 
 int make_actual_key_from_kms(const DoutPrefixProvider *dpp,
@@ -1292,4 +1575,9 @@ int remove_sse_s3_bucket_key(const DoutPrefixProvider *dpp,
     ldpp_dout(dpp, 0) << "Missing or invalid secret engine" << dendl;
     return -EINVAL;
   }
+}
+
+void rgw_kms_cleanup(CephContext* cct) {
+  KMSContext kctx { cct };
+  kctx.stop_async_ttl_reaper(cct);
 }
