@@ -156,5 +156,8 @@
   },
   "optionalDependencies": {
     "@rollup/rollup-linux-arm64-gnu": "4.22.4"
+  },
+  "overrides": {
+    "glob": "^9.0.0"
   }
 }
