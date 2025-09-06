@@ -36,10 +36,12 @@ export class DataGatewayService {
     });
   }
 
-  delete(dataPath: string, key: string): Observable<any> {
+  delete(dataPath: string, key: string | string[]): Observable<any> {
     const { url, version } = this.getUrlAndVersion(dataPath);
 
-    return this.http.delete<any>(`${url}/${key}`, {
+    const keyPath = Array.isArray(key) ? key.join(',') : key;
+
+    return this.http.delete<any>(`${url}/${keyPath}`, {
       headers: { Accept: `application/vnd.ceph.api.v${version}+json` },
       observe: 'response'
     });
