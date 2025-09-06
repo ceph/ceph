@@ -6603,7 +6603,16 @@ void Server::handle_client_setvxattr(const MDRequestRef& mdr, CInode *cur)
     }
     pi.snapnode->last_modified = mdr->get_op_stamp();
     pi.snapnode->change_attr++;
-
+    for (auto child_snaprealm: cur->snaprealm->open_children) {
+      dout(10) << "child snaprealm " << *child_snaprealm << " of " << *(cur->snaprealm) << dendl;
+      if (val) {
+        child_snaprealm->srnode.set_snapdir_visibility();
+      } else {
+        child_snaprealm->srnode.unset_snapdir_visibility();
+      }
+      child_snaprealm->srnode.last_modified = mdr->get_op_stamp();
+      child_snaprealm->srnode.change_attr++;
+    }
     mdr->no_early_reply = true;
     pip = pi.inode.get();
   } else if (name == "ceph.dir.pin"sv) {
