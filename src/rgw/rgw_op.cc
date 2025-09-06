@@ -3798,6 +3798,24 @@ void RGWCreateBucket::execute(optional_yield y)
       return;
     }
 
+    // prevent re-creation with different index type or shard count
+    if ((createparams.index_type && *createparams.index_type !=
+         info.layout.current_index.layout.type) ||
+        (createparams.index_shards && *createparams.index_shards !=
+         info.layout.current_index.layout.normal.num_shards)) {
+      s->err.message =
+          "Cannot modify existing bucket's index type or shard count";
+      op_ret = -EEXIST;
+      return;
+    }
+
+    // don't allow changes to object lock
+    if (createparams.obj_lock_enabled != info.obj_lock_enabled()) {
+      s->err.message = "Cannot modify existing bucket's object lock";
+      op_ret = -EEXIST;
+      return;
+    }
+
     // don't allow changes to the acl policy
     RGWAccessControlPolicy old_policy;
     int r = rgw_op_get_bucket_policy_from_attr(this, s->cct, driver, info.owner,
@@ -3808,6 +3826,20 @@ void RGWCreateBucket::execute(optional_yield y)
       op_ret = -EEXIST;
       return;
     }
+
+    // For s3::CreateBucket just return back if bucket exists, as we do not allow
+    // any changes in bucket config param. need_metadata_upload() is always false
+    // for S3, so use the check to decide if its s3 request and not swift request.
+    if (!need_metadata_upload()) {
+      op_ret = -ERR_BUCKET_EXISTS;
+      return;
+    }
+
+    // use |createparams.bucket_exists| to decide whether to update the existing
+    // existing buket_instance object or create new instance object and index shard objects.
+    createparams.bucket_exists = true;
+    createparams.bucket_id = info.bucket.bucket_id;
+    createparams.marker = info.bucket.marker;
   }
 
   s->bucket_owner = policy.get_owner();

@@ -2450,8 +2450,8 @@ int RGWRados::create_bucket(const DoutPrefixProvider* dpp,
                             std::optional<rgw::BucketIndexType> index_type,
                             std::optional<uint32_t> index_shards,
                             obj_version* pep_objv,
-                            RGWBucketInfo& info)
-{
+                            RGWBucketInfo& info,
+                            bool bucket_exists) {
   int ret = 0;
 
 #define MAX_CREATE_RETRIES 20 /* need to bound retries */
@@ -2496,15 +2496,16 @@ int RGWRados::create_bucket(const DoutPrefixProvider* dpp,
       info.quota = *quota;
     }
 
-    if (zone_placement) {
+    if (zone_placement && !bucket_exists) {
       ret = svc.bi->init_index(dpp, y, info, info.layout.current_index);
       if (ret < 0) {
         return ret;
       }
     }
 
-    constexpr bool exclusive = true;
-    ret = put_linked_bucket_info(info, exclusive, ceph::real_time(), pep_objv, &attrs, true, dpp, y);
+    const bool exclusive = !bucket_exists;
+    ret = put_linked_bucket_info(info, exclusive, ceph::real_time(), pep_objv,
+                                 &attrs, true, dpp, bucket_exists, y);
     if (ret == -ECANCELED) {
       ret = -EEXIST;
     }
@@ -9928,9 +9929,11 @@ int RGWRados::put_bucket_instance_info(RGWBucketInfo& info, bool exclusive,
 }
 
 int RGWRados::put_linked_bucket_info(RGWBucketInfo& info, bool exclusive, real_time mtime, obj_version *pep_objv,
-                                     const map<string, bufferlist> *pattrs, bool create_entry_point,
-                                     const DoutPrefixProvider *dpp, optional_yield y)
-{
+                                     const map<string, bufferlist>* pattrs,
+                                     bool create_entry_point,
+                                     const DoutPrefixProvider* dpp,
+                                     bool bucket_exists,
+                                     optional_yield y) {
   bool create_head = !info.has_instance_obj || create_entry_point;
 
   int ret = put_bucket_instance_info(info, exclusive, mtime, pattrs, dpp, y);
@@ -9938,7 +9941,7 @@ int RGWRados::put_linked_bucket_info(RGWBucketInfo& info, bool exclusive, real_t
     return ret;
   }
 
-  if (!create_head)
+  if (!create_head || bucket_exists)
     return 0; /* done! */
 
   RGWBucketEntryPoint entry_point;

@@ -177,7 +177,7 @@ int RadosBucket::create(const DoutPrefixProvider* dpp,
       params.placement_rule, params.zone_placement, params.attrs,
       params.obj_lock_enabled, params.swift_ver_location,
       params.quota, params.creation_time, params.index_type,
-      params.index_shards, &bucket_version, info);
+      params.index_shards, &bucket_version, info, params.bucket_exists);
 
   bool existed = false;
   if (ret == -EEXIST) {

@@ -907,6 +907,7 @@ class Bucket {
       std::optional<ceph::real_time> creation_time;
       std::optional<rgw::BucketIndexType> index_type;
       std::optional<uint32_t> index_shards;
+      bool bucket_exists = false;
     };
 
     /// Create this bucket in the backing store.

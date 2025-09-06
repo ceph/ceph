@@ -670,7 +670,8 @@ public:
                     std::optional<rgw::BucketIndexType> index_type,
                     std::optional<uint32_t> index_shards,
                     obj_version* pep_objv,
-                    RGWBucketInfo& info);
+                    RGWBucketInfo& info,
+                    bool bucket_exists);
 
   RGWCoroutinesManagerRegistry *get_cr_registry() { return cr_registry; }
 
@@ -1532,7 +1533,9 @@ public:
 
   int put_linked_bucket_info(RGWBucketInfo& info, bool exclusive, ceph::real_time mtime, obj_version *pep_objv,
 			     const std::map<std::string, bufferlist> *pattrs, bool create_entry_point,
-                             const DoutPrefixProvider *dpp, optional_yield y);
+                             const DoutPrefixProvider* dpp,
+                             bool bucket_exists,
+                             optional_yield y);
 
   int cls_obj_prepare_op(const DoutPrefixProvider *dpp, BucketShard& bs, RGWModifyOp op, std::string& tag, rgw_obj& obj,
                          optional_yield y);
