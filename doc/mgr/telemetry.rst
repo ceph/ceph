@@ -231,6 +231,7 @@ To list all collections, run the following command:
   NAME                            STATUS                                               DESC
   basic_base                      NOT REPORTING: NOT OPTED-IN                          Basic information about the cluster (capacity, number and type of daemons, version, etc.)
   basic_mds_metadata              NOT REPORTING: NOT OPTED-IN                          MDS metadata
+  basic_mgr_modules_list          NOT REPORTING: NOT OPTED-IN                          The always_on_modules, force_disabled_modules and enabled_modules of mgr                     
   basic_pool_flags                NOT REPORTING: NOT OPTED-IN                          Per-pool flags
   basic_pool_options_bluestore    NOT REPORTING: NOT OPTED-IN                          Per-pool bluestore config options
   basic_pool_usage                NOT REPORTING: NOT OPTED-IN                          Default pool application and usage statistics
