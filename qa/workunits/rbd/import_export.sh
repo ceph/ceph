@@ -39,6 +39,10 @@ compare_files_and_ondisk_sizes () {
     test $difference -ge 0 -a $difference -lt 4096
 }
 
+expect_false() {
+    if "$@"; then return 1; else return 0; fi
+}
+
 TMPDIR=/tmp/rbd_import_export_$$
 rm -rf $TMPDIR
 mkdir $TMPDIR
@@ -56,6 +60,7 @@ dd if=/bin/rm of=${TMPDIR}/img bs=1k count=100 seek=1000
 dd if=/bin/ls of=${TMPDIR}/img bs=1k seek=10000
 dd if=/bin/ln of=${TMPDIR}/img bs=1k seek=100000
 dd if=/bin/grep of=${TMPDIR}/img bs=1k seek=1000000
+dd if=/dev/zero of=${TMPDIR}/img count=0 seek=2097152
 
 rbd rm testimg || true
 
@@ -74,8 +79,33 @@ rbd export testimg - > ${TMPDIR}/img3
 rbd rm testimg
 cmp ${TMPDIR}/img ${TMPDIR}/img2
 cmp ${TMPDIR}/img ${TMPDIR}/img3
+rm ${TMPDIR}/img2 ${TMPDIR}/img3
 
-rm ${TMPDIR}/img ${TMPDIR}/img2 ${TMPDIR}/img3
+# try again, importing from and exporting to block devices
+dd if=/dev/zero of=${TMPDIR}/img2 count=0 seek=2097152
+# imported block device
+LOOP_DEV=$(sudo losetup -f --show ${TMPDIR}/img)
+# export destination
+LOOP_DEV2=$(sudo losetup -f --show ${TMPDIR}/img2)
+sudo rbd import $RBD_CREATE_ARGS ${LOOP_DEV} testimg
+sudo losetup -d ${LOOP_DEV}
+rbd export testimg ${TMPDIR}/img3
+rbd export testimg - > ${TMPDIR}/img4
+sudo rbd export testimg ${LOOP_DEV2}
+rbd rm testimg
+cmp ${TMPDIR}/img ${TMPDIR}/img3
+cmp ${TMPDIR}/img ${TMPDIR}/img4
+sudo cmp ${TMPDIR}/img ${LOOP_DEV2}
+rm ${TMPDIR}/img ${TMPDIR}/img2 ${TMPDIR}/img3 ${TMPDIR}/img4
+# ensure that rbd refuses to export an image to a block device of
+# mismatching size.
+rbd create test_size_mismatch_lt -s 512M
+rbd create test_size_mismatch_gt -s 2048M
+expect_false sudo rbd export test_size_mismatch_lt ${LOOP_DEV2}
+expect_false sudo rbd export test_size_mismatch_gt ${LOOP_DEV2}
+rbd rm test_size_mismatch_lt
+rbd rm test_size_mismatch_gt
+sudo losetup -d ${LOOP_DEV2}
 
 if rbd help export | grep -q export-format; then
     # try with --export-format for snapshots
