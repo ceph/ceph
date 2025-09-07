@@ -294,6 +294,9 @@ struct scrub_chunk_t {
 
   // EC-related:
   shard_id_map<bufferlist> m_ec_digest_map;
+
+  /// only one 'large OMAP' warning per chunk
+  bool m_large_omap_warning_issued{false};
 };
 
 
@@ -435,7 +438,13 @@ class ScrubBackend {
   /// might return error messages to be cluster-logged
   std::optional<std::string> compare_obj_in_maps(const hobject_t& ho);
 
-  void omap_checks();
+  /**
+   * add the OMAP stats for the handled object to the m_omap_stats info.
+   * Also warn if the object has large omap keys or values.
+   */
+  void collect_omap_stats(
+      const hobject_t& ho,
+      const ScrubMap::object& auth_object);
 
   std::optional<auth_and_obj_errs_t> for_empty_auth_list(
     std::list<pg_shard_t>&& auths,
