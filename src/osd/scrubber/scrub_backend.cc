@@ -881,6 +881,7 @@ std::optional<std::string> ScrubBackend::compare_obj_in_maps(
 {
   // clear per-object data:
   m_current_obj = object_scrub_data_t{};
+  this_chunk->m_ec_digest_map.clear();
 
   stringstream candidates_errors;
   auto auth_res = select_auth_object(ho, candidates_errors);
