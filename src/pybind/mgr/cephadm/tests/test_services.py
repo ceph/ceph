@@ -3510,14 +3510,14 @@ class TestIngressService:
             '}\n'
             '\n'
             'RADOS_KV {\n'
-            '        UserId = "nfs.foo.test.0.0";\n'
+            '        UserId = "nfs.foo";\n'
             '        nodeid = 0;\n'
             '        pool = ".nfs";\n'
             '        namespace = "foo";\n'
             '}\n'
             '\n'
             'RADOS_URLS {\n'
-            '        UserId = "nfs.foo.test.0.0";\n'
+            '        UserId = "nfs.foo";\n'
             '        watch_url = '
             '"rados://.nfs/foo/conf-nfs.foo";\n'
             '}\n'
@@ -3534,7 +3534,7 @@ class TestIngressService:
             'config': '',
             'extra_args': ['-N', 'NIV_EVENT'],
             'keyring': (
-                '[client.nfs.foo.test.0.0]\n'
+                '[client.nfs.foo]\n'
                 'key = None\n'
             ),
             'namespace': 'foo',
@@ -3547,7 +3547,7 @@ class TestIngressService:
                 ),
                 'user': 'nfs.foo.test.0.0-rgw',
             },
-            'userid': 'nfs.foo.test.0.0',
+            'userid': 'nfs.foo',
         }
 
         nfs_daemons = [
