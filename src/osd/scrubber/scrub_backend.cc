@@ -1293,7 +1293,7 @@ ScrubBackend::auth_and_obj_errs_t ScrubBackend::match_in_shards(
     if (std::any_of(
             digests.begin(), digests.end(),
             [](const std::pair<const shard_id_t, ceph::bufferlist&>& digest) {
-              return !std::string(digest.second.c_str()).empty();
+              return digest.second.length() > 0;
             })) {
       // Unseed all buffers in chunks
       for (auto& [srd, bl] : digests) {
