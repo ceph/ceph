@@ -35,7 +35,10 @@ class VersionTracker:
         return 0, '', ''
     
     def _get_bootstrap_version(self) -> Tuple[int, str, str]:
-        return 0, self.mgr.get_store('bootstrap-version'), ''
+        if self.mgr.get_store_prefix('bootstrap-version'):
+            return 0, self.mgr.get_store('bootstrap-version'), ''
+        
+        return -errno.EPERM, '', 'bootstrap version not stored'
     
     def _set_bootstrap_time(self, time: str) -> Tuple[int, str, str]:
         self.mgr.set_store('bootstrap-time', time)
@@ -43,7 +46,10 @@ class VersionTracker:
         return 0, '', ''
     
     def _get_bootstrap_time(self) -> Tuple[int, str, str]:
-        return 0, self.mgr.get_store('bootstrap-time'), ''
+        if self.mgr.get_store_prefix('bootstrap-time'):
+            return 0, self.mgr.get_store('bootstrap-time'), ''
+        
+        return -errno.EPERM, '', 'bootstrap time not stored'
     
     def add_cluster_version(self, version: str, time: str) -> None:
         SQL_QUERY = '''
@@ -54,6 +60,13 @@ class VersionTracker:
         with self.mgr._db_lock, self.mgr.db:
             self.mgr.db.execute(SQL_QUERY, (version, time))
 
+    def add_bootstrap_cluster_version(self) -> None:
+        if self._cluster_version_history_is_empty():
+            if self.mgr.get_store_prefix('bootstrap-version') and self.mgr.get_store_prefix('bootstrap-time'):
+                self.add_cluster_version(self.mgr.get_store('bootstrap-version'), self.mgr.get_store('bootstrap-time'))
+            else:
+                self.add_cluster_version(self.mgr._version, str(datetime.datetime.now(datetime.timezone.utc)))
+
     def get_cluster_version_history(self) -> Tuple[int, str, str]:
         SQL_QUERY = '''
         SELECT cluster_version, creation_time
@@ -62,10 +75,9 @@ class VersionTracker:
         '''
 
         if not self.mgr.db_ready():
-            return -errno.EAGAIN, "", "mgr db not yet available"
+            return -errno.EAGAIN, '', 'mgr db not yet available'
         
-        if self._cluster_version_history_is_empty():
-            self.add_cluster_version(self.mgr.get_store('bootstrap-version'), self.mgr.get_store('bootstrap-time'))
+        self.add_bootstrap_cluster_version()
 
         res = dict()
 
@@ -92,7 +104,7 @@ class VersionTracker:
         '''
 
         if not self.mgr.db_ready():
-            return -errno.EAGAIN, "", "mgr db not yet available"
+            return -errno.EAGAIN, '', 'mgr db not yet available'
         
         if self._cluster_version_history_is_empty():
             return 0, 'No Cluster Version History', ''

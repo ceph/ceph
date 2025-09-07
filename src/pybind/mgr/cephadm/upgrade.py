@@ -349,6 +349,7 @@ class CephadmUpgrade:
             raise OrchestratorError('Need at least 2 running mgr daemons for upgrade')
 
         self.mgr.log.info('Upgrade: Started with target %s' % target_name)
+        self.mgr.version_tracker.add_bootstrap_cluster_version()
         self.upgrade_state = UpgradeState(
             target_name=target_name,
             progress_id=str(uuid.uuid4()),
