@@ -234,9 +234,6 @@ objs_fix_list_t ScrubBackend::scrub_compare_maps(
   m_cleaned_meta_map.insert(my_map());
   merge_to_authoritative_set();
 
-  // collect some omap statistics into m_omap_stats
-  omap_checks();
-
   update_authoritative();
   auto for_meta_scrub = clean_meta_map(m_cleaned_meta_map, max_reached);
 
@@ -249,52 +246,30 @@ objs_fix_list_t ScrubBackend::scrub_compare_maps(
                          scan_snaps(for_meta_scrub, snaps_getter)};
 }
 
-void ScrubBackend::omap_checks()
+
+void ScrubBackend::collect_omap_stats(
+    const hobject_t& ho,
+    const ScrubMap::object& obj_in_smap)
 {
-  const bool needs_omap_check = std::any_of(
-    this_chunk->received_maps.begin(),
-    this_chunk->received_maps.end(),
-    [](const auto& m) -> bool {
-      return m.second.has_large_omap_object_errors || m.second.has_omap_keys;
-    });
+  m_omap_stats.omap_bytes += obj_in_smap.object_omap_bytes;
+  m_omap_stats.omap_keys += obj_in_smap.object_omap_keys;
 
-  if (!needs_omap_check) {
-    return;  // Nothing to do
-  }
+  if (obj_in_smap.large_omap_object_found) {
+    m_omap_stats.large_omap_objects++;
+    if (!this_chunk->m_large_omap_warning_issued) {
+      this_chunk->m_large_omap_warning_issued = true;
+      std::string erm = fmt::format(
+	  "Large omap object found. Object: {} PG: {} Key count: {} Size "
+	  "(bytes): {}\n",
+	  ho, m_pg_id, obj_in_smap.large_omap_object_key_count,
+	  obj_in_smap.large_omap_object_value_size);
 
-  stringstream wss;
-  const auto& smap = this_chunk->received_maps.at(m_pg_whoami);
-
-  // Iterate through objects and update omap stats
-  for (const auto& ho : this_chunk->authoritative_set) {
-
-    const auto it = smap.objects.find(ho);
-    if (it == smap.objects.end()) {
-      continue;
+      clog.do_log(CLOG_WARN, erm);
+      dout(5) << __func__ << ": " << erm << dendl;
     }
-
-    const ScrubMap::object& smap_obj = it->second;
-    m_omap_stats.omap_bytes += smap_obj.object_omap_bytes;
-    m_omap_stats.omap_keys += smap_obj.object_omap_keys;
-    if (smap_obj.large_omap_object_found) {
-      auto osdmap = m_scrubber.get_osdmap();
-      pg_t pg;
-      osdmap->map_to_pg(ho.pool, ho.oid.name, ho.get_key(), ho.nspace, &pg);
-      pg_t mpg = osdmap->raw_pg_to_pg(pg);
-      m_omap_stats.large_omap_objects++;
-      wss << "Large omap object found. Object: " << ho << " PG: " << pg << " ("
-	  << mpg << ")"
-	  << " Key count: " << smap_obj.large_omap_object_key_count
-	  << " Size (bytes): " << smap_obj.large_omap_object_value_size << '\n';
-      break;
-    }
-  }
-
-  if (!wss.str().empty()) {
-    dout(5) << __func__ << ": " << wss.str() << dendl;
-    clog.warn(wss);
   }
 }
+
 
 /*
  * update_authoritative() updates:
@@ -309,6 +284,16 @@ void ScrubBackend::update_authoritative()
   dout(10) << __func__ << dendl;
 
   if (m_acting_but_me.empty()) {
+    // nothing to fix. Just count OMAP stats
+    // (temporary code - to be removed once scrub_compare_maps()
+    //  is modified to process object-by-object)
+    for (const auto& ho : this_chunk->authoritative_set) {
+      const auto it = my_map().objects.find(ho);
+      // all objects in the authoritative set should be there, in the
+      // map of the sole OSD
+      ceph_assert(it != my_map().objects.end());
+      collect_omap_stats(ho, it->second);
+    }
     return;
   }
 
@@ -932,9 +917,12 @@ std::optional<std::string> ScrubBackend::compare_obj_in_maps(
   auto& auth = auth_res.auth;
 
   // an auth source was selected
+  ScrubMap::object& auth_object = auth->second.objects[ho];
+
+  // collect some OMAP statistics based on the selected version of the object
+  collect_omap_stats(ho, auth_object);
 
   object_error.set_version(auth_res.auth_oi.user_version);
-  ScrubMap::object& auth_object = auth->second.objects[ho];
   ceph_assert(!m_current_obj.fix_digest);
 
   auto [auths, objerrs] =
