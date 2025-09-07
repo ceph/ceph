@@ -646,7 +646,7 @@ TEST(ECUtil, slice_iterator)
   out_set.insert_range(shard_id_t(0), 3);
   shard_extent_map_t sem(&sinfo);
   {
-    auto iter = sem.begin_slice_iterator(out_set);
+    auto iter = sem.begin_slice_iterator(out_set, nullptr);
     ASSERT_TRUE(iter.get_out_bufferptrs().empty());
   }
 
@@ -660,7 +660,7 @@ TEST(ECUtil, slice_iterator)
   sem.insert_in_shard(shard_id_t(0), 0, a);
   sem.insert_in_shard(shard_id_t(1), 0, b);
   {
-    auto iter = sem.begin_slice_iterator(out_set);
+    auto iter = sem.begin_slice_iterator(out_set, nullptr);
 
     {
       auto out = iter.get_out_bufferptrs();
@@ -699,7 +699,7 @@ TEST(ECUtil, slice_iterator)
   sem.insert_in_shard(shard_id_t(1), 4096*4, e);
 
   {
-    auto iter = sem.begin_slice_iterator(out_set);
+    auto iter = sem.begin_slice_iterator(out_set, nullptr);
 
     {
       auto out = iter.get_out_bufferptrs();
@@ -755,7 +755,7 @@ TEST(ECUtil, slice_iterator)
   sem.insert_in_shard(shard_id_t(1), 4096*2, d);
 
   {
-    auto iter = sem.begin_slice_iterator(out_set);
+    auto iter = sem.begin_slice_iterator(out_set, nullptr);
 
     {
       auto out = iter.get_out_bufferptrs();
@@ -794,7 +794,7 @@ TEST(ECUtil, slice_iterator_subset_out)
   out_set.insert(shard_id_t(1));
   shard_extent_map_t sem(&sinfo);
   {
-    auto iter = sem.begin_slice_iterator(out_set);
+    auto iter = sem.begin_slice_iterator(out_set, nullptr);
     ASSERT_TRUE(iter.get_in_bufferptrs().empty());
     ASSERT_TRUE(iter.get_out_bufferptrs().empty());
   }
@@ -809,7 +809,7 @@ TEST(ECUtil, slice_iterator_subset_out)
   sem.insert_in_shard(shard_id_t(0), 0, a);
   sem.insert_in_shard(shard_id_t(1), 0, b);
   {
-    auto iter = sem.begin_slice_iterator(out_set);
+    auto iter = sem.begin_slice_iterator(out_set, nullptr);
 
     {
       auto in = iter.get_in_bufferptrs();
@@ -841,7 +841,7 @@ TEST(ECUtil, slice_iterator_subset_out)
   sem.insert_in_shard(shard_id_t(1), 4096*4, e);
 
   {
-    auto iter = sem.begin_slice_iterator(out_set);
+    auto iter = sem.begin_slice_iterator(out_set, nullptr);
 
     {
       auto in = iter.get_in_bufferptrs();
@@ -896,7 +896,7 @@ TEST(ECUtil, slice_iterator_subset_out)
   sem.insert_in_shard(shard_id_t(1), 4096*2, d);
 
   {
-    auto iter = sem.begin_slice_iterator(out_set);
+    auto iter = sem.begin_slice_iterator(out_set, nullptr);
 
     {
       auto in = iter.get_in_bufferptrs();
