@@ -42,6 +42,7 @@ from ceph.deployment.service_spec import (
     TunedProfileSpec,
     MgmtGatewaySpec,
     NvmeofServiceSpec,
+    CertificateSource
 )
 from ceph.deployment.drive_group import DeviceSelection
 from ceph.utils import str_to_datetime, datetime_to_str, datetime_now
@@ -649,8 +650,6 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
 
         self.tuned_profile_utils = TunedProfileUtils(self)
 
-        self._init_cert_mgr()
-
         # ensure the host lists are in sync
         for h in self.inventory.keys():
             if h not in self.cache.daemons:
@@ -663,9 +662,10 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         self.events = EventStore(self)
         self.offline_hosts: Set[str] = set()
 
-        self.migration = Migrations(self)
-
         service_registry.init_services(self)
+        self._init_cert_mgr()
+
+        self.migration = Migrations(self)
 
         self.mgr_service: MgrService = cast(MgrService, service_registry.get_service('mgr'))
         self.osd_service: OSDService = cast(OSDService, service_registry.get_service('osd'))
@@ -723,23 +723,14 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
 
         self.cert_mgr = CertMgr(self)
 
-        # register global certificates
-        self.cert_mgr.register_cert_key_pair('mgmt-gateway', 'mgmt_gw_cert', 'mgmt_gw_key', TLSObjectScope.GLOBAL)
-        self.cert_mgr.register_cert_key_pair('oauth2-proxy', 'oauth2_proxy_cert', 'oauth2_proxy_key', TLSObjectScope.GLOBAL)
+        for svc in service_registry.get_all_services():
+            if svc.allows_user_certificates:
+                if svc.SCOPE == TLSObjectScope.UNKNOWN:
+                    OrchestratorError(f"Service {svc.TYPE} requieres certificates but it has not defined its svc.SCOPE field.")
+                self.cert_mgr.register_cert_key_pair(svc.TYPE, svc.cert_name, svc.key_name, svc.SCOPE)
 
-        # register per-service certificates
-        self.cert_mgr.register_cert_key_pair('ingress', 'ingress_ssl_cert', 'ingress_ssl_key', TLSObjectScope.SERVICE)
-        self.cert_mgr.register_cert_key_pair('iscsi', 'iscsi_ssl_cert', 'iscsi_ssl_key', TLSObjectScope.SERVICE)
-        self.cert_mgr.register_cert_key_pair('nvmeof', 'nvmeof_server_cert', 'nvmeof_server_key', TLSObjectScope.SERVICE)
         self.cert_mgr.register_cert_key_pair('nvmeof', 'nvmeof_client_cert', 'nvmeof_client_key', TLSObjectScope.SERVICE)
-
-        # register ancilary certificates/keys
         self.cert_mgr.register_cert('nvmeof', 'nvmeof_root_ca_cert', TLSObjectScope.SERVICE)
-        self.cert_mgr.register_cert('rgw', 'rgw_frontend_ssl_cert', TLSObjectScope.SERVICE)
-        self.cert_mgr.register_key('nvmeof', 'nvmeof_encryption_key', TLSObjectScope.SERVICE)
-
-        # register per-host certificates
-        self.cert_mgr.register_cert_key_pair('grafana', 'grafana_cert', 'grafana_key', TLSObjectScope.HOST)
 
         self.cert_mgr.init_tlsobject_store()
 
@@ -3329,12 +3320,15 @@ Then run the following:
                 'certificate': self.cert_mgr.get_root_ca()}
 
     @handle_orch_error
-    def cert_store_cert_ls(self, show_details: bool = False) -> Dict[str, Any]:
-        return self.cert_mgr.cert_ls(show_details)
+    def cert_store_cert_ls(self,
+                           filter_by: str = '',
+                           show_details: bool = False,
+                           include_cephadm_signed: bool = False) -> Dict[str, Any]:
+        return self.cert_mgr.cert_ls(filter_by, show_details, include_cephadm_signed)
 
     @handle_orch_error
-    def cert_store_entity_ls(self) -> Dict[str, Dict[str, List[str]]]:
-        return self.cert_mgr.get_entities()
+    def cert_store_bindings_ls(self) -> Dict[str, Dict[str, List[str]]]:
+        return self.cert_mgr.get_consumers()
 
     @handle_orch_error
     def cert_store_reload(self) -> str:
@@ -3354,8 +3348,8 @@ Then run the following:
         return report
 
     @handle_orch_error
-    def cert_store_key_ls(self) -> Dict[str, Any]:
-        return self.cert_mgr.key_ls()
+    def cert_store_key_ls(self, include_cephadm_generated_keys: bool = False) -> Dict[str, Any]:
+        return self.cert_mgr.key_ls(include_cephadm_generated_keys)
 
     @handle_orch_error
     def cert_store_get_cert(
@@ -3369,7 +3363,7 @@ Then run the following:
         if not cert:
             if no_exception_when_missing:
                 return ''
-            raise OrchSecretNotFound(entity=cert_name, service_name=service_name, hostname=hostname)
+            raise OrchSecretNotFound(consumer=cert_name, service_name=service_name, hostname=hostname)
         return cert
 
     @handle_orch_error
@@ -3384,36 +3378,50 @@ Then run the following:
         if not key:
             if no_exception_when_missing:
                 return ''
-            raise OrchSecretNotFound(entity=key_name, service_name=service_name, hostname=hostname)
+            raise OrchSecretNotFound(consumer=key_name, service_name=service_name, hostname=hostname)
         return key
+
+    def _raise_non_editable_cert_error(self, cert_name: str, consumer: str, service_name: str, hostname: str) -> None:
+        if service_name:
+            context = f"service '{service_name}'"
+        elif hostname:
+            context = f"host '{hostname}'"
+        elif consumer:
+            context = f"'{consumer}'"
+
+        raise OrchestratorError(
+            f"Certificate '{cert_name}' for {context} is not editable (defined as inline in the spec or generated by cephadm)."
+        )
 
     @handle_orch_error
     def cert_store_set_pair(
         self,
         cert: str,
         key: str,
-        entity: str,
+        consumer: str,
         cert_name: str = "",
         service_name: str = "",
         hostname: str = "",
         force: bool = False
     ) -> str:
 
-        if entity not in self.cert_mgr.list_entities():
-            raise OrchestratorError(f"Invalid entity: {entity}. Please use 'ceph orch certmgr entity ls' to list valid entities.")
+        if consumer not in self.cert_mgr.list_consumers():
+            raise OrchestratorError(f"Invalid service: {consumer}. Please use 'ceph orch certmgr bindings ls' to list valid bindings.")
 
         # Check the certificate validity status
         target = service_name or hostname
-        cert_info = self.cert_mgr.check_certificate_state(entity, target, cert, key)
-        if not force and not cert_info.is_operationally_valid():
+        cert_info = self.cert_mgr.check_certificate_state(consumer, target, cert, key)
+        debug_mode = self.certificate_check_debug_mode and force
+        if not debug_mode and not cert_info.is_operationally_valid():
             raise OrchestratorError(cert_info.get_status_description())
 
-        # Obtain the certificate name (from entity)
-        cert_names = self.cert_mgr.list_entity_known_certificates(entity)
-        if len(cert_names) == 1:
-            cert_name = cert_names[0]
-        elif len(cert_names) > 1 and not cert_name:
-            raise OrchestratorError(f"Entity '{entity}' has many certificates, please use --cert-name argument to specify which one from the list: {cert_names}")
+        if not cert_name:
+            # If not provided, then obtain the certificate name by using consumer
+            cert_names = self.cert_mgr.list_consumer_known_certificates(consumer)
+            if len(cert_names) == 1:
+                cert_name = cert_names[0]
+            elif len(cert_names) > 1 and not cert_name:
+                raise OrchestratorError(f"Service '{consumer}' has many certificates, please use the --cert-name argument to specify which one from the list: {cert_names}")
 
         # Check the certificate scope
         scope_errors = {
@@ -3425,9 +3433,12 @@ Then run the following:
         if (scope == TLSObjectScope.HOST and not hostname) or (scope == TLSObjectScope.SERVICE and not service_name):
             raise OrchestratorError(scope_errors[scope])
 
+        if not debug_mode and not self.cert_mgr.is_cert_editable(cert_name, service_name or '', hostname or ''):
+            self._raise_non_editable_cert_error(cert_name, consumer, service_name, hostname)
+
         key_name = cert_name.replace('_cert', '_key')
-        self.cert_mgr.save_cert(cert_name, cert, service_name, hostname, True)
-        self.cert_mgr.save_key(key_name, key, service_name, hostname, True)
+        self.cert_mgr.save_cert(cert_name, cert, service_name, hostname, user_made=True, editable=True)
+        self.cert_mgr.save_key(key_name, key, service_name, hostname, user_made=True, editable=True)
         return "Certificate/key pair set correctly"
 
     @handle_orch_error
@@ -3437,14 +3448,19 @@ Then run the following:
         cert: str,
         service_name: str = "",
         hostname: str = "",
+        force: bool = False
     ) -> str:
 
-        target = service_name or hostname
-        cert_info = self.cert_mgr.check_certificate_state(cert_name, target, cert)
-        if not cert_info.is_operationally_valid():
-            raise OrchestratorError(cert_info.get_status_description())
+        debug_mode = self.certificate_check_debug_mode and force
+        if not debug_mode:
+            if not self.cert_mgr.is_cert_editable(cert_name, service_name or '', hostname or ''):
+                self._raise_non_editable_cert_error(cert_name, '', service_name, hostname)
+            target = service_name or hostname
+            cert_info = self.cert_mgr.check_certificate_state(cert_name, target, cert)
+            if not cert_info.is_operationally_valid():
+                raise OrchestratorError(cert_info.get_status_description())
 
-        self.cert_mgr.save_cert(cert_name, cert, service_name, hostname, True)
+        self.cert_mgr.save_cert(cert_name, cert, service_name, hostname, user_made=True, editable=True)
         return f'Certificate for {cert_name} set correctly'
 
     @handle_orch_error
@@ -3466,12 +3482,14 @@ Then run the following:
         hostname: Optional[str] = None,
     ) -> str:
 
+        cert_err = OrchestratorError("Cannot delete the certificate. Please use 'ceph orch certmgr cert ls' to list available certificates. \n"
+                                     "Note: for certificates with host/service scope use --service-name or --hostname to specify the target.")
         try:
-            self.cert_mgr.rm_cert(cert_name, service_name, hostname)
+            if not self.cert_mgr.rm_cert(cert_name, service_name, hostname):
+                raise cert_err
             return f'Certificate for {cert_name} removed correctly'
         except TLSObjectException:
-            raise OrchestratorError("Cannot delete the certificate. Please use 'ceph orch certmgr cert ls' to list available certificates. \n"
-                                    "Note: for certificates with host/service scope use --service-name or --hostname to specify the target.")
+            raise cert_err
 
     @handle_orch_error
     def cert_store_rm_key(
@@ -3694,6 +3712,29 @@ Then run the following:
             results.append(self._plan(cast(ServiceSpec, spec)))
         return results
 
+    def _check_cert_source(self, spec: ServiceSpec) -> str:
+        cert_warning = ''
+        if spec.is_using_certificates_source(CertificateSource.REFERENCE):
+            svc = service_registry.get_service(spec.service_type)
+            if svc.SCOPE == TLSObjectScope.SERVICE:
+                if not self.cert_mgr.cert_exists(svc.cert_name, service_name=spec.service_name(), host=None):
+                    raise OrchestratorError(
+                        f"\n\nSSL is configured with '{CertificateSource.REFERENCE.value}', but cannot find an entry for the service '{spec.service_name()}'"
+                        f"\nunder the certificate '{svc.cert_name}' within the certmgr store. To set the certificate, use:\n"
+                        f"\n  > ceph orch certmgr cert set --cert-name {svc.cert_name} --service-name {spec.service_name()} -i <cert-key-pem-file> \n"
+                    )
+            else:
+                cert_warning = (
+                    f"\n\n\nWarning: SSL is configured with '{CertificateSource.REFERENCE.value}', and this service uses per-host certificates.\n\n"
+                    f"To configure keys/certificates, run the following commands for each host daemons are deployed on:\n"
+                    f"  > ceph orch certmgr cert set --cert-name {svc.cert_name} --service-name {spec.service_name()} --hostname <host>  -i <cert-file>\n"
+                    f"  > ceph orch certmgr key set --key-name {svc.cert_name} --service-name {spec.service_name()} --hostname <host> -i <key-file>\n\n"
+                    f"Once all certificates are provisioned, run:\n"
+                    f"  > ceph orch reconfig {spec.service_name()}\n"
+                    f"to reconfigure the service with the certificates."
+                )
+        return cert_warning
+
     def _apply_service_spec(self, spec: ServiceSpec) -> str:
         if spec.placement.is_empty():
             # fill in default placement
@@ -3735,6 +3776,8 @@ Then run the following:
 
         host_count = len(self.inventory.keys())
         max_count = self.max_count_per_host
+
+        cert_warning = self._check_cert_source(spec)
 
         if spec.service_type == 'nvmeof':
             nvmeof_spec = cast(NvmeofServiceSpec, spec)
@@ -3784,7 +3827,7 @@ Then run the following:
             spec.service_name(), spec.placement.pretty_str()))
         self.spec_store.save(spec)
         self._kick_serve_loop()
-        return "Scheduled %s update..." % spec.service_name()
+        return f"Scheduled {spec.service_name()} update...{cert_warning}"
 
     @handle_orch_error
     def apply(

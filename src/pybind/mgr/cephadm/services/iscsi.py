@@ -52,6 +52,8 @@ class IscsiService(CephService):
     def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
         assert self.TYPE == daemon_spec.daemon_type
 
+        self.register_for_certificates(daemon_spec)
+
         spec = cast(IscsiServiceSpec, self.mgr.spec_store[daemon_spec.service_name].spec)
         igw_id = daemon_spec.daemon_id
 
@@ -62,26 +64,18 @@ class IscsiService(CephService):
                                               'mgr', 'allow command "service status"',
                                               'osd', 'allow rwx'])
 
-        if spec.ssl_cert:
-            if isinstance(spec.ssl_cert, list):
-                cert_data = '\n'.join(spec.ssl_cert)
-            else:
-                cert_data = spec.ssl_cert
+        tls_pair = self.get_certificates(daemon_spec)
+        if tls_pair.cert:
             ret, out, err = self.mgr.check_mon_command({
                 'prefix': 'config-key set',
                 'key': f'iscsi/{utils.name_to_config_section("iscsi")}.{igw_id}/iscsi-gateway.crt',
-                'val': cert_data,
+                'val': tls_pair.cert,
             })
-
-        if spec.ssl_key:
-            if isinstance(spec.ssl_key, list):
-                key_data = '\n'.join(spec.ssl_key)
-            else:
-                key_data = spec.ssl_key
+        if tls_pair.key:
             ret, out, err = self.mgr.check_mon_command({
                 'prefix': 'config-key set',
                 'key': f'iscsi/{utils.name_to_config_section("iscsi")}.{igw_id}/iscsi-gateway.key',
-                'val': key_data,
+                'val': tls_pair.key,
             })
 
         trusted_ip_list = get_trusted_ips(self.mgr, spec)

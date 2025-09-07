@@ -71,6 +71,10 @@ class CephadmServiceRegistry:
         services_to_monitor = [svc for svc in self._services if self._services[svc].needs_monitoring]
         return sorted(services_to_monitor)
 
+    def get_all_services(self) -> List["CephadmService"]:
+        """Retrieves an initialized service instance by type."""
+        return list(self._services.values())
+
 
 def register_cephadm_service(cls: Type["CephadmService"]) -> Type["CephadmService"]:
     """
