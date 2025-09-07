@@ -516,9 +516,15 @@ void Mgr::handle_osd_map()
         
       DaemonStatePtr daemon = daemon_state.get(k);
         
-      if (daemon && osd_map.is_out(osd_id) && osd_map.is_down(osd_id)) {
-        std::lock_guard l(daemon->lock);
-        daemon->daemon_health_metrics.clear();
+      if (daemon) {
+        bool clear_metrics = false;
+        clear_metrics |= (osd_map.is_out(osd_id) && osd_map.is_down(osd_id));
+        clear_metrics |= osd_map.is_destroyed(osd_id);
+        if (clear_metrics) {
+          // clear any health metrics for an OSD that is (out and down) or destroyed
+          std::lock_guard l(daemon->lock);
+          daemon->daemon_health_metrics.clear();
+        }
       }
 
       bool update_meta = false;
