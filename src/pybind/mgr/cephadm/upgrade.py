@@ -1213,7 +1213,8 @@ class CephadmUpgrade:
             need_upgrade_self, need_upgrade, need_upgrade_deployer, done = self._detect_need_upgrade(
                 daemons_of_type, target_digests, target_image)
             upgraded_daemon_count += done
-            self._update_upgrade_progress(upgraded_daemon_count / len(daemons))
+            progress = upgraded_daemon_count / len(daemons) if len(daemons) > 0 else 0.0
+            self._update_upgrade_progress(progress)
 
             # make sure mgr and monitoring stack daemons are properly redeployed in staggered upgrade scenarios
             # The idea here is to upgrade the mointoring daemons after the mgr is done upgrading as
