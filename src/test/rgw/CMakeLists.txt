@@ -12,28 +12,6 @@ if(WITH_RADOSGW_KAFKA_ENDPOINT)
   add_library(kafka_stub STATIC ${kafka_stub_src})
 endif()
 
-# Find LMDB if not already found
-if(NOT LMDB_FOUND)
-  find_package(PkgConfig QUIET)
-  if(PkgConfig_FOUND)
-    pkg_check_modules(LMDB QUIET lmdb)
-  endif()
-  
-  if(NOT LMDB_FOUND)
-    find_path(LMDB_INCLUDE_DIR NAMES lmdb.h
-      PATHS /usr/include /usr/local/include)
-    find_library(LMDB_LIBRARIES NAMES lmdb
-      PATHS /usr/lib /usr/local/lib /usr/lib64 /usr/local/lib64)
-    
-    if(LMDB_INCLUDE_DIR AND LMDB_LIBRARIES)
-      set(LMDB_FOUND TRUE)
-      message(STATUS "Found LMDB: ${LMDB_LIBRARIES}")
-    else()
-      message(FATAL_ERROR "LMDB not found. Please install liblmdb-dev or lmdb-devel")
-    endif()
-  endif()
-endif()
-
 if(WITH_RADOSGW_LUA_PACKAGES)
   list(APPEND rgw_libs Boost::filesystem)
 endif()
@@ -375,10 +353,7 @@ endif()
 # Adding the usage cache unit test
 if(WITH_TESTS)
 
-  add_executable(unittest_rgw_usage_cache
-  test_rgw_usage_cache.cc
-  ${CMAKE_SOURCE_DIR}/src/rgw/rgw_usage_cache.cc
-  ${CMAKE_SOURCE_DIR}/src/rgw/rgw_usage_perf.cc)
+  add_executable(unittest_rgw_usage_cache test_rgw_usage_cache.cc)
 
   target_include_directories(unittest_rgw_usage_cache PRIVATE
     ${CMAKE_SOURCE_DIR}/src
@@ -387,6 +362,7 @@ if(WITH_TESTS)
   )
 
   target_link_libraries(unittest_rgw_usage_cache
+    rgw_common
     global
     gtest
     gtest_main
