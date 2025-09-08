@@ -33,20 +33,8 @@ endfunction()
 
 find_package(ICU 52.0 COMPONENTS uc REQUIRED)
 
-find_package(PkgConfig QUIET)
-if(PkgConfig_FOUND)
-  pkg_check_modules(LMDB QUIET lmdb)
-endif()
-
-if(NOT LMDB_FOUND)
-  find_path(LMDB_INCLUDE_DIR NAMES lmdb.h)
-  find_library(LMDB_LIBRARIES NAMES lmdb)
-  if(LMDB_INCLUDE_DIR AND LMDB_LIBRARIES)
-    set(LMDB_FOUND TRUE)
-  else()
-    message(FATAL_ERROR "LMDB not found. Please install liblmdb-dev or lmdb-devel")
-  endif()
-endif()
+find_package(LMDB REQUIRED)
+add_compile_definitions(LMDB_SAFE_NO_CPP_UTILITIES)
 
 set(librgw_common_srcs
   spdk/crc64.c
@@ -273,8 +261,6 @@ if(WITH_RADOSGW_DAOS)
 endif()
 if(WITH_RADOSGW_POSIX)
   #add_subdirectory(driver/posix)
-  find_package(LMDB REQUIRED)
-  add_compile_definitions(LMDB_SAFE_NO_CPP_UTILITIES)
   list(APPEND librgw_common_srcs
 	      driver/posix/rgw_sal_posix.cc
 	      driver/posix/lmdb-safe.cc
