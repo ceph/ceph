@@ -37,6 +37,7 @@
 #include "osd/OSDMap.h"
 
 #include "MonitorDBStore.h"
+#include "MonMap.h"
 #include "Paxos.h"
 
 #include "messages/PaxosServiceMessage.h"
@@ -2287,6 +2288,21 @@ const utime_t& Monitor::get_leader_since() const
 epoch_t Monitor::get_epoch()
 {
   return elector.get_epoch();
+}
+
+std::string Monitor::get_leader_name() {
+  return quorum.empty() ? std::string() : monmap->get_name(leader);
+}
+
+std::list<std::string> Monitor::get_quorum_names() {
+  std::list<std::string> q;
+  for (auto p = quorum.begin(); p != quorum.end(); ++p)
+    q.push_back(monmap->get_name(*p));
+  return q;
+}
+
+mon_feature_t Monitor::get_required_mon_features() const {
+  return monmap->get_required_features();
 }
 
 void Monitor::_finish_svc_election()
@@ -6111,6 +6127,13 @@ vector<DaemonHealthMetric> Monitor::get_health_metrics()
     metrics.emplace_back(daemon_metric::SLOW_OPS, 0, 0);
   }
   return metrics;
+}
+
+bool Monitor::is_mon_down() const {
+  int max = monmap->size();
+  int actual = get_quorum().size();
+  auto now = ceph::real_clock::now();
+  return actual < max && now > monmap->created.to_real_time();
 }
 
 void Monitor::prepare_new_fingerprint(MonitorDBStore::TransactionRef t)
