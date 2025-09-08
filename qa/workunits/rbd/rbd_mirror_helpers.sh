@@ -2394,7 +2394,7 @@ mirror_group_snapshot()
     if [ "$#" -gt 2 ]
     then
       local -n _group_snap_id=$3
-      _group_snap_id=$(awk -F': ' '{print $NF}' "$CMD_STDOUT" )
+      _group_snap_id=$( awk -F": " '/Snapshot ID:/ {print $2}' "$CMD_STDOUT" )
     fi
 }
 
