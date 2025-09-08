@@ -2410,11 +2410,11 @@ Objecter::ECRead::~ECRead() {
 
   // do callbacks
   if (rc >= 0) {
-    ldout(cct, 0) << __func__ << " success this=" << this << " rc=" << rc << dendl;
+    ldout(cct, 20) << __func__ << " success this=" << this << " rc=" << rc << dendl;
     Op::complete(std::move(orig_op->onfinish), osdcode(rc), rc, objecter.service.get_executor());
     objecter._finish_op(orig_op, rc);
   } else {
-    ldout(cct, 0) << __func__ << " retry this=" << this << " rc=" << rc << dendl;
+    ldout(cct, 20) << __func__ << " retry this=" << this << " rc=" << rc << dendl;
     // The
     objecter.op_post_submit(orig_op);
   }
@@ -2490,7 +2490,7 @@ std::shared_ptr<Objecter::ECRead> Objecter::ECRead::create_replica(Op *op, Objec
     objecter._op_submit_with_budget(op_to_send, sul, ptid, ctx_budget);
   }
 
-  ldout(cct, 0) << __func__ << " " << ec_read << dendl;
+  ldout(cct, 20) << __func__ << " " << ec_read << dendl;
   return ec_read;
 
 }
