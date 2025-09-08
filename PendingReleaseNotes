@@ -5,6 +5,10 @@
     If the default provider is required when also using custom providers,
     it must be explicitly loaded in the configuration file or code (see https://github.com/openssl/openssl/blob/master/README-PROVIDERS.md).
 
+* DASHBOARD: Removed the older landing page which was deprecated in Quincy.
+  Admins can no longer enable the older, deprecated landing page layout by
+  adjusting FEATURE_TOGGLE_DASHBOARD.
+
 >=20.0.0
 
 * RADOS: The lead Monitor and stretch mode status are now displayed by `ceph status`.
@@ -194,9 +198,17 @@
   C `rbd_mirror_image_resync()`, and Python `Image.mirror_image_resync()` --
   will return EINVAL instead of ENOENT when mirroring is not enabled.
 
-* DASHBOARD: Removed the older landing page which was deprecated in quincy.
-  The admin can no longer enable the older, deprecated landing page layout by 
-  adjusting FEATURE_TOGGLE_DASHBOARD.
+* Dashboard: NVMe/TCP Gateway group support
+* Dashboard: NVMe/TCP multiple namespaces support
+* Dashboard: Multi-cluster support
+* Dashboard: Management Gateway and oAuth2 integration with dashboard
+* Dashboard: RGW multi-site automation & sync Policies
+* Dashboard: RGW Tiering, Rate Limting and Account management
+* Dashboard: RGW bucket Lifecycles and ACLs
+* Dashboard: RGW Topics and Bucket Notification Management
+* Dashboard: RGW granular bucket replication
+* Dashboard: SMB monitoring and management
+* Monitoring: New monitoring Dashboards for Application, NVMe, CephFS, and SMB Overview
 
 >=19.2.1
 
