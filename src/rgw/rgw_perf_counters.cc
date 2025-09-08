@@ -19,7 +19,7 @@ void add_rgw_frontend_counters(PerfCountersBuilder *pcb) {
   pcb->set_prio_default(PerfCountersBuilder::PRIO_USEFUL);
 
   pcb->add_u64_counter(l_rgw_req, "req", "Requests");
-  pcb->add_u64_counter(l_rgw_failed_req, "failed_req", "Aborted requests");
+  pcb->add_u64_counter(l_rgw_failed_req, "failed_req", "Aborted requests", "", PerfCountersBuilder::PRIO_CRITICAL);
 
   pcb->add_u64(l_rgw_qlen, "qlen", "Queue length");
   pcb->add_u64(l_rgw_qactive, "qactive", "Active requests queue");
@@ -69,37 +69,37 @@ void add_rgw_op_counters(PerfCountersBuilder *lpcb) {
   // description must match general rgw counters description above
   lpcb->set_prio_default(PerfCountersBuilder::PRIO_USEFUL);
 
-  lpcb->add_u64_counter(l_rgw_op_put_obj, "put_obj_ops", "Puts");
-  lpcb->add_u64_counter(l_rgw_op_put_obj_b, "put_obj_bytes", "Size of puts");
-  lpcb->add_time_avg(l_rgw_op_put_obj_lat, "put_obj_lat", "Put latency");
+  lpcb->add_u64_counter(l_rgw_op_put_obj, "put_obj_ops", "Puts", "", PerfCountersBuilder::PRIO_CRITICAL);
+  lpcb->add_u64_counter(l_rgw_op_put_obj_b, "put_obj_bytes", "Size of puts", "", PerfCountersBuilder::PRIO_CRITICAL, PerfCounters::UNIT_BYTES);
+  lpcb->add_time_avg(l_rgw_op_put_obj_lat, "put_obj_lat", "Put latency", "", PerfCountersBuilder::PRIO_CRITICAL);
 
-  lpcb->add_u64_counter(l_rgw_op_get_obj, "get_obj_ops", "Gets");
-  lpcb->add_u64_counter(l_rgw_op_get_obj_b, "get_obj_bytes", "Size of gets");
-  lpcb->add_time_avg(l_rgw_op_get_obj_lat, "get_obj_lat", "Get latency");
+  lpcb->add_u64_counter(l_rgw_op_get_obj, "get_obj_ops", "Gets", "", PerfCountersBuilder::PRIO_CRITICAL);
+  lpcb->add_u64_counter(l_rgw_op_get_obj_b, "get_obj_bytes", "Size of gets", "", PerfCountersBuilder::PRIO_CRITICAL, PerfCounters::UNIT_BYTES);
+  lpcb->add_time_avg(l_rgw_op_get_obj_lat, "get_obj_lat", "Get latency", "", PerfCountersBuilder::PRIO_CRITICAL);
 
-  lpcb->add_u64_counter(l_rgw_op_del_obj, "del_obj_ops", "Delete objects");
-  lpcb->add_u64_counter(l_rgw_op_del_obj_b, "del_obj_bytes", "Size of delete objects");
-  lpcb->add_time_avg(l_rgw_op_del_obj_lat, "del_obj_lat", "Delete object latency");
+  lpcb->add_u64_counter(l_rgw_op_del_obj, "del_obj_ops", "Delete objects", "", PerfCountersBuilder::PRIO_CRITICAL);
+  lpcb->add_u64_counter(l_rgw_op_del_obj_b, "del_obj_bytes", "Size of delete objects", "", PerfCountersBuilder::PRIO_CRITICAL, PerfCounters::UNIT_BYTES);
+  lpcb->add_time_avg(l_rgw_op_del_obj_lat, "del_obj_lat", "Delete object latency", "", PerfCountersBuilder::PRIO_CRITICAL);
 
   lpcb->add_u64_counter(l_rgw_op_del_bucket, "del_bucket_ops", "Delete Buckets");
   lpcb->add_time_avg(l_rgw_op_del_bucket_lat, "del_bucket_lat", "Delete bucket latency");
 
-  lpcb->add_u64_counter(l_rgw_op_copy_obj, "copy_obj_ops", "Copy objects");
-  lpcb->add_u64_counter(l_rgw_op_copy_obj_b, "copy_obj_bytes", "Size of copy objects");
-  lpcb->add_time_avg(l_rgw_op_copy_obj_lat, "copy_obj_lat", "Copy object latency");
+  lpcb->add_u64_counter(l_rgw_op_copy_obj, "copy_obj_ops", "Copy objects", "", PerfCountersBuilder::PRIO_CRITICAL);
+  lpcb->add_u64_counter(l_rgw_op_copy_obj_b, "copy_obj_bytes", "Size of copy objects", "", PerfCountersBuilder::PRIO_CRITICAL, PerfCounters::UNIT_BYTES);
+  lpcb->add_time_avg(l_rgw_op_copy_obj_lat, "copy_obj_lat", "Copy object latency", "", PerfCountersBuilder::PRIO_CRITICAL);
 
-  lpcb->add_u64_counter(l_rgw_op_list_obj, "list_obj_ops", "List objects");
-  lpcb->add_time_avg(l_rgw_op_list_obj_lat, "list_obj_lat", "List objects latency");
+  lpcb->add_u64_counter(l_rgw_op_list_obj, "list_obj_ops", "List objects", "", PerfCountersBuilder::PRIO_CRITICAL);
+  lpcb->add_time_avg(l_rgw_op_list_obj_lat, "list_obj_lat", "List objects latency", "", PerfCountersBuilder::PRIO_CRITICAL);
 
-  lpcb->add_u64_counter(l_rgw_op_list_buckets, "list_buckets_ops", "List buckets");
-  lpcb->add_time_avg(l_rgw_op_list_buckets_lat, "list_buckets_lat", "List buckets latency");
+  lpcb->add_u64_counter(l_rgw_op_list_buckets, "list_buckets_ops", "List buckets", "", PerfCountersBuilder::PRIO_CRITICAL);
+  lpcb->add_time_avg(l_rgw_op_list_buckets_lat, "list_buckets_lat", "List buckets latency", "", PerfCountersBuilder::PRIO_CRITICAL);
 }
 
 void add_rgw_topic_counters(PerfCountersBuilder *lpcb) {
   lpcb->set_prio_default(PerfCountersBuilder::PRIO_USEFUL);
 
-  lpcb->add_u64(l_rgw_persistent_topic_len, "persistent_topic_len", "Persistent topic queue length");
-  lpcb->add_u64(l_rgw_persistent_topic_size, "persistent_topic_size", "Persistent topic queue size");
+  lpcb->add_u64(l_rgw_persistent_topic_len, "persistent_topic_len", "Persistent topic queue length", "", PerfCountersBuilder::PRIO_CRITICAL);
+  lpcb->add_u64(l_rgw_persistent_topic_size, "persistent_topic_size", "Persistent topic queue size", "", PerfCountersBuilder::PRIO_CRITICAL);
 
 }
 
