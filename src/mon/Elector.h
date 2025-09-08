@@ -23,12 +23,12 @@
 
 #include "common/Formatter.h"
 #include "include/types.h"
-#include "include/Context.h"
 #include "mon/MonOpRequest.h"
 #include "mon/mon_types.h"
 #include "mon/ElectionLogic.h"
 #include "mon/ConnectionTracker.h"
 
+class Context;
 class Monitor;
 
 
