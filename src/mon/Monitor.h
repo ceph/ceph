@@ -34,7 +34,6 @@
 
 #include "common/Timer.h"
 
-#include "health_check.h"
 #include "Elector.h"
 #include "Session.h"
 #include "MonCommand.h"
@@ -56,6 +55,7 @@
 #include "mon/MonOpRequest.h"
 #include "common/WorkQueue.h"
 
+struct health_check_map_t;
 class Messenger;
 class MonMap;
 
