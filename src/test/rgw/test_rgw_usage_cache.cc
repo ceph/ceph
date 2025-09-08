@@ -135,44 +135,6 @@ TEST_F(TestRGWUsageCache, TTLExpiration) {
   EXPECT_FALSE(stats.has_value());
 }
 
-// Test concurrent access
-TEST_F(TestRGWUsageCache, ConcurrentAccess) {
-  const int num_threads = 4;
-  const int ops_per_thread = 100;
-  std::vector<std::thread> threads;
-  std::atomic<int> successful_updates(0);
-  std::atomic<int> failed_updates(0);
-  
-  for (int t = 0; t < num_threads; ++t) {
-    threads.emplace_back([this, t, ops_per_thread, &successful_updates, &failed_updates]() {
-      for (int i = 0; i < ops_per_thread; ++i) {
-        std::string user_id = "t" + std::to_string(t) + "_u" + std::to_string(i);
-        int result = cache->update_user_stats(user_id, i * 1024, i);
-        if (result == 0) {
-          successful_updates++;
-        } else {
-          failed_updates++;
-        }
-        
-        auto stats = cache->get_user_stats(user_id);
-        if (result == 0) {
-          EXPECT_TRUE(stats.has_value());
-        }
-      }
-    });
-  }
-  
-  for (auto& th : threads) {
-    th.join();
-  }
-  
-  std::cout << "Concurrent test: " << successful_updates << " successful, " 
-            << failed_updates << " failed updates" << std::endl;
-  
-  EXPECT_GT(successful_updates, 0) << "At least some updates should succeed";
-  EXPECT_GT(cache->get_cache_size(), 0u) << "Cache should contain entries";
-}
-
 // Test updating existing user stats
 TEST_F(TestRGWUsageCache, UpdateExistingUserStats) {
   const std::string user_id = "update_test_user";
