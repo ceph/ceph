@@ -23,7 +23,8 @@
 #include "common/ceph_context.h"
 #include "include/buffer_fwd.h"
 #include "include/types.h"
-#include "ConnectionTracker.h"
+
+class ConnectionTracker;
 
 class ElectionOwner {
 public:
@@ -226,15 +227,10 @@ public:
 
   ElectionLogic(ElectionOwner *e, election_strategy es, ConnectionTracker *t,
 		double ipm,
-		CephContext *c) : elector(e), peer_tracker(t), cct(c),
-				  last_election_winner(-1), last_voted_for(-1),
-				  ignore_propose_margin(ipm),
-				  stable_peer_tracker(),
-				  leader_peer_tracker(),
-				  leader_acked(-1),
-				  strategy(es),
-				  participating(true),
-				  electing_me(false) {}
+		CephContext *c);
+
+  ~ElectionLogic() noexcept;
+
   /**
    * Set the election strategy to use. If this is not consistent across the
    * electing cluster, you're going to have a bad time.
