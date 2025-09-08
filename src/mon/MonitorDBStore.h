@@ -27,6 +27,7 @@
 #include "common/Formatter.h"
 #include "common/Finisher.h"
 #include "common/errno.h"
+#include "common/Clock.h"
 #include "common/debug.h"
 #include "common/safe_io.h"
 #include "common/blkdev.h"

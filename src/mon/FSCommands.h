@@ -17,6 +17,7 @@
 #define FS_COMMANDS_H_
 
 #include "Monitor.h"
+#include "MonOpRequest.h"
 #include "CommandHandler.h"
 
 #include "osd/OSDMap.h"

@@ -17,9 +17,11 @@
 #include "mon/AuthMonitor.h"
 #include "mon/Monitor.h"
 #include "mon/MonitorDBStore.h"
+#include "mon/MonMap.h"
 #include "mon/OSDMonitor.h"
 #include "mon/MDSMonitor.h"
 #include "mon/ConfigMonitor.h"
+#include "mon/Paxos.h"
 
 #include "messages/MMonCommand.h"
 #include "messages/MAuth.h"

@@ -15,6 +15,7 @@
 #include "MonmapMonitor.h"
 #include "Monitor.h"
 #include "OSDMonitor.h"
+#include "Paxos.h"
 #include "messages/MMonCommand.h"
 #include "messages/MMonJoin.h"
 
