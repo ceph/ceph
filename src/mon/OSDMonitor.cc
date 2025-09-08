@@ -24,10 +24,12 @@
 
 #include "mon/OSDMonitor.h"
 #include "mon/Monitor.h"
+#include "mon/MonMap.h"
 #include "mon/MDSMonitor.h"
 #include "mon/MgrStatMonitor.h"
 #include "mon/AuthMonitor.h"
 #include "mon/KVMonitor.h"
+#include "mon/Paxos.h"
 
 #include "mon/MonitorDBStore.h"
 #include "mon/Session.h"
