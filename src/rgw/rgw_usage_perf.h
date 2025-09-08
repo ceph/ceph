@@ -14,7 +14,6 @@
 #include "common/perf_counters.h"
 #include "rgw_usage_cache.h"
 
-class CephContext;
 
 namespace rgw {
 

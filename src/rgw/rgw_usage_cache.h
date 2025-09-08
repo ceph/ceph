@@ -14,6 +14,8 @@
 #include "include/encoding.h"
 #include "include/common_fwd.h"
 #include "common/ceph_time.h"
+#include "common/ceph_context.h" 
+#include "common/perf_counters.h"
 
 namespace rgw {
 

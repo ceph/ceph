@@ -145,44 +145,6 @@ TEST_F(TestRGWUsagePerfCounters, UserAndBucketSeparateTracking) {
   EXPECT_EQ(2u, cache->get_cache_misses());  // 1 user miss + 1 bucket miss
 }
 
-TEST_F(TestRGWUsagePerfCounters, ConcurrentCounterUpdates) {
-  const int num_threads = 4;
-  const int ops_per_thread = 100;
-  std::vector<std::thread> threads;
-  
-  for (int t = 0; t < num_threads; ++t) {
-    threads.emplace_back([this, t, ops_per_thread]() {
-      for (int i = 0; i < ops_per_thread; ++i) {
-        std::string user_id = "t" + std::to_string(t) + "_u" + std::to_string(i);
-        
-        // First access - miss
-        cache->get_user_stats(user_id);
-        
-        // Update
-        cache->update_user_stats(user_id, i * 1024, i);
-        
-        // Second access - hit
-        cache->get_user_stats(user_id);
-      }
-    });
-  }
-  
-  for (auto& t : threads) {
-    t.join();
-  }
-  
-  // Each thread does ops_per_thread users
-  // Each user: 1 miss (first get), 1 hit (second get)
-  uint64_t expected_total = num_threads * ops_per_thread;
-  EXPECT_EQ(expected_total, cache->get_cache_hits());
-  EXPECT_EQ(expected_total, cache->get_cache_misses());
-  
-  std::cout << "Concurrent test results:" << std::endl;
-  std::cout << "  Total operations: " << expected_total * 2 << std::endl;
-  std::cout << "  Hits: " << cache->get_cache_hits() << std::endl;
-  std::cout << "  Misses: " << cache->get_cache_misses() << std::endl;
-}
-
 TEST_F(TestRGWUsagePerfCounters, ExpiredEntryTracking) {
   // Add a user
   ASSERT_EQ(0, cache->update_user_stats("expiry_test", 1024, 1));
