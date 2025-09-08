@@ -6209,10 +6209,7 @@ int RGWGetObjAttrs::verify_permission(optional_yield y)
       rgw_iam_add_objtags(this, s, has_s3_existing_tag, has_s3_resource_tag);
     }
 
-    /* XXXX the following conjunction should be &&--but iam_action2 is currently not
-     * hooked up and always fails (but should succeed if the requestor has READ
-     * acess to the object) */
-    perm = (verify_object_permission(this, s, iam_action1) || /* && */
+    perm = (verify_object_permission(this, s, iam_action1) &&
 	    verify_object_permission(this, s, iam_action2));
   }
 
