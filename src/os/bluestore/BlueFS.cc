@@ -246,7 +246,7 @@ void BlueFS::_init_logger()
 	    "u", PerfCountersBuilder::PRIO_USEFUL, unit_t(UNIT_BYTES));
   b.add_u64(l_bluefs_wal_total_bytes, "wal_total_bytes",
 	    "Total bytes (wal device)",
-	    "walb", PerfCountersBuilder::PRIO_USEFUL, unit_t(UNIT_BYTES));
+	    "walb", PerfCountersBuilder::PRIO_CRITICAL, unit_t(UNIT_BYTES));
   b.add_u64(l_bluefs_wal_used_bytes, "wal_used_bytes",
 	    "Used bytes (wal device)",
 	    "walu", PerfCountersBuilder::PRIO_USEFUL, unit_t(UNIT_BYTES));
