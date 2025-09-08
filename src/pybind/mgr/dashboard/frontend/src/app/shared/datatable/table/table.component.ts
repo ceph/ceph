@@ -1001,15 +1001,23 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
         }
       }
     });
-    if (newSelected.size === 0) return;
+
     const newSelectedArray = Array.from(newSelected.values());
 
-    newSelectedArray?.forEach?.((selection: any) => {
+    if (newSelectedArray.length === 0) {
+      this.selection.selected = [];
+      this.updateSelection.emit(_.clone(this.selection));
+      return;
+    }
+
+    newSelectedArray.forEach((selection: any) => {
       const rowIndex = this.model.data.findIndex(
         (row: TableItem[]) =>
           _.get(row, [0, 'selected', this.identifier]) === selection[this.identifier]
       );
-      rowIndex > -1 && this.model.selectRow(rowIndex, true);
+      if (rowIndex > -1) {
+        this.model.selectRow(rowIndex, true);
+      }
     });
 
     if (
@@ -1021,11 +1029,9 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
 
     this.selection.selected = newSelectedArray;
 
-    if (this.updateSelectionOnRefresh === 'never') {
-      return;
+    if (this.updateSelectionOnRefresh !== 'never') {
+      this.updateSelection.emit(_.clone(this.selection));
     }
-
-    this.updateSelection.emit(_.clone(this.selection));
   }
 
   updateExpanded() {
@@ -1046,7 +1052,12 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
   _toggleSelection(rowIndex: number, isSelected: boolean) {
     const selectedData = _.get(this.model.data?.[rowIndex], [0, 'selected']);
     if (isSelected) {
-      this.selection.selected = [...this.selection.selected, selectedData];
+      const alreadySelected = this.selection.selected.some(
+        (s) => s[this.identifier] === selectedData[this.identifier]
+      );
+      if (!alreadySelected) {
+        this.selection.selected = [...this.selection.selected, selectedData];
+      }
     } else {
       this.selection.selected = this.selection.selected.filter(
         (s) => s[this.identifier] !== selectedData[this.identifier]
@@ -1055,14 +1066,15 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
   }
 
   onSelect(selectedRowIndex: number) {
-    const selectedData = _.get(this.model.data?.[selectedRowIndex], [0, 'selected']);
     if (this.selectionType === 'single') {
       this.model.selectAll(false);
-      this.selection.selected = [selectedData];
+      this.selection.selected = [_.get(this.model.data?.[selectedRowIndex], [0, 'selected'])];
+      this.model.selectRow(selectedRowIndex, true);
     } else {
-      this.selection.selected = [...this.selection.selected, selectedData];
+      const isSelected = this.model.rowsSelected[selectedRowIndex] ?? false;
+      this._toggleSelection(selectedRowIndex, !isSelected);
+      this.model.selectRow(selectedRowIndex, !isSelected);
     }
-    this.model.selectRow(selectedRowIndex, true);
     this.updateSelection.emit(this.selection);
   }
 
