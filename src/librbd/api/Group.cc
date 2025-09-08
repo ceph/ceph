@@ -548,7 +548,7 @@ int Group<I>::image_add(librados::IoCtx& group_ioctx, const char *group_name,
 
   cls::rbd::MirrorGroup mirror_info;
   r = cls_client::mirror_group_get(&group_ioctx, group_id, &mirror_info);
-  if (r < 0  && r != -ENOENT && r != -ENOTSUP) {
+  if (r < 0  && r != -ENOENT && r != -EOPNOTSUPP) {
     lderr(cct) << "error getting mirror info of group: "
                << cpp_strerror(r) << dendl;
     return r;
@@ -573,7 +573,7 @@ int Group<I>::image_add(librados::IoCtx& group_ioctx, const char *group_name,
 
   cls::rbd::MirrorImage mirror_image;
   r = cls_client::mirror_image_get(&image_ioctx, image_id, &mirror_image);
-  if (r < 0 && r != -ENOENT && r != -ENOTSUP) {
+  if (r < 0 && r != -ENOENT && r != -EOPNOTSUPP) {
     lderr(cct) << "failed to retrieve mirroring state of image: " << cpp_strerror(r)
                << dendl;
     return r;
@@ -653,7 +653,7 @@ int Group<I>::image_remove(librados::IoCtx& group_ioctx,
 
   cls::rbd::MirrorGroup mirror_info;
   r = cls_client::mirror_group_get(&group_ioctx, group_id, &mirror_info);
-  if (r < 0  && r != -ENOENT && r != -ENOTSUP) {
+  if (r < 0  && r != -ENOENT && r != -EOPNOTSUPP) {
     lderr(cct) << "error getting mirror info of group: "
                << cpp_strerror(r) << dendl;
     return r;
