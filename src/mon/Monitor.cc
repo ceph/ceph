@@ -36,6 +36,7 @@
 
 #include "osd/OSDMap.h"
 
+#include "health_check.h"
 #include "MonitorDBStore.h"
 #include "MonMap.h"
 #include "Paxos.h"
