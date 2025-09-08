@@ -13,6 +13,7 @@
  */
 
 #include "ElectionLogic.h"
+#include "ConnectionTracker.h"
 
 #include "include/ceph_assert.h"
 #include "common/dout.h"
@@ -55,6 +56,21 @@ static ostream& _prefix(std::ostream *_dout, epoch_t epoch, ElectionOwner* elect
   return *_dout << "paxos." << elector->get_my_rank()
 		<< ").electionLogic(" <<  epoch << ") ";
 }
+
+ElectionLogic::ElectionLogic(ElectionOwner *e, election_strategy es, ConnectionTracker *t,
+			     double ipm,
+			     CephContext *c) : elector(e), peer_tracker(t), cct(c),
+					       last_election_winner(-1), last_voted_for(-1),
+					       ignore_propose_margin(ipm),
+					       stable_peer_tracker(),
+					       leader_peer_tracker(),
+					       leader_acked(-1),
+					       strategy(es),
+					       participating(true),
+					       electing_me(false) {}
+
+ElectionLogic::~ElectionLogic() noexcept = default;
+
 void ElectionLogic::init()
 {
   epoch = elector->read_persisted_epoch();
