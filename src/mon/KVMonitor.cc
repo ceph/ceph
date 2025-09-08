@@ -3,6 +3,7 @@
 
 #include "mon/Monitor.h"
 #include "mon/KVMonitor.h"
+#include "mon/Paxos.h"
 #include "include/encoding_map.h"
 #include "include/encoding_optional.h"
 #include "include/encoding_string.h"

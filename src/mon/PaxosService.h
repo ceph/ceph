@@ -15,10 +15,15 @@
 #ifndef CEPH_PAXOSSERVICE_H
 #define CEPH_PAXOSSERVICE_H
 
+#include <set>
+#include <string>
+#include <vector>
+
 #include "include/Context.h"
 #include "health_check.h"
 #include "Paxos.h"
 #include "MonitorDBStore.h"
+#include "MonOpRequest.h"
 
 class Monitor;
 
