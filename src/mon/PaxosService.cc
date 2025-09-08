@@ -13,6 +13,7 @@
  */
 
 #include "PaxosService.h"
+#include "Paxos.h"
 #include "common/Clock.h"
 #include "common/config.h"
 #include "include/stringify.h"
@@ -523,4 +524,67 @@ void PaxosService::load_health()
     using ceph::decode;
     decode(health_checks, p);
   }
+}
+
+bool PaxosService::is_active() const {
+  return
+    !is_proposing() &&
+    (paxos.is_active() || paxos.is_updating() || paxos.is_writing());
+}
+
+bool PaxosService::is_readable(version_t ver) const {
+  if (ver > get_last_committed() ||
+      !paxos.is_readable(0) ||
+      get_last_committed() == 0)
+    return false;
+  return true;
+}
+
+void PaxosService::wait_for_active(MonOpRequestRef op, Context *c) {
+  if (op)
+    op->mark_event(service_name + ":wait_for_active");
+
+  if (!is_proposing()) {
+    paxos.wait_for_active(op, c);
+    return;
+  }
+  wait_for_finished_proposal(op, c);
+}
+
+void PaxosService::wait_for_readable(MonOpRequestRef op, Context *c, version_t ver) {
+  /* This is somewhat of a hack. We only do check if a version is readable on
+   * PaxosService::dispatch(), but, nonetheless, we must make sure that if that
+   * is why we are not readable, then we must wait on PaxosService and not on
+   * Paxos; otherwise, we may assert on Paxos::wait_for_readable() if it
+   * happens to be readable at that specific point in time.
+   */
+  if (op)
+    op->mark_event(service_name + ":wait_for_readable");
+
+  if (is_proposing() ||
+      ver > get_last_committed() ||
+      get_last_committed() == 0)
+    wait_for_finished_proposal(op, c);
+  else {
+    if (op)
+      op->mark_event(service_name + ":wait_for_readable/paxos");
+
+    paxos.wait_for_readable(op, c);
+  }
+}
+
+void PaxosService::wait_for_writeable(MonOpRequestRef op, Context *c) {
+  if (op)
+    op->mark_event(service_name + ":wait_for_writeable");
+
+  if (is_proposing())
+    wait_for_finished_proposal(op, c);
+  else if (!is_writeable())
+    wait_for_active(op, c);
+  else
+    paxos.wait_for_writeable(op, c);
+}
+
+void PaxosService::cancel_events() {
+  paxos.cancel_events();
 }
