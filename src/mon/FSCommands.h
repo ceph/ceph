@@ -16,7 +16,6 @@
 #ifndef FS_COMMANDS_H_
 #define FS_COMMANDS_H_
 
-#include "Monitor.h"
 #include "MonOpRequest.h"
 #include "CommandHandler.h"
 
@@ -30,6 +29,7 @@
 
 class Filesystem;
 class FSMap;
+class Monitor;
 class OSDMap;
 class Paxos;
 
