@@ -16,6 +16,7 @@
 #include "OSDMonitor.h"
 #include "MDSMonitor.h"
 #include "MgrStatMonitor.h"
+#include "Monitor.h"
 #include "Paxos.h"
 #include "mds/cephfs_features.h"
 #include "mds/FSMap.h"
