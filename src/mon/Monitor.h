@@ -34,7 +34,6 @@
 #include "common/Timer.h"
 
 #include "health_check.h"
-#include "MonMap.h"
 #include "Elector.h"
 #include "Session.h"
 #include "MonCommand.h"
@@ -57,6 +56,7 @@
 #include "common/WorkQueue.h"
 
 class Messenger;
+class MonMap;
 
 using namespace TOPNSPC::common;
 
@@ -224,12 +224,7 @@ public:
     return age.count();
   }
 
-  bool is_mon_down() const {
-    int max = monmap->size();
-    int actual = get_quorum().size();
-    auto now = ceph::real_clock::now();
-    return actual < max && now > monmap->created.to_real_time();
-  }
+  bool is_mon_down() const;
 
   // -- elector --
 private:
@@ -631,16 +626,9 @@ private:
 public:
   epoch_t get_epoch();
   int get_leader() const { return leader; }
-  std::string get_leader_name() {
-    return quorum.empty() ? std::string() : monmap->get_name(leader);
-  }
+  std::string get_leader_name();
   const std::set<int>& get_quorum() const { return quorum; }
-  std::list<std::string> get_quorum_names() {
-    std::list<std::string> q;
-    for (auto p = quorum.begin(); p != quorum.end(); ++p)
-      q.push_back(monmap->get_name(*p));
-    return q;
-  }
+  std::list<std::string> get_quorum_names();
   uint64_t get_quorum_con_features() const {
     return quorum_con_features;
   }
@@ -650,9 +638,7 @@ public:
   uint64_t get_required_features() const {
     return required_features;
   }
-  mon_feature_t get_required_mon_features() const {
-    return monmap->get_required_features();
-  }
+  mon_feature_t get_required_mon_features() const;
   void apply_quorum_to_compatset_features();
   void apply_monmap_to_compatset_features();
   void calc_quorum_requirements();
