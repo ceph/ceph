@@ -15,10 +15,15 @@
 #ifndef CEPH_PAXOSSERVICE_H
 #define CEPH_PAXOSSERVICE_H
 
+#include <set>
+#include <string>
+#include <vector>
+
 #include "include/Context.h"
 #include "Paxos.h"
 #include "Monitor.h"
 #include "MonitorDBStore.h"
+#include "MonOpRequest.h"
 
 /**
  * A Paxos Service is an abstraction that easily allows one to obtain an
