@@ -38,6 +38,7 @@
 #include "osd/OSDMap.h"
 
 #include "MonitorDBStore.h"
+#include "Paxos.h"
 
 #include "messages/PaxosServiceMessage.h"
 #include "messages/MMonCommand.h"

@@ -37,7 +37,6 @@
 #include "health_check.h"
 #include "MonMap.h"
 #include "Elector.h"
-#include "Paxos.h"
 #include "Session.h"
 #include "MonCommand.h"
 
@@ -102,6 +101,7 @@ enum {
   l_mon_last,
 };
 
+class Paxos;
 class PaxosService;
 
 class AdminSocketHook;
