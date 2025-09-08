@@ -18,6 +18,9 @@
 
 #include <map>
 #include <set>
+
+#include "common/ceph_context.h"
+#include "include/buffer_fwd.h"
 #include "include/types.h"
 #include "ConnectionTracker.h"
 
