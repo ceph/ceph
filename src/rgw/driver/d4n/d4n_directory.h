@@ -168,6 +168,7 @@ public:
     void start_trx();
     int init_trx(const DoutPrefixProvider* dpp,std::shared_ptr<connection> , optional_yield y);
     int end_trx(const DoutPrefixProvider* dpp,std::shared_ptr<connection> , optional_yield y);
+    int get_clone_script(const DoutPrefixProvider* dpp,std::shared_ptr<connection> conn,optional_yield y);
     bool is_trx_started(const DoutPrefixProvider* dpp,std::shared_ptr<connection> conn,std::string &key,redis_operation_type op, optional_yield y);
     std::string get_end_trx_script(const DoutPrefixProvider* dpp, std::shared_ptr<connection> conn, optional_yield y);
     std::string get_trx_id(const DoutPrefixProvider* dpp,std::shared_ptr<connection> conn, optional_yield y);

@@ -1,7 +1,9 @@
 #include <algorithm>
 #include <boost/asio/consign.hpp>
 #include <boost/algorithm/string.hpp>
+#include <cstring>
 #include <memory>
+#include <stop_token>
 //#include <string>
 #include "common/async/blocked_completion.h"
 #include "common/dout.h" 
@@ -457,7 +459,7 @@ int ObjectDirectory::set(const DoutPrefixProvider* dpp, CacheObj* object, option
   } catch (std::exception &e) {
     ldpp_dout(dpp, 0) << "ObjectDirectory::" << __func__ << "() ERROR: " << e.what() << dendl;
     return -EINVAL;
-  }
+  	}
 
   return 0;
 }
@@ -1062,24 +1064,59 @@ end
 return clone_key(KEYS[1], KEYS[2])
 )";
 
+int D4NTransaction::get_clone_script(const DoutPrefixProvider* dpp,std::shared_ptr<connection> conn,optional_yield y)
+{
+  //get m_evalsha_clone_key from redis server. 
+  try {
+      boost::system::error_code ec;
+      response< std::optional<std::vector<std::string>> > resp;
+      request req;
+
+      req.push("HGET", "trx_debug", "clone_key_sha");
+
+      redis_exec(conn, ec, req, resp, y);
+      if (ec) {
+	ldpp_dout(dpp, 0) << "Directory::start_trx" << "failed to get clone_key_sha ec = " << ec.value() << dendl;
+	return -ec.value();
+      }
+
+      if (std::get<0>(resp).value().has_value()) {
+	m_evalsha_clone_key = std::get<0>(resp).value().value()[0];
+	ldpp_dout(dpp, 0) << "Directory::start_trx got clone_key_sha = " << m_evalsha_clone_key << dendl;
+	return 0;
+      }
+
+  } catch (std::exception &e) {
+	ldpp_dout(dpp, 0) << "Directory::start_trx" << "failed to get clone_key_sha " << "() ERROR: " << e.what() << dendl;
+	return -EINVAL;
+  }
+
+  return 0;
+}
+
 int D4NTransaction::init_trx(const DoutPrefixProvider* dpp,std::shared_ptr<connection> conn,optional_yield y)
 {
+	 //TODO a singletone pattern should be used to load the lua script only once per process lifetime.
+	
   if(trxState != TrxState::STARTED) {
     return 0;
   }
   
   ldpp_dout(dpp, 0) << "Directory::start_trx this = " << this << dendl;
 
-
-  if(!m_evalsha_clone_key.empty()) {
-    return 0;
+  // this function is called each time a read or write operation is done, thus, the lua script should be loaded only once.
+  if(m_evalsha_clone_key.empty()) {
+  	//get m_evalsha_clone_key from redis server. 
+  	get_clone_script(dpp,conn,y);
+  	if(!m_evalsha_clone_key.empty()) return 0;
+	//else load the script.
+  } else {
+  	//the script is already loaded.
+  	return 0;
   }
 
-  ldpp_dout(dpp, 0) << "Directory::start_trx evalsha " << m_evalsha_clone_key  << dendl;
- 
-  //TODO the lua script should be loaded only once. per D4N lifetime.
-
-    try{
+  //it is not loaded yet, load it now.
+  try{
       // loading the lua script for cloning the keys.
       boost::system::error_code ec;
       response< std::optional<std::vector<std::string>> > resp;
@@ -1092,13 +1129,20 @@ int D4NTransaction::init_trx(const DoutPrefixProvider* dpp,std::shared_ptr<conne
 	ldpp_dout(dpp, 0) << "Directory::start_trx" << "failed to load copy script ec = " << ec.value() << dendl;
 	return -ec.value();
       }
-      m_evalsha_clone_key = std::get<0>(resp).value().value()[0];
-      save_trx_info(dpp,conn, "clone_key_sha", m_evalsha_clone_key, y);
-      ldpp_dout(dpp, 0) << "Directory::start_trx loading clone script = " << "evalsha " << m_evalsha_clone_key  << dendl;
+
+      if (std::get<0>(resp).value().has_value()) {
+	m_evalsha_clone_key = std::get<0>(resp).value().value()[0];
+    	//save the loaded script sha in redis server, so it could be retrieved later.
+    	save_trx_info(dpp, conn, "clone_key_sha", m_evalsha_clone_key, y);
+	return 0;
+      } else {
+	ldpp_dout(dpp, 0) << "Directory::start_trx" << "failed to load script, no sha returned" << dendl;
+	return -EINVAL;
+      }
 
     } catch (std::exception &e) {
-    ldpp_dout(dpp, 0) << "Directory::start_trx" << "failed to load script " << "() ERROR: " << e.what() << dendl;
-    return -EINVAL;
+    	ldpp_dout(dpp, 0) << "Directory::start_trx" << "failed to load script " << "() ERROR: " << e.what() << dendl;
+    	return -EINVAL;
     }
  
   return 0;
@@ -1347,20 +1391,20 @@ std::string D4NTransaction::get_end_trx_script(const DoutPrefixProvider* dpp, st
     redis_exec(conn, ec, req, resp, y);
 
     if (ec) {
-      if(dpp){ldpp_dout(dpp, 0) << "get_end_trx_script::" << __func__ << "() ERROR: " << ec.what() << dendl;}
-    return "";
+      ldout(g_ceph_context,0) << "get_end_trx_script::" << __func__ << "() ERROR: " << ec.what() << dendl;
+      return std::string("");
     }
       
     if (std::get<0>(resp).value().empty()) {
-      if(dpp){ldpp_dout(dpp, 0) << "get_end_trx_script:: m_evalsha_end_trx is empty " << dendl;}
+      ldout(g_ceph_context,0) << "get_end_trx_script:: m_evalsha_end_trx is empty " << dendl;
       return std::string("");
     }
 
     m_evalsha_end_trx = std::get<0>(resp).value();
 
     } catch (std::exception &e) {
-      if(dpp){ldpp_dout(dpp, 0) << "get_end_trx_script::" << __func__ << "() ERROR: " << e.what() << dendl;}
-      return "";
+      ldout(g_ceph_context,0) << "get_end_trx_script::" << __func__ << "() ERROR: " << e.what() << dendl;
+      return std::string("");
     }
 
   return m_evalsha_end_trx;
@@ -1368,6 +1412,9 @@ std::string D4NTransaction::get_end_trx_script(const DoutPrefixProvider* dpp, st
 
 int D4NTransaction::end_trx(const DoutPrefixProvider* dpp, std::shared_ptr<connection> conn, optional_yield y)
 {
+	//TODO upon calling to a LUA script, it should be guaranteed that no other transaction is running at the same time with the same trx-id.
+	//or it should be guaranteed that the transaction is unique across multiple D4N transactions.
+	
   if(trxState != TrxState::STARTED) {
     ldout(g_ceph_context, 0) << "Directory::end_trx trx is not started, skipping end_trx" << dendl;
     return 0;
@@ -1379,7 +1426,7 @@ int D4NTransaction::end_trx(const DoutPrefixProvider* dpp, std::shared_ptr<conne
    //the end_trx is currently called from the destructor, and the dpp is not available.
   if(!dpp) {ldout(g_ceph_context, 0) << "Directory::end_trx this = " << this << dendl;}
   if(!dpp) {ldout(g_ceph_context, 0) << "Directory::end_trx evalsha " << m_evalsha_end_trx << dendl;}
-  save_trx_info(dpp,conn, "test_debug_key", "test_debug_value", y);
+  //save_trx_info(dpp,conn, "test_debug_key", "test_debug_value", y);
 
     // load the lua script that implements the end of the transaction.
     if(get_end_trx_script(dpp,conn,y).empty()) {
@@ -1428,14 +1475,15 @@ int D4NTransaction::end_trx(const DoutPrefixProvider* dpp, std::shared_ptr<conne
       trx_keys.push_back(key);
     }		
 
-    ldout(g_ceph_context, 0) << "Directory::end_trx running evalsha script = " << "evalsha " << m_evalsha_end_trx << " num of keys " << num_keys 
-	    << "with the following keys " << debug_all_keys << dendl;
-
     if(num_keys == 0) {
 	    //TODO how it happens that no keys are set?
       ldout(g_ceph_context, 0) << "Directory::end_trx no keys to compare, skipping end_trx script" << dendl;
       return 0;
     }
+
+    ldout(g_ceph_context, 0) << "Directory::end_trx running evalsha script = " 
+	    << "evalsha " << m_evalsha_end_trx << " num of keys " << num_keys 
+	    << " with the following keys " << debug_all_keys << dendl;
 
     //the keys that are passed to the script are the keys that are related to the unique transaction.
     req.push_range("EVALSHA",m_evalsha_end_trx, trx_keys);
@@ -1452,11 +1500,11 @@ int D4NTransaction::end_trx(const DoutPrefixProvider* dpp, std::shared_ptr<conne
                   		<< " (errno=" << ec.value() << dendl; 
 	//boost redis error
     	} else if (ec.category().name() == std::string("boost.redis")) {
-        		ldout(g_ceph_context,0) << err_msg.str() << "Redis error: " << ec.message()
+        		ldout(g_ceph_context,0) << err_msg.str() << " Redis error: " << ec.message()
                   		<< " (boost.redis code=" << ec.value() << dendl;
 
    	} else {//TODO what are the other error categories?
-        		ldout(g_ceph_context,0) << err_msg.str() << "Other error: " << ec.message()
+        		ldout(g_ceph_context,0) << err_msg.str() << " Other error: " << ec.message()
                   		<< " (category=" << ec.category().name()
                   		<< ", value=" << ec.value() << dendl;
     	}
@@ -1466,7 +1514,7 @@ int D4NTransaction::end_trx(const DoutPrefixProvider* dpp, std::shared_ptr<conne
 
       // the response contain whether the transaction was successful or not <bool status, string result>
       // Extract values
-	bool status        = std::get<0>(resp).value();
+	bool status = std::get<0>(resp).value();
 	std::string result = std::get<1>(resp).value();
 
       //could be compile-time error or no matching script.
@@ -1488,6 +1536,7 @@ int D4NTransaction::end_trx(const DoutPrefixProvider* dpp, std::shared_ptr<conne
     }
 
     ldout(g_ceph_context, 0) << "Directory::end_trx the end-trx script had finished successfully this = " << this << dendl;
+
 return 0;
 }
 
