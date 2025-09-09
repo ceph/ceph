@@ -336,6 +336,11 @@ class SubvolumeV2(SubvolumeV1):
                 raise VolumeException(-errno.ENOENT, "subvolume '{0}' does not exist".format(self.subvolname))
             raise VolumeException(me.args[0], me.args[1])
         except cephfs.ObjectNotFound:
+            if op_type == SubvolumeOpType.REMOVE_FORCE:
+                log.debug("since --force is passed, ignoring missing subvolume '"
+                          f"path '{subvol_path}' for subvolume "
+                          f"{self.subvolname}'")
+                return
             log.debug("missing subvolume path '{0}' for subvolume '{1}'".format(subvol_path, self.subvolname))
             raise VolumeException(-errno.ENOENT, "mount path missing for subvolume '{0}'".format(self.subvolname))
         except cephfs.Error as e:
