@@ -21,9 +21,9 @@ void Model::set_secondary_oid(const std::string& new_oid) {
 
 void Model::swap_primary_secondary_oid() {
     std::string old_primary;
-    old_primary = Model::get_primary_oid();
-    Model::set_primary_oid(Model::get_secondary_oid());
-    Model::set_secondary_oid(old_primary);
+    old_primary = get_primary_oid();
+    set_primary_oid(Model::get_secondary_oid());
+    set_secondary_oid(old_primary);
 }
 
 const uint64_t Model::get_block_size() const { return block_size; }

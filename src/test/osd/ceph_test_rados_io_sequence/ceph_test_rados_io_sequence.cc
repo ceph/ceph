@@ -1047,38 +1047,11 @@ ceph::io_sequence::tester::TestObject::TestObject(
     bufferlist inbl, outbl;
     auto formatter = std::make_unique<JSONFormatter>(false);
 
-    std::optional<std::vector<int>> cached_shard_order = std::nullopt;
-
-    if (!spo.get_allow_pool_autoscaling() && !spo.get_allow_pool_balancer() &&
-        !spo.get_allow_pool_deep_scrubbing() &&
-        !spo.get_allow_pool_scrubbing()) {
-      {
-        ceph::messaging::osd::OSDMapRequest osdMapRequest{pool, primary_oid, ""};
-        int rc = send_mon_command(osdMapRequest, rados, "OSDMapRequest", inbl,
-                                  &outbl, formatter.get());
-        ceph_assert(rc == 0);
-      }
-      {
-        ceph::messaging::osd::OSDMapRequest osdMapRequest{pool, secondary_oid, ""};
-        int rc = send_mon_command(osdMapRequest, rados, "OSDMapRequest", inbl,
-                                  &outbl, formatter.get());
-        ceph_assert(rc == 0);
-      }
-
-      JSONParser p;
-      bool success = p.parse(outbl.c_str(), outbl.length());
-      ceph_assert(success);
-
-      ceph::messaging::osd::OSDMapReply reply{};
-      reply.decode_json(&p);
-      cached_shard_order = reply.acting;
-    }
-
     exerciser_model = std::make_unique<ceph::io_exerciser::RadosIo>(
-        rados, asio, pool, primary_oid, secondary_cached_shard_order, sbs.select(), rng(),
+        rados, asio, pool, primary_oid, secondary_oid, sbs.select(), rng(),
         threads, lock, cond, spo.is_replicated_pool(),
         spo.get_allow_pool_ec_optimizations());
-    dout(0) << "= " << oid << " pool=" << pool << " threads=" << threads
+    dout(0) << "= " << primary_oid << " pool=" << pool << " threads=" << threads
             << " blocksize=" << exerciser_model->get_block_size() << " ="
             << dendl;
   }
@@ -1195,7 +1168,7 @@ ceph::io_sequence::tester::TestRunner::TestRunner(
   allow_pool_deep_scrubbing = vm.contains("allow_pool_deep_scrubbing");
   allow_pool_scrubbing = vm.contains("allow_pool_scrubbing");
 
-  if (testrecovery && (num_objects > 1)) {
+  if (testrecovery && (num_object_pairs > 1)) {
     throw std::invalid_argument("testrecovery option not allowed if parallel is"
                                 " specified, except when parallel=1 is used");
   }
@@ -1343,28 +1316,12 @@ bool ceph::io_sequence::tester::TestRunner::run_interactive_test() {
     bufferlist inbl, outbl;
     auto formatter = std::make_unique<JSONFormatter>(false);
 
-    {
-    ceph::messaging::osd::OSDMapRequest osd_map_request{pool, primary_object_name, ""};
-    int rc = send_mon_command(osd_map_request, rados, "OSDMapRequest", inbl,
-                              &outbl, formatter.get());
-    ceph_assert(rc == 0);
-    }
-    {
-      ceph::messaging::osd::OSDMapRequest osdMapRequest{pool, secondary_object_name, ""};
-      int rc = send_mon_command(osdMapRequest, rados, "OSDMapRequest", inbl,
-                                &outbl, formatter.get());
-      ceph_assert(rc == 0);
-    }
-
     JSONParser p;
     bool success = p.parse(outbl.c_str(), outbl.length());
     ceph_assert(success);
 
-    ceph::messaging::osd::OSDMapReply osd_map_reply{};
-    osd_map_reply.decode_json(&p);
-
     model = std::make_unique<ceph::io_exerciser::RadosIo>(
-        rados, asio, pool, primary_object_name, secondary_object_name, osd_map_reply.acting, sbs.select(), rng(),
+        rados, asio, pool, primary_object_name, secondary_object_name, sbs.select(), rng(),
         1,  // 1 thread
         lock, cond, spo.is_replicated_pool(),
         spo.get_allow_pool_ec_optimizations());

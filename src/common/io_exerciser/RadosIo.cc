@@ -44,7 +44,6 @@ int send_mon_command(S& s, librados::Rados& rados, const char* name,
 
 RadosIo::RadosIo(librados::Rados& rados, boost::asio::io_context& asio,
                  const std::string& pool, const std::string& primary_oid, const std::string& secondary_oid,
-                 const std::optional<std::vector<int>>& cached_shard_order,
                  uint64_t block_size, int seed, int threads, ceph::mutex& lock,
                  ceph::condition_variable& cond, bool is_replicated_pool,
                  bool ec_optimizations)
@@ -55,7 +54,6 @@ RadosIo::RadosIo(librados::Rados& rados, boost::asio::io_context& asio,
       db(data_generation::DataGenerator::create_generator(
           data_generation::GenerationType::HeaderedSeededRandom, *om)),
       pool(pool),
-      cached_shard_order(cached_shard_order),
       threads(threads),
       lock(lock),
       cond(cond),
