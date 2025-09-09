@@ -146,17 +146,18 @@ ECTransaction::WritePlanObj::WritePlanObj(
 
   /* Calculate any non-aligned pages. These need to be read and written */
   extent_set aligned_ro_writes(unaligned_ro_writes);
-  aligned_ro_writes.align(EC_ALIGN_SIZE);
+  uint64_t alignment = sinfo.supports_partial_writes() ? EC_ALIGN_SIZE : sinfo.get_chunk_size();
+  aligned_ro_writes.align(alignment);
   extent_set partial_page_ro_writes(aligned_ro_writes);
   partial_page_ro_writes.subtract(unaligned_ro_writes);
-  partial_page_ro_writes.align(EC_ALIGN_SIZE);
+  partial_page_ro_writes.align(alignment);
 
   extent_set write_superset;
   for (auto &&[off, len] : unaligned_ro_writes) {
     sinfo.ro_range_to_shard_extent_set_with_superset(
       off, len, will_write, write_superset);
   }
-  write_superset.align(EC_ALIGN_SIZE);
+  write_superset.align(alignment);
 
   shard_id_set writable_parity_shards = shard_id_set::intersection(sinfo.get_parity_shards(), writable_shards);
   if (write_superset.size() > 0) {
@@ -194,7 +195,7 @@ ECTransaction::WritePlanObj::WritePlanObj(
       }
 
       /* We now need to add in the partial page ro writes. This is not particularly
-       * efficient as the are many divs in here, but non-4k aligned writes are
+       * efficient as there are many divs in here, but non-4k aligned writes are
        * not very efficient anyway
        */
       for (auto &&[off, len] : partial_page_ro_writes) {
@@ -260,7 +261,8 @@ ECTransaction::WritePlanObj::WritePlanObj(
   if (op.truncate && op.truncate->first < orig_size) {
     ECUtil::shard_extent_set_t truncate_read(sinfo.get_k_plus_m());
     uint64_t prev_stripe = sinfo.ro_offset_to_prev_stripe_ro_offset(op.truncate->first);
-    uint64_t next_align = ECUtil::align_next(op.truncate->first);
+    uint64_t next_align = ECUtil::align_next(op.truncate->first, alignment);
+
     sinfo.ro_range_to_shard_extent_set(
       prev_stripe, next_align - prev_stripe,
       truncate_read);
@@ -273,7 +275,7 @@ ECTransaction::WritePlanObj::WritePlanObj(
 
     if (next_align != 0) {
       truncate_write = truncate_read.at(shard_id_t(0));
-      truncate_write.align(EC_ALIGN_SIZE);
+      truncate_write.align(alignment);
     }
 
     if (!truncate_read.empty()) {
@@ -565,7 +567,8 @@ ECTransaction::Generate::Generate(PGTransaction &t,
   written_map->emplace(oid, std::move(to_write));
 
   if (entry && plan.orig_size < plan.projected_size) {
-    entry->mod_desc.append(ECUtil::align_next(plan.orig_size));
+    uint64_t alignment = sinfo.supports_partial_writes() ? EC_ALIGN_SIZE : sinfo.get_chunk_size();
+    entry->mod_desc.append(ECUtil::align_next(plan.orig_size, alignment));
   }
 
   // On a size change or when clearing whiteout,
@@ -652,11 +655,12 @@ void ECTransaction::Generate::truncate() {
     uint64_t clone_end = 0;
 
     shard_id_set clone_shards;
+    uint64_t alignment = sinfo.supports_partial_writes() ? EC_ALIGN_SIZE : sinfo.get_chunk_size();
 
     for (auto &&[shard, eset]: truncate_eset) {
       clone_shards.insert(shard);
       uint64_t start = eset.range_start();
-      uint64_t start_align_prev = ECUtil::align_prev(start);
+      uint64_t start_align_prev = ECUtil::align_prev(start, alignment);
       uint64_t end = eset.range_end();
 
       if (clone_start > start_align_prev) {
@@ -674,7 +678,7 @@ void ECTransaction::Generate::truncate() {
 
       auto &t = transactions.at(shard);
       uint64_t start = eset.range_start();
-      uint64_t start_align_next = ECUtil::align_next(start);
+      uint64_t start_align_next = ECUtil::align_next(start, alignment);
       uint64_t end = eset.range_end();
       t.touch(
         coll_t(spg_t(pgid, shard)),
@@ -739,14 +743,16 @@ void ECTransaction::Generate::overlay_writes() {
 void ECTransaction::Generate::appends_and_clone_ranges() {
 
   extent_set clone_ranges = plan.will_write.get_extent_superset();
-  uint64_t clone_max = ECUtil::align_next(plan.orig_size);
+  uint64_t alignment = sinfo.supports_partial_writes() ? EC_ALIGN_SIZE : sinfo.get_chunk_size();
+  uint64_t clone_max = ECUtil::align_next(plan.orig_size, alignment);
   ldpp_dout(dpp, 20) << __func__ << dendl;
 
   if (op.delete_first) {
     clone_max = 0;
   } else if (op.truncate && op.truncate->first < clone_max) {
-    clone_max = ECUtil::align_next(op.truncate->first);
+    clone_max = ECUtil::align_next(op.truncate->first, alignment);
   }
+
   ECUtil::shard_extent_set_t cloneable_range(sinfo.get_k_plus_m());
   sinfo.ro_size_to_read_mask(clone_max, cloneable_range);
 
@@ -862,10 +868,11 @@ void ECTransaction::Generate::appends_and_clone_ranges() {
 void ECTransaction::Generate::written_shards() {
   if (entry) {
     if (!rollback_extents.empty()) {
+      uint64_t alignment = sinfo.supports_partial_writes() ? EC_ALIGN_SIZE : sinfo.get_chunk_size();
       entry->mod_desc.rollback_extents(
         entry->version.version,
         rollback_extents,
-        ECUtil::align_next(plan.orig_size),
+        ECUtil::align_next(plan.orig_size, alignment),
         rollback_shards);
     }
     if (entry->written_shards.size() == sinfo.get_k_plus_m()) {

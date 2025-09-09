@@ -1284,7 +1284,8 @@ void ECCommon::RecoveryBackend::handle_recovery_read_complete(
   ceph_assert(op.obc);
 
   op.returned_data.emplace(std::move(res.buffers_read));
-  uint64_t aligned_size = ECUtil::align_next(op.obc->obs.oi.size);
+  uint64_t alignment = sinfo.supports_partial_writes() ? EC_ALIGN_SIZE : sinfo.get_chunk_size();
+  uint64_t aligned_size = ECUtil::align_next(op.obc->obs.oi.size, alignment);
 
   dout(30) << __func__ << " before decode: oid=" << op.hoid << " EC_DEBUG_BUFFERS: "
          << op.returned_data->debug_string(2048, 0)
@@ -1410,17 +1411,25 @@ void ECCommon::RecoveryBackend::continue_recovery_op(
        */
       uint64_t read_size = get_recovery_chunk_size();
       if (op.obc) {
-        uint64_t read_to_end = ECUtil::align_next(op.obc->obs.oi.size) -
+        uint64_t alignment = sinfo.supports_partial_writes() ? EC_ALIGN_SIZE : sinfo.get_chunk_size();
+        uint64_t read_to_end = ECUtil::align_next(op.obc->obs.oi.size, alignment) -
           op.recovery_progress.data_recovered_to;
-
         if (read_to_end < read_size) {
           read_size = read_to_end;
         }
       }
-      sinfo.ro_range_to_shard_extent_set_with_parity(
-        op.recovery_progress.data_recovered_to, read_size, want);
 
-      op.recovery_progress.data_recovered_to += read_size;
+      if (sinfo.supports_partial_writes()) {
+        sinfo.ro_range_to_shard_extent_set_with_parity(
+          op.recovery_progress.data_recovered_to, read_size, want);
+        op.recovery_progress.data_recovered_to += read_size;
+      } else {
+        sinfo.ro_range_to_shard_extent_set_with_parity(
+          op.recovery_progress.data_recovered_to,
+          sinfo.ro_offset_to_next_stripe_ro_offset(read_size), want);
+        op.recovery_progress.data_recovered_to += read_size;
+        sinfo.trim_shard_extent_set_for_ro_offset(op.recovery_progress.data_recovered_to, want);
+      }
 
       // We only need to recover shards that are missing.
       for (auto shard : shard_id_set::difference(sinfo.get_all_shards(), op.missing_on_shards)) {

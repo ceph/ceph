@@ -204,9 +204,9 @@ int ErasureCodeJerasure::decode_chunks(const shard_id_set &want_to_read,
     if (size == 0) size = ptr.length();
     else ceph_assert(size == ptr.length());
     if (shard < k) {
-      data[static_cast<int>(shard)] = const_cast<char*>(ptr.c_str());
+      data[static_cast<int>(shard)] = ptr.c_str();
     } else {
-      coding[static_cast<int>(shard) - k] = const_cast<char*>(ptr.c_str());
+      coding[static_cast<int>(shard) - k] = ptr.c_str();
     }
     erasures_set.erase(shard);
   }
@@ -215,9 +215,9 @@ int ErasureCodeJerasure::decode_chunks(const shard_id_set &want_to_read,
     if (size == 0) size = ptr.length();
     else ceph_assert(size == ptr.length());
     if (shard < k) {
-      data[static_cast<int>(shard)] = const_cast<char*>(ptr.c_str());
+      data[static_cast<int>(shard)] = ptr.c_str();
     } else {
-      coding[static_cast<int>(shard) - k] = const_cast<char*>(ptr.c_str());
+      coding[static_cast<int>(shard) - k] = ptr.c_str();
     }
     erasures_set.insert(shard);
   }

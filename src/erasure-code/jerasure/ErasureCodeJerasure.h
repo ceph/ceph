@@ -47,15 +47,14 @@ public:
         DEFAULT_W("8"),
         technique(_technique),
         per_chunk_alignment(false) {
-    flags = FLAG_EC_PLUGIN_PARTIAL_READ_OPTIMIZATION |
-      FLAG_EC_PLUGIN_PARTIAL_WRITE_OPTIMIZATION |
-      FLAG_EC_PLUGIN_ZERO_INPUT_ZERO_OUTPUT_OPTIMIZATION |
-      FLAG_EC_PLUGIN_PARITY_DELTA_OPTIMIZATION;
+    flags = FLAG_EC_PLUGIN_OPTIMIZED_SUPPORTED;
 
     if (technique == "reed_sol_van"sv) {
-      flags |= FLAG_EC_PLUGIN_OPTIMIZED_SUPPORTED;
-    } else if (technique != "cauchy_orig"sv) {
-      flags |= FLAG_EC_PLUGIN_CRC_ENCODE_DECODE_SUPPORT;
+      flags |= FLAG_EC_PLUGIN_PARTIAL_READ_OPTIMIZATION |
+               FLAG_EC_PLUGIN_PARTIAL_WRITE_OPTIMIZATION |
+               FLAG_EC_PLUGIN_ZERO_INPUT_ZERO_OUTPUT_OPTIMIZATION |
+               FLAG_EC_PLUGIN_PARITY_DELTA_OPTIMIZATION |
+               FLAG_EC_PLUGIN_CRC_ENCODE_DECODE_SUPPORT;
     }
   }
 
