@@ -776,12 +776,15 @@ bool Mgr::exceeded_initialization_expiration()
   auto time_elapsed = ceph::coarse_mono_clock::now() - initialization_start_time;
   dout(20) << "time elapsed since mgr initialization: " << time_elapsed << dendl;
 
-  // Reset `initialization_start_time` if the expiration time has been exceeded.
+  // Reset start time if the expiration time has been exceeded.
+  // Signal initialization=true so the mgr forcibly sends an "active" beacon
   auto expiration = g_conf().get_val<std::chrono::milliseconds>("mgr_module_load_expiration");
   bool exceeded_expiration = time_elapsed > expiration;
   if (exceeded_expiration) {
     std::lock_guard l(lock);
     initialization_start_time = ceph::coarse_mono_clock::zero();
+    initializing = false;
+    initialized = true;
   }
 
   return exceeded_expiration;
