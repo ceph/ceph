@@ -1377,6 +1377,15 @@ class RgwService(CephService):
                 'value': 'false' if spec.disable_multisite_sync_traffic else 'true',
             })
 
+        qat_mode = spec.qat.get('compression') if spec.qat else None
+        if qat_mode in ('sw', 'hw'):
+            ret, out, err = self.mgr.check_mon_command({
+                'prefix': 'config set',
+                'who': daemon_name,
+                'name': 'qat_compressor_enabled',
+                'value': 'true',
+            })
+
         daemon_spec.keyring = keyring
         daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
 
@@ -1412,6 +1421,11 @@ class RgwService(CephService):
             'prefix': 'config rm',
             'who': utils.name_to_config_section(daemon.name()),
             'name': 'rgw_frontends',
+        })
+        self.mgr.check_mon_command({
+            'prefix': 'config rm',
+            'who': utils.name_to_config_section(daemon.name()),
+            'name': 'qat_compressor_enabled'
         })
         self.mgr.check_mon_command({
             'prefix': 'config-key rm',
@@ -1462,6 +1476,9 @@ class RgwService(CephService):
 
         if hasattr(svc_spec, 'rgw_exit_timeout_secs') and svc_spec.rgw_exit_timeout_secs:
             config['rgw_exit_timeout_secs'] = svc_spec.rgw_exit_timeout_secs
+
+        if svc_spec.qat:
+            config['qat'] = svc_spec.qat
 
         rgw_deps = parent_deps + self.get_dependencies(self.mgr, svc_spec)
         return config, rgw_deps
@@ -1599,6 +1616,7 @@ class CephExporterService(CephService):
                 'ceph-exporter.crt': crt,
                 'ceph-exporter.key': key
             }
+
         daemon_spec.keyring = keyring
         daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
         daemon_spec.final_config = merge_dicts(daemon_spec.final_config, exporter_config)
