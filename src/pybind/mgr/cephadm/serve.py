@@ -1182,6 +1182,7 @@ class CephadmServe:
                     dd.daemon_type in CEPH_TYPES:
                 self.log.info('Reconfiguring %s (extra config changed)...' % dd.name())
                 action = 'reconfig'
+
             if action:
                 if self.mgr.cache.get_scheduled_daemon_action(dd.hostname, dd.name()) == 'redeploy' \
                         and action == 'reconfig':
@@ -1426,6 +1427,14 @@ class CephadmServe:
                 self.log.info('%s daemon %s on %s' % (
                     'Reconfiguring' if reconfig else 'Deploying',
                     daemon_spec.name(), daemon_spec.host))
+
+                termination_grace_period = None
+                if daemon_spec.service_name in self.mgr.spec_store:
+                    svc_spec = self.mgr.spec_store[daemon_spec.service_name].spec
+                    termination_grace_period = getattr(svc_spec, 'termination_grace_period_seconds', None)
+
+                if termination_grace_period is not None:
+                    daemon_params['termination_grace_period_seconds'] = int(termination_grace_period)
 
                 out, err, code = await self._run_cephadm(
                     daemon_spec.host,
