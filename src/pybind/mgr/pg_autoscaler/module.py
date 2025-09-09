@@ -707,16 +707,34 @@ class PgAutoscaler(MgrModule):
         for pool_id in list(self._event):
             ev = self._event[pool_id]
             pool_data = self._get_pool_by_id(pools, pool_id)
-            if (
-                pool_data is None
-                or pool_data["pg_num"] == pool_data["pg_num_target"]
-                or ev.pg_num == ev.pg_num_target
-            ):
-                # pool is gone or we've reached our target
+            if (pool_data is None):
+                # pool is gone
+                self.log.warning("pool %s missing; marking complete", pool_id)
                 self.remote('progress', 'complete', ev.ev_id)
                 del self._event[pool_id]
                 continue
-            ev.update(self, (ev.pg_num - pool_data['pg_num']) / (ev.pg_num - ev.pg_num_target))
+            current = pool_data['pg_num']
+            start = ev.pg_num
+            target = ev.pg_num_target
+            self.log.debug("pool %s; start_pg_num: %d; current_pg_num: %d; -> target_pg_num: %d;",
+                           pool_id, start, current, target)
+            if (current == target):
+                # we've reached our target
+                self.log.debug("pool %s reached target; marking complete", pool_id)
+                self.remote('progress', 'complete', ev.ev_id)
+                del self._event[pool_id]
+                continue
+
+            denominator = (start - target)
+            if denominator == 0:
+               # start == target, we complete the event since nothing to track
+               self.remote('progress', 'complete', ev.ev_id)
+               self._event.pop(pool_id, None)
+               continue
+
+            progress = (start - current) / denominator
+
+            ev.update(self, progress)
 
     def _maybe_adjust(self,
                       osdmap: OSDMap,
