@@ -1215,6 +1215,17 @@ options:
   see_also:
   - rgw_keystone_verify_ssl
   with_legacy: true
+- name: rgw_enable_jwks_url_verification
+  type: bool
+  level: advanced
+  desc: Enable JWKS url verification for AWS compliance
+  long_desc:
+    Verifies the security of the JWKS url endpoint using the client provided thumbprints
+    for AWS compliance. If turned on, the legacy verification option of using thumbprints
+    to verify JWT x5c certs is disabled.
+  default: false
+  services:
+  - rgw
 # The following are tunables for caches of RGW NFS (and other file
 # client) objects.
 #
