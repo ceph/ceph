@@ -281,6 +281,7 @@ class SubvolumeV2(SubvolumeV1):
                 SubvolumeOpType.LIST,
                 SubvolumeOpType.INFO,
                 SubvolumeOpType.SNAP_REMOVE,
+                SubvolumeOpType.SNAP_REMOVE_FORCE,
                 SubvolumeOpType.SNAP_LIST,
                 SubvolumeOpType.SNAP_GETPATH,
                 SubvolumeOpType.SNAP_INFO,
@@ -336,7 +337,7 @@ class SubvolumeV2(SubvolumeV1):
                 raise VolumeException(-errno.ENOENT, "subvolume '{0}' does not exist".format(self.subvolname))
             raise VolumeException(me.args[0], me.args[1])
         except cephfs.ObjectNotFound:
-            if op_type == SubvolumeOpType.REMOVE_FORCE:
+            if op_type in (SubvolumeOpType.REMOVE_FORCE, SubvolumeOpType.SNAP_REMOVE_FORCE):
                 log.debug("since --force is passed, ignoring missing subvolume '"
                           f"path '{subvol_path}' for subvolume "
                           f"{self.subvolname}'")
