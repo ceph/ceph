@@ -11,6 +11,7 @@
   <cd-table
     [data]="prometheusAlertService.alerts"
     [columns]="columns"
+    [extraFilterableColumns]="filters"
     identifier="fingerprint"
     [forceIdentifier]="true"
     [customCss]="customCss"
