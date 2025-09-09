@@ -2939,6 +2939,73 @@ test_force_promote_before_initial_sync()
   start_mirrors "${secondary_cluster}"
 }
 
+# test snapshot sync to secondary cluster while restarting secondary cluster
+declare -a test_snapshot_sync_while_restarting_secondary_cluster_1=("${CLUSTER2}" "${CLUSTER1}" "${pool0}" 3 2G)
+    
+test_snapshot_sync_while_restarting_secondary_cluster_scenarios=1
+    
+test_snapshot_sync_while_restarting_secondary_cluster()
+{
+  local primary_cluster=$1 ; shift
+  local secondary_cluster=$1 ; shift
+  local pool=$1 ; shift 
+  local image_count=$1 ; shift
+  local image_size=$1 ; shift
+  local image_size_bytes=$(numfmt --from=iec "$image_size")
+  local write_count=$((image_size_bytes / (4096*4096)))
+  local max_images
+    
+  local group0=test-group0
+  local image_prefix="test_image"
+
+  echo "starting daemon on primary"
+  start_mirrors "${primary_cluster}"
+
+  echo "starting daemon on secondary"
+  start_mirrors "${secondary_cluster}"
+
+  group_create "${primary_cluster}" "${pool}/${group0}"
+  images_create "${primary_cluster}" "${pool}/${image_prefix}" "${image_count}" "${image_size}"
+  group_images_add "${primary_cluster}" "${pool}/${group0}" "${pool}/${image_prefix}" "${image_count}"
+
+  mirror_group_enable "${primary_cluster}" "${pool}/${group0}"
+
+  wait_for_group_present "${secondary_cluster}" "${pool}" "${group0}" "${image_count}"
+  wait_for_group_replay_started "${secondary_cluster}" "${pool}"/"${group0}" "${image_count}"
+  wait_for_group_status_in_pool_dir "${secondary_cluster}" "${pool}"/"${group0}" 'up+replaying' "${image_count}"
+
+  wait_for_group_synced "${primary_cluster}" "${pool}"/"${group0}" "${secondary_cluster}" "${pool}"/"${group0}"
+
+  max_images=$((image_count-1))
+  for i in $(seq 0 "${max_images}"); do
+    write_image "${primary_cluster}" "${pool}" "${image_prefix}$i" "${write_count}"
+  done;
+
+  mirror_group_snapshot "${primary_cluster}" "${pool}/${group0}" group_snap_id
+
+  # make sure snapshot is in incomplete state
+  wait_for_group_snap_present "${secondary_cluster}" "${pool}/${group0}" "${group_snap_id}"
+  test_group_snap_sync_incomplete "${secondary_cluster}" "${pool}/${group0}" "${group_snap_id}"
+
+  stop_mirror "${secondary_cluster}" -9
+  # snapshot in incomplete state while restarting secondary cluster
+  test_group_snap_sync_incomplete "${secondary_cluster}" "${pool}/${group0}" "${group_snap_id}"
+  start_mirror "${secondary_cluster}"
+
+  wait_for_group_snap_sync_complete "${secondary_cluster}" "${pool}/${group0}" "${group_snap_id}"
+
+  # cleanup
+  mirror_group_disable "${primary_cluster}" "${pool}/${group0}"
+  group_remove "${primary_cluster}" "${pool}/${group0}"
+  wait_for_group_not_present "${primary_cluster}" "${pool}" "${group0}"
+  wait_for_group_not_present "${secondary_cluster}" "${pool}" "${group0}"
+  images_remove "${primary_cluster}" "${pool}/${image_prefix}" "${image_count}"
+  stop_mirror "${secondary_cluster}"
+  stop_mirror "${primary_cluster}"
+
+}
+
+
 # test force unlink time
 declare -a test_multiple_mirror_group_snapshot_unlink_time_1=("${CLUSTER2}" "${CLUSTER1}" "${pool0}")
 
@@ -3697,6 +3764,7 @@ run_all_tests()
   run_test_all_scenarios test_empty_group_omap_keys
   # TODO: add the capabilty to have clone images support in the mirror group
   run_test_all_scenarios test_group_with_clone_image
+  run_test_all_scenarios test_snapshot_sync_while_restarting_secondary_cluster
   run_test_all_scenarios test_multiple_mirror_group_snapshot_unlink_time
   run_test_all_scenarios test_force_promote_delete_group
   run_test_all_scenarios test_create_group_stop_daemon_then_recreate
