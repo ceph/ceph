@@ -1336,7 +1336,14 @@ void MDSMap::set_min_compat_client(ceph_release_t version)
   else if (version >= ceph_release_t::jewel)
     bits.push_back(CEPHFS_FEATURE_JEWEL);
 
-  std::sort(bits.begin(), bits.end());
+  if (bits.size() >= 2) {  // Need at least 2 elements to sort
+    auto first = bits.begin();
+    auto last = bits.end();
+    if (first < last) {  // Validate iterator range
+      std::sort(first, last);
+    }
+  }
+
   required_client_features = feature_bitset_t(bits);
 }
 
