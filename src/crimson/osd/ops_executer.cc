@@ -1089,9 +1089,8 @@ ObjectContextRef OpsExecuter::prepare_clone(
   clone_obs.oi.copy_user_bits(initial_obs.oi);
   clone_obs.oi.clear_flag(object_info_t::FLAG_WHITEOUT);
 
-  auto [clone_obc, existed] = pg->obc_registry.get_cached_obc(std::move(coid));
+  auto [clone_obc, existed] = pg->obc_registry.get_cached_obc(coid);
   ceph_assert(!existed);
-
   clone_obc->set_clone_state(std::move(clone_obs));
   clone_obc->ssc = obc->ssc;
   return clone_obc;
@@ -1100,6 +1099,23 @@ ObjectContextRef OpsExecuter::prepare_clone(
 void OpsExecuter::apply_stats()
 {
   pg->apply_stats(get_target(), delta_stats);
+}
+
+void OpsExecuter::on_rollback()
+{
+  // If we prepared a clone preemptively for this request but the write failed,
+  // invalidate only the cached OBC for the specific clone so a follow-up
+  // request will not see an in-memory pre-created clone.
+  if (cloning_ctx) {
+    const auto coid = cloning_ctx->coid;
+    LOG_PREFIX(OpsExecuter::on_rollback);
+    DEBUGDPP(
+      "on_rollback: invalidating cached OBC for {} reqid={}",
+      coid, get_message().get_reqid());
+    // Use single-key clear by passing [coid, coid] to avoid impacting other clones
+    pg->obc_registry.clear_range(coid, coid);
+    cloning_ctx.reset();
+  }
 }
 
 OpsExecuter::OpsExecuter(Ref<PG> _pg,
