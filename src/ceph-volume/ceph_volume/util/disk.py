@@ -141,13 +141,14 @@ def remove_partition(device):
     # in the output of `udevadm info --query=property`.
     # Probably not ideal and not the best fix but this allows to get around that issue.
     # The idea is to make it retry multiple times before actually failing.
-    for i in range(10):
-        udev_info = udevadm_property(device.path)
-        partition_number = udev_info.get('ID_PART_ENTRY_NUMBER')
+    partition_number = None
+    for _ in range(10):
+        udev_data = UdevData(device.path)
+        partition_number = udev_data.environment.get("ID_PART_ENTRY_NUMBER", None)
         if partition_number:
             break
         time.sleep(0.2)
-    if not partition_number:
+    if partition_number is None:
         raise RuntimeError('Unable to detect the partition number for device: %s' % device.path)
 
     process.run(
@@ -196,47 +197,6 @@ def device_family(device):
         devices.append(_lsblk_parser(line))
 
     return devices
-
-
-def udevadm_property(device, properties=[]):
-    """
-    Query udevadm for information about device properties.
-    Optionally pass a list of properties to return. A requested property might
-    not be returned if not present.
-
-    Expected output format::
-        # udevadm info --query=property --name=/dev/sda                                  :(
-        DEVNAME=/dev/sda
-        DEVTYPE=disk
-        ID_ATA=1
-        ID_BUS=ata
-        ID_MODEL=SK_hynix_SC311_SATA_512GB
-        ID_PART_TABLE_TYPE=gpt
-        ID_PART_TABLE_UUID=c8f91d57-b26c-4de1-8884-0c9541da288c
-        ID_PATH=pci-0000:00:17.0-ata-3
-        ID_PATH_TAG=pci-0000_00_17_0-ata-3
-        ID_REVISION=70000P10
-        ID_SERIAL=SK_hynix_SC311_SATA_512GB_MS83N71801150416A
-        TAGS=:systemd:
-        USEC_INITIALIZED=16117769
-        ...
-    """
-    out = _udevadm_info(device)
-    ret = {}
-    for line in out:
-        p, v = line.split('=', 1)
-        if not properties or p in properties:
-            ret[p] = v
-    return ret
-
-
-def _udevadm_info(device):
-    """
-    Call udevadm and return the output
-    """
-    cmd = ['udevadm', 'info', '--query=property', device]
-    out, _err, _rc = process.call(cmd)
-    return out
 
 
 def lsblk(device, columns=None, abspath=False):
@@ -907,8 +867,8 @@ def get_devices(_sys_block_path='/sys/block', device=''):
         metadata['parent'] = block[3]
 
         # some facts from udevadm
-        p = udevadm_property(sysdir)
-        metadata['id_bus'] = p.get('ID_BUS', '')
+        udev_data = UdevData(sysdir)
+        metadata['id_bus'] = udev_data.environment.get("ID_BUS", "")
 
         device_facts[diskname] = metadata
     return device_facts
@@ -1372,9 +1332,18 @@ class UdevData:
             raise RuntimeError(f'{path} not found.')
         self.path: str = path
         self.realpath: str = os.path.realpath(self.path)
-        self.stats: os.stat_result = os.stat(self.realpath)
-        self.major: int = os.major(self.stats.st_rdev)
-        self.minor: int = os.minor(self.stats.st_rdev)
+
+        if path.startswith("/sys/block/") and os.path.isdir(path):
+            dev_file = os.path.join(path, "dev")
+            if not os.path.exists(dev_file):
+                raise RuntimeError(f"{dev_file} not found.")
+            with open(dev_file) as f:
+                self.major, self.minor = map(int, f.read().strip().split(":"))
+        else:
+            self.stats: os.stat_result = os.stat(self.realpath)
+            self.major: int = os.major(self.stats.st_rdev)
+            self.minor: int = os.minor(self.stats.st_rdev)
+
         self.udev_data_path: str = f'/run/udev/data/b{self.major}:{self.minor}'
         self.symlinks: List[str] = []
         self.id: str = ''

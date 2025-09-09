@@ -8,7 +8,6 @@ import ceph_volume.util.lsmdisk as lsmdisk
 
 
 @pytest.fixture
-@patch("ceph_volume.util.disk.has_bluestore_label", lambda x: False)
 def device_report_keys(device_info):
     device_info(devices={
         # example output of disk.get_devices()
