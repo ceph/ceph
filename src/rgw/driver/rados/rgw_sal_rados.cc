@@ -401,9 +401,9 @@ int RadosBucket::remove(const DoutPrefixProvider* dpp,
 
   // remove lifecycle config, if any (XXX note could be made generic)
   if (get_attrs().count(RGW_ATTR_LC)) {
-    constexpr bool merge_attrs = false; // don't update xattrs, we're deleting
+    constexpr bool update_attrs = false; // don't update xattrs, we're deleting
     (void) store->getRados()->get_lc()->remove_bucket_config(
-      this, get_attrs(), merge_attrs);
+      dpp, y, this, update_attrs);
   }
 
   // remove bucket-topic mapping
