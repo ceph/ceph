@@ -962,6 +962,7 @@ def deploy_daemon(
                     endpoints=endpoints,
                     init_containers=init_containers,
                     sidecars=sidecars,
+                    timeout=getattr(ctx, 'termination_grace_period_seconds', None),
                 )
             else:
                 raise RuntimeError('attempting to deploy a daemon without a container image')
@@ -1028,6 +1029,7 @@ def deploy_daemon_units(
     endpoints: Optional[List[EndPoint]] = None,
     init_containers: Optional[List[InitContainer]] = None,
     sidecars: Optional[List[SidecarContainer]] = None,
+    stop_timeout: Optional[int] = None,
 ) -> None:
     data_dir = ident.data_dir(ctx.data_dir)
     pre_start_commands: List[runscripts.Command] = []
@@ -1061,7 +1063,7 @@ def deploy_daemon_units(
         endpoints=endpoints,
         pre_start_commands=pre_start_commands,
         post_stop_commands=post_stop_commands,
-        timeout=30 if ident.daemon_type == 'osd' else None,
+        timeout=stop_timeout,
     )
 
     # sysctl
@@ -2939,10 +2941,13 @@ def apply_deploy_config_to_ctx(
     facade = ArgumentFacade()
     _add_deploy_parser_args(facade)
     facade.apply(ctx)
-    for key, value in config_data.get('params', {}).items():
+    params = config_data.get('params', {})
+    for key, value in params.items():
         if key not in facade.defaults:
             logger.warning('unexpected parameter: %r=%r', key, value)
         setattr(ctx, key, value)
+    
+
     update_default_image(ctx)
     logger.debug('Determined image: %r', ctx.image)
 
@@ -4496,6 +4501,12 @@ def _add_deploy_parser_args(
         action='append',
         default=[],
         help='Additional entrypoint arguments to apply to deamon'
+    )
+    parser_deploy.add_argument(
+        '--termination-grace-period-seconds',
+        type=int,
+        default=None,
+        help='Graceful stop timeout written to unit.stop'
     )
 
 
