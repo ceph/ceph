@@ -58,7 +58,7 @@ def remove_subvol(mgr, fs, vol_spec, group, subvolname, force=False, retainsnaps
     """
     op_type = SubvolumeOpType.REMOVE if not force else SubvolumeOpType.REMOVE_FORCE
     with open_subvol(mgr, fs, vol_spec, group, subvolname, op_type) as subvolume:
-        subvolume.remove(retainsnaps)
+        subvolume.remove(retainsnaps, force=force)
 
 
 @contextmanager
