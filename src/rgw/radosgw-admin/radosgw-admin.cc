@@ -7812,22 +7812,18 @@ int main(int argc, const char **argv)
     std::string obj_name;
     RGWObjVersionTracker objv_tracker;
     ret = target_bucket->get_logging_object_name(obj_name, configuration.target_prefix, null_yield, dpp(), &objv_tracker);
-    if (ret < 0) {
-      cerr << "ERROR: failed to get pending logging object name from target bucket '" << configuration.target_bucket << "'" << std::endl;
+    if (ret < 0 && ret != -ENOENT) {
+      cerr << "ERROR: failed to get pending logging object name from target bucket '" << configuration.target_bucket <<
+        "'. error: " << cpp_strerror(-ret) << std::endl;
       return -ret;
     }
     std::string old_obj;
     const auto region = driver->get_zone()->get_zonegroup().get_api_name();
     ret = rgw::bucketlogging::rollover_logging_object(configuration, target_bucket, obj_name, dpp(), region, bucket, null_yield, true, &objv_tracker, &old_obj);
     if (ret < 0) {
-      if (ret == -ENOENT) {
-        cerr << "WARNING: no pending logging object '" << obj_name << "'. nothing to flush";
-        ret = 0;
-      } else {
-        cerr << "ERROR: failed flush pending logging object '" << obj_name << "'";
-      }
-      cerr << " to target bucket '" << configuration.target_bucket << "'. "
-        << " last committed object is '" << old_obj << "'" << std::endl;
+      cerr << "ERROR: failed to flush pending logging object '" << obj_name << "' to target bucket '" << configuration.target_bucket << "'. "
+        << " last committed object is '" << old_obj <<
+        "'. error: " << cpp_strerror(-ret) << std::endl;
       return -ret;
     }
     cout << "flushed pending logging object '" << old_obj

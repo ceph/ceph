@@ -1138,7 +1138,7 @@ int RadosBucket::get_logging_object_name(std::string& obj_name,
     return -EIO;
   }
   bufferlist bl;
-  const int ret = rgw_get_system_obj(store->svc()->sysobj,
+  if (const int ret = rgw_get_system_obj(store->svc()->sysobj,
                                data_pool,
                                obj_name_oid,
                                bl,
@@ -1147,13 +1147,12 @@ int RadosBucket::get_logging_object_name(std::string& obj_name,
                                y,
                                dpp,
                                nullptr,
-                               nullptr);
-  if (ret < 0) {
-    if (ret == -ENOENT) {
-      ldpp_dout(dpp, 20) << "INFO: logging object name '" << obj_name_oid << "' not found. ret = " << ret << dendl;
-      return ret;
+                               nullptr); ret < 0) {
+    if (ret != -ENOENT) {
+      ldpp_dout(dpp, 1) << "ERROR: failed to get logging object name from '" << obj_name_oid << "'. ret = " << ret << dendl;
+    } else {
+      ldpp_dout(dpp, 20) << "INFO: logging object name does not exist at '" << obj_name_oid << "'" << dendl;
     }
-    ldpp_dout(dpp, 1) << "ERROR: failed to get logging object name from '" << obj_name_oid << "'. ret = " << ret << dendl;
     return ret;
   }
   obj_name = bl.to_str();
@@ -1274,7 +1273,7 @@ int RadosBucket::commit_logging_object(const std::string& obj_name,
   std::map<string, bufferlist> obj_attrs;
   ceph::real_time mtime;
   bufferlist bl_data;
-  if (const auto ret = rgw_get_system_obj(store->svc()->sysobj,
+  if (auto ret = rgw_get_system_obj(store->svc()->sysobj,
                      data_pool,
                      temp_obj_name,
                      bl_data,
@@ -1284,13 +1283,28 @@ int RadosBucket::commit_logging_object(const std::string& obj_name,
                      dpp,
                      &obj_attrs,
                      nullptr); ret < 0) {
-    if (ret == -ENOENT) {
-      ldpp_dout(dpp, 5) << "WARNING: temporary logging object '" << temp_obj_name << "' does not exists" << dendl;
-    } else {
+    if (ret != -ENOENT) {
       ldpp_dout(dpp, 1) << "ERROR: failed to read logging data when committing object '" << temp_obj_name
         << ". error: " << ret << dendl;
+      return ret;
     }
-    return ret;
+    ldpp_dout(dpp, 20) << "INFO: temporary logging object '" << temp_obj_name << "' does not exist. committing it empty" << dendl;
+    // creating an empty object
+    if (ret = rgw_put_system_obj(dpp, store->svc()->sysobj,
+                   data_pool,
+                   temp_obj_name,
+                   bl_data, // empty bufferlist
+                   true, // exclusive
+                   nullptr,
+                   ceph::real_time::clock::now(),
+                   y); ret < 0) {
+      if (ret == -EEXIST) {
+        ldpp_dout(dpp, 5) << "WARNING: race detected in committing an empty logging object '" << temp_obj_name << dendl;
+      } else {
+        ldpp_dout(dpp, 1) << "ERROR: failed to commit empty logging object '" << temp_obj_name << "'. error: " << ret << dendl;
+      }
+      return ret;
+    }
   }
 
   uint64_t size = bl_data.length();
