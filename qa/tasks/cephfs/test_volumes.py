@@ -9652,3 +9652,23 @@ class TestCorruptedSubvolumes(TestVolumesHelper):
                               retval=errno.ENOENT,
                               errmsgs='mount path missing for subvolume')
         self.run_ceph_cmd(f'fs subvolume rm {self.volname} {sv1} --force')
+
+    def test_rm_subvol_that_has_snap_and_missing__UUID_dir(self):
+        sv1 = 'sv1'
+        ss1 = 'ss1'
+
+        self.run_ceph_cmd(f'fs subvolume create {self.volname} {sv1}')
+        self.run_ceph_cmd(f'fs subvolume snapshot create {self.volname} {sv1} {ss1}')
+
+        sv_path = self.get_ceph_cmd_stdout('fs subvolume getpath '
+                                           f'{self.volname} {sv1}').strip()[1:]
+        self.mount_a.run_shell(f'sudo rmdir {sv_path}', omit_sudo=False)
+
+        self.negtest_ceph_cmd(f'fs subvolume snapshot rm {self.volname} {sv1} {ss1}',
+                              retval=errno.ENOENT,
+                              errmsgs='mount path missing for subvolume')
+        self.run_ceph_cmd(f'fs subvolume snapshot rm {self.volname} {sv1} {ss1} '
+                           '--force')
+
+        # cleanup
+        self.run_ceph_cmd(f'fs subvolume rm {self.volname} {sv1} --force')
