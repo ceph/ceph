@@ -197,9 +197,18 @@ class GlobalRecoveryEvent(Event):
         self._active_clean_num = active_clean_num
         self._persists()
 
-    def global_event_update_progress(self, log):
-        # type: (logging.Logger) -> None
-        "Update progress of Global Recovery Event"
+
+    def update_progress_maybe_complete(self, log):
+        # type: (logging.Logger) -> bool
+        """
+        Update progress of Global Recovery Event and complete if the following conditions are met:
+        1. All PGs are active+clean
+        2. A holdoff period has elapsed to avoid premature completion
+        Returns:
+            bool
+            :True if event should complete
+            :False if we should keep tracking
+        """
         global _module
         assert _module
         skipped_pgs = 0
@@ -218,25 +227,57 @@ class GlobalRecoveryEvent(Event):
                 skipped_pgs += 1
                 continue
         start = self._active_clean_num
-        current = active_clean_pg_count
+        current = active_clean_pg_count - skipped_pgs
         total = total_pg_num - skipped_pgs
+        # Get timing variables for holdoff logic
+        complete_holdoff_s = _module._COMPLETE_HOLDOFF_S
+        clean_since = _module._clean_since
+        now = time.time()
+        
         if (current == total):
             # All active+clean PGs have been recovered
-            self._progress = 1.0
-            self._persists()
-            return
+            # Apply holdoff period to avoid premature completion
+            _module._unclean_since = None
+            if clean_since is None:
+                _module._clean_since = now
+                log.debug("All PGs clean, starting holdoff period")
+                self._progress = 0.99
+                self._persists()
+                return False  # Continue tracking during holdoff
+            elif now - clean_since >= complete_holdoff_s:
+                # Holdoff period complete, finish the event
+                self._progress = 1.0
+                self._persists()
+                return True  # Event completed
+            else:
+                # Still in holdoff period
+                remaining = complete_holdoff_s - (now - clean_since)
+                log.debug("In completion holdoff, {0:.1f}s remaining".format(remaining))
+                self._progress = 0.99
+                self._persists()
+                return False  # Continue tracking
+        else:
+            # Not all PGs are clean yet, reset clean timer
+            _module._clean_since = None
 
         denominator = (start - total)
         if denominator == 0:
             # start == target, No need to track anymore
             self._progress = 1.0
             self._persists()
-            return
+            return True # Event completed
 
         self._progress = (start - current) / denominator
-
         log.debug("Updated progress to %s", self.summary())
+        # Handle edge case where progress calculation reaches 1.0
+        if self._progress >= 1.0:
+            self._progress = 0.99
+            # Don't complete immediately, let the holdoff logic handle it
+            self._persists()
+            return False  # Continue tracking
+
         self._persists()
+        return False  # Continue tracking
 
     @property
     def progress(self):
@@ -486,6 +527,11 @@ class Module(MgrModule):
         global _module
         _module = self
 
+        self._CREATE_DEBOUNCE_S = 15 # seconds to wait before creating
+        self._COMPLETE_HOLDOFF_S = 20 # seconds to wait before completing
+        self._unclean_since = None  # type: Optional[float]
+        self._clean_since = None  # type: Optional[float]
+
         # only for mypy
         if TYPE_CHECKING:
             self.max_completed_events = 0
@@ -602,28 +648,40 @@ class Module(MgrModule):
 
     def _pg_state_changed(self):
 
-        # This function both constructs and updates
-        # the global recovery event if one of the
-        # PGs is not at active+clean state
+        # the global recovery event if all the following are true:
+        # 1. one of the PGs is not at active+clean state,
+        # 2. pgs_not_active > 0 has been true for at least
+        # _CREATE_DEBOUNCE_S seconds.
+        # 3. degraded_objects > 0 or any PGs are in
+        # recovering, recovery_wait, backfilling, 
+        # backfill_wait, undersized, remapped, stale, inconsistent.
         pg_stats_active_clean = _module.get("pg_stats_active_clean")
         total_pg_count = pg_stats_active_clean["total_pg_count"]
         active_clean_pg_count = pg_stats_active_clean["active_clean_pg_count"]
-        try:
-            # There might be a case where there is no pg_num
-            progress = float(active_clean_pg_count) / total_pg_count
-        except ZeroDivisionError:
-            return
-        if progress < 1.0:
-            self.log.warning(("Starting Global Recovery Event,"
-                              "%d pgs not in active + clean state"),
-                              total_pg_count - active_clean_pg_count)
-            ev = GlobalRecoveryEvent("Global Recovery Event",
-                    refs=[("global", "")],
-                    add_to_ceph_s=True,
-                    start_epoch=self.get_osdmap().get_epoch(),
-                    active_clean_num=active_clean_pg_count)
-            ev.global_event_update_progress(self.log)
-            self._events[ev.id] = ev
+        unclean_num = total_pg_count - active_clean_pg_count
+        now = time.time()
+        if unclean_num:
+            self._clean_since = None
+            if self._unclean_since is None:
+                self._unclean_since = now
+            try:
+                # There might be a case where there is no pg_num
+                progress = float(active_clean_pg_count) / total_pg_count
+            except ZeroDivisionError:
+                return
+            if progress < 1.0 and now - self._unclean_since > self._CREATE_DEBOUNCE_S:
+                self.log.warning(("Starting Global Recovery Event,"
+                                "%d pgs not in active + clean state"),
+                                total_pg_count - active_clean_pg_count)
+                ev = GlobalRecoveryEvent("Global Recovery Event",
+                        refs=[("global", "")],
+                        add_to_ceph_s=True,
+                        start_epoch=self.get_osdmap().get_epoch(),
+                        active_clean_num=active_clean_pg_count)
+                if ev.update_progress_maybe_complete(self.log):
+                    self.maybe_complete(ev)
+                else:
+                    self._events[ev.id] = ev
 
     def _process_osdmap(self):
         old_osdmap = self._latest_osdmap
@@ -653,15 +711,15 @@ class Module(MgrModule):
                     self.maybe_complete(ev)
                 elif isinstance(ev, GlobalRecoveryEvent):
                     global_event = True
-                    ev.global_event_update_progress(self.log)
-                    self.maybe_complete(ev)
+                    # Update the global event and complete the event if needed be
+                    if ev.update_progress_maybe_complete(self.log):
+                        self.maybe_complete(ev)
             except KeyError:
                 self.log.warning("_process_pg_summary: ev {0} does not exist".format(ev_id))
                 continue
 
         if not global_event:
-            # If there is no global event
-            # we create one
+            # Lets see if need to create a global recovery event 
             self._pg_state_changed()
 
     def maybe_complete(self, event):
