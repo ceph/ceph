@@ -6380,8 +6380,10 @@ int RGWRados::Object::Delete::delete_obj(optional_yield y,
     if (add_log) {
       r = add_datalog_entry(dpp, store->svc.datalog_rados,
 			    target->get_bucket_info(), bs->shard_id, y);
-      ldpp_dout(dpp, 0) << "failed to write datalog for object: r=" << r << dendl;
-      return r;
+      if (r < 0) {
+        ldpp_dout(dpp, 0) << "failed to write datalog for object: r=" << r << dendl;
+        return r;
+      }
     }
 
     return 0;

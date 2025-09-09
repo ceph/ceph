@@ -1909,26 +1909,7 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
   // op.olh_epoch is provided (> 0) in the case when a remote epoch is coming in as the result of multisite sync;
   uint64_t candidate_epoch = op.olh_epoch ? op.olh_epoch :
     duration_cast<std::chrono::nanoseconds>(obj.mtime().time_since_epoch()).count();
-  do {
-    if (!olh.start_modify(candidate_epoch)) {
-      ret = obj.write(candidate_epoch, false, header);
-      if (ret < 0) {
-        return ret;
-      }
-
-      // no point here in adding CLS_RGW_OLH_OP_LINK_OLH to the pending log as we know that
-      // the epoch is already stale compared to the current - so no point in applying it;
-
-      if (removing) {
-        olh.update_log(CLS_RGW_OLH_OP_REMOVE_INSTANCE, op.op_tag, op.key, false, candidate_epoch);
-      }
-
-      // do not return yet - we haven't logged the LINK_OLH op to the bilog yet; not doing so will result in an
-      // orphaned BI instance entry in the peer zone (consuming the bilog) that is never linked into the OLH -> thus
-      // 'radosgw-admin bucket list' command won't report the entry even though data for it has been replicated
-      break;
-    }
-
+  if (olh.start_modify(candidate_epoch)) {
     // promote this version to current if it's a newer epoch, or if it matches the
     // current epoch and sorts after the current instance
     const bool promote = (olh.get_epoch() > prev_epoch) ||
@@ -1994,9 +1975,24 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
     if (ret < 0) {
       return ret;
     }
-  } while (false);
 
-  ret = olh.write(header);
+    ret = olh.write(header);
+  }
+  else {
+    ret = obj.write(candidate_epoch, false, header);
+    if (ret < 0) {
+      return ret;
+    }
+
+    // no point here in adding CLS_RGW_OLH_OP_LINK_OLH to the pending log as we know that
+    // the epoch is already stale compared to the current - so no point in applying it;
+
+    if (removing) {
+      olh.update_log(CLS_RGW_OLH_OP_REMOVE_INSTANCE, op.op_tag, op.key, false, candidate_epoch);
+      ret = olh.write(header);
+    }
+  }
+
   if (ret < 0) {
     CLS_LOG(0, "ERROR: failed to update olh ret=%d", ret);
     return ret;
@@ -2099,25 +2095,7 @@ static int rgw_bucket_unlink_instance(cls_method_context_t hctx, bufferlist *in,
   // op.olh_epoch is provided (> 0) in the case when a remote epoch is coming in as the result of multisite sync;
   uint64_t candidate_epoch = op.olh_epoch ? op.olh_epoch :
     duration_cast<std::chrono::nanoseconds>(real_clock::now().time_since_epoch()).count();
-  do {
-    if (!olh.start_modify(candidate_epoch)) {
-      ret = obj.unlink_list_entry(header);
-      if (ret < 0) {
-        return ret;
-      }
-
-      if (obj.is_delete_marker()) {
-        return 0;
-      }
-
-      olh.update_log(CLS_RGW_OLH_OP_REMOVE_INSTANCE, op.op_tag, op.key, false, candidate_epoch);
-
-      // do not return yet - we haven't logged the UNLINK_INSTANCE op to the bilog; if we don't log then we will have an
-      // BI instance entry appear in the OLH history in the peer zone that has not been removed from the OLH -> thus
-      // 'radosgw-admin bucket list' command will report the entry even though the data for it has been removed
-      break;
-    }
-
+  if (olh.start_modify(candidate_epoch)) {
     rgw_bucket_olh_entry &olh_entry = olh.get_entry();
     cls_rgw_obj_key &olh_key = olh_entry.key;
     CLS_LOG(20, "%s: updating olh log: existing olh entry: %s[%s] (delete_marker=%d)", __func__,
@@ -2172,7 +2150,19 @@ static int rgw_bucket_unlink_instance(cls_method_context_t hctx, bufferlist *in,
     if (ret < 0) {
       return ret;
     }
-  } while (false);
+  }
+  else {
+    ret = obj.unlink_list_entry(header);
+    if (ret < 0) {
+      return ret;
+    }
+
+    if (obj.is_delete_marker()) {
+      return 0;
+    }
+
+    olh.update_log(CLS_RGW_OLH_OP_REMOVE_INSTANCE, op.op_tag, op.key, false, candidate_epoch);
+  }
 
   ret = olh.write(header);
   if (ret < 0) {

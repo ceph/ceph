@@ -114,8 +114,8 @@ def bilog_list(zone, bucket, args = None):
     return json.loads(bilog)
 
 def bucket_list(zone, bucket, args = None):
-    cmd = ['bucket', 'list', '--bucket', bucket, '--max-entries', '100000'] + (args or [])
-    cmd += ['--tenant', config.tenant, '--uid', user.name] if config.tenant else []
+    cmd = ['bucket', 'list', '--bucket', bucket, '--max-entries', '100000', '--uid', user.name] + (args or [])
+    cmd += ['--tenant', config.tenant] if config.tenant else []
     output, _ = zone.cluster.admin(cmd, read_only=True)
     return json.loads(output)
 
@@ -4868,7 +4868,6 @@ def test_bucket_delete_with_bucket_sync_policy_directional():
 
     assert check_all_buckets_dont_exist(zcA, buckets)
     assert check_all_buckets_dont_exist(zcB, buckets)
-
     remove_sync_policy_group(c1, "sync-group")
 
     return
@@ -4947,7 +4946,6 @@ def test_bucket_delete_with_bucket_sync_policy_symmetric():
 
     assert check_all_buckets_dont_exist(zcA, buckets)
     assert check_all_buckets_dont_exist(zcB, buckets)
-
     remove_sync_policy_group(c1, "sync-group")
     return
 
@@ -5080,7 +5078,6 @@ def test_delete_bucket_with_zone_opt_out():
 
     bucket = get_bucket(zcC, bucketA.name)
     check_objects_not_exist(bucket, objnameA)
-
     # verify that objnameB is not synced to either zoneA or zoneB
     bucket = get_bucket(zcA, bucketA.name)
     check_objects_not_exist(bucket, objnameB)
@@ -5116,7 +5113,6 @@ def test_delete_bucket_with_zone_opt_out():
     assert check_all_buckets_dont_exist(zcC, buckets)
 
     remove_sync_policy_group(c1, "sync-group")
-
     return
 
 @attr('sync_policy')
@@ -5175,7 +5171,6 @@ def test_bucket_delete_with_sync_policy_object_prefix():
 
     zone_bucket_checkpoint(zoneA, zoneB, bucketA.name)
     zone_data_checkpoint(zoneB, zoneA)
-
     # verify that objnameA is synced to zoneB
     bucket = get_bucket(zcB, bucketA.name)
     check_object_exists(bucket, objnameA)
@@ -5810,15 +5805,12 @@ def test_bucket_replication_source_allow_either_getobjectversion_or_getobjectver
 def test_bucket_replication_source_forbidden_objretention():
     zonegroup = realm.master_zonegroup()
     zonegroup_conns = ZonegroupConns(zonegroup)
-
     source = zonegroup_conns.rw_zones[0]
     dest = zonegroup_conns.rw_zones[1]
-
     source_bucket_name = gen_bucket_name()
     source.s3_client.create_bucket(Bucket=source_bucket_name, ObjectLockEnabledForBucket=True)
     dest_bucket = dest.create_bucket(gen_bucket_name())
     zonegroup_meta_checkpoint(zonegroup)
-
     # create replication configuration
     source.s3_client.put_bucket_replication(
         Bucket=source_bucket_name,
@@ -5833,7 +5825,6 @@ def test_bucket_replication_source_forbidden_objretention():
             }]
         }
     )
-
     # Deny myself from fetching the source object's retention for replication
     source.s3_client.put_bucket_policy(
         Bucket=source_bucket_name,
@@ -5848,7 +5839,6 @@ def test_bucket_replication_source_forbidden_objretention():
         })
     )
     zonegroup_meta_checkpoint(zonegroup)
-
     # upload an object and wait for sync.
     objname = 'dummy'
     k = new_key(source, source_bucket_name, objname)
@@ -5868,15 +5858,12 @@ def test_bucket_replication_source_forbidden_objretention():
 def test_bucket_replication_source_forbidden_legalhold():
     zonegroup = realm.master_zonegroup()
     zonegroup_conns = ZonegroupConns(zonegroup)
-
     source = zonegroup_conns.rw_zones[0]
     dest = zonegroup_conns.rw_zones[1]
-
     source_bucket_name = gen_bucket_name()
     source.s3_client.create_bucket(Bucket=source_bucket_name, ObjectLockEnabledForBucket=True)
     dest_bucket = dest.create_bucket(gen_bucket_name())
     zonegroup_meta_checkpoint(zonegroup)
-
     # create replication configuration
     source.s3_client.put_bucket_replication(
         Bucket=source_bucket_name,
@@ -5891,7 +5878,6 @@ def test_bucket_replication_source_forbidden_legalhold():
             }]
         }
     )
-
     # Deny myself from fetching the source object's retention for replication
     source.s3_client.put_bucket_policy(
         Bucket=source_bucket_name,
@@ -5906,7 +5892,6 @@ def test_bucket_replication_source_forbidden_legalhold():
         })
     )
     zonegroup_meta_checkpoint(zonegroup)
-
     # upload an object and wait for sync.
     objname = 'dummy'
     k = new_key(source, source_bucket_name, objname)
