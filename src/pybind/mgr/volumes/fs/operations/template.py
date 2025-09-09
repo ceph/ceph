@@ -48,6 +48,7 @@ class SubvolumeOpType(Enum):
     RESIZE                = 'resize'
     SNAP_CREATE           = 'snap-create'
     SNAP_REMOVE           = 'snap-rm'
+    SNAP_REMOVE_FORCE     = 'snap-rm-force'
     SNAP_LIST             = 'snap-ls'
     SNAP_GETPATH          = 'snap-getpath'
     SNAP_INFO             = 'snap-info'
