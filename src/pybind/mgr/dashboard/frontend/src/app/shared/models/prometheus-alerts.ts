@@ -1,3 +1,5 @@
+type AlertState = 'active' | 'suppressed' | 'resolved' | 'unprocessed';
+
 export class PrometheusAlertLabels {
   alertname: string;
   instance: string;
@@ -48,7 +50,7 @@ export class PrometheusRule {
 
 export class AlertmanagerAlert extends CommonAlertmanagerAlert {
   status: {
-    state: 'unprocessed' | 'active' | 'suppressed';
+    state: AlertState;
     silencedBy: null | string[];
     inhibitedBy: null | string[];
   };
@@ -84,9 +86,16 @@ export class AlertmanagerNotification {
 }
 
 export class PrometheusCustomAlert {
-  status: 'resolved' | 'unprocessed' | 'active' | 'suppressed';
+  status: AlertState;
   name: string;
   url: string;
   description: string;
   fingerprint?: string | boolean;
 }
+
+export const AlertState = {
+  ACTIVE: 'active' as AlertState,
+  SUPPRESSED: 'suppressed' as AlertState,
+  RESOLVED: 'resolved' as AlertState,
+  UNPROCCESSED: 'unprocessed' as AlertState
+};
