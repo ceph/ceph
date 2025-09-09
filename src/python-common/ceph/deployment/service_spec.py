@@ -1584,9 +1584,12 @@ class NvmeofServiceSpec(ServiceSpec):
                  omap_file_lock_retries: Optional[int] = 30,
                  omap_file_lock_retry_sleep_interval: Optional[float] = 1.0,
                  omap_file_update_reloads: Optional[int] = 10,
+                 omap_file_update_attempts: Optional[int] = 500,
                  enable_prometheus_exporter: Optional[bool] = True,
                  prometheus_port: Optional[int] = 10008,
                  prometheus_stats_interval: Optional[int] = 10,
+                 prometheus_frequency_slow_down_factor: Optional[float] = 3.0,
+                 prometheus_cycles_to_adjust_speed: Optional[int] = 3,
                  prometheus_startup_delay: Optional[int] = 240,
                  prometheus_connection_list_cache_expiration: Optional[int] = 60,
                  bdevs_per_cluster: Optional[int] = None,
@@ -1707,6 +1710,10 @@ class NvmeofServiceSpec(ServiceSpec):
         self.prometheus_port = prometheus_port or 10008
         #: ``prometheus_stats_interval`` Prometheus get stats interval
         self.prometheus_stats_interval = prometheus_stats_interval
+        #: ``prometheus_frequency_slow_down_factor`` Ratio between get stats and the interval
+        self.prometheus_frequency_slow_down_factor = prometheus_frequency_slow_down_factor
+        #: ``prometheus_cycles_to_adjust_speed`` Number of slow cycles before adjusting interval
+        self.prometheus_cycles_to_adjust_speed = prometheus_cycles_to_adjust_speed
         #: ``prometheus_startup_delay`` Prometheus startup delay, in seconds
         self.prometheus_startup_delay = prometheus_startup_delay
         #: ``prometheus_connection_list_cache_expiration`` Expiration time of connection list cache
@@ -1730,8 +1737,10 @@ class NvmeofServiceSpec(ServiceSpec):
         self.omap_file_lock_retries = omap_file_lock_retries
         #: ``omap_file_lock_retry_sleep_interval`` seconds to wait before retrying to lock OMAP
         self.omap_file_lock_retry_sleep_interval = omap_file_lock_retry_sleep_interval
-        #: ``omap_file_update_reloads`` number of attempt to reload OMAP when it differs from local
+        #: ``omap_file_update_reloads`` number of attempts to lock OMAP when it differs from local
         self.omap_file_update_reloads = omap_file_update_reloads
+        #: ``omap_file_update_attempts`` attempts to update local state when it differs from OMAP
+        self.omap_file_update_attempts = omap_file_update_attempts
         #: ``max_hosts_per_namespace`` max number of hosts per namespace
         self.max_hosts_per_namespace = max_hosts_per_namespace
         #: ``max_namespaces_with_netmask`` max number of namespaces which are not auto visible
@@ -1968,6 +1977,7 @@ class NvmeofServiceSpec(ServiceSpec):
                                    "OMAP file lock sleep interval")
         verify_non_negative_int(self.omap_file_lock_retries, "OMAP file lock retries")
         verify_non_negative_int(self.omap_file_update_reloads, "OMAP file reloads")
+        verify_non_negative_int(self.omap_file_update_attempts, "local state updates on reload")
         verify_non_negative_number(self.spdk_timeout, "SPDK timeout")
         verify_non_negative_int(self.max_log_file_size_in_mb, "Log file size")
         verify_non_negative_int(self.max_log_files_count, "Log files count")
@@ -1988,6 +1998,11 @@ class NvmeofServiceSpec(ServiceSpec):
         verify_boolean(self.abort_discovery_on_errors, "Abort discovery service on errors")
         verify_non_negative_int(self.prometheus_port, "Prometheus port")
         verify_non_negative_int(self.prometheus_stats_interval, "Prometheus stats interval")
+        verify_non_negative_number(self.prometheus_frequency_slow_down_factor,
+                                   "Prometheus stats interval factor")
+        verify_non_negative_int(self.prometheus_cycles_to_adjust_speed,
+                                "Prometheus count of slow cycles before adjusting")
+        verify_non_negative_int(self.prometheus_startup_delay, "Prometheus startup delay")
         verify_boolean(self.state_update_notify, "State update notify")
         verify_boolean(self.enable_spdk_discovery_controller, "Enable SPDK discovery controller")
         verify_boolean(self.enable_prometheus_exporter, "Enable Prometheus exporter")
