@@ -16,6 +16,7 @@ from ..constants import DEFAULT_IMAGE
 from ..context import CephadmContext
 from ..deployment_utils import to_deployment_container
 from ..exceptions import Error
+from ..call_wrappers import call_throws
 from ..file_utils import (
     make_run_dir,
     pathify,
@@ -196,10 +197,64 @@ class Ceph(ContainerDaemonForm):
         )
         mounts.update(cm)
 
+    def setup_qat_args(self, ctx: CephadmContext, args: List[str]) -> None:
+        try:
+            out, _, _ = call_throws(ctx, ['ls', '-1', '/dev/vfio/devices'])
+            devices = [d for d in out.split('\n') if d]
+
+            args.extend(
+                [
+                    '--cap-add=SYS_ADMIN',
+                    '--cap-add=SYS_PTRACE',
+                    '--cap-add=IPC_LOCK',
+                    '--security-opt',
+                    'seccomp=unconfined',
+                    '--ulimit',
+                    'memlock=209715200:209715200',
+                    '--device=/dev/qat_adf_ctl:/dev/qat_adf_ctl',
+                    '--device=/dev/vfio/vfio:/dev/vfio/vfio',
+                    '-v',
+                    '/dev:/dev',
+                    '--volume=/etc/sysconfig/qat:/etc/sysconfig/qat:ro',
+                ]
+            )
+
+            for dev in devices:
+                args.append(
+                    f'--device=/dev/vfio/devices/{dev}:/dev/vfio/devices/{dev}'
+                )
+
+            os.makedirs('/etc/sysconfig', exist_ok=True)
+            with open('/etc/sysconfig/qat', 'w') as f:
+                f.write('ServicesEnabled=dc\nPOLICY=8\nQAT_USER=ceph\n')
+
+            logger.info(
+                f'[QAT] Successfully injected container args for {self.identity.daemon_name}'
+            )
+        except RuntimeError:
+            logger.exception('[QAT] Could not list /dev/vfio/devices')
+            devices = []
+
     def customize_container_args(
         self, ctx: CephadmContext, args: List[str]
     ) -> None:
         args.append(ctx.container_engine.unlimited_pids_option)
+        config_json = fetch_configs(ctx)
+        qat_raw: Any = config_json.get('qat', {})
+        if qat_raw is None:
+            qat_config: Dict[str, Any] = {}
+        elif isinstance(qat_raw, dict):
+            qat_config = qat_raw
+        else:
+            raise Error(
+                f'Invalid qat config: expected dict got {type(qat_raw.__name__)}'
+            )
+
+        if (
+            self.identity.daemon_type == 'rgw'
+            and qat_config.get('compression') == 'hw'
+        ):
+            self.setup_qat_args(ctx, args)
 
     def customize_process_args(
         self, ctx: CephadmContext, args: List[str]
