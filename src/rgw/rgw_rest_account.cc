@@ -220,6 +220,84 @@ void RGWOp_Account_Delete::execute(optional_yield y)
                                 s->err.message, flusher, y);
 }
 
+class RGWOp_Account_Quota_Set : public RGWRESTOp {
+public:
+  int check_caps(const RGWUserCaps& caps) override {
+    return caps.check_cap("accounts", RGW_CAP_WRITE);
+  }
+
+  void execute(optional_yield y) override;
+
+  const char* name() const override { return "set_account_quota_info"; }
+};
+
+/**
+ * @brief Sets quota limits for an RGW account
+ * 
+ * @param y Optional yield context for coroutine-based async operations
+ * 
+ * REST Endpoint:
+ *   PUT /admin/account
+ * 
+ * Query Parameters:
+ *   - quota: (required) Subresource to trigger the put account quota operation
+ *   - id: (required) Account ID to set quota for
+ *   - quota-type (required): Type of quota to set - "account" or "bucket" 
+ *   - max-size: (optional) Maximum storage size in bytes
+ *   - max-objects: (optional) Maximum number of objects (-1 for unlimited)
+ *   - enabled: (optional) Enable/disable quota enforcement (true/false)
+ * 
+ * Example Usage:
+ *   PUT /admin/account?quota&id=RGW123&quota-type=account&max-size=1073741824&enabled=true
+ * 
+ */
+
+void RGWOp_Account_Quota_Set::execute(optional_yield y)
+{
+  bufferlist data;
+  op_ret = rgw_forward_request_to_master(this, *s->penv.site, s->user->get_id(),
+                                         &data, nullptr, s->info, s->err, y);
+  if (op_ret < 0) {
+    ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
+    return;
+  }
+
+  rgw::account::AdminOpState op_state;
+  bool has_account_id = false;
+  RESTArgs::get_string(s, "id", "", &op_state.account_id, &has_account_id);
+  bool has_quota_scope = false;
+  RESTArgs::get_string(s, "quota-type", "", &op_state.quota_scope, &has_quota_scope);
+
+  if (!has_account_id || !has_quota_scope || (op_state.quota_scope != "account" && op_state.quota_scope != "bucket")) {
+    op_ret = -EINVAL;
+    return;
+  }
+
+  int32_t quota_max_size = 0;
+  bool has_quota_max_size = false;
+  RESTArgs::get_int32(s, "max-size", 0, &quota_max_size, &has_quota_max_size);
+  if (has_quota_max_size) {
+    op_state.quota_max_size = quota_max_size;
+  }
+
+  int32_t quota_max_objects = 0;
+  bool has_quota_max_objects = false;
+  RESTArgs::get_int32(s, "max-objects", 0, &quota_max_objects, &has_quota_max_objects);
+  if (has_quota_max_objects) {
+    op_state.quota_max_objects = quota_max_objects;
+  }
+
+  bool quota_enabled = false;
+  bool has_quota_enabled = false;
+  RESTArgs::get_bool(s, "enabled", false, &quota_enabled, &has_quota_enabled);
+  if (has_quota_enabled) {
+    op_state.quota_enabled = quota_enabled;
+  }
+
+  op_ret = rgw::account::modify(this, driver, op_state,
+                                s->err.message, flusher, y);
+}
+
 RGWOp* RGWHandler_Account::op_post()
 {
   return new RGWOp_Account_Create;
@@ -227,6 +305,8 @@ RGWOp* RGWHandler_Account::op_post()
 
 RGWOp* RGWHandler_Account::op_put()
 {
+  if (s->info.args.sub_resource_exists("quota"))
+    return new RGWOp_Account_Quota_Set;
   return new RGWOp_Account_Modify;
 }
 
