@@ -7538,7 +7538,9 @@ void RGWDeleteMultiObj::write_ops_log_entry(rgw_log_entry& entry) const {
   entry.delete_multi_obj_meta.objects = std::move(ops_log_entries);
 }
 
-void RGWDeleteMultiObj::handle_individual_object(const RGWMultiDelObject& object, optional_yield y)
+void RGWDeleteMultiObj::handle_individual_object(const RGWMultiDelObject& object,
+                                                 optional_yield y,
+                                                 const bool skip_olh_obj_update)
 {
   const string& key = object.get_key();
   const string& instance = object.get_version_id();
@@ -7629,11 +7631,12 @@ void RGWDeleteMultiObj::handle_individual_object(const RGWMultiDelObject& object
   del_op->params.if_match = object.get_if_match();
   del_op->params.size_match = object.get_size_match();
 
-  op_ret = del_op->delete_obj(dpp, y, rgw::sal::FLAG_LOG_OP);
+  op_ret = del_op->delete_obj(dpp, y,
+                              rgw::sal::FLAG_LOG_OP | (skip_olh_obj_update ? rgw::sal::FLAG_SKIP_UPDATE_OLH : 0));
   if (op_ret == -ENOENT) {
     op_ret = 0;
   }
-      
+
   if (auto ret = rgw::bucketlogging::log_record(driver, rgw::bucketlogging::LoggingType::Any, obj.get(), s, canonical_name(), etag, obj_size, this, y, true, false); ret < 0) {
     // don't reply with an error in case of failed delete logging
     ldpp_dout(this, 5) << "WARNING: multi DELETE operation ignores bucket logging failure: " << ret << dendl;
@@ -7651,9 +7654,46 @@ void RGWDeleteMultiObj::handle_individual_object(const RGWMultiDelObject& object
   send_partial_response(o, del_op->result.delete_marker, del_op->result.version_id, op_ret);
 }
 
-void RGWDeleteMultiObj::handle_objects(const std::vector<RGWMultiDelObject>& objects,
-                                       uint32_t max_aio,
-                                       boost::asio::yield_context yield)
+void RGWDeleteMultiObj::handle_versioned_objects(const std::vector<RGWMultiDelObject>& objects,
+                                                 uint32_t max_aio,
+                                                 boost::asio::yield_context yield)
+{
+  auto group = ceph::async::spawn_throttle{yield, max_aio};
+  std::map<std::string, std::vector<RGWMultiDelObject>> grouped_objects;
+
+  // group objects by their keys
+  for (const auto& object : objects) {
+    const std::string& key = object.get_key();
+    grouped_objects[key].push_back(object);
+  }
+
+  // for each group of objects, handle all but the last object and skip update_olh
+  for (const auto& [_, objects] : grouped_objects) {
+    for (size_t i = 0; i + 1 < objects.size(); ++i) { // skip the last element
+      group.spawn([this, &objects, i] (boost::asio::yield_context yield) {
+        handle_individual_object(objects[i], yield, true /* skip_olh_obj_update */);
+      });
+
+      rgw_flush_formatter(s, s->formatter);
+    }
+  }
+  group.wait();
+
+  // Now handle the last object of each group with update_olh
+  for (const auto& [_, objects] : grouped_objects) {
+    const auto& object = objects.back();
+    group.spawn([this, &object] (boost::asio::yield_context yield) {
+      handle_individual_object(object, yield);
+    });
+
+    rgw_flush_formatter(s, s->formatter);
+  }
+  group.wait();
+}
+
+void RGWDeleteMultiObj::handle_non_versioned_objects(const std::vector<RGWMultiDelObject>& objects,
+                                                     uint32_t max_aio,
+                                                     boost::asio::yield_context yield)
 {
   auto group = ceph::async::spawn_throttle{yield, max_aio};
 
@@ -7665,6 +7705,17 @@ void RGWDeleteMultiObj::handle_objects(const std::vector<RGWMultiDelObject>& obj
     rgw_flush_formatter(s, s->formatter);
   }
   group.wait();
+}
+
+void RGWDeleteMultiObj::handle_objects(const std::vector<RGWMultiDelObject>& objects,
+                                       uint32_t max_aio,
+                                       boost::asio::yield_context yield)
+{
+  if (bucket->versioned()) {
+    handle_versioned_objects(objects, max_aio, yield);
+  } else {
+    handle_non_versioned_objects(objects, max_aio, yield);
+  }
 }
 
 void RGWDeleteMultiObj::execute(optional_yield y)
