@@ -914,6 +914,9 @@ int D4NFilterObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattr
   }
 
   if (!found_in_cache) {
+    if (cache_request) {
+      return -ENOENT;
+    }
     auto ret = next->set_obj_attrs(dpp, setattrs, delattrs, y, flags);
     if (ret < 0) {
       ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): set_obj_attrs method of backend store failed with ret: " << ret << dendl;
@@ -1588,6 +1591,10 @@ int D4NFilterObject::modify_obj_attrs(const char* attr_name, bufferlist& attr_va
       return ret;
     }
   } else {
+    if (cache_request) {
+      return -ENOENT;
+    }
+
     if (block.deleteMarker) {
       ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): object " << this->get_name() << " does not exist." << dendl;
       return -ENOENT;
@@ -2666,6 +2673,9 @@ int D4NFilterWriter::prepare(optional_yield y)
   d4n_writecache = g_conf()->d4n_writecache_enabled;
 
   if (!d4n_writecache) {
+    if (object->get_cache_request()) {
+      return -EINVAL;
+    }
     ldpp_dout(dpp, 0) << "D4NFilterWriter::" << __func__ << "(): calling next->prepare" << dendl;
     return next->prepare(y);
   } else {
@@ -2715,6 +2725,9 @@ int D4NFilterWriter::process(bufferlist&& data, uint64_t offset)
     int ret = 0;
 
     if (!d4n_writecache) {
+      if (object->get_cache_request()) {
+		return -EINVAL;
+      }
       ldpp_dout(dpp, 10) << "D4NFilterWriter::" << __func__ << "(): calling next process" << dendl;
       return next->process(std::move(data), offset);
     } else {
@@ -2840,6 +2853,9 @@ int D4NFilterWriter::complete(size_t accounted_size, const std::string& etag,
     object->set_attrs(attrs);
     object->set_attrs_from_obj_state(dpp, y, attrs, dirty);
   } else {
+    if (object->get_cache_request()) {
+      return -EINVAL;
+    }
     // we need to call next->complete here so that we are able to correctly get the object state needed for caching head
     ret = next->complete(accounted_size, etag, mtime, set_mtime, attrs, cksum,
                             delete_at, if_match, if_nomatch, user_data, zones_trace,
