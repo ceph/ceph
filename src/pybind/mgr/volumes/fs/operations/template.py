@@ -58,6 +58,7 @@ class SubvolumeOpType(Enum):
     CLONE_CREATE          = 'clone-create'
     CLONE_STATUS          = 'clone-status'
     CLONE_CANCEL          = 'clone-cancel'
+    CLONE_FAILED          = 'clone-failed'
     CLONE_INTERNAL        = 'clone_internal'
     ALLOW_ACCESS          = 'allow-access'
     DENY_ACCESS           = 'deny-access'

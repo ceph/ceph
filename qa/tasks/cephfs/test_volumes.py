@@ -9672,3 +9672,26 @@ class TestCorruptedSubvolumes(TestVolumesHelper):
 
         # cleanup
         self.run_ceph_cmd(f'fs subvolume rm {self.volname} {sv1} --force')
+
+    def test_clone_when_src_subvol_has_missing_UUID_dir(self):
+        sv1 = 'sv1'
+        ss1 = 'ss1'
+        c1 = 'c1'
+
+        self.run_ceph_cmd(f'fs subvolume create {self.volname} {sv1}')
+        sv_path = self.get_ceph_cmd_stdout('fs subvolume getpath '
+                                           f'{self.volname} {sv1}').strip()
+        sv_path = sv_path[1:]
+        self.run_ceph_cmd(f'fs subvolume snapshot create {self.volname} {sv1} {ss1}')
+        self.run_ceph_cmd('config set mgr mgr/volumes/snapshot_clone_delay 2')
+        self.run_ceph_cmd(f'fs subvolume snapshot clone {self.volname} {sv1} {ss1} {c1}')
+
+        self.mount_a.run_shell(f'sudo rmdir {sv_path}', omit_sudo=False)
+
+        time.sleep(2)
+        self._wait_for_clone_to_fail(c1, timo=20)
+
+        # cleanup
+        self.run_ceph_cmd(f'fs subvolume snapshot rm {self.volname} {sv1} {ss1} '
+                           '--force')
+        self.run_ceph_cmd(f'fs subvolume rm {self.volname} {sv1} --force')
