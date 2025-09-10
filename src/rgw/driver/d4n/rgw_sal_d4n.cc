@@ -827,6 +827,9 @@ int D4NFilterObject::load_obj_state(const DoutPrefixProvider *dpp, optional_yiel
                              bool follow_olh)
 {
   if (load_from_store) {
+    if (cache_request) {
+      return -ENOENT;
+    }
     return next->load_obj_state(dpp, y, follow_olh);
   }
   bool has_instance = false;
@@ -844,6 +847,9 @@ int D4NFilterObject::load_obj_state(const DoutPrefixProvider *dpp, optional_yiel
       this->clear_instance();
     }
     return 0;
+  }
+  if (cache_request) {
+    return -ENOENT;
   }
   return next->load_obj_state(dpp, y, follow_olh);
 }
@@ -1503,6 +1509,9 @@ int D4NFilterObject::get_obj_attrs(optional_yield y, const DoutPrefixProvider* d
     ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): " << " object " << this->get_name() << " does not exist." << dendl;
     return -ENOENT;
   } else if (!ret) {
+    if (cache_request) {
+      return -ENOENT;
+    }
     if(perfcounter) {
       perfcounter->inc(l_rgw_d4n_cache_misses);
     }
@@ -1699,6 +1708,9 @@ int D4NFilterObject::D4NFilterReadOp::prepare(optional_yield y, const DoutPrefix
     ldpp_dout(dpp, 10) << "D4NFilterObject::D4NFilterReadOp::" << __func__ << "(): object " << source->get_name() << " does not exist." << dendl;
     return -ENOENT;
   } else if (!ret) {
+    if (source->get_cache_request()) {
+      return -ENOENT;
+    }
     if(perfcounter) {
       perfcounter->inc(l_rgw_d4n_cache_misses);
     }
@@ -2073,6 +2085,11 @@ int D4NFilterObject::D4NFilterReadOp::iterate(const DoutPrefixProvider* dpp, int
       adjusted_len -= max_chunk_size;
     } while (start_part_num < num_parts);
   }
+
+  if (source->cache_request) {
+    return -ENOENT;
+  }
+
   ldpp_dout(dpp, 20) << "D4NFilterObject::iterate:: " << __func__ << "(): Fetching object from backend store" << dendl;
 
   Attrs obj_attrs;
