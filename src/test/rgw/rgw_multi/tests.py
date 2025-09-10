@@ -4016,10 +4016,10 @@ def test_timestamp_based_epochs():
             if not isinstance(entry, dict):
                 continue
 
-            name = entry.get("name")
-            instance = entry.get("instance")
+            name = entry["name"]
+            instance = entry["instance"]
             mtime = entry.get("meta", {}).get("mtime")
-            ver_epoch = entry.get("versioned_epoch")
+            ver_epoch = entry["versioned_epoch"]
 
             obj_ver= ObjVersion(name, instance, mtime, ver_epoch)
             if results.get(name) is None:
