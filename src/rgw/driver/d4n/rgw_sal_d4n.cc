@@ -915,6 +915,9 @@ int D4NFilterObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattr
   }
 
   if (!found_in_cache) {
+    if (cache_request) {
+      return -ENOENT;
+    }
     auto ret = next->set_obj_attrs(dpp, setattrs, delattrs, y, flags);
     if (ret < 0) {
       ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): set_obj_attrs method of backend store failed with ret: " << ret << dendl;
@@ -1585,6 +1588,10 @@ int D4NFilterObject::modify_obj_attrs(const char* attr_name, bufferlist& attr_va
       return ret;
     }
   } else {
+    if (cache_request) {
+      return -ENOENT;
+    }
+
     if (block.deleteMarker) {
       ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): object " << this->get_name() << " does not exist." << dendl;
       return -ENOENT;

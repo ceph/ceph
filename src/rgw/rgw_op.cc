@@ -4580,6 +4580,11 @@ void RGWPutObj::execute(optional_yield y)
 					 s->owner,
 					 pdest_placement, olh_epoch, s->req_id);
   }
+#ifdef WITH_RADOSGW_D4N
+  if (s->info.env->get_optional("HTTP_X_RGW_CACHE_REQUEST") && (g_conf().get_val<std::string>("rgw_filter") == "d4n")) {
+    dynamic_cast<rgw::sal::D4NFilterWriter*>(processor.get())->set_cache_request();
+  }
+#endif
 
   op_ret = processor->prepare(s->yield);
   if (op_ret < 0) {

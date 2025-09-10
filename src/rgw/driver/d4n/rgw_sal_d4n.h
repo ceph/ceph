@@ -364,6 +364,7 @@ class D4NFilterWriter : public FilterWriter {
    int sendRemote(const DoutPrefixProvider* dpp, rgw::d4n::CacheObj *object, std::string remoteCacheAddress, std::string key, bufferlist*
     out_bl, optional_yield y);
    const DoutPrefixProvider* get_dpp() { return this->dpp; } 
+   void set_cache_request() { object->set_cache_request(); }
 };
 
 class D4NGetObjectCB : public RGWHTTPStreamRWRequest::ReceiveCB {
