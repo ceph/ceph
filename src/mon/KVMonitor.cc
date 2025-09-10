@@ -70,6 +70,7 @@ void KVMonitor::create_pending()
 {
   dout(10) << " " << version << dendl;
   pending.clear();
+  pending_range_deletes.clear();
 }
 
 void KVMonitor::encode_pending(MonitorDBStore::TransactionRef t)
@@ -79,9 +80,29 @@ void KVMonitor::encode_pending(MonitorDBStore::TransactionRef t)
 
   // record the delta for this commit point
   bufferlist bl;
-  encode(pending, bl);
+
+  // Feature-based encoding strategy
+  // Check if all monitors in quorum support KV range operations
+  bool can_use_range_ops = HAVE_FEATURE(mon.get_quorum_con_features(), KV_RANGE_OPS);
+
+  if (can_use_range_ops) {
+    ENCODE_START(1, 1, bl);
+    encode(pending, bl);     // key operations (always present)
+    encode(pending_range_deletes, bl);  // range operations (new in v2)
+    ENCODE_FINISH(bl);
+
+    dout(15) << __func__ << " using v2 format with range ops, "
+             << "range_ops=" << pending_range_deletes.size()
+             << " key_ops=" << pending.size() << dendl;
+  } else {
+    // Legacy encoding (no version header, compatible with all versions)
+    encode(pending, bl);
+
+    dout(15) << __func__ << " using legacy format, key_ops=" << pending.size() << dendl;
+  }
+
   put_version(t, version+1, bl);
-  
+
   // make actual changes
   for (auto& p : pending) {
     string key = p.first;
@@ -91,6 +112,23 @@ void KVMonitor::encode_pending(MonitorDBStore::TransactionRef t)
     } else {
       dout(20) << __func__ << " rm " << key << dendl;
       t->erase(KV_PREFIX, key);
+    }
+  }
+
+  // handle range deletions
+  for (auto& rd : pending_range_deletes) {
+    if (rd.start.empty() && rd.end.empty()) {
+      // delete all keys with prefix
+      dout(10) << __func__ << " rm_prefix " << rd.prefix
+               << " (deleting all keys with this prefix)" << dendl;
+      t->erase_range(KV_PREFIX, rd.prefix, rd.prefix + "~");
+    } else {
+      string start_key = rd.prefix + (rd.start.empty() ? "" : "/" + rd.start);
+      string end_key = rd.prefix + (rd.end.empty() ? "~" : "/" + rd.end);
+      dout(10) << __func__ << " rm_range [" << start_key << ", " << end_key
+               << ") prefix=" << rd.prefix << " start=" << rd.start
+               << " end=" << rd.end << dendl;
+      t->erase_range(KV_PREFIX, start_key, end_key);
     }
   }
 }
@@ -219,7 +257,7 @@ bool KVMonitor::preprocess_command(MonOpRequestRef op)
       iter->next();
     }
     f->close_section();
-    
+
     stringstream tmp_ss;
     f->flush(tmp_ss);
     odata.append(tmp_ss);
@@ -305,6 +343,42 @@ bool KVMonitor::prepare_command(MonOpRequestRef op)
     pending[key].reset();
     goto update;
   }
+  else if (prefix == "config-key rm-range") {
+    // Check if range operations are supported
+    bool range_ops_supported = HAVE_FEATURE(mon.get_quorum_con_features(), KV_RANGE_OPS);
+
+    if (!range_ops_supported) {
+      err = -EOPNOTSUPP;
+      ss << "range operations not supported: cluster does not have 'kv-range-ops' feature enabled. "
+         << "All monitors must be upgraded to support this feature.";
+      goto reply;
+    }
+
+    // For range deletion, we need prefix parameter instead of key
+    string prefix_key;
+    if (!cmd_getval(cmdmap, "key", prefix_key)) {
+      err = -EINVAL;
+      ss << "must specify a prefix for range deletion";
+      goto reply;
+    }
+
+    string start, end;
+    cmd_getval(cmdmap, "start", start);
+    cmd_getval(cmdmap, "end", end);
+
+    // Use helper method for validation
+    err = _validate_range_params(prefix_key, start, end, ss);
+    if (err != 0) {
+      goto reply;
+    }
+
+    dout(10) << __func__ << " rm-range key_prefix=" << prefix_key
+             << " start=" << start << " end=" << end << dendl;
+
+    // Add to pending range deletions
+    pending_range_deletes.emplace_back(prefix_key, start, end);
+    goto update;
+  }
   else {
     ss << "unknown command " << prefix;
     err = -EINVAL;
@@ -316,7 +390,7 @@ reply:
 
 update:
   // see if there is an actual change
-  if (pending.empty()) {
+  if (pending.empty() && pending_range_deletes.empty()) {
     err = 0;
     goto reply;
   }
@@ -395,7 +469,7 @@ int KVMonitor::validate_osd_new(
   string dmcrypt_prefix = _get_dmcrypt_prefix(uuid, "luks");
   bufferlist value;
   value.append(dmcrypt_key);
-  
+
   if (mon.store->exists(KV_PREFIX, dmcrypt_prefix)) {
     bufferlist existing_value;
     int err = mon.store->get(KV_PREFIX, dmcrypt_prefix, existing_value);
@@ -498,14 +572,65 @@ bool KVMonitor::maybe_send_update(Subscription *sub)
       int err = get_version(cur, bl);
       ceph_assert(err == 0);
 
-      std::map<std::string,std::optional<ceph::buffer::list>> pending;
       auto p = bl.cbegin();
-      ceph::decode(pending, p);
 
-      for (auto& i : pending) {
-	if (i.first.find(m->prefix) == 0) {
-	  m->data[i.first] = i.second;
-	}
+      std::map<std::string, std::optional<ceph::buffer::list>> key_ops;
+      std::vector<RangeDeleteOp> range_ops;
+
+      bool can_use_range_ops = HAVE_FEATURE(mon.get_quorum_con_features(), KV_RANGE_OPS);
+
+      if (can_use_range_ops) {
+        // New versioned format
+        DECODE_START_LEGACY_COMPAT_LEN(1, 1, 1, p);
+        decode(key_ops, p);
+        decode(range_ops, p);
+        DECODE_FINISH(p);
+      } else {
+        // Legacy format (no version header)
+        decode(key_ops, p);
+      }
+
+      // Handle key operations
+      for (auto& i : key_ops) {
+        if (i.first.find(m->prefix) == 0) {
+          m->data[i.first] = i.second;
+        }
+      }
+
+
+      // iter all config prefix key in range_ops, convert range to all matched keys, and add to m->data
+      for (auto& rd : range_ops) {
+        // Check if this range delete affects the subscriber's prefix
+        if (m->prefix.find(rd.prefix) == 0 || rd.prefix.find(m->prefix) == 0) {
+          // Enumerate all keys that would be deleted by this range operation
+          KeyValueDB::Iterator iter = mon.store->get_iterator(KV_PREFIX);
+
+          // Calculate the actual key range that will be deleted
+          string start_key, end_key;
+          if (rd.start.empty() && rd.end.empty()) {
+            // Delete all keys with prefix
+            start_key = rd.prefix;
+          } else {
+            start_key = rd.prefix + (rd.start.empty() ? "" : "/" + rd.start);
+            end_key = rd.prefix + (rd.end.empty() ? "~" : "/" + rd.end);
+          }
+
+          dout(20) << __func__ << " range delete: enumerating keys in range ["
+                   << start_key << ", " << end_key << ") for subscriber " << m->prefix << dendl;
+
+          // Iterate through all keys in the deletion range
+          iter->lower_bound(start_key);
+          while (iter->valid() && iter->key() < end_key) {
+            string key = iter->key();
+            // Only include keys that match the subscriber's prefix
+            if (key.find(m->prefix) == 0) {
+              // Mark this key as deleted (std::nullopt indicates deletion)
+              m->data[key] = std::nullopt;
+              dout(20) << __func__ << " marking key for deletion: " << key << dendl;
+            }
+            iter->next();
+          }
+        }
       }
     }
 
@@ -531,4 +656,46 @@ bool KVMonitor::maybe_send_update(Subscription *sub)
   sub->session->con->send_message(m);
   sub->next = version + 1;
   return true;
+}
+
+int KVMonitor::_validate_range_params(const std::string &prefix,
+                                      const std::string &start,
+                                      const std::string &end,
+                                      std::ostream &ss) const {
+  // Basic prefix validation
+  if (prefix.empty()) {
+    ss << "prefix cannot be empty";
+    return -EINVAL;
+  }
+
+  // Check for invalid characters
+  for (char c : prefix) {
+    if (c < 0x20 || c > 0x7E) { // Non-printable ASCII
+      ss << "prefix contains invalid characters";
+      return -EINVAL;
+    }
+  }
+
+  // Validate range if both start and end are specified
+  if (!start.empty() && !end.empty()) {
+    if (start >= end) {
+      ss << "invalid range: start '" << start << "' >= end '" << end << "'";
+      return -EINVAL;
+    }
+
+    // Check for very large ranges that might indicate typos
+    if (start.length() == 1 && end.length() == 1 &&
+        (end[0] - start[0]) > 26) { // More than alphabet
+      ss << "suspiciously large single-character range";
+      return -EINVAL;
+    }
+  }
+
+  // Check for suspicious prefix patterns
+  if (prefix == "/" || prefix == "." || prefix == "..") {
+    ss << "potentially dangerous prefix pattern";
+    return -EINVAL;
+  }
+
+  return 0;
 }
