@@ -2499,6 +2499,11 @@ void RGWGetObj::execute(optional_yield y)
   if (multipart_part_num) {
     read_op->params.part_num = &*multipart_part_num;
   }
+#ifdef WITH_RADOSGW_D4N
+  if (s->info.env->get_optional("HTTP_X_RGW_CACHE_REQUEST") && (g_conf().get_val<std::string>("rgw_filter") == "d4n")) {
+    dynamic_cast<rgw::sal::D4NFilterObject*>(s->object.get())->set_cache_request();
+  }
+#endif
 
   op_ret = read_op->prepare(s->yield, this);
   version_id = s->object->get_instance();
