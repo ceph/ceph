@@ -238,7 +238,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                 msg = f'{msg}; {e.stdout}'
             elif e.stdout:
                 msg = e.stdout
-            return HandleCommandResult(retval=e.retcode, stdout=msg, stderr=e.stderr)
+
             e.stderr = (e.stderr or '') + (
                 "\nNote: Partial bootstrap detected - The following entries were already created during a previous bootstrap attempt. \n"
                 "To resume, run:\n ceph rgw realm bootstrap with --skip-realm-components\n"
