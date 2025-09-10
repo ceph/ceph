@@ -1642,6 +1642,9 @@ int D4NFilterObject::delete_obj_attrs(const DoutPrefixProvider* dpp, const char*
     }
   }
   if (!found_in_cache) {
+    if (cache_request) {
+      return -ENOENT;
+    }
     if (auto ret = next->delete_obj_attrs(dpp, attr_name, y); ret < 0) {
       ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): delete_obj_attrs method of backend store failed with ret: " << ret << dendl;
       return ret;
@@ -2388,6 +2391,9 @@ int D4NFilterObject::D4NFilterDeleteOp::delete_obj(const DoutPrefixProvider* dpp
   if (!source->check_head_exists_in_cache_get_oid(dpp, head_oid_in_cache, attrs, block, y) && !block.deleteMarker) {
     /* for a dirty object, if the first call is a simple delete after versioning is enabled, the call will go to the backend store and create a delete marker there
        since no object with source->get_name() will be found in the cache (and this is correct) */
+    if (source->cache_request) {
+      return -ENOENT;
+    }
     ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): head object not found; calling next->delete_obj" << dendl;
     next->params = params;
     ret = next->delete_obj(dpp, y, flags);
@@ -2658,6 +2664,9 @@ int D4NFilterObject::D4NFilterDeleteOp::delete_obj(const DoutPrefixProvider* dpp
     }
 
     if (!objDirty) {
+      if (source->cache_request) {
+        return 0;
+      }
       next->params = params;
       ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): object is not dirty; calling next->delete_obj" << dendl;
       ret = next->delete_obj(dpp, y, flags);

@@ -5699,6 +5699,11 @@ void RGWDeleteObj::execute(optional_yield y)
       del_op->params.null_verid = null_verid;
       del_op->params.size_match = size_match;
       del_op->params.if_match = if_match;
+#ifdef WITH_RADOSGW_D4N
+      if (s->info.env->get_optional("HTTP_X_RGW_CACHE_REQUEST")) {
+	dynamic_cast<rgw::sal::D4NFilterObject*>(s->object.get())->set_cache_request();
+      }
+#endif
 
       op_ret = del_op->delete_obj(this, y, rgw::sal::FLAG_LOG_OP);
       if (op_ret >= 0) {
