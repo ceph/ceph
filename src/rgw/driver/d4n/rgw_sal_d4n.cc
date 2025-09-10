@@ -914,6 +914,9 @@ int D4NFilterObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattr
   }
 
   if (!found_in_cache) {
+    if (cache_request) {
+      return -ENOENT;
+    }
     auto ret = next->set_obj_attrs(dpp, setattrs, delattrs, y, flags);
     if (ret < 0) {
       ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): set_obj_attrs method of backend store failed with ret: " << ret << dendl;
@@ -1584,6 +1587,10 @@ int D4NFilterObject::modify_obj_attrs(const char* attr_name, bufferlist& attr_va
       return ret;
     }
   } else {
+    if (cache_request) {
+      return -ENOENT;
+    }
+
     if (block.deleteMarker) {
       ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): object " << this->get_name() << " does not exist." << dendl;
       return -ENOENT;
@@ -2705,7 +2712,7 @@ int D4NFilterWriter::process(bufferlist&& data, uint64_t offset)
     bufferlist bl = data;
     off_t bl_len = bl.length();
     off_t ofs = offset;
-    bool dirty = true;
+    bool dirty;
 
     std::string version = object->get_object_version();
     std::string prefix = get_cache_block_prefix(obj, version);
@@ -2722,16 +2729,25 @@ int D4NFilterWriter::process(bufferlist&& data, uint64_t offset)
       rgw::sal::Attrs attrs;
       std::string oid = prefix + CACHE_DELIM + std::to_string(ofs);
       std::string oid_in_cache = oid + CACHE_DELIM + std::to_string(bl_len);
-      dirty = true;
+      if (!object->is_cache_request()) {
+	dirty = true;
+      }
       ret = driver->get_policy_driver()->get_cache_policy()->eviction(dpp, bl.length(), y);
       if (ret == 0) {     
         if (bl.length() > 0) {          
           ldpp_dout(dpp, 10) << "D4NFilterWriter::" << __func__ << "(): oid_in_cache is: " << oid_in_cache << dendl;
           ret = driver->get_cache_driver()->put(dpp, oid_in_cache, bl, bl.length(), attrs, y);
           if (ret == 0) {
-            ret = driver->get_cache_driver()->set_attr(dpp, oid_in_cache, RGW_CACHE_ATTR_DIRTY, "1", y);
-            if (ret == 0) {
-              driver->get_policy_driver()->get_cache_policy()->update(dpp, oid_in_cache, ofs, bl.length(), version, dirty, rgw::d4n::RefCount::NOOP, y);
+	    if (!object->is_cache_request()) {
+	      dirty = true;
+	    }
+	    if (!object->is_cache_request()) {
+              ret = driver->get_cache_driver()->set_attr(dpp, oid_in_cache, RGW_CACHE_ATTR_DIRTY, "1", y);
+	      if (ret == 0) {
+		driver->get_policy_driver()->get_cache_policy()->update(dpp, oid_in_cache, ofs, bl.length(), version, dirty, rgw::d4n::RefCount::NOOP, y);
+	      }
+            } else {
+	      driver->get_policy_driver()->get_cache_policy()->update(dpp, oid_in_cache, ofs, bl.length(), version, dirty, rgw::d4n::RefCount::NOOP, y);
             }
           } else {
             ldpp_dout(dpp, 0) << "D4NFilterWriter::" << __func__ << "(): ERROR: writing data to the cache failed, ret=" << ret << dendl;
@@ -2824,7 +2840,9 @@ int D4NFilterWriter::complete(size_t accounted_size, const std::string& etag,
       return ret;
     }
 
-    dirty = true;
+    if (!object->is_cache_request()) {
+      dirty = true;
+    }
     ceph::real_time m_time;
     if (mtime) {
       if (real_clock::is_zero(*mtime)) {
