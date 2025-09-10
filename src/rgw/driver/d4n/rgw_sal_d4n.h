@@ -340,6 +340,7 @@ class D4NFilterWriter : public FilterWriter {
 			 uint32_t flags) override;
    bool is_atomic() { return atomic; };
    const DoutPrefixProvider* get_dpp() { return this->dpp; } 
+   void set_cache_request() { object->set_cache_request(); }
 };
 
 class D4NFilterMultipartUpload : public FilterMultipartUpload {
