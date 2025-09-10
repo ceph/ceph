@@ -515,28 +515,43 @@ services have been deployed, you should see something like this when you issue t
 Configuring SSL/TLS for Grafana
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-``cephadm`` deploys Grafana using the certificate defined in the ceph
-key/value store. If no certificate is specified, ``cephadm`` generates a
-self-signed certificate during the deployment of the Grafana service. Each
-certificate is specific for the host it was generated on.
+``cephadm`` deploys Grafana using a certificate managed by the cephadm
+Certificate Manager (certmgr). Certificates for Grafana are **per host**:
 
-A custom certificate can be configured using the following commands:
+  - **Default (cephadm-signed):** If no certificate is specified,
+    cephadm generates and signs a certificate for each host where Grafana runs.
+  - **User-provided (as reference):** You can add your own certificate
+    and private key with certmgr and reference them in the Grafana spec.
+
+A Grafana service spec with a user-provided certificate looks like:
+
+.. code-block:: yaml
+
+   service_type: grafana
+   placement:
+     hosts:
+       - <ceph-node-hostname>
+   spec:
+     ssl: true
+     certificate_source: reference
+
+To register a custom certificate and key with certmgr for host ``<ceph-node-hostname>``:
 
 .. prompt:: bash #
 
-  ceph config-key set mgr/cephadm/{hostname}/grafana_key -i $PWD/key.pem
-  ceph config-key set mgr/cephadm/{hostname}/grafana_crt -i $PWD/certificate.pem
+   ceph orch certmgr cert set --cert-name grafana_ssl_cert --hostname <ceph-node-hostname> -i $PWD/certificate.pem
+   ceph orch certmgr key set --key-name grafana_ssl_key --hostname <ceph-node-hostname> -i  $PWD/key.pem
 
-Where `hostname` is the hostname for the host where grafana service is deployed.
-
-If you have already deployed Grafana, run ``reconfig`` on the service to
-update its configuration:
+If Grafana is already deployed, run ``reconfig`` on the service to
+apply the updated certificate:
 
 .. prompt:: bash #
 
-  ceph orch reconfig grafana
+   ceph orch reconfig grafana
 
-The ``reconfig`` command also sets the proper URL for Ceph Dashboard.
+The ``reconfig`` command also ensures that the Ceph Dashboard URL
+is updated to use the correct certificate. The ``reconfig`` command
+also sets the proper URL for the Ceph Dashboard.
 
 Setting the initial admin password
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
