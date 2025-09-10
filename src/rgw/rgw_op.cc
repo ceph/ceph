@@ -87,6 +87,10 @@
 #include "rgw_flight_frontend.h"
 #endif
 
+#ifdef WITH_RADOSGW_D4N
+#include "driver/d4n/rgw_sal_d4n.h"
+#endif
+
 #ifdef WITH_LTTNG
 #define TRACEPOINT_DEFINE
 #define TRACEPOINT_PROBE_DYNAMIC_LINKAGE
@@ -3350,6 +3354,11 @@ void RGWListBucket::execute(optional_yield y)
   params.list_versions = list_versions;
   params.allow_unordered = allow_unordered;
   params.shard_id = shard_id;
+#ifdef WITH_RADOSGW_D4N
+  if (s->info.env->get_optional("HTTP_X_RGW_CACHE_REQUEST") && (g_conf().get_val<std::string>("rgw_filter") == "d4n")) {
+    dynamic_cast<rgw::sal::D4NFilterBucket*>(s->bucket.get())->set_cache_request();
+  }
+#endif
 
   rgw::sal::Bucket::ListResults results;
 

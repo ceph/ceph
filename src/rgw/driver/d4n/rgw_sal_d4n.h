@@ -123,6 +123,7 @@ class D4NFilterBucket : public FilterBucket {
       uint16_t flags;
     };
     D4NFilterDriver* filter;
+    bool cache_request{false};
 
   public:
     D4NFilterBucket(std::unique_ptr<Bucket> _next, D4NFilterDriver* _filter) :
@@ -140,6 +141,7 @@ class D4NFilterBucket : public FilterBucket {
 				const std::string& oid,
 				std::optional<std::string> upload_id=std::nullopt,
 				ACLOwner owner={}, ceph::real_time mtime=real_clock::now()) override;
+    void set_cache_request() { cache_request = true; }
 };
 
 class D4NFilterObject : public FilterObject {

@@ -515,6 +515,14 @@ int D4NFilterBucket::list(const DoutPrefixProvider* dpp, ListParams& params, int
     }
   } //d4n_write_cache_enabled = true
 
+  /* Cache requests are indicated with the x-rgw-cache-request custom header during S3 ops so users can interact
+   * only with the cache. If the object is found in the cache, the request succeeds. If it is only in the backend,
+   * the request returns -ENOENT. */
+  if (cache_request) {
+    results = std::move(cache_results);
+    return 0;
+  }
+
   //Get objects from backend store
   auto ret = next->list(dpp, params, max, store_results, y);
   if (ret < 0) {
