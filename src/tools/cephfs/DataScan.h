@@ -265,8 +265,10 @@ class DataScan : public MDSUtility, public MetadataTool
     // IoCtxs for extra data pools
     std::vector<librados::IoCtx> extra_data_ios;
 
-    uint32_t n;
-    uint32_t m;
+    uint32_t worker_n;
+    uint32_t worker_m;
+
+    void set_progress_operation_name(const std::string& op_name) const;
 
     /**
      * Scan data pool for backtraces, and inject inodes to metadata pool
@@ -339,12 +341,17 @@ class DataScan : public MDSUtility, public MetadataTool
     int main(const std::vector<const char *> &args);
 
     DataScan()
-      : driver(NULL), fscid(FS_CLUSTER_ID_NONE),
-	data_pool_id(-1), n(0), m(1),
-        force_pool(false), force_corrupt(false),
-        force_init(false)
+      : driver(NULL),
+	fscid(FS_CLUSTER_ID_NONE),
+	data_pool_id(-1),
+	worker_n(0),
+	worker_m(1),
+	force_pool(false),
+	force_corrupt(false),
+	force_init(false)
     {
       progress_tracker = std::make_unique<ProgressTracker>("Data scan");
+      progress_tracker->set_enable_progress_update(true);
     }
 
     ~DataScan() override
