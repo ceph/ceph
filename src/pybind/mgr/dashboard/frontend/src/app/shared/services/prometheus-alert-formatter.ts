@@ -34,7 +34,8 @@ export class PrometheusAlertFormatter {
           name: alert.labels.alertname,
           url: alert.generatorURL,
           description: alert.annotations.description,
-          fingerprint: _.isObject(alert.status) && (alert as AlertmanagerAlert).fingerprint
+          fingerprint: _.isObject(alert.status) && (alert as AlertmanagerAlert).fingerprint,
+          severity: alert.labels.severity
         };
       }),
       _.isEqual
@@ -51,7 +52,7 @@ export class PrometheusAlertFormatter {
 
   convertAlertToNotification(alert: PrometheusCustomAlert): CdNotificationConfig {
     return new CdNotificationConfig(
-      this.formatType(alert.status),
+      this.formatType(alert.status, alert.severity),
       `${alert.name} (${alert.status})`,
       this.appendSourceLink(alert, alert.description),
       undefined,
@@ -59,7 +60,11 @@ export class PrometheusAlertFormatter {
     );
   }
 
-  private formatType(status: string): NotificationType {
+  private formatType(status: string, severity?: string): NotificationType {
+    if (status === 'active' && severity === 'warning') {
+      return NotificationType.warning;
+    }
+
     const types = {
       error: ['firing', 'active'],
       info: ['suppressed', 'unprocessed'],
