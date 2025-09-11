@@ -905,6 +905,7 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
     this.userConfig.limit = this.model.pageLength;
 
     if (this.serverSide) {
+      this.loadingIndicator = true;
       this.reloadData();
       return;
     }
