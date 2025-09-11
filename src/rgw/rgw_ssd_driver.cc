@@ -401,47 +401,6 @@ int SSDDriver::put(const DoutPrefixProvider* dpp, const std::string& key, const 
     return 0;
 }
 
-int SSDDriver::get(const DoutPrefixProvider* dpp, const std::string& key, off_t offset, uint64_t len, bufferlist& bl, rgw::sal::Attrs& attrs, optional_yield y)
-{
-    char buffer[len];
-    std::string location = create_dirs_get_filepath_from_key(dpp, partition_info.location, key);
-    ldpp_dout(dpp, 20) << __func__ << "(): location=" << location << dendl;
-    FILE *cache_file = nullptr;
-    int r = 0;
-    size_t nbytes = 0;
-
-    cache_file = fopen(location.c_str(), "r+");
-    if (cache_file == nullptr) {
-        ldpp_dout(dpp, 0) << "ERROR: get::fopen file has return error, errno=" << errno << dendl;
-        return -errno;
-    }
-
-    fseek(cache_file, offset, SEEK_SET);
-
-    nbytes = fread(buffer, 1, len, cache_file);
-    if (nbytes != len) {
-        fclose(cache_file);
-        ldpp_dout(dpp, 0) << "ERROR: get::io_read: fread has returned error: nbytes!=len, nbytes=" << nbytes << ", len=" << len << dendl;
-        return -EIO;
-    }
-
-    r = fclose(cache_file);
-    if (r != 0) {
-        ldpp_dout(dpp, 0) << "ERROR: get::fclose file has return error, errno=" << errno << dendl;
-        return -errno;
-    }
-
-    bl.append(buffer, len);
-
-    r = get_attrs(dpp, key, attrs, y);
-    if (r < 0) {
-        ldpp_dout(dpp, 0) << "ERROR: get::get_attrs: failed to get attrs, r = " << r << dendl;
-        return r;
-    }
-
-    return 0;
-}
-
 int SSDDriver::append_data(const DoutPrefixProvider* dpp, const::std::string& key, const bufferlist& bl_data, optional_yield y)
 {
     bufferlist src = bl_data;
@@ -608,6 +567,54 @@ rgw::AioResultList SSDDriver::put_async(const DoutPrefixProvider* dpp, optional_
     rgw_raw_obj r_obj;
     r_obj.oid = key;
     return aio->get(r_obj, ssd_cache_write_op(dpp, y, this, bl, len, attrs, key), cost, id);
+}
+
+int SSDDriver::get(const DoutPrefixProvider* dpp, const std::string& key, off_t offset, uint64_t len, bufferlist& bl, rgw::sal::Attrs& attrs, optional_yield y)
+{
+    std::string location = create_dirs_get_filepath_from_key(dpp, partition_info.location, key);
+    ldpp_dout(dpp, 20) << __func__ << "(): location=" << location << dendl;
+
+    if (y) {
+        using namespace boost::asio;
+        boost::system::error_code ec;
+        yield_context yield = y.get_yield_context();
+        auto ex = yield.get_executor();
+        bl = this->get_async(dpp, ex, key, offset, len, boost::asio::bind_executor(ex, yield[ec]));
+        if (ec) {
+            ldpp_dout(dpp, 0) << "ERROR: SSDCache: get_async failed, ec=" << ec.message() << dendl;
+            return -ec.value();
+        }
+    } else {
+        std::vector<char> buffer(len);
+        auto deleter = [](FILE* f) { fclose(f); };
+        auto cache_file = std::unique_ptr<FILE, decltype(deleter)>(
+            fopen(location.c_str(), "r+"), deleter);
+
+        if (cache_file == nullptr) {
+            ldpp_dout(dpp, 0) << "ERROR: get::fopen file has return error, errno=" << errno << dendl;
+            return -errno;
+        }
+
+        if (fseek(cache_file.get(), offset, SEEK_SET) != 0) {
+            ldpp_dout(dpp, 0) << "ERROR: get::fseek failed, errno=" << errno << dendl;
+            return -errno;
+        }
+
+        size_t nbytes = fread(buffer.data(), 1, len, cache_file.get());
+        if (nbytes != len) {
+            ldpp_dout(dpp, 0) << "ERROR: get::io_read: fread has returned error: nbytes!=len, nbytes=" << nbytes << ", len=" << len << dendl;
+            return -EIO;
+        }
+
+        bl.append(buffer.data(), len);
+    }
+
+    ldpp_dout(dpp, 20) << "INFO: get::bl length: = " << bl.length() << dendl;
+    if (auto r = get_attrs(dpp, location, attrs, y); r < 0) {
+        ldpp_dout(dpp, 0) << "ERROR: get::get_attrs: failed to get attrs, r = " << r << dendl;
+        return r;
+    }
+    return 0;
 }
 
 int SSDDriver::delete_data(const DoutPrefixProvider* dpp, const::std::string& key, optional_yield y)
