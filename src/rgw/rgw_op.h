@@ -1149,6 +1149,8 @@ class RGWCreateBucket : public RGWOp {
   RGWAccessControlPolicy policy;
   std::string location_constraint;
   bool has_cors = false;
+  bool has_policy = false;
+  uint32_t policy_rw_mask = 0;
   bool relaxed_region_enforcement = false;
   RGWCORSConfiguration cors_config;
   std::set<std::string> rmattr_names;
