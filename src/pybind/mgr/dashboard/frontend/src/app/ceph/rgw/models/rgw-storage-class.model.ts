@@ -10,6 +10,8 @@ export interface StorageClass {
   endpoint?: string;
   region?: string;
   zonegroup_name?: string;
+  zone_name?: string;
+  data_pool?: string;
 }
 
 export interface TierTarget {
@@ -56,6 +58,33 @@ export interface ZoneGroup {
   name: string;
   id: string;
   placement_targets?: Target[];
+  zones?: string[];
+}
+
+export interface ZoneRequest {
+  zone_name: string;
+  placement_targets: PlacementTarget[];
+}
+export interface StorageClassPool {
+  data_pool: string;
+}
+
+export interface PlacementPool {
+  key: string;
+  val: {
+    storage_classes: {
+      [storage_class: string]: StorageClassPool;
+    };
+  };
+}
+
+export interface Zone {
+  name: string;
+  placement_pools: PlacementPool[];
+}
+
+export interface AllZonesResponse {
+  zones: Zone[];
 }
 
 export interface ACL {
@@ -102,10 +131,10 @@ export interface RequestModel {
 }
 
 export interface PlacementTarget {
-  placement_id: string;
+  placement_id?: string;
   tags?: string[];
   tier_type?: TIER_TYPE;
-  tier_config_rm: TierConfigRm;
+  tier_config_rm?: TierConfigRm;
   tier_config?: {
     endpoint: string;
     access_key: string;
@@ -126,6 +155,8 @@ export interface PlacementTarget {
   storage_class?: string;
   name?: string;
   tier_targets?: TierTarget[];
+  data_pool?: string;
+  placement_target?: string;
 }
 
 export interface TierConfigRm {

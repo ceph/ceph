@@ -1493,6 +1493,63 @@ class RgwZone(RESTController):
                                                 master, zone_endpoints, access_key,
                                                 secret_key)
         return result
+    
+    def handle_storage_class(self, zone_name: str, placement_targets: List[Dict[str, str]], operation: str):
+
+        target = placement_targets[0]
+        placement_target = target.get('placement_target')
+        storage_class = target.get('storage_class')
+        data_pool = target.get('data_pool')
+        compression = target.get('compression', '')
+
+        if not (placement_target and storage_class and data_pool):
+            raise DashboardException(
+                msg='Failed to get placement target',
+                http_status_code=404,
+                component='rgw'
+            )
+        multisite_instance = RgwMultisite()
+
+        try:
+            if operation == 'create':
+                multisite_instance.add_storage_class_zone(
+                    zone_name=zone_name,
+                    placement_target=placement_target,
+                    storage_class=storage_class,
+                    data_pool=data_pool,
+                    compression=compression
+                )
+            elif operation == 'edit':
+                multisite_instance.edit_storage_class_zone(
+                    zone_name=zone_name,
+                    placement_target=placement_target,
+                    storage_class=storage_class,
+                    data_pool=data_pool,
+                    compression=compression
+                )
+            else:
+                raise DashboardException(f"Unsupported operation: {operation}", http_status_code=400, component='rgw')
+
+            return {
+                'placement_target': placement_target,
+                'storage_class': storage_class,
+                'data_pool': data_pool,
+                'status': 'success'
+            }
+        except DashboardException as e:
+            raise DashboardException(e, http_status_code=404, component='rgw')
+
+
+    @Endpoint('POST', path='storage-class')
+    @CreatePermission
+    def create_storage_class(self, zone_name: str, placement_targets: List[Dict[str, str]] = []):
+        return self.handle_storage_class(zone_name, placement_targets, operation='create')
+
+
+    @Endpoint('PUT', path='storage-class')
+    @CreatePermission
+    def edit_storage_class(self, zone_name: str, placement_targets: List[Dict[str, str]] = []):
+        return self.handle_storage_class(zone_name, placement_targets, operation='edit')
 
     @allow_empty_body
     # pylint: disable=W0613
