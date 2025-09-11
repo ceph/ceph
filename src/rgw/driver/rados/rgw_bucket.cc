@@ -318,6 +318,30 @@ static void dump_bucket_usage(map<RGWObjCategory, RGWStorageStats>& stats, Forma
   formatter->close_section();
 }
 
+static void dump_bucket_storage_classes_usage(map<RGWObjCategory, RGWStorageStats>& stats, std::optional<map<std::string, RGWStorageStats>> sc_stats, Formatter *formatter)
+{
+  formatter->open_object_section("usage");
+  for (auto it = stats.begin(); it != stats.end(); ++it) {
+    RGWStorageStats& s = it->second;
+    formatter->open_object_section(to_string(it->first));
+    s.dump(formatter);
+    formatter->close_section();
+  }
+  if (sc_stats.has_value()) {
+    formatter->open_array_section("rgw.storage-classes");
+    for (auto it = sc_stats.value().begin(); it != sc_stats.value().end(); ++it){
+      RGWStorageStats& s = it->second;
+      std::string storage_class = it->first;
+      formatter->open_object_section(storage_class);
+      formatter->dump_string("name", storage_class);
+      s.dump(formatter);
+      formatter->close_section();
+    }
+    formatter->close_section();
+  }
+  formatter->close_section();
+}
+
 #ifdef WITH_RADOSGW_RADOS
 static void dump_index_check(map<RGWObjCategory, RGWStorageStats> existing_stats,
         map<RGWObjCategory, RGWStorageStats> calculated_stats,
@@ -1600,6 +1624,8 @@ static int bucket_stats(rgw::sal::Driver* driver, const rgw::SiteConfig& site,
                         const DoutPrefixProvider* dpp, optional_yield y) {
   std::unique_ptr<rgw::sal::Bucket> bucket;
   map<RGWObjCategory, RGWStorageStats> stats;
+  std::optional<map<string, RGWStorageStats>> sc_stats;
+  sc_stats.emplace();
 
   int ret = driver->load_bucket(dpp, rgw_bucket(tenant_name, bucket_name),
                                 &bucket, y);
@@ -1626,6 +1652,20 @@ static int bucket_stats(rgw::sal::Driver* driver, const rgw::SiteConfig& site,
       cerr << "error getting bucket stats bucket=" << bucket->get_name() << " ret=" << ret << std::endl;
       return ret;
     }
+  }
+
+  auto radosdriver = static_cast<rgw::sal::RadosStore*>(driver);
+  if (!radosdriver) {
+    cerr << "rados store only" << std::endl;
+    return -ENOTSUP;
+  }
+
+  ret = radosdriver->getRados()->get_bucket_storage_classes_stats(dpp, y, bucket_info, RGW_NO_SHARD,
+                                                            &bucket_ver, &master_ver, sc_stats,
+                                                            &max_marker, index);
+  if (ret < 0) {
+    cerr << "error getting bucket storage class stats bucket=" << bucket->get_name() << " ret=" << ret << std::endl;
+    return ret;
   }
 
   utime_t ut(bucket->get_modification_time());
@@ -1661,6 +1701,7 @@ static int bucket_stats(rgw::sal::Driver* driver, const rgw::SiteConfig& site,
   }
   ut.gmtime(formatter->dump_stream("mtime"));
   ctime_ut.gmtime(formatter->dump_stream("creation_time"));
+  dump_bucket_storage_classes_usage(stats, sc_stats, formatter);
 
   // if this is an archive zone "-deleted-" bucket, expose when this instance was created
   auto archive_mtime_iter = bucket->get_attrs().find(RGW_ATTR_ARCHIVE_INSTANCE_MTIME);
@@ -3689,6 +3730,7 @@ int RGWBucketCtl::sync_owner_stats(const DoutPrefixProvider *dpp,
                                    const rgw_owner& owner,
                                    const RGWBucketInfo& bucket_info,
                                    optional_yield y,
+                                   bool reset,
                                    RGWBucketEnt* pent)
 {
   RGWBucketEnt ent;
@@ -3710,7 +3752,7 @@ int RGWBucketCtl::sync_owner_stats(const DoutPrefixProvider *dpp,
         const RGWZoneParams& zone = svc.zone->get_zone_params();
         return rgwrados::account::get_buckets_obj(zone, id);
       }), owner);
-  return rgwrados::buckets::write_stats(dpp, y, rados, obj, *pent);
+  return rgwrados::buckets::write_stats(dpp, y, rados, obj, *pent, reset);
 }
 #endif
 
