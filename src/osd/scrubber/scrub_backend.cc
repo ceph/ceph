@@ -274,10 +274,11 @@ void ScrubBackend::collect_omap_stats(
 /*
  * update_authoritative() updates:
  *
- *  - m_auth_peers: adds obj-> list of pairs < scrub-map, shard>
+ *  - m_auth_peers: adds the selected authoritative version for each damaged
+ *    object.
  *
  *  - m_cleaned_meta_map: replaces [obj] entry with:
- *     the relevant object in the scrub-map of the "selected" (back-most) peer
+ *     the relevant object in the scrub-map of that selected peer
  */
 void ScrubBackend::update_authoritative()
 {
@@ -299,46 +300,36 @@ void ScrubBackend::update_authoritative()
 
   compare_smaps();  // note: might cluster-log errors
 
-  // update the session-wide m_auth_peers with the list of good
-  // peers for each object (i.e. the ones that are in this_chunks's auth list)
-  for (auto& [obj, peers] : this_chunk->authoritative) {
-
-    auth_peers_t good_peers;
-
-    for (auto& peer : peers) {
-      good_peers.emplace_back(this_chunk->received_maps[peer].objects[obj],
-                              peer);
-    }
-
-    m_auth_peers.emplace(obj, std::move(good_peers));
-  }
-
+  // for each object in this chunk's authoritative map:
+  // update the session-wide m_auth_peers with the selected auth peer
   for (const auto& [obj, peers] : this_chunk->authoritative) {
+    m_auth_peer.emplace(
+	obj, std::make_pair(
+		 this_chunk->received_maps[peers.back()].objects.at(obj),
+		 peers.back()));
+
     m_cleaned_meta_map.objects.erase(obj);
     m_cleaned_meta_map.objects.insert(
-      *(this_chunk->received_maps[peers.back()].objects.find(obj)));
+	*(this_chunk->received_maps[peers.back()].objects.find(obj)));
   }
 }
 
+
 int ScrubBackend::scrub_process_inconsistent()
 {
-  dout(20) << fmt::format("{}: {} (m_repair:{}) good peers tbl #: {}",
-                          __func__,
-                          m_mode_desc,
-                          m_repair,
-                          m_auth_peers.size())
-           << dendl;
+  dout(20) << fmt::format(
+		  "{}: {} (m_repair:{}) good peers tbl #: {}", __func__,
+		  m_mode_desc, m_repair, m_auth_peer.size())
+	   << dendl;
 
-  ceph_assert(!m_auth_peers.empty());
+  ceph_assert(!m_auth_peer.empty());
   // authoritative only store objects which are missing or inconsistent.
 
   // some tests expect an error message that does not contain the __func__ and
   // PG:
-  auto err_msg = fmt::format("{} {} {} missing, {} inconsistent objects",
-                             m_formatted_id,
-                             m_mode_desc,
-                             m_missing.size(),
-                             m_inconsistent.size());
+  auto err_msg = fmt::format(
+      "{} {} {} missing, {} inconsistent objects", m_formatted_id, m_mode_desc,
+      m_missing.size(), m_inconsistent.size());
 
   dout(4) << err_msg << dendl;
   clog.error() << err_msg;
@@ -346,66 +337,62 @@ int ScrubBackend::scrub_process_inconsistent()
   ceph_assert(m_repair);
   int fixed_cnt{0};
 
-  for (const auto& [hobj, shrd_list] : m_auth_peers) {
+  for (const auto& [hobj, auth_peer] : m_auth_peer) {
 
     auto missing_entry = m_missing.find(hobj);
 
     if (missing_entry != m_missing.end()) {
-      repair_object(hobj, shrd_list, missing_entry->second);
+      repair_object(
+          hobj, auth_peer.second, auth_peer.first,
+          missing_entry->second);
       fixed_cnt += missing_entry->second.size();
     }
 
-    if (m_inconsistent.count(hobj)) {
-      repair_object(hobj, shrd_list, m_inconsistent[hobj]);
+    if (m_inconsistent.contains(hobj)) {
+      repair_object(
+          hobj, auth_peer.second, auth_peer.first,
+	  m_inconsistent[hobj]);
       fixed_cnt += m_inconsistent[hobj].size();
     }
   }
   return fixed_cnt;
 }
 
-void ScrubBackend::repair_object(const hobject_t& soid,
-                                 const auth_peers_t& ok_peers,
-                                 const set<pg_shard_t>& bad_peers)
-{
-  if (g_conf()->subsys.should_gather<ceph_subsys_osd, 20>()) {
-    // log the good peers
-    set<pg_shard_t> ok_shards;  // the shards from the ok_peers list
-    for (const auto& peer : ok_peers) {
-      ok_shards.insert(peer.second);
-    }
-    dout(10) << fmt::format(
-                  "repair_object {} bad_peers osd.{{{}}}, ok_peers osd.{{{}}}",
-                  soid,
-                  bad_peers,
-                  ok_shards)
-             << dendl;
-  }
 
-  const ScrubMap::object& po = ok_peers.back().first;
+void ScrubBackend::repair_object(
+    const hobject_t& soid,
+    pg_shard_t ok_peer,
+    const ScrubMap::object& ok_object_smap,
+    const set<pg_shard_t>& bad_peers)
+{
+  dout(10)
+      << fmt::format(
+	     "repair_object {} bad_peers osd.{{{}}}, peer used as auth: {}",
+	     soid, bad_peers, ok_peer)
+      << dendl;
 
   object_info_t oi;
   try {
     bufferlist bv;
-    if (po.attrs.count(OI_ATTR)) {
-      bv = po.attrs.find(OI_ATTR)->second;
+    if (ok_object_smap.attrs.count(OI_ATTR)) {
+      bv = ok_object_smap.attrs.find(OI_ATTR)->second;
     }
     auto bliter = bv.cbegin();
     decode(oi, bliter);
   } catch (...) {
     dout(0) << __func__
-            << ": Need version of replica, bad object_info_t: " << soid
-            << dendl;
+	    << ": Need version of replica, bad object_info_t: " << soid
+	    << dendl;
     ceph_abort();
   }
 
-  if (bad_peers.count(m_pg.get_primary())) {
+  if (bad_peers.contains(m_pg_whoami)) {
     // We should only be scrubbing if the PG is clean.
     ceph_assert(!m_pg.is_waiting_for_unreadable_object());
-    dout(10) << __func__ << ": primary = " << m_pg.get_primary() << dendl;
+    dout(10) << fmt::format("{}: note: primary marked as missing", __func__)
+             << dendl;
   }
 
-  // No need to pass ok_peers, they must not be missing the object, so
-  // force_object_missing will add them to missing_loc anyway
   m_pg.force_object_missing(ScrubberPasskey{}, bad_peers, soid, oi.version);
 }
 

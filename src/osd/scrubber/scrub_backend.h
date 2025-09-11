@@ -68,7 +68,7 @@ using digests_fixes_t = std::vector<std::pair<hobject_t, data_omap_digests_t>>;
 using shard_info_map_t = std::map<pg_shard_t, shard_info_wrapper>;
 using shard_to_scrubmap_t = std::map<pg_shard_t, ScrubMap>;
 
-using auth_peers_t = std::vector<std::pair<ScrubMap::object, pg_shard_t>>;
+using auth_peer_t = std::pair<ScrubMap::object, pg_shard_t>;
 
 using wrapped_err_t =
   std::variant<inconsistent_obj_wrapper, inconsistent_snapset_wrapper>;
@@ -364,7 +364,11 @@ class ScrubBackend {
 
   const omap_stat_t& this_scrub_omapstats() const { return m_omap_stats; }
 
-  int authoritative_peers_count() const { return m_auth_peers.size(); };
+  /**
+   * the number of objects that have an authoritative peer selected for
+   * them (which equates with the number of damaged objects in this chunk)
+   */
+  int authoritative_peers_count() const { return m_auth_peer.size(); }
 
   std::ostream& logger_prefix(std::ostream* _dout, const ScrubBackend* t);
 
@@ -387,8 +391,8 @@ class ScrubBackend {
   /// collecting some scrub-session-wide omap stats
   omap_stat_t m_omap_stats;
 
-  /// Mapping from object with errors to good peers
-  std::map<hobject_t, auth_peers_t> m_auth_peers;
+  /// Mapping: object with errors -> the selected good peer
+  std::map<hobject_t, auth_peer_t> m_auth_peer;
 
   // EC related:
   /// size of the EC digest map, calculated based on the EC configuration
@@ -469,9 +473,11 @@ class ScrubBackend {
                            bool has_snapset,
                            const pg_shard_t &shard);
 
-  void repair_object(const hobject_t& soid,
-                     const auth_peers_t& ok_peers,
-                     const std::set<pg_shard_t>& bad_peers);
+  void repair_object(
+      const hobject_t& soid,
+      pg_shard_t ok_shard,
+      const ScrubMap::object& ok_object_smap,
+      const std::set<pg_shard_t>& bad_peers);
 
   /**
    * An auxiliary used by select_auth_object() to test a specific shard
