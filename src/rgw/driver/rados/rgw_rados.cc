@@ -7421,7 +7421,20 @@ int RGWRados::set_attrs(const DoutPrefixProvider *dpp, RGWObjectCtx* octx, RGWBu
   if (!op.size())
     return 0;
 
+  // remove replication-trace attr to be able to re-replicate an object when metadata changes
   bufferlist bl;
+  const string replication_trace = RGW_ATTR_OBJ_REPLICATION_TRACE;
+  bool removed_attr{false};
+  r = state->get_attr(replication_trace, bl);
+  if (r < 0) {
+    ldpp_dout(dpp, 10) << "ERROR: cannot remove attr " << replication_trace.c_str() << dendl;
+  } else {
+    op.rmxattr(replication_trace.c_str());
+    removed_attr = true;
+  }
+
+  bl.clear();
+
   RGWRados::Bucket bop(this, bucket_info);
   RGWRados::Bucket::UpdateIndex index_op(&bop, obj);
 
@@ -7538,6 +7551,10 @@ int RGWRados::set_attrs(const DoutPrefixProvider *dpp, RGWObjectCtx* octx, RGWBu
       for (iter = rmattrs->begin(); iter != rmattrs->end(); ++iter) {
         state->attrset.erase(iter->first);
       }
+    }
+
+    if (removed_attr) {
+        state->attrset.erase(replication_trace);
     }
 
     for (iter = attrs.begin(); iter != attrs.end(); ++iter) {
