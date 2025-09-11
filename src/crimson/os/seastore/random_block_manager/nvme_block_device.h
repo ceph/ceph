@@ -268,7 +268,9 @@ public:
 	  return file.size().then([this, &stat, &file](auto size) mutable {
 	    stat.size = size;
 	    return identify_namespace(file
-	    ).safe_then([&stat] (auto id_namespace_data) mutable {
+	    ).safe_then([&stat] (auto id_ns_data) mutable {
+	      assert(id_ns_data);
+	      auto id_namespace_data = *id_ns_data;
 	      // LBA format provides LBA size which is power of 2. LBA is the
 	      // minimum size of read and write.
 	      stat.block_size = (1 << id_namespace_data.lbaf[0].lbads);
@@ -372,7 +374,7 @@ private:
   // as supported features, NPWG and NPWA
   nvme_command_ertr::future<nvme_identify_controller_data_t> 
     identify_controller(seastar::file f);
-  nvme_command_ertr::future<nvme_identify_namespace_data_t>
+  nvme_command_ertr::future<std::optional<nvme_identify_namespace_data_t>>
     identify_namespace(seastar::file f);
   nvme_command_ertr::future<int> get_nsid(seastar::file f);
   open_ertr::future<> open_for_io(
