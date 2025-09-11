@@ -1186,15 +1186,15 @@ class TestSubvolumeGroups(TestVolumesHelper):
         self._fs_cmd("subvolume", "create", self.volname, subvolume, "--group_name", group)
 
         # make sure it exists
-        subvolpath = self._get_subvolume_path(self.volname, subvolume)
+        subvolpath = self._get_subvolume_path(self.volname, subvolume, group)
         self.assertNotEqual(subvolpath, None)
 
         # check case sensitivity
-        case_sensitive = self._fs_cmd("subvolume", "charmap", "get", self.volname, subvolume, "casesensitive")
+        case_sensitive = self._fs_cmd("subvolume", "charmap", "get", self.volname, subvolume, "casesensitive", group)
         self.assertEqual(case_sensitive.strip(), "0")
 
         # check normalization (it's implicitly enabled by --case-insensitive, with default value 'nfd')
-        normalization = self._fs_cmd("subvolume", "charmap", "get", self.volname, subvolume, "normalization")
+        normalization = self._fs_cmd("subvolume", "charmap", "get", self.volname, subvolume, "normalization", group)
         self.assertEqual(normalization.strip(), "nfc")
 
     def test_subvolume_group_info(self):
