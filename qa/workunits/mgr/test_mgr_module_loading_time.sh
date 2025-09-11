@@ -58,6 +58,14 @@ if [[ "$health" == *"Module failed to initialize"* ]]; then
     exit 1
 fi
 
+echo "Verify that mgr is active..."
+stat=$("$ceph" -s 2>&1)
+if [[ "$stat" != *"active, since"* ]]; then
+    echo "FAIL: Mgr should be in 'active' state."
+    echo "$stat"
+    exit 1
+fi
+
 # ------ Test 2 ------
 echo "Select balancer module to receive loading delays..."
 "$ceph" config set mgr mgr_module_load_delay_name balancer
@@ -88,6 +96,14 @@ if [[ "$health" == *"Module failed to initialize"* ]]; then
     exit 1
 fi
 
+echo "Verify that mgr is active..."
+stat=$("$ceph" -s 2>&1)
+if [[ "$stat" != *"active, since"* ]]; then
+    echo "FAIL: Mgr should be in 'active' state."
+    echo "$stat"
+    exit 1
+fi
+
 # ------ Test 3 ------
 echo "Test 3: Inject large delay (10000000000 ms) that exceeds max loading retries and emits cluster error"
 "$ceph" config set mgr mgr_module_load_delay 10000000000
@@ -115,6 +131,14 @@ else
     exit 1
 fi
 
+echo "Verify that mgr is active..."
+stat=$("$ceph" -s 2>&1)
+if [[ "$stat" != *"active, since"* ]]; then
+    echo "FAIL: Mgr should be in 'active' state."
+    echo "$stat"
+    exit 1
+fi
+
 # ----- Test 4 -----
 echo "Test 4: Disable the problematic module and confirm that the health error goes away"
 
@@ -129,6 +153,14 @@ health=$("$ceph" health detail 2>&1)
 if [[ "$health" == *"Module failed to initialize"* ]]; then
     echo "FAIL: One or more modules failed to initialize despite problem module being disabled."
     echo "$health"
+    exit 1
+fi
+
+echo "Verify that mgr is active..."
+stat=$("$ceph" -s 2>&1)
+if [[ "$stat" != *"active, since"* ]]; then
+    echo "FAIL: Mgr should be in 'active' state."
+    echo "$stat"
     exit 1
 fi
 
