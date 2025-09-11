@@ -517,6 +517,60 @@ class RedmineUpkeep:
         def requires_github_api():
             return True
 
+    @transformation(10000)
+    def _transform_clear_stale_merge_commit(self, issue_update):
+        """
+        Transformation: If the "Pull Request ID" was changed after the "Merge
+        Commit SHA" was set, this transformation clears the merge commit and
+        related "Fixed In" field, as they are now considered stale.
+        """
+        issue_update.logger.debug("Running _transform_clear_stale_merge_commit")
+        try:
+            issue_with_journals = self.R.issue.get(issue_update.issue.id, include=['journals'])
+        except redminelib.exceptions.ResourceNotFoundError:
+            issue_update.logger.warning("Could not fetch issue with journals. Skipping stale merge commit check.")
+            return False
+
+        last_pr_id_change = None
+        last_merge_commit_set = None
+
+        # Journals are ordered oldest to newest, so reverse to find the latest changes first.
+        for journal in reversed(issue_with_journals.journals):
+            if last_pr_id_change and last_merge_commit_set:
+                break
+
+            for detail in journal.details:
+                if detail.get('property') == 'cf':
+                    try:
+                        field_id = int(detail.get('name'))
+                        if field_id == REDMINE_CUSTOM_FIELD_ID_PULL_REQUEST_ID and not last_pr_id_change:
+                            last_pr_id_change = journal.id
+                            issue_update.logger.debug(f"last_pr_id_change = {last_pr_id_change}")
+                        elif field_id == REDMINE_CUSTOM_FIELD_ID_MERGE_COMMIT and not last_merge_commit_set:
+                            # We only care when the commit was set to a non-empty value.
+                            if detail.get('new_value'):
+                                last_merge_commit_set = journal.id
+                                issue_update.logger.debug(f"last_merge_commit_set = {last_merge_commit_set}")
+                    except (ValueError, TypeError):
+                        continue # Ignore if 'name' is not a valid integer field ID
+
+        if not last_pr_id_change or not last_merge_commit_set:
+            issue_update.logger.debug("Did not find journal entries for both PR ID and Merge Commit changes. No action taken.")
+            return False
+
+        issue_update.logger.debug(f"Last PR ID change: {last_pr_id_change}, Last Merge Commit set: {last_merge_commit_set}")
+
+        if last_pr_id_change > last_merge_commit_set:
+            issue_update.logger.info("The 'Pull Request ID' was changed after the 'Merge Commit SHA' was set. Clearing the stale merge commit.")
+            # Clear the merge commit field and also the 'Fixed In' field which depends on it.
+            changed = False
+            changed |= issue_update.add_or_update_custom_field(REDMINE_CUSTOM_FIELD_ID_MERGE_COMMIT, "")
+            changed |= issue_update.add_or_update_custom_field(REDMINE_CUSTOM_FIELD_ID_FIXED_IN, "")
+            changed |= issue_update.add_or_update_custom_field(REDMINE_CUSTOM_FIELD_ID_RELEASED_IN, "")
+            return changed
+
+        return False
+
     class FilterMerged(Filter):
         """
         Filter issues that are closed but no merge commit is set.
