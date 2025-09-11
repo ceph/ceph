@@ -23,6 +23,9 @@
 * RGW: Added support for S3 GetObjectAttributes.
 * RGW: Added BEAST frontend option 'so_reuseport' which facilitates running multiple
         RGW instances on the same host by sharing a single TCP port.
+* RGW: Bucket resharding now does most of its processing before it starts to block
+  write operations. This should significantly reduce the client-visible impact
+  of resharding on large buckets.
 
 * RBD: All Python APIs that produce timestamps now return "aware" `datetime`
   objects instead of "naive" ones (i.e. those including time zone information
