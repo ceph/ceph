@@ -4762,6 +4762,16 @@ void RGWListMultipart_ObjStore_S3::send_response()
 
     if (cksum && cksum->aws()) {
       s->formatter->dump_string("ChecksumAlgorithm", cksum->uc_type_string());
+      auto ckr = rgw::cksum::get_checksum_type(*cksum, true);
+      s->formatter->dump_string("ChecksumType", get<1>(ckr));
+    } else {
+      auto cksum_desc =
+	rgw::cksum::Cksum::checksums[uint16_t(upload->cksum_type)];
+      if (cksum_desc.aws()) {
+	s->formatter->dump_string("ChecksumAlgorithm", cksum_desc.name_uc);
+	s->formatter->dump_string("ChecksumType",
+				  (upload->cksum_flags & rgw::cksum::Cksum::FLAG_FULL_OBJECT) ? "FULL_OBJECT" : "COMPOSITE");
+      }
     }
 
     for (; iter != upload->get_parts().end(); ++iter) {
