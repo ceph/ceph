@@ -30,6 +30,26 @@ static void dump_usage_categories_info(Formatter *formatter, const rgw_usage_log
   formatter->close_section(); // categories
 }
 
+static void dump_usage_storage_class_info(Formatter *formatter, const rgw_usage_log_entry& entry, map<string, bool> *categories)
+{
+  for (auto uiter = entry.usage_by_storage_class_map.begin(); uiter != entry.usage_by_storage_class_map.end(); ++uiter) {
+    formatter->open_array_section("categories-" + uiter->first);
+    for (auto uiter2 = uiter->second.begin(); uiter2 != uiter->second.end(); ++uiter2) {
+      if (categories && !categories->empty() && !categories->count(uiter2->first))
+        continue;
+      const rgw_usage_data& usage = uiter2->second;
+      formatter->open_object_section("entry");
+      formatter->dump_string("category", uiter2->first);
+      formatter->dump_unsigned("bytes_sent", usage.bytes_sent);
+      formatter->dump_unsigned("bytes_received", usage.bytes_received);
+      formatter->dump_unsigned("ops", usage.ops);
+      formatter->dump_unsigned("successful_ops", usage.successful_ops);
+      formatter->close_section(); // entry
+    }
+    formatter->close_section();
+  }
+}
+
 int RGWUsage::show(const DoutPrefixProvider *dpp, rgw::sal::Driver* driver,
 		  rgw::sal::User* user , rgw::sal::Bucket* bucket,
 		   uint64_t start_epoch, uint64_t end_epoch, bool show_log_entries,
@@ -107,7 +127,7 @@ int RGWUsage::show(const DoutPrefixProvider *dpp, rgw::sal::Driver* driver,
         }
 
         dump_usage_categories_info(formatter, entry, categories);
-
+        dump_usage_storage_class_info(formatter, entry, categories);
         formatter->open_object_section("s3select");
         if (!categories || categories->empty() || categories->count("s3select")) {
           formatter->dump_unsigned("bytes_processed", entry.s3select_usage.bytes_processed);
@@ -138,6 +158,7 @@ int RGWUsage::show(const DoutPrefixProvider *dpp, rgw::sal::Driver* driver,
       formatter->open_object_section("user");
       formatter->dump_string("user", siter->first);
       dump_usage_categories_info(formatter, entry, categories);
+      dump_usage_storage_class_info(formatter, entry, categories);
       rgw_usage_data total_usage;
       entry.sum(total_usage, *categories);
       formatter->open_object_section("total");

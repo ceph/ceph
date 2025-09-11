@@ -229,7 +229,7 @@ static void log_usage(req_state *s, const string& op_name)
   uint64_t bytes_sent = ACCOUNTING_IO(s)->get_bytes_sent();
   uint64_t bytes_received = ACCOUNTING_IO(s)->get_bytes_received();
 
-  rgw_usage_data data(bytes_sent, bytes_received);
+  rgw_usage_data data(bytes_sent, bytes_received, s->dest_placement.get_storage_class());
 
   data.ops = 1;
   if (!s->is_err())
@@ -242,7 +242,7 @@ static void log_usage(req_state *s, const string& op_name)
 	<< ", bytes_processed=" << s->s3select_usage.bytes_processed
 	<< ", bytes_returned=" << s->s3select_usage.bytes_returned << dendl;
 
-  entry.add_usage(op_name, data);
+  entry.add_usage(s->dest_placement.name + "::" + s->dest_placement.get_storage_class(), op_name, data);
   entry.s3select_usage = s->s3select_usage;
 
   utime_t ts = ceph_clock_now();
