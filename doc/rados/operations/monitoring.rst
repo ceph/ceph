@@ -388,18 +388,31 @@ following command:
 
 The output of ``ceph df`` resembles the following::
 
+   --- RAW STORAGE ---
    CLASS     SIZE    AVAIL     USED  RAW USED  %RAW USED
-   ssd    202 GiB  200 GiB  2.0 GiB   2.0 GiB       1.00
-   TOTAL  202 GiB  200 GiB  2.0 GiB   2.0 GiB       1.00
-
-   --- POOLS ---
-   POOL                   ID  PGS   STORED   (DATA)   (OMAP)   OBJECTS     USED  (DATA)   (OMAP)   %USED  MAX AVAIL  QUOTA OBJECTS  QUOTA BYTES  DIRTY  USED COMPR  UNDER COMPR
-   device_health_metrics   1    1  242 KiB   15 KiB  227 KiB         4  251 KiB  24 KiB  227 KiB       0    297 GiB            N/A          N/A      4         0 B          0 B
-   cephfs.a.meta           2   32  6.8 KiB  6.8 KiB      0 B        22   96 KiB  96 KiB      0 B       0    297 GiB            N/A          N/A     22         0 B          0 B
-   cephfs.a.data           3   32      0 B      0 B      0 B         0      0 B     0 B      0 B       0     99 GiB            N/A          N/A      0         0 B          0 B
-   test                    4   32   22 MiB   22 MiB   50 KiB       248   19 MiB  19 MiB   50 KiB       0    297 GiB            N/A          N/A    248         0 B          0 B
+   hdd    5.4 PiB  1.2 PiB  4.3 PiB   4.3 PiB      78.58
+   ssd     22 TiB   19 TiB  2.7 TiB   2.7 TiB      12.36
+   TOTAL  5.5 PiB  1.2 PiB  4.3 PiB   4.3 PiB      78.32
    
-- **CLASS:** For example, "ssd" or "hdd".
+   --- POOLS ---
+   POOL                         ID   PGS   STORED  OBJECTS     USED  %USED  MAX AVAIL
+   .mgr                         11     1  558 MiB      141  1.6 GiB      0    5.8 TiB
+   cephfs_meta                  13  1024  166 GiB   14.59M  499 GiB   2.74    5.8 TiB
+   cephfs_data                  14  1024      0 B    1.17G      0 B      0    5.8 TiB
+   cephfsECvol                  19  2048  2.8 PiB    1.81G  3.5 PiB  83.79    561 TiB
+   .nfs                         20    32  9.7 KiB       61  118 KiB      0    5.8 TiB
+   testbench                    71    32   12 GiB    3.14k   37 GiB      0    234 TiB
+   default.rgw.buckets.data     76  2048  482 TiB  132.09M  643 TiB  47.85    526 TiB
+   .rgw.root                    97     1  1.4 KiB        4   48 KiB      0    5.8 TiB
+   default.rgw.log              98   256  3.6 KiB      209  408 KiB      0    5.8 TiB
+   default.rgw.control          99     1      0 B        8      0 B      0    5.8 TiB
+   default.rgw.meta            100   128  3.8 KiB       20  194 KiB      0    5.8 TiB
+   default.rgw.buckets.index   101   256  4.2 MiB       33   13 MiB      0    5.8 TiB
+   default.rgw.buckets.non-ec  102   128  5.6 MiB       13   17 MiB      0    5.8 TiB
+   kubedata                    104   256   63 GiB   17.65k  188 GiB   0.03    234 TiB
+   kubemeta                    105   256  241 MiB      166  724 MiB      0    5.8 TiB
+   
+- **CLASS:** Statistics for each CRUSH device class present, for example, ``ssd`` and ``hdd``.
 - **SIZE:** The amount of storage capacity managed by the cluster.
 - **AVAIL:** The amount of free space available in the cluster.
 - **USED:** The amount of raw storage consumed by user data (excluding
@@ -407,8 +420,41 @@ The output of ``ceph df`` resembles the following::
 - **RAW USED:** The amount of raw storage consumed by user data, internal
   overhead, and reserved capacity.
 - **%RAW USED:** The percentage of raw storage used. Watch this number in
-  conjunction with ``full ratio`` and ``near full ratio`` to be forewarned when
+  conjunction with ``backfillfull ratio`` and ``near full ratio`` to be forewarned when
   your cluster approaches the fullness thresholds. See `Storage Capacity`_.
+
+Additional information may be displayed by invoking as below:
+
+.. prompt:: bash $
+
+   ceph df detail
+
+The output now resembles the below example::
+
+   --- RAW STORAGE ---
+   CLASS     SIZE    AVAIL     USED  RAW USED  %RAW USED
+   hdd    5.4 PiB  1.2 PiB  4.3 PiB   4.3 PiB      78.58
+   ssd     22 TiB   19 TiB  2.7 TiB   2.7 TiB      12.36
+   TOTAL  5.5 PiB  1.2 PiB  4.3 PiB   4.3 PiB      78.32
+   
+   --- POOLS ---
+   POOL                         ID   PGS   STORED   (DATA)   (OMAP)  OBJECTS     USED   (DATA)   (OMAP)  %USED  MAX AVAIL  QUOTA OBJECTS  QUOTA BYTES  DIRTY  USED COMPR  UNDER COMPR
+   .mgr                         11     1  558 MiB  558 MiB      0 B      141  1.6 GiB  1.6 GiB      0 B      0    5.8 TiB            N/A          N/A    N/A         0 B          0 B
+   cephfs_meta                  13  1024  166 GiB  206 MiB  166 GiB   14.59M  499 GiB  618 MiB  498 GiB   2.74    5.8 TiB            N/A          N/A    N/A         0 B          0 B
+   cephfs_data                  14  1024      0 B      0 B      0 B    1.17G      0 B      0 B      0 B      0    5.8 TiB            N/A          N/A    N/A         0 B          0 B
+   cephfsECvol                  19  2048  2.8 PiB  2.8 PiB   17 KiB    1.81G  3.5 PiB  3.5 PiB   21 KiB  83.79    561 TiB            N/A          N/A    N/A         0 B          0 B
+   .nfs                         20    32  9.7 KiB  2.2 KiB  7.5 KiB       61  118 KiB   96 KiB   22 KiB      0    5.8 TiB            N/A          N/A    N/A         0 B          0 B
+   testbench                    71    32   12 GiB   12 GiB  2.3 KiB    3.14k   37 GiB   37 GiB  6.9 KiB      0    234 TiB            N/A          N/A    N/A         0 B          0 B
+   default.rgw.buckets.data     76  2048  482 TiB  482 TiB      0 B  132.09M  643 TiB  643 TiB      0 B  47.85    526 TiB            N/A          N/A    N/A     312 MiB      623 MiB
+   .rgw.root                    97     1  1.4 KiB  1.4 KiB      0 B        4   48 KiB   48 KiB      0 B      0    5.8 TiB            N/A          N/A    N/A         0 B          0 B
+   default.rgw.log              98   256  3.6 KiB  3.6 KiB      0 B      209  408 KiB  408 KiB      0 B      0    5.8 TiB            N/A          N/A    N/A         0 B          0 B
+   default.rgw.control          99     1      0 B      0 B      0 B        8      0 B      0 B      0 B      0    5.8 TiB            N/A          N/A    N/A         0 B          0 B
+   default.rgw.meta            100   128  3.8 KiB  3.2 KiB    671 B       20  194 KiB  192 KiB  2.0 KiB      0    5.8 TiB            N/A          N/A    N/A         0 B          0 B
+   default.rgw.buckets.index   101   256  4.2 MiB      0 B  4.2 MiB       33   13 MiB      0 B   13 MiB      0    5.8 TiB            N/A          N/A    N/A         0 B          0 B
+   default.rgw.buckets.non-ec  102   128  5.6 MiB      0 B  5.6 MiB       13   17 MiB      0 B   17 MiB      0    5.8 TiB            N/A          N/A    N/A         0 B          0 B
+   kubedata                    104   256   63 GiB   63 GiB      0 B   17.65k  188 GiB  188 GiB      0 B   0.03    234 TiB            N/A       20 TiB    N/A         0 B          0 B
+   kubemeta                    105   256  241 MiB  241 MiB  278 KiB      166  723 MiB  722 MiB  833 KiB      0    5.8 TiB            N/A          N/A    N/A         0 B          0 B
+
 
 
 **POOLS:**
