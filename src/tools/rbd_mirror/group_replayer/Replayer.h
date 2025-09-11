@@ -125,6 +125,7 @@ private:
   bool m_retry_validate_snap = false;
   bool m_resync_requested = false;
   bool m_rename_requested = false;
+  bool m_reload_snaps = false;
 
   utime_t m_snapshot_start;
   uint64_t m_last_snapshot_complete_seconds = 0;

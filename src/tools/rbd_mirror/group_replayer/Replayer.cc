@@ -682,6 +682,12 @@ void Replayer<I>::check_local_group_snapshots(
     std::unique_lock<ceph::mutex>* locker) {
   if (!m_local_group_snaps.empty()) {
     prune_group_snapshots(locker);
+    if (m_reload_snaps) {
+      m_reload_snaps = false;
+      locker->unlock();
+      schedule_load_group_snapshots();
+      return;
+    }
     auto last_local_snap = get_latest_group_snapshot(m_local_group_snaps);
     auto last_local_snap_ns = std::get_if<cls::rbd::GroupSnapshotNamespaceMirror>(
         &last_local_snap->snapshot_namespace);
@@ -1521,33 +1527,78 @@ void Replayer<I>::mirror_group_snapshot_unlink_peer(const std::string &snap_id) 
       return s.id == snap_id;
       });
 
-  if (remote_snap == m_remote_group_snaps.end()) {
-    derr << "remote group snapshot not found: "
-         << snap_id << dendl;
-    return;
+  int r;
+  bool local_unlink_peer = false;
+  if (remote_snap != m_remote_group_snaps.end()) {
+    auto rns = std::get_if<cls::rbd::GroupSnapshotNamespaceMirror>(
+        &remote_snap->snapshot_namespace);
+    if (rns == nullptr) {
+      derr << "remote group snapshot is not a mirror snapshot: "
+           << snap_id << dendl;
+      return;
+    }
+
+    if (rns->mirror_peer_uuids.count(m_remote_mirror_peer_uuid) != 0) {
+      dout(10) << "removing peer uuid on remote snap: " << snap_id << dendl;
+      m_reload_snaps = true; // reload snaps (especially remote) to filter-out this snap
+      rns->mirror_peer_uuids.erase(m_remote_mirror_peer_uuid);
+      m_in_flight_op_tracker.start_op();
+      auto comp = create_rados_callback(
+          new LambdaContext([this, snap_id](int r) {
+            handle_mirror_group_snapshot_unlink_peer(r, snap_id);
+            m_in_flight_op_tracker.finish_op();
+            }));
+
+      librados::ObjectWriteOperation op;
+      librbd::cls_client::group_snap_set(&op, *remote_snap);
+      r = m_remote_io_ctx.aio_operate(
+          librbd::util::group_header_name(m_remote_group_id), comp, &op);
+      ceph_assert(r == 0);
+      comp->release();
+      if (rns->is_non_primary()) {
+        // if remote snap is non-primary makesure that the local snap don't
+        // have peer UUID attached.
+        local_unlink_peer = true;
+      }
+    }
+  } else {
+    // may be, remote snap is filtered-out, but still could be non-primary.
+    local_unlink_peer = true;
   }
 
-  auto rns = std::get_if<cls::rbd::GroupSnapshotNamespaceMirror>(
-      &remote_snap->snapshot_namespace);
-  if (rns == nullptr) {
-    derr << "remote group snapshot is not a mirror snapshot: "
-         << snap_id << dendl;
-    return;
-  }
+  if (local_unlink_peer) {
+    auto local_snap = std::find_if(
+        m_local_group_snaps.begin(), m_local_group_snaps.end(),
+        [snap_id](const cls::rbd::GroupSnapshot &s) {
+        return s.id == snap_id;
+        });
 
-  if (rns->mirror_peer_uuids.count(m_remote_mirror_peer_uuid) != 0) {
-    rns->mirror_peer_uuids.erase(m_remote_mirror_peer_uuid);
-    auto comp = create_rados_callback(
-      new LambdaContext([this, snap_id](int r) {
-	handle_mirror_group_snapshot_unlink_peer(r, snap_id);
-      }));
+    if (local_snap != m_local_group_snaps.end()) {
+      auto lns = std::get_if<cls::rbd::GroupSnapshotNamespaceMirror>(
+          &local_snap->snapshot_namespace);
+      if (lns == nullptr) {
+        derr << "local group snapshot is not a mirror snapshot: "
+             << snap_id << dendl;
+        return;
+      }
+      if (lns->mirror_peer_uuids.size() != 0) {
+        dout(10) << "removing peer uuid on local snap: " << snap_id << dendl;
+        lns->mirror_peer_uuids.clear();
+        m_in_flight_op_tracker.start_op();
+        auto comp = create_rados_callback(
+            new LambdaContext([this, snap_id](int r) {
+              handle_mirror_group_snapshot_unlink_peer(r, snap_id);
+              m_in_flight_op_tracker.finish_op();
+              }));
 
-    librados::ObjectWriteOperation op;
-    librbd::cls_client::group_snap_set(&op, *remote_snap);
-    int r = m_remote_io_ctx.aio_operate(
-      librbd::util::group_header_name(m_remote_group_id), comp, &op);
-    ceph_assert(r == 0);
-    comp->release();
+        librados::ObjectWriteOperation op;
+        librbd::cls_client::group_snap_set(&op, *local_snap);
+        r = m_local_io_ctx.aio_operate(
+            librbd::util::group_header_name(m_local_group_id), comp, &op);
+        ceph_assert(r == 0);
+        comp->release();
+      }
+    }
   }
 }
 
@@ -1728,8 +1779,8 @@ void Replayer<I>::prune_mirror_group_snapshots(
       derr << "failed to remove group snapshot : "
            << prune_snap->id << " : " << cpp_strerror(r) << dendl;
     }
-    prune_snap = nullptr;
-    skip_next_snap_check = false;
+    m_reload_snaps = true;
+    return;
   }
 }
 

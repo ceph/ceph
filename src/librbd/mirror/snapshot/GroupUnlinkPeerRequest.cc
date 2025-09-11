@@ -70,8 +70,6 @@ void GroupUnlinkPeerRequest<I>::unlink_peer() {
       if (ns == nullptr) {
 	continue;
       }
-      // FIXME: after relocate, on new primary the previous primary demoted
-      // snap is not getting deleted, until the next demotion.
       if (ns->state != cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY) {
 	// Reset the count if the group was demoted.
 	count = 0;
@@ -143,7 +141,7 @@ void GroupUnlinkPeerRequest<I>::process_snapshot(cls::rbd::GroupSnapshot group_s
     } else if (found) {
       auto ns = std::get_if<cls::rbd::GroupSnapshotNamespaceMirror>(
           &it->snapshot_namespace);
-      if (ns != nullptr) {
+      if (ns != nullptr && it->state == cls::rbd::GROUP_SNAPSHOT_STATE_COMPLETE) {
         m_has_newer_mirror_snap = true;
         break;
       }
