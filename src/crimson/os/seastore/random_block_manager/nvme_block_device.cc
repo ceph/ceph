@@ -34,37 +34,39 @@ NVMeBlockDevice::mkfs_ret NVMeBlockDevice::mkfs(device_config_t config) {
 open_ertr::future<> NVMeBlockDevice::open(
   const std::string &in_path,
   seastar::open_flags mode) {
-  seastar::file file;
-  try {
-    file = co_await seastar::open_file_dma(in_path, mode);
-  } catch (...) {
-    co_return;
-  }
+  auto file = co_await seastar::open_file_dma(in_path, mode);
   device = std::move(file);
   // Get SSD's features from identify_controller and namespace command.
   // Do identify_controller first, and then identify_namespace.
-  //auto id_controller_data = 
-  co_await identify_controller(device
-  ).safe_then([this, in_path, mode](
-    auto id_controller_data) {
+  auto id_ctr_data = co_await identify_controller(device
+  ).handle_error(crimson::ct_error::input_output_error::handle([] {
+    LOG_PREFIX(NVMeBlockDevice::open);
+    DEBUG("identify_controller failed.\
+      Proceeding to open the device normally without adding device-specific information.");
+    return std::nullopt;
+  }));
+  if (id_ctr_data) {
     // TODO: enable multi-stream if the nvme device supports
+    auto id_controller_data = *id_ctr_data;
     awupf = id_controller_data.awupf + 1;
-    return identify_namespace(device
-    ).safe_then([this, in_path, mode] (
-      auto id_namespace_data) {
+    auto id_ns_data = co_await identify_namespace(device
+    ).handle_error(crimson::ct_error::input_output_error::handle([] {
+      LOG_PREFIX(NVMeBlockDevice::open);
+      DEBUG("identify_namespace failed.\
+	Proceeding to open the device normally without adding device-specific information.");
+      return std::nullopt;
+    }));
+    if (id_ns_data) {
+      auto id_namespace_data = *id_ns_data;
       atomic_write_unit = awupf * super.block_size;
       if (id_namespace_data.nsfeat.opterf == 1){
 	// NPWG and NPWA is 0'based value
 	write_granularity = super.block_size * (id_namespace_data.npwg + 1);
 	write_alignment = super.block_size * (id_namespace_data.npwa + 1);
       }
-      return open_for_io(in_path, mode);
-    });
-  }).handle_error(crimson::ct_error::input_output_error::handle([this, in_path, mode] {
-    logger().error("open: id ctrlr failed. ohen without ioctl");
-    return open_for_io(in_path, mode);
-  }), crimson::ct_error::pass_further_all{});
-  co_return;
+    }
+  } 
+  co_return co_await open_for_io(in_path, mode);
 }
 
 open_ertr::future<> NVMeBlockDevice::open_for_io(
@@ -91,7 +93,9 @@ NVMeBlockDevice::mount_ret NVMeBlockDevice::mount()
   });
 
   if (is_end_to_end_data_protection()) {
-    auto id_namespace_data = co_await identify_namespace(device);
+    auto id_ns_data = co_await identify_namespace(device);
+    assert(id_ns_data);
+    auto id_namespace_data = *id_ns_data;
     if (id_namespace_data.dps.protection_type !=
 	nvme_format_nvm_command_t::PROTECT_INFORMATION_TYPE_2) {
       logger().error("seastore was formated with end-to-end-data-protection \
@@ -237,7 +241,7 @@ Device::close_ertr::future<> NVMeBlockDevice::close() {
   co_return;
 }
 
-nvme_command_ertr::future<nvme_identify_controller_data_t>
+nvme_command_ertr::future<std::optional<nvme_identify_controller_data_t>>
 NVMeBlockDevice::identify_controller(seastar::file f) {
 
   nvme_admin_command_t admin_command;
@@ -254,7 +258,7 @@ discard_ertr::future<> NVMeBlockDevice::discard(uint64_t offset, uint64_t len) {
   co_return co_await device.discard(offset, len);
 }
 
-nvme_command_ertr::future<nvme_identify_namespace_data_t>
+nvme_command_ertr::future<std::optional<nvme_identify_namespace_data_t>>
 NVMeBlockDevice::identify_namespace(seastar::file f) {
 
   auto nsid = co_await get_nsid(f);
@@ -304,7 +308,8 @@ nvme_command_ertr::future<int> NVMeBlockDevice::pass_through_io(
 }
 
 nvme_command_ertr::future<> NVMeBlockDevice::try_enable_end_to_end_protection() {
-  auto id_namespace_data = co_await identify_namespace(device);
+  auto id_ns_data = co_await identify_namespace(device);
+  auto id_namespace_data = *id_ns_data;
   if (!id_namespace_data.nlbaf) {
     logger().info("the device does not support end to end data protection,\
       mkfs() will be done without this functionality.");
@@ -344,7 +349,8 @@ nvme_command_ertr::future<> NVMeBlockDevice::try_enable_end_to_end_protection() 
     ceph_abort();
   }
 
-  id_namespace_data = co_await identify_namespace(device);
+  id_ns_data = co_await identify_namespace(device);
+  id_namespace_data = *id_ns_data;
   ceph_assert(id_namespace_data.dps.protection_type ==
      nvme_format_nvm_command_t::PROTECT_INFORMATION_TYPE_2);
   super.set_end_to_end_data_protection();

@@ -266,9 +266,7 @@ public:
     stat.size = size;
     std::optional<nvme_identify_namespace_data_t> id_ns_data =
       co_await identify_namespace(file
-      ).safe_then([] (auto id_namespace_data) mutable {
-	return std::optional<nvme_identify_namespace_data_t>(id_namespace_data);
-      }).handle_error(crimson::ct_error::input_output_error::handle([]{
+      ).handle_error(crimson::ct_error::input_output_error::handle([]{
 	return std::nullopt;
       }));
 
@@ -358,9 +356,9 @@ public:
 private:
   // identify_controller/namespace are used to get SSD internal information such
   // as supported features, NPWG and NPWA
-  nvme_command_ertr::future<nvme_identify_controller_data_t> 
+  nvme_command_ertr::future<std::optional<nvme_identify_controller_data_t>> 
     identify_controller(seastar::file f);
-  nvme_command_ertr::future<nvme_identify_namespace_data_t>
+  nvme_command_ertr::future<std::optional<nvme_identify_namespace_data_t>>
     identify_namespace(seastar::file f);
   nvme_command_ertr::future<int> get_nsid(seastar::file f);
   open_ertr::future<> open_for_io(
