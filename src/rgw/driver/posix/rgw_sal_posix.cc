@@ -2894,6 +2894,7 @@ int POSIXBucket::read_stats_async(const DoutPrefixProvider *dpp,
 }
 
 int POSIXBucket::sync_owner_stats(const DoutPrefixProvider *dpp, optional_yield y,
+                                  bool reset,
                                   RGWBucketEnt* ent)
 {
   return 0;

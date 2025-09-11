@@ -80,7 +80,7 @@ struct bucket_meta_entry {
 
 int rgw_sync_all_stats(const DoutPrefixProvider *dpp,
                        optional_yield y, rgw::sal::Driver* driver,
-                       const rgw_owner& owner, const std::string& tenant);
+                       const rgw_owner& owner, bool reset, const std::string& tenant);
 extern int rgw_user_get_all_buckets_stats(const DoutPrefixProvider *dpp,
   rgw::sal::Driver* driver, rgw::sal::User* user,
   std::map<std::string, bucket_meta_entry>& buckets_usage_map, optional_yield y);
