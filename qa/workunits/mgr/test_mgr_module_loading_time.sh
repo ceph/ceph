@@ -66,11 +66,23 @@ if [[ "$stat" != *"active, since"* ]]; then
     exit 1
 fi
 
+echo "Check mgr_status to ensure 'pending_modules' is empty..."
+expected='[]'
+mgr_status=$("$ceph" tell mgr mgr_status | jq -c '.pending_modules')
+if [[ "$mgr_status" == "$expected" ]]; then
+    echo "PASS: No modules are pending."
+else
+    echo "FAIL: Some modules are pending when there shouldn't be."
+    echo "Expected: $expected"
+    echo "Actual:   $mgr_status"
+    exit 1
+fi
+
 # ------ Test 2 ------
 echo "Select balancer module to receive loading delays..."
 "$ceph" config set mgr mgr_module_load_delay_name balancer
 
-echo "Test 2: Inject small delay (10000 ms) that should not exceed max loading retries"
+echo "Test 2: Inject small delay (10000 ms) that should not exceed max loading expiration"
 "$ceph" config set mgr mgr_module_load_delay 10000
 
 "$ceph" mgr fail
@@ -104,8 +116,20 @@ if [[ "$stat" != *"active, since"* ]]; then
     exit 1
 fi
 
+echo "Check mgr_status to ensure 'pending_modules' is empty..."
+expected='[]'
+mgr_status=$("$ceph" tell mgr mgr_status | jq -c '.pending_modules')
+if [[ "$mgr_status" == "$expected" ]]; then
+    echo "PASS: No modules are pending."
+else
+    echo "FAIL: Some modules are pending when there shouldn't be."
+    echo "Expected: $expected"
+    echo "Actual:   $mgr_status"
+    exit 1
+fi
+
 # ------ Test 3 ------
-echo "Test 3: Inject large delay (10000000000 ms) that exceeds max loading retries and emits cluster error"
+echo "Test 3: Inject large delay (10000000000 ms) that exceeds max loading expiration and emits cluster error"
 "$ceph" config set mgr mgr_module_load_delay 10000000000
 
 "$ceph" mgr fail
@@ -139,6 +163,18 @@ if [[ "$stat" != *"active, since"* ]]; then
     exit 1
 fi
 
+echo "Check mgr_status to ensure 'pending_modules' is populated with modules we expect..."
+expected='["balancer","cephadm","crash","dashboard","devicehealth","iostat","nfs","orchestrator","pg_autoscaler","progress","rbd_support","status","telemetry","volumes"]'
+mgr_status=$("$ceph" tell mgr mgr_status | jq -c '.pending_modules')
+if [[ "$mgr_status" == "$expected" ]]; then
+    echo "PASS: Expected modules are pending."
+else
+    echo "FAIL: Expected output does not match actual."
+    echo "Expected: $expected"
+    echo "Actual:   $mgr_status"
+    exit 1
+fi
+
 # ----- Test 4 -----
 echo "Test 4: Disable the problematic module and confirm that the health error goes away"
 
@@ -161,6 +197,18 @@ stat=$("$ceph" -s 2>&1)
 if [[ "$stat" != *"active, since"* ]]; then
     echo "FAIL: Mgr should be in 'active' state."
     echo "$stat"
+    exit 1
+fi
+
+echo "Check mgr_status to ensure 'pending_modules' is empty..."
+expected='[]'
+mgr_status=$("$ceph" tell mgr mgr_status | jq -c '.pending_modules')
+if [[ "$mgr_status" == "$expected" ]]; then
+    echo "PASS: No modules are pending."
+else
+    echo "FAIL: Some modules are pending when there shouldn't be."
+    echo "Expected: $expected"
+    echo "Actual:   $mgr_status"
     exit 1
 fi
 
