@@ -847,6 +847,18 @@ int rgw_bucket_update_stats(cls_method_context_t hctx, bufferlist *in, bufferlis
     }
   }
 
+  for (auto& s : op.storage_class_stats) {
+    auto& dest = header.storage_class_stats[s.first];
+    if (op.absolute) {
+      dest = s.second;
+    } else {
+      dest.total_size += s.second.total_size;
+      dest.total_size_rounded += s.second.total_size_rounded;
+      dest.num_entries += s.second.num_entries;
+      dest.actual_size += s.second.actual_size;
+    }
+  }
+
   return write_bucket_header(hctx, &header);
 }
 
@@ -1034,7 +1046,21 @@ static void unaccount_entry(rgw_bucket_dir_header& header,
 			    rgw_bucket_dir_entry& entry)
 {
   if (entry.exists) {
+    auto& storage_class = rgw_placement_rule::get_canonical_storage_class(entry.meta.storage_class);
     rgw_bucket_category_stats& stats = header.stats[entry.meta.category];
+    rgw_bucket_category_stats &sc_stats = header.storage_class_stats[storage_class];
+    if ((sc_stats.num_entries - 1) > sc_stats.num_entries) { // unsigned long overflow
+      sc_stats.num_entries = 0;
+      sc_stats.total_size = 0;
+      sc_stats.total_size_rounded = 0;
+      sc_stats.actual_size = 0;
+    } else {
+      sc_stats.num_entries--;
+      sc_stats.total_size -= entry.meta.accounted_size;
+      sc_stats.total_size_rounded -=
+              cls_rgw_get_rounded_size(entry.meta.accounted_size);
+      sc_stats.actual_size -= entry.meta.size;
+    }
     stats.num_entries--;
     stats.total_size -= entry.meta.accounted_size;
     stats.total_size_rounded -=
@@ -1322,6 +1348,7 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
     unaccount_entry(header, entry);
 
     rgw_bucket_dir_entry_meta& meta = op.meta;
+    auto& storage_class = rgw_placement_rule::get_canonical_storage_class(meta.storage_class);
     rgw_bucket_category_stats& stats = header.stats[meta.category];
     entry.meta = meta;
     entry.key = op.key;
@@ -1332,6 +1359,12 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
     stats.total_size += meta.accounted_size;
     stats.total_size_rounded += cls_rgw_get_rounded_size(meta.accounted_size);
     stats.actual_size += meta.size;
+    rgw_bucket_category_stats& sc_stats = header.storage_class_stats[storage_class];
+    sc_stats.num_entries++;
+    sc_stats.total_size += meta.accounted_size;
+    sc_stats.total_size_rounded += cls_rgw_get_rounded_size(meta.accounted_size);
+    sc_stats.actual_size += meta.size;
+
     CLS_LOG_BITX(bitx_inst, 20,
 		 "INFO: %s: setting map entry at key=%s",
 		 __func__, escape_str(idx).c_str());
@@ -2520,15 +2553,30 @@ int rgw_dir_suggest_changes(cls_method_context_t hctx,
     if (cur_disk.pending_map.empty()) {
       CLS_LOG_BITX(bitx_inst, 10, "INFO: %s: cur_disk.pending_map is empty", __func__);
       if (cur_disk.exists) {
-        rgw_bucket_category_stats& old_stats = header.stats[cur_disk.meta.category];
+          auto& storage_class = rgw_placement_rule::get_canonical_storage_class(cur_disk.meta.storage_class);
+          rgw_bucket_category_stats& old_stats = header.stats[cur_disk.meta.category];
 	CLS_LOG_BITX(bitx_inst, 10, "INFO: %s: stats.num_entries: %ld -> %ld",
 		     __func__, old_stats.num_entries, old_stats.num_entries - 1);
         old_stats.num_entries--;
         old_stats.total_size -= cur_disk.meta.accounted_size;
         old_stats.total_size_rounded -= cls_rgw_get_rounded_size(cur_disk.meta.accounted_size);
         old_stats.actual_size -= cur_disk.meta.size;
+        rgw_bucket_category_stats &old_sc_stats = header.storage_class_stats[storage_class];
+        if ((old_sc_stats.num_entries - 1) > old_sc_stats.num_entries) { // unsigned long overflow
+          old_sc_stats.num_entries = 0;
+          old_sc_stats.total_size = 0;
+          old_sc_stats.total_size_rounded = 0;
+          old_sc_stats.actual_size = 0;
+        } else {
+          old_sc_stats.num_entries--;
+          old_sc_stats.total_size -= cur_disk.meta.accounted_size;
+          old_sc_stats.total_size_rounded -= cls_rgw_get_rounded_size(cur_disk.meta.accounted_size);
+          old_sc_stats.actual_size -= cur_disk.meta.size;
+        }
         header_changed = true;
       }
+      auto& storage_class = rgw_placement_rule::get_canonical_storage_class(cur_change.meta.storage_class);
+      std::map<std::string, rgw_bucket_category_stats> storage_class_stats = header.storage_class_stats;
       rgw_bucket_category_stats& stats = header.stats[cur_change.meta.category];
 
       switch(op) {
@@ -2567,6 +2615,12 @@ int rgw_dir_suggest_changes(cls_method_context_t hctx,
         stats.total_size += cur_change.meta.accounted_size;
         stats.total_size_rounded += cls_rgw_get_rounded_size(cur_change.meta.accounted_size);
         stats.actual_size += cur_change.meta.size;
+        rgw_bucket_category_stats sc_stats = storage_class_stats[storage_class];
+        sc_stats.num_entries++;
+        sc_stats.total_size += cur_change.meta.accounted_size;
+        sc_stats.total_size_rounded += cls_rgw_get_rounded_size(cur_change.meta.accounted_size);
+        sc_stats.actual_size += cur_change.meta.size;
+
         header_changed = true;
         cur_change.index_ver = header.ver;
 
@@ -2949,7 +3003,8 @@ static int rgw_bi_put_entries(cls_method_context_t hctx, bufferlist *in, bufferl
       cls_rgw_obj_key key;
       RGWObjCategory category;
       rgw_bucket_category_stats stats;
-      const bool account = entry.get_info(&key, &category, &stats);
+      string storage_class;
+      const bool account = entry.get_info(&key, &category, &stats, &storage_class);
       if (account) {
         auto& dest = header.stats[category];
         dest.total_size -= stats.total_size;
@@ -2975,7 +3030,8 @@ static int rgw_bi_put_entries(cls_method_context_t hctx, bufferlist *in, bufferl
     cls_rgw_obj_key key;
     RGWObjCategory category;
     rgw_bucket_category_stats stats;
-    const bool account = entry.get_info(&key, &category, &stats);
+    string storage_class;
+    const bool account = entry.get_info(&key, &category, &stats, &storage_class);
     if (account) {
       auto& dest = header.stats[category];
       dest.total_size += stats.total_size;
@@ -3424,11 +3480,17 @@ static int check_index(cls_method_context_t hctx,
       }
 
       if (entry.exists && entry.flags == 0) {
+        auto& storage_class = rgw_placement_rule::get_canonical_storage_class(entry.meta.storage_class);
         rgw_bucket_category_stats& stats = calc_header->stats[entry.meta.category];
         stats.num_entries++;
         stats.total_size += entry.meta.accounted_size;
         stats.total_size_rounded += cls_rgw_get_rounded_size(entry.meta.accounted_size);
         stats.actual_size += entry.meta.size;
+        rgw_bucket_category_stats& sc_stats = calc_header->storage_class_stats[storage_class];
+        sc_stats.num_entries++;
+        sc_stats.total_size += entry.meta.accounted_size;
+        sc_stats.total_size_rounded += cls_rgw_get_rounded_size(entry.meta.accounted_size);
+        sc_stats.actual_size += entry.meta.size;
       }
       start_obj = bientry.idx;
     }
@@ -3453,11 +3515,17 @@ static int check_index(cls_method_context_t hctx,
       }
 
       if (entry.exists) {
+        auto& storage_class = rgw_placement_rule::get_canonical_storage_class(entry.meta.storage_class);
         rgw_bucket_category_stats& stats = calc_header->stats[entry.meta.category];
         stats.num_entries++;
         stats.total_size += entry.meta.accounted_size;
         stats.total_size_rounded += cls_rgw_get_rounded_size(entry.meta.accounted_size);
         stats.actual_size += entry.meta.size;
+        rgw_bucket_category_stats& sc_stats = calc_header->storage_class_stats[storage_class];
+        sc_stats.num_entries++;
+        sc_stats.total_size += entry.meta.accounted_size;
+        sc_stats.total_size_rounded += cls_rgw_get_rounded_size(entry.meta.accounted_size);
+        sc_stats.actual_size += entry.meta.size;
       }
       start_obj = bientry.idx;
     }

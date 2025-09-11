@@ -156,6 +156,7 @@ class BucketReshardShard {
   RGWRados::BucketShard bs;
   vector<rgw_cls_bi_entry> entries;
   map<RGWObjCategory, rgw_bucket_category_stats> stats;
+  map<string, rgw_bucket_category_stats> storage_class_stats;
   deque<librados::AioCompletion *>& aio_completions;
   uint64_t max_aio_completions;
   uint64_t reshard_shard_batch_size;
@@ -212,11 +213,17 @@ public:
   }
 
   int add_entry(rgw_cls_bi_entry& entry, bool account, RGWObjCategory category,
-                const rgw_bucket_category_stats& entry_stats,
+                const rgw_bucket_category_stats& entry_stats, string& storage_class,
                 bool process_log = false) {
     entries.push_back(entry);
     if (account) {
       rgw_bucket_category_stats& target = stats[category];
+      storage_class = rgw_placement_rule::get_canonical_storage_class(storage_class);
+      rgw_bucket_category_stats& sc_target = storage_class_stats[storage_class];
+      sc_target.num_entries += entry_stats.num_entries;
+      sc_target.total_size += entry_stats.total_size;
+      sc_target.total_size_rounded += entry_stats.total_size_rounded;
+      sc_target.actual_size += entry_stats.actual_size;
       target.num_entries += entry_stats.num_entries;
       target.total_size += entry_stats.total_size;
       target.total_size_rounded += entry_stats.total_size_rounded;
@@ -248,7 +255,7 @@ public:
       for (auto& entry : entries) {
         store->getRados()->bi_put(op, bs, entry, null_yield);
       }
-      cls_rgw_bucket_update_stats(op, false, stats);
+      cls_rgw_bucket_update_stats(op, false, stats, storage_class_stats);
     }
 
     librados::AioCompletion *c;
@@ -263,7 +270,7 @@ public:
     }
     entries.clear();
     stats.clear();
-
+    storage_class_stats.clear();
     return 0;
   }
 
@@ -313,9 +320,10 @@ public:
   int add_entry(int shard_index,
                 rgw_cls_bi_entry& entry, bool account, RGWObjCategory category,
                 const rgw_bucket_category_stats& entry_stats,
+                string& storage_class,
                 bool process_log = false) {
     int ret = target_shards[shard_index].add_entry(entry, account, category,
-						   entry_stats, process_log);
+						   entry_stats, storage_class, process_log);
     if (ret < 0) {
       derr << "ERROR: target_shards.add_entry(" << entry.idx <<
 	") returned error: " << cpp_strerror(-ret) << dendl;
@@ -1136,7 +1144,8 @@ int RGWBucketReshard::reshard_process(const rgw::bucket_index_layout_generation&
         cls_rgw_obj_key cls_key;
         RGWObjCategory category;
         rgw_bucket_category_stats stats;
-        bool account = entry.get_info(&cls_key, &category, &stats);
+        string storage_class;
+        bool account = entry.get_info(&cls_key, &category, &stats, &storage_class);
         rgw_obj_key key(cls_key);
         if (entry.type == BIIndexType::OLH && key.empty()) {
           // bogus entry created by https://tracker.ceph.com/issues/46456
@@ -1153,7 +1162,7 @@ int RGWBucketReshard::reshard_process(const rgw::bucket_index_layout_generation&
         }
 
         ret = target_shards_mgr.add_entry(shard_index, entry, account,
-                  category, stats, process_log);
+                  category, stats, storage_class, process_log);
         if (ret < 0) {
           return ret;
         }

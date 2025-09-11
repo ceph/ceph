@@ -1496,6 +1496,10 @@ public:
     rctx->set_compressed(obj);
   }
   int decode_policy(const DoutPrefixProvider *dpp, bufferlist& bl, ACLOwner *owner);
+  int get_bucket_storage_classes_stats(const DoutPrefixProvider *dpp, optional_yield y, const RGWBucketInfo& bucket_info,
+                                       int shard_id, std::string *bucket_ver, std::string *master_ver,
+                                       std::map<std::string, RGWStorageStats>& sc_stats, std::string *max_marker,
+                                       const rgw::bucket_index_layout_generation& idx_layout, bool* syncstopped = NULL);
   int get_bucket_stats(const DoutPrefixProvider *dpp, optional_yield y,
                        RGWBucketInfo& bucket_info, const rgw::bucket_index_layout_generation& idx_layout, int shard_id, std::string *bucket_ver, std::string *master_ver,
       std::map<RGWObjCategory, RGWStorageStats>& stats, std::string *max_marker, bool* syncstopped = NULL);

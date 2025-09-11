@@ -72,12 +72,14 @@ void cls_rgw_bucket_set_tag_timeout(librados::ObjectWriteOperation& op,
 
 void cls_rgw_bucket_update_stats(librados::ObjectWriteOperation& o,
 				 bool absolute,
-                                 const map<RGWObjCategory, rgw_bucket_category_stats>& stats,
-                                 const map<RGWObjCategory, rgw_bucket_category_stats>* dec_stats)
+                 const map<RGWObjCategory, rgw_bucket_category_stats>& stats,
+                 const std::map<std::string, rgw_bucket_category_stats>& storage_class_stats,
+                 const std::map<RGWObjCategory, rgw_bucket_category_stats>* dec_stats)
 {
   rgw_cls_bucket_update_stats_op call;
   call.absolute = absolute;
   call.stats = stats;
+  call.storage_class_stats = storage_class_stats;
   if (dec_stats != NULL)
     call.dec_stats = *dec_stats;
   bufferlist in;
