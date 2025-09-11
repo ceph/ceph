@@ -499,22 +499,26 @@ struct rgw_cls_bucket_update_stats_op
   bool absolute{false};
   std::map<RGWObjCategory, rgw_bucket_category_stats> stats;
   std::map<RGWObjCategory, rgw_bucket_category_stats> dec_stats;
+  std::map<std::string, rgw_bucket_category_stats> storage_class_stats;
 
   rgw_cls_bucket_update_stats_op() {}
 
   void encode(ceph::buffer::list &bl) const {
-    ENCODE_START(2, 1, bl);
+    ENCODE_START(3, 1, bl);
     encode(absolute, bl);
     encode(stats, bl);
     encode(dec_stats, bl);
+    encode(storage_class_stats, bl);
     ENCODE_FINISH(bl);
   }
   void decode(ceph::buffer::list::const_iterator &bl) {
-    DECODE_START(2, bl);
+    DECODE_START(3, bl);
     decode(absolute, bl);
     decode(stats, bl);
     if (struct_v >= 2)
       decode(dec_stats, bl);
+    if (struct_v >= 3)
+      decode(storage_class_stats, bl);
     DECODE_FINISH(bl);
   }
   void dump(ceph::Formatter *f) const;
