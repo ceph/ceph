@@ -450,7 +450,7 @@ int stats(const DoutPrefixProvider* dpp,
   const rgw_owner owner = rgw_account_id{info.id};
 
   if (sync_stats) {
-    ret = rgw_sync_all_stats(dpp, y, driver, owner, info.tenant);
+    ret = rgw_sync_all_stats(dpp, y, driver, owner, false, info.tenant);
     if (ret < 0) {
       err_msg = "failed to sync account stats";
       return ret;

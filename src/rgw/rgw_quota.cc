@@ -610,7 +610,7 @@ int RGWOwnerStatsCache::sync_bucket(const rgw_owner& owner, const rgw_bucket& b,
   }
 
   RGWBucketEnt ent;
-  r = bucket->sync_owner_stats(dpp, y, &ent);
+  r = bucket->sync_owner_stats(dpp, y, false, &ent);
   if (r < 0) {
     ldpp_dout(dpp, 0) << "ERROR: sync_owner_stats() for bucket=" << bucket << " returned " << r << dendl;
     return r;
@@ -676,7 +676,7 @@ int RGWOwnerStatsCache::sync_owner(const DoutPrefixProvider *dpp,
     return ret;
   }
 
-  ret = rgw_sync_all_stats(dpp, y, driver, owner, tenant);
+  ret = rgw_sync_all_stats(dpp, y, driver, owner, false, tenant);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: failed user stats sync, ret=" << ret << dendl;
     return ret;

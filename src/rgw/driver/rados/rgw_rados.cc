@@ -9898,6 +9898,66 @@ int RGWRados::raw_obj_stat(const DoutPrefixProvider *dpp,
   return 0;
 }
 
+int RGWRados::get_bucket_storage_classes_stats(const DoutPrefixProvider *dpp, optional_yield y, const RGWBucketInfo& bucket_info, int shard_id, string *bucket_ver, string *master_ver,
+                                               map<std::string, RGWStorageStats>& sc_stats, string *max_marker,
+                                               const rgw::bucket_index_layout_generation& idx_layout, bool *syncstopped)
+{
+  vector<rgw_bucket_dir_header> headers;
+  map<int, string> bucket_instance_ids;
+  int r = svc.bi_rados->cls_bucket_head(dpp, bucket_info, idx_layout, shard_id, &headers, &bucket_instance_ids, y);
+  if (r < 0) {
+    return r;
+  }
+
+  ceph_assert(headers.size() == bucket_instance_ids.size());
+
+  auto iter = headers.begin();
+  map<int, string>::iterator viter = bucket_instance_ids.begin();
+  BucketIndexShardsManager ver_mgr;
+  BucketIndexShardsManager master_ver_mgr;
+  BucketIndexShardsManager marker_mgr;
+  for(; iter != headers.end(); ++iter, ++viter) {
+    if (iter->storage_class_stats.empty() && !iter->stats.empty()){
+      sc_stats.clear();
+      return 0;
+    }
+    uint64_t stats_total_size = 0;
+    for (auto it = iter->stats.begin(); it != iter->stats.end(); ++it) {
+      stats_total_size += it->second.total_size;
+    }
+    for (auto it = iter->storage_class_stats.begin(); it != iter->storage_class_stats.end(); ++it) {
+      std::string storage_class = it->first;
+      rgw_bucket_category_stats stats = it->second;
+      RGWStorageStats& s = sc_stats[storage_class];
+
+      s.size += stats.total_size;
+      s.size_rounded += stats.total_size_rounded;
+      s.size_utilized += stats.actual_size;
+      s.num_objects += stats.num_entries;
+      stats_total_size -= stats.total_size;
+    }
+    if (stats_total_size != 0) {
+      sc_stats.clear();
+      return 0;
+    }
+    ver_mgr.add(viter->first, fmt::format("%lu", (unsigned long)iter->ver));
+    master_ver_mgr.add(viter->first, fmt::format("%lu", (unsigned long)iter->master_ver));
+    if (shard_id >= 0) {
+      *max_marker = iter->max_marker;
+    } else {
+      marker_mgr.add(viter->first, iter->max_marker);
+    }
+    if (syncstopped != NULL)
+      *syncstopped = iter->syncstopped;
+  }
+  ver_mgr.to_string(bucket_ver);
+  master_ver_mgr.to_string(master_ver);
+  if (shard_id < 0) {
+    marker_mgr.to_string(max_marker);
+  }
+  return 0;
+}
+
 int RGWRados::get_bucket_stats(const DoutPrefixProvider *dpp, optional_yield y,
 			       RGWBucketInfo& bucket_info,
 			       const rgw::bucket_index_layout_generation& idx_layout,

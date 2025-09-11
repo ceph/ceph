@@ -951,6 +951,7 @@ class Bucket {
 				 int shard_id, boost::intrusive_ptr<ReadStatsCB> cb) = 0;
     /** Sync this bucket's stats to the owning user's stats in the backing store */
     virtual int sync_owner_stats(const DoutPrefixProvider *dpp, optional_yield y,
+                                 bool reset,
                                  RGWBucketEnt* optional_ent) = 0;
     /** Check if this bucket needs resharding, and schedule it if it does */
     virtual int check_bucket_shards(const DoutPrefixProvider* dpp,
