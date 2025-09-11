@@ -1,5 +1,7 @@
 from contextlib import contextmanager
 
+from .volume import open_volume, open_volume_lockless
+from .group import open_group
 from .template import SubvolumeOpType
 
 from .versions import loaded_subvolumes
@@ -73,3 +75,15 @@ def open_subvol(mgr, fs, vol_spec, group, subvolname, op_type):
     subvolume = loaded_subvolumes.get_subvolume_object(mgr, fs, vol_spec, group, subvolname)
     subvolume.open(op_type)
     yield subvolume
+
+
+@contextmanager
+def open_subvol_in_vol(vc, vol_spec, vol_name, group_name, subvol_name,
+                       op_type, lockless=False):
+    open_vol = open_volume_lockless if lockless else open_volume
+
+    with open_vol(vc, vol_name) as vol_handle:
+        with open_group(vol_handle, vol_spec, group_name) as group:
+            with open_subvol(vc.mgr, vol_handle, vol_spec, group, subvol_name,
+                             op_type) as subvol:
+                yield vol_handle, group, subvol
