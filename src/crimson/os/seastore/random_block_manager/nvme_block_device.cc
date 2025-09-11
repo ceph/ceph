@@ -5,6 +5,7 @@
 #include <string.h>
 
 #include <fcntl.h>
+#include <seastar/coroutine/parallel_for_each.hh>
 
 #include "crimson/common/log.h"
 #include "crimson/common/errorator-loop.h"
@@ -181,43 +182,40 @@ write_ertr::future<> NVMeBlockDevice::writev(
     supported_stream = WRITE_LIFE_NOT_SET;
   }
   if (is_end_to_end_data_protection()) {
-    return seastar::do_with(
-      std::move(bl),
-      [this, offset] (auto &bl) {
-      return nvme_write(offset, bl.length(), bl.c_str());
-    });
+    co_await nvme_write(offset, bl.length(), bl.c_str());
+    co_return;
   }
   bl.rebuild_aligned(super.block_size);
-
-  return seastar::do_with(
-    bl.prepare_iovs(),
-    std::move(bl),
-    [this, supported_stream, offset](auto& iovs, auto& bl)
+  auto iovs = bl.prepare_iovs();
+  auto has_error = seastar::make_lw_shared<bool>(false);
+  co_await seastar::coroutine::parallel_for_each(
+    iovs,
+    [this, supported_stream, offset, has_error](auto& p)
   {
-    return write_ertr::parallel_for_each(
-      iovs,
-      [this, supported_stream, offset](auto& p) mutable
+    auto off = offset + p.offset;
+    auto len = p.length;
+    auto& iov = p.iov;
+    return io_device[supported_stream].dma_write(off, std::move(iov)
+    ).handle_exception(
+      [this, off, len, has_error](auto e) -> seastar::future<size_t>
     {
-      auto off = offset + p.offset;
-      auto len = p.length;
-      auto& iov = p.iov;
-      return io_device[supported_stream].dma_write(off, std::move(iov)
-      ).handle_exception(
-        [this, off, len](auto e) -> write_ertr::future<size_t>
-      {
-        logger().error("{} poffset={}~{} dma_write got error -- {}",
-                       device_id_printer_t{get_device_id()}, off, len, e);
-        return crimson::ct_error::input_output_error::make();
-      }).then([this, off, len](size_t written) -> write_ertr::future<> {
-        if (written != len) {
-          logger().error("{} poffset={}~{} dma_write len={} inconsistent",
-                         device_id_printer_t{get_device_id()}, off, len, written);
-          return crimson::ct_error::input_output_error::make();
-        }
-        return write_ertr::now();
-      });
+      logger().error("{} poffset={}~{} dma_write got error -- {}",
+		     device_id_printer_t{get_device_id()}, off, len, e);
+      *has_error = true;
+      return seastar::make_ready_future<size_t>(0);
+    }).then([this, off, len, has_error](size_t written) {
+      if (written != len) {
+	logger().error("{} poffset={}~{} dma_write len={} inconsistent",
+		       device_id_printer_t{get_device_id()}, off, len, written);
+	*has_error = true;
+      }
+      return seastar::now();
     });
   });
+  if (*has_error) {
+    co_await write_ertr::future<>(
+      crimson::ct_error::input_output_error::make());
+  }
 }
 
 Device::close_ertr::future<> NVMeBlockDevice::close() {
