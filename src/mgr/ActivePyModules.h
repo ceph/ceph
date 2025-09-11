@@ -223,6 +223,11 @@ public:
   bool is_pending(std::string_view name) const {
     return pending_modules.count(name) > 0;
   }
+
+  // Return set of active modules where class instances are not yet created
+  const std::set<std::string, std::less<>>& get_pending_modules() const {
+    return pending_modules;
+  }
   bool module_exists(const std::string &name) const
   {
     return modules.count(name) > 0;
