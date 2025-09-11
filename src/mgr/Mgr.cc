@@ -828,12 +828,19 @@ int Mgr::call(
   try {
     if (admin_command == "mgr_status") {
       f->open_object_section("mgr_status");
-      cluster_state.with_mgrmap(
-	[f](const MgrMap& mm) {
-	  f->dump_unsigned("mgrmap_epoch", mm.get_epoch());
-	});
-      f->dump_bool("initialized", initialized);
+      {
+	cluster_state.with_mgrmap(
+	    [f](const MgrMap& mm) {
+	    f->dump_unsigned("mgrmap_epoch", mm.get_epoch());
+	    });
+        f->dump_bool("initialized", initialized);
+	f->open_array_section("pending_modules");
+        for (auto& mod : py_module_registry->get_pending_modules()) {
+          f->dump_string("module", mod);
+        }
+        f->close_section();
       f->close_section();
+      }
       return 0;
     } else {
       return -ENOSYS;

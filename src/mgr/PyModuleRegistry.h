@@ -245,5 +245,11 @@ public:
   // See "Mgr::background_init()".
   void check_all_modules_started(Context *modules_start_complete);
 
+  // Return set of active modules where class instances are not yet created.
+  // Protected by const; we only want to view the contents- not modify anything.
+  const std::set<std::string, std::less<>>& get_pending_modules() const {
+    return active_modules->get_pending_modules();
+  }
+
   // <<< (end of ActivePyModules cheeky call-throughs)
 };
