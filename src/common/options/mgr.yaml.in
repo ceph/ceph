@@ -164,7 +164,9 @@ options:
   type: millisecs
   level: dev
   default: 0
-  desc: Amount of milliseconds a mgr module delays loading. For testing purposes only.
+  desc: Number of milliseconds for Manager modules to delay loading. For testing purposes only.
+  long_desc: Number of milliseconds for Manager modules to delay loading. For testing purposes only.
+   Related to `mgr_module_load_delay_name`.
   flags:
   - runtime
   services:
@@ -172,7 +174,9 @@ options:
 - name: mgr_module_load_delay_name
   type: str
   level: dev
-  desc: Choose which mgr module to inject a load delay. For testing purposes only.
+  desc: Specify which Manager module is to delay loading by mgr_module_load_delay milliseconds. For testing purposes only.
+  long_desc: Specify which Manager module is to delay loading by mgr_module_load_delay milliseconds. For testing purposes only.
+    Related to `mgr_module_load_delay`.
   flags:
   - runtime
   services:
