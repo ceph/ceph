@@ -86,6 +86,10 @@
 #include "rgw_flight_frontend.h"
 #endif
 
+#ifdef WITH_RADOSGW_D4N
+#include "driver/d4n/rgw_sal_d4n.h"
+#endif
+
 #ifdef WITH_LTTNG
 #define TRACEPOINT_DEFINE
 #define TRACEPOINT_PROBE_DYNAMIC_LINKAGE
@@ -4849,6 +4853,28 @@ void RGWPutObj::execute(optional_yield y)
   }
   if (s->info.env->get_optional("HTTP_X_RGW_CACHE_REQUEST"))
     s->object->set_cache_request();
+#ifdef WITH_RADOSGW_D4N
+  if (g_conf().get_val<std::string>("rgw_filter") == "d4n") {
+    if (s->info.env->get_optional("HTTP_X_RGW_REMOTE_CACHE_REQUEST")) {
+      ldpp_dout(this, 20) << "This is a remote cache request !!!" << dendl;
+      dynamic_cast<rgw::sal::D4NFilterWriter*>(processor.get())->set_remote_cache_request();
+      rgw::sal::D4NFilterObject* d4n_obj = dynamic_cast<rgw::sal::D4NFilterObject*>(s->object.get());
+      auto object_version = s->info.env->get_optional("HTTP_X_RGW_CACHE_OBJECT_VERSION");
+      if (object_version) {
+        d4n_obj->set_object_version(object_version.get());
+      }
+      if (auto blk_offset = s->info.env->get_optional("HTTP_X_RGW_CACHE_BLK_OFFSET"); blk_offset) {
+        d4n_obj->set_block_offset(std::stoull(blk_offset.get()));
+      }
+      if (auto blk_len = s->info.env->get_optional("HTTP_X_RGW_CACHE_BLK_LEN"); blk_len) {
+        d4n_obj->set_block_len(std::stoull(blk_len.get()));
+      }
+      if (auto obj_size = s->info.env->get_optional("HTTP_X_RGW_CACHE_OBJ_SIZE"); obj_size) {
+        d4n_obj->set_remote_obj_size(std::stoull(obj_size.get()));
+      }
+    }
+  }
+#endif
 
   op_ret = processor->prepare(s->yield);
   if (op_ret < 0) {
