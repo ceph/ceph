@@ -659,7 +659,11 @@ export class RbdFormComponent extends CdForm implements OnInit {
         this.rbdForm.get('mirroring').setValue(this.mirroring);
         this.rbdForm.get('mirroringMode').setValue(response?.mirror_mode);
         this.currentImageMirrorMode = response?.mirror_mode;
-        this.rbdForm.get('schedule').setValue(response?.schedule_interval);
+        const scheduleInterval = response?.schedule_info?.schedule_interval[0]?.interval;
+        if (scheduleInterval) {
+          this.rbdForm.get('schedule').setValue(scheduleInterval);
+          this.rbdForm.get('schedule').disable();
+        }
       } else {
         this.mirroring = false;
         this.rbdForm.get('mirroring').setValue(this.mirroring);
