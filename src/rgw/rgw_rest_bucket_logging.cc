@@ -178,13 +178,13 @@ class RGWPutBucketLoggingOp : public RGWDefaultResponseOp {
 
     rgw_bucket target_bucket_id;
     if (const auto ret = rgw::bucketlogging::get_bucket_id(configuration.target_bucket, s->bucket_tenant, target_bucket_id); ret < 0) {
-      ldpp_dout(this, 1) << "ERROR: failed to parse target bucket '" << configuration.target_bucket << "', ret = " << ret << dendl;
+      ldpp_dout(this, 1) << "ERROR: failed to parse logging bucket '" << configuration.target_bucket << "', ret = " << ret << dendl;
       return ret;
     }
 
     if (const auto ret = driver->load_bucket(this, target_bucket_id,
                                  &target_bucket, y); ret < 0) {
-      ldpp_dout(this, 1) << "ERROR: failed to get target bucket '" << target_bucket_id << "', ret = " << ret << dendl;
+      ldpp_dout(this, 1) << "ERROR: failed to get logging bucket '" << target_bucket_id << "', ret = " << ret << dendl;
       return ret;
     }
 
@@ -242,14 +242,14 @@ class RGWPutBucketLoggingOp : public RGWDefaultResponseOp {
     const auto& target_bucket_id = target_bucket->get_key();
     if (target_bucket_id == src_bucket_id) {
       // target bucket must be different from source bucket (cannot change later on)
-      ldpp_dout(this, 1) << "ERROR: target bucket '" << target_bucket_id << "' must be different from source bucket" << dendl;
+      ldpp_dout(this, 1) << "ERROR: logging bucket '" << target_bucket_id << "' must be different from source bucket" << dendl;
       op_ret = -EINVAL;
       return;
     }
     const auto& target_info = target_bucket->get_info();
     if (target_info.zonegroup != src_bucket->get_info().zonegroup) {
       // target bucket must be in the same zonegroup as source bucket (cannot change later on)
-      ldpp_dout(this, 1) << "ERROR: target bucket '" << target_bucket_id << "' zonegroup '" <<
+      ldpp_dout(this, 1) << "ERROR: logging bucket '" << target_bucket_id << "' zonegroup '" <<
         target_info.zonegroup << "' is different from the source bucket '" << src_bucket_id  <<
         "' zonegroup '" << src_bucket->get_info().zonegroup << "'" << dendl;
       op_ret = -EINVAL;
@@ -301,7 +301,7 @@ class RGWPutBucketLoggingOp : public RGWDefaultResponseOp {
       ldpp_dout(this, 20) << "INFO: new logging configuration added to bucket '" << src_bucket_id << "'. configuration: " <<
         configuration.to_json_str() << dendl;
       if (const auto ret = rgw::bucketlogging::update_bucket_logging_sources(this, target_bucket, src_bucket_id, true, y); ret < 0) {
-        ldpp_dout(this, 1) << "WARNING: failed to add source bucket '" << src_bucket_id << "' to logging sources of target bucket '" <<
+        ldpp_dout(this, 1) << "WARNING: failed to add source bucket '" << src_bucket_id << "' to logging sources of logging bucket '" <<
           target_bucket_id << "', ret = " << ret << dendl;
       }
     } else if (*old_conf != configuration) {
@@ -316,15 +316,15 @@ class RGWPutBucketLoggingOp : public RGWDefaultResponseOp {
       if (old_conf->target_bucket != configuration.target_bucket) {
         rgw_bucket old_target_bucket_id;
         if (const auto ret = rgw::bucketlogging::get_bucket_id(old_conf->target_bucket, s->bucket_tenant, old_target_bucket_id); ret < 0) {
-          ldpp_dout(this, 1) << "ERROR: failed to parse target bucket '" << old_conf->target_bucket << "', ret = " << ret << dendl;
+          ldpp_dout(this, 1) << "ERROR: failed to parse logging bucket '" << old_conf->target_bucket << "', ret = " << ret << dendl;
           return;
         }
         if (const auto ret = rgw::bucketlogging::update_bucket_logging_sources(this, driver, old_target_bucket_id, src_bucket_id, false, y); ret < 0) {
-          ldpp_dout(this, 1) << "WARNING: failed to remove source bucket '" << src_bucket_id << "' from logging sources of original target bucket '" <<
+          ldpp_dout(this, 1) << "WARNING: failed to remove source bucket '" << src_bucket_id << "' from logging sources of original logging bucket '" <<
             old_target_bucket_id << "', ret = " << ret << dendl;
         }
         if (const auto ret = rgw::bucketlogging::update_bucket_logging_sources(this, target_bucket, src_bucket_id, true, y); ret < 0) {
-          ldpp_dout(this, 1) << "WARNING: failed to add source bucket '" << src_bucket_id << "' to logging sources of target bucket '" <<
+          ldpp_dout(this, 1) << "WARNING: failed to add source bucket '" << src_bucket_id << "' to logging sources of logging bucket '" <<
             target_bucket_id << "', ret = " << ret << dendl;
         }
       }
@@ -385,25 +385,25 @@ class RGWPostBucketLoggingOp : public RGWDefaultResponseOp {
     RGWObjVersionTracker objv_tracker;
     op_ret = target_bucket->get_logging_object_name(obj_name, configuration.target_prefix, y, this, &objv_tracker);
     if (op_ret < 0 && op_ret != -ENOENT) {
-      ldpp_dout(this, 1) << "ERROR: failed to get pending logging object name from target bucket '" << target_bucket_id <<
+      ldpp_dout(this, 1) << "ERROR: failed to get pending logging object name from logging bucket '" << target_bucket_id <<
         "'. error: " << op_ret << dendl;
       return;
     }
     if (op_ret == -ENOENT) {
       // no pending object - nothing to flush
-      ldpp_dout(this, 5) << "INFO: no pending logging object in target bucket '" << target_bucket_id << "'. new object should be created" << dendl;
+      ldpp_dout(this, 5) << "INFO: no pending logging object in logging bucket '" << target_bucket_id << "'. new object should be created" << dendl;
     }
     const auto region = driver->get_zone()->get_zonegroup().get_api_name();
     op_ret = rgw::bucketlogging::rollover_logging_object(configuration, target_bucket, obj_name, this, region, source_bucket, y, true, &objv_tracker, &old_obj);
     if (op_ret < 0) {
       ldpp_dout(this, 1) << "ERROR: failed to flush pending logging object '" << obj_name << "'"
-          << " to target bucket '" << target_bucket_id << "'. "
+          << " to logging bucket '" << target_bucket_id << "'. "
           << " last committed object is '" << old_obj <<
           "'. error: " << op_ret << dendl;
       return;
     }
     ldpp_dout(this, 20) << "INFO: flushed pending logging object '" << old_obj
-                << "' to target bucket '" << target_bucket_id << "'" << dendl;
+                << "' to logging bucket '" << target_bucket_id << "'" << dendl;
   }
 
   void send_response() override {
