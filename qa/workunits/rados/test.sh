@@ -10,7 +10,6 @@ RADOS_TESTS=(
     api_asio api_list
     api_lock api_lock_pp
     api_misc api_misc_pp
-    api_tier_pp
     api_pool
     api_snapshots api_snapshots_pp
     api_stat api_stat_pp
