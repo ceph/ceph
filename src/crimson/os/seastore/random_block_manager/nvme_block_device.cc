@@ -50,7 +50,9 @@ open_ertr::future<> NVMeBlockDevice::open(
     awupf = id_controller_data.awupf + 1;
     return identify_namespace(device
     ).safe_then([this, in_path, mode] (
-      auto id_namespace_data) {
+      auto id_ns_data) {
+      assert(id_ns_data);
+      auto id_namespace_data = *id_ns_data;
       atomic_write_unit = awupf * super.block_size;
       if (id_namespace_data.nsfeat.opterf == 1){
 	// NPWG and NPWA is 0'based value
@@ -90,7 +92,9 @@ NVMeBlockDevice::mount_ret NVMeBlockDevice::mount()
   });
 
   if (is_end_to_end_data_protection()) {
-    auto id_namespace_data = co_await identify_namespace(device);
+    auto id_ns_data = co_await identify_namespace(device);
+    assert(id_ns_data);
+    auto id_namespace_data = *id_ns_data;
     if (id_namespace_data.dps.protection_type !=
 	nvme_format_nvm_command_t::PROTECT_INFORMATION_TYPE_2) {
       logger().error("seastore was formated with end-to-end-data-protection \
@@ -257,7 +261,7 @@ discard_ertr::future<> NVMeBlockDevice::discard(uint64_t offset, uint64_t len) {
   co_return co_await device.discard(offset, len);
 }
 
-nvme_command_ertr::future<nvme_identify_namespace_data_t>
+nvme_command_ertr::future<std::optional<nvme_identify_namespace_data_t>>
 NVMeBlockDevice::identify_namespace(seastar::file f) {
 
   auto nsid = co_await get_nsid(f);
@@ -307,12 +311,16 @@ nvme_command_ertr::future<int> NVMeBlockDevice::pass_through_io(
 }
 
 nvme_command_ertr::future<> NVMeBlockDevice::try_enable_end_to_end_protection() {
-  auto id_namespace_data = co_await identify_namespace(device
+  auto id_ns_data = co_await identify_namespace(device
   ).handle_error(crimson::ct_error::input_output_error::handle([]{
     logger().info("the device does not support identify namespace command");
-    return nvme_identify_namespace_data_t();
+    return std::nullopt;
   }), crimson::ct_error::pass_further_all{});
+  if (id_ns_data == std::nullopt) {
+    co_return;
+  }
 
+  auto id_namespace_data = *id_ns_data;
   if (!id_namespace_data.nlbaf) {
     logger().info("the device does not support end to end data protection,\
       mkfs() will be done without this functionality.");
@@ -352,7 +360,8 @@ nvme_command_ertr::future<> NVMeBlockDevice::try_enable_end_to_end_protection() 
     ceph_abort();
   }
 
-  id_namespace_data = co_await identify_namespace(device);
+  id_ns_data = co_await identify_namespace(device);
+  id_namespace_data = *id_ns_data;
   ceph_assert(id_namespace_data.dps.protection_type ==
      nvme_format_nvm_command_t::PROTECT_INFORMATION_TYPE_2);
   super.set_end_to_end_data_protection();
