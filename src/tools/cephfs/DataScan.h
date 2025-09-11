@@ -258,8 +258,7 @@ protected:
   RecoveryDriver* driver;
   fs_cluster_id_t fscid;
 
-  std::string metadata_pool_name;
-  std::vector<int64_t> data_pools;
+  void set_progress_operation_name(const std::string& op_name) const;
 
   // IoCtx for data pool (where we scrape file backtraces from)
   librados::IoCtx data_io;
@@ -268,8 +267,11 @@ protected:
   // IoCtxs for extra data pools
   std::vector<librados::IoCtx> extra_data_ios;
 
-  uint32_t n;
-  uint32_t m;
+  uint32_t worker_n;
+  uint32_t worker_m;
+
+  std::string metadata_pool_name;
+  std::vector<int64_t> data_pools;
 
   /**
      * Scan data pool for backtraces, and inject inodes to metadata pool
@@ -345,13 +347,14 @@ public:
     driver(NULL),
     fscid(FS_CLUSTER_ID_NONE),
     data_pool_id(-1),
-    n(0),
-    m(1),
+    worker_n(0),
+    worker_m(1),
     force_pool(false),
     force_corrupt(false),
     force_init(false)
   {
     progress_tracker = std::make_unique<ProgressTracker>("Data scan");
+    progress_tracker->set_enable_progress_update(true);
   }
 
     ~DataScan() override

@@ -14,6 +14,8 @@
 
 #include "DataScan.h"
 
+#include <fmt/format.h>
+
 #include <fstream>
 
 #include "common/debug.h"
@@ -85,7 +87,7 @@ bool DataScan::parse_kwarg(
     return true;
   } else if (arg == std::string("--worker_n")) {
     std::string err;
-    n = strict_strtoll(val.c_str(), 10, &err);
+    worker_n = strict_strtoll(val.c_str(), 10, &err);
     if (!err.empty()) {
       std::cerr << "Invalid worker number '" << val << "'" << std::endl;
       *r = -EINVAL;
@@ -94,7 +96,7 @@ bool DataScan::parse_kwarg(
     return true;
   } else if (arg == std::string("--worker_m")) {
     std::string err;
-    m = strict_strtoll(val.c_str(), 10, &err);
+    worker_m = strict_strtoll(val.c_str(), 10, &err);
     if (!err.empty()) {
       std::cerr << "Invalid worker count '" << val << "'" << std::endl;
       *r = -EINVAL;
@@ -566,6 +568,16 @@ int parse_oid(const std::string &oid, uint64_t *inode_no, uint64_t *obj_id)
   return 0;
 }
 
+void
+DataScan::set_progress_operation_name(const std::string& op_name) const
+{
+  if (worker_m > 1) {
+    progress_tracker->set_operation_name(
+        fmt::format("{} {}/{}", op_name, worker_n, worker_m));
+  } else {
+    progress_tracker->set_operation_name(op_name);
+  }
+}
 
 int DataScan::scan_extents()
 {
@@ -576,6 +588,7 @@ int DataScan::scan_extents()
   }
 
   uint64_t total_objects = get_pool_objects(data_ios);
+  set_progress_operation_name("scan_extents");
   progress_tracker->start(total_objects);
 
   if (total_objects == 0) {
@@ -632,6 +645,7 @@ int DataScan::scan_extents()
 
       return r;
     });
+    progress_tracker->display_final_summary();
     if (r < 0) {
       return r;
     }
@@ -663,12 +677,8 @@ int DataScan::forall_objects(
   librados::ObjectCursor range_i;
   librados::ObjectCursor range_end;
   ioctx.object_list_slice(
-      ioctx.object_list_begin(),
-      ioctx.object_list_end(),
-      n,
-      m,
-      &range_i,
-      &range_end);
+      ioctx.object_list_begin(), ioctx.object_list_end(), worker_n, worker_m,
+      &range_i, &range_end);
 
 
   bufferlist filter_bl;
@@ -771,16 +781,17 @@ DataScan::get_pool_objects(const std::vector<librados::IoCtx*>& data_ios)
              << " objects" << dendl;
     total += stat.second.num_objects;
   }
-  if (m > 1) {
+
+  if (worker_m > 1) {
     // For multi-worker scenarios, estimate this worker's share
     // Each worker processes roughly 1/m of the total objects
-    uint64_t estimated_worker_objects = total / m;
-    dout(4) << "Worker " << n << "/" << m << " estimated to process ~"
-            << estimated_worker_objects << " objects (out of " << total
-            << " total)" << dendl;
+    uint64_t estimated_worker_objects = total / worker_m;
+    dout(4) << "Worker " << worker_n << "/" << worker_m
+            << " estimated to process ~" << estimated_worker_objects
+            << " objects (out of " << total << " total)" << dendl;
     return estimated_worker_objects;
   }
-  
+
   dout(4) << "Single worker processing " << total << " objects" << dendl;
   return total;
 }
@@ -808,17 +819,18 @@ DataScan::get_metadata_pool_objects(
     total += stat.second.num_objects;
   }
 
-  if (worker_sliced && m > 1) {
+  if (worker_sliced && worker_m > 1) {
     // For operations that use forall_objects() with worker slicing
-    uint64_t estimated_worker_objects = total / m;
-    dout(4) << "Worker " << n << "/" << m << " estimated to process ~"
-            << estimated_worker_objects << " metadata objects (out of " << total
-            << " total, worker-sliced)" << dendl;
+    uint64_t estimated_worker_objects = total / worker_m;
+    dout(4) << "Worker " << worker_n << "/" << worker_m
+            << " estimated to process ~" << estimated_worker_objects
+            << " metadata objects (out of " << total << " total, worker-sliced)"
+            << dendl;
     return estimated_worker_objects;
   } else {
     // For operations that process ALL metadata objects in each worker (like scan_links)
-    dout(4) << "Worker " << n << "/" << m << " processing all " << total
-            << " metadata objects (no worker slicing)" << dendl;
+    dout(4) << "Worker " << worker_n << "/" << worker_m << " processing all "
+            << total << " metadata objects (no worker slicing)" << dendl;
     return total;
   }
 }
@@ -840,6 +852,7 @@ int DataScan::scan_inodes()
   }
 
   uint64_t total_objects = get_pool_objects({&data_io});
+  set_progress_operation_name("scan_inodes");
   progress_tracker->start(total_objects);
 
   if (total_objects == 0) {
@@ -1109,11 +1122,13 @@ int DataScan::scan_inodes()
 
     return r;
   });
+  progress_tracker->display_final_summary();
 }
 
 int DataScan::cleanup()
 {
   uint64_t total_objects = get_pool_objects({&data_io});
+  set_progress_operation_name("scan_cleanup");
   progress_tracker->start(total_objects);
 
   if (total_objects == 0) {
@@ -1138,6 +1153,7 @@ int DataScan::cleanup()
 
         return r;
       });
+  progress_tracker->display_final_summary();
 }
 
 bool DataScan::valid_ino(inodeno_t ino) const
@@ -1162,6 +1178,8 @@ int DataScan::scan_links()
   // We'll estimate total objects in metadata pool for progress tracking
   // scan_links processes ALL metadata objects in each worker (no slicing)
   uint64_t total_objects = get_metadata_pool_objects(metadata_io, false);
+
+  set_progress_operation_name("scan_links");
   // Since scan_links processes each object twice (SCAN_INOS + CHECK_LINK phases),
   // we'll track total iterations as 2 * object_count
   progress_tracker->start(total_objects * 2);
@@ -1639,6 +1657,7 @@ int DataScan::scan_links()
 int DataScan::scan_frags()
 {
   uint64_t total_objects = get_metadata_pool_objects(metadata_io, true);
+  set_progress_operation_name("scan_frags");
   progress_tracker->start(total_objects);
   if (total_objects == 0) {
     dout(4) << "No objects found in metadata pool" << dendl;
@@ -1804,6 +1823,7 @@ int DataScan::scan_frags()
 
     return r;
   });
+  progress_tracker->display_final_summary();
 }
 
 int MetadataTool::read_fnode(
