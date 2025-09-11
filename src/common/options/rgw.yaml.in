@@ -3991,6 +3991,37 @@ options:
   flags:
   - startup
   with_legacy: true
+- name: rgw_d4n_remote_requests_num
+  type: int
+  level: advanced
+  desc: specifies the maximum number of simultaneous I/O requests that can be sent to a remote cache.
+  default: 10
+  services:
+  - rgw
+  with_legacy: true
+- name: rgw_d4n_async_remote_put
+  type: bool
+  level: advanced
+  desc: option to asynchronously write to a remote cache, off by default.
+  default: false
+  services:
+  - rgw
+  with_legacy: true
+- name: rgw_d4n_thread_pool_size
+  type: int
+  level: advanced
+  desc: size of thread pool used to asynchronously write a request to a remote cache
+  services:
+  - rgw
+  with_legacy: true
+- name: rgw_d4n_remote_put
+  type: bool
+  level: advanced
+  desc: debug option to enable/disable remote put, enabled by default
+  default: true
+  services:
+  - rgw
+  with_legacy: true
 - name: rgw_backend_store
   type: str
   level: advanced
