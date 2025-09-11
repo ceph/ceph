@@ -160,7 +160,7 @@ void ScrubBackend::merge_to_authoritative_set()
 {
   dout(15) << __func__ << dendl;
   ceph_assert(m_scrubber.is_primary());
-  ceph_assert(this_chunk->authoritative_set.empty() &&
+  ceph_assert(this_chunk->all_chunk_objects.empty() &&
               "the scrubber-backend should be empty");
 
   if (g_conf()->subsys.should_gather<ceph_subsys_osd, 15>()) {
@@ -177,8 +177,8 @@ void ScrubBackend::merge_to_authoritative_set()
   for (const auto& map : this_chunk->received_maps) {
     std::transform(map.second.objects.begin(),
                    map.second.objects.end(),
-                   std::inserter(this_chunk->authoritative_set,
-                                 this_chunk->authoritative_set.end()),
+                   std::inserter(this_chunk->all_chunk_objects,
+                                 this_chunk->all_chunk_objects.end()),
                    [](const auto& i) { return i.first; });
   }
 }
@@ -288,7 +288,7 @@ void ScrubBackend::update_authoritative()
     // nothing to fix. Just count OMAP stats
     // (temporary code - to be removed once scrub_compare_maps()
     //  is modified to process object-by-object)
-    for (const auto& ho : this_chunk->authoritative_set) {
+    for (const auto& ho : this_chunk->all_chunk_objects) {
       const auto it = my_map().objects.find(ho);
       // all objects in the authoritative set should be there, in the
       // map of the sole OSD
@@ -850,11 +850,11 @@ shard_as_auth_t ScrubBackend::possible_auth_shard(const hobject_t& obj,
 void ScrubBackend::compare_smaps()
 {
   dout(10) << __func__
-           << ": authoritative-set #: " << this_chunk->authoritative_set.size()
+           << ": authoritative-set #: " << this_chunk->all_chunk_objects.size()
            << dendl;
 
-  std::for_each(this_chunk->authoritative_set.begin(),
-                this_chunk->authoritative_set.end(),
+  std::for_each(this_chunk->all_chunk_objects.begin(),
+                this_chunk->all_chunk_objects.end(),
                 [this](const auto& ho) {
                   if (auto maybe_clust_err = compare_obj_in_maps(ho);
                       maybe_clust_err) {

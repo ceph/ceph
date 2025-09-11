@@ -278,7 +278,7 @@ struct scrub_chunk_t {
   std::map<pg_shard_t, ScrubMap> received_maps;
 
   /// a collection of all objs mentioned in the maps
-  std::set<hobject_t> authoritative_set;
+  std::set<hobject_t> all_chunk_objects;
 
   utime_t started{ceph_clock_now()};
 
@@ -430,7 +430,7 @@ class ScrubBackend {
   /**
    *  merge_to_authoritative_set() updates
    *   - this_chunk->maps[from] with the replicas' scrub-maps;
-   *   - this_chunk->authoritative_set as a union of all the maps' objects;
+   *   - this_chunk->all_chunk_objects as a union of all the maps' objects;
    */
   void merge_to_authoritative_set();
 
