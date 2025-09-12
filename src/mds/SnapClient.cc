@@ -145,6 +145,46 @@ void SnapClient::notify_commit(version_t tid)
   }
 }
 
+void SnapClient::prepare_create(inodeno_t dirino, std::string_view name, utime_t stamp,
+				version_t *pstid, bufferlist *pbl, MDSContext *onfinish) {
+  bufferlist bl;
+  __u32 op = TABLE_OP_CREATE;
+  encode(op, bl);
+  encode(dirino, bl);
+  encode(name, bl);
+  encode(stamp, bl);
+  _prepare(bl, pstid, pbl, onfinish);
+}
+
+void SnapClient::prepare_create_realm(inodeno_t ino, version_t *pstid, bufferlist *pbl, MDSContext *onfinish) {
+  bufferlist bl;
+  __u32 op = TABLE_OP_CREATE;
+  encode(op, bl);
+  encode(ino, bl);
+  _prepare(bl, pstid, pbl, onfinish);
+}
+
+void SnapClient::prepare_destroy(inodeno_t ino, snapid_t snapid, version_t *pstid, bufferlist *pbl, MDSContext *onfinish) {
+  bufferlist bl;
+  __u32 op = TABLE_OP_DESTROY;
+  encode(op, bl);
+  encode(ino, bl);
+  encode(snapid, bl);
+  _prepare(bl, pstid, pbl, onfinish);
+}
+
+void SnapClient::prepare_update(inodeno_t ino, snapid_t snapid, std::string_view name, utime_t stamp,
+				version_t *pstid, MDSContext *onfinish) {
+  bufferlist bl;
+  __u32 op = TABLE_OP_UPDATE;
+  encode(op, bl);
+  encode(ino, bl);
+  encode(snapid, bl);
+  encode(name, bl);
+  encode(stamp, bl);
+  _prepare(bl, pstid, NULL, onfinish);
+}
+
 void SnapClient::refresh(version_t want, MDSContext *onfinish)
 {
   dout(10) << __func__ << " want " << want << dendl;
