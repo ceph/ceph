@@ -1375,6 +1375,24 @@ images_create()
   done
 }
 
+unmap_image()
+{
+    local cluster=$1 ; shift
+    local image_spec=$1 ; shift
+    local options=("$@")
+
+    run_cmd "rbd --cluster ${cluster} device unmap ${options[*]} ${image_spec}"
+}
+
+map_image()
+{
+    local cluster=$1 ; shift
+    local image_spec=$1 ; shift
+    local options=("$@")
+
+    run_cmd "rbd --cluster ${cluster} device map ${options[*]} ${image_spec}"
+}
+
 is_pool_mirror_mode_image()
 {
     local pool=$1
@@ -2394,7 +2412,7 @@ mirror_group_snapshot()
     if [ "$#" -gt 2 ]
     then
       local -n _group_snap_id=$3
-      _group_snap_id=$(awk -F': ' '{print $NF}' "$CMD_STDOUT" )
+      _group_snap_id=$( awk -F": " '/Snapshot ID:/ {print $2}' "$CMD_STDOUT" )
     fi
 }
 
