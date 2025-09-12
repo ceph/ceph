@@ -54,7 +54,6 @@ struct RGWRoleInfo;
 
 using RGWBucketListNameFilter = std::function<bool (const std::string&)>;
 
-
 namespace rgw {
   class Aio;
   namespace IAM { struct Policy; }
