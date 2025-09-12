@@ -4738,7 +4738,7 @@ public:
       std::move(childdups));
     }
 
-  mempool::osd_pglog::list<pg_log_entry_t> rewind_from_head(eversion_t newhead) {
+  mempool::osd_pglog::list<pg_log_entry_t> rewind_from_head(eversion_t newhead, bool *dirty_log = nullptr) {
     ceph_assert(newhead >= tail);
 
     mempool::osd_pglog::list<pg_log_entry_t>::iterator p = log.end();
@@ -4768,11 +4768,19 @@ public:
     }
     head = newhead;
 
-    if (can_rollback_to > newhead)
+    if (can_rollback_to > newhead) {
       can_rollback_to = newhead;
+      if (dirty_log) {
+	*dirty_log = true;
+      }
+    }
 
-    if (rollback_info_trimmed_to > newhead)
+    if (rollback_info_trimmed_to > newhead) {
       rollback_info_trimmed_to = newhead;
+      if (dirty_log) {
+	*dirty_log = true;
+      }
+    }
 
     return divergent;
   }
