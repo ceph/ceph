@@ -9,6 +9,7 @@
 #include <deque>
 #include <memory>
 #include <concepts>
+#include <set>
 
 namespace rgw { namespace d4n {
 
@@ -144,6 +145,49 @@ struct CacheBlock {
   /* Blocks use the cacheObj's dirty and hostsList metadata to store their dirty flag values and locations in the block directory. */
 };
 
+class D4NTransaction {
+  //purpose: to provide a transactional interface per Redis operations, i.e. to allow multiple Redis operations to be executed atomically.
+  //this object instance is created per each request, and it is used to manage multiple Redis operations as a single transaction.
+  //this object is shared among all the directories objects (object, block, bucket)
+  //assumption: all the directories objects belong to the same s3-request context.
+public:
+
+    enum class redis_operation_type {
+	NONE,READ_OP,WRITE_OP
+    };
+
+    enum class TrxState {
+			NONE,
+			STARTED,
+			ENDED
+		} trxState{TrxState::NONE};
+
+    std::string m_trx_id;
+    void start_trx();
+    int init_trx(const DoutPrefixProvider* dpp,std::shared_ptr<connection> , optional_yield y);
+    int end_trx(const DoutPrefixProvider* dpp,std::shared_ptr<connection> , optional_yield y);
+    int get_clone_script(const DoutPrefixProvider* dpp,std::shared_ptr<connection> conn,optional_yield y);
+    bool is_trx_started(const DoutPrefixProvider* dpp,std::shared_ptr<connection> conn,std::string &key,redis_operation_type op, optional_yield y);
+    std::string get_end_trx_script(const DoutPrefixProvider* dpp, std::shared_ptr<connection> conn, optional_yield y);
+    std::string get_trx_id(const DoutPrefixProvider* dpp,std::shared_ptr<connection> conn, optional_yield y);
+
+    void create_rw_temp_keys(std::string key);
+    std::string create_unique_temp_keys(std::string key);
+  
+    int clone_key_for_transaction(std::string key_source, std::string key_destination, std::shared_ptr<connection> conn, optional_yield y);
+    void clear_temp_keys();
+    std::string m_evalsha_clone_key;
+    std::string m_evalsha_end_trx;
+
+    std::set<std::string> m_temp_read_keys;//unique temporary keys that are used in transactions(read operations)
+    std::set<std::string> m_temp_write_keys;//unique temporary keys for use in transactions(write operations)
+    std::set<std::string> m_temp_test_write_keys;// each key that is used for write, is clone for later test, to ensure that the key is not changed by other transactions (test write operation)
+    std::string m_original_key;//original key, used to restore the key from Redis
+    std::string m_temp_key_read;//temporary key for use in transactions
+    std::string m_temp_key_write;//temporary key for use in transactions
+    std::string m_temp_key_test_write;//temporary key for use in transactions
+};
+
 class Directory {
   public:
 	std::shared_ptr<RedisPool> redis_pool{nullptr}; // Redis connection pool
@@ -151,6 +195,11 @@ class Directory {
       	redis_pool = pool;
     }
     Directory() {}
+   
+    //m_d4n_trx is used to manage the transaction state and operations and it is shared among all the Directory objects.
+    D4NTransaction* m_d4n_trx{nullptr};//TODO: private
+    void set_d4n_trx(D4NTransaction* d4n_trx) {m_d4n_trx = d4n_trx;}
+    D4NTransaction* get_d4n_trx() const { return m_d4n_trx; }
 };
 
 class Pipeline {
@@ -171,7 +220,7 @@ class Pipeline {
 
 class BucketDirectory: public Directory {
   public:
-    BucketDirectory(std::shared_ptr<connection>& conn) : conn(conn) {}
+    BucketDirectory(std::shared_ptr<connection> conn) : conn(conn) {}
     int zadd(const DoutPrefixProvider* dpp, const std::string& bucket_id, double score, const std::string& member, optional_yield y, Pipeline* pipeline=nullptr);
     int zrem(const DoutPrefixProvider* dpp, const std::string& bucket_id, const std::string& member, optional_yield y);
     int zrange(const DoutPrefixProvider* dpp, const std::string& bucket_id, const std::string& start, const std::string& stop, uint64_t offset, uint64_t count, std::vector<std::string>& members, optional_yield y);
@@ -184,7 +233,10 @@ class BucketDirectory: public Directory {
 
 class ObjectDirectory: public Directory {
   public:
-    ObjectDirectory(std::shared_ptr<connection>& conn) : conn(conn) {}
+    ObjectDirectory(std::shared_ptr<connection> conn) : conn(conn) {}
+
+    //get a connection
+    std::shared_ptr<connection> get_connection() { return conn; } 
 
     int exist_key(const DoutPrefixProvider* dpp, CacheObj* object, optional_yield y);
 
@@ -210,7 +262,7 @@ class ObjectDirectory: public Directory {
 
 class BlockDirectory: public Directory {
   public:
-    BlockDirectory(std::shared_ptr<connection>& conn) : conn(conn) {}
+    BlockDirectory(std::shared_ptr<connection> conn) : conn(conn) {}
     
     int exist_key(const DoutPrefixProvider* dpp, CacheBlock* block, optional_yield y);
 
@@ -231,6 +283,8 @@ class BlockDirectory: public Directory {
     int zrange(const DoutPrefixProvider* dpp, CacheBlock* block, int start, int stop, std::vector<std::string>& members, optional_yield y);
     int zrevrange(const DoutPrefixProvider* dpp, CacheBlock* block, int start, int stop, std::vector<std::string>& members, optional_yield y);
     int zrem(const DoutPrefixProvider* dpp, CacheBlock* block, const std::string& member, optional_yield y);
+
+    std::shared_ptr<connection> get_connection() {return conn;}	
 
   private:
     std::shared_ptr<connection> conn;
