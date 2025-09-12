@@ -67,3 +67,5 @@
 .. confval:: mds_symlink_recovery
 .. confval:: mds_extraordinary_events_dump_interval
 .. confval:: subv_metrics_window_interval
+.. confval:: mds_log_submit_thread_count
+.. confval:: mds_log_encode_delay_max
