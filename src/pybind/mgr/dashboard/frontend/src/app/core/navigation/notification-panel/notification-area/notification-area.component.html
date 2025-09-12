@@ -5,8 +5,7 @@
     <div class="notification-wrapper">
       <div class="notification-item">
         <div class="notification-icon">
-          <cd-icon [type]="getCarbonIcon(notification.type)"
-                   [ngClass]="getIconColorClass(notification.type)">
+          <cd-icon [type]="getCarbonIcon(notification.type)">
           </cd-icon>
         </div>
         <div class="notification-content">
@@ -19,8 +18,7 @@
                 size="sm"
                 class="notification-close"
                 (click)="removeNotification(notification, $event)">
-          <svg cdsIcon="close"
-               size="16"></svg>
+          <cd-icon type="destroy" size="16"></cd-icon>
         </button>
       </div>
       @if (!last) {
@@ -32,14 +30,13 @@
 
 @if (previousNotifications.length > 0) {
   <div class="notification-section-heading"
-       [class.mt-0]="todayNotifications.length === 0"
+       [class.no-top-margin]="todayNotifications.length === 0"
        i18n>Previous</div>
   @for (notification of previousNotifications; track notification.timestamp; let last = $last) {
     <div class="notification-wrapper">
       <div class="notification-item">
         <div class="notification-icon">
-          <cd-icon [type]="getCarbonIcon(notification.type)"
-                   [ngClass]="getIconColorClass(notification.type)">
+          <cd-icon [type]="getCarbonIcon(notification.type)">
           </cd-icon>
         </div>
         <div class="notification-content">
@@ -52,8 +49,7 @@
                 size="sm"
                 class="notification-close"
                 (click)="removeNotification(notification, $event)">
-          <svg cdsIcon="close"
-               size="16"></svg>
+          <cd-icon type="destroy" size="16"></cd-icon>
         </button>
       </div>
       @if (!last) {

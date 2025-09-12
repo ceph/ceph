@@ -14,7 +14,7 @@
   z-index: 2;
   display: block;
 
-  &.mt-0 {
+  &.no-top-margin {
     margin-top: 0;
   }
 }
@@ -50,34 +50,17 @@
 .notification-icon {
   flex-shrink: 0;
   margin-top: 0;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 
-  svg.icon-error,
-  svg.icon-error:hover {
-    fill: $support-error !important;
-    color: $support-error !important;
+  svg {
+    width: 16px;
+    height: 16px;
   }
 
-  svg.icon-warning,
-  svg.icon-warning:hover {
-    fill: $support-warning !important;
-    color: $support-warning !important;
-  }
-
-  svg.icon-success,
-  svg.icon-success:hover {
-    fill: $support-success !important;
-    color: $support-success !important;
-  }
-
-  svg.icon-info,
-  svg.icon-info:hover {
-    fill: $support-info !important;
-    color: $support-info !important;
-  }
-
-  svg path {
-    fill: inherit !important;
-  }
 }
 
 .notification-empty {

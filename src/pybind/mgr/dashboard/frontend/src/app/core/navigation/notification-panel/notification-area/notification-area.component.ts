@@ -64,7 +64,7 @@ export class NotificationAreaComponent implements OnInit, OnDestroy {
       case NotificationType.success:
         return 'success';
       case NotificationType.error:
-        return 'error';
+        return 'danger';
       case NotificationType.info:
         return 'info';
       case NotificationType.warning:
@@ -74,18 +74,4 @@ export class NotificationAreaComponent implements OnInit, OnDestroy {
     }
   }
 
-  getIconColorClass(type: NotificationType): string {
-    switch (type) {
-      case NotificationType.success:
-        return 'icon-success';
-      case NotificationType.error:
-        return 'icon-error';
-      case NotificationType.info:
-        return 'icon-info';
-      case NotificationType.warning:
-        return 'icon-warning';
-      default:
-        return '';
-    }
-  }
 }
