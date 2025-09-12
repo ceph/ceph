@@ -111,6 +111,7 @@ public:
   bool is_zero_reserved() const {
     return !is_indirect() && get_val().is_zero();
   }
+  // true if the mapping corresponds to real data
   bool is_real() const {
     return !is_indirect() && !get_val().is_zero();
   }
@@ -145,6 +146,10 @@ public:
     }
     assert(!direct_cursor->is_end());
     return direct_cursor->get_laddr();
+  }
+
+  laddr_t get_end() const {
+    return (get_key() + get_length()).checked_to_laddr();
   }
 
    // An lba pin may be indirect, see comments in lba/btree_lba_manager.h
