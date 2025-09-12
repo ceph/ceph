@@ -55,6 +55,7 @@
 #include <thread>
 #include <unordered_map>
 #include <unordered_set>
+#include <shared_mutex>
 
 using std::set;
 using std::map;
@@ -258,6 +259,40 @@ struct dir_result_t {
   struct dirent de;
 
   int fd;                // fd attached using fdopendir (-1 if none)
+};
+
+/**
+ * @brief The subvolume metric tracker.
+ *
+ * Maps subvolume_id(which is in fact inode id) to the vector of SimpleIOMetric instances.
+ * Each simple metric records the single IO operation on the client.
+ * On clients metric message to the MDS, client will aggregate all simple metrics for each subvolume
+ * into the AggregatedIOMetric struct and clear the current metrics list.
+ * TODO: limit the cap for each subvolume? in the case client sends metrics to the MDS not so often?
+ */
+class SubvolumeMetricTracker {
+public:
+    struct SubvolumeEntry {
+        AggregatedIOMetrics metrics;
+
+        void dump(Formatter *f) const {
+          f->dump_object("", metrics);
+        }
+    };
+
+    SubvolumeMetricTracker(CephContext *ct, client_t id);
+    void dump(Formatter *f);
+    void add_inode(inodeno_t inode, inodeno_t subvol);
+    void remove_inode(inodeno_t inode);
+    void add_metric(inodeno_t inode, SimpleIOMetric&& metric);
+    std::vector<AggregatedIOMetrics> aggregate(bool clean);
+protected:
+    std::vector<AggregatedIOMetrics> last_subvolume_metrics;
+    std::unordered_map<inodeno_t, SubvolumeEntry> subvolume_metrics;
+    std::unordered_map<inodeno_t, inodeno_t> inode_subvolume;
+    CephContext *cct = nullptr;
+    client_t whoami;
+    std::shared_mutex metrics_lock;
 };
 
 class Client : public Dispatcher, public md_config_obs_t {
@@ -1180,6 +1215,7 @@ protected:
   void force_session_readonly(MetaSession *s);
 
   void dump_status(Formatter *f);  // debug
+  void dump_subvolume_metrics(Formatter* f);
 
   Dispatcher::dispatch_result_t ms_dispatch2(const MessageRef& m) override;
 
@@ -1362,11 +1398,11 @@ private:
 
     C_Read_Finisher(Client *clnt, Context *onfinish, Context *iofinish,
                     bool is_read_async, int have_caps, bool movepos,
-                    utime_t start, Fh *f, Inode *in, uint64_t fpos,
+                    Fh *f, Inode *in, uint64_t fpos,
                     int64_t offset, uint64_t size)
       : clnt(clnt), onfinish(onfinish), iofinish(iofinish),
         is_read_async(is_read_async), have_caps(have_caps), f(f), in(in),
-        start(start), fpos(fpos), offset(offset), size(size), movepos(movepos) {
+        start(mono_clock_now()), fpos(fpos), offset(offset), size(size), movepos(movepos) {
       iofinished = false;
     }
 
@@ -1415,7 +1451,7 @@ private:
                             uint64_t fpos, uint64_t off, uint64_t len,
                             bufferlist *bl, Filer *filer, int have_caps)
       : clnt(clnt), onfinish(onfinish), f(f), in(in), off(off), len(len), bl(bl),
-        filer(filer), have_caps(have_caps)
+        filer(filer), have_caps(have_caps), start_time(mono_clock_now())
     {
       left = len;
       wanted = len;
@@ -1439,6 +1475,7 @@ private:
     bufferlist tbl;
     Filer *filer;
     int have_caps;
+    utime_t start_time;
     int read;
     uint64_t pos;
     bool fini;
@@ -1457,7 +1494,7 @@ private:
   public:
     C_Read_Async_Finisher(Client *clnt, Context *onfinish, Fh *f, Inode *in,
                           uint64_t fpos, uint64_t off, uint64_t len)
-      : clnt(clnt), onfinish(onfinish), f(f), in(in), off(off), len(len) {}
+      : clnt(clnt), onfinish(onfinish), f(f), in(in), off(off), len(len), start_time(mono_clock_now()) {}
 
   private:
     Client *clnt;
@@ -1466,6 +1503,7 @@ private:
     Inode *in;
     uint64_t off;
     uint64_t len;
+    utime_t start_time;
 
     void finish(int r) override;
   };
@@ -1492,11 +1530,11 @@ private:
     void finish_fsync(int r);
 
     C_Write_Finisher(Client *clnt, Context *onfinish, bool dont_need_uninline,
-                     bool is_file_write, utime_t start, Fh *f, Inode *in,
+                     bool is_file_write, Fh *f, Inode *in,
                      uint64_t fpos, int64_t offset, uint64_t size,
                      bool do_fsync, bool syncdataonly)
       : clnt(clnt), onfinish(onfinish),
-        is_file_write(is_file_write), start(start), f(f), in(in), fpos(fpos),
+        is_file_write(is_file_write), start(mono_clock_now()), f(f), in(in), fpos(fpos),
         offset(offset), size(size), syncdataonly(syncdataonly) {
       iofinished_r = 0;
       onuninlinefinished_r = 0;
@@ -1576,7 +1614,7 @@ private:
     C_nonblocking_fsync_state(Client *clnt, Inode *in, bool syncdataonly, Context *onfinish)
       : clnt(clnt), in(in), syncdataonly(syncdataonly), onfinish(onfinish) {
       flush_tid = 0;
-      start = ceph_clock_now();
+      start = mono_clock_now();
       progress = 0;
       flush_wait = false;
       flush_completed = false;
@@ -1621,6 +1659,7 @@ private:
 
     Client *client;
     Fh *f;
+    utime_t start_time = 0;
   };
 
   /*
@@ -1931,6 +1970,9 @@ private:
 
   // Cluster fsid
   fs_cluster_id_t fscid;
+
+  // subvolume metrics tracker
+  std::unique_ptr<SubvolumeMetricTracker> subvolume_tracker = nullptr;
 
   // file handles, etc.
   interval_set<int> free_fd_set;  // unused fds
