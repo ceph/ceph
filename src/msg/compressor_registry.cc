@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "compressor_registry.h"
+#include "common/ceph_context.h"
 #include "common/dout.h"
 #include "include/types.h" // for operator<<(std::vector)
 
