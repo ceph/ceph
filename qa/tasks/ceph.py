@@ -124,6 +124,64 @@ def ceph_crash(ctx, config):
                     pass
 
 
+class Rotater(object):
+    stop_event = gevent.event.Event()
+
+    def __init__(self, ctx, logrotate_path='/etc/logrotate.d/ceph-test.conf', ignore_missing=False):
+        self.ctx = ctx
+        self.logrotate_path = logrotate_path
+        self.ignore_missing = ignore_missing
+
+    def invoke_logrotate(self):
+        # 1) install ceph-test.conf in /etc/logrotate.d
+        # 2) continuously loop over logrotate invocation with ceph-test.conf
+        while not self.stop_event.is_set():
+            self.stop_event.wait(timeout=30)
+            try:
+                procs = self.ctx.cluster.run(
+                      args=['sudo', 'logrotate', self.logrotate_path],
+                      wait=False,
+                      stderr=StringIO()
+                )
+                run.wait(procs)
+            except exceptions.ConnectionLostError as e:
+                # Some tests may power off nodes during test, in which
+                # case we will see connection errors that we should ignore.
+                log.debug("Missed logrotate, node '{0}' is offline".format(
+                    e.node))
+            except EOFError:
+                # Paramiko sometimes raises this when it fails to
+                # connect to a node during open_session.  As with
+                # ConnectionLostError, we ignore this because nodes
+                # are allowed to get power cycled during tests.
+                log.debug("Missed logrotate, EOFError")
+            except SSHException:
+                log.debug("Missed logrotate, SSHException")
+            except run.CommandFailedError as e:
+                for p in procs:
+                    if p.finished and p.exitstatus != 0:
+                        err = p.stderr.getvalue()
+                        if 'error: error renaming temp state file' in err:
+                            log.info('ignoring transient state error: %s', e)
+                        elif self.ignore_missing and 'No such file or directory' in err:
+                            log.info(f'Logrotate config not found at {self.logrotate_path}. '
+                                     'Assuming transient issue and ignoring')
+                        else:
+                            raise
+            except socket.error as e:
+                if e.errno in (errno.EHOSTUNREACH, errno.ECONNRESET):
+                    log.debug("Missed logrotate, host unreachable")
+                else:
+                    raise
+
+    def begin(self):
+        self.thread = gevent.spawn(self.invoke_logrotate)
+
+    def end(self):
+        self.stop_event.set()
+        self.thread.get()
+
+
 @contextlib.contextmanager
 def ceph_log(ctx, config):
     """
@@ -172,55 +230,6 @@ def ceph_log(ctx, config):
     # Add logs directory to job's info log file
     update_archive_setting(ctx, 'log', '/var/log/ceph')
 
-    class Rotater(object):
-        stop_event = gevent.event.Event()
-
-        def invoke_logrotate(self):
-            # 1) install ceph-test.conf in /etc/logrotate.d
-            # 2) continuously loop over logrotate invocation with ceph-test.conf
-            while not self.stop_event.is_set():
-                self.stop_event.wait(timeout=30)
-                try:
-                    procs = ctx.cluster.run(
-                          args=['sudo', 'logrotate', '/etc/logrotate.d/ceph-test.conf'],
-                          wait=False,
-                          stderr=StringIO()
-                    )
-                    run.wait(procs)
-                except exceptions.ConnectionLostError as e:
-                    # Some tests may power off nodes during test, in which
-                    # case we will see connection errors that we should ignore.
-                    log.debug("Missed logrotate, node '{0}' is offline".format(
-                        e.node))
-                except EOFError:
-                    # Paramiko sometimes raises this when it fails to
-                    # connect to a node during open_session.  As with
-                    # ConnectionLostError, we ignore this because nodes
-                    # are allowed to get power cycled during tests.
-                    log.debug("Missed logrotate, EOFError")
-                except SSHException:
-                    log.debug("Missed logrotate, SSHException")
-                except run.CommandFailedError as e:
-                    for p in procs:
-                        if p.finished and p.exitstatus != 0:
-                            err = p.stderr.getvalue()
-                            if 'error: error renaming temp state file' in err:
-                                log.info('ignoring transient state error: %s', e)
-                            else:
-                                raise
-                except socket.error as e:
-                    if e.errno in (errno.EHOSTUNREACH, errno.ECONNRESET):
-                        log.debug("Missed logrotate, host unreachable")
-                    else:
-                        raise
-
-        def begin(self):
-            self.thread = gevent.spawn(self.invoke_logrotate)
-
-        def end(self):
-            self.stop_event.set()
-            self.thread.get()
-
     def write_rotate_conf(ctx, daemons):
         testdir = teuthology.get_testdir(ctx)
         remote_logrotate_conf = '%s/logrotate.ceph-test.conf' % testdir
@@ -246,7 +255,7 @@ def ceph_log(ctx, config):
         daemons = ctx.config.get('log-rotate')
         log.info('Setting up log rotation with ' + str(daemons))
         write_rotate_conf(ctx, daemons)
-        logrotater = Rotater()
+        logrotater = Rotater(ctx)
         logrotater.begin()
     try:
         yield

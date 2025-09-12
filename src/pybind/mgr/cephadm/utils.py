@@ -62,6 +62,21 @@ class SpecialHostLabels(str, Enum):
         return self.value
 
 
+class LogrotateConfigType(str, Enum):
+    cephadm: str = 'cephadm'
+    cluster: str = 'cluster'
+
+    def to_json(self) -> str:
+        return self.value
+
+    def __str__(self) -> str:
+        return self.value
+
+    @property
+    def config_key_entry(self) -> str:
+        return f'{self.value}_logrotate_config'
+
+
 def name_to_config_section(name: str) -> ConfEntity:
     """
     Map from daemon names to ceph entity names (as seen in config)
