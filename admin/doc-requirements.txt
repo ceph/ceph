@@ -1,7 +1,7 @@
 # RTD theme does not work with >= 7 https://github.com/readthedocs/readthedocs.org/issues/10279
 Sphinx < 7
-git+https://github.com/ceph/sphinx-ditaa.git@py3#egg=sphinx-ditaa
-git+https://github.com/vlasovskikh/funcparserlib.git
+sphinx-ditaa@git+https://github.com/ceph/sphinx-ditaa.git@py3
+funcparserlib@git+https://github.com/vlasovskikh/funcparserlib.git
 breathe >= 4.20.0,!=4.33
 cryptography
 Jinja2
