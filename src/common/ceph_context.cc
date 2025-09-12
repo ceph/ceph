@@ -987,6 +987,17 @@ void CephContext::_enable_perf_counter()
   }
   _mempool_perf = plb2.create_perf_counters();
   _perf_counters_collection->add(_mempool_perf);
+
+  service_unique_id = _conf.get_val<std::string>("service_unique_id");
+  if (!service_unique_id.empty()) {
+    PerfCountersBuilder plb(this, "service_unique_id", l_service_first,
+			    l_service_last);
+    plb.add_u64(l_service_unique_id, service_unique_id.c_str(),
+		"Unique ID for this service");
+    _service_perf = plb.create_perf_counters();
+    _perf_counters_collection->add(_service_perf);
+    _service_perf->set(l_service_unique_id, 0);
+  }
 }
 
 void CephContext::_disable_perf_counter()
@@ -1003,6 +1014,12 @@ void CephContext::_disable_perf_counter()
   _mempool_perf = nullptr;
   _mempool_perf_names.clear();
   _mempool_perf_descriptions.clear();
+
+  if (_service_perf) {
+    _perf_counters_collection->remove(_service_perf);
+    delete _service_perf;
+    _service_perf = nullptr;
+  }
 }
 
 void CephContext::_refresh_perf_values()
