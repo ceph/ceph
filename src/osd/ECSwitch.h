@@ -366,10 +366,7 @@ public:
     return false;
   }
   bool get_is_hinfo_required() const final {
-    if (is_optimized()) {
-      return optimized.get_is_hinfo_required();
-    }
-    return true;
+    return !is_optimized();
   }
   bool get_is_ec_optimized() const final {
     return is_optimized();
