@@ -40,7 +40,7 @@ describe('ActiveAlertListComponent', () => {
     fixture = TestBed.createComponent(ActiveAlertListComponent);
     component = fixture.componentInstance;
     let prometheusAlertService = TestBed.inject(PrometheusAlertService);
-    spyOn(prometheusAlertService, 'getAlerts').and.callFake(() => of([]));
+    spyOn(prometheusAlertService, 'getGroupedAlerts').and.callFake(() => of([]));
   });
 
   it('should create', () => {
