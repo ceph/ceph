@@ -1744,9 +1744,10 @@ void PG::reset_pglog_based_recovery_op() {
 }
 
 void PG::cancel_pglog_based_recovery_op() {
-  ceph_assert(pglog_based_recovery_op);
-  pglog_based_recovery_op->cancel();
-  reset_pglog_based_recovery_op();
+  if (pglog_based_recovery_op) {
+    pglog_based_recovery_op->cancel();
+    reset_pglog_based_recovery_op();
+  }
 }
 
 void PG::C_PG_FinishRecovery::finish(int r) {
