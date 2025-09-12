@@ -148,7 +148,7 @@ public:
     std::lock_guard l(submit_mutex);
     auto seq = _submit_entry(e, c);
     _segment_upkeep();
-    submit_cond.notify_all();
+    submit_cond.notify_one();
     return seq;
   }
 
@@ -188,11 +188,14 @@ public:
   bool is_trim_slow() const;
 
 protected:
-  struct PendingEvent {
-    PendingEvent(LogEvent *e, Context* c, bool f=false) : le(e), fin(c), flush(f) {}
+  struct SubmittingEvent {
+    SubmittingEvent(LogEvent *e, Context* c, LogSegment::seq_t s, bool f=false) :
+      le(e), fin(c), seq(s), flush(f), bl(nullptr) {}
     LogEvent *le;
     Context* fin;
+    LogSegment::seq_t seq;
     bool flush;
+    bufferlist *bl;
   };
 
   // -- replay --
@@ -230,7 +233,8 @@ protected:
     }
   private:
     MDLog *log;
-  } submit_thread;
+  };
+  std::list<SubmitThread> submit_threads;
 
   friend class ReplayThread;
   friend class C_MDL_Replay;
@@ -289,7 +293,16 @@ protected:
   uint64_t expired_events = 0;
 
   int64_t mdsmap_up_features = 0;
-  std::map<uint64_t,std::list<PendingEvent> > pending_events; // log segment -> event list
+
+  // pending_events -> (encoding_events, waiting_events) -> waiting_events -> journaling_events
+  std::map<uint64_t,std::list<SubmittingEvent> > pending_events; // log segment -> event list
+  std::set<LogSegment::seq_t> encoding_events;
+  std::queue<SubmittingEvent> waiting_events;
+  std::queue<SubmittingEvent> journaling_events;
+
+  // accessed by submit threads for testing
+  std::atomic<std::chrono::milliseconds> encode_delay_max;
+
   ceph::fair_mutex submit_mutex{"MDLog::submit_mutex"};
   std::condition_variable_any submit_cond;
 
@@ -297,6 +310,8 @@ private:
   friend class C_MaybeExpiredSegment;
   friend class C_MDL_Flushed;
   friend class C_OFT_Committed;
+
+  void create_submit_threads();
 
   void try_to_commit_open_file_table(uint64_t last_seq);
   LogSegmentRef const& _start_new_segment(SegmentBoundary* sb);

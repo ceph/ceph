@@ -47,7 +47,6 @@ MDLog::MDLog(MDSRank* m)
     mds(m),
     replay_thread(this),
     recovery_thread(this),
-    submit_thread(this),
     log_trim_counter(DecayCounter(g_conf().get_val<double>("mds_log_trim_decay_rate")))
 {
   debug_subtrees = g_conf().get_val<bool>("mds_debug_subtrees");
@@ -61,6 +60,11 @@ MDLog::MDLog(MDSRank* m)
   log_warn_factor = g_conf().get_val<double>("mds_log_warn_factor");
   minor_segments_per_major_segment = g_conf().get_val<uint64_t>("mds_log_minor_segments_per_major_segment");
   upkeep_thread = std::thread(&MDLog::log_trim_upkeep, this);
+
+  encode_delay_max.store(g_conf().get_val<std::chrono::milliseconds>("mds_log_encode_delay_max"));
+  uint64_t submit_thread_count = g_conf().get_val<uint64_t>("mds_log_submit_thread_count");
+  while (submit_thread_count--)
+    submit_threads.emplace_back(this);
 }
 
 MDLog::~MDLog()
@@ -263,6 +267,19 @@ EstimatedReplayTime MDLog::get_estimated_replay_finish_time() {
   return estimated_time;
 }
 
+void MDLog::create_submit_threads()
+{
+  if (submit_threads.size() > 1) {
+    uint32_t i = 0;
+    for (auto& thread : submit_threads)
+      // thread name length < 16
+      thread.create(("mds-log-sbmt-" + std::to_string(i++)).c_str());
+  } else {
+    ceph_assert(submit_threads.size() == 1);
+    submit_threads.front().create("mds-log-submit");
+  }
+}
+
 void MDLog::create(MDSContext *c)
 {
   ceph_assert(ceph_mutex_is_locked_by_me(mds->mds_lock));
@@ -299,7 +316,7 @@ void MDLog::create(MDSContext *c)
   logger->set(l_mdl_expos, journaler->get_expire_pos());
   logger->set(l_mdl_wrpos, journaler->get_write_pos());
 
-  submit_thread.create("mds-log-submit");
+  create_submit_threads();
 }
 
 void MDLog::open(MDSContext *c)
@@ -310,7 +327,7 @@ void MDLog::open(MDSContext *c)
   recovery_thread.set_completion(c);
   recovery_thread.create("mds-log-recvr");
 
-  submit_thread.create("mds-log-submit");
+  create_submit_threads();
   // either append() or replay() will follow.
 }
 
@@ -427,7 +444,7 @@ LogSegment::seq_t MDLog::_submit_entry(LogEvent *le, MDSLogContextBase* c)
   le->set_stamp(ceph_clock_now());
 
   mdsmap_up_features = mds->mdsmap->get_up_features();
-  pending_events[ls->seq].push_back(PendingEvent(le, c));
+  pending_events[ls->seq].push_back(SubmittingEvent(le, c, event_seq));
   num_events++;
 
   if (logger) {
@@ -489,7 +506,7 @@ public:
 
 void MDLog::_submit_thread()
 {
-  dout(10) << "_submit_thread start" << dendl;
+  dout(10) << __func__ << " start" << dendl;
 
   std::unique_lock locker{submit_mutex};
 
@@ -499,7 +516,7 @@ void MDLog::_submit_thread()
       continue;
     }
 
-    map<uint64_t,list<PendingEvent> >::iterator it = pending_events.begin();
+    map<uint64_t,list<SubmittingEvent> >::iterator it = pending_events.begin();
     if (it == pending_events.end()) {
       submit_cond.wait(locker);
       continue;
@@ -511,73 +528,177 @@ void MDLog::_submit_thread()
     }
 
     int64_t features = mdsmap_up_features;
-    PendingEvent data = it->second.front();
+    SubmittingEvent event = it->second.front();
     it->second.pop_front();
 
-    locker.unlock();
+    if (event.le) {
+      encoding_events.insert(event.seq);
+      event.bl = new bufferlist();
+    }
+    waiting_events.push(event);
 
-    if (data.le) {
-      LogEvent *le = data.le;
-      auto&& ls = le->_segment;
+    dout(7) << __func__ << " encoding event(s) " << encoding_events.size()
+	    << ", waiting event(s) " << waiting_events.size()
+	    << ", journaling event(s) " << journaling_events.size() << dendl;
+
+    if (event.le) {
+      locker.unlock();
+      dout(10) << __func__ << " start encoding event, seq " << event.seq << dendl;
+
+      // for testing only
+      auto delay = encode_delay_max.load();
+      if (unlikely(delay > 0ms)) {
+	std::mt19937 gen(std::random_device {} ());
+	std::uniform_int_distribution<int64_t> dist(1, delay.count());
+	delay = std::chrono::milliseconds(dist(gen));
+	// we can also do some calculations here instead of sleeping
+	dout(10) << __func__ << " sleeping for " << delay << dendl;
+	std::this_thread::sleep_for(delay);
+      }
+
       // encode it, with event type
-      bufferlist bl;
-      le->encode_with_header(bl, features);
+      event.le->encode_with_header(*event.bl, features);
 
-      uint64_t write_pos = journaler->get_write_pos();
+      dout(10) << __func__ << " end encoding event, seq " << event.seq << dendl;
+      locker.lock();
 
-      le->set_start_off(write_pos);
-      if (dynamic_cast<SegmentBoundary*>(le)) {
-	ls->offset = write_pos;
-      }
-
-      if (bl.length() >= event_large_threshold.load()) {
-        dout(5) << "large event detected!" << dendl;
-        logger->inc(l_mdl_evlrg);
-      }
-
-      dout(5) << "_submit_thread " << write_pos << "~" << bl.length()
-	      << " : " << *le << dendl;
-
-      // journal it.
-      const uint64_t new_write_pos = journaler->append_entry(bl);  // bl is destroyed.
-      ls->end = new_write_pos;
-
-      MDSLogContextBase *fin;
-      if (data.fin) {
-	fin = dynamic_cast<MDSLogContextBase*>(data.fin);
-	ceph_assert(fin);
-	fin->set_write_pos(new_write_pos);
-      } else {
-	fin = new C_MDL_Flushed(this, new_write_pos);
-      }
-
-      journaler->wait_for_flush(fin);
-
-      if (data.flush)
-	journaler->flush();
-
-      if (logger)
-	logger->set(l_mdl_wrpos, ls->end);
-
-      delete le;
+      encoding_events.erase(event.seq);
     } else {
-      if (data.fin) {
-	Context* fin = dynamic_cast<Context*>(data.fin);
-	ceph_assert(fin);
-	C_MDL_Flushed *fin2 = new C_MDL_Flushed(this, fin);
-	fin2->set_write_pos(journaler->get_write_pos());
-	journaler->wait_for_flush(fin2);
-      }
-      if (data.flush)
-	journaler->flush();
+      // an flush(empty) event has the same seq as the previous event
+      dout(10) << __func__ << " get flush(empty) event, seq " << event.seq << dendl;
     }
 
-    locker.lock();
-    if (data.flush)
-      unflushed = 0;
-    else if (data.le)
-      unflushed++;
+    // Is there another thread journaling now?
+    bool journaling = !journaling_events.empty();
+
+    // events in waiting queue but not in encoding set have finished encoding,
+    // move continuous sequence of them from waiting queue to journaling queue
+    while (!waiting_events.empty() && (encoding_events.empty() ||
+      waiting_events.front().seq < *encoding_events.begin())) {
+      journaling_events.push(waiting_events.front());
+      waiting_events.pop();
+    }
+
+    // just add the events need to be journaled to journaling queue
+    // if another thread is journaling
+    if (journaling || journaling_events.empty()) {
+      dout(10) << __func__ << " I do not need to journal, journaling event(s) "
+	       << journaling_events.size() << dendl;
+      continue;
+    }
+
+    // only one thread can reach here, others need to wait for journaling queue
+    // to be cleared and may add new events to journaling queue
+    dout(7) << __func__ << " I am journaling, " << journaling_events.size()
+	    << " event(s) need be journaled" << dendl;
+    uint32_t journaled = 0;
+    while (!mds->is_daemon_stopping() && !journaling_events.empty()) {
+      event = journaling_events.front();
+      locker.unlock();
+
+      if (event.le) {
+	LogEvent *le = event.le;
+	auto&& ls = le->_segment;;
+	bufferlist *bl = event.bl;
+
+	uint64_t write_pos = journaler->get_write_pos();
+
+	le->set_start_off(write_pos);
+	if (dynamic_cast<SegmentBoundary*>(le)) {
+	  ls->offset = write_pos;
+	}
+
+	if (bl->length() >= event_large_threshold.load()) {
+	  dout(5) << __func__ << " large event detected!" << dendl;
+	  logger->inc(l_mdl_evlrg);
+	}
+
+	dout(5) << __func__ << " journaling " << write_pos << "~" << bl->length()
+		<< " : " << *le << ", seq " << event.seq << dendl;
+
+	// journal it.
+	const uint64_t new_write_pos = journaler->append_entry(*bl);  // bl is destroyed.
+	ls->end = new_write_pos;
+
+	MDSLogContextBase *fin;
+	if (event.fin) {
+	  fin = dynamic_cast<MDSLogContextBase*>(event.fin);
+	  ceph_assert(fin);
+	  fin->set_write_pos(new_write_pos);
+	} else {
+	  fin = new C_MDL_Flushed(this, new_write_pos);
+	}
+
+	journaler->wait_for_flush(fin);
+
+	if (event.flush)
+	  journaler->flush();
+
+	if (logger)
+	  logger->set(l_mdl_wrpos, ls->end);
+
+	dout(10) << __func__ << " event(seq " << event.seq
+		 << ") has been submitted, total time spent "
+		 << ceph_clock_now() - le->get_stamp() << dendl;
+
+	delete le;
+	delete bl;
+      } else {
+	dout(10) << __func__ << " journaling flush(empty) event, seq " << event.seq << dendl;
+	if (event.fin) {
+	  Context* fin = dynamic_cast<Context*>(event.fin);
+	  ceph_assert(fin);
+	  C_MDL_Flushed *fin2 = new C_MDL_Flushed(this, fin);
+	  fin2->set_write_pos(journaler->get_write_pos());
+	  journaler->wait_for_flush(fin2);
+	}
+	if (event.flush)
+	  journaler->flush();
+      }
+
+      ++journaled;
+
+      locker.lock();
+      if (event.flush)
+	unflushed = 0;
+      else if (event.le)
+	unflushed++;
+
+      journaling_events.pop();
+    }
+    dout(7) << __func__ << " I have finished journaling, " << journaled
+	    << " event(s) have been journaled" << dendl;
+
+    if (mds->is_daemon_stopping()) {
+      // clean up
+      dout(10) << __func__ << " " << journaling_events.size()
+	       << " journaling event(s) will be dropped" << dendl;
+      while (!journaling_events.empty()) {
+	auto& event = journaling_events.front();
+	if (event.le) {
+	  delete event.le;
+	  delete event.bl;
+	}
+	journaling_events.pop();
+      }
+    }
   }
+
+  // clean up
+  uint32_t dropped = 0;
+  for (auto& [_, events] : pending_events) {
+    for (auto& event : events) {
+      if (event.le)
+	delete event.le;
+    }
+    dropped += events.size();
+    events.clear();
+  }
+  pending_events.clear();
+  dout(10) << __func__ << " " << dropped
+	   << " pending event(s) have been dropped" << dendl;
+
+  dout(10) << __func__ << " end" << dendl;
 }
 
 void MDLog::wait_for_safe(Context* c)
@@ -586,9 +707,9 @@ void MDLog::wait_for_safe(Context* c)
 
   bool no_pending = true;
   if (!pending_events.empty()) {
-    pending_events.rbegin()->second.push_back(PendingEvent(NULL, c));
+    pending_events.rbegin()->second.push_back(SubmittingEvent(NULL, c, event_seq));
     no_pending = false;
-    submit_cond.notify_all();
+    submit_cond.notify_one();
   }
 
   submit_mutex.unlock();
@@ -604,9 +725,9 @@ void MDLog::flush()
   bool do_flush = unflushed > 0;
   unflushed = 0;
   if (!pending_events.empty()) {
-    pending_events.rbegin()->second.push_back(PendingEvent(NULL, NULL, true));
+    pending_events.rbegin()->second.push_back(SubmittingEvent(NULL, NULL, event_seq, true));
     do_flush = false;
-    submit_cond.notify_all();
+    submit_cond.notify_one();
   }
 
   submit_mutex.unlock();
@@ -632,25 +753,30 @@ void MDLog::shutdown()
   ceph_assert(ceph_mutex_is_locked_by_me(mds->mds_lock));
 
   dout(5) << "shutdown" << dendl;
-  if (submit_thread.is_started()) {
-    ceph_assert(mds->is_daemon_stopping());
+  bool notified = false;
+  for (auto& thread : submit_threads) {
+    if (thread.is_started()) {
+      ceph_assert(mds->is_daemon_stopping());
+      if (thread.am_self()) {
+	// Called suicide from the thread: trust it to do no work after
+	// returning from suicide, and subsequently respect mds->is_daemon_stopping()
+	// and fall out of its loop.
+	continue;
+      }
+      if (!notified) {
+	mds->mds_lock.unlock();
+	// Because MDS::stopping is true, it's safe to drop mds_lock: nobody else
+	// picking it up will do anything with it.
 
-    if (submit_thread.am_self()) {
-      // Called suicide from the thread: trust it to do no work after
-      // returning from suicide, and subsequently respect mds->is_daemon_stopping()
-      // and fall out of its loop.
-    } else {
-      mds->mds_lock.unlock();
-      // Because MDS::stopping is true, it's safe to drop mds_lock: nobody else
-      // picking it up will do anything with it.
+	submit_mutex.lock();
+	submit_cond.notify_all();
+	submit_mutex.unlock();
 
-      submit_mutex.lock();
-      submit_cond.notify_all();
-      submit_mutex.unlock();
+	mds->mds_lock.lock();
 
-      mds->mds_lock.lock();
-
-      submit_thread.join();
+	notified = true;
+      }
+      thread.join();
     }
   }
 
@@ -1700,5 +1826,8 @@ void MDLog::handle_conf_change(const std::set<std::string>& changed, const MDSMa
   }
   if (changed.count("mds_log_minor_segments_per_major_segment")) {
     minor_segments_per_major_segment = g_conf().get_val<uint64_t>("mds_log_minor_segments_per_major_segment");
+  }
+  if (changed.count("mds_log_encode_delay_max")) {
+    encode_delay_max.store(g_conf().get_val<std::chrono::milliseconds>("mds_log_encode_delay_max"));
   }
 }
