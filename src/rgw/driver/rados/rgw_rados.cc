@@ -10942,6 +10942,11 @@ int RGWRados::cls_bucket_list_unordered(const DoutPrefixProvider *dpp,
   uint32_t count = 0u;
   std::map<std::string, bufferlist> updates;
   rgw_obj_index_key last_added_entry;
+
+  // Bound consecutive AdvanceAndRetry cycles to avoid livelock
+  constexpr int MAX_ADVANCE_ONLY_RETRIES = 8;
+  int advance_only_retries = 0;
+
   while (count <= num_entries &&
 	 ((shard_id >= 0 && current_shard == uint32_t(shard_id)) ||
 	  current_shard < num_shards)) {
@@ -10950,15 +10955,67 @@ int RGWRados::cls_bucket_list_unordered(const DoutPrefixProvider *dpp,
 
     librados::ObjectReadOperation op;
     const std::string empty_delimiter;
+
+    // Keep the previous marker to detect real progress
+    const auto prev_marker = marker;
+
     cls_rgw_bucket_list_op(op, marker, prefix, empty_delimiter,
 			   num_entries,
                            list_versions, &result);
     r = rgw_rados_operate(dpp, ioctx, oid, std::move(op), nullptr, y, 0, nullptr, &index_ver.epoch);
+    if (r == RGWBIAdvanceAndRetryError) {
+      // CLS could not return any visible entries in this round,
+      // but it advanced the marker; retry with the new marker.
+
+      // Copy marker from cls type into rgw index key (avoid type-mismatch assignment)
+      marker.name = result.marker.name;
+      marker.instance = result.marker.instance;
+
+      ldpp_dout(dpp, 10)
+        << __func__
+        << ": got RGWBIAdvanceAndRetryError"
+        << " on oid=" << oid
+        << "; prev_marker=" << prev_marker
+        << " -> marker=" << marker
+        << "; advancing marker and retrying"
+        << dendl;
+
+      // If the marker did not advance, bound the number of consecutive retries
+      if (!(prev_marker < marker)) {
+        // No forward progress; log markers, oid, and bounded retry count.
+        ldpp_dout(dpp, 10)
+          << __func__
+          << ": no marker progress"
+          << " on oid=" << oid
+          << "; prev_marker=" << prev_marker
+          << ", marker=" << marker
+          << " retries=" << (advance_only_retries + 1)
+          << "/" << MAX_ADVANCE_ONLY_RETRIES
+          << dendl;
+        if (++advance_only_retries > MAX_ADVANCE_ONLY_RETRIES) {
+          ldpp_dout(dpp, 0)
+            << "ERROR: " << __func__
+            << ": exceeded MAX_ADVANCE_ONLY_RETRIES without marker progress"
+            << " on oid=" << oid
+            << "; prev_marker=" << prev_marker
+            << ", marker=" << marker
+            << "; aborting (EIO)"
+            << dendl;
+          return -EIO;
+        }
+      } else {
+        advance_only_retries = 0;
+      }
+      continue;
+    }
     if (r < 0) {
       ldpp_dout(dpp, 0) << "ERROR: " << __func__ <<
 	": error in rgw_rados_operate (bucket list op), r=" << r << dendl;
       return r;
     }
+
+    // Successful round: reset the AdvanceAndRetry backoff
+    advance_only_retries = 0;
 
     for (auto& entry : result.dir.m) {
       rgw_bucket_dir_entry& dirent = entry.second;
