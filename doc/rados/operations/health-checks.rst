@@ -328,6 +328,9 @@ commands:
 To troubleshoot, you may try running ``ceph mgr fail`` to reboot
 module initialization.
 
+Note that the health error may disappear on its own since modules
+will continue to initialize in the background.
+
 If the modules are still failing to initialize, please file a bug
 report under the `"mgr" project <https://tracker.ceph.com/projects/mgr>`_
 for further assistance.
