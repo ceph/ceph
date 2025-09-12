@@ -1,8 +1,10 @@
 #pragma once
 
 #include <aio.h>
+
 #include "rgw_common.h"
-#include "rgw_cache_driver.h"
+
+#include "driver/cache/rgw_cache_driver.h"
 
 namespace rgw { namespace cache {
 
