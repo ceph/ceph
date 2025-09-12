@@ -20,7 +20,7 @@
 #include "include/utime.h"
 #include "dmclock/src/dmclock_server.h"
 #ifndef WITH_CRIMSON
- #include "mon/MonClient.h"
+  class MonClient;
 #else
  #include "crimson/mon/MonClient.h"
 #endif
