@@ -116,6 +116,7 @@ add_library(crimson-common STATIC
   ${PROJECT_SOURCE_DIR}/src/msg/msg_types.cc
   ${PROJECT_SOURCE_DIR}/src/msg/Message.cc
   ${PROJECT_SOURCE_DIR}/src/mon/PGMap.cc
+  ${PROJECT_SOURCE_DIR}/src/mon/MgrMap.cc
   ${PROJECT_SOURCE_DIR}/src/mon/MonCap.cc
   ${PROJECT_SOURCE_DIR}/src/mon/MonMap.cc
   ${PROJECT_SOURCE_DIR}/src/osd/osd_types.cc
