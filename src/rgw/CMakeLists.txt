@@ -33,6 +33,9 @@ endfunction()
 
 find_package(ICU 52.0 COMPONENTS uc REQUIRED)
 
+find_package(LMDB REQUIRED)
+add_compile_definitions(LMDB_SAFE_NO_CPP_UTILITIES)
+
 set(librgw_common_srcs
   spdk/crc64.c
   madler/crc64nvme.c
@@ -148,7 +151,10 @@ set(librgw_common_srcs
   rgw_realm_watcher.cc
   rgw_bucket_logging.cc
   rgw_rest_bucket_logging.cc
-  rgw_bucket_sync.cc)
+  rgw_bucket_sync.cc
+  rgw_usage_cache.cc
+  rgw_usage_perf.cc
+)
 
 list(APPEND librgw_common_srcs
   driver/immutable_config/store.cc
@@ -255,8 +261,6 @@ if(WITH_RADOSGW_DAOS)
 endif()
 if(WITH_RADOSGW_POSIX)
   #add_subdirectory(driver/posix)
-  find_package(LMDB REQUIRED)
-  add_compile_definitions(LMDB_SAFE_NO_CPP_UTILITIES)
   list(APPEND librgw_common_srcs
 	      driver/posix/rgw_sal_posix.cc
 	      driver/posix/lmdb-safe.cc
@@ -327,7 +331,8 @@ target_link_libraries(rgw_common
 target_include_directories(rgw_common
   PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw/services"
   PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw"
-  PUBLIC "${LUA_INCLUDE_DIR}")
+  PUBLIC "${LUA_INCLUDE_DIR}"
+  PRIVATE "${LMDB_INCLUDE_DIR}")
 
 # work around https://github.com/Cyan4973/xxHash/issues/943 for debug builds
 target_compile_definitions(rgw_common PUBLIC
