@@ -5945,9 +5945,29 @@ void RGWCopyObj::progress_cb(off_t ofs)
     return;
   }
 
-  send_partial_response(ofs);
+  std::lock_guard<std::mutex> l(progress_tracker->mtx);
+  progress_tracker->ofs_queue.push(ofs);
+  progress_tracker->cv.notify_one();
 
   last_ofs = ofs;
+}
+
+void RGWCopyObj::progress_cb_handler()
+{
+  std::unique_lock<std::mutex> l(progress_tracker->mtx);
+  while(!progress_tracker->done || !progress_tracker->ofs_queue.empty()) {
+    progress_tracker->cv.wait(l, [&]() {
+      return progress_tracker->done || !progress_tracker->ofs_queue.empty();
+    });
+
+    while (!progress_tracker->ofs_queue.empty()) {
+      auto ofs = progress_tracker->ofs_queue.front();
+      progress_tracker->ofs_queue.pop();
+      l.unlock();
+      send_partial_response(ofs);
+      l.lock();
+    }
+  }
 }
 
 void RGWCopyObj::pre_exec()
