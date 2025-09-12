@@ -1081,3 +1081,23 @@ TEST(ECUtil, insert_parity_buffer_into_sem) {
     ASSERT_EQ(8192, sem.ro_end);
   }
 }
+
+// Debug String test, to track down seg-fault found by teuthology.
+TEST(ECUtil, debug_string)
+{
+  int k=3;
+  int m=2;
+  int chunk_size = 4096;
+
+  stripe_info_t sinfo(k, m, chunk_size*k, vector<shard_id_t>(0));
+  shard_extent_map_t semap(&sinfo);
+
+  bufferlist bl0, bl1;
+  bl0.append_zero(750);
+  bl1.append_zero(3516);
+
+  semap.insert_in_shard(shard_id_t(0), 352256, bl0);
+  semap.insert_in_shard(shard_id_t(0), 348740, bl1);
+
+  semap.debug_string(2048, 0);
+}
