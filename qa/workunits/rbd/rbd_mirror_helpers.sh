@@ -1375,6 +1375,24 @@ images_create()
   done
 }
 
+unmap_image()
+{
+    local cluster=$1 ; shift
+    local image_spec=$1 ; shift
+    local options=("$@")
+
+    run_cmd "rbd --cluster ${cluster} device unmap ${options[*]} ${image_spec}"
+}
+
+map_image()
+{
+    local cluster=$1 ; shift
+    local image_spec=$1 ; shift
+    local options=("$@")
+
+    run_cmd "rbd --cluster ${cluster} device map ${options[*]} ${image_spec}"
+}
+
 is_pool_mirror_mode_image()
 {
     local pool=$1
