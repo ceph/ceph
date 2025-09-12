@@ -16,6 +16,7 @@
 
 #include "common/perf_counters_collection.h"
 #include "common/perf_counters_key.h"
+#include "mgr/DaemonHealthMetric.h"
 #include "mgr/MgrContext.h"
 #include "mon/MonMap.h"
 
