@@ -38,7 +38,6 @@ protected:
 public:
   virtual std::string get_endpoint_url() const noexcept = 0;
 
-  virtual std::string get_admin_token() const noexcept = 0;
   virtual std::string_view get_admin_user() const noexcept = 0;
   virtual std::string get_admin_password() const noexcept = 0;
   virtual std::string_view get_admin_tenant() const noexcept = 0;
@@ -60,8 +59,6 @@ public:
   }
 
   std::string get_endpoint_url() const noexcept override;
-
-  std::string get_admin_token() const noexcept override;
 
   std::string_view get_admin_user() const noexcept override {
     return g_ceph_context->_conf->rgw_keystone_admin_user;
