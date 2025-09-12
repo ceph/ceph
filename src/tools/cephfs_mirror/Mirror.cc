@@ -278,7 +278,7 @@ int Mirror::init(std::string &reason) {
     return r;
   }
 
-  m_service_daemon = std::make_unique<ServiceDaemon>(m_cct, m_local);
+  m_service_daemon = std::make_unique<ServiceDaemon>(m_cct, m_local, m_msgr, m_monc);
   r = m_service_daemon->init();
   if (r < 0) {
     derr << ": error registering service daemon: " << cpp_strerror(r) << dendl;

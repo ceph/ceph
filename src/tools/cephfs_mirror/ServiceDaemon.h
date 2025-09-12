@@ -7,6 +7,8 @@
 #include "common/ceph_mutex.h"
 #include "common/Timer.h"
 #include "mds/FSMap.h"
+#include "mgr/MgrClient.h"
+#include "mon/MonClient.h"
 #include "Types.h"
 
 namespace cephfs {
@@ -14,7 +16,7 @@ namespace mirror {
 
 class ServiceDaemon {
 public:
-  ServiceDaemon(CephContext *cct, RadosRef rados);
+  ServiceDaemon(CephContext *cct, RadosRef rados, Messenger* msgr, MonClient* monc);
   ~ServiceDaemon();
 
   int init();
@@ -51,9 +53,11 @@ private:
   ceph::mutex m_lock = ceph::make_mutex("cephfs::mirror::service_daemon");
   Context *m_timer_ctx = nullptr;
   std::map<fs_cluster_id_t, Filesystem> m_filesystems;
+  MgrClient mgrc;
 
   void schedule_update_status();
   void update_status();
+  std::string get_health_metrics();
 };
 
 } // namespace mirror

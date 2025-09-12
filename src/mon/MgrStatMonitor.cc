@@ -408,6 +408,33 @@ bool MgrStatMonitor::prepare_report(MonOpRequestRef op)
   jf.close_section();
   jf.flush(*_dout);
   *_dout << dendl;
+  ////////////
+  /*  JSONFormatter jf(true);
+  jf.open_object_section("service_status");
+  for (auto& [type, service] : pending_service_map_bl.services) {
+    if (ServiceMap::is_normal_ceph_entity(type)) {
+      continue;
+    }
+
+    jf.open_object_section(type.c_str());
+    for (auto& q : service.daemons) {
+      jf.open_object_section(q.first.c_str());
+      DaemonKey key{type, q.first};
+      ceph_assert(daemon_state.exists(key));
+      auto daemon = daemon_state.get(key);
+      std::lock_guard l(daemon->lock);
+      jf.dump_stream("status_stamp") << daemon->service_status_stamp;
+      jf.dump_stream("last_beacon") << daemon->last_service_beacon;
+      jf.open_object_section("status");
+      for (auto& r : daemon->service_status) {
+	jf.dump_string(r.first.c_str(), r.second);
+      }
+      jf.close_section();
+      jf.close_section();
+    }
+    jf.close_section();
+    }*/
+  ////////////
   dout(20) << "pool_availability:\n";
   JSONFormatter jf(true);
   jf.open_object_section("pool_availability");
