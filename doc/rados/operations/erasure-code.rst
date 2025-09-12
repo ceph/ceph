@@ -177,10 +177,10 @@ Erasure Coding with Overwrites
 ------------------------------
 
 By default, erasure-coded pools work only with operations that
-perform full object writes and appends (for example, RGW).
+perform full RADOS object writes, for example, RGW.
 
 Since Luminous, partial writes for an erasure-coded pool may be
-enabled with a per-pool setting. This lets RBD and CephFS store their
+enabled with a per-pool setting. This lets RBD, CephFS, and librados  store
 data in an erasure-coded pool:
 
 .. prompt:: bash $
@@ -189,13 +189,16 @@ data in an erasure-coded pool:
 
 This can be enabled only on a pool residing on BlueStore OSDs, since
 BlueStore's checksumming is used during deep scrubs to detect bitrot
-or other corruption. Using Filestore with EC overwrites is not only
+and other corruption. Using Filestore with EC overwrites is not only
 unsafe, but it also results in lower performance compared to BlueStore.
 Moreover, Filestore is deprecated and any Filestore OSDs in your cluster
 should be migrated to BlueStore.
 
+There is no downside to enabling EC overwrites, so it is best practice to
+routinely do so.
+
 Erasure-coded pools do not support omap, so to use them with RBD and
-CephFS you must instruct them to store their data in an EC pool and
+CephFS you must instruct them and their clients to store their data in an EC pool and
 their metadata in a replicated pool. For RBD, this means using the
 erasure-coded pool as the ``--data-pool`` during image creation:
 
@@ -213,7 +216,8 @@ Erasure Coding Optimizations
 
 Since Tentacle, an erasure-coded pool may have optimizations enabled
 with a per-pool setting. This improves performance for smaller I/Os and
-eliminates padding which can save capacity:
+eliminates padding, which can significantly reduce space amplification
+and wasted capacity:
 
 .. prompt:: bash $
 
