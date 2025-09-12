@@ -557,7 +557,7 @@ auto EC2Engine::get_secret_from_keystone(const DoutPrefixProvider* dpp,
   /* now parse response */
 
   JSONParser parser;
-  if (! parser.parse(token_body_bl.c_str(), token_body_bl.length())) {
+  if (!parser.parse(token_body_bl.c_str(), token_body_bl.length())) {
     ldpp_dout(dpp, 0) << "Keystone credential parse error: malformed json." << dendl;
     return make_pair(boost::none, -EINVAL);
   }
