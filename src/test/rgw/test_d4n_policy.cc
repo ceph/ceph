@@ -6,8 +6,8 @@
 #include "gtest/gtest_prod.h"
 #include "common/ceph_argparse.h"
 #include "common/async/blocked_completion.h"
-#include "rgw_auth_registry.h"
-#include "rgw_cache_driver.h"
+#include "rgw/rgw_auth_registry.h"
+#include "rgw/rgw_cache_driver.h"
 #include "driver/d4n/d4n_policy.h"
 
 #define dout_subsys ceph_subsys_rgw
