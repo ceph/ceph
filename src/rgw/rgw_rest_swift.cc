@@ -811,9 +811,6 @@ static int get_swift_versioning_settings(
 
 int RGWCreateBucket_ObjStore_SWIFT::get_params(optional_yield y)
 {
-  bool has_policy;
-  uint32_t policy_rw_mask = 0;
-
   int r = get_swift_container_settings(s, driver, policy, &has_policy,
 				       &policy_rw_mask, &cors_config, &has_cors);
   if (r < 0) {
