@@ -9,6 +9,7 @@
   Admins can no longer enable the older, deprecated landing page layout by
   adjusting FEATURE_TOGGLE_DASHBOARD.
 
+* CephFS
 >=20.0.0
 
 * RADOS: The lead Monitor and stretch mode status are now displayed by `ceph status`.
