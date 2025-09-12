@@ -144,6 +144,40 @@ To query OSD subsystem status, run the following command:
 
    ceph osd stat
 
+To show the ID, device class, weights, size, and usage of all OSDs in the
+cluster, run the following command:
+
+.. prompt:: bash $
+
+   ceph osd df
+
+The ``ceph osd df`` command appends a summary that includes OSD fullness
+statistics. When a cluster comprises multiple sizes and types of OSD
+media, this summary may be more useful by limiting the scope to a specific
+CRUSH device class by running a command of the following form:
+
+.. prompt:: bash $
+
+   ceph osd df hdd
+   ceph osd df ssd
+   ceph osd df qlc
+
+To limit the display and summary to the OSDs present on a specific host,
+run a command of the following form. Note that this command may be used
+on other CRUSH topology bucket types, for example `rack`:
+
+.. prompt:: bash $
+
+   ceph osd df NAME
+
+To display information for only a specific OSD, in this example osd.1701,
+run a command of the following form:
+
+.. prompt:: bash $
+
+   ceph osd df 1701
+
+
 To write a copy of the most recent OSD map to a file (see :ref:`osdmaptool
 <osdmaptool>`), run the following command:
 
@@ -319,12 +353,14 @@ command:
    ceph osd reweight {osd-num} {weight}
 
 .. note:: Any assigned override reweight value will conflict with the balancer.
-   This means that if the balancer is in use, all override reweight values
-   should be ``1.0000`` in order to avoid suboptimal cluster behavior.
+   This means that when the balancer is in use, all override reweight values
+   must be be reset to ``1.0000`` in order to avoid unbalanced usage and
+   full OSDs. Most clusters with no clients older than the Luminous release
+   should use the pg-upmap balancer instead of legacy reweighting.
 
 A cluster's OSDs can be reweighted in order to maintain balance if some OSDs
 are being disproportionately utilized. Note that override or ``reweight``
-weights have values relative to one another that default to 1.00000; their
+weights have values relative to one another that default to 1.00000. These
 values are not absolute, and these weights must be distinguished from CRUSH
 weights (which reflect the absolute capacity of a bucket, as measured in TiB).
 To reweight OSDs by utilization, run the following command:
@@ -335,7 +371,8 @@ To reweight OSDs by utilization, run the following command:
 
 By default, this command adjusts the override weight of OSDs that have ±20% of
 the average utilization, but you can specify a different percentage in the
-``threshold`` argument. 
+``threshold`` argument. As noted above, most clusters without pre-Luminous
+clients should run the balancer in pg-upmap mode instead.
 
 To limit the increment by which any OSD's reweight is to be changed, use the
 ``max_change`` argument (default: 0.05). To limit the number of OSDs that are
