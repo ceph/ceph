@@ -572,25 +572,21 @@ auto EC2Engine::get_secret_from_keystone(const DoutPrefixProvider* dpp,
 
       int blob_size = blob_string.length();
 
-      // declaring character array
-      char blob_size_char_array[blob_size + 1];
-      strcpy(blob_size_char_array, blob_string.c_str());
-
       JSONParser blob_parser;
-      if (!blob_parser.parse(blob_size_char_array, blob_size)) {
-          ldpp_dout(dpp, 0) << "Keystone credential parse error: malformed 'blob' section in json" << dendl;
-          return make_pair(boost::none, -EINVAL);
+      if (!blob_parser.parse(blob_string.c_str(), blob_string.length())) {
+        ldpp_dout(dpp, 0) << "Keystone credential parse error: malformed 'blob' section in json" << dendl;
+        return make_pair(boost::none, -EINVAL);
       }
 
       JSONObjIter json_blob_iterator = blob_parser.find_first("secret");
-        
-      if (!json_blob_iterator.end()) {
-          secret_string = (*json_blob_iterator)->get_data();
 
-          ldpp_dout(dpp, 10) << "Loaded secret for access key [" << access_key_id << "] with credential ID [" << access_key_actual_id << "]." << dendl;
+      if (!json_blob_iterator.end()) {
+        secret_string = (*json_blob_iterator)->get_data();
+
+        ldpp_dout(dpp, 10) << "Loaded secret for access key [" << access_key_id << "] with credential ID [" << access_key_actual_id << "]." << dendl;
       } else {
-          ldpp_dout(dpp, 0) << "Keystone credential secret not found in the response from Keystone server blob [" << blob_string << "] ." << dendl;
-          return make_pair(boost::none, -EINVAL);
+        ldpp_dout(dpp, 0) << "Keystone credential secret not found in the response from Keystone server blob [" << blob_string << "] ." << dendl;
+        return make_pair(boost::none, -EINVAL);
       }
     } else {
       ldpp_dout(dpp, 0) << "Keystone credential not present in return from server" << dendl;
