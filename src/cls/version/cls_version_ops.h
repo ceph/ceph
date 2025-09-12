@@ -30,8 +30,8 @@ struct cls_version_set_op {
 
   static std::list<cls_version_set_op> generate_test_instances() {
     std::list<cls_version_set_op> o;
-    o.push_back(cls_version_set_op{});
-    o.push_back(cls_version_set_op{});
+    o.emplace_back();
+    o.emplace_back();
     o.back().objv.ver = 123;
     o.back().objv.tag = "foo";
     return o;
@@ -66,8 +66,8 @@ struct cls_version_inc_op {
 
   static std::list<cls_version_inc_op> generate_test_instances() {
     std::list<cls_version_inc_op> o;
-    o.push_back(cls_version_inc_op{});
-    o.push_back(cls_version_inc_op{});
+    o.emplace_back();
+    o.emplace_back();
     o.back().objv.ver = 123;
     o.back().objv.tag = "foo";
     o.back().conds.push_back(obj_version_cond());
@@ -106,8 +106,8 @@ struct cls_version_check_op {
 
   static std::list<cls_version_check_op> generate_test_instances() {
     std::list<cls_version_check_op> o;
-    o.push_back(cls_version_check_op{});
-    o.push_back(cls_version_check_op{});
+    o.emplace_back();
+    o.emplace_back();
     o.back().objv.ver = 123;
     o.back().objv.tag = "foo";
     o.back().conds.push_back(obj_version_cond());
@@ -142,8 +142,8 @@ struct cls_version_read_ret {
 
   static std::list<cls_version_read_ret> generate_test_instances() {
     std::list<cls_version_read_ret> o;
-    o.push_back(cls_version_read_ret{});
-    o.push_back(cls_version_read_ret{});
+    o.emplace_back();
+    o.emplace_back();
     o.back().objv.ver = 123;
     o.back().objv.tag = "foo";
     return o;

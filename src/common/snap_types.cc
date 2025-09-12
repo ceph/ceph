@@ -45,7 +45,7 @@ void SnapRealmInfo::dump(ceph::Formatter *f) const
 std::list<SnapRealmInfo> SnapRealmInfo::generate_test_instances()
 {
   std::list<SnapRealmInfo> o;
-  o.push_back(SnapRealmInfo{});
+  o.emplace_back();
   o.push_back(SnapRealmInfo(1, 10, 10, 0));
   o.push_back(SnapRealmInfo(1, 10, 10, 0));
   o.back().my_snaps.push_back(10);
@@ -88,7 +88,7 @@ void SnapRealmInfoNew::dump(ceph::Formatter *f) const
 std::list<SnapRealmInfoNew> SnapRealmInfoNew::generate_test_instances()
 {
   std::list<SnapRealmInfoNew> o;
-  o.push_back(SnapRealmInfoNew{});
+  o.emplace_back();
   o.push_back(SnapRealmInfoNew(SnapRealmInfo(1, 10, 10, 0), utime_t(), 0));
   o.push_back(SnapRealmInfoNew(SnapRealmInfo(1, 10, 10, 0), utime_t(), 1));
   o.back().info.my_snaps.push_back(10);
@@ -145,7 +145,7 @@ void SnapContext::dump(ceph::Formatter *f) const
 std::list<SnapContext> SnapContext::generate_test_instances()
 {
   std::list<SnapContext> o;
-  o.push_back(SnapContext{});
+  o.emplace_back();
   std::vector<snapid_t> v;
   o.push_back(SnapContext(10, v));
   v.push_back(18);

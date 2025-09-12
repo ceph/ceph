@@ -43,7 +43,7 @@ struct SequencerPosition {
   }
   static std::list<SequencerPosition> generate_test_instances() {
     std::list<SequencerPosition> o;
-    o.push_back(SequencerPosition{});
+    o.emplace_back();
     o.push_back(SequencerPosition(1, 2, 3));
     o.push_back(SequencerPosition(4, 5, 6));
     return o;

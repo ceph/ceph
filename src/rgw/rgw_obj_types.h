@@ -90,8 +90,8 @@ struct rgw_obj_index_key { // cls_rgw_obj_key now aliases this type
   void decode_json(JSONObj *obj);
   static std::list<rgw_obj_index_key> generate_test_instances() {
     std::list<rgw_obj_index_key> ls;
-    ls.push_back(rgw_obj_index_key{});
-    ls.push_back(rgw_obj_index_key{});
+    ls.emplace_back();
+    ls.emplace_back();
     ls.back().name = "name";
     ls.back().instance = "instance";
     return ls;

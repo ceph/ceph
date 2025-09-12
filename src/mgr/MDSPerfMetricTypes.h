@@ -415,8 +415,8 @@ struct MDSPerfMetricReport {
   }
   static std::list<MDSPerfMetricReport> generate_test_instances() {
     std::list<MDSPerfMetricReport> o;
-    o.push_back(MDSPerfMetricReport{});
-    o.push_back(MDSPerfMetricReport{});
+    o.emplace_back();
+    o.emplace_back();
     o.back().reports.emplace(MDSPerfMetricQuery(), MDSPerfMetrics());
     o.back().rank_metrics_delayed.insert(1);
     return o;

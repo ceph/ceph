@@ -127,7 +127,7 @@ void resource_metadata::dump(ceph::Formatter* f) const
 std::list<resource_metadata> resource_metadata::generate_test_instances()
 {
   std::list<resource_metadata> o;
-  o.push_back(resource_metadata{});
+  o.emplace_back();
   resource_metadata m;
   m.group_id = "id";
   o.push_back(std::move(m));

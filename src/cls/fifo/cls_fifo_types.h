@@ -122,8 +122,8 @@ struct data_params {
   }
   static std::list<data_params> generate_test_instances() {
     std::list<data_params> o;
-    o.push_back(data_params{});
-    o.push_back(data_params{});
+    o.emplace_back();
+    o.emplace_back();
     o.back().max_part_size = 1;
     o.back().max_entry_size = 2;
     o.back().full_size_threshold = 3;
@@ -444,8 +444,8 @@ struct info {
   }
   static std::list<info> generate_test_instances() {
     std::list<info> o;
-    o.push_back(info{});
-    o.push_back(info{});
+    o.emplace_back();
+    o.emplace_back();
     o.back().id = "myid";
     o.back().version = objv();
     o.back().oid_prefix = "myprefix";

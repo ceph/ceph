@@ -110,8 +110,8 @@ public:
     static std::list<ModuleOption> generate_test_instances()
     {
       std::list<ModuleOption> ls;
-      ls.push_back(ModuleOption{});
-      ls.push_back(ModuleOption{});
+      ls.emplace_back();
+      ls.emplace_back();
       ls.back().name = "name";
       ls.back().type = Option::TYPE_STR;
       ls.back().level = Option::LEVEL_ADVANCED;
@@ -180,8 +180,8 @@ public:
     static std::list<ModuleInfo> generate_test_instances()
     {
       std::list<ModuleInfo> ls;
-      ls.push_back(ModuleInfo{});
-      ls.push_back(ModuleInfo{});
+      ls.emplace_back();
+      ls.emplace_back();
       ls.back().name = "name";
       ls.back().can_run = true;
       ls.back().error_string = "error_string";
@@ -642,7 +642,7 @@ public:
   static std::list<MgrMap> generate_test_instances()
   {
     std::list<MgrMap> l;
-    l.push_back(MgrMap{});
+    l.emplace_back();
     return l;
   }
 

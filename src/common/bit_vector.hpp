@@ -619,7 +619,7 @@ template <uint8_t _b>
 auto BitVector<_b>::generate_test_instances() -> std::list<BitVector> {
   std::list<BitVector> o;
 
-  o.push_back(BitVector{});
+  o.emplace_back();
 
   BitVector b;
   const uint64_t radix = 1 << b.BIT_COUNT;
