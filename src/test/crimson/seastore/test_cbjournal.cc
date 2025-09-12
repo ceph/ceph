@@ -198,7 +198,10 @@ struct cbjournal_test_t : public seastar_test_suite_t, JournalTrimmer
   }
 
   seastar::future<> tear_down_fut() final {
-    return close();
+    return close(
+    ).then([this] {
+      cbj.reset();
+    });
   }
 
   extent_t generate_extent(size_t blocks) {
