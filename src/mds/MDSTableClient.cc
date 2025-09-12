@@ -69,7 +69,9 @@ void MDSTableClient::handle_request(const cref_t<MMDSTableRequest> &m)
     break;
 
   case TABLESERVER_OP_NOTIFY_PREP:
-    ceph_assert(g_conf()->mds_kill_mdstable_at != 9);
+    //ceph_assert(g_conf()->mds_kill_mdstable_at != 9);
+    if (g_conf()->mds_kill_mdstable_at == 9)
+      _exit(120);
     handle_notify_prep(m);
     break;
     
@@ -77,7 +79,9 @@ void MDSTableClient::handle_request(const cref_t<MMDSTableRequest> &m)
     if (pending_prepare.count(reqid)) {
       dout(10) << "got agree on " << reqid << " atid " << tid << dendl;
 
-      ceph_assert(g_conf()->mds_kill_mdstable_at != 3);
+      //ceph_assert(g_conf()->mds_kill_mdstable_at != 3);
+      if (g_conf()->mds_kill_mdstable_at == 3)
+        _exit(120);
 
       MDSContext *onfinish = pending_prepare[reqid].onfinish;
       *pending_prepare[reqid].ptid = tid;
@@ -114,7 +118,9 @@ void MDSTableClient::handle_request(const cref_t<MMDSTableRequest> &m)
 	pending_commit[tid]->pending_commit_tids[table].count(tid)) {
       dout(10) << "got ack on tid " << tid << ", logging" << dendl;
       
-      ceph_assert(g_conf()->mds_kill_mdstable_at != 7);
+      //ceph_assert(g_conf()->mds_kill_mdstable_at != 7);
+      if (g_conf()->mds_kill_mdstable_at == 7)
+        _exit(120);
       
       // remove from committing list
       pending_commit[tid]->pending_commit_tids[table].erase(tid);
@@ -196,7 +202,9 @@ void MDSTableClient::commit(version_t tid, LogSegmentRef const& ls)
 
   notify_commit(tid);
 
-  ceph_assert(g_conf()->mds_kill_mdstable_at != 4);
+  //ceph_assert(g_conf()->mds_kill_mdstable_at != 4);
+  if (g_conf()->mds_kill_mdstable_at == 4)
+    _exit(120);
 
   if (server_ready) {
     // send message
