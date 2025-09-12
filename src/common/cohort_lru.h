@@ -195,6 +195,20 @@ namespace cohort {
 	  }
 
       ~LRU() { delete[] qlane; }
+      
+      /* clear_all_objects is used only during destruction to unlink all objects from LRU
+       * This method is NOT part of normal LRU operations and should only be
+       * called when the LRU is being destroyed and no other threads are accessing it.
+       * It does not affect normal LRU performance as it's not in the hot path. */
+      void clear_all_objects() {
+	for (int lane_ix = 0; lane_ix < n_lanes; ++lane_ix) {
+	  Lane& lane = qlane[lane_ix];
+	  std::lock_guard lock_guard(lane.lock);
+	  lane.q.clear();
+	  /* Note: We don't delete the objects here - the caller is responsible
+	   * for proper cleanup based on the specific object type */
+	}
+      }
 
       bool ref(Object* o, uint32_t flags) {
 	++(o->lru_refcnt);
