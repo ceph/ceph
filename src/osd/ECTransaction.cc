@@ -38,7 +38,7 @@ void debug(const hobject_t &oid, const std::string &str,
            const ECUtil::shard_extent_map_t &map, DoutPrefixProvider *dpp) {
   ldpp_dout(dpp, 20)
     << " generate_transactions: " << "oid: " << oid << " " << str << " " << map << dendl;
-  ldpp_dout(dpp, 20)
+  ldpp_dout(dpp, 30)
     << "EC_DEBUG_BUFFERS: " << map.debug_string(2048, 0) << dendl;
 }
 
@@ -213,6 +213,10 @@ ECTransaction::WritePlanObj::WritePlanObj(
 
         if (pdw_write_mode != 0) {
           do_parity_delta_write = (pdw_write_mode == 2);
+        } else if (pdw_read_shards.size() >= sinfo.get_k()) {
+          // Even if recovery required for a convention RMW, PDW is not more
+          // efficient.
+          do_parity_delta_write = false;
         } else if (!shard_id_set::difference(pdw_read_shards, readable_shards).empty()) {
           // Some kind of reconstruct would be needed for PDW, so don't bother.
           do_parity_delta_write = false;
@@ -588,7 +592,7 @@ ECTransaction::Generate::Generate(PGTransaction &t,
     shard_written(shard_id_t(0));
   }
 
-  written_and_present_shards();
+  written_shards();
 
   if (!op.attr_updates.empty()) {
     attr_updates();
@@ -855,7 +859,7 @@ void ECTransaction::Generate::appends_and_clone_ranges() {
   }
 }
 
-void ECTransaction::Generate::written_and_present_shards() {
+void ECTransaction::Generate::written_shards() {
   if (entry) {
     if (!rollback_extents.empty()) {
       entry->mod_desc.rollback_extents(
@@ -868,14 +872,6 @@ void ECTransaction::Generate::written_and_present_shards() {
       // More efficient to encode an empty set for all shards
       entry->written_shards.clear();
       written_shards_final = true;
-    }
-    // Calculate set of present shards
-    for (auto &&[shard, t]: transactions) {
-      entry->present_shards.insert(shard);
-    }
-    if (entry->present_shards.size() == sinfo.get_k_plus_m()) {
-      // More efficient to encode an empty set for all shards
-      entry->present_shards.clear();
     }
 
     // Update shard_versions in object_info to record which shards are being
@@ -932,7 +928,6 @@ void ECTransaction::Generate::written_and_present_shards() {
       }
       ldpp_dout(dpp, 20) << __func__ << " shard_info: oid=" << oid
                          << " version=" << entry->version
-                         << " present=" << entry->present_shards
                          << " written=" << entry->written_shards
                          << " shard_versions=" << oi.shard_versions << dendl;
     }
