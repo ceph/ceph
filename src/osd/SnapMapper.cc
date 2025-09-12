@@ -297,7 +297,7 @@ std::pair<snapid_t, hobject_t> SnapMapper::from_raw(
 
 bool SnapMapper::is_mapping(const string &to_test)
 {
-  return to_test.substr(0, MAPPING_PREFIX.size()) == MAPPING_PREFIX;
+  return to_test.compare(0, MAPPING_PREFIX.size(), MAPPING_PREFIX) == 0;
 }
 
 string SnapMapper::to_object_key(const hobject_t &hoid) const
@@ -641,6 +641,7 @@ vector<hobject_t> SnapMapper::get_objects_by_prefixes(
   unsigned max)
 {
   vector<hobject_t> out;
+  out.reserve(max);
 
   /// maintain the prefix_itr between calls to avoid searching depleted prefixes
   for ( ; prefix_itr != prefixes.end(); prefix_itr++) {
@@ -658,11 +659,10 @@ vector<hobject_t> SnapMapper::get_objects_by_prefixes(
 
       ceph_assert(is_mapping(next.first));
 
-      if (auto next_prefix = next.first.substr(0, prefix.size());
-          next_prefix != prefix) {
+      if (next.first.compare(0, prefix.size(), prefix) != 0) {
 	// TBD: we access the DB twice for the first object of each iterator...
-	dout(20) << fmt::format("{}: breaking, prefix expected {} got {}",
-	                        __func__, prefix, next_prefix)
+	dout(20) << fmt::format("{}: breaking, prefix expected {} got key {} with a different prefix",
+	                        __func__, prefix, next.first)
 	         << dendl;
 	break; // Done with this prefix
       }
@@ -671,7 +671,7 @@ vector<hobject_t> SnapMapper::get_objects_by_prefixes(
       pair<snapid_t, hobject_t> next_decoded(from_raw(next));
       ceph_assert(next_decoded.first == snap);
       ceph_assert(check(next_decoded.second));
-      out.push_back(next_decoded.second);
+      out.emplace_back(std::move(next_decoded.second));
 
       pos = next.first;
     }
