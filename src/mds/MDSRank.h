@@ -26,6 +26,8 @@
 
 #include "include/common_fwd.h"
 
+#include "msg/Connection.h" // for ConnectionRef
+
 #include "DamageTable.h"
 #include "MDSMap.h"
 #include "SessionMap.h"
