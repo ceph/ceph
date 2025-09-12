@@ -1,0 +1,15 @@
+
+
+* right now, functions that take a commit parameter generally only commit on success; should we also commit on failure? 
+
+* I started to implement vivification
+
+
+* TLI improvements:
+    - if you pass a txn, use that txn
+    - if passed dbh, create txn
+
+    - default commit mode (reads: no; mutations: yes)
+
+* OOP helper (or lambda helper) to bind dbh, we don't need that param, either.
+
