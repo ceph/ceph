@@ -570,8 +570,6 @@ auto EC2Engine::get_secret_from_keystone(const DoutPrefixProvider* dpp,
       std::string blob_string;
       JSONDecoder::decode_json("blob", blob_string, *credential_iter, true);
 
-      int blob_size = blob_string.length();
-
       JSONParser blob_parser;
       if (!blob_parser.parse(blob_string.c_str(), blob_string.length())) {
         ldpp_dout(dpp, 0) << "Keystone credential parse error: malformed 'blob' section in json" << dendl;
