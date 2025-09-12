@@ -262,19 +262,22 @@ endif()
 if(WITH_RADOSGW_DAOS)
   list(APPEND librgw_common_srcs driver/motr/rgw_sal_daos.cc)
 endif()
+
 if(WITH_RADOSGW_POSIX)
   #add_subdirectory(driver/posix)
   find_package(LMDB REQUIRED)
   add_compile_definitions(LMDB_SAFE_NO_CPP_UTILITIES)
   list(APPEND librgw_common_srcs
-	      driver/posix/rgw_sal_posix.cc
 	      driver/posix/lmdb-safe.cc
-	      driver/posix/posixDB.cc
-	      driver/posix/notify.cpp)
+	      driver/posix/notify.cpp
+          driver/posix/posixDB.cc
+	      driver/posix/rgw_sal_posix.cc)
 endif()
+
 if(WITH_JAEGER)
   list(APPEND librgw_common_srcs rgw_tracer.cc)
 endif()
+
 if(WITH_RADOSGW_ARROW_FLIGHT)
   # NOTE: eventually don't want this in common but just in radosgw daemon
   # list(APPEND radosgw_srcs rgw_flight.cc rgw_flight_frontend.cc)
@@ -390,10 +393,6 @@ if(WITH_RADOSGW_RADOS)
 endif()
 
 if(WITH_RADOSGW_DBSTORE)
-  target_link_libraries(rgw_common PRIVATE global dbstore)
-endif()
-
-if(WITH_RADOSGW_POSIX)
   target_link_libraries(rgw_common PRIVATE global dbstore)
 endif()
 
@@ -516,6 +515,7 @@ set(radosgw_srcs
   rgw_main.cc)
 
 add_executable(radosgw ${radosgw_srcs})
+
 if(WITH_RADOSGW_ARROW_FLIGHT)
   # target_compile_definitions(radosgw PUBLIC WITH_ARROW_FLIGHT)
   target_compile_definitions(rgw_common PUBLIC WITH_ARROW_FLIGHT)
@@ -537,6 +537,46 @@ target_link_libraries(radosgw PRIVATE
   legacy-option-headers
   ${rgw_libs}
   ${ALLOC_LIBS})
+
+if(WITH_RADOSGW_FDB)
+ message("FoundationDB support is active (experimental)")
+
+ add_library(rgw_fdb INTERFACE)
+
+ target_link_libraries(rgw_fdb INTERFACE
+  -lfdb_c
+  -lm
+  -lrt
+ )
+
+ target_compile_options(rgw_fdb INTERFACE
+   -pthread)
+
+#JFW: this is where the FDB client library packages install
+#fdb_c headers-- we need to find a smarter way to handle this
+#end of it before libfdb can be non-experimental:
+ target_include_directories(rgw_fdb INTERFACE
+  /usr/include/foundationdb)
+
+ target_include_directories(rgw_common PRIVATE
+  /usr/include/foundationdb
+  "${CMAKE_SOURCE_DIR}/src/rgw")
+
+ target_link_libraries(rgw_common PRIVATE
+  rgw_fdb)
+
+ target_include_directories(radosgw PRIVATE
+  /usr/include/foundationdb)
+
+ # Use the zpp_bits back-end for serialization:
+ add_library(zpp_bits INTERFACE)
+
+ # JFW: there must be a nicer way to refer to this path (or ask it to be installed somewhere?):
+ target_include_directories(zpp_bits INTERFACE "${CMAKE_BINARY_DIR}/_deps/zpp_bits-src/")
+
+ target_link_libraries(rgw_fdb INTERFACE zpp_bits)
+
+endif(WITH_RADOSGW_FDB)
 
 install(TARGETS radosgw DESTINATION bin)
 
