@@ -3132,11 +3132,11 @@ test_multiple_snapshot_sync_while_restarting_secondary()
   mirror_group_snapshot "${primary_cluster}" "${pool}/${group0}" group_snap_id
 
   # partial removal of snapshot
-  map_image "${primary_cluster}" "${pool}/${image_prefix}0" -t nbd --exclusive
+  map_image "${primary_cluster}" "${pool}/${image_prefix}0" --exclusive
 
   mirror_group_snapshot "${primary_cluster}" "${pool}/${group0}" group_snap_id
 
-  unmap_image "${primary_cluster}" "${pool}/${image_prefix}0" -t nbd --exclusive
+  unmap_image "${primary_cluster}" "${pool}/${image_prefix}0" --exclusive
 
   mirror_group_snapshot "${primary_cluster}" "${pool}/${group0}" group_snap_id
   mirror_group_snapshot "${primary_cluster}" "${pool}/${group0}" group_snap_id
