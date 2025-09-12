@@ -149,6 +149,10 @@ public:
   ceph::logging::Log *_log;
 #ifdef HAVE_BREAKPAD
   std::unique_ptr<google_breakpad::ExceptionHandler> _ex_handler;
+  static_assert(sizeof(std::unique_ptr<google_breakpad::ExceptionHandler>) == sizeof(std::unique_ptr<char>));
+#else
+  // Reserve the space for the case when part of ceph is compiled with and other without HAVE_BREAKPAD
+  [[maybe_unused]] std::unique_ptr<char> _ex_handler;
 #endif
 
   /* init ceph::crypto */
