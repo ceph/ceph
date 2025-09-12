@@ -138,8 +138,8 @@ void Capability::revoke_info::decode(ceph::buffer::list::const_iterator& bl)
 
 void Capability::revoke_info::dump(ceph::Formatter *f) const
 {
-  f->dump_unsigned("before", before);
-  f->dump_unsigned("seq", seq);
+  f->dump_unsigned("prior_pending", before);
+  f->dump_unsigned("last_sent", seq);
   f->dump_unsigned("last_issue", last_issue);
 }
 
@@ -309,17 +309,24 @@ void Capability::dump(ceph::Formatter *f) const
   if (inode)
     f->dump_stream("ino") << inode->ino();
   f->dump_unsigned("last_sent", last_sent);
+  f->dump_unsigned("last_issue", last_issue);
   f->dump_stream("last_issue_stamp") << last_issue_stamp;
   f->dump_stream("wanted") << ccap_string(_wanted);
   f->dump_stream("pending") << ccap_string(_pending);
+  f->dump_stream("issued") << ccap_string(_issued);
 
-  f->open_array_section("revokes");
-  for (const auto &r : _revokes) {
-    f->open_object_section("revoke");
-    r.dump(f);
+  if (int _revoking = revoking()) {
+    f->dump_unsigned("revoking", _revoking);
+    f->dump_stream("last_revoke_stamp") << last_revoke_stamp;
+    // dump revocation list (in-flight revokes)
+    f->open_array_section("revokes");
+    for (const auto &r : _revokes) {
+      f->open_object_section("revoke");
+      r.dump(f);
+      f->close_section();
+    }
     f->close_section();
   }
-  f->close_section();
 }
 
 std::list<Capability> Capability::generate_test_instances()
