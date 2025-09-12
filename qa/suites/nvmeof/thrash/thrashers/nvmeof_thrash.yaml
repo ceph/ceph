@@ -14,6 +14,8 @@ overrides:
       - is unavailable
       - is in error state
       - failed cephadm daemon
+      - CEPHADM_STRAY_DAEMON
+      - CEPHADM_DAEMON_PLACE_FAIL
 
 tasks:
 - nvmeof.thrash:
