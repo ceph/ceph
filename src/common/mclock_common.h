@@ -16,13 +16,18 @@
 
 #pragma once
 #include "config.h"
-#include "ceph_context.h"
 #include "dmclock/src/dmclock_server.h"
 #ifndef WITH_CRIMSON
- #include "mon/MonClient.h"
+  class MonClient;
 #else
  #include "crimson/mon/MonClient.h"
 #endif
+
+namespace TOPNSPC::common {
+  class CephContext;
+}
+
+using TOPNSPC::common::CephContext;
 
 // scheduler class for classic
 enum class op_scheduler_class : uint8_t {
