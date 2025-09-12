@@ -74,11 +74,15 @@ private:
 
   PerfCounters *m_perf_counters;
   std::map<std::pair<entity_inst_t, mds_rank_t>, PerfCounters*> client_perf_counters;
+  uint64_t subv_window_sec;
+  std::unordered_map<std::string, SlidingWindowTracker<SubvolumeMetric>> subvolume_aggregated_metrics;
+  std::map<std::string, PerfCounters*> subvolume_perf_counters;
 
   void handle_mds_metrics(const cref_t<MMDSMetrics> &m);
 
   void refresh_metrics_for_rank(const entity_inst_t &client, mds_rank_t rank,
                                 const Metrics &metrics);
+  void refresh_subvolume_metrics_for_rank(mds_rank_t rank, const std::vector<SubvolumeMetric> &metrics);
   void remove_metrics_for_rank(const entity_inst_t &client, mds_rank_t rank, bool remove);
 
   void cull_metrics_for_rank(mds_rank_t rank);
