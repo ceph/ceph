@@ -17,9 +17,10 @@ namespace crimson::os::seastore::journal {
 CircularBoundedJournal::CircularBoundedJournal(
     JournalTrimmer &trimmer,
     RBMDevice* device,
-    const std::string &path)
+    const std::string &path,
+    int stream_id)
   : trimmer(trimmer), path(path),
-  cjs(device),
+  cjs(device, stream_id),
   record_submitter(crimson::common::get_conf<uint64_t>(
       "seastore_journal_iodepth_limit"),
     crimson::common::get_conf<uint64_t>(
