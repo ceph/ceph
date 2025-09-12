@@ -1218,7 +1218,11 @@ private:
     // and linking the absent child
     if (v.has_child()) {
       return std::move(v.get_child_fut()
-      ).si_then([type](auto ext) {
+      ).si_then([this, &t](auto extent) {
+	auto len = extent->get_length();
+	return cache->read_extent_maybe_partial(
+	  t, std::move(extent), 0, len);
+      }).si_then([type](auto ext) {
         ceph_assert(ext->get_type() == type);
         return ext;
       });
