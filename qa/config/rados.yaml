@@ -9,5 +9,6 @@ overrides:
         bluestore zero block detection: true
         osd mclock override recovery settings: true
         osd mclock profile: high_recovery_ops
+        osd mclock skip benchmark: true
       mon:
         mon scrub interval: 300
