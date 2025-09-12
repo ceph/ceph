@@ -251,11 +251,13 @@ int bucket_deletion_cleanup(const DoutPrefixProvider* dpp,
 // in addition:
 // any pending log objects should be comitted to the log bucket
 // and the log bucket should be updated to remove the bucket as a source
+// if "last_committed" is not null, it will be set to the name of the last committed object
 int source_bucket_cleanup(const DoutPrefixProvider* dpp,
                                    sal::Driver* driver,
                                    sal::Bucket* bucket,
                                    bool remove_attr,
-                                   optional_yield y);
+                                   optional_yield y,
+                                   std::string* last_committed);
 
 // verify that the target bucket has the correct policy to allow the source bucket to log to it
 // note that this function adds entries to the request state environment
