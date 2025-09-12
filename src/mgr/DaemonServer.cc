@@ -2560,14 +2560,27 @@ bool DaemonServer::_handle_command(
     return true;
   }
 
+  // Validate that the module is enabled
+  auto& py_handler_name = py_command.module_name;
+  PyModuleRef module = py_modules.get_module(py_handler_name);
+  ceph_assert(module);
+  if (!module->is_enabled()) {
+    ss << "Module '" << py_handler_name << "' is not enabled (required by "
+          "command '" << prefix << "'): use `ceph mgr module enable "
+          << py_handler_name << "` to enable it";
+    dout(4) << ss.str() << dendl;
+    cmdctx->reply(-EOPNOTSUPP, ss);
+    return true;
+  }
+
   // Validate that the module is active
   auto& mod_name = py_command.module_name;
   if (!py_modules.is_module_active(mod_name)) {
-    ss << "Module '" << mod_name << "' is not enabled/loaded (required by "
-          "command '" << prefix << "'): use `ceph mgr module enable "
-          << mod_name << "` to enable it";
+    ss << "Module '" << mod_name << "' did not initialize in time (required by "
+          "command '" << prefix << "'): see https://docs.ceph.com/en/latest/rados/operations/health-checks/#mgr-module-error "
+	  "for troubleshooting tips.";
     dout(4) << ss.str() << dendl;
-    cmdctx->reply(-EOPNOTSUPP, ss);
+    cmdctx->reply(-ETIMEDOUT, ss);
     return true;
   }
 
@@ -2576,24 +2589,11 @@ bool DaemonServer::_handle_command(
   dout(10) << "passing through command '" << prefix << "' size " << cmdctx->cmdmap.size() << dendl;
   Finisher& mod_finisher = py_modules.get_active_module_finisher(mod_name);
 
-  mod_finisher.queue(new LambdaContext([this, cmdctx, session, py_command, prefix, op]
+  mod_finisher.queue(new LambdaContext([this, cmdctx, session, py_command, prefix, op, py_handler_name, module]
                                        (int r_) mutable {
     std::stringstream ss;
 
     dout(10) << "dispatching command '" << prefix << "' size " << cmdctx->cmdmap.size() << dendl;
-
-    // Validate that the module is enabled
-    auto& py_handler_name = py_command.module_name;
-    PyModuleRef module = py_modules.get_module(py_handler_name);
-    ceph_assert(module);
-    if (!module->is_enabled()) {
-      ss << "Module '" << py_handler_name << "' is not enabled (required by "
-            "command '" << prefix << "'): use `ceph mgr module enable "
-            << py_handler_name << "` to enable it";
-      dout(4) << ss.str() << dendl;
-      cmdctx->reply(-EOPNOTSUPP, ss);
-      return;
-    }
 
     // Hack: allow the self-test method to run on unhealthy modules.
     // Fix this in future by creating a special path for self test rather
