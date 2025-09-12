@@ -6,6 +6,7 @@
 
 #include "rgw_sync_module.h"
 #include "rgw_zone.h"
+#include "include/container_ios.h"
 
 #define dout_subsys ceph_subsys_rgw
 

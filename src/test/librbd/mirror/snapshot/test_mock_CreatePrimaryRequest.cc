@@ -1,6 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include "include/encoding_vector.h"
 #include "include/stringify.h"
 #include "test/librbd/test_mock_fixture.h"
 #include "test/librbd/test_support.h"

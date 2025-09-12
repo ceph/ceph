@@ -22,6 +22,7 @@
 #include <string>
 
 #include "common/config.h"
+#include "include/byte_u_t.h"
 #include "include/ceph_features.h"
 
 #include "mon/MonMap.h"
@@ -35,6 +36,7 @@
 
 #include "common/ceph_argparse.h"
 #include "common/pick_address.h"
+#include "common/JSONFormatter.h"
 #include "common/Throttle.h"
 #include "common/Timer.h"
 #include "common/errno.h"

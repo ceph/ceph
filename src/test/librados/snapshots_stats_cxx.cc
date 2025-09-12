@@ -30,15 +30,14 @@ protected:
         "\"value\": \"off\""
       "}";
     std::cout << "Setting pg_autoscaler to 'off'" << std::endl;
-    bufferlist inbl;
     bufferlist outbl;
-    ASSERT_EQ(0, s_cluster.mon_command(cmd, inbl, &outbl, NULL));
+    ASSERT_EQ(0, s_cluster.mon_command(std::move(cmd), {},  &outbl, NULL));
 
     // disable scrubs for the test
     cmd = "{\"prefix\": \"osd set\",\"key\":\"noscrub\"}";
-    ASSERT_EQ(0, s_cluster.mon_command(cmd, inbl, &outbl, NULL));
+    ASSERT_EQ(0, s_cluster.mon_command(std::move(cmd), {},  &outbl, NULL));
     cmd = "{\"prefix\": \"osd set\",\"key\":\"nodeep-scrub\"}";
-    ASSERT_EQ(0, s_cluster.mon_command(cmd, inbl, &outbl, NULL));
+    ASSERT_EQ(0, s_cluster.mon_command(std::move(cmd), {},  &outbl, NULL));
 
     RadosTestPP::SetUp();
   }
@@ -53,15 +52,14 @@ protected:
         "\"value\": \"on\""
       "}";
     std::cout << "Setting pg_autoscaler to 'on'" << std::endl;
-    bufferlist inbl;
     bufferlist outbl;
-    ASSERT_EQ(0, s_cluster.mon_command(cmd, inbl, &outbl, NULL));
+    ASSERT_EQ(0, s_cluster.mon_command(std::move(cmd), {},  &outbl, NULL));
 
     // re-enable scrubs
     cmd = "{\"prefix\": \"osd unset\",\"key\":\"noscrub\"}";
-    ASSERT_EQ(0, s_cluster.mon_command(cmd, inbl, &outbl, NULL));
+    ASSERT_EQ(0, s_cluster.mon_command(std::move(cmd), {},  &outbl, NULL));
     cmd = string("{\"prefix\": \"osd unset\",\"key\":\"nodeep-scrub\"}");
-    ASSERT_EQ(0, s_cluster.mon_command(cmd, inbl, &outbl, NULL));
+    ASSERT_EQ(0, s_cluster.mon_command(std::move(cmd), {},  &outbl, NULL));
 
     RadosTestPP::TearDown();
   }
@@ -82,15 +80,14 @@ protected:
         "\"value\": \"off\""
       "}";
     std::cout << "Setting pg_autoscaler to 'off'" << std::endl;
-    bufferlist inbl;
     bufferlist outbl;
-    ASSERT_EQ(0, s_cluster.mon_command(cmd, inbl, &outbl, NULL));
+    ASSERT_EQ(0, s_cluster.mon_command(std::move(cmd), {},  &outbl, NULL));
 
     // disable scrubs for the test
     cmd = string("{\"prefix\": \"osd set\",\"key\":\"noscrub\"}");
-    ASSERT_EQ(0, s_cluster.mon_command(cmd, inbl, &outbl, NULL));
+    ASSERT_EQ(0, s_cluster.mon_command(std::move(cmd), {},  &outbl, NULL));
     cmd = string("{\"prefix\": \"osd set\",\"key\":\"nodeep-scrub\"}");
-    ASSERT_EQ(0, s_cluster.mon_command(cmd, inbl, &outbl, NULL));
+    ASSERT_EQ(0, s_cluster.mon_command(std::move(cmd), {},  &outbl, NULL));
 
     RadosTestECPP::SetUp();
   }
@@ -105,15 +102,14 @@ protected:
         "\"value\": \"on\""
       "}";
     std::cout << "Setting pg_autoscaler to 'on'" << std::endl;
-    bufferlist inbl;
     bufferlist outbl;
-    ASSERT_EQ(0, s_cluster.mon_command(cmd, inbl, &outbl, NULL));
+    ASSERT_EQ(0, s_cluster.mon_command(std::move(cmd), {},  &outbl, NULL));
 
     // re-enable scrubs
     cmd = string("{\"prefix\": \"osd unset\",\"key\":\"noscrub\"}");
-    ASSERT_EQ(0, s_cluster.mon_command(cmd, inbl, &outbl, NULL));
+    ASSERT_EQ(0, s_cluster.mon_command(std::move(cmd), {},  &outbl, NULL));
     cmd = string("{\"prefix\": \"osd unset\",\"key\":\"nodeep-scrub\"}");
-    ASSERT_EQ(0, s_cluster.mon_command(cmd, inbl, &outbl, NULL));
+    ASSERT_EQ(0, s_cluster.mon_command(std::move(cmd), {},  &outbl, NULL));
 
     RadosTestECPP::TearDown();
   }
@@ -207,9 +203,8 @@ TEST_F(LibRadosSnapshotStatsSelfManagedPP, SnaptrimStatsPP) {
   int tries = 0;
   do {
     string cmd = string("{\"prefix\": \"pg dump\",\"format\":\"json\"}");
-    bufferlist inbl;
     bufferlist outbl;
-    ASSERT_EQ(0, cluster.mon_command(cmd, inbl, &outbl, NULL));
+    ASSERT_EQ(0, cluster.mon_command(std::move(cmd), {},  &outbl, NULL));
     string outstr(outbl.c_str(), outbl.length());
     json_spirit::Value v;
     ASSERT_NE(0, json_spirit::read(outstr, v)) << "unable to parse json." << '\n' << outstr;
@@ -289,9 +284,8 @@ TEST_F(LibRadosSnapshotStatsSelfManagedECPP, SnaptrimStatsECPP) {
   int tries = 0;
   do {
     string cmd = string("{\"prefix\": \"pg dump\",\"format\":\"json\"}");
-    bufferlist inbl;
     bufferlist outbl;
-    ASSERT_EQ(0, cluster.mon_command(cmd, inbl, &outbl, NULL));
+    ASSERT_EQ(0, cluster.mon_command(std::move(cmd), {},  &outbl, NULL));
     string outstr(outbl.c_str(), outbl.length());
     json_spirit::Value v;
     ASSERT_NE(0, json_spirit::read(outstr, v)) << "unable to parse json." << '\n' << outstr;
