@@ -5,6 +5,7 @@
 #define CEPH_MGR_MDS_PERF_METRIC_TYPES_H
 
 #include <regex>
+#include <shared_mutex>
 #include <vector>
 #include <iosfwd>
 
