@@ -392,13 +392,15 @@ done:
 int Restore::process_restore_entry(RestoreEntry& entry, optional_yield y)
 {
   int ret = 0;
-  bool in_progress = true;
   std::unique_ptr<rgw::sal::Bucket> bucket;
   std::unique_ptr<rgw::sal::Object> obj;
   std::unique_ptr<rgw::sal::PlacementTier> tier;
   std::optional<uint64_t> days = entry.days;
   rgw::sal::RGWRestoreStatus restore_status = rgw::sal::RGWRestoreStatus::None;
   rgw_placement_rule target_placement;
+
+  // mark in_progress as false if the entry is being processed first time
+  bool in_progress = ((entry.status == rgw::sal::RGWRestoreStatus::None) ? false : true);
 
   // Ensure its the same source zone processing temp entries as we do not
   // replicate temp restored copies
@@ -632,7 +634,8 @@ int Restore::restore_obj_from_cloud(rgw::sal::Bucket* pbucket,
   RestoreEntry entry;
   entry.bucket = pbucket->get_key();
   entry.obj_key = pobj->get_key();
-  entry.status = rgw::sal::RGWRestoreStatus::RestoreAlreadyInProgress;
+  // for first time mark status as None
+  entry.status = rgw::sal::RGWRestoreStatus::None;
   entry.days = days;
   entry.zone_id = driver->get_zone()->get_id(); 
  
