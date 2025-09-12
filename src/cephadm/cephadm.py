@@ -138,6 +138,7 @@ from cephadmlib.logging import (
 )
 from cephadmlib.systemd import check_unit, check_units, terminate_service, enable_service
 from cephadmlib import systemd_unit
+from cephadmlib.signals import send_signal_to_container_entrypoint
 from cephadmlib import runscripts
 from cephadmlib.container_types import (
     CephContainer,
@@ -598,6 +599,25 @@ def lookup_unit_name_by_daemon_name(ctx: CephadmContext, fsid: str, name: str) -
         raise Error('Failed to get unit name for {}'.format(daemon))
 
 
+def lookup_container_id_by_daemon_name(ctx: CephadmContext, fsid: str, name: str) -> str:
+    updater = CombinedStatusUpdater([CoreStatusUpdater()])
+    daemon_entries = daemons_matching(
+        ctx,
+        daemon_name=name,
+    )
+    daemons = [updater.expand(ctx, entry) for entry in daemon_entries]
+    if not daemons:
+        raise Error(f'Failed to find daemon {name}')
+    if len(daemons) > 1:
+        raise Error(f'Found multiple daemons matching name {name}: {daemons}')
+
+    daemon = daemons[0]
+    try:
+        return daemon['container_id']
+    except KeyError:
+        raise Error(f'Failed to get container id for {daemon}')
+
+
 def create_daemon_dirs(
     ctx: CephadmContext,
     ident: 'DaemonIdentity',
@@ -985,10 +1005,15 @@ def deploy_daemon(
     # If this was a reconfig and the daemon is not a Ceph daemon, restart it
     # so it can pick up potential changes to its configuration files
     if deployment_type == DeploymentType.RECONFIG and daemon_type not in ceph_daemons():
-        # ceph daemons do not need a restart; others (presumably) do to pick
-        # up the new config
-        call_throws(ctx, ['systemctl', 'reset-failed', ident.unit_name])
-        call_throws(ctx, ['systemctl', 'restart', ident.unit_name])
+        if not ctx.skip_restart_for_reconfig:
+            # ceph daemons do not need a restart; others (presumably) do to pick
+            # up the new config
+            call_throws(ctx, ['systemctl', 'reset-failed', ident.unit_name])
+            call_throws(ctx, ['systemctl', 'restart', ident.unit_name])
+        elif ctx.send_signal_to_daemon:
+            ctx.signal_name = ctx.send_signal_to_daemon
+            ctx.signal_number = None
+            command_signal(ctx)
 
 
 def clean_cgroup(ctx: CephadmContext, fsid: str, unit_name: str) -> None:
@@ -3253,6 +3278,17 @@ def command_unit(ctx: CephadmContext) -> int:
     )
     return code
 
+
+@infer_fsid
+def command_signal(ctx: CephadmContext) -> int:
+    if not ctx.fsid:
+        raise Error('must pass --fsid to specify cluster')
+
+    container_id = lookup_container_id_by_daemon_name(ctx, ctx.fsid, ctx.name)
+
+    return send_signal_to_container_entrypoint(ctx, container_id, ctx.signal_name, ctx.signal_number)
+
+
 ##################################
 
 
@@ -4497,6 +4533,16 @@ def _add_deploy_parser_args(
         default=[],
         help='Additional entrypoint arguments to apply to deamon'
     )
+    parser_deploy.add_argument(
+        '--skip-restart-for-reconfig',
+        action='store_true',
+        default=False,
+        help='skip restart for non ceph daemons and perform default action'
+    )
+    parser_deploy.add_argument(
+        '--send-signal-to-daemon',
+        help='Send signal to daemon'
+    )
 
 
 def _name_opts(parser: argparse.ArgumentParser) -> None:
@@ -4847,6 +4893,24 @@ def _get_parser():
         '--fsid',
         help='cluster FSID')
     _name_opts(parser_unit_install)
+
+    parser_signal = subparsers.add_parser(
+        'signal', help='Send signal to entrypoint of containerized daemon')
+    parser_signal.set_defaults(func=command_signal)
+    signal_group = parser_signal.add_mutually_exclusive_group(required=True)
+    signal_group.add_argument(
+        '--signal-number',
+        help='Signal number to send',)
+    signal_group.add_argument(
+        '--signal-name',
+        help='Signal to send')
+    parser_signal.add_argument(
+        '--fsid',
+        help='cluster FSID')
+    parser_signal.add_argument(
+        '--name', '-n',
+        required=True,
+        help='daemon name (type.id)')
 
     parser_logs = subparsers.add_parser(
         'logs', help='print journald logs for a daemon container')

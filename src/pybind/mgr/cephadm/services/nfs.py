@@ -4,7 +4,7 @@ import logging
 import os
 import subprocess
 import tempfile
-from typing import Dict, Tuple, Any, List, cast, Optional
+from typing import Dict, Tuple, Any, List, cast, Optional, TYPE_CHECKING
 from configparser import ConfigParser
 from io import StringIO
 
@@ -16,7 +16,10 @@ from .service_registry import register_cephadm_service
 
 from orchestrator import DaemonDescription, OrchestratorError
 
+from cephadm import utils
 from cephadm.services.cephadmservice import AuthEntity, CephadmDaemonDeploySpec, CephService
+if TYPE_CHECKING:
+    from ..module import CephadmOrchestrator
 
 logger = logging.getLogger(__name__)
 
@@ -76,6 +79,25 @@ class NFSService(CephService):
         daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
         return daemon_spec
 
+    @classmethod
+    def get_dependencies(
+        cls,
+        mgr: "CephadmOrchestrator",
+        spec: Optional[ServiceSpec] = None,
+        daemon_type: Optional[str] = None
+    ) -> List[str]:
+        deps: List[str] = []
+        if not spec:
+            return deps
+        nfs_spec = cast(NFSServiceSpec, spec)
+        if (nfs_spec.kmip_cert and nfs_spec.kmip_key and nfs_spec.kmip_ca_cert and nfs_spec.kmip_host_list):
+            # add dependency of kmip fields
+            deps.append(f'kmip_cert: {str(utils.md5_hash(nfs_spec.kmip_cert))}')
+            deps.append(f'kmip_key: {str(utils.md5_hash(nfs_spec.kmip_key))}')
+            deps.append(f'kmip_ca_cert: {str(utils.md5_hash(nfs_spec.kmip_ca_cert))}')
+            deps.append(f'kmip_host_list: {nfs_spec.kmip_host_list}')
+        return sorted(deps)
+
     def generate_config(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[Dict[str, Any], List[str]]:
         assert self.TYPE == daemon_spec.daemon_type
 
@@ -83,8 +105,6 @@ class NFSService(CephService):
         daemon_id = daemon_spec.daemon_id
         host = daemon_spec.host
         spec = cast(NFSServiceSpec, self.mgr.spec_store[daemon_spec.service_name].spec)
-
-        deps: List[str] = []
 
         nodeid = f'{daemon_spec.rank}'
 
@@ -125,6 +145,8 @@ class NFSService(CephService):
         if monitoring_ip:
             daemon_spec.port_ips.update({str(monitoring_port): monitoring_ip})
 
+        add_kmip_block = (spec.kmip_cert and spec.kmip_key and spec.kmip_ca_cert and spec.kmip_host_list)
+
         # generate the ganesha config
         def get_ganesha_conf() -> str:
             context: Dict[str, Any] = {
@@ -143,6 +165,7 @@ class NFSService(CephService):
                 "nfs_idmap_conf": nfs_idmap_conf,
                 "enable_nlm": str(spec.enable_nlm).lower(),
                 "cluster_id": self.mgr._cluster_fsid,
+                "kmip_addrs": spec.kmip_host_list if add_kmip_block else None,
             }
             if spec.enable_haproxy_protocol:
                 context["haproxy_hosts"] = self._haproxy_hosts()
@@ -176,6 +199,13 @@ class NFSService(CephService):
                 'ganesha.conf': get_ganesha_conf(),
                 'idmap.conf': get_idmap_conf()
             }
+            if add_kmip_block:
+                for kmip_cert_key_field in [
+                    'kmip_cert',
+                    'kmip_key',
+                    'kmip_ca_cert',
+                ]:
+                    config['files'][f'{kmip_cert_key_field}.pem'] = getattr(spec, kmip_cert_key_field)
             config.update(
                 self.get_config_and_keyring(
                     daemon_type, daemon_id,
@@ -191,7 +221,7 @@ class NFSService(CephService):
             logger.debug('Generated cephadm config-json: %s' % config)
             return config
 
-        return get_cephadm_config(), deps
+        return get_cephadm_config(), self.get_dependencies(self.mgr, spec)
 
     def create_rados_config_obj(self,
                                 spec: NFSServiceSpec,
