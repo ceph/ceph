@@ -62,47 +62,47 @@ CEPH_SETATTR_BTIME = 0x200
 
 CEPH_NOSNAP = -2
 
-# errno definitions
-cdef enum:
-    EBLOCKLISTED = 108
-    EPERM = 1
-    ESTALE = 116
-    ENOSPC = 28
-    ETIMEDOUT = 110
-    EIO = 5
-    ENOTCONN = 107
-    EEXIST = 17
-    EINTR = 4
-    EINVAL = 22
-    EBADF = 9
-    EROFS = 30
-    EAGAIN = 11
-    EACCES = 13
-    ELOOP = 40
-    EISDIR = 21
-    ENOENT = 2
-    ENOTDIR = 20
-    ENAMETOOLONG = 36
-    EBUSY = 16
-    EDQUOT = 122
-    EFBIG = 27
-    ERANGE = 34
-    ENXIO = 6
-    ECANCELED = 125
-    ENODATA = 61
-    EOPNOTSUPP = 95
-    EXDEV = 18
-    ENOMEM = 12
-    ENOTRECOVERABLE = 131
-    ENOSYS = 38
-    EWOULDBLOCK = EAGAIN
-    ENOTEMPTY = 39
-    EDEADLK = 35
-    EDEADLOCK = EDEADLK
-    EDOM = 33
-    EMLINK = 31
-    ETIME = 62
-    EOLDSNAPC = 85
+# XXX: errno definitions, hard-coded numbers here are errnos defined by Linux
+# that are used for the Ceph on-the-wire status codes.
+EBLOCKLISTED = ceph_to_hostos_errno(108)
+EPERM = ceph_to_hostos_errno(1)
+ESTALE = ceph_to_hostos_errno(116)
+ENOSPC = ceph_to_hostos_errno(28)
+ETIMEDOUT = ceph_to_hostos_errno(110)
+EIO = ceph_to_hostos_errno(5)
+ENOTCONN = ceph_to_hostos_errno(107)
+EEXIST = ceph_to_hostos_errno(17)
+EINTR = ceph_to_hostos_errno(4)
+EINVAL = ceph_to_hostos_errno(22)
+EBADF = ceph_to_hostos_errno(9)
+EROFS = ceph_to_hostos_errno(30)
+EAGAIN = ceph_to_hostos_errno(11)
+EWOULDBLOCK = EAGAIN
+EACCES = ceph_to_hostos_errno(13)
+ELOOP = ceph_to_hostos_errno(40)
+EISDIR = ceph_to_hostos_errno(21)
+ENOENT = ceph_to_hostos_errno(2)
+ENOTDIR = ceph_to_hostos_errno(20)
+ENAMETOOLONG = ceph_to_hostos_errno(36)
+EBUSY = ceph_to_hostos_errno(16)
+EDQUOT = ceph_to_hostos_errno(122)
+EFBIG = ceph_to_hostos_errno(27)
+ERANGE = ceph_to_hostos_errno(34)
+ENXIO = ceph_to_hostos_errno(6)
+ECANCELED = ceph_to_hostos_errno(125)
+ENODATA = ceph_to_hostos_errno(61)
+EOPNOTSUPP = ceph_to_hostos_errno(95)
+EXDEV = ceph_to_hostos_errno(18)
+ENOMEM = ceph_to_hostos_errno(12)
+ENOTRECOVERABLE = ceph_to_hostos_errno(131)
+ENOSYS = ceph_to_hostos_errno(38)
+ENOTEMPTY = ceph_to_hostos_errno(39)
+EDEADLK = ceph_to_hostos_errno(35)
+EDEADLOCK = EDEADLK
+EDOM = ceph_to_hostos_errno(33)
+EMLINK = ceph_to_hostos_errno(31)
+ETIME = ceph_to_hostos_errno(62)
+EOLDSNAPC = ceph_to_hostos_errno(85)
 
 cdef extern from "Python.h":
     # These are in cpython/string.pxd, but use "object" types instead of
@@ -512,7 +512,7 @@ cdef class LibCephFS(object):
         with nogil:
             ret = ceph_create_from_rados(&self.cluster, rados_inst.cluster)
         if ret != 0:
-            raise Error("libcephfs_initialize failed with error code: %d" % ret)
+            raise Error(f"libcephfs_initialize failed with error code: {ret}")
         self.state = "configuring"
 
     NO_CONF_FILE = -1
@@ -541,7 +541,7 @@ cdef class LibCephFS(object):
         with nogil:
             ret = ceph_create(&self.cluster, <const char*>_auth_id)
         if ret != 0:
-            raise Error("libcephfs_initialize failed with error code: %d" % ret)
+            raise Error(f"libcephfs_initialize failed with error code: {ret}")
 
         self.state = "configuring"
         if conffile in (self.NO_CONF_FILE, None):
