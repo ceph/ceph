@@ -3829,7 +3829,9 @@ int RGWDeleteObj_ObjStore_S3::get_params(optional_yield y)
     bypass_governance_mode = boost::algorithm::iequals(bypass_gov_decoded, "true");
   }
 
-  return 0;
+  // we're not reading any request body, so this should just match
+  // the sha256 hash of an empty buffer
+  return do_aws4_auth_completion();
 }
 
 void RGWDeleteObj_ObjStore_S3::send_response()
@@ -6535,6 +6537,7 @@ AWSGeneralAbstractor::get_auth_data_v4(const req_state* const s,
         case RGW_OP_INIT_MULTIPART: // in case that Init Multipart uses CHUNK encoding
         case RGW_OP_COMPLETE_MULTIPART:
         case RGW_OP_SET_BUCKET_VERSIONING:
+        case RGW_OP_DELETE_OBJ:
         case RGW_OP_DELETE_MULTI_OBJ:
         case RGW_OP_ADMIN_SET_METADATA:
         case RGW_OP_SYNC_DATALOG_NOTIFY:
