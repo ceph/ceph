@@ -83,7 +83,7 @@ check_create_device_ret check_create_device(
 	return seastar::now();
       } catch (const std::system_error &e) {
 	if (e.code().value() == EEXIST) {
-          ERROR("path={} exists", path);
+          DEBUG("path={} exists", path);
 	  return seastar::now();
 	} else {
           ERROR("path={} creation error -- {}", path, e);
