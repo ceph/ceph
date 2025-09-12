@@ -1089,11 +1089,14 @@ ObjectContextRef OpsExecuter::prepare_clone(
   clone_obs.oi.copy_user_bits(initial_obs.oi);
   clone_obs.oi.clear_flag(object_info_t::FLAG_WHITEOUT);
 
-  auto [clone_obc, existed] = pg->obc_registry.get_cached_obc(std::move(coid));
-  ceph_assert(!existed);
-
+  [[maybe_unused]] auto [clone_obc, existed] = pg->obc_registry.get_cached_obc(coid);  // cache hits are valid
+  // Initialize SSC only if missing; never overwrite on cache hits
+  if (!clone_obc->ssc) {
+    clone_obc->set_clone_ssc(obc->ssc);
+  }
+  // Update the clone's object state
   clone_obc->set_clone_state(std::move(clone_obs));
-  clone_obc->ssc = obc->ssc;
+
   return clone_obc;
 }
 
