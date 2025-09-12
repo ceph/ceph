@@ -62,6 +62,8 @@
 
 #include "neorados/RADOSImpl.h"
 
+#include "include/intarith.h"
+
 using std::list;
 using std::make_pair;
 using std::map;
@@ -897,7 +899,7 @@ void Objecter::_linger_submit(LingerOp *info,
 
   // Populate Op::target
   OSDSession *s = NULL;
-  int r = _calc_target(&info->target, nullptr);
+  int r = _calc_target(&info->target);
   switch (r) {
   case RECALC_OP_TARGET_POOL_EIO:
     _check_linger_pool_eio(info);
@@ -1127,8 +1129,7 @@ void Objecter::_scan_requests(
     if (pool_full_map)
       force_resend_writes = force_resend_writes ||
 	(*pool_full_map)[op->target.base_oloc.pool];
-    int r = _calc_target(&op->target,
-			 op->session ? op->session->con.get() : nullptr);
+    int r = _calc_target(&op->target, op);
     switch (r) {
     case RECALC_OP_TARGET_NO_ACTION:
       if (!skipped_map && !(force_resend_writes && op->target.respects_full()))
@@ -1330,7 +1331,8 @@ void Objecter::handle_osd_map(MOSDMap *m)
     Op *op = p->second;
     if (op->target.epoch < osdmap->get_epoch()) {
       ldout(cct, 10) << __func__ << "  checking op " << p->first << dendl;
-      int r = _calc_target(&op->target, nullptr);
+      // Do not pass op. We want ECReads to retry via the primary.
+      int r = _calc_target(&op->target);
       if (r == RECALC_OP_TARGET_POOL_DNE) {
 	p = need_resend.erase(p);
 	_check_op_pool_dne(op, nullptr);
@@ -2318,6 +2320,282 @@ void Objecter::resend_mon_ops()
 
 // read | write ---------------------------
 
+#undef dout_prefix
+#define dout_prefix *_dout << " ECRead::"
+
+void Objecter::ECRead::assemble_buffer()  {
+
+  const pg_pool_t *pi = objecter.osdmap->get_pg_pool(orig_op->target.base_oloc.pool);
+  ceph_osd_op &osd_op = orig_op->ops[0].op;
+  bufferlist *bl_out = orig_op->out_bl[0];
+
+  // FIXME: This is patch-til-works code.  What were we supposed to do?
+  if (bl_out == nullptr) {
+    bl_out = &orig_op->ops[0].outdata;
+  }
+
+  ceph_assert(bl_out != nullptr);
+
+  uint64_t offset = osd_op.extent.offset;
+  uint64_t length = osd_op.extent.length;
+  unsigned int data_chunk_count = pi->nonprimary_shards.size() + 1;
+  uint64_t stripe_size = pi->get_stripe_width();
+  uint32_t chunk_size = stripe_size / data_chunk_count;
+
+  uint64_t chunk_aligned_off = offset - (offset % chunk_size);
+  uint64_t tmp_len = (offset - chunk_aligned_off) + length;
+  uint64_t chunk_aligned_len = ((tmp_len % chunk_size)
+                    ? (tmp_len - (tmp_len % chunk_size) + chunk_size)
+                    : tmp_len);
+
+  shard_id_t shard((offset / chunk_size) % data_chunk_count);
+
+  mini_flat_map<shard_id_t, uint64_t> shard_offset(data_chunk_count);
+
+  for (uint64_t chunk_offset = chunk_aligned_off;
+       chunk_offset < chunk_aligned_off + chunk_aligned_len;
+       chunk_offset += chunk_size, ++shard) {
+
+    if (unsigned(shard) == data_chunk_count) {
+      shard = 0;
+    }
+
+    uint64_t sub_chunk_offset = std::max(chunk_offset, offset);
+    uint64_t sub_chunk_len = std::min(offset + length, chunk_offset + chunk_size) - sub_chunk_offset;
+
+    bufferlist sub_bl;
+    sub_bl.substr_of(sub_reads[shard].bl, shard_offset[shard], sub_chunk_len);
+    shard_offset[shard] += sub_chunk_len;
+    bl_out->append(sub_bl);
+  }
+}
+
+void Objecter::ECRead::assemble_buffer_replica()  {
+  bufferlist *bl_out = orig_op->out_bl[0];
+
+  // FIXME: This is patch-til-works code.  What were we supposed to do?
+  if (bl_out == nullptr) {
+    bl_out = &orig_op->ops[0].outdata;
+  }
+
+  ceph_assert(bl_out != nullptr);
+
+  for (auto && [shaard, sr] : sub_reads) {
+    bl_out->append(sr.bl);
+  }
+}
+
+Objecter::ECRead::~ECRead() {
+  ldout(cct, 20) << __func__ << " entry this=" << this << dendl;
+
+  // This should only happen on a single thread.
+  for (auto & [_, sub_read] : sub_reads) {
+    if (rc >= 0 && sub_read.rc >= 0) {
+      rc += sub_read.rc;
+    } else if (rc >= 0) {
+      rc = sub_read.rc;
+    } // else ignore subsequent errors.
+  }
+
+  auto &t = orig_op->target;
+  if (rc >= 0) {
+    const pg_pool_t *pi = objecter.osdmap->get_pg_pool(t.base_oloc.pool);
+    // The original IO should never do a balanced read.
+    if (pi->is_erasure()) {
+      assemble_buffer();
+    } else {
+      assemble_buffer_replica();
+    }
+  }
+
+  // do callbacks
+  if (rc >= 0) {
+    ldout(cct, 20) << __func__ << " success this=" << this << " rc=" << rc << dendl;
+    Op::complete(std::move(orig_op->onfinish), osdcode(rc), rc, objecter.service.get_executor());
+    objecter._finish_op(orig_op, rc);
+  } else {
+    ldout(cct, 20) << __func__ << " retry this=" << this << " rc=" << rc << dendl;
+    // The
+    objecter.op_post_submit(orig_op);
+  }
+}
+
+void Objecter::op_post_submit(Op* op) {
+  boost::asio::post(service, [this, op]() {
+    op_submit(op);
+  });
+}
+
+static std::shared_ptr<Objecter::ECRead> null_ec_read;
+std::shared_ptr<Objecter::ECRead> Objecter::ECRead::create_replica(Op *op, Objecter &objecter,
+    shunique_lock<ceph::shared_mutex>& sul, ceph_tid_t *ptid, int *ctx_budget, CephContext *cct) {
+
+  auto &t = op->target;
+  ceph_osd_op &osd_op = op->ops[0].op;
+
+  // FAIL REVIEW: I don't expect 16k to be the threshold eventually!
+  if (osd_op.extent.length < 16 * 1024) {
+    return null_ec_read;
+  }
+
+  // We need to reset this before calling _calc_taret.
+  op->target.flags &= ~CEPH_OSD_FLAG_BALANCE_READS;
+
+  // Populate the target, to extract the acting set from it.
+  objecter._calc_target(&op->target, op);
+
+  std::set<int> osds;
+  for (int direct_osd : t.acting) {
+    if (objecter.osdmap->exists(direct_osd)) {\
+      osds.insert(direct_osd);
+    }
+  }
+
+
+  if (osds.size() <= 1) {
+    return null_ec_read;
+  }
+
+
+  uint64_t offset = osd_op.extent.offset;
+  uint64_t length = osd_op.extent.length;
+  uint64_t chunk_size = p2roundup(length / osds.size(), (uint64_t)CEPH_PAGE_SIZE);
+
+  vector<Op*> ops_to_send(((length - 1) / chunk_size) + 1);
+
+  auto ec_read = std::make_shared<ECRead>(op, objecter, cct, osds.size() );
+  ldout(cct, 20) << __func__ << " " << ec_read << dendl;
+
+  for (unsigned i = 0; i < osds.size() && length > 0; i++) {
+
+    shard_id_t shard(i);
+    uint64_t len = std::min(length, chunk_size);
+    ec_read->sub_reads.emplace(shard);
+    auto fin = new Finisher(ec_read, ec_read->sub_reads.at(shard)); // Self-destructs when called.
+    ops_to_send[i] = objecter.prepare_read_op(t.base_oid,
+      t.base_oloc, offset,
+      len,
+      op->snapid, &ec_read->sub_reads[shard].bl, osd_op.flags, fin);
+
+    offset += len;
+    length -= len;
+
+    ops_to_send[i]->ec_shard.emplace(shard);
+    ops_to_send[i]->target.flags |= CEPH_OSD_FLAG_BALANCE_READS;
+  }
+
+  op->target.flags &= ~CEPH_OSD_FLAG_BALANCE_READS;
+
+  for (auto && op_to_send : ops_to_send) {
+    objecter._op_submit_with_budget(op_to_send, sul, ptid, ctx_budget);
+  }
+
+  ldout(cct, 20) << __func__ << " " << ec_read << dendl;
+  return ec_read;
+
+}
+
+std::shared_ptr<Objecter::ECRead> Objecter::ECRead::create(Op *op, Objecter &objecter,
+  shunique_lock<ceph::shared_mutex>& sul, ceph_tid_t *ptid, int *ctx_budget, CephContext *cct) {
+
+  auto &t = op->target;
+  const pg_pool_t *pi = objecter.osdmap->get_pg_pool(t.base_oloc.pool);
+
+  // Ignore non-erasure IO or if balanced reads were not enabled.
+  if ((t.flags & CEPH_OSD_FLAG_BALANCE_READS) == 0) {
+    return null_ec_read;
+  }
+
+  // The original IO should never do a balanced read.
+  if (pi->is_erasure()) {
+    op->target.flags &= ~CEPH_OSD_FLAG_BALANCE_READS;
+  }
+
+  if (op->ops.size() != 1 || op->ops[0].op.op != CEPH_OSD_OP_READ) {
+    return null_ec_read;
+  }
+
+  if (!pi->is_erasure()) {
+    return create_replica(op, objecter, sul, ptid, ctx_budget, cct);
+  }
+
+
+  // The original IO should never do a balanced read.
+  op->target.flags &= ~CEPH_OSD_FLAG_BALANCE_READS;
+
+  // Reject if direct reads not supported by profile.
+  if (!pi->has_flag(pg_pool_t::FLAG_EC_DIRECT_READS)) {
+    return null_ec_read;
+  }
+
+  if (op->ops.size() != 1) {
+    return null_ec_read;
+  }
+
+  ceph_osd_op &osd_op = op->ops[0].op;
+
+  // Ignore zero-length reads.
+  if (osd_op.extent.length == 0) {
+    return null_ec_read;
+  }
+
+  uint64_t offset = osd_op.extent.offset;
+  uint64_t length = osd_op.extent.length;
+  uint64_t data_chunk_count = pi->nonprimary_shards.size() + 1;
+  uint32_t chunk_size = pi->get_stripe_width() / data_chunk_count;
+  uint64_t start_chunk = offset / chunk_size;
+  // This calculation is wrong for length = 0, but it doesn't matter if these reads get sent to the primary
+  uint64_t end_chunk = (offset + osd_op.extent.length - 1) / chunk_size;
+
+  unsigned count = std::min(data_chunk_count, end_chunk - start_chunk + 1);
+
+  vector<Op*> ops_to_send(count);
+
+  // Populate the target, to extract the acting set from it.
+  objecter._calc_target(&op->target, op);
+
+  bool abort = false;
+  int first_shard = start_chunk % data_chunk_count;
+  // Check all shards are online.
+  for (unsigned i = first_shard; i < first_shard + count; i++) {
+    int direct_osd = t.acting[(i >= data_chunk_count)?(i - data_chunk_count):i];
+    if (!objecter.osdmap->exists(direct_osd)) {
+      abort = true;
+      break;
+    }
+  }
+
+  if (abort) {
+    return null_ec_read;
+  }
+
+  auto ec_read = std::make_shared<ECRead>(op, objecter, cct, data_chunk_count);
+  ldout(cct, 20) << __func__ << " " << ec_read << dendl;
+
+  for (unsigned i = 0; i < count; i++) {
+
+    unsigned s = i + first_shard;
+    shard_id_t shard(s >= data_chunk_count ? s - data_chunk_count : s);
+    ec_read->sub_reads.emplace(shard);
+    auto fin = new Finisher(ec_read, ec_read->sub_reads.at(shard)); // Self-destructs when called.
+    ops_to_send[i] = objecter.prepare_read_op(t.base_oid,
+      t.base_oloc, offset, length, op->snapid, &ec_read->sub_reads[shard].bl, osd_op.flags, fin);
+
+    ops_to_send[i]->ec_shard.emplace(shard);
+    ops_to_send[i]->target.flags |= CEPH_OSD_FLAG_BALANCE_READS;
+  }
+
+  for (auto && op_to_send : ops_to_send) {
+    objecter._op_submit_with_budget(op_to_send, sul, ptid, ctx_budget);
+  }
+
+  return ec_read;
+}
+
+
+#undef dout_prefix
+#define dout_prefix *_dout << messenger->get_myname() << ".objecter "
+
 void Objecter::op_submit(Op *op, ceph_tid_t *ptid, int *ctx_budget)
 {
   shunique_lock rl(rwlock, ceph::acquire_shared);
@@ -2325,7 +2603,12 @@ void Objecter::op_submit(Op *op, ceph_tid_t *ptid, int *ctx_budget)
   if (!ptid)
     ptid = &tid;
   op->trace.event("op submit");
-  _op_submit_with_budget(op, rl, ptid, ctx_budget);
+
+  std::shared_ptr<ECRead> ec_read = ECRead::create(op, *this, rl, ptid, ctx_budget, cct);
+
+  if (!ec_read) {
+    _op_submit_with_budget(op, rl, ptid, ctx_budget);
+  }
 }
 
 void Objecter::_op_submit_with_budget(Op *op,
@@ -2465,7 +2748,7 @@ void Objecter::_op_submit(Op *op, shunique_lock<ceph::shared_mutex>& sul, ceph_t
   OSDSession *s = NULL;
 
   bool check_for_latest_map = false;
-  int r = _calc_target(&op->target, nullptr);
+  int r = _calc_target(&op->target, op);
   switch(r) {
   case RECALC_OP_TARGET_POOL_DNE:
     check_for_latest_map = true;
@@ -2493,7 +2776,7 @@ void Objecter::_op_submit(Op *op, shunique_lock<ceph::shared_mutex>& sul, ceph_t
       // map changed; recalculate mapping
       ldout(cct, 10) << __func__ << " relock raced with osdmap, recalc target"
 		     << dendl;
-      check_for_latest_map = _calc_target(&op->target, nullptr)
+      check_for_latest_map = _calc_target(&op->target, op)
 	== RECALC_OP_TARGET_POOL_DNE;
       if (s) {
 	put_session(s);
@@ -2910,7 +3193,7 @@ void Objecter::_prune_snapc(
   }
 }
 
-int Objecter::_calc_target(op_target_t *t, Connection *con, bool any_change)
+int Objecter::_calc_target(op_target_t *t, const Op *op, bool any_change)
 {
   // rwlock is locked
   bool is_read = t->flags & CEPH_OSD_FLAG_READ;
@@ -3062,6 +3345,7 @@ int Objecter::_calc_target(op_target_t *t, Connection *con, bool any_change)
       prev_pgid.is_merge_target(t->pg_num, pg_num);
   }
 
+  bool ec_direct = false;
   if (legacy_change || split_or_merge || force_resend) {
     t->pgid = pgid;
     t->acting = std::move(acting);
@@ -3083,10 +3367,27 @@ int Objecter::_calc_target(op_target_t *t, Connection *con, bool any_change)
       if (osdmap->has_pgtemp(actual_pgid)) {
 	pg_temp = osdmap->pgtemp_primaryfirst(*pi, t->acting);
       }
-      for (uint8_t i = 0; i < t->acting.size(); ++i) {
-        if (pg_temp[i] == acting_primary) {
-	  spgid.reset_shard(osdmap->pgtemp_undo_primaryfirst(*pi, actual_pgid, shard_id_t(i)));
-          break;
+      if (t->flags & CEPH_OSD_FLAG_BALANCE_READS) {
+        if (!op || !op->ec_shard) {
+          t->osd = -1;
+          return RECALC_OP_TARGET_POOL_DNE; // Force legacy path.
+        }
+        ec_direct = true;
+        t->osd = t->acting[int(*op->ec_shard)];
+        // In some redrive scenarios, the acting set can change. Fail the IO
+        // and retry.
+        if (!osdmap->exists(t->osd)) {
+          t->osd = -1;
+          return RECALC_OP_TARGET_POOL_DNE;
+        }
+        spgid.reset_shard(osdmap->pgtemp_undo_primaryfirst(*pi, actual_pgid, *op->ec_shard));
+
+      } else {
+        for (uint8_t i = 0; i < t->acting.size(); ++i) {
+          if (pg_temp[i] == acting_primary) {
+            spgid.reset_shard(osdmap->pgtemp_undo_primaryfirst(*pi, actual_pgid, shard_id_t(i)));
+            break;
+          }
         }
       }
     }
@@ -3103,12 +3404,15 @@ int Objecter::_calc_target(op_target_t *t, Connection *con, bool any_change)
 		   << " acting " << t->acting
 		   << " primary " << acting_primary << dendl;
     t->used_replica = false;
-    if ((t->flags & (CEPH_OSD_FLAG_BALANCE_READS |
+    if (!ec_direct && (t->flags & (CEPH_OSD_FLAG_BALANCE_READS |
                      CEPH_OSD_FLAG_LOCALIZE_READS)) &&
         !is_write && pi->is_replicated() && t->acting.size() > 1) {
       int osd;
       ceph_assert(is_read && t->acting[0] == acting_primary);
-      if (t->flags & CEPH_OSD_FLAG_BALANCE_READS) {
+      if (op->ec_shard) {
+        osd = t->acting[int(*op->ec_shard)];
+      }
+      else if (t->flags & CEPH_OSD_FLAG_BALANCE_READS) {
 	int p = rand() % t->acting.size();
 	if (p)
 	  t->used_replica = true;
@@ -3140,7 +3444,7 @@ int Objecter::_calc_target(op_target_t *t, Connection *con, bool any_change)
 	osd = t->acting[best];
       }
       t->osd = osd;
-    } else {
+    } else if (!ec_direct) {
       t->osd = acting_primary;
     }
   }
@@ -3159,7 +3463,7 @@ int Objecter::_calc_target(op_target_t *t, Connection *con, bool any_change)
 int Objecter::_map_session(op_target_t *target, OSDSession **s,
 			   shunique_lock<ceph::shared_mutex>& sul)
 {
-  _calc_target(target, nullptr);
+  _calc_target(target);
   return _get_session(target->osd, s, sul);
 }
 
@@ -3627,7 +3931,7 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
     }
   }
 
-  if (rc == -EAGAIN) {
+  if (rc == -EAGAIN && !op->ec_shard) {
     ldout(cct, 7) << " got -EAGAIN, resubmitting" << dendl;
     if (op->has_completion())
       num_in_flight--;

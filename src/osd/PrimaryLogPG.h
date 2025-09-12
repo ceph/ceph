@@ -343,6 +343,10 @@ public:
   void apply_stats(
     const hobject_t &soid,
     const object_stat_sum_t &delta_stats) override;
+  void log_stats(hobject_t soid,
+                 const object_stat_sum_t& stats,
+                 ObjectStore::Transaction& t,
+                 bool is_delta) override;
 
   bool primary_error(const hobject_t& soid, eversion_t v);
 
@@ -535,7 +539,7 @@ public:
       projected_log.skip_can_rollback_to_to_head();
       projected_log.trim(cct, last->version, nullptr, nullptr, nullptr);
     }
-    if (!is_primary() && !is_ec_pg()) {
+    if (!is_primary()) {
       replica_clear_repop_obc(logv, t);
     }
     recovery_state.append_log(

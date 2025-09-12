@@ -620,7 +620,7 @@ struct ClientReadCompleter final : ECCommon::ReadCompleter {
     extent_map result;
     if (res.r == 0) {
       ceph_assert(res.errors.empty());
-      dout(20) << __func__ << ": before decode: "
+      dout(30) << __func__ << ": before decode: "
                << res.buffers_read.debug_string(2048, 0)
                << dendl;
       /* Decode any missing buffers */
@@ -630,7 +630,7 @@ struct ClientReadCompleter final : ECCommon::ReadCompleter {
                                   req.object_size,
                                   read_pipeline.get_parent()->get_dpp());
       ceph_assert( r == 0 );
-      dout(20) << __func__ << ": after decode: "
+      dout(30) << __func__ << ": after decode: "
                << res.buffers_read.debug_string(2048, 0)
                << dendl;
 
@@ -841,6 +841,11 @@ void ECCommon::RMWPipeline::cache_ready(Op &op) {
     &trans,
     get_parent()->get_dpp(),
     get_osdmap());
+
+  get_parent()->log_stats(op.hoid,
+                          op.delta_stats,
+                          trans[get_parent()->whoami_shard().shard],
+                          true);
 
   dout(20) << __func__ << ": written: " << written << ", op: " << op << dendl;
 
@@ -1286,7 +1291,7 @@ void ECCommon::RecoveryBackend::handle_recovery_read_complete(
   op.returned_data.emplace(std::move(res.buffers_read));
   uint64_t aligned_size = ECUtil::align_next(op.obc->obs.oi.size);
 
-  dout(20) << __func__ << " before decode: oid=" << op.hoid << " EC_DEBUG_BUFFERS: "
+  dout(30) << __func__ << " before decode: oid=" << op.hoid << " EC_DEBUG_BUFFERS: "
          << op.returned_data->debug_string(2048, 0)
          << dendl;
 
@@ -1299,7 +1304,7 @@ void ECCommon::RecoveryBackend::handle_recovery_read_complete(
   op.returned_data->erase_after_ro_offset(aligned_size);
 
   dout(20) << __func__ << ": oid=" << op.hoid << dendl;
-  dout(20) << __func__ << " after decode: oid=" << op.hoid << " EC_DEBUG_BUFFERS: "
+  dout(30) << __func__ << " after decode: oid=" << op.hoid << " EC_DEBUG_BUFFERS: "
            << op.returned_data->debug_string(2048, 0)
            << dendl;
 

@@ -557,7 +557,7 @@ auth_selection_t ScrubBackend::select_auth_object(const hobject_t& ho,
           std::count_if(m_pg.get_ec_sinfo().get_data_shards().begin(),
                         m_pg.get_ec_sinfo().get_data_shards().end(),
                         [&available_shards](const auto& shard_id) {
-                          return available_shards.contains(shard_id);
+                          return !available_shards.contains(shard_id);
                         });
 
       const int num_redundancy_shards = m_pg.get_ec_sinfo().get_m();
