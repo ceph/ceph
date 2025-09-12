@@ -63,6 +63,7 @@
    - osd_op_num_shards_hdd = 1 (was 5)
    - osd_op_num_threads_per_shard_hdd = 5 (was 1)
   For more details see https://tracker.ceph.com/issues/66289.
+* RGW: Added support for S3 Object Ownership to disable object ACLs.
 * MGR: The Ceph Manager's always-on modulues/plugins can now be force-disabled.
   This can be necessary when we wish to prevent the Manager from being
   flooded by module commands when Ceph services are down or degraded.

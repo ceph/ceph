@@ -264,9 +264,6 @@ struct TopicList {
   std::string next_marker;
 };
 
-/** A list of key-value attributes */
-  using Attrs = std::map<std::string, ceph::buffer::list>;
-
 /**
  * @brief Base singleton representing a Store or Filter
  *
