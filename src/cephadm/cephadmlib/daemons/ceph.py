@@ -466,7 +466,7 @@ def get_ceph_mounts_for_type(
                 mounts[selinux_folder] = '/sys/fs/selinux:ro'
             else:
                 logger.error(
-                    f'Cluster direcotry {cluster_dir} does not exist.'
+                    f'Cluster directory {cluster_dir} does not exist.'
                 )
     if daemon_type == 'osd':
         mounts['/'] = '/rootfs'
