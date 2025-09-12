@@ -897,7 +897,7 @@ struct ECClassicalOp : ECCommon::RMWPipeline::Op {
     pg_t pgid,
     const ECUtil::stripe_info_t &sinfo,
     map<hobject_t, ECUtil::shard_extent_map_t> *written,
-    shard_id_map<ObjectStore::Transaction> *transactions,
+    shard_id_map<pair<ObjectStore::Transaction, uint64_t> > *transactions,
     DoutPrefixProvider *dpp,
     const OSDMapRef &osdmap) final {
     ceph_assert(t);
