@@ -27,16 +27,20 @@ export class NotificationService {
   private hideToasties = false;
 
   private dataSource = new BehaviorSubject<CdNotification[]>([]);
+  data$ = this.dataSource.asObservable();
+
+  // Panel state observable
   private panelStateSource = new BehaviorSubject<{ isOpen: boolean; useNewPanel: boolean }>({
     isOpen: false,
     useNewPanel: true
   });
+  panelState$ = this.panelStateSource.asObservable();
+
+  // Mute state observable
   private muteStateSource = new BehaviorSubject<boolean>(false);
   private activeToastsSource = new BehaviorSubject<ToastContent[]>([]);
   sidebarSubject = new Subject();
 
-  data$ = this.dataSource.asObservable();
-  panelState$ = this.panelStateSource.asObservable();
   muteState$ = this.muteStateSource.asObservable();
   activeToasts$ = this.activeToastsSource.asObservable();
 
@@ -45,6 +49,7 @@ export class NotificationService {
   private activeToasts: ToastContent[] = [];
   KEY = 'cdNotifications';
   MUTE_KEY = 'cdNotificationsMuted';
+  private readonly MAX_NOTIFICATIONS = 10;
 
   constructor(
     private taskMessageService: TaskMessageService,
@@ -80,27 +85,34 @@ export class NotificationService {
   }
 
   /**
-   * Removes a single saved notifications
+   * Removes a single saved notification
    */
   remove(index: number) {
-    const recent = this.dataSource.getValue();
-    recent.splice(index, 1);
-    this.dataSource.next(recent);
-    localStorage.setItem(this.KEY, JSON.stringify(recent));
+    const notifications = this.dataSource.getValue();
+    notifications.splice(index, 1);
+    this.dataSource.next(notifications);
+    this.persistNotifications(notifications);
   }
 
   /**
    * Method used for saving a shown notification (check show() method).
    */
   save(notification: CdNotification) {
-    const recent = this.dataSource.getValue();
-    recent.push(notification);
-    recent.sort((a, b) => (a.timestamp > b.timestamp ? -1 : 1));
-    while (recent.length > 10) {
-      recent.pop();
+    const notifications = this.dataSource.getValue();
+    notifications.push(notification);
+    notifications.sort((a, b) => (a.timestamp > b.timestamp ? -1 : 1));
+    while (notifications.length > this.MAX_NOTIFICATIONS) {
+      notifications.pop();
     }
-    this.dataSource.next(recent);
-    localStorage.setItem(this.KEY, JSON.stringify(recent));
+    this.dataSource.next(notifications);
+    this.persistNotifications(notifications);
+  }
+
+  /**
+   * Persists notifications to localStorage
+   */
+  private persistNotifications(notifications: CdNotification[]) {
+    localStorage.setItem(this.KEY, JSON.stringify(notifications));
   }
 
   /**
@@ -166,6 +178,7 @@ export class NotificationService {
       }
       this.showToasty(notification);
     });
+    this.queued = [];
   }
 
   private getUnifiedTitleQueue(): CdNotificationConfig[] {
