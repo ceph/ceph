@@ -17,6 +17,8 @@ from typing import (
     Tuple,
 )
 
+import ceph.smb.constants
+
 from .. import context_getters
 from .. import daemon_form
 from .. import data_utils
@@ -48,12 +50,14 @@ logger = logging.getLogger()
 _SCC = '/usr/bin/samba-container'
 _NODES_SUBCMD = [_SCC, 'ctdb-list-nodes']
 _MUTEX_SUBCMD = [_SCC, 'ctdb-rados-mutex']  # requires rados uri
+_ETC_SAMBA_TLS = '/etc/samba/tls'
 
 
 class Features(enum.Enum):
     DOMAIN = 'domain'
     CLUSTERED = 'clustered'
     CEPHFS_PROXY = 'cephfs-proxy'
+    REMOTE_CONTROL = 'remote-control'
 
     @classmethod
     def valid(cls, value: str) -> bool:
@@ -102,18 +106,81 @@ class BindInterface(NamedTuple):
 
 
 class Ports(enum.Enum):
-    SMB = 445
-    SMBMETRICS = 9922
-    CTDB = 4379
+    SMB = ceph.smb.constants.SMB_PORT
+    SMBMETRICS = ceph.smb.constants.SMBMETRICS_PORT
+    CTDB = ceph.smb.constants.CTDB_PORT
+    REMOTE_CONTROL = ceph.smb.constants.REMOTE_CONTROL_PORT
 
     def customized(self, service_ports: Dict[str, int]) -> int:
         """Return a custom port value if it is present in service_ports or the
         default port value if it is not present.
         """
-        port = service_ports.get(self.name.lower())
+        port = service_ports.get(str(self))
         if port:
             return int(port)
         return int(self.value)
+
+    def __str__(self) -> str:
+        # NOTE: mypy is getting the key type below wrong. using reveal_type:
+        # >>> reveal_type(self.SMB)
+        # > note: Revealed type is "builtins.int"
+        # >>> reveal_type(self)
+        # > note: Revealed type is "cephadmlib.daemons.smb.Ports"
+        # maybe newer versions would not hit this issue?
+        names: Dict[Any, str] = {
+            self.SMB: ceph.smb.constants.SMB,
+            self.SMBMETRICS: ceph.smb.constants.SMBMETRICS,
+            self.CTDB: ceph.smb.constants.CTDB,
+            self.REMOTE_CONTROL: ceph.smb.constants.REMOTE_CONTROL,
+        }
+        return names[self]
+
+
+@dataclasses.dataclass(frozen=True)
+class TLSFiles:
+    cert: str = ''
+    key: str = ''
+    ca_cert: str = ''
+
+    def __bool__(self) -> bool:
+        return bool(self.cert or self.key or self.ca_cert)
+
+    def _interior_path(self, value: str) -> str:
+        if not value:
+            return value
+        return f'{_ETC_SAMBA_TLS}/{value}'
+
+    @property
+    def cert_interior_path(self) -> str:
+        return self._interior_path(self.cert)
+
+    @property
+    def key_interior_path(self) -> str:
+        return self._interior_path(self.key)
+
+    @property
+    def ca_cert_interior_path(self) -> str:
+        return self._interior_path(self.ca_cert)
+
+    @classmethod
+    def match(cls, files: Iterable[str], service: str) -> 'TLSFiles':
+        kwargs: Dict[str, str] = {}
+        for filename in files:
+            if not filename.startswith(f'{service}.'):
+                continue
+            if filename.endswith('.ca.crt'):
+                kwargs['ca_cert'] = filename
+            elif filename.endswith('.crt'):
+                kwargs['cert'] = filename
+            elif filename.endswith('.key'):
+                kwargs['key'] = filename
+        return cls(**kwargs)
+
+
+@dataclasses.dataclass(frozen=True)
+class RemoteControlConfig:
+    port: int
+    tls_files: TLSFiles
 
 
 @dataclasses.dataclass(frozen=True)
@@ -145,6 +212,7 @@ class Config:
     )
     bind_to: List[BindInterface] = dataclasses.field(default_factory=list)
     proxy_image: str = ''
+    remote_control: Optional[RemoteControlConfig] = None
 
     def config_uris(self) -> List[str]:
         uris = [self.source_config]
@@ -275,6 +343,9 @@ class SMBDContainer(SambaContainerCommon):
             if self.cfg.metrics_port:
                 metrics_port = self.cfg.metrics_port
                 cargs.extend(self._publish(metrics_port, metrics_port))
+            if self.cfg.remote_control:
+                rc_port = self.cfg.remote_control.port
+                cargs.extend(self._publish(rc_port, rc_port))
         cargs.extend(_container_dns_args(self.cfg))
         return cargs
 
@@ -337,6 +408,38 @@ class SMBMetricsContainer(ContainerCommon):
         if self.cfg.bind_to:
             args.append(f'--address={self.cfg.bind_to[0].address}')
         return args
+
+
+class RemoteControlContainer(SambaContainerCommon):
+    def name(self) -> str:
+        return 'remotectl'
+
+    def args(self) -> List[str]:
+        args = super().args()
+        assert self.cfg.remote_control, 'remote_control is not configured'
+        args.append('serve')
+        args.append('--grpc')
+        address = self.cfg.bind_to[0].address if self.cfg.bind_to else '*'
+        port = self.cfg.remote_control.port
+        args.append(f'--address={address}:{port}')
+        if not self.cfg.remote_control.tls_files:
+            args.append('--insecure')
+        else:
+            cert_path = self.cfg.remote_control.tls_files.cert_interior_path
+            key_path = self.cfg.remote_control.tls_files.key_interior_path
+            ca_cert = self.cfg.remote_control.tls_files.ca_cert_interior_path
+            assert cert_path
+            assert key_path
+            args.append(f'--tls-cert={cert_path}')
+            args.append(f'--tls-key={key_path}')
+            if ca_cert:
+                args.append(f'--tls-ca-cert={ca_cert}')
+        return args
+
+    def container_args(self) -> List[str]:
+        return super().container_args() + [
+            '--entrypoint=samba-remote-control'
+        ]
 
 
 class CephFSProxyContainer(ContainerCommon):
@@ -462,6 +565,7 @@ class SMB(ContainerDaemonForm):
         self._identity = ident
         self._instance_cfg: Optional[Config] = None
         self._files: Dict[str, str] = {}
+        self._tls_files: Dict[str, str] = {}
         self._raw_configs: Dict[str, Any] = context_getters.fetch_configs(ctx)
         self._config_keyring = context_getters.get_config_and_keyring(ctx)
         self._cached_layout: Optional[ContainerLayout] = None
@@ -542,16 +646,29 @@ class SMB(ContainerDaemonForm):
             # cache the cephadm networks->devices mapping for later
             self._network_mapper.load()
 
+        self._organize_files(files)
+
+        if Features.REMOTE_CONTROL.value in instance_features:
+            remote_control_cfg = RemoteControlConfig(
+                port=Ports.REMOTE_CONTROL.customized(service_ports),
+                tls_files=TLSFiles.match(self._tls_files, 'remote_control'),
+            )
+        else:
+            remote_control_cfg = None
+
         rank, rank_gen = self._rank_info
         self._instance_cfg = Config(
+            # core configuration
             identity=self._identity,
             instance_id=instance_id,
             source_config=source_config,
             join_sources=join_sources,
             user_sources=user_sources,
             custom_dns=custom_dns,
+            # major features
             domain_member=Features.DOMAIN.value in instance_features,
             clustered=Features.CLUSTERED.value in instance_features,
+            # config details
             smb_port=Ports.SMB.customized(service_ports),
             ctdb_port=Ports.CTDB.customized(service_ports),
             ceph_config_entity=ceph_config_entity,
@@ -565,10 +682,13 @@ class SMB(ContainerDaemonForm):
             cluster_public_addrs=_public_addrs,
             proxy_image=proxy_image,
             bind_to=self._network_mapper.bind_interfaces(bind_networks),
+            remote_control=remote_control_cfg,
         )
-        self._files = files
         logger.debug('SMB Instance Config: %s', self._instance_cfg)
         logger.debug('Configured files: %s', self._files)
+        logger.debug(
+            'Configured TLS/SSL files: %s', list(self._tls_files.keys())
+        )
 
     @property
     def _cfg(self) -> Config:
@@ -622,6 +742,8 @@ class SMB(ContainerDaemonForm):
             ctrs.append(
                 CephFSProxyContainer(self._cfg, self._cfg.proxy_image)
             )
+        if self._cfg.remote_control:
+            ctrs.append(RemoteControlContainer(self._cfg))
 
         if self._cfg.clustered:
             init_ctrs += [
@@ -756,6 +878,9 @@ class SMB(ContainerDaemonForm):
         mounts[run_samba] = '/run:z'  # TODO: make this a shared tmpfs
         mounts[config] = '/etc/ceph/ceph.conf:z'
         mounts[keyring] = '/etc/ceph/keyring:z'
+        if self._tls_files:
+            tls_dir = str(data_dir / 'tls')
+            mounts[tls_dir] = f'{_ETC_SAMBA_TLS}:z'
         if self._cfg.clustered:
             ctdb_persistent = str(data_dir / 'ctdb/persistent')
             ctdb_run = str(data_dir / 'ctdb/run')  # TODO: tmpfs too!
@@ -802,6 +927,15 @@ class SMB(ContainerDaemonForm):
                 for addr in addrs:
                     endpoints.append(EndPoint(addr, self._cfg.metrics_port))
 
+    def _organize_files(self, files: Dict[str, str]) -> None:
+        # this separation is similar to how ceph services are set up
+        # regarding certs and keys
+        for key, value in files.items():
+            if key.endswith(('.crt', '.key')):
+                self._tls_files[key] = value
+            else:
+                self._files[key] = value
+
     def prepare_data_dir(self, data_dir: str, uid: int, gid: int) -> None:
         self.validate()
         ddir = pathlib.Path(data_dir)
@@ -811,6 +945,10 @@ class SMB(ContainerDaemonForm):
         file_utils.makedirs(ddir / 'run', uid, gid, 0o770)
         if self._files:
             file_utils.populate_files(data_dir, self._files, uid, gid)
+        if self._tls_files:
+            tls_dir = ddir / 'tls'
+            file_utils.makedirs(tls_dir, uid, gid, 0o700)
+            file_utils.populate_files(tls_dir, self._tls_files, uid, gid)
         if self._cfg.clustered:
             file_utils.makedirs(ddir / 'ctdb/persistent', uid, gid, 0o770)
             file_utils.makedirs(ddir / 'ctdb/run', uid, gid, 0o770)

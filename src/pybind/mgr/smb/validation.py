@@ -3,6 +3,8 @@ from typing import Dict, Optional
 import posixpath
 import re
 
+import ceph.smb.constants
+
 # Initially, this regex is pretty restrictive.  But I (JJM) find that
 # starting out more restricitive is better than not because it's generally
 # easier to relax strict rules then discover someone relies on lax rules
@@ -114,14 +116,14 @@ def check_access_name(name: str) -> None:
         raise ValueError('login name may not exceed 128 characters')
 
 
-PORT_SERVICES = {"smb", "ctdb", "smbmetrics"}
 _MAX_PORT = (1 << 16) - 1
 
 
 def check_custom_ports(ports: Optional[Dict[str, int]]) -> None:
     if ports is None:
         return
-    other = set(ports) - PORT_SERVICES
+    _defaults = ceph.smb.constants.DEFAULT_PORTS
+    other = set(ports) - set(_defaults)
     if other:
         raise ValueError(
             "invalid service names for custom ports:"
@@ -132,5 +134,12 @@ def check_custom_ports(ports: Optional[Dict[str, int]]) -> None:
         raise ValueError(
             f'invalid port number(s): {", ".join(sorted(invalid))}'
         )
-    if len(ports) != len(set(ports.values())):
-        raise ValueError('port numbers must not be repeated')
+    # make sure ports are unique per service
+    all_ports = _defaults | ports
+    for port in all_ports.values():
+        using_port = {s for s, p in all_ports.items() if p == port}
+        if len(using_port) > 1:
+            raise ValueError(
+                'port numbers must be unique:'
+                f' {port} used for {", ".join(sorted(using_port))}'
+            )
