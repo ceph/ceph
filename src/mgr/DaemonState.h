@@ -14,6 +14,7 @@
 #ifndef DAEMON_STATE_H_
 #define DAEMON_STATE_H_
 
+#include <cstdint>
 #include <map>
 #include <string>
 #include <memory>
