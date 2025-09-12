@@ -7518,6 +7518,11 @@ int Client::_lookup(const InodeRef& dir, const std::string& name, std::string& a
   mask &= CEPH_CAP_ANY_SHARED | CEPH_STAT_RSTAT;
   std::string dname = name;
 
+  if (!dir->is_dir()) {
+    r = -ENOTDIR;
+    goto done;
+  }
+
   if (dname == ".."sv) {
     if (dir->dentries.empty()) {
       MetaRequest *req = new MetaRequest(CEPH_MDS_OP_LOOKUPPARENT);
@@ -7541,11 +7546,6 @@ int Client::_lookup(const InodeRef& dir, const std::string& name, std::string& a
 
   if (dname == "."sv) {
     *target = dir;
-    goto done;
-  }
-
-  if (!dir->is_dir()) {
-    r = -ENOTDIR;
     goto done;
   }
 
@@ -7723,6 +7723,11 @@ int Client::path_walk(InodeRef dirinode, const filepath& origpath, walk_dentry_r
     ldout(cct, 10) << " " << i << " " << *diri << " " << dname << dendl;
     ldout(cct, 20) << "  (path is " << path << ")" << dendl;
     InodeRef next;
+    if (!diri.get()->is_dir()) {
+      ldout(cct, 20) << diri.get() << " is not a dir inode, name " << dname.c_str() << dendl;
+      rc = -ENOTDIR;
+      goto out;
+    }
     if (should_check_perms()) {
       int r = may_lookup(diri.get(), perms);
       if (r < 0) {
