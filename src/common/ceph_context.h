@@ -411,9 +411,19 @@ private:
     l_mempool_items,
     l_mempool_last
   };
+  // This is just how PerfCounters indices work, we have a bunch of
+  // bare enums all over.
+  enum {
+    // Picked by grepping for the current highest value and adding 1000
+    l_service_first = 1001000,
+    l_service_unique_id,
+    l_service_last
+  };
   PerfCounters *_cct_perf = nullptr;
   PerfCounters* _mempool_perf = nullptr;
   std::vector<std::string> _mempool_perf_names, _mempool_perf_descriptions;
+  std::string service_unique_id;
+  PerfCounters* _service_perf = nullptr;
 
   /**
    * Enable the performance counters.
