@@ -515,6 +515,14 @@ int D4NFilterBucket::list(const DoutPrefixProvider* dpp, ListParams& params, int
     }
   } //d4n_write_cache_enabled = true
 
+  /* Cache requests are indicated with the x-rgw-cache-request custom header during S3 ops so users can interact
+   * only with the cache. If the object is found in the cache, the request succeeds. If it is only in the backend,
+   * the request returns -ENOENT. */
+  if (cache_request) {
+    results = std::move(cache_results);
+    return 0;
+  }
+
   //Get objects from backend store
   auto ret = next->list(dpp, params, max, store_results, y);
   if (ret < 0) {
@@ -819,6 +827,9 @@ int D4NFilterObject::load_obj_state(const DoutPrefixProvider *dpp, optional_yiel
                              bool follow_olh)
 {
   if (load_from_store) {
+    if (cache_request) {
+      return -ENOENT;
+    }
     return next->load_obj_state(dpp, y, follow_olh);
   }
   bool has_instance = false;
@@ -836,6 +847,9 @@ int D4NFilterObject::load_obj_state(const DoutPrefixProvider *dpp, optional_yiel
       this->clear_instance();
     }
     return 0;
+  }
+  if (cache_request) {
+    return -ENOENT;
   }
   return next->load_obj_state(dpp, y, follow_olh);
 }
@@ -900,6 +914,9 @@ int D4NFilterObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattr
   }
 
   if (!found_in_cache) {
+    if (cache_request) {
+      return -ENOENT;
+    }
     auto ret = next->set_obj_attrs(dpp, setattrs, delattrs, y, flags);
     if (ret < 0) {
       ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): set_obj_attrs method of backend store failed with ret: " << ret << dendl;
@@ -1495,6 +1512,9 @@ int D4NFilterObject::get_obj_attrs(optional_yield y, const DoutPrefixProvider* d
     ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): " << " object " << this->get_name() << " does not exist." << dendl;
     return -ENOENT;
   } else if (!ret) {
+    if (cache_request) {
+      return -ENOENT;
+    }
     if(perfcounter) {
       perfcounter->inc(l_rgw_d4n_cache_misses);
     }
@@ -1571,6 +1591,10 @@ int D4NFilterObject::modify_obj_attrs(const char* attr_name, bufferlist& attr_va
       return ret;
     }
   } else {
+    if (cache_request) {
+      return -ENOENT;
+    }
+
     if (block.deleteMarker) {
       ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): object " << this->get_name() << " does not exist." << dendl;
       return -ENOENT;
@@ -1621,6 +1645,9 @@ int D4NFilterObject::delete_obj_attrs(const DoutPrefixProvider* dpp, const char*
     }
   }
   if (!found_in_cache) {
+    if (cache_request) {
+      return -ENOENT;
+    }
     if (auto ret = next->delete_obj_attrs(dpp, attr_name, y); ret < 0) {
       ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): delete_obj_attrs method of backend store failed with ret: " << ret << dendl;
       return ret;
@@ -1691,6 +1718,9 @@ int D4NFilterObject::D4NFilterReadOp::prepare(optional_yield y, const DoutPrefix
     ldpp_dout(dpp, 10) << "D4NFilterObject::D4NFilterReadOp::" << __func__ << "(): object " << source->get_name() << " does not exist." << dendl;
     return -ENOENT;
   } else if (!ret) {
+    if (source->get_cache_request()) {
+      return -ENOENT;
+    }
     if(perfcounter) {
       perfcounter->inc(l_rgw_d4n_cache_misses);
     }
@@ -1741,6 +1771,9 @@ int D4NFilterObject::D4NFilterReadOp::prepare(optional_yield y, const DoutPrefix
       2. When part_num is 0 and source is multipart
       In both the cases the head is fetched from the backend store.
     */
+    if (source->get_cache_request()) {
+      return 0; // Let iterate method handle cache request logic 
+    }
     if (params.part_num || (!params.part_num && source->is_multipart())) {
       ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): source->is_multipart()= " << source->is_multipart() << dendl;
       if (params.part_num) { 
@@ -2065,6 +2098,11 @@ int D4NFilterObject::D4NFilterReadOp::iterate(const DoutPrefixProvider* dpp, int
       adjusted_len -= max_chunk_size;
     } while (start_part_num < num_parts);
   }
+
+  if (source->cache_request) {
+    return -ENOENT;
+  }
+
   ldpp_dout(dpp, 20) << "D4NFilterObject::iterate:: " << __func__ << "(): Fetching object from backend store" << dendl;
 
   Attrs obj_attrs;
@@ -2356,6 +2394,9 @@ int D4NFilterObject::D4NFilterDeleteOp::delete_obj(const DoutPrefixProvider* dpp
   if (!source->check_head_exists_in_cache_get_oid(dpp, head_oid_in_cache, attrs, block, y) && !block.deleteMarker) {
     /* for a dirty object, if the first call is a simple delete after versioning is enabled, the call will go to the backend store and create a delete marker there
        since no object with source->get_name() will be found in the cache (and this is correct) */
+    if (source->cache_request) {
+      return -ENOENT;
+    }
     ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): head object not found; calling next->delete_obj" << dendl;
     next->params = params;
     ret = next->delete_obj(dpp, y, flags);
@@ -2626,6 +2667,9 @@ int D4NFilterObject::D4NFilterDeleteOp::delete_obj(const DoutPrefixProvider* dpp
     }
 
     if (!objDirty) {
+      if (source->cache_request) {
+        return 0;
+      }
       next->params = params;
       ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): object is not dirty; calling next->delete_obj" << dendl;
       ret = next->delete_obj(dpp, y, flags);
@@ -2641,6 +2685,9 @@ int D4NFilterWriter::prepare(optional_yield y)
   d4n_writecache = g_conf()->d4n_writecache_enabled;
 
   if (!d4n_writecache) {
+    if (object->get_cache_request()) {
+      return -EINVAL;
+    }
     ldpp_dout(dpp, 0) << "D4NFilterWriter::" << __func__ << "(): calling next->prepare" << dendl;
     return next->prepare(y);
   } else {
@@ -2690,6 +2737,9 @@ int D4NFilterWriter::process(bufferlist&& data, uint64_t offset)
     int ret = 0;
 
     if (!d4n_writecache) {
+      if (object->get_cache_request()) {
+	return -EINVAL;
+      }
       ldpp_dout(dpp, 10) << "D4NFilterWriter::" << __func__ << "(): calling next process" << dendl;
       return next->process(std::move(data), offset);
     } else {
@@ -2815,6 +2865,9 @@ int D4NFilterWriter::complete(size_t accounted_size, const std::string& etag,
     object->set_attrs(attrs);
     object->set_attrs_from_obj_state(dpp, y, attrs, dirty);
   } else {
+    if (object->get_cache_request()) {
+      return -EINVAL;
+    }
     // we need to call next->complete here so that we are able to correctly get the object state needed for caching head
     ret = next->complete(accounted_size, etag, mtime, set_mtime, attrs, cksum,
                             delete_at, if_match, if_nomatch, user_data, zones_trace,
