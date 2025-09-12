@@ -7,7 +7,9 @@
 #include <map>
 #include <set>
 #include <thread>
+#include <unordered_map>
 #include <unordered_set>
+#include <vector>
 
 #include "msg/msg_types.h" // for entity_inst_t
 #include "msg/Dispatcher.h"
