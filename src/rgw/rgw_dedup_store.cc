@@ -63,7 +63,7 @@ namespace rgw::dedup {
     this->s.manifest_len    = 0;
 
     this->s.shared_manifest = 0;
-    memset(this->s.sha256, 0, sizeof(this->s.sha256));
+    memset(this->s.hash, 0, sizeof(this->s.hash));
     this->ref_tag           = "";
     this->manifest_bl.clear();
   }
@@ -118,7 +118,7 @@ namespace rgw::dedup {
     else {
       this->s.shared_manifest = CEPHTOH_64(p_rec->s.shared_manifest);
       for (int i = 0; i < 4; i++) {
-        this->s.sha256[i] = CEPHTOH_64(p_rec->s.sha256[i]);
+        this->s.hash[i] = CEPHTOH_64(p_rec->s.hash[i]);
       }
       this->ref_tag = std::string(p, this->s.ref_tag_len);
       p += p_rec->s.ref_tag_len;
@@ -177,7 +177,7 @@ namespace rgw::dedup {
     else {
       p_rec->s.shared_manifest = HTOCEPH_64(this->s.shared_manifest);
       for (int i = 0; i < 4; i++) {
-        p_rec->s.sha256[i] = HTOCEPH_64(this->s.sha256[i]);
+        p_rec->s.hash[i] = HTOCEPH_64(this->s.hash[i]);
       }
       len = this->ref_tag.length();
       std::memcpy(p, this->ref_tag.data(), len);
@@ -251,13 +251,13 @@ namespace rgw::dedup {
     stream << "num_parts = " << rec.s.num_parts << "\n";
     stream << "obj_size  = " << rec.s.obj_bytes_size/1024 <<" KiB"  << "\n";
     stream << "MD5       = " << std::hex << rec.s.md5_high << rec.s.md5_low << "\n";
-    stream << "SHA256    = ";
+    stream << "HASH      = ";
     for (int i =0; i < 4; i++) {
-      stream << rec.s.sha256[i];
+      stream << rec.s.hash[i];
     }
     stream << "\n";
 
-    if (rec.has_shared_manifest()) {
+    if (rec.s.flags.has_shared_manifest()) {
       stream << "Shared Manifest Object\n";
     }
     else {
@@ -583,19 +583,12 @@ namespace rgw::dedup {
     ceph_assert(bl.length());
 
     int ret = ioctx.write_full(oid, bl);
-    if (ret == (int)bl.length()) {
-      ldpp_dout(dpp, 20) << __func__ << "::wrote " << bl.length() << " bytes to "
-                         << oid << dendl;
+    if (ret == 0) {
+      ldpp_dout(dpp, 20) << __func__ << "::SLAB was written successfully" << dendl;
     }
     else {
-      if (ret == 0) {
-        // no error reported, but we wrote nothing which should never happen
-        ldpp_dout(dpp, 5) << __func__ << "::ERR: No Data was written to " << oid
-                          << ", bl.length()=" << bl.length() << dendl;
-        ret = -ENODATA;
-      }
       ldpp_dout(dpp, 1) << "ERROR: failed to write " << oid
-                        << " with: " << cpp_strerror(-ret) << dendl;
+                        << "::ret=" << ret << "::" << cpp_strerror(-ret) << dendl;
     }
 
     return ret;
