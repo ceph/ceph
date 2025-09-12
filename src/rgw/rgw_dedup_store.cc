@@ -63,7 +63,7 @@ namespace rgw::dedup {
     this->s.manifest_len    = 0;
 
     this->s.shared_manifest = 0;
-    memset(this->s.sha256, 0, sizeof(this->s.sha256));
+    memset(this->s.hash, 0, sizeof(this->s.hash));
     this->ref_tag           = "";
     this->manifest_bl.clear();
   }
@@ -117,8 +117,11 @@ namespace rgw::dedup {
     }
     else {
       this->s.shared_manifest = CEPHTOH_64(p_rec->s.shared_manifest);
-      for (int i = 0; i < 4; i++) {
-        this->s.sha256[i] = CEPHTOH_64(p_rec->s.sha256[i]);
+      // BLAKE3 hash has 256 bit splitted into multiple 64bit units
+      const unsigned units = (256 / (sizeof(uint64_t)*8));
+      static_assert(units == 4);
+      for (unsigned i = 0; i < units; i++) {
+        this->s.hash[i] = CEPHTOH_64(p_rec->s.hash[i]);
       }
       this->ref_tag = std::string(p, this->s.ref_tag_len);
       p += p_rec->s.ref_tag_len;
@@ -176,8 +179,11 @@ namespace rgw::dedup {
     }
     else {
       p_rec->s.shared_manifest = HTOCEPH_64(this->s.shared_manifest);
-      for (int i = 0; i < 4; i++) {
-        p_rec->s.sha256[i] = HTOCEPH_64(this->s.sha256[i]);
+      // BLAKE3 hash has 256 bit splitted into multiple 64bit units
+      const unsigned units = (256 / (sizeof(uint64_t)*8));
+      static_assert(units == 4);
+      for (unsigned i = 0; i < units; i++) {
+        p_rec->s.hash[i] = HTOCEPH_64(this->s.hash[i]);
       }
       len = this->ref_tag.length();
       std::memcpy(p, this->ref_tag.data(), len);
@@ -251,9 +257,12 @@ namespace rgw::dedup {
     stream << "num_parts = " << rec.s.num_parts << "\n";
     stream << "obj_size  = " << rec.s.obj_bytes_size/1024 <<" KiB"  << "\n";
     stream << "MD5       = " << std::hex << rec.s.md5_high << rec.s.md5_low << "\n";
-    stream << "SHA256    = ";
-    for (int i =0; i < 4; i++) {
-      stream << rec.s.sha256[i];
+    stream << "HASH      = ";
+    // BLAKE3 hash has 256 bit splitted into multiple 64bit units
+    const unsigned units = (256 / (sizeof(uint64_t)*8));
+    static_assert(units == 4);
+    for (unsigned i = 0; i < units; i++) {
+      stream << rec.s.hash[i];
     }
     stream << "\n";
 

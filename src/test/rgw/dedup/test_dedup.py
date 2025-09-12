@@ -35,10 +35,10 @@ class Dedup_Stats:
     skip_src_record: int = 0
     skip_changed_object: int = 0
     corrupted_etag: int = 0
-    sha256_mismatch: int = 0
-    valid_sha256: int = 0
-    invalid_sha256: int = 0
-    set_sha256: int = 0
+    hash_mismatch: int = 0
+    valid_hash: int = 0
+    invalid_hash: int = 0
+    set_hash: int = 0
     total_processed_objects: int = 0
     size_before_dedup: int = 0
     #loaded_objects: int = 0
@@ -594,8 +594,8 @@ def calc_expected_stats(dedup_stats, obj_size, num_copies, config):
     else:
         dedup_stats.skip_src_record += 1
         dedup_stats.set_shared_manifest_src += 1
-        dedup_stats.set_sha256 += num_copies
-        dedup_stats.invalid_sha256 += num_copies
+        dedup_stats.set_hash += num_copies
+        dedup_stats.invalid_hash += num_copies
         dedup_stats.unique_obj += 1
         dedup_stats.duplicate_obj += dups_count
         dedup_stats.deduped_obj += dups_count
@@ -939,10 +939,10 @@ def reset_full_dedup_stats(dedup_stats):
     dedup_stats.skip_singleton_bytes = 0
     dedup_stats.skip_changed_object = 0
     dedup_stats.corrupted_etag = 0
-    dedup_stats.sha256_mismatch = 0
-    dedup_stats.valid_sha256 = 0
-    dedup_stats.invalid_sha256 = 0
-    dedup_stats.set_sha256 = 0
+    dedup_stats.hash_mismatch = 0
+    dedup_stats.valid_hash = 0
+    dedup_stats.invalid_hash = 0
+    dedup_stats.set_hash = 0
 
 
 #-------------------------------------------------------------------------------
@@ -964,11 +964,11 @@ def read_full_dedup_stats(dedup_stats, md5_stats):
         dedup_stats.skip_changed_object = skipped[key]
 
     notify=md5_stats['notify']
-    dedup_stats.valid_sha256 = notify['Valid SHA256 attrs']
-    dedup_stats.invalid_sha256 = notify['Invalid SHA256 attrs']
-    key='Set SHA256'
+    dedup_stats.valid_hash = notify['Valid HASH attrs']
+    dedup_stats.invalid_hash = notify['Invalid HASH attrs']
+    key='Set HASH'
     if key in notify:
-        dedup_stats.set_sha256 = notify[key]
+        dedup_stats.set_hash = notify[key]
 
     sys_failures = md5_stats['system failures']
     key='Corrupted ETAG'
@@ -976,9 +976,9 @@ def read_full_dedup_stats(dedup_stats, md5_stats):
         dedup_stats.corrupted_etag = sys_failures[key]
 
     log_failures = md5_stats['logical failures']
-    key='SHA256 mismatch'
+    key='HASH mismatch'
     if key in log_failures:
-        dedup_stats.sha256_mismatch = log_failures[key]
+        dedup_stats.hash_mismatch = log_failures[key]
 
 
 #-------------------------------------------------------------------------------
@@ -1076,7 +1076,7 @@ def exec_dedup_internal(expected_dedup_stats, dry_run, max_dedup_time):
         result = admin(['dedup', 'estimate'])
         reset_full_dedup_stats(expected_dedup_stats)
     else:
-        result = admin(['dedup', 'restart'])
+        result = admin(['dedup', 'restart', '--yes-i-really-mean-it'])
 
     assert result[1] == 0
     log.debug("wait for dedup to complete")
@@ -1121,7 +1121,7 @@ def exec_dedup(expected_dedup_stats, dry_run, verify_stats=True):
         log.debug("potential_unique_obj= %d / %d ", dedup_stats.potential_unique_obj,
                   expected_dedup_stats.potential_unique_obj)
 
-    #dedup_stats.set_sha256 = dedup_stats.invalid_sha256
+    #dedup_stats.set_hash = dedup_stats.invalid_hash
     if dedup_stats != expected_dedup_stats:
         log.debug("==================================================")
         print_dedup_stats_diff(dedup_stats, expected_dedup_stats)
@@ -1308,14 +1308,14 @@ def check_full_dedup_state():
     global full_dedup_state_was_checked
     global full_dedup_state_disabled
     log.debug("check_full_dedup_state:: sending FULL Dedup request")
-    result = admin(['dedup', 'restart'])
+    result = admin(['dedup', 'restart', '--yes-i-really-mean-it'])
     if result[1] == 0:
-        log.debug("full dedup is enabled!")
+        log.info("full dedup is enabled!")
         full_dedup_state_disabled = False
         result = admin(['dedup', 'abort'])
         assert result[1] == 0
     else:
-        log.debug("full dedup is disabled, skip all full dedup tests")
+        log.info("full dedup is disabled, skip all full dedup tests")
         full_dedup_state_disabled = True
 
     full_dedup_state_was_checked = True
@@ -1455,9 +1455,9 @@ def test_dedup_etag_corruption():
             dedup_ratio_actual=ret[3]
 
             if corruption == "no corruption":
-                expected_dedup_stats.valid_sha256=1
-                expected_dedup_stats.invalid_sha256=0
-                expected_dedup_stats.set_sha256=0
+                expected_dedup_stats.valid_hash=1
+                expected_dedup_stats.invalid_hash=0
+                expected_dedup_stats.set_hash=0
 
             s3_bytes_before=expected_dedup_stats.size_before_dedup
             expected_ratio_actual=Dedup_Ratio()
@@ -1527,10 +1527,10 @@ def test_md5_collisions():
         dedup_stats.size_before_dedup=2*BLOCK_SIZE
         # the md5 collision confuses the estimate
         dedup_stats.dedup_bytes_estimate=BLOCK_SIZE
-        # SHA256 check will expose the problem
-        dedup_stats.invalid_sha256=dedup_stats.total_processed_objects
-        dedup_stats.set_sha256=dedup_stats.total_processed_objects
-        dedup_stats.sha256_mismatch=1
+        # HASH check will expose the problem
+        dedup_stats.invalid_hash=dedup_stats.total_processed_objects
+        dedup_stats.set_hash=dedup_stats.total_processed_objects
+        dedup_stats.hash_mismatch=1
         s3_bytes_before=dedup_stats.size_before_dedup
         expected_ratio_actual=Dedup_Ratio()
         expected_ratio_actual.s3_bytes_before=s3_bytes_before
@@ -1544,9 +1544,9 @@ def test_md5_collisions():
 
         assert expected_ratio_actual == dedup_ratio_actual
 
-        dedup_stats.valid_sha256=dedup_stats.total_processed_objects
-        dedup_stats.invalid_sha256=0
-        dedup_stats.set_sha256=0
+        dedup_stats.valid_hash=dedup_stats.total_processed_objects
+        dedup_stats.invalid_hash=0
+        dedup_stats.set_hash=0
 
         log.debug("test_md5_collisions: second call to exec_dedup")
         ret=exec_dedup(dedup_stats, dry_run)
@@ -1657,9 +1657,9 @@ def test_dedup_inc_0_with_tenants():
         dedup_stats2.set_shared_manifest_src=0
         dedup_stats2.deduped_obj=0
         dedup_stats2.deduped_obj_bytes=0
-        dedup_stats2.valid_sha256=dedup_stats.invalid_sha256
-        dedup_stats2.invalid_sha256=0
-        dedup_stats2.set_sha256=0
+        dedup_stats2.valid_hash=dedup_stats.invalid_hash
+        dedup_stats2.invalid_hash=0
+        dedup_stats2.set_hash=0
 
         log.debug("test_dedup_inc_0_with_tenants: incremental dedup:")
         # run dedup again and make sure nothing has changed
@@ -1706,9 +1706,9 @@ def test_dedup_inc_0():
         dedup_stats2.set_shared_manifest_src=0
         dedup_stats2.deduped_obj=0
         dedup_stats2.deduped_obj_bytes=0
-        dedup_stats2.valid_sha256=dedup_stats.invalid_sha256
-        dedup_stats2.invalid_sha256=0
-        dedup_stats2.set_sha256=0
+        dedup_stats2.valid_hash=dedup_stats.invalid_hash
+        dedup_stats2.invalid_hash=0
+        dedup_stats2.set_hash=0
 
         log.debug("test_dedup_inc_0: incremental dedup:")
         # run dedup again and make sure nothing has changed
@@ -1775,9 +1775,9 @@ def test_dedup_inc_1_with_tenants():
         stats_combined.deduped_obj         -= stats_base.deduped_obj
         stats_combined.deduped_obj_bytes   -= stats_base.deduped_obj_bytes
 
-        stats_combined.valid_sha256    = stats_base.set_sha256
-        stats_combined.invalid_sha256 -= stats_base.set_sha256
-        stats_combined.set_sha256     -= stats_base.set_sha256
+        stats_combined.valid_hash    = stats_base.set_hash
+        stats_combined.invalid_hash -= stats_base.set_hash
+        stats_combined.set_hash     -= stats_base.set_hash
 
         log.debug("test_dedup_inc_1_with_tenants: incremental dedup:")
         # run dedup again
@@ -1840,9 +1840,9 @@ def test_dedup_inc_1():
         stats_combined.deduped_obj         -= stats_base.deduped_obj
         stats_combined.deduped_obj_bytes   -= stats_base.deduped_obj_bytes
 
-        stats_combined.valid_sha256    = stats_base.set_sha256
-        stats_combined.invalid_sha256 -= stats_base.set_sha256
-        stats_combined.set_sha256     -= stats_base.set_sha256
+        stats_combined.valid_hash    = stats_base.set_hash
+        stats_combined.invalid_hash -= stats_base.set_hash
+        stats_combined.set_hash     -= stats_base.set_hash
 
         log.debug("test_dedup_inc_1: incremental dedup:")
         # run dedup again
@@ -1918,9 +1918,9 @@ def test_dedup_inc_2_with_tenants():
         stats_combined.deduped_obj         -= stats_base.deduped_obj
         stats_combined.deduped_obj_bytes   -= stats_base.deduped_obj_bytes
 
-        stats_combined.valid_sha256    = stats_base.set_sha256
-        stats_combined.invalid_sha256 -= stats_base.set_sha256
-        stats_combined.set_sha256     -= stats_base.set_sha256
+        stats_combined.valid_hash    = stats_base.set_hash
+        stats_combined.invalid_hash -= stats_base.set_hash
+        stats_combined.set_hash     -= stats_base.set_hash
 
         log.debug("test_dedup_inc_2_with_tenants: incremental dedup:")
         # run dedup again
@@ -1991,9 +1991,9 @@ def test_dedup_inc_2():
         stats_combined.deduped_obj         -= stats_base.deduped_obj
         stats_combined.deduped_obj_bytes   -= stats_base.deduped_obj_bytes
 
-        stats_combined.valid_sha256    = stats_base.set_sha256
-        stats_combined.invalid_sha256 -= stats_base.set_sha256
-        stats_combined.set_sha256     -= stats_base.set_sha256
+        stats_combined.valid_hash    = stats_base.set_hash
+        stats_combined.invalid_hash -= stats_base.set_hash
+        stats_combined.set_hash     -= stats_base.set_hash
 
         log.debug("test_dedup_inc_2: incremental dedup:")
         # run dedup again
@@ -2039,7 +2039,7 @@ def test_dedup_inc_with_remove_multi_tenants():
         # REMOVE some objects and update stats/expected
         src_record=0
         shared_manifest=0
-        valid_sha=0
+        valid_hash=0
         object_keys=[]
         files_sub=[]
         dedup_stats = Dedup_Stats()
@@ -2052,7 +2052,7 @@ def test_dedup_inc_with_remove_multi_tenants():
             log.debug("objects::%s::size=%d, num_copies=%d", filename, obj_size, num_copies_2);
             if num_copies_2:
                 if num_copies_2 > 1 and obj_size > RADOS_OBJ_SIZE:
-                    valid_sha += num_copies_2
+                    valid_hash += num_copies_2
                     src_record += 1
                     shared_manifest += (num_copies_2 - 1)
 
@@ -2076,9 +2076,9 @@ def test_dedup_inc_with_remove_multi_tenants():
         dedup_stats.deduped_obj_bytes=0
         dedup_stats.skip_src_record=src_record
         dedup_stats.skip_shared_manifest=shared_manifest
-        dedup_stats.valid_sha256=valid_sha
-        dedup_stats.invalid_sha256=0
-        dedup_stats.set_sha256=0
+        dedup_stats.valid_hash=valid_hash
+        dedup_stats.invalid_hash=0
+        dedup_stats.set_hash=0
 
         log.debug("test_dedup_inc_with_remove: incremental dedup:")
         dry_run=False
@@ -2119,7 +2119,7 @@ def test_dedup_inc_with_remove():
         # REMOVE some objects and update stats/expected
         src_record=0
         shared_manifest=0
-        valid_sha=0
+        valid_hash=0
         object_keys=[]
         files_sub=[]
         dedup_stats = Dedup_Stats()
@@ -2132,7 +2132,7 @@ def test_dedup_inc_with_remove():
             log.debug("objects::%s::size=%d, num_copies=%d", filename, obj_size, num_copies_2);
             if num_copies_2:
                 if num_copies_2 > 1 and obj_size > RADOS_OBJ_SIZE:
-                    valid_sha += num_copies_2
+                    valid_hash += num_copies_2
                     src_record += 1
                     shared_manifest += (num_copies_2 - 1)
 
@@ -2163,9 +2163,9 @@ def test_dedup_inc_with_remove():
         dedup_stats.deduped_obj_bytes=0
         dedup_stats.skip_src_record=src_record
         dedup_stats.skip_shared_manifest=shared_manifest
-        dedup_stats.valid_sha256=valid_sha
-        dedup_stats.invalid_sha256=0
-        dedup_stats.set_sha256=0
+        dedup_stats.valid_hash=valid_hash
+        dedup_stats.invalid_hash=0
+        dedup_stats.set_hash=0
 
         log.debug("test_dedup_inc_with_remove: incremental dedup:")
         log.debug("stats_base.size_before_dedup=%d", stats_base.size_before_dedup)
@@ -2322,7 +2322,7 @@ def test_dedup_small_multipart():
 #-------------------------------------------------------------------------------
 @pytest.mark.basic_test
 def test_dedup_large_scale_with_tenants():
-    return
+    #return
 
     if full_dedup_is_disabled():
         return
@@ -2342,7 +2342,7 @@ def test_dedup_large_scale_with_tenants():
 #-------------------------------------------------------------------------------
 @pytest.mark.basic_test
 def test_dedup_large_scale():
-    return
+    #return
 
     if full_dedup_is_disabled():
         return
@@ -2362,7 +2362,7 @@ def test_dedup_large_scale():
 #-------------------------------------------------------------------------------
 @pytest.mark.basic_test
 def test_empty_bucket():
-    return
+    #return
 
     if full_dedup_is_disabled():
         return
@@ -2426,9 +2426,9 @@ def inc_step_with_tenants(stats_base, files, conns, bucket_names, config):
     stats_combined.deduped_obj         -= stats_base.deduped_obj
     stats_combined.deduped_obj_bytes   -= stats_base.deduped_obj_bytes
 
-    stats_combined.valid_sha256    = stats_base.set_sha256
-    stats_combined.invalid_sha256 -= stats_base.set_sha256
-    stats_combined.set_sha256     -= stats_base.set_sha256
+    stats_combined.valid_hash    = stats_base.set_hash
+    stats_combined.invalid_hash -= stats_base.set_hash
+    stats_combined.set_hash     -= stats_base.set_hash
 
     log.debug("test_dedup_inc_2_with_tenants: incremental dedup:")
     # run dedup again
@@ -2470,10 +2470,10 @@ def test_dedup_inc_loop_with_tenants():
             files=ret[0]
             stats_last=ret[1]
             stats_base.set_shared_manifest_src += stats_last.set_shared_manifest_src
-            stats_base.dup_head_size       += stats_last.dup_head_size
-            stats_base.deduped_obj         += stats_last.deduped_obj
-            stats_base.deduped_obj_bytes   += stats_last.deduped_obj_bytes
-            stats_base.set_sha256          += stats_last.set_sha256
+            stats_base.dup_head_size     += stats_last.dup_head_size
+            stats_base.deduped_obj       += stats_last.deduped_obj
+            stats_base.deduped_obj_bytes += stats_last.deduped_obj_bytes
+            stats_base.set_hash          += stats_last.set_hash
     finally:
         # cleanup must be executed even after a failure
         cleanup_all_buckets(bucket_names, conns)

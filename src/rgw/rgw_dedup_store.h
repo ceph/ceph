@@ -27,6 +27,7 @@
 #include "include/rados/buffer.h"
 #include "include/rados/librados.hpp"
 #include "rgw_dedup_utils.h"
+#include "BLAKE3/c/blake3.h"
 
 namespace rgw::dedup {
   struct key_t;
@@ -171,7 +172,7 @@ namespace rgw::dedup {
       uint8_t       pad[6];
 
       uint64_t      shared_manifest; // 64bit hash of the SRC object manifest
-      uint64_t      sha256[4];       // 4 * 8 Bytes of SHA256
+      uint64_t      hash[4];       // 4 * 8 Bytes of BLAKE3
     }s;
     std::string obj_name;
     // TBD: find pool name making it easier to get ioctx
@@ -182,7 +183,7 @@ namespace rgw::dedup {
     std::string stor_class;
     bufferlist  manifest_bl;
   };
-
+  static_assert(BLAKE3_OUT_LEN == sizeof(disk_record_t::packed_rec_t::hash));
   std::ostream &operator<<(std::ostream &stream, const disk_record_t & rec);
 
   static constexpr unsigned BLOCK_MAGIC = 0xFACE;

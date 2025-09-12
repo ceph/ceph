@@ -156,7 +156,7 @@ void usage()
   cout << "  caps rm                          remove user capabilities\n";
   cout << "  dedup stats                      Display dedup statistics from the last run\n";
   cout << "  dedup estimate                   Runs dedup in estimate mode (no changes will be made)\n";
-  cout << "  dedup restart                    Restart dedup\n";
+  cout << "  dedup restart                    Restart dedup; must include --yes-i-really-mean-it to activate\n";
   cout << "  dedup abort                      Abort dedup\n";
   cout << "  dedup pause                      Pause dedup\n";
   cout << "  dedup resume                     Resume paused dedup\n";
@@ -9225,6 +9225,12 @@ next:
 	dedup_type = dedup_req_type_t::DEDUP_TYPE_ESTIMATE;
       }
       else {
+	if (!yes_i_really_mean_it) {
+	  cerr << "Full Dedup is dangerous and could lead to data loss!\n"
+	       << "do you really mean it? (requires --yes-i-really-mean-it)"
+	       << std::endl;
+	  return EINVAL;
+	}
 	dedup_type = dedup_req_type_t::DEDUP_TYPE_FULL;
 #ifndef FULL_DEDUP_SUPPORT
 	std::cerr << "Only dedup estimate is supported!" << std::endl;
