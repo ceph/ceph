@@ -693,7 +693,7 @@ public:
   seastar::future<PipelineExitBarrierI::Ref> enter(TriggerT& t) {
     waiting++;
     return mutex.lock().then([this, op_id=t.get_op().get_id()] {
-      ceph_assert_always(waiting > 0);
+      ceph_assert(waiting > 0);
       --waiting;
       set_held_by(op_id);
       return PipelineExitBarrierI::Ref(new ExitBarrier{*this, op_id});
@@ -702,12 +702,12 @@ public:
 
 private:
   void set_held_by(Operation::id_t id) {
-    ceph_assert_always(held_by == Operation::NULL_ID);
+    ceph_assert(held_by == Operation::NULL_ID);
     held_by = id;
   }
 
   void clear_held_by(Operation::id_t id) {
-    ceph_assert_always(held_by == id);
+    ceph_assert(held_by == id);
     held_by = Operation::NULL_ID;
   }
 

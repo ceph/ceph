@@ -312,7 +312,7 @@ public:
     LOG_PREFIX(AdminSocketHook::AssertAlwaysHook);
     DEBUG("");
     if (local_conf().get_val<bool>("debug_asok_assert_abort")) {
-      ceph_assert_always(0);
+      ceph_abort();
       co_return tell_result_t();
     } else {
       co_return tell_result_t{-EPERM, "configuration set to disallow asok assert"};
