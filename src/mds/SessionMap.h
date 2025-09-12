@@ -31,12 +31,15 @@
 #include "include/xlist.h"
 #include "include/elist.h"
 #include "include/interval_set.h"
+#include "include/object.h" // for object_t
 #include "mdstypes.h" // for metareqid_t, session_info_t
 #include "mds/MDSAuthCaps.h"
 #include "common/ceph_time.h" // for ceph::coarse_mono_{clock,time}
 #include "common/DecayCounter.h"
+#include "common/RefCountedObj.h"
 
 #include "Mutation.h" // for struct MDRequestImpl
+#include "msg/Connection.h" // for ConnectionRef
 #include "msg/Message.h"
 
 struct MDRequestImpl;

@@ -17,6 +17,7 @@
 #include "Capability.h"
 #include "CDentry.h" // for struct ClientLease
 #include "CInode.h"
+#include "MDSContext.h" // for MDSIOContextBase
 #include "MDSRank.h"
 #include "MDCache.h"
 #include "Mutation.h"

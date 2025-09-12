@@ -28,6 +28,7 @@
 #include "Locker.h"
 #include "Mutation.h"
 #include "MDBalancer.h"
+#include "cephfs_features.h" // for CEPHFS_FEATURE_REPLY_ENCODING
 
 #include "events/EUpdate.h"
 
