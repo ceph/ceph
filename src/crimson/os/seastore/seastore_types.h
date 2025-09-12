@@ -1480,8 +1480,9 @@ enum class extent_types_t : uint8_t {
   TEST_BLOCK_PHYSICAL = 14,
   BACKREF_INTERNAL = 15,
   BACKREF_LEAF = 16,
+  LOG_NODE = 17,
   // None and the number of valid extent_types_t
-  NONE = 17,
+  NONE = 18,
 };
 using extent_types_le_t = uint8_t;
 constexpr auto EXTENT_TYPES_MAX = static_cast<uint8_t>(extent_types_t::NONE);
@@ -1496,14 +1497,16 @@ constexpr bool is_data_type(extent_types_t type) {
 }
 
 constexpr bool is_logical_metadata_type(extent_types_t type) {
-  return type >= extent_types_t::ROOT_META &&
-         type <= extent_types_t::COLL_BLOCK;
+  return (type >= extent_types_t::ROOT_META &&
+         type <= extent_types_t::COLL_BLOCK) ||
+	 type == extent_types_t::LOG_NODE;
 }
 
 constexpr bool is_logical_type(extent_types_t type) {
   if ((type >= extent_types_t::ROOT_META &&
        type <= extent_types_t::OBJECT_DATA_BLOCK) ||
-      type == extent_types_t::TEST_BLOCK) {
+      type == extent_types_t::TEST_BLOCK ||
+      type == extent_types_t::LOG_NODE) {
     assert(is_logical_metadata_type(type) ||
            is_data_type(type));
     return true;
@@ -1557,7 +1560,8 @@ constexpr bool is_backref_mapped_type(extent_types_t type) {
   if ((type >= extent_types_t::LADDR_INTERNAL &&
        type <= extent_types_t::OBJECT_DATA_BLOCK) ||
       type == extent_types_t::TEST_BLOCK ||
-      type == extent_types_t::TEST_BLOCK_PHYSICAL) {
+      type == extent_types_t::TEST_BLOCK_PHYSICAL ||
+      type == extent_types_t::LOG_NODE) {
     assert(is_logical_type(type) ||
 	   is_lba_node(type) ||
 	   type == extent_types_t::TEST_BLOCK_PHYSICAL);
@@ -1573,7 +1577,7 @@ constexpr bool is_backref_mapped_type(extent_types_t type) {
 constexpr bool is_real_type(extent_types_t type) {
   if (type <= extent_types_t::OBJECT_DATA_BLOCK ||
       (type >= extent_types_t::TEST_BLOCK &&
-       type <= extent_types_t::BACKREF_LEAF)) {
+       type <= extent_types_t::LOG_NODE)) {
     assert(is_logical_type(type) ||
            is_physical_type(type));
     return true;
@@ -1932,6 +1936,10 @@ public:
   
   omap_type_t get_type() const {
     return type;
+  }
+
+  bool is_null() const {
+    return addr == laddr_le_t(L_ADDR_NULL);
   }
 };
 
