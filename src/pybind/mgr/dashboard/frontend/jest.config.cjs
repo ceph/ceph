@@ -6,7 +6,8 @@ const esModules = [
   'lodash-es',
   'react-syntax-highlighter',
   'swagger-client',
-  '@ng-bootstrap'
+  '@ng-bootstrap',
+  'is-cidr'
 ];
 const jestConfig = {
   moduleNameMapper: {
@@ -40,7 +41,7 @@ const jestConfig = {
   testMatch: ['**/*.spec.ts'],
   testRunner: 'jest-jasmine2',
   testEnvironmentOptions: {
-    detectOpenHandles: false
+    detectOpenHandles: true
   }
 };
 module.exports = jestConfig;
