@@ -5,7 +5,8 @@
 #include "common/ceph_argparse.h"
 #include "rgw_auth_registry.h"
 #include "rgw_aio_throttle.h"
-#include "rgw_ssd_driver.h"
+
+#include "driver/ssd/rgw_ssd_driver.h"
 
 #define dout_subsys ceph_subsys_rgw
 
