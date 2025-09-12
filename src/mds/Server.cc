@@ -67,6 +67,7 @@
 #include "common/strescape.h"
 #include "common/ceph_json.h"
 #include "common/debug.h"
+#include "common/errno.h" // for cpp_strerror()
 #include "common/Timer.h"
 #include "common/perf_counters.h"
 #include "include/compat.h"
