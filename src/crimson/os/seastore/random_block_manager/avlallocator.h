@@ -65,7 +65,7 @@ public:
   std::optional<interval_set<rbm_abs_addr>> alloc_extent(
     size_t size) final;
   std::optional<interval_set<rbm_abs_addr>> alloc_extents(
-    size_t size) final;
+    size_t size, rbm_abs_addr hint) final;
 
   void free_extent(rbm_abs_addr addr, size_t size) final;
   void mark_extent_used(rbm_abs_addr addr, size_t size) final;

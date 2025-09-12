@@ -77,14 +77,15 @@ struct rbm_superblock_t {
       ceph_assert(shard_infos[i].size > block_size &&
                   shard_infos[i].size % block_size == 0);
       ceph_assert_always(shard_infos[i].size <= DEVICE_OFF_MAX);
-      ceph_assert(journal_size > 0 &&
-                  journal_size % block_size == 0);
+      ceph_assert((journal_size > 0 &&
+		   journal_size % block_size == 0) ||
+		  config.spec.dtype == device_type_t::HDD);
       ceph_assert(shard_infos[i].start_offset < size &&
 		  shard_infos[i].start_offset % block_size == 0);
     }
     ceph_assert(config.spec.magic != 0);
-    ceph_assert(get_default_backend_of_device(config.spec.dtype) ==
-		backend_type_t::RANDOM_BLOCK);
+    // allow HDD devices use segmented backend
+    ceph_assert(config.spec.btype != backend_type_t::NONE);
     ceph_assert(config.spec.id <= DEVICE_ID_MAX_VALID);
   }
 
@@ -146,7 +147,7 @@ public:
 
   using allocate_ret_bare = std::list<alloc_paddr_result>;
   using allo_extents_ret = allocate_ertr::future<allocate_ret_bare>;
-  virtual allocate_ret_bare alloc_extents(size_t size) = 0;
+  virtual allocate_ret_bare alloc_extents(size_t size, paddr_t hint) = 0;
 
   virtual void mark_space_used(paddr_t paddr, size_t len) = 0;
   virtual void mark_space_free(paddr_t paddr, size_t len) = 0;
@@ -183,7 +184,7 @@ namespace random_block_device {
 }
 
 seastar::future<std::unique_ptr<random_block_device::RBMDevice>> 
-  get_rb_device(const std::string &device);
+  get_rb_device(const std::string &device, device_type_t dtype);
 
 std::ostream &operator<<(std::ostream &out, const rbm_superblock_t &header);
 std::ostream &operator<<(std::ostream &out, const rbm_shard_info_t &shard);

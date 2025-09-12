@@ -97,7 +97,7 @@ public:
     return super.config.spec.magic;
   }
 
-  device_type_t get_device_type() const final {
+  virtual device_type_t get_device_type() const {
     return device_type_t::RANDOM_BLOCK_SSD;
   }
 

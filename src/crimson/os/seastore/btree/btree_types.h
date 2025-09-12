@@ -110,16 +110,21 @@ struct lba_map_val_t {
   extent_len_t len = 0;  ///< length of mapping
   pladdr_t pladdr;         ///< direct addr of mapping or
 			   //	laddr of a direct lba mapping(see btree_lba_manager.h)
+  paddr_t shadow_paddr;
   extent_ref_count_t refcount = 0; ///< refcount
   checksum_t checksum = 0; ///< checksum of original block written at paddr (TODO)
+  extent_types_t type;
 
   lba_map_val_t() = default;
   lba_map_val_t(
     extent_len_t len,
     pladdr_t pladdr,
+    paddr_t shadow_paddr,
     extent_ref_count_t refcount,
-    checksum_t checksum)
-    : len(len), pladdr(pladdr), refcount(refcount), checksum(checksum) {}
+    checksum_t checksum,
+    extent_types_t type)
+    : len(len), pladdr(pladdr), shadow_paddr(shadow_paddr),
+      refcount(refcount), checksum(checksum), type(type) {}
   bool operator==(const lba_map_val_t&) const = default;
 };
 
@@ -133,8 +138,10 @@ std::ostream& operator<<(std::ostream& out, const lba_map_val_t&);
 struct __attribute__((packed)) lba_map_val_le_t {
   extent_len_le_t len = init_extent_len_le(0);
   pladdr_le_t pladdr;
+  paddr_le_t shadow_paddr;
   extent_ref_count_le_t refcount{0};
   checksum_le_t checksum{0};
+  extent_types_le_t type{EXTENT_TYPES_MAX};
 
   lba_map_val_le_t() = default;
   lba_map_val_le_t(const lba_map_val_le_t &) = default;
@@ -142,10 +149,14 @@ struct __attribute__((packed)) lba_map_val_le_t {
     : len(init_extent_len_le(val.len)),
       pladdr(pladdr_le_t(val.pladdr)),
       refcount(val.refcount),
-      checksum(val.checksum) {}
+      checksum(val.checksum),
+      type(static_cast<extent_types_le_t>(val.type)) {}
 
   operator lba_map_val_t() const {
-    return lba_map_val_t{ len, pladdr, refcount, checksum };
+    return lba_map_val_t{
+      len, pladdr, shadow_paddr, refcount, checksum,
+      static_cast<extent_types_t>(type)
+    };
   }
 };
 
@@ -250,6 +261,11 @@ struct BtreeCursor
     assert(!is_end());
     return val->len;
   }
+
+  extent_types_t get_extent_type() const {
+    assert(val->type != extent_types_t::NONE);
+    return val->type;
+  }
 };
 
 struct LBACursor : BtreeCursor<laddr_t, lba::lba_map_val_t> {
@@ -269,7 +285,7 @@ struct LBACursor : BtreeCursor<laddr_t, lba::lba_map_val_t> {
   laddr_t get_intermediate_key() const {
     assert(is_indirect());
     assert(!is_end());
-    return val->pladdr.get_laddr();
+    return val->pladdr.build_laddr(key);
   }
   checksum_t get_checksum() const {
     assert(!is_end());
@@ -283,6 +299,15 @@ struct LBACursor : BtreeCursor<laddr_t, lba::lba_map_val_t> {
     assert(!is_end());
     assert(!is_indirect());
     return val->refcount;
+  }
+
+  bool has_shadow_paddr() const {
+    return val->shadow_paddr != P_ADDR_NULL;
+  }
+
+  paddr_t get_shadow_paddr() const {
+    assert(has_shadow_paddr());
+    return val->shadow_paddr;
   }
 
   base_iertr::future<> refresh();
@@ -323,7 +348,7 @@ std::ostream &operator<<(
   if (cursor.is_end()) {
     return out << "END)";
   }
-  return out << "," << cursor.key
+  return out << cursor.key
 	     << "~" << *cursor.val
 	     << ")";
 }

@@ -74,8 +74,7 @@ struct block_sm_superblock_t {
                   shard_infos[i].first_segment_offset % block_size == 0);
     }
     ceph_assert(config.spec.magic != 0);
-    ceph_assert(get_default_backend_of_device(config.spec.dtype) ==
-		backend_type_t::SEGMENTED);
+    ceph_assert(config.spec.btype != backend_type_t::NONE);
     ceph_assert(config.spec.id <= DEVICE_ID_MAX_VALID);
     if (!config.major_dev) {
       ceph_assert(config.secondary_devices.size() == 0);

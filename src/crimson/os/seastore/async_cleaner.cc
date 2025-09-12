@@ -596,10 +596,10 @@ std::size_t JournalTrimmerImpl::get_alloc_journal_size() const
   return static_cast<std::size_t>(ret);
 }
 
-seastar::future<> JournalTrimmerImpl::trim() {
+seastar::future<> JournalTrimmerImpl::trim(bool force) {
   return seastar::when_all(
-    [this] {
-      if (should_trim_alloc()) {
+    [this, force] {
+      if (force || should_trim_alloc()) {
         return trim_alloc(
         ).handle_error(
           crimson::ct_error::assert_all{
@@ -610,8 +610,8 @@ seastar::future<> JournalTrimmerImpl::trim() {
         return seastar::now();
       }
     },
-    [this] {
-      if (should_start_trim_dirty()) {
+    [this, force] {
+      if (force || should_start_trim_dirty()) {
         return trim_dirty(
         ).handle_error(
           crimson::ct_error::assert_all{
@@ -1245,15 +1245,12 @@ SegmentCleaner::do_reclaim_space(
 	}).si_then([FNAME, &extents, this, &reclaimed, &t] {
           DEBUGT("reclaim {} extents", t, extents.size());
           // rewrite live extents
-          auto modify_time = segments[reclaim_state->get_segment_id()].modify_time;
-          return trans_intr::do_for_each(
-            extents,
-            [this, modify_time, &t, &reclaimed](auto ext)
-          {
-            reclaimed += ext->get_length();
-            return extent_callback->rewrite_extent(
-                t, ext, reclaim_state->target_generation, modify_time);
-          });
+	  auto modify_time = segments[reclaim_state->get_segment_id()].modify_time;
+	  for (auto &ext : extents) {
+	    reclaimed += ext->get_length();
+	  }
+	  return extent_callback->rewrite_extents(
+	    t, extents, reclaim_state->target_generation, modify_time);
         });
       }).si_then([this, &t] {
         return extent_callback->submit_transaction_direct(t);
@@ -1767,8 +1764,10 @@ void SegmentCleaner::print(std::ostream &os, bool is_detailed) const
 RBMCleaner::RBMCleaner(
   RBMDeviceGroupRef&& rb_group,
   BackrefManager &backref_manager,
-  bool detailed)
+  bool detailed,
+  bool is_cold)
   : detailed(detailed),
+    is_cold(is_cold),
     rb_group(std::move(rb_group)),
     backref_manager(backref_manager)
 {}
@@ -1959,7 +1958,13 @@ void RBMCleaner::register_metrics()
 {
   namespace sm = seastar::metrics;
 
-  metrics.add_group("rbm_cleaner", {
+  std::string prefix;
+  if (is_cold) {
+    prefix.append("cold_");
+  }
+  prefix.append("rbm_cleaner");
+
+  metrics.add_group(prefix, {
     sm::make_counter("total_bytes",
 		     [this] { return get_total_bytes(); },
 		     sm::description("the size of the space")),
