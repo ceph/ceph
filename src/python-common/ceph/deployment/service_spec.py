@@ -32,6 +32,8 @@ from typing import (
 )
 
 import yaml
+import json
+import hashlib
 
 from ceph.deployment.hostspec import HostSpec, SpecValidationError, assert_valid_host
 from ceph.deployment.utils import unwrap_ipv6, valid_addr, verify_non_negative_int
@@ -1270,6 +1272,14 @@ class ServiceSpec(object):
         return (self.__class__ == other.__class__
                 and
                 self.__dict__ == other.__dict__)
+
+    def spec_hash(self, length: int = 12) -> str:
+        """
+        Return a short stable SHA-256 hex digest of the full service-spec JSON.
+        """
+        json_repr = json.dumps(self.to_json(), sort_keys=True)
+        full_hash = hashlib.sha256(json_repr.encode('utf-8')).hexdigest()
+        return full_hash[:length]
 
     def one_line_str(self) -> str:
         return '<{} for service_name={}>'.format(self.__class__.__name__, self.service_name())

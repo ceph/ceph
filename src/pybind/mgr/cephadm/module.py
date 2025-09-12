@@ -3098,6 +3098,8 @@ Then run the following:
                           spec: Optional[ServiceSpec],
                           daemon_type: str,
                           daemon_id: str) -> List[str]:
+        if spec is None:
+            return []
         svc_type = daemon_type_to_service(daemon_type)
         svc_cls = service_registry.get_service(svc_type)
         deps = svc_cls.get_dependencies(self, spec, daemon_type) if svc_cls else []
