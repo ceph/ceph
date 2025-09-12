@@ -38,7 +38,7 @@ SQLITE_EXTENSION_INIT1
 #include "include/rados/librados.hpp"
 
 #include "common/Clock.h"
-#include "common/Formatter.h"
+#include "common/JSONFormatter.h"
 #include "common/ceph_argparse.h"
 #include "common/ceph_mutex.h"
 #include "common/common_init.h"
