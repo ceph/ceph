@@ -2104,6 +2104,13 @@ class RgwMultisite:
                         '--tier-type', tier_type, '--tier-config', tier_config_str
                     ]
 
+            tier_config_rm = placement_target.get('tier_config_rm', {})
+            if tier_config_rm:
+                tier_config_rm_str = ','.join(
+                    f"{key}={value}" for key, value in tier_config_rm.items()
+                )
+                cmd_add_placement_options += ['--tier-config-rm', tier_config_rm_str]
+
             if placement_target.get('tags') and storage_class_name != STANDARD_STORAGE_CLASS:
                 cmd_add_placement_options += ['--tags', placement_target['tags']]
 
