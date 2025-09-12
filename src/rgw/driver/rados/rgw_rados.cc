@@ -7418,6 +7418,13 @@ int RGWRados::set_attrs(const DoutPrefixProvider *dpp, RGWObjectCtx* octx, RGWBu
     }
   }
 
+ // remove replication-trace attr to be able to re-replicate an object when metadata changes
+  iter = attrs.find(RGW_ATTR_OBJ_REPLICATION_TRACE);
+  if (iter != attrs.end()) {
+    const string& name = iter->first;
+    op.rmxattr(name.c_str());
+  }
+
   if (!op.size())
     return 0;
 
