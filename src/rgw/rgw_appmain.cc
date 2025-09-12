@@ -583,7 +583,7 @@ void rgw::AppMain::init_lua()
   env.lua.manager = env.driver->get_lua_manager(install_dir);
   if (driver->get_name() == "rados") { /* Supported for only RadosStore */
     lua_background = std::make_unique<
-      rgw::lua::Background>(driver, dpp->get_cct(), env.lua.manager.get());
+      rgw::lua::Background>(dpp->get_cct(), env.lua.manager.get());
     lua_background->start();
     env.lua.background = lua_background.get();
     static_cast<rgw::sal::RadosLuaManager*>(env.lua.manager.get())->watch_reload(dpp);

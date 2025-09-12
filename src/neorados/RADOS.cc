@@ -897,9 +897,10 @@ void RADOS::make_with_cct_(CephContext* cct,
 			   asio::io_context& ioctx,
 			   BuildComp c) {
   try {
-    auto r = new detail::NeoClient{std::make_unique<detail::RADOS>(ioctx, cct)};
+    auto r = std::make_shared<detail::NeoClient>(
+      std::make_unique<detail::RADOS>(ioctx, cct));
     r->objecter->wait_for_osd_map(
-      [c = std::move(c), r = std::unique_ptr<detail::Client>(r)]() mutable {
+      [c = std::move(c), r = std::move(r)]() mutable {
 	asio::dispatch(asio::append(std::move(c), bs::error_code{},
 				    RADOS{std::move(r)}));
       });
@@ -910,13 +911,16 @@ void RADOS::make_with_cct_(CephContext* cct,
 }
 
 RADOS RADOS::make_with_librados(librados::Rados& rados) {
-  return RADOS{std::make_unique<detail::RadosClient>(rados.client)};
+  return RADOS{std::make_shared<detail::RadosClient>(rados.client)};
 }
 
 RADOS::RADOS() = default;
 
-RADOS::RADOS(std::unique_ptr<detail::Client> impl)
+RADOS::RADOS(std::shared_ptr<detail::Client> impl)
   : impl(std::move(impl)) {}
+
+RADOS::RADOS(const RADOS&) = default;
+RADOS& RADOS::operator =(const RADOS&) = default;
 
 RADOS::RADOS(RADOS&&) = default;
 RADOS& RADOS::operator =(RADOS&&) = default;
@@ -934,7 +938,8 @@ asio::io_context& RADOS::get_io_context() {
 void RADOS::execute_(Object o, IOContext _ioc, ReadOp _op,
 		     cb::list* bl,
 		     ReadOp::Completion c, version_t* objver,
-		     const blkin_trace_info *trace_info) {
+		     const blkin_trace_info *trace_info,
+		     std::uint64_t subsystem) {
   if (_op.size() == 0) {
     asio::dispatch(asio::append(std::move(c), bs::error_code{}));
     return;
@@ -953,14 +958,16 @@ void RADOS::execute_(Object o, IOContext _ioc, ReadOp _op,
   trace.event("init");
   impl->objecter->read(
     *oid, ioc->oloc, std::move(op->op), ioc->snap_seq, bl, flags,
-    std::move(c), objver, nullptr /* data_offset */, 0 /* features */, &trace);
+    std::move(c), objver, nullptr /* data_offset */, 0 /* features */, &trace,
+    subsystem);
 
   trace.event("submitted");
 }
 
 void RADOS::execute_(Object o, IOContext _ioc, WriteOp _op,
 		     WriteOp::Completion c, version_t* objver,
-		     const blkin_trace_info *trace_info) {
+		     const blkin_trace_info *trace_info,
+		     std::uint64_t subsystem) {
   if (_op.size() == 0) {
     asio::dispatch(asio::append(std::move(c), bs::error_code{}));
     return;
@@ -985,7 +992,7 @@ void RADOS::execute_(Object o, IOContext _ioc, WriteOp _op,
   impl->objecter->mutate(
     *oid, ioc->oloc, std::move(op->op), ioc->snapc,
     mtime, flags,
-    std::move(c), objver, osd_reqid_t{}, &trace);
+    std::move(c), objver, osd_reqid_t{}, &trace, subsystem);
   trace.event("submitted");
 }
 
@@ -1383,8 +1390,12 @@ class Notifier : public async::service_list_base_hook {
   std::deque<id_and_handler> handlers;
   std::mutex m;
   uint64_t next_id = 0;
+  std::shared_ptr<detail::Client> neoref;
 
   void service_shutdown() {
+    if (neoref) {
+      neoref = nullptr;
+    }
     if (linger_op) {
       linger_op->put();
     }
@@ -1395,10 +1406,11 @@ class Notifier : public async::service_list_base_hook {
 public:
 
   Notifier(asio::io_context::executor_type ex, Objecter::LingerOp* linger_op,
-	   uint32_t capacity)
+	   uint32_t capacity, std::shared_ptr<detail::Client> neoref)
     : ex(ex), linger_op(linger_op), capacity(capacity),
       svc(asio::use_service<async::service<Notifier>>(
-	    asio::query(ex, boost::asio::execution::context))) {
+	    asio::query(ex, boost::asio::execution::context))),
+      neoref(std::move(neoref)) {
     // register for service_shutdown() notifications
     svc.add(*this);
   }
@@ -1535,7 +1547,7 @@ void RADOS::watch_(Object o, IOContext _ioc, WatchComp c,
   uint64_t cookie = linger_op->get_cookie();
   // Shared pointer to avoid a potential race condition
   linger_op->user_data.emplace<std::shared_ptr<Notifier>>(
-    std::make_shared<Notifier>(get_executor(), linger_op, queue_size));
+    std::make_shared<Notifier>(get_executor(), linger_op, queue_size, impl));
   auto& n = ceph::any_cast<std::shared_ptr<Notifier>&>(
     linger_op->user_data);
   linger_op->handle = std::ref(*n);
@@ -1956,6 +1968,17 @@ void RADOS::mon_command_(std::vector<std::string> command,
 
 uint64_t RADOS::instance_id() const {
   return impl->get_instance_id();
+}
+
+uint64_t RADOS::new_subsystem() const
+{
+  return impl->objecter->unique_subsystem_id();
+}
+
+void RADOS::cancel_subsystem(uint64_t subsystem) const
+{
+  impl->objecter->subsystem_cancel(subsystem,
+				   asio::error::operation_aborted);
 }
 
 #pragma GCC diagnostic push
