@@ -276,18 +276,18 @@ int PosixWorker::listen(entity_addr_t &sa,
 			const SocketOptions &opt,
                         ServerSocket *sock)
 {
-  int listen_sd = net.create_socket(sa.get_family(), true);
+  int listen_sd = net->create_socket(sa.get_family(), true);
   if (listen_sd < 0) {
     return -ceph_sock_errno();
   }
 
-  int r = net.set_nonblock(listen_sd);
+  int r = net->set_nonblock(listen_sd);
   if (r < 0) {
     ::close(listen_sd);
     return -ceph_sock_errno();
   }
 
-  r = net.set_socket_options(listen_sd, opt.nodelay, opt.rcbuf_size);
+  r = net->set_socket_options(listen_sd, opt.nodelay, opt.rcbuf_size);
   if (r < 0) {
     ::close(listen_sd);
     return -ceph_sock_errno();
@@ -312,7 +312,7 @@ int PosixWorker::listen(entity_addr_t &sa,
 
   *sock = ServerSocket(
           std::unique_ptr<PosixServerSocketImpl>(
-	    new PosixServerSocketImpl(net, listen_sd, sa, addr_slot)));
+	    new PosixServerSocketImpl(*net, listen_sd, sa, addr_slot)));
   return 0;
 }
 
@@ -320,18 +320,18 @@ int PosixWorker::connect(const entity_addr_t &addr, const SocketOptions &opts, C
   int sd;
 
   if (opts.nonblock) {
-    sd = net.nonblock_connect(addr, opts.connect_bind_addr);
+    sd = net->nonblock_connect(addr, opts.connect_bind_addr);
   } else {
-    sd = net.connect(addr, opts.connect_bind_addr);
+    sd = net->connect(addr, opts.connect_bind_addr);
   }
 
   if (sd < 0) {
     return -ceph_sock_errno();
   }
 
-  net.set_priority(sd, opts.priority, addr.get_family());
+  net->set_priority(sd, opts.priority, addr.get_family());
   *socket = ConnectedSocket(
-      std::unique_ptr<PosixConnectedSocketImpl>(new PosixConnectedSocketImpl(net, addr, sd, !opts.nonblock)));
+      std::unique_ptr<PosixConnectedSocketImpl>(new PosixConnectedSocketImpl(*net, addr, sd, !opts.nonblock)));
   return 0;
 }
 
