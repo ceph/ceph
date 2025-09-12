@@ -136,7 +136,7 @@ echo "Test 3: Inject large delay (10000000000 ms) that exceeds max loading expir
 orch_status_output=$("$ceph" orch status 2>&1)
 
 echo "$orch_status_output"
-if [[ "$orch_status_output" == *"Error ENOTSUP: Module 'orchestrator' is not enabled/loaded"* ]]; then
+if [[ "$orch_status_output" == *"Error ETIMEDOUT: Module 'orchestrator' did not initialize in time"* ]]; then
     echo "PASS: orch command failed during large delay as expected."
 else
     echo "FAIL: Unexpected error in orch command during large delay."
