@@ -153,5 +153,5 @@ ghobject_t OSDMeta::final_pool_info_oid(int64_t pool)
 
 ghobject_t OSDMeta::superblock_oid()
 {
-  return ghobject_t(hobject_t(sobject_t(object_t("osd_superblock"), 0)));
+  return ghobject_t(hobject_t(sobject_t(object_t("osd_superblock"), CEPH_NOSNAP)));
 }

@@ -123,7 +123,8 @@ public:
   using remove_mapping_ret = remove_mapping_iertr::future<remove_mapping_result_t>;
   virtual remove_mapping_ret remove_mapping(
     Transaction &t,
-    paddr_t offset) = 0;
+    paddr_t offset,
+    extent_types_t type) = 0;
 
   /**
    * scan all extents in both tree and cache,
