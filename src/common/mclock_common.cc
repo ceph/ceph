@@ -26,6 +26,7 @@
 #include "crimson/common/perf_counters_collection.h"
 #else
 #include "perf_counters_collection.h"
+#include "mon/MonClient.h"
 #endif
 
 #define dout_context cct
