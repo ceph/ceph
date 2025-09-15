@@ -153,7 +153,7 @@ class LFUDAPolicy : public CachePolicy {
 
     int age = 1, weightSum = 0, postedSum = 0;
     optional_yield y = null_yield;
-    std::shared_ptr<connection> conn;
+    std::vector<std::shared_ptr<connection>>& connections;
     BlockDirectory* blockDir;
     ObjectDirectory* objDir;
     BucketDirectory* bucketDir;
@@ -182,14 +182,14 @@ class LFUDAPolicy : public CachePolicy {
     int delete_data_blocks(const DoutPrefixProvider* dpp, LFUDAObjEntry* e, optional_yield y);
 
   public:
-    LFUDAPolicy(std::shared_ptr<connection>& conn, rgw::cache::CacheDriver* cacheDriver, optional_yield y) : CachePolicy(), 
+    LFUDAPolicy(std::vector<std::shared_ptr<connection>>& connections, rgw::cache::CacheDriver* cacheDriver, optional_yield y) : CachePolicy(),
                                                                                                              y(y),
-													     conn(conn), 
+													     connections(connections),
 													     cacheDriver(cacheDriver)
     {
-      blockDir = new BlockDirectory{conn};
-      objDir = new ObjectDirectory{conn};
-      bucketDir = new BucketDirectory{conn};
+      blockDir = new BlockDirectory{connections};
+      objDir = new ObjectDirectory{connections};
+      bucketDir = new BucketDirectory{connections};
     }
     ~LFUDAPolicy() {
       rthread_stop();
@@ -259,10 +259,10 @@ class PolicyDriver {
     CachePolicy* cachePolicy;
 
   public:
-    PolicyDriver(std::shared_ptr<connection>& conn, rgw::cache::CacheDriver* cacheDriver, const std::string& _policyName, optional_yield y) : policyName(_policyName) 
+    PolicyDriver(std::vector<std::shared_ptr<connection>>& connections, rgw::cache::CacheDriver* cacheDriver, const std::string& _policyName, optional_yield y) : policyName(_policyName)
     {
       if (policyName == "lfuda") {
-	cachePolicy = new LFUDAPolicy(conn, cacheDriver, y);
+	cachePolicy = new LFUDAPolicy(connections, cacheDriver, y);
       } else if (policyName == "lru") {
 	cachePolicy = new LRUPolicy(cacheDriver);
       }

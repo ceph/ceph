@@ -38,6 +38,42 @@ static inline Object* nextObject(Object* t)
   return dynamic_cast<FilterObject*>(t)->get_next();
 }
 
+std::pair<std::vector<std::string>, std::vector<std::string>> D4NFilterDriver::parseHostPorts(const DoutPrefixProvider* dpp, std::string_view address)
+{
+    ldpp_dout(dpp, 20) << "Parsing address: " << address << dendl;
+    std::vector<std::string> hosts;
+    std::vector<std::string> ports;
+    size_t start = 0;
+
+    // Format is host1:port1_host2:port2_....
+    while (start < address.length()) {
+        size_t end = address.find('_', start);
+        if (end == std::string_view::npos) {
+            end = address.length();
+        }
+        if (start == end) {
+            start = end + 1;
+            continue;
+        }
+        // Extract current host:port pair
+        std::string_view pair = address.substr(start, end - start);
+        ldpp_dout(dpp, 20) << "Host:Port pair: " << pair << dendl;
+        // Find the colon separator
+        size_t colon_pos = pair.find(':');
+        if (colon_pos != std::string_view::npos && colon_pos > 0) {
+          // Extract host and port
+          std::string_view host = pair.substr(0, colon_pos);
+          std::string_view port = pair.substr(colon_pos + 1);
+          // Add host and port
+          hosts.emplace_back(host);
+          ports.emplace_back(port);
+          ldpp_dout(dpp, 20) << "Host: " << host << " Port: " << port << dendl;
+        }
+        start = end + 1;
+    }
+    return {std::move(hosts), std::move(ports)};
+}
+
 D4NFilterDriver::D4NFilterDriver(Driver* _next, boost::asio::io_context& io_context, bool admin) : FilterDriver(_next),
 												   io_context(io_context), 
 												   y(null_yield)
@@ -56,46 +92,56 @@ int D4NFilterDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
 {
   namespace net = boost::asio;
   using boost::redis::config;
+  std::string address = dpp->get_cct()->_conf->rgw_d4n_directory_address;
+  int dirMasterCount = dpp->get_cct()->_conf->rgw_d4n_directory_master_count;
 
-  conn = std::make_shared<connection>(boost::asio::make_strand(io_context));
-  objDir = std::make_unique<rgw::d4n::ObjectDirectory>(conn);
-  blockDir = std::make_unique<rgw::d4n::BlockDirectory>(conn);
-  bucketDir = std::make_unique<rgw::d4n::BucketDirectory>(conn);
-  policyDriver = std::make_unique<rgw::d4n::PolicyDriver>(conn,
+  std::tie(hosts, ports) = parseHostPorts(dpp, address);
+  if (!std::cmp_equal(hosts.size(), dirMasterCount) ||
+    !std::cmp_equal(ports.size(), dirMasterCount)) {
+    ldpp_dout(dpp, 0) << "Number of hosts/ports is not the same as dirMasterCount" << dendl;
+    return -EINVAL;
+  }
+
+  connections.resize(hosts.size());
+  for (size_t i = 0; i < hosts.size(); i++) {
+    connections[i] = std::make_shared<connection>(boost::asio::make_strand(io_context));
+  }
+
+  objDir = std::make_unique<rgw::d4n::ObjectDirectory>(connections);
+  blockDir = std::make_unique<rgw::d4n::BlockDirectory>(connections);
+  bucketDir = std::make_unique<rgw::d4n::BucketDirectory>(connections);
+  policyDriver = std::make_unique<rgw::d4n::PolicyDriver>(connections,
 							  cacheDriver.get(),
 							  "lfuda",
                                                           this->y);
 
-  std::string address = cct->_conf->rgw_d4n_address;
-  config cfg;
-  cfg.addr.host = address.substr(0, address.find(":"));
-  cfg.addr.port = address.substr(address.find(":") + 1, address.length());
-  cfg.clientname = "D4N.Filter";
-
-  if (!cfg.addr.host.length() || !cfg.addr.port.length()) {
-    ldpp_dout(dpp, 0) << "D4NFilterDriver::" << __func__ << "(): Endpoint was not configured correctly." << dendl;
-    return -EDESTADDRREQ;
+  for (size_t i = 0; i < hosts.size(); i++) {
+    config cfg;
+    cfg.addr.host = hosts[i];
+    cfg.addr.port = ports[i];
+    cfg.clientname = "D4N.Filter";
+    if (!cfg.addr.host.length() || !cfg.addr.port.length()) {
+      ldpp_dout(dpp, 0) << "D4NFilterDriver::" << __func__ << "(): Endpoint was not configured correctly." << dendl;
+      return -EDESTADDRREQ;
+    }
+    connections[i]->async_run(cfg, {}, net::consign(net::detached, connections[i]));
   }
-
-  conn->async_run(cfg, {}, net::consign(net::detached, conn));
 
   FilterDriver::initialize(cct, dpp);
 
   cacheDriver->initialize(dpp);
   policyDriver->get_cache_policy()->init(cct, dpp, io_context, next);
 
-  //setting the connection pool size and other parameters
+  //setting the redis pool manager size and other parameters
   uint64_t rgw_redis_connection_pool_size = dpp->get_cct()->_conf->rgw_redis_connection_pool_size;
-  std::shared_ptr<rgw::d4n::RedisPool>redis_pool = nullptr;
-  if(rgw_redis_connection_pool_size>0){
-      redis_pool = std::make_shared<rgw::d4n::RedisPool>(&io_context, cfg, rgw_redis_connection_pool_size);
-      ldpp_dout(dpp, 10) << "redis connection pool created with " << rgw_redis_connection_pool_size << " connections "  << dendl;
+  if(rgw_redis_connection_pool_size > 0){
+      redis_pool_manager = bucketDir->connectClient(dpp, io_context, hosts, ports, rgw_redis_connection_pool_size);
+      ldpp_dout(dpp, 10) << "redis connection pool manager created with " << rgw_redis_connection_pool_size << " connections "  << dendl;
   }
 
-  objDir->set_redis_pool(redis_pool);
-  blockDir->set_redis_pool(redis_pool);
-  bucketDir->set_redis_pool(redis_pool);
-  
+  objDir->set_redis_pool_manager(get_redis_pool_manager());
+  blockDir->set_redis_pool_manager(get_redis_pool_manager());
+  bucketDir->set_redis_pool_manager(get_redis_pool_manager());
   return 0;
 }
 
@@ -1200,9 +1246,9 @@ int D4NFilterObject::set_head_obj_dir_entry(const DoutPrefixProvider* dpp, std::
 
     //dirty objects
     if (dirty) {
-      auto redis_conn = this->driver->get_conn();
-      auto redis_pool = this->driver->get_redis_pool();
-      rgw::d4n::Pipeline p = rgw::d4n::Pipeline(redis_conn, redis_pool);
+      auto redis_connections = this->driver->get_connections();
+      auto redis_pool_manager = this->driver->get_redis_pool_manager();
+      rgw::d4n::Pipeline p = rgw::d4n::Pipeline(redis_connections, redis_pool_manager);
       p.start();
       auto ret = blockDir->set(dpp, &block, y, &p);
       if (ret < 0) {
@@ -1249,9 +1295,9 @@ int D4NFilterObject::set_head_obj_dir_entry(const DoutPrefixProvider* dpp, std::
       auto ret = blockDir->get(dpp, &latest, y);
       if (ret == -ENOENT) {
         if (!(this->get_bucket()->versioned())) {
-          auto redis_conn = this->driver->get_conn();
-          auto redis_pool = this->driver->get_redis_pool();
-          rgw::d4n::Pipeline p = rgw::d4n::Pipeline(redis_conn, redis_pool);
+          auto redis_connections = this->driver->get_connections();
+          auto redis_pool_manager = this->driver->get_redis_pool_manager();
+          rgw::d4n::Pipeline p = rgw::d4n::Pipeline(redis_connections, redis_pool_manager);
           p.start();
           //we can explore pipelining to send the two 'HSET' commands together
           ret = blockDir->set(dpp, &block, y, &p);
@@ -1283,9 +1329,9 @@ int D4NFilterObject::set_head_obj_dir_entry(const DoutPrefixProvider* dpp, std::
         /* even if the head block is found, overwrite existing values with new version in case of non-versioned bucket, clean objects
            and versioned and non-versioned buckets dirty objects */
         if (!(this->get_bucket()->versioned())) {
-          auto redis_conn = this->driver->get_conn();
-          auto redis_pool = this->driver->get_redis_pool();
-          rgw::d4n::Pipeline p = rgw::d4n::Pipeline(redis_conn, redis_pool);
+          auto redis_connections = this->driver->get_connections();
+          auto redis_pool_manager = this->driver->get_redis_pool_manager();
+          rgw::d4n::Pipeline p = rgw::d4n::Pipeline(redis_connections, redis_pool_manager);
           p.start();
           ret = blockDir->set(dpp, &block, y, &p);
           if (ret < 0) {
@@ -1655,7 +1701,9 @@ std::unique_ptr<Writer> D4NFilterDriver::get_atomic_writer(const DoutPrefixProvi
 void D4NFilterDriver::shutdown()
 {
   // call cancel() on the connection's executor
-  boost::asio::dispatch(conn->get_executor(), [c = conn] { c->cancel(); });
+  for (size_t i = 0; i < hosts.size(); i++) {
+    boost::asio::dispatch(connections[i]->get_executor(), [c = connections[i]] { c->cancel(); });
+  }
 
   cacheDriver.reset();
   objDir.reset();

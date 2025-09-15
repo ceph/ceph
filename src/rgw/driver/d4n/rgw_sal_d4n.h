@@ -53,7 +53,7 @@ using boost::redis::connection;
 
 class D4NFilterDriver : public FilterDriver {
   private:
-    std::shared_ptr<connection> conn;
+    std::vector<std::shared_ptr<connection>> connections;
     std::unique_ptr<rgw::cache::CacheDriver> cacheDriver;
     std::unique_ptr<rgw::d4n::ObjectDirectory> objDir;
     std::unique_ptr<rgw::d4n::BlockDirectory> blockDir;
@@ -61,9 +61,12 @@ class D4NFilterDriver : public FilterDriver {
     std::unique_ptr<rgw::d4n::PolicyDriver> policyDriver;
     boost::asio::io_context& io_context;
     optional_yield y;
+    std::vector<std::string> hosts;
+    std::vector<std::string> ports;
 
-    // Redis connection pool
-    std::shared_ptr<rgw::d4n::RedisPool> redis_pool;
+    // Redis connection pool Manager
+    std::optional<rgw::d4n::MultiRedisPoolManager> redis_pool_manager;
+    std::pair<std::vector<std::string>, std::vector<std::string>> parseHostPorts(const DoutPrefixProvider* dpp, std::string_view address);
 
   public:
     D4NFilterDriver(Driver* _next, boost::asio::io_context& io_context, bool admin);
@@ -89,8 +92,13 @@ class D4NFilterDriver : public FilterDriver {
     rgw::d4n::BucketDirectory* get_bucket_dir() { return bucketDir.get(); }
     rgw::d4n::PolicyDriver* get_policy_driver() { return policyDriver.get(); }
     void save_y(optional_yield y) { this->y = y; }
-    std::shared_ptr<connection> get_conn() { return conn; }
-    std::shared_ptr<rgw::d4n::RedisPool> get_redis_pool() { return redis_pool; }
+    std::vector<std::shared_ptr<connection>>& get_connections() { return connections; }
+    rgw::d4n::MultiRedisPoolManager* get_redis_pool_manager() {
+      if (redis_pool_manager) {
+        return &(*redis_pool_manager);
+      }
+      return nullptr;
+    }
     void shutdown() override;
 };
 

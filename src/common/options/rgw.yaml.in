@@ -4271,6 +4271,29 @@ options:
   flags:
   - startup
   with_legacy: true
+- name: rgw_d4n_directory_master_count
+  type: int
+  level: advanced
+  desc: The number of redis server for the d4n directory
+  default: 1
+  services:
+  - rgw
+  flags:
+  - startup
+  with_legacy: true
+- name: rgw_d4n_directory_address
+  type: str
+  level: advanced
+  desc: address of the D4N Redis servers used in a distributed cache
+  long_desc: The address of redis servers for the d4n directory.
+    The format is host1:port1_host2:port2. The number of host:port pair
+    must match with rgw_d4n_directory_master_count.
+  default: 127.0.0.1:6379
+  services:
+  - rgw
+  flags:
+  - startup
+  with_legacy: true
 - name: rgw_topic_persistency_time_to_live
   type: uint
   level: advanced
@@ -4511,15 +4534,17 @@ options:
 - name: rgw_redis_connection_pool_size
   type: int
   level: basic
-  desc: RGW connection pool size for Redis operation per D4N
+  desc: RGW connection pool size for Redis operation per D4N per Redis master.
   long_desc: This option sets the size of the connection pool for Redis operations
-    in D4N. It is used to manage the number of concurrent connections to Redis.
-    A larger pool size can improve performance when multiple threads are accessing
-    Redis simultaneously, but it also increases resource usage.
-  fmt_desc: The size of the redis connection pool.
+    to a single Redis master in D4N. It is used to manage the number of concurrent
+    connections to Redis. A larger pool size can improve performance when multiple
+    threads are accessing Redis simultaneously, but it also increases resource usage.
+  fmt_desc: The size of the redis connection pool for a single Redis master.
   default: 512
   services:
   - rgw
+  see_also:
+  - rgw_d4n_directory_master_count
   with_legacy: true
 - name: rgw_bucket_persistent_notif_num_shards
   type: uint

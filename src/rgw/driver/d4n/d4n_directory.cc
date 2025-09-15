@@ -5,6 +5,7 @@
 #include "common/async/blocked_completion.h"
 #include "common/dout.h" 
 #include "d4n_directory.h"
+#include "d4n_hashing.h"
 
 namespace rgw { namespace d4n {
 
@@ -51,14 +52,15 @@ void redis_exec(std::shared_ptr<connection> conn,
 }
 
 template <typename... Types>
-void redis_exec_cp(std::shared_ptr<rgw::d4n::RedisPool> pool,
+void redis_exec_cp(rgw::d4n::MultiRedisPoolManager* pool_manager,
+                int index,
                 boost::system::error_code& ec,
                 const boost::redis::request& req,
                 boost::redis::response<Types...>& resp,
 		optional_yield y)
 {
 //purpose: Execute a Redis command using a connection from the pool
-	std::shared_ptr<connection> conn = pool->acquire();
+	std::shared_ptr<connection> conn = pool_manager->acquire_connection(index);
 	try {
 
   		if (y) {
@@ -69,11 +71,11 @@ void redis_exec_cp(std::shared_ptr<rgw::d4n::RedisPool> pool,
   		}
 	} catch (const std::exception& e) {
 		//release the connection upon exception
-    		pool->release(conn);
+    		pool_manager->release_connection(index, conn);
     		throw;
 	}
 	//release the connection back to the pool after execution
-	pool->release(conn);
+	pool_manager->release_connection(index, conn);
 }
 
 void redis_exec(std::shared_ptr<connection> conn,
@@ -89,13 +91,14 @@ void redis_exec(std::shared_ptr<connection> conn,
   }
 }
 
-void redis_exec_cp(std::shared_ptr<rgw::d4n::RedisPool> pool,
+void redis_exec_cp(rgw::d4n::MultiRedisPoolManager* pool_manager,
+                int index,
                 boost::system::error_code& ec,
                 const boost::redis::request& req,
                 boost::redis::generic_response& resp, optional_yield y)
 {
 	//purpose: Execute a Redis command using a connection from the pool
-	std::shared_ptr<connection> conn = pool->acquire();
+	std::shared_ptr<connection> conn = pool_manager->acquire_connection(index);
 
 	try {
   		if (y) {
@@ -105,11 +108,11 @@ void redis_exec_cp(std::shared_ptr<rgw::d4n::RedisPool> pool,
     			async_exec(conn, req, resp, ceph::async::use_blocked[ec]);
   		}	
 	} catch (const std::exception& e) {
-    			pool->release(conn);
+    			pool_manager->release_connection(index, conn);
     			throw;
 	}
 	//release the connection back to the pool after execution
-	pool->release(conn);
+	pool_manager->release_connection(index, conn);
 }
 
 int check_bool(std::string str) {
@@ -123,54 +126,143 @@ int check_bool(std::string str) {
 }
 
 void redis_exec_connection_pool(const DoutPrefixProvider* dpp,
-				std::shared_ptr<RedisPool> redis_pool,
-				std::shared_ptr<connection> conn,
+				MultiRedisPoolManager* redis_pool_manager,
+                              int index,
+				std::vector<std::shared_ptr<connection>>& connections,
 				boost::system::error_code& ec,
 				const boost::redis::request& req,
 				boost::redis::generic_response& resp,
 				optional_yield y)
 {
-    if(!redis_pool)[[unlikely]]
+    if(!redis_pool_manager)[[unlikely]]
     {
-	redis_exec(conn, ec, req, resp, y);
+	redis_exec(connections[index], ec, req, resp, y);
 	ldpp_dout(dpp, 0) << "Directory::" << __func__ << " not using connection-pool, it's using the shared connection " << dendl;
     }
     else[[likely]]
-    	redis_exec_cp(redis_pool, ec, req, resp, y);
+    	redis_exec_cp(redis_pool_manager, index, ec, req, resp, y);
 }
 
 template <typename... Types>
 void redis_exec_connection_pool(const DoutPrefixProvider* dpp,
-				std::shared_ptr<RedisPool> redis_pool,
-				std::shared_ptr<connection> conn,
+				MultiRedisPoolManager* redis_pool_manager,
+                        int index,
+				std::vector<std::shared_ptr<connection>>& connections,
 				boost::system::error_code& ec,
 				const boost::redis::request& req,
 				boost::redis::response<Types...>& resp,
 				optional_yield y)
 {
-    if(!redis_pool)[[unlikely]]
+    if(!redis_pool_manager)[[unlikely]]
     {
-	redis_exec(conn, ec, req, resp, y);
+	redis_exec(connections[index], ec, req, resp, y);
 	ldpp_dout(dpp, 0) << "Directory::" << __func__ << " not using connection-pool, it's using the shared connection " << dendl;
     }
     else[[likely]]
-    	redis_exec_cp(redis_pool, ec, req, resp, y);
+    	redis_exec_cp(redis_pool_manager, index, ec, req, resp, y);
+}
+
+std::pair<std::vector<std::string>, std::vector<int>> Directory::parseHostPorts(const DoutPrefixProvider* dpp, std::string_view address)
+{
+    ldpp_dout(dpp, 20) << "Parsing address: " << address << dendl;
+    std::vector<std::string> hosts;
+    std::vector<int> ports;
+    size_t start = 0;
+
+    // Format is host1:port1_host2:port2_....
+    while (start < address.length()) {
+        size_t end = address.find('_', start);
+        if (end == std::string_view::npos) {
+            end = address.length();
+        }
+        if (start == end) {
+            start = end + 1;
+            continue;
+        }
+        // Extract current host:port pair
+        std::string_view pair = address.substr(start, end - start);
+        ldpp_dout(dpp, 20) << "Host:Port pair: " << pair << dendl;
+        // Find the colon separator
+        size_t colon_pos = pair.find(':');
+        if (colon_pos != std::string_view::npos && colon_pos > 0) {
+          // Extract host and port
+          std::string_view host = pair.substr(0, colon_pos);
+          std::string_view port = pair.substr(colon_pos + 1);
+          // Add host
+          hosts.emplace_back(host);
+          int port_value = 0;
+          auto [ptr, ec] = std::from_chars(port.data(), 
+                                          port.data() + port.size(), 
+                                          port_value);
+          ldpp_dout(dpp, 20) << "Host: " << host << " Port: " << port_value << dendl;
+          // Add port
+          if (ec == std::errc{}) {
+            ports.push_back(port_value);
+          } else {
+            // Remove the host we just added due to port parsing error
+            hosts.pop_back();
+          }
+        }
+        start = end + 1;
+    }
+    return {std::move(hosts), std::move(ports)};
+}
+
+std::optional<MultiRedisPoolManager> Directory::connectClient(const DoutPrefixProvider* dpp,
+                                                                boost::asio::io_context& io_context,
+                                                                const std::vector<std::string>& hosts,
+                                                                const std::vector<std::string>& ports,
+                                                                size_t connection_pool_size)
+{
+  if (connection_pool_size == 0) {
+    return std::nullopt;
+  }
+  try {
+    MultiRedisPoolManager pool_manager(
+            &io_context, 
+            hosts, 
+            ports,
+            connection_pool_size
+        );
+
+    ldpp_dout(dpp, 10) << "Redis connection pools created for " << pool_manager.pool_count()
+                        << " hosts with " << connection_pool_size << " connections each" << dendl;
+    return pool_manager;
+  }
+  catch(std::exception &e) {
+    ldpp_dout(dpp, 0) <<"Redis client connected failed!" << dendl;
+    return std::nullopt;
+  }
+}
+
+int Directory::findClient(const DoutPrefixProvider* dpp, std::string key){
+  int slot = 0;
+  slot = hash_slot(key.c_str(), key.size());
+  int dirMasterCount = dpp->get_cct()->_conf->rgw_d4n_directory_master_count;
+  int slotQuota = REDIS_CLUSTER_SLOTS/dirMasterCount;
+
+  for (int i = 0; i < dirMasterCount; i++) {
+    if (slot < (slotQuota*(i+1))) {
+      ldpp_dout(dpp, 20) <<"Redis server index: " << i << dendl;
+      return i;
+    }
+  }
+  return -1;
 }
 
 int BucketDirectory::zadd(const DoutPrefixProvider* dpp, const std::string& bucket_id, double score, const std::string& member, optional_yield y, Pipeline* pipeline)
 {
   try {
     boost::system::error_code ec;
+    int index = findClient(dpp, bucket_id);
     if (pipeline && pipeline->is_pipeline()) {
-      request& req = pipeline->get_request();
+      request& req = pipeline->get_request(index);
       req.push("ZADD", bucket_id, "CH", std::to_string(0), member);
     } else {
       request req;
       req.push("ZADD", bucket_id, "CH", std::to_string(0), member);
-
-    response<std::string> resp;
-
-    redis_exec_connection_pool(dpp, redis_pool, conn, ec, req, resp, y);
+      response<std::string> resp;
+      redis_exec_connection_pool(dpp, redis_pool_manager, index, connections, ec, req, resp, y);
 
       if (ec) {
         ldpp_dout(dpp, 0) << "BucketDirectory::" << __func__ << "() ERROR: " << ec.what() << dendl;
@@ -199,7 +291,8 @@ int BucketDirectory::zrem(const DoutPrefixProvider* dpp, const std::string& buck
     req.push("ZREM", bucket_id, member);
     response<std::string> resp;
 
-    redis_exec_connection_pool(dpp, redis_pool, conn, ec, req, resp, y);
+    int index = findClient(dpp, bucket_id);
+    redis_exec_connection_pool(dpp, redis_pool_manager, index, connections, ec, req, resp, y);
 
     if (ec) {
       ldpp_dout(dpp, 0) << "BucketDirectory::" << __func__ << "() ERROR: " << ec.what() << dendl;
@@ -231,7 +324,8 @@ int BucketDirectory::zrange(const DoutPrefixProvider* dpp, const std::string& bu
     }
 
     response<std::vector<std::string> > resp;
-    redis_exec_connection_pool(dpp, redis_pool, conn, ec, req, resp, y);
+    int index = findClient(dpp, bucket_id);
+    redis_exec_connection_pool(dpp, redis_pool_manager, index, connections, ec, req, resp, y);
 
     if (ec) {
       ldpp_dout(dpp, 0) << "BucketDirectory::" << __func__ << "() ERROR: " << ec.what() << dendl;
@@ -262,7 +356,8 @@ int BucketDirectory::zscan(const DoutPrefixProvider* dpp, const std::string& buc
     req.push("ZSCAN", bucket_id, cursor, "MATCH", pattern, "COUNT", count);
 
     boost::redis::generic_response resp;
-    redis_exec_connection_pool(dpp, redis_pool, conn, ec, req, resp, y);
+    int index = findClient(dpp, bucket_id);
+    redis_exec_connection_pool(dpp, redis_pool_manager, index, connections, ec, req, resp, y);
 
     if (ec) {
       ldpp_dout(dpp, 0) << "BucketDirectory::" << __func__ << "() ERROR: " << ec.what() << dendl;
@@ -304,7 +399,8 @@ int BucketDirectory::zrank(const DoutPrefixProvider* dpp, const std::string& buc
     req.push("ZRANK", bucket_id, member);
 
     response<int> resp;
-    redis_exec_connection_pool(dpp, redis_pool, conn, ec, req, resp, y);
+    int index = findClient(dpp, bucket_id);
+    redis_exec_connection_pool(dpp, redis_pool_manager, index, connections, ec, req, resp, y);
 
     if (ec) {
       ldpp_dout(dpp, 0) << "BucketDirectory::" << __func__ << "() ERROR: " << ec.what() << dendl;
@@ -336,7 +432,8 @@ int ObjectDirectory::exist_key(const DoutPrefixProvider* dpp, CacheObj* object, 
     request req;
     req.push("EXISTS", key);
 
-    redis_exec_connection_pool(dpp, redis_pool, conn, ec, req, resp, y);
+    int index = findClient(dpp, key);
+    redis_exec_connection_pool(dpp, redis_pool_manager, index, connections, ec, req, resp, y);
 
     if (ec) {
       ldpp_dout(dpp, 0) << "ObjectDirectory::" << __func__ << "() ERROR: " << ec.what() << dendl;
@@ -403,7 +500,8 @@ int ObjectDirectory::set(const DoutPrefixProvider* dpp, CacheObj* object, option
     request req;
     req.push_range("HSET", key, redisValues);
 
-    redis_exec_connection_pool(dpp, redis_pool, conn, ec, req, resp, y);
+    int index = findClient(dpp, key);
+    redis_exec_connection_pool(dpp, redis_pool_manager, index, connections, ec, req, resp, y);
 
     if (ec) {
       ldpp_dout(dpp, 0) << "ObjectDirectory::" << __func__ << "() ERROR: " << ec.what() << dendl;
@@ -439,7 +537,8 @@ int ObjectDirectory::get(const DoutPrefixProvider* dpp, CacheObj* object, option
     request req;
     req.push_range("HMGET", key, fields);
 
-    redis_exec_connection_pool(dpp, redis_pool, conn, ec, req, resp, y);
+    int index = findClient(dpp, key);
+    redis_exec_connection_pool(dpp, redis_pool_manager, index, connections, ec, req, resp, y);
 
     if (ec) {
       ldpp_dout(dpp, 0) << "ObjectDirectory::" << __func__ << "() ERROR: " << ec.what() << dendl;
@@ -490,7 +589,8 @@ int ObjectDirectory::copy(const DoutPrefixProvider* dpp, CacheObj* object, const
     req.push("HSET", copyKey, "objName", copyName, "bucketName", copyBucketName);
     req.push("EXEC");
 
-    redis_exec_connection_pool(dpp, redis_pool, conn, ec, req, resp, y);
+    int index = findClient(dpp, copyKey);
+    redis_exec_connection_pool(dpp, redis_pool_manager, index, connections, ec, req, resp, y);
 
     if (ec) {
       ldpp_dout(dpp, 0) << "ObjectDirectory::" << __func__ << "() ERROR: " << ec.what() << dendl;
@@ -520,7 +620,8 @@ int ObjectDirectory::del(const DoutPrefixProvider* dpp, CacheObj* object, option
     request req;
     req.push("DEL", key);
 
-    redis_exec_connection_pool(dpp, redis_pool, conn, ec, req, resp, y);
+    int index = findClient(dpp, key);
+    redis_exec_connection_pool(dpp, redis_pool_manager, index, connections, ec, req, resp, y);
 
     if (!std::get<0>(resp).value()) {
       ldpp_dout(dpp, 10) << "ObjectDirectory::" << __func__ << "(): No values deleted." << dendl;
@@ -555,7 +656,8 @@ int ObjectDirectory::update_field(const DoutPrefixProvider* dpp, CacheObj* objec
 	request req;
 	req.push("HGET", key, field);
 
-    redis_exec_connection_pool(dpp, redis_pool, conn, ec, req, resp, y);
+    int index = findClient(dpp, key);
+    redis_exec_connection_pool(dpp, redis_pool_manager, index, connections, ec, req, resp, y);
 
 	if (ec) {
 	  ldpp_dout(dpp, 0) << "ObjectDirectory::" << __func__ << "() ERROR: " << ec.what() << dendl;
@@ -582,7 +684,8 @@ int ObjectDirectory::update_field(const DoutPrefixProvider* dpp, CacheObj* objec
       request req;
       req.push("HSET", key, field, value);
 
-    redis_exec_connection_pool(dpp, redis_pool, conn, ec, req, resp, y);
+      int index = findClient(dpp, key);
+      redis_exec_connection_pool(dpp, redis_pool_manager, index, connections, ec, req, resp, y);
 
       if (ec) {
 	ldpp_dout(dpp, 0) << "ObjectDirectory::" << __func__ << "() ERROR: " << ec.what() << dendl;
@@ -608,15 +711,15 @@ int ObjectDirectory::zadd(const DoutPrefixProvider* dpp, CacheObj* object, doubl
   std::string key = build_index(object);
   try {
     boost::system::error_code ec;
+    int index = findClient(dpp, key);
     if (pipeline && pipeline->is_pipeline()) {
-      request& req = pipeline->get_request();
+      request& req = pipeline->get_request(index);
       req.push("ZADD", key, "CH", std::to_string(score), member);
     } else {
       request req;
       req.push("ZADD", key, "CH", std::to_string(score), member);
-
       response<std::string> resp;
-      redis_exec_connection_pool(dpp, redis_pool, conn, ec, req, resp, y);
+      redis_exec_connection_pool(dpp, redis_pool_manager, index, connections, ec, req, resp, y);
 
       if (ec) {
         ldpp_dout(dpp, 0) << "ObjectDirectory::" << __func__ << "() ERROR: " << ec.what() << dendl;
@@ -646,7 +749,8 @@ int ObjectDirectory::zrange(const DoutPrefixProvider* dpp, CacheObj* object, int
     req.push("ZRANGE", key, std::to_string(start), std::to_string(stop));
 
     response<std::vector<std::string> > resp;
-    redis_exec_connection_pool(dpp, redis_pool, conn, ec, req, resp, y);
+    int index = findClient(dpp, key);
+    redis_exec_connection_pool(dpp, redis_pool_manager, index, connections, ec, req, resp, y);
 
     if (ec) {
       ldpp_dout(dpp, 0) << "ObjectDirectory::" << __func__ << "() ERROR: " << ec.what() << dendl;
@@ -676,8 +780,9 @@ int ObjectDirectory::zrevrange(const DoutPrefixProvider* dpp, CacheObj* object, 
     request req;
     req.push("ZREVRANGE", key, start, stop);
 
+    int index = findClient(dpp, key);
     response<std::vector<std::string> > resp;
-    redis_exec_connection_pool(dpp, redis_pool, conn, ec, req, resp, y);
+    redis_exec_connection_pool(dpp, redis_pool_manager, index, connections, ec, req, resp, y);
 
     if (ec) {
       ldpp_dout(dpp, 0) << "ObjectDirectory::" << __func__ << "() ERROR: " << ec.what() << dendl;
@@ -703,7 +808,8 @@ int ObjectDirectory::zrem(const DoutPrefixProvider* dpp, CacheObj* object, const
     req.push("ZREM", key, member);
     response<std::string> resp;
 
-    redis_exec_connection_pool(dpp, redis_pool, conn, ec, req, resp, y);
+    int index = findClient(dpp, key);
+    redis_exec_connection_pool(dpp, redis_pool_manager, index, connections, ec, req, resp, y);
 
     if (ec) {
       ldpp_dout(dpp, 0) << "ObjectDirectory::" << __func__ << "() ERROR: " << ec.what() << dendl;
@@ -732,7 +838,8 @@ int ObjectDirectory::zremrangebyscore(const DoutPrefixProvider* dpp, CacheObj* o
     req.push("ZREMRANGEBYSCORE", key, std::to_string(min), std::to_string(max));
     response<std::string> resp;
 
-    redis_exec_connection_pool(dpp, redis_pool, conn, ec, req, resp, y);
+    int index = findClient(dpp, key);
+    redis_exec_connection_pool(dpp, redis_pool_manager, index, connections, ec, req, resp, y);
 
     if (ec) {
       ldpp_dout(dpp, 0) << "ObjectDirectory::" << __func__ << "() ERROR: " << ec.what() << dendl;
@@ -763,7 +870,8 @@ int ObjectDirectory::incr(const DoutPrefixProvider* dpp, CacheObj* object, optio
     req.push("INCR", key);
     response<std::string> resp;
 
-    redis_exec_connection_pool(dpp, redis_pool, conn, ec, req, resp, y);
+    int index = findClient(dpp, key);
+    redis_exec_connection_pool(dpp, redis_pool_manager, index, connections, ec, req, resp, y);
 
     if (ec) {
       ldpp_dout(dpp, 0) << "ObjectDirectory::" << __func__ << "() ERROR: " << ec.what() << dendl;
@@ -780,7 +888,7 @@ int ObjectDirectory::incr(const DoutPrefixProvider* dpp, CacheObj* object, optio
   return value;
 }
 
-int ObjectDirectory::zrank(const DoutPrefixProvider* dpp, CacheObj* object, const std::string& member, std::string& index, optional_yield y)
+int ObjectDirectory::zrank(const DoutPrefixProvider* dpp, CacheObj* object, const std::string& member, std::string& idx, optional_yield y)
 {
   std::string key = build_index(object);
   try {
@@ -789,14 +897,15 @@ int ObjectDirectory::zrank(const DoutPrefixProvider* dpp, CacheObj* object, cons
     req.push("ZRANK", key, member);
     response<std::string> resp;
 
-    redis_exec_connection_pool(dpp, redis_pool, conn, ec, req, resp, y);
+    int index = findClient(dpp, key);
+    redis_exec_connection_pool(dpp, redis_pool_manager, index, connections, ec, req, resp, y);
 
     if (ec) {
       ldpp_dout(dpp, 0) << "ObjectDirectory::" << __func__ << "() ERROR: " << ec.what() << dendl;
       return -ec.value();
     }
 
-    index = std::get<0>(resp).value();
+    idx = std::get<0>(resp).value();
 
   } catch (std::exception &e) {
     ldpp_dout(dpp, 0) << "ObjectDirectory::" << __func__ << "() ERROR: " << e.what() << dendl;
@@ -820,7 +929,8 @@ int BlockDirectory::exist_key(const DoutPrefixProvider* dpp, CacheBlock* block, 
     request req;
     req.push("EXISTS", key);
 
-    redis_exec_connection_pool(dpp, redis_pool, conn, ec, req, resp, y);
+    int index = findClient(dpp, key);
+    redis_exec_connection_pool(dpp, redis_pool_manager, index, connections, ec, req, resp, y);
 
     if (ec) {
       ldpp_dout(dpp, 0) << "BlockDirectory::" << __func__ << "() ERROR: " << ec.what() << dendl;
@@ -913,14 +1023,14 @@ int BlockDirectory::set(const DoutPrefixProvider* dpp, CacheBlock* block, option
   try {
     boost::system::error_code ec;
     response<ignore_t> resp;
+    int index = findClient(dpp, key);
     if (pipeline && pipeline->is_pipeline()) {
-      request& req = pipeline->get_request();
+      request& req = pipeline->get_request(index);
       req.push_range("HSET", key, redisValues);
     } else {
       request req;
       req.push_range("HSET", key, redisValues);
-
-      redis_exec_connection_pool(dpp, redis_pool, conn, ec, req, resp, y);
+      redis_exec_connection_pool(dpp, redis_pool_manager, index, connections, ec, req, resp, y);
       if (ec) {
         ldpp_dout(dpp, 0) << "BlockDirectory::" << __func__ << "() ERROR: " << ec.what() << dendl;
         return -ec.value();
@@ -937,6 +1047,8 @@ int BlockDirectory::set(const DoutPrefixProvider* dpp, CacheBlock* block, option
 int BlockDirectory::set(const DoutPrefixProvider* dpp, std::vector<CacheBlock>& blocks, optional_yield y)
 {
   request req;
+  //map of index to requests
+  std::unordered_map<int, request> requests;
   for (auto block : blocks) {
     std::string key = build_index(&block);
     ldpp_dout(dpp, 10) << "BlockDirectory::" << __func__ << "(): index is: " << key << dendl;
@@ -947,21 +1059,30 @@ int BlockDirectory::set(const DoutPrefixProvider* dpp, std::vector<CacheBlock>& 
     if (ret < 0) {
       return ret;
     }
-    req.push_range("HSET", key, redisValues);
+    int index = findClient(dpp, key);
+    auto it = requests.find(index);
+    if (it != requests.end()) {
+      it->second.push_range("HSET", key, redisValues);
+    } else {
+      req.push_range("HSET", key, redisValues);
+      requests.emplace(index, req);
+    }
   }
 
-  try {
-    boost::system::error_code ec;
-    boost::redis::generic_response resp;
-    redis_exec_connection_pool(dpp, redis_pool, conn, ec, req, resp, y);
-    if (ec) {
-      ldpp_dout(dpp, 0) << "BlockDirectory::" << __func__ << "() ERROR: " << ec.what() << dendl;
-      return -ec.value();
+  for (const auto& pair : requests) {
+    try {
+      boost::system::error_code ec;
+      boost::redis::generic_response resp;
+      redis_exec_connection_pool(dpp, redis_pool_manager, pair.first, connections, ec, pair.second, resp, y);
+      if (ec) {
+        ldpp_dout(dpp, 0) << "BlockDirectory::" << __func__ << "() ERROR: " << ec.what() << dendl;
+        return -ec.value();
+      }
+    } catch (std::exception &e) {
+      ldpp_dout(dpp, 0) << "BlockDirectory::" << __func__ << "() ERROR: " << e.what() << dendl;
+      return -EINVAL;
     }
-  } catch (std::exception &e) {
-    ldpp_dout(dpp, 0) << "BlockDirectory::" << __func__ << "() ERROR: " << e.what() << dendl;
-    return -EINVAL;
-  }
+ }
 
   return 0;
 }
@@ -1023,10 +1144,13 @@ template int BlockDirectory::get<100>(const DoutPrefixProvider* dpp, std::vector
 template <size_t N>
 int BlockDirectory::get(const DoutPrefixProvider* dpp, std::vector<CacheBlock>& blocks, optional_yield y)
 {
-  request req;
-  typename redis_response<N, std::optional<std::vector<std::string>>>::type resp;
+  std::unordered_map<int, request> requests; //map of index of directory masters to requests
+  std::unordered_map<std::string, int> key_index; //map of block key to index in vector of blocks
+  int vec_idx = 0;
   for (auto block : blocks) {
     std::string key = build_index(&block);
+    int dir_index = findClient(dpp, key);
+    key_index.emplace(key, vec_idx);
     std::vector<std::string> fields;
     ldpp_dout(dpp, 10) << "BlockDirectory::" << __func__ << "(): index is: " << key << dendl;
 
@@ -1047,54 +1171,65 @@ int BlockDirectory::get(const DoutPrefixProvider* dpp, std::vector<CacheBlock>& 
     fields.push_back("displayName");
 
     try {
-      req.push_range("HMGET", key, fields);
+      requests[dir_index].push_range("HMGET", key, fields);
     } catch (std::exception &e) {
       ldpp_dout(dpp, 0) << "BlockDirectory::" << __func__ << "() ERROR: " << e.what() << dendl;
       return -EINVAL;
     }
+    vec_idx++;
   } //end - for
 
-  try {
-    boost::system::error_code ec;
-    redis_exec_connection_pool(dpp, redis_pool, conn, ec, req, resp, y);
-
-    if (ec) {
-      ldpp_dout(dpp, 0) << "BlockDirectory::" << __func__ << "() ERROR: " << ec.what() << dendl;
-      return -ec.value();
+  using ResponseType = typename redis_response<N, std::optional<std::vector<std::string>>>::type;
+  std::unordered_map<int, ResponseType> responses_map; //map of index of directory masters to redis responses
+  for (auto& [index, req] : requests) {
+    try {
+      boost::system::error_code ec;
+      redis_exec_connection_pool(dpp, redis_pool_manager, index, connections, ec, req, responses_map[index], y);
+      if (ec) {
+        ldpp_dout(dpp, 0) << "BlockDirectory::" << __func__ << "() ERROR: " << ec.what() << dendl;
+        return -ec.value();
+      }
+    } catch (std::exception &e) {
+      ldpp_dout(dpp, 0) << "BlockDirectory::" << __func__ << "() ERROR: " << e.what() << dendl;
+      return -EINVAL;
     }
-  } catch (std::exception &e) {
-    ldpp_dout(dpp, 0) << "BlockDirectory::" << __func__ << "() ERROR: " << e.what() << dendl;
-    return -EINVAL;
   }
 
-  std::vector<std::vector<std::string>> responses;
-  parse_response<decltype(resp)>(resp, responses);
-
-  for (size_t i = 0; i < blocks.size(); i++) {
-    CacheBlock* block = &blocks[i];
-    auto vec = responses[i];
-    if (vec.empty()) {
-      ldpp_dout(dpp, 0) << "BlockDirectory::" << __func__ << "(): No values returned for key=" << build_index(block) << dendl;
-      continue;
-    }
-
-    using Fields = rgw::d4n::BlockFields;
-    block->blockID = std::stoull(vec[std::size_t(Fields::BlockID)]);
-    block->version = vec[std::size_t(Fields::Version)];
-    block->deleteMarker = (std::stoi(vec[std::size_t(Fields::DeleteMarker)]) != 0);
-    block->size = std::stoull(vec[std::size_t(Fields::Size)]);
-    block->globalWeight = std::stoull(vec[std::size_t(Fields::GlobalWeight)]);
-    block->cacheObj.objName = vec[std::size_t(Fields::ObjName)];
-    block->cacheObj.bucketName = vec[std::size_t(Fields::BucketName)];
-    block->cacheObj.creationTime = vec[std::size_t(Fields::CreationTime)];
-    block->cacheObj.dirty = (std::stoi(vec[std::size_t(Fields::Dirty)]) != 0);
-    boost::split(block->cacheObj.hostsList, vec[std::size_t(Fields::Hosts)], boost::is_any_of("_"));
-    block->cacheObj.etag = vec[std::size_t(Fields::Etag)];
-    block->cacheObj.size = std::stoull(vec[std::size_t(Fields::ObjSize)]);
-    block->cacheObj.user_id = vec[std::size_t(Fields::UserID)];
-    block->cacheObj.display_name = vec[std::size_t(Fields::DisplayName)];
+  std::unordered_map<int, std::vector<std::vector<std::string>>> responses;
+  for (auto& [index, resp] : responses_map) {
+    parse_response<decltype(resp)>(resp, responses[index]);
   }
 
+  //loop through all indexes that map to a directory master
+  for (auto& [index, response] : responses) {
+    //for each index, loop through the vector of responses and populate the response
+    for (size_t i = 0; i < response.size(); i++) {
+      auto vec = response[i];
+      if (vec.empty()) {
+        continue;
+      }
+      CacheBlock block;
+      using Fields = rgw::d4n::BlockFields;
+      block.blockID = std::stoull(vec[std::size_t(Fields::BlockID)]);
+      block.version = vec[std::size_t(Fields::Version)];
+      block.deleteMarker = (std::stoi(vec[std::size_t(Fields::DeleteMarker)]) != 0);
+      block.size = std::stoull(vec[std::size_t(Fields::Size)]);
+      block.globalWeight = std::stoull(vec[std::size_t(Fields::GlobalWeight)]);
+      block.cacheObj.objName = vec[std::size_t(Fields::ObjName)];
+      block.cacheObj.bucketName = vec[std::size_t(Fields::BucketName)];
+      block.cacheObj.creationTime = vec[std::size_t(Fields::CreationTime)];
+      block.cacheObj.dirty = (std::stoi(vec[std::size_t(Fields::Dirty)]) != 0);
+      boost::split(block.cacheObj.hostsList, vec[std::size_t(Fields::Hosts)], boost::is_any_of("_"));
+      block.cacheObj.etag = vec[std::size_t(Fields::Etag)];
+      block.cacheObj.size = std::stoull(vec[std::size_t(Fields::ObjSize)]);
+      block.cacheObj.user_id = vec[std::size_t(Fields::UserID)];
+      block.cacheObj.display_name = vec[std::size_t(Fields::DisplayName)];
+      std::string key = build_index(&block);
+      if (auto it = key_index.find(key); it != key_index.end()) {
+        blocks[it->second] = std::move(block);
+      }
+    }
+  }
   return 0;
 }
 
@@ -1126,7 +1261,8 @@ int BlockDirectory::get(const DoutPrefixProvider* dpp, CacheBlock* block, option
     request req;
     req.push_range("HMGET", key, fields);
 
-    redis_exec_connection_pool(dpp, redis_pool, conn, ec, req, resp, y);
+    int index = findClient(dpp, key);
+    redis_exec_connection_pool(dpp, redis_pool_manager, index, connections, ec, req, resp, y);
 
     if (ec) {
       ldpp_dout(dpp, 0) << "BlockDirectory::" << __func__ << "() ERROR: " << ec.what() << dendl;
@@ -1162,122 +1298,118 @@ int BlockDirectory::get(const DoutPrefixProvider* dpp, CacheBlock* block, option
 
 int BlockDirectory::get(const DoutPrefixProvider* dpp, std::vector<CacheBlock>& blocks, optional_yield y)
 {
-  boost::redis::generic_response resp;
-  request req;
+  std::unordered_map<int, request> requests; //map of index of directory masters to requests
+  std::unordered_map<std::string, int> key_index; //map of block key to index in vector of blocks
+  int vec_idx = 0;
   for (auto block : blocks) {
     std::string key = build_index(&block);
-    std::vector<std::string> fields;
+    int dir_index = findClient(dpp, key);
+    key_index.emplace(key, vec_idx);
     ldpp_dout(dpp, 10) << "BlockDirectory::" << __func__ << "(): index is: " << key << dendl;
-
-    fields.push_back("blockID");
-    fields.push_back("version");
-    fields.push_back("deleteMarker");
-    fields.push_back("size");
-    fields.push_back("globalWeight");
-
-    fields.push_back("objName");
-    fields.push_back("bucketName");
-    fields.push_back("creationTime");
-    fields.push_back("dirty");
-    fields.push_back("hosts");
-    fields.push_back("etag");
-    fields.push_back("objSize");
-    fields.push_back("userId");
-    fields.push_back("displayName");
-
     try {
-      req.push("HGETALL", key);
+      requests[dir_index].push("HGETALL", key);
     } catch (std::exception &e) {
       ldpp_dout(dpp, 0) << "BlockDirectory::" << __func__ << "() ERROR: " << e.what() << dendl;
       return -EINVAL;
     }
+    vec_idx++;
   } //end - for
 
-  try {
-    boost::system::error_code ec;
-    redis_exec(conn, ec, req, resp, y);
+  using ResponseType = boost::redis::generic_response;
+  std::unordered_map<int, ResponseType> responses_map; //map of index of directory masters to redis responses
+  for (auto& [index, req] : requests) {
+    try {
+      boost::system::error_code ec;
+      redis_exec_connection_pool(dpp, redis_pool_manager, index, connections, ec, req, responses_map[index], y);
 
-    if (ec) {
-      ldpp_dout(dpp, 0) << "BlockDirectory::" << __func__ << "() ERROR: " << ec.what() << dendl;
-      return -ec.value();
+      if (ec) {
+        ldpp_dout(dpp, 0) << "BlockDirectory::" << __func__ << "() ERROR: " << ec.what() << dendl;
+        return -ec.value();
+      }
+    } catch (std::exception &e) {
+      ldpp_dout(dpp, 0) << "BlockDirectory::" << __func__ << "() ERROR: " << e.what() << dendl;
+      return -EINVAL;
     }
-  } catch (std::exception &e) {
-    ldpp_dout(dpp, 0) << "BlockDirectory::" << __func__ << "() ERROR: " << e.what() << dendl;
-    return -EINVAL;
   }
-  //i is used to index blocks
-  //j is used to keep a track of number of elements for aggregate type map or array
-  auto i = 0, j = 0;
-  bool field_key=true, field_val=false;
-  std::string key, fieldkey, fieldval, prev_val;
-  int num_elements = 0;
-  for (auto& element : resp.value()) {
-    ldpp_dout(dpp, 10) << "BlockDirectory::" << __func__ << "(): i is: " << i << dendl;
-    CacheBlock* block = &blocks[i];
-    std::string key = build_index(block);
-    ldpp_dout(dpp, 10) << "BlockDirectory::" << __func__ << "(): index is: " << key << dendl;
-    if (element.data_type == boost::redis::resp3::type::array || element.data_type == boost::redis::resp3::type::map) {
-      num_elements = element.aggregate_size;
-      if (num_elements == 0) {
-        i++;
-        j = 0;
-      }
-      ldpp_dout(dpp, 10) << "BlockDirectory::" << __func__ << "() num_elements: " << num_elements << dendl;
-      continue;
-    } else {
-      if (j < num_elements) {
-        if (field_key && !field_val) {
-          if (element.value == "blockID" || element.value == "version" || element.value == "deleteMarker" ||
-              element.value == "size" || element.value == "globalWeight" || element.value == "objName" ||
-              element.value == "bucketName" || element.value == "creationTime" || element.value == "dirty" ||
-              element.value == "hosts" || element.value == "etag" || element.value == "objSize" ||
-              element.value == "userId" || element.value == "displayName") {
-            prev_val = element.value;
-            ldpp_dout(dpp, 10) << "BlockDirectory::" << __func__ << "() field key: " << prev_val << dendl;
-            field_key = false;
-            field_val = true;
-          }
-          continue;
-        } else {
-          ldpp_dout(dpp, 10) << "BlockDirectory::" << __func__ << "() field val: " << element.value << dendl;
-          if (prev_val == "blockID") {
-            block->blockID = std::stoull(element.value);
-          } else if (prev_val == "version") {
-            block->version = element.value;
-          } else if (prev_val == "deleteMarker") {
-            block->deleteMarker = (std::stoi(element.value) != 0);
-          } else if (prev_val == "size") {
-            block->size = std::stoull(element.value);
-          } else if (prev_val == "globalWeight") {
-            block->globalWeight = std::stoull(element.value);
-          } else if (prev_val == "objName") {
-            block->cacheObj.objName = element.value;
-          } else if (prev_val == "bucketName") {
-            block->cacheObj.bucketName = element.value;
-          } else if (prev_val == "creationTime") {
-            block->cacheObj.creationTime = element.value;
-          } else if (prev_val == "dirty") {
-            block->cacheObj.dirty = (std::stoi(element.value) != 0);
-          } else if (prev_val == "hosts") {
-            boost::split(block->cacheObj.hostsList, element.value, boost::is_any_of("_"));
-          } else if (prev_val == "etag") {
-            block->cacheObj.etag = element.value;
-          } else if (prev_val == "objSize") {
-            block->cacheObj.size = std::stoull(element.value);
-          } else if (prev_val == "userId") {
-            block->cacheObj.user_id = element.value;
-          } else if (prev_val == "displayName") {
-            block->cacheObj.display_name = element.value;
-          }
-          j++;
-          field_key= true;
-          field_val = false;
-          prev_val.clear();
+  for (auto& [index, resp] : responses_map) {
+    //i is used to index blocks
+    //j is used to keep a track of number of elements for aggregate type map or array
+    auto i = 0, j = 0;
+    bool field_key=true, field_val=false;
+    std::string key, fieldkey, fieldval, prev_val;
+    int num_elements = 0;
+    CacheBlock block;
+    for (auto& element : resp.value()) {
+      ldpp_dout(dpp, 10) << "BlockDirectory::" << __func__ << "(): i is: " << i << dendl;
+      if (element.data_type == boost::redis::resp3::type::array || element.data_type == boost::redis::resp3::type::map) {
+        num_elements = element.aggregate_size;
+        if (num_elements == 0) {
+          i++;
+          j = 0;
         }
-      }
-      if (j == num_elements) {
-        i++;
-        j = 0;
+        ldpp_dout(dpp, 10) << "BlockDirectory::" << __func__ << "() num_elements: " << num_elements << dendl;
+        continue;
+      } else {
+        if (j < num_elements) {
+          if (field_key && !field_val) {
+            if (element.value == "blockID" || element.value == "version" || element.value == "deleteMarker" ||
+                element.value == "size" || element.value == "globalWeight" || element.value == "objName" ||
+                element.value == "bucketName" || element.value == "creationTime" || element.value == "dirty" ||
+                element.value == "hosts" || element.value == "etag" || element.value == "objSize" ||
+                element.value == "userId" || element.value == "displayName") {
+              prev_val = element.value;
+              ldpp_dout(dpp, 10) << "BlockDirectory::" << __func__ << "() field key: " << prev_val << dendl;
+              field_key = false;
+              field_val = true;
+            }
+            continue;
+          } else {
+            ldpp_dout(dpp, 10) << "BlockDirectory::" << __func__ << "() field val: " << element.value << dendl;
+            if (prev_val == "blockID") {
+              block.blockID = std::stoull(element.value);
+            } else if (prev_val == "version") {
+              block.version = element.value;
+            } else if (prev_val == "deleteMarker") {
+              block.deleteMarker = (std::stoi(element.value) != 0);
+            } else if (prev_val == "size") {
+              block.size = std::stoull(element.value);
+            } else if (prev_val == "globalWeight") {
+              block.globalWeight = std::stoull(element.value);
+            } else if (prev_val == "objName") {
+              block.cacheObj.objName = element.value;
+            } else if (prev_val == "bucketName") {
+              block.cacheObj.bucketName = element.value;
+            } else if (prev_val == "creationTime") {
+              block.cacheObj.creationTime = element.value;
+            } else if (prev_val == "dirty") {
+              block.cacheObj.dirty = (std::stoi(element.value) != 0);
+            } else if (prev_val == "hosts") {
+              boost::split(block.cacheObj.hostsList, element.value, boost::is_any_of("_"));
+            } else if (prev_val == "etag") {
+              block.cacheObj.etag = element.value;
+            } else if (prev_val == "objSize") {
+              block.cacheObj.size = std::stoull(element.value);
+            } else if (prev_val == "userId") {
+              block.cacheObj.user_id = element.value;
+            } else if (prev_val == "displayName") {
+              block.cacheObj.display_name = element.value;
+            }
+            j++;
+            field_key= true;
+            field_val = false;
+            prev_val.clear();
+          }
+        }
+        if (j == num_elements) {
+          i++;
+          j = 0;
+          std::string key = build_index(&block);
+          ldpp_dout(dpp, 10) << "BlockDirectory::" << __func__ << "(): index is: " << key << dendl;
+          auto it = key_index.find(key);
+          if (it != key_index.end()) {
+            blocks[it->second] = std::move(block);
+          }
+        }
       }
     }
   }
@@ -1305,7 +1437,8 @@ int BlockDirectory::copy(const DoutPrefixProvider* dpp, CacheBlock* block, const
     req.push("HSET", copyKey, "objName", copyName, "bucketName", copyBucketName);
     req.push("EXEC");
 
-    redis_exec_connection_pool(dpp, redis_pool, conn, ec, req, resp, y);
+    int index = findClient(dpp, key);
+    redis_exec_connection_pool(dpp, redis_pool_manager, index, connections, ec, req, resp, y);
 
     if (ec) {
       ldpp_dout(dpp, 0) << "BlockDirectory::" << __func__ << "() ERROR: " << ec.what() << dendl;
@@ -1334,7 +1467,8 @@ int BlockDirectory::del(const DoutPrefixProvider* dpp, CacheBlock* block, option
     request req;
     req.push("DEL", key);
     response<int> resp;
-    redis_exec_connection_pool(dpp, redis_pool, conn, ec, req, resp, y);
+    int index = findClient(dpp, key);
+    redis_exec_connection_pool(dpp, redis_pool_manager, index, connections, ec, req, resp, y);
     if (!std::get<0>(resp).value()) {
       ldpp_dout(dpp, 10) << "BlockDirectory::" << __func__ << "(): No values deleted for key=" << key << dendl;
       return -ENOENT;
@@ -1369,7 +1503,8 @@ int BlockDirectory::update_field(const DoutPrefixProvider* dpp, CacheBlock* bloc
 	request req;
 	req.push("HGET", key, field);
 
-    	redis_exec_connection_pool(dpp, redis_pool, conn, ec, req, resp, y);
+  int index = findClient(dpp, key);
+  redis_exec_connection_pool(dpp, redis_pool_manager, index, connections, ec, req, resp, y);
 
 	if (ec) {
 	  ldpp_dout(dpp, 0) << "BlockDirectory::" << __func__ << "() ERROR: " << ec.what() << dendl;
@@ -1394,9 +1529,10 @@ int BlockDirectory::update_field(const DoutPrefixProvider* dpp, CacheBlock* bloc
       boost::system::error_code ec;
       response<ignore_t> resp;
       request req;
+      int index = findClient(dpp, key);
       req.push("HSET", key, field, value);
 
-    	redis_exec_connection_pool(dpp, redis_pool, conn, ec, req, resp, y);
+    	redis_exec_connection_pool(dpp, redis_pool_manager, index, connections, ec, req, resp, y);
 
       if (ec) {
 	ldpp_dout(dpp, 0) << "BlockDirectory::" << __func__ << "() ERROR: " << ec.what() << dendl;
@@ -1428,7 +1564,8 @@ int BlockDirectory::remove_host(const DoutPrefixProvider* dpp, CacheBlock* block
       request req;
       req.push("HGET", key, "hosts");
 
-    redis_exec_connection_pool(dpp, redis_pool, conn, ec, req, resp, y);
+    int index = findClient(dpp, key);
+    redis_exec_connection_pool(dpp, redis_pool_manager, index, connections, ec, req, resp, y);
 
       if (ec) {
 	ldpp_dout(dpp, 0) << "BlockDirectory::" << __func__ << "() ERROR: " << ec.what() << dendl;
@@ -1467,7 +1604,8 @@ int BlockDirectory::remove_host(const DoutPrefixProvider* dpp, CacheBlock* block
       request req;
       req.push("HSET", key, "hosts", value);
 
-    redis_exec_connection_pool(dpp, redis_pool, conn, ec, req, resp, y);
+    int index = findClient(dpp, key);
+    redis_exec_connection_pool(dpp, redis_pool_manager, index, connections, ec, req, resp, y);
 
       if (ec) {
 	ldpp_dout(dpp, 0) << "BlockDirectory::" << __func__ << "() ERROR: " << ec.what() << dendl;
@@ -1491,7 +1629,8 @@ int BlockDirectory::zadd(const DoutPrefixProvider* dpp, CacheBlock* block, doubl
     req.push("ZADD", key, "CH", std::to_string(score), member);
 
     response<std::string> resp;
-    redis_exec_connection_pool(dpp, redis_pool, conn, ec, req, resp, y);
+    int index = findClient(dpp, key);
+    redis_exec_connection_pool(dpp, redis_pool_manager, index, connections, ec, req, resp, y);
 
     if (ec) {
       ldpp_dout(dpp, 0) << "BlockDirectory::" << __func__ << "() ERROR: " << ec.what() << dendl;
@@ -1520,7 +1659,8 @@ int BlockDirectory::zrange(const DoutPrefixProvider* dpp, CacheBlock* block, int
     req.push("ZRANGE", key, std::to_string(start), std::to_string(stop));
 
     response<std::vector<std::string> > resp;
-    redis_exec_connection_pool(dpp, redis_pool, conn, ec, req, resp, y);
+    int index = findClient(dpp, key);
+    redis_exec_connection_pool(dpp, redis_pool_manager, index, connections, ec, req, resp, y);
 
     if (ec) {
       ldpp_dout(dpp, 0) << "BlockDirectory::" << __func__ << "() ERROR: " << ec.what() << dendl;
@@ -1551,7 +1691,8 @@ int BlockDirectory::zrevrange(const DoutPrefixProvider* dpp, CacheBlock* block, 
     req.push("ZREVRANGE", key, std::to_string(start), std::to_string(stop));
 
     response<std::vector<std::string> > resp;
-    redis_exec_connection_pool(dpp, redis_pool, conn, ec, req, resp, y);
+    int index = findClient(dpp, key);
+    redis_exec_connection_pool(dpp, redis_pool_manager, index, connections, ec, req, resp, y);
 
     if (ec) {
       ldpp_dout(dpp, 0) << "BlockDirectory::" << __func__ << "() ERROR: " << ec.what() << dendl;
@@ -1582,7 +1723,8 @@ int BlockDirectory::zrem(const DoutPrefixProvider* dpp, CacheBlock* block, const
     req.push("ZREM", key, member);
     response<std::string> resp;
 
-    redis_exec_connection_pool(dpp, redis_pool, conn, ec, req, resp, y);
+    int index = findClient(dpp, key);
+    redis_exec_connection_pool(dpp, redis_pool_manager, index, connections, ec, req, resp, y);
 
     if (ec) {
       ldpp_dout(dpp, 0) << "BlockDirectory::" << __func__ << "() ERROR: " << ec.what() << dendl;
@@ -1604,19 +1746,22 @@ int BlockDirectory::zrem(const DoutPrefixProvider* dpp, CacheBlock* block, const
 
 int Pipeline::execute(const DoutPrefixProvider* dpp, optional_yield y)
 {
-  boost::redis::generic_response resp;
-  try {
-    boost::system::error_code ec;
-    pipeline_mode = false;
-    redis_exec_connection_pool(dpp, redis_pool, conn, ec, req, resp, y);
-
-    if (ec) {
-      ldpp_dout(dpp, 0) << "Directory::" << __func__ << "() ERROR: " << ec.what() << dendl;
-      return -ec.value();
+  pipeline_mode = false;
+  //Loop through all the redis hosts, indicated by index and execute the pipeline on each host
+  for (auto& [index, req] : requests) {
+    ldpp_dout(dpp, 0) << "Pipeline::" << __func__ << "() directory index: " << index << dendl;
+    boost::redis::generic_response resp;
+    try {
+      boost::system::error_code ec;
+      redis_exec_connection_pool(dpp, redis_pool_manager, index, connections, ec, req, resp, y);
+      if (ec) {
+        ldpp_dout(dpp, 0) << "Pipeline::" << __func__ << "() ERROR: " << ec.what() << dendl;
+        return -ec.value();
+      }
+    } catch (std::exception &e) {
+      ldpp_dout(dpp, 0) << "Pipeline::" << __func__ << "() ERROR: " << e.what() << dendl;
+      return -EINVAL;
     }
-  } catch (std::exception &e) {
-    ldpp_dout(dpp, 0) << "Directory::" << __func__ << "() ERROR: " << e.what() << dendl;
-    return -EINVAL;
   }
   return 0;
 }
