@@ -14,12 +14,8 @@
 #include "rbm_device.h"
 #include "nvme_block_device.h"
 #include "block_rb_manager.h"
-
-namespace {
-  seastar::logger& logger() {
-    return crimson::get_logger(ceph_subsys_seastore_tm);
-  }
-}
+#include "crimson/os/seastore/logging.h"
+SET_SUBSYS(seastore_device);
 
 namespace crimson::os::seastore::random_block_device::nvme {
 
@@ -77,7 +73,8 @@ open_ertr::future<> NVMeBlockDevice::open_for_io(
 
 NVMeBlockDevice::mount_ret NVMeBlockDevice::mount()
 {
-  logger().debug(" mount ");
+  LOG_PREFIX(NVMeBlockDevice::mount);
+  DEBUG("mount");
   co_await shard_devices.invoke_on_all([](auto &local_device) {
     return local_device.do_shard_mount(
     ).handle_error(
@@ -92,14 +89,14 @@ NVMeBlockDevice::mount_ret NVMeBlockDevice::mount()
     auto id_namespace_data = *id_ns_data;
     if (id_namespace_data.dps.protection_type !=
 	nvme_format_nvm_command_t::PROTECT_INFORMATION_TYPE_2) {
-      logger().error("seastore was formated with end-to-end-data-protection \
+      ERROR("seastore was formated with end-to-end-data-protection \
 	but the device being mounted to use seastore does not support \
 	the functionality. Please check the device.");
       ceph_abort();
     }
     if (id_namespace_data.lbaf[id_namespace_data.flbas.lba_index].ms != 
 	nvme_identify_namespace_data_t::METASIZE_FOR_CHECKSUM_OFFLOAD) {
-      logger().error("seastore was formated with end-to-end-data-protection \
+      ERROR("seastore was formated with end-to-end-data-protection \
 	but the formatted device meta size is wrong. Please check the device.");
       ceph_abort();
     }
@@ -110,8 +107,8 @@ write_ertr::future<> NVMeBlockDevice::write(
   uint64_t offset,
   bufferptr bptr,
   uint16_t stream) {
-  logger().debug(
-      "block: write offset {} len {}",
+  LOG_PREFIX(NVMeBlockDevice::write);
+  DEBUG("block: write offset {} len {}",
       offset,
       bptr.length());
   auto length = bptr.length();
@@ -127,12 +124,12 @@ write_ertr::future<> NVMeBlockDevice::write(
   }
   auto ret = co_await io_device[supported_stream].dma_write(
     offset, bptr.c_str(), length).handle_exception(
-    [](auto e) -> write_ertr::future<size_t> {
-    logger().error("write: dma_write got error{}", e);
+    [FNAME](auto e) -> write_ertr::future<size_t> {
+    ERROR("write: dma_write got error{}", e);
     return crimson::ct_error::input_output_error::make();
   });
   if (ret != length) {
-    logger().error("write: dma_write got error with not proper length");
+    ERROR("write: dma_write got error with not proper length");
     co_await write_ertr::future<>(
       crimson::ct_error::input_output_error::make());
   }
@@ -141,8 +138,8 @@ write_ertr::future<> NVMeBlockDevice::write(
 read_ertr::future<> NVMeBlockDevice::read(
   uint64_t offset,
   bufferptr &bptr) {
-  logger().debug(
-      "block: read offset {} len {}",
+  LOG_PREFIX(NVMeBlockDevice::read);
+  DEBUG("block: read offset {} len {}",
       offset,
       bptr.length());
   auto length = bptr.length();
@@ -157,12 +154,12 @@ read_ertr::future<> NVMeBlockDevice::read(
   }
   auto ret = co_await device.dma_read(offset, bptr.c_str(), length
   ).handle_exception(
-    [](auto e) -> read_ertr::future<size_t> {
-    logger().error("read: dma_read got error{}", e);
+    [FNAME](auto e) -> read_ertr::future<size_t> {
+    ERROR("read: dma_read got error{}", e);
     return crimson::ct_error::input_output_error::make();
   });
   if (ret != length) {
-    logger().error("read: dma_read got error with not proper length");
+    ERROR("read: dma_read got error with not proper length");
     co_await read_ertr::future<>(
       crimson::ct_error::input_output_error::make());
   }
@@ -172,8 +169,8 @@ write_ertr::future<> NVMeBlockDevice::writev(
   uint64_t offset,
   ceph::bufferlist bl,
   uint16_t stream) {
-  logger().debug(
-    "block: write offset {} len {}",
+  LOG_PREFIX(NVMeBlockDevice::writev);
+  DEBUG("block: write offset {} len {}",
     offset,
     bl.length());
 
@@ -190,23 +187,23 @@ write_ertr::future<> NVMeBlockDevice::writev(
   auto has_error = seastar::make_lw_shared<bool>(false);
   co_await seastar::coroutine::parallel_for_each(
     iovs,
-    [this, supported_stream, offset, has_error](auto& p)
+    [this, supported_stream, offset, has_error, FNAME](auto& p)
   {
     auto off = offset + p.offset;
     auto len = p.length;
     auto& iov = p.iov;
     return io_device[supported_stream].dma_write(off, std::move(iov)
     ).handle_exception(
-      [this, off, len, has_error](auto e) -> seastar::future<size_t>
+      [this, off, len, has_error, FNAME](auto e) -> seastar::future<size_t>
     {
-      logger().error("{} poffset={}~{} dma_write got error -- {}",
-		     device_id_printer_t{get_device_id()}, off, len, e);
+      ERROR("{} poffset={}~{} dma_write got error -- {}",
+	device_id_printer_t{get_device_id()}, off, len, e);
       *has_error = true;
       return seastar::make_ready_future<size_t>(0);
-    }).then([this, off, len, has_error](size_t written) {
+    }).then([this, off, len, has_error, FNAME](size_t written) {
       if (written != len) {
-	logger().error("{} poffset={}~{} dma_write len={} inconsistent",
-		       device_id_printer_t{get_device_id()}, off, len, written);
+	ERROR("{} poffset={}~{} dma_write len={} inconsistent",
+	  device_id_printer_t{get_device_id()}, off, len, written);
 	*has_error = true;
       }
       return seastar::now();
@@ -219,7 +216,8 @@ write_ertr::future<> NVMeBlockDevice::writev(
 }
 
 Device::close_ertr::future<> NVMeBlockDevice::close() {
-  logger().debug(" close ");
+  LOG_PREFIX(NVMeBlockDevice::close);
+  DEBUG("close");
   stream_index_to_open = WRITE_LIFE_NOT_SET;
   co_await device.close();
   for (auto& target_device : io_device) {
@@ -283,7 +281,8 @@ nvme_command_ertr::future<int> NVMeBlockDevice::get_nsid(seastar::file f) {
   auto ret = co_await f.ioctl(NVME_IOCTL_ID, nullptr
   ).handle_exception(
     [](auto e)->nvme_command_ertr::future<int> {
-    logger().error("pass_admin: ioctl failed");
+    LOG_PREFIX(NVMeBlockDevice::get_nsid);
+    ERROR("pass_admin: ioctl failed {}", e);
     return crimson::ct_error::input_output_error::make();
   });
   co_return ret;
@@ -294,7 +293,8 @@ nvme_command_ertr::future<int> NVMeBlockDevice::pass_admin(
   auto ret = co_await f.ioctl(NVME_IOCTL_ADMIN_CMD, nullptr
   ).handle_exception(
     [](auto e)->nvme_command_ertr::future<int> {
-    logger().error("pass_admin: ioctl failed {}", e);
+    LOG_PREFIX(NVMeBlockDevice::pass_admin);
+    ERROR("pass_admin: ioctl failed {}", e);
     return crimson::ct_error::input_output_error::make();
   });
   co_return ret;
@@ -305,13 +305,15 @@ nvme_command_ertr::future<int> NVMeBlockDevice::pass_through_io(
   auto ret = co_await device.ioctl(NVME_IOCTL_IO_CMD, &io_cmd
   ).handle_exception(
     [](auto e)->nvme_command_ertr::future<int> {
-    logger().error("pass_through_io: ioctl failed {}", e);
+    LOG_PREFIX(NVMeBlockDevice::pass_through_io);
+    ERROR("pass_through_io: ioctl failed {}", e);
     return crimson::ct_error::input_output_error::make();
   });
   co_return ret;
 }
 
 nvme_command_ertr::future<> NVMeBlockDevice::try_enable_end_to_end_protection() {
+  LOG_PREFIX(NVMeBlockDevice::try_enable_end_to_end_protection);
   auto id_ns_data = co_await identify_namespace(device);
   if (!id_ns_data) {
     INFO("the device does not support end to end data protection,\
@@ -320,7 +322,7 @@ nvme_command_ertr::future<> NVMeBlockDevice::try_enable_end_to_end_protection() 
   }
   auto id_namespace_data = *id_ns_data;
   if (!id_namespace_data.nlbaf) {
-    logger().info("the device does not support end to end data protection,\
+    INFO("the device does not support end to end data protection,\
       mkfs() will be done without this functionality.");
     co_return;
   }
@@ -339,7 +341,7 @@ nvme_command_ertr::future<> NVMeBlockDevice::try_enable_end_to_end_protection() 
     }
   }
   if (lba_format_index == -1) {
-    logger().info("the device does not support end to end data protection,\
+    INFO("the device does not support end to end data protection,\
       mkfs() will be done without this functionality.");
     co_return;
   }
@@ -353,7 +355,7 @@ nvme_command_ertr::future<> NVMeBlockDevice::try_enable_end_to_end_protection() 
   cmd.format.lbaf = lba_format_index;
   auto ret = co_await pass_admin(cmd, device);
   if (ret != 0) {
-    logger().error(
+    ERROR(
       "formt nvm command to use end-to-end-protection fails : {}", ret);
     ceph_abort();
   }
@@ -389,8 +391,8 @@ write_ertr::future<> NVMeBlockDevice::nvme_write(
   cmd.rw.nlb = (len >> lba_shift) - 1;
   auto ret = co_await pass_through_io(cmd);
   if (ret != 0) {
-    logger().error(
-      "write nvm command with checksum offload fails : {}", ret);
+    LOG_PREFIX(NVMeBlockDevice::nvme_write);
+    ERROR("write nvm command with checksum offload fails : {}", ret);
     ceph_abort();
   }
 }
@@ -411,8 +413,8 @@ read_ertr::future<> NVMeBlockDevice::nvme_read(
   cmd.rw.nlb = (len >> lba_shift) - 1;
   auto ret = co_await pass_through_io(cmd);
   if (ret != 0) {
-    logger().error(
-      "read nvm command with checksum offload fails : {}", ret);
+    LOG_PREFIX(NVMeBlockDevice::nvme_read);
+    ERROR("read nvm command with checksum offload fails : {}", ret);
     ceph_abort();
   }
 }
