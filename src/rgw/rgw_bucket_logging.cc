@@ -857,14 +857,15 @@ int bucket_deletion_cleanup(const DoutPrefixProvider* dpp,
     }
   }
 
-  return source_bucket_cleanup(dpp, driver, bucket, false, y);
+  return source_bucket_cleanup(dpp, driver, bucket, false, y, nullptr);
 }
 
 int source_bucket_cleanup(const DoutPrefixProvider* dpp,
                                    sal::Driver* driver,
                                    sal::Bucket* bucket,
                                    bool remove_attr,
-                                   optional_yield y) {
+                                   optional_yield y,
+                                   std::string* last_committed) {
   std::optional<configuration> conf;
   if (const int ret = retry_raced_bucket_write(dpp, bucket, [dpp, bucket, &conf, remove_attr, y] {
     auto& attrs = bucket->get_attrs();
@@ -899,7 +900,7 @@ int source_bucket_cleanup(const DoutPrefixProvider* dpp,
     return 0;
   }
   const auto& info = bucket->get_info();
-  if (const int ret = commit_logging_object(*conf, dpp, driver, info.bucket.tenant, y, nullptr); ret < 0) {
+  if (const int ret = commit_logging_object(*conf, dpp, driver, info.bucket.tenant, y, last_committed); ret < 0) {
     ldpp_dout(dpp, 5) << "WARNING: could not commit pending logging object of bucket '" <<
       bucket->get_key() << "' during cleanup. ret = " << ret << dendl;
   } else {
