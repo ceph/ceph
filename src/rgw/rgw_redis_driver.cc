@@ -65,6 +65,75 @@ void redis_exec(std::shared_ptr<connection> conn,
   }
 }
 
+std::optional<fs::path> RedisDriver::resolve_valkey_data_dir(const DoutPrefixProvider* dpp) const
+{
+  try {
+    boost::system::error_code ec;
+    response<std::vector<std::string>> resp;
+    request req;
+    req.push("CONFIG", "GET", "dir");
+
+    redis_exec(conn, ec, req, resp, null_yield);
+
+    if (ec) {
+      ldpp_dout(dpp, 5) << "RedisDriver::" << __func__
+                        << "(): failed to execute CONFIG GET dir: " << ec.message()
+                        << dendl;
+      return std::nullopt;
+    }
+
+    const auto& entries = std::get<0>(resp);
+    std::clog << "MK| OK " << __FILE__ << " :" << __LINE__ << " | " << __func__ << "(): entries.value().size()=" << entries.value().size() << std::endl;
+    if (entries.value().size() < 2) {
+      ldpp_dout(dpp, 5) << "RedisDriver::" << __func__
+                        << "(): unexpected CONFIG GET dir response size=" << entries.value().size()
+                        << dendl;
+      return std::nullopt;
+    }
+
+    const fs::path dir_path(entries.value()[1]);
+    std::clog << "MK| OK " << __FILE__ << " :" << __LINE__ << " | " << __func__ << "(): dir_path=" << std::quoted(dir_path.string()) << std::endl;
+    if (dir_path.empty()) {
+      ldpp_dout(dpp, 5) << "RedisDriver::" << __func__
+                        << "(): CONFIG GET dir returned empty path" << dendl;
+      return std::nullopt;
+    }
+
+    return dir_path;
+  } catch (const std::exception& e) {
+    ldpp_dout(dpp, 0) << "RedisDriver::" << __func__
+                      << "(): exception while resolving data dir: " << e.what()
+                      << dendl;
+  }
+
+  return std::nullopt;
+}
+
+uint64_t RedisDriver::get_free_space(const DoutPrefixProvider* dpp)
+{
+  auto data_dir = resolve_valkey_data_dir(dpp);
+  if (!data_dir) {
+    ldpp_dout(dpp, 0) << __func__ << "(): ERROR: could not resolve redis data dir" << dendl;
+    return 0;
+  }
+
+  const fs::path redis_probe_path = *data_dir;
+  ldpp_dout(dpp, 20) << __func__ << "(): redis path = " << std::quoted(redis_probe_path.string()) << dendl;
+
+  std::error_code ec;
+  fs::space_info space = fs::space(redis_probe_path, ec);
+  if (ec) {
+    ldpp_dout(dpp, 0) << __func__ << "(): ERROR: unable to stat redis path "
+                      << std::quoted(redis_probe_path.string()) << " : " << ec.message() << dendl;
+    return 0;
+  }
+
+  ldpp_dout(dpp, 20) << __func__ << "(): redis partition space.available=" << space.available
+                     << ", partition_info.reserve_size=" << partition_info.reserve_size << dendl;
+
+  return (space.available < partition_info.reserve_size) ? 0 : (space.available - partition_info.reserve_size);
+}
+
 int RedisDriver::initialize(const DoutPrefixProvider* dpp)
 {
   if (partition_info.location.back() != '/') {

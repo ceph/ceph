@@ -46,7 +46,7 @@ D4NFilterDriver::D4NFilterDriver(Driver* _next, boost::asio::io_context& io_cont
   partition_info.location = g_conf()->rgw_d4n_l1_datacache_persistent_path;
   partition_info.name = "d4n";
   partition_info.type = "read-cache";
-  partition_info.size = g_conf()->rgw_d4n_l1_datacache_size;
+  partition_info.reserve_size = g_conf()->rgw_d4n_l1_datacache_disk_reserve;
   cacheDriver = std::make_unique<rgw::cache::SSDDriver>(partition_info, admin);
 }
 

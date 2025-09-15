@@ -3894,12 +3894,12 @@ options:
   services:
   - rgw
   with_legacy: true
-- name: rgw_d4n_l1_datacache_size
+- name: rgw_d4n_l1_datacache_disk_reserve
   type: size
   level: advanced
-  desc: maximum size on disk for datacache
-  long_desc: The local SSD cache uses this option to configure its size in bytes. This 
-    option is not used by the Redis cache backend. 
+  desc: amount of disk space to keep free for datacache
+  long_desc: The local SSD cache uses this option to determine how much disk space to 
+    reserve. The cache can grow until disk usage reaches (total disk space - reserved space).
   default: 1_G
   services:
   - rgw

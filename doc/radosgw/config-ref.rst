@@ -326,7 +326,7 @@ below.
 
 .. confval:: rgw_d4n_address
 .. confval:: rgw_d4n_l1_datacache_persistent_path
-.. confval:: rgw_d4n_l1_datacache_size
+.. confval:: rgw_d4n_l1_datacache_disk_reserve
 .. confval:: rgw_d4n_l1_evict_cache_on_start
 .. confval:: rgw_d4n_l1_fadvise
 .. confval:: rgw_d4n_libaio_aio_threads
