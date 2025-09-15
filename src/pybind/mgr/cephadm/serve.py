@@ -120,6 +120,9 @@ class CephadmServe:
 
                     self._check_for_moved_osds()
 
+                    if self.mgr.db_ready():
+                        self.mgr.version_tracker.add_bootstrap_cluster_version()
+                        
                     if self.mgr.agent_helpers._handle_use_agent_setting():
                         continue
 
