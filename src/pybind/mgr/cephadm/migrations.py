@@ -16,7 +16,7 @@ from orchestrator import OrchestratorError, DaemonDescription
 if TYPE_CHECKING:
     from .module import CephadmOrchestrator
 
-LAST_MIGRATION = 8
+LAST_MIGRATION = 9
 
 logger = logging.getLogger(__name__)
 
@@ -86,7 +86,6 @@ class Migrations:
                 "cephadm migration still ongoing. Please wait, until the migration is complete.")
 
     def migrate(self, startup: bool = False) -> None:
-
         logger.info('running migrations')
 
         if self.mgr.migration_current == 0:
@@ -120,6 +119,10 @@ class Migrations:
         if self.mgr.migration_current == 7:
             if self.migrate_7_8():
                 self.set(8)
+
+        if self.mgr.migration_current == 8:
+            if self.migrate_8_9():
+                self.set(9)
 
     def migrate_0_1(self) -> bool:
         """
@@ -497,6 +500,72 @@ class Migrations:
 
         self.rgw_ssl_migration_queue = []
         return True
+
+    def migrate_8_9(self) -> bool:
+        """
+        Replace Promtail with Alloy.
+
+        - If mgr daemons are still being upgraded, return True WITHOUT bumping migration_current.
+        - Mark Promtail service unmanaged so cephadm won't redeploy it.
+        - Remove Promtail daemons to free ports.
+        - Deploy Alloy with Promtail's placement.
+        - Once Alloy is confirmed deployed, remove Promtail service spec.
+        """
+        try:
+            target_digests = getattr(self.mgr.upgrade.upgrade_state, "target_digests", [])
+            active_mgr_digests = self.mgr.get_active_mgr_digests()
+
+            if target_digests:
+                if not any(d in target_digests for d in active_mgr_digests):
+                    logger.info(
+                        "Promtail -> Alloy migration: mgr daemons still upgrading. "
+                        "Marking as complete without bumping migration_current."
+                    )
+                    return False
+
+            promtail_spec = self.mgr.spec_store.active_specs.get("promtail")
+            if not promtail_spec:
+                logger.info("Promtail -> Alloy migration: no Promtail \
+                    service found, nothing to do.")
+                return True
+
+            if not promtail_spec.unmanaged:
+                logger.info("Promtail -> Alloy migration: marking promtail unmanaged")
+                self.mgr.spec_store.set_unmanaged("promtail", True)
+
+            daemons = self.mgr.cache.get_daemons()
+            promtail_daemons = [d for d in daemons if d.daemon_type == "promtail"]
+            if promtail_daemons:
+                promtail_names = [d.name() for d in promtail_daemons]
+                logger.info(f"Promtail -> Alloy migration: removing daemons {promtail_names}")
+                self.mgr.remove_daemons(promtail_names)
+
+            daemons = self.mgr.cache.get_daemons()
+            if any(d.daemon_type == "promtail" for d in daemons):
+                logger.info(
+                    "Promtail -> Alloy migration: promtail daemons still present, "
+                    "skipping Alloy deployment until next run."
+                )
+                return False
+
+            alloy_spec = ServiceSpec(
+                service_type="alloy",
+                service_id="alloy",
+                placement=promtail_spec.placement
+            )
+
+            logger.info("Promtail -> Alloy migration: deploying Alloy service")
+            self.mgr.apply_alloy(alloy_spec)
+
+            logger.info("Promtail -> Alloy migration: removing promtail service spec")
+            self.mgr.remove_service("promtail")
+
+            logger.info("Promtail -> Alloy migration completed successfully.")
+            return True
+
+        except Exception as e:
+            logger.error(f"Promtail -> Alloy migration failed: {e}")
+            return False
 
 
 def queue_migrate_rgw_spec(mgr: "CephadmOrchestrator", spec_dict: Dict[Any, Any]) -> None:

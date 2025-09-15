@@ -827,6 +827,43 @@ class LokiService(CephadmService):
 
 
 @register_cephadm_service
+class AlloyService(CephadmService):
+    TYPE = 'alloy'
+    DEFAULT_SERVICE_PORT = 9080
+
+    @classmethod
+    def get_dependencies(cls, mgr: "CephadmOrchestrator",
+                         spec: Optional[ServiceSpec] = None,
+                         daemon_type: Optional[str] = None) -> List[str]:
+        return sorted(mgr.cache.get_daemons_by_types(['loki']))
+
+    def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
+        assert self.TYPE == daemon_spec.daemon_type
+        daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
+        return daemon_spec
+
+    def generate_config(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[Dict[str, Any], List[str]]:
+        assert self.TYPE == daemon_spec.daemon_type
+        daemons = self.mgr.cache.get_daemons_by_service('loki')
+        loki_host = ''
+        for i, dd in enumerate(daemons):
+            assert dd.hostname is not None
+            if i == 0:
+                loki_host = dd.ip if dd.ip else self.mgr.get_fqdn(dd.hostname)
+
+        context = {
+            'client_hostname': loki_host,
+        }
+
+        alloy_config = self.mgr.template.render('services/alloy.j2', context)
+        return {
+            "files": {
+                "config.alloy": alloy_config
+            }
+        }, self.get_dependencies(self.mgr)
+
+
+@register_cephadm_service
 class PromtailService(CephadmService):
     TYPE = 'promtail'
     DEFAULT_SERVICE_PORT = 9080
