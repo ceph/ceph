@@ -74,6 +74,13 @@ frontend frontend
 {% endif %}
     default_backend backend
 
+{% if backend_spec.service_type == 'nfs' and peer_hosts %}
+peers haproxy_peers
+    {% for hostname, ip in peer_hosts.items() %}
+     peer {{ hostname }} {{ ip }}:1024
+    {% endfor %}
+
+{% endif %}
 backend backend
 {% if mode == 'http' %}
     option forwardfor
@@ -87,6 +94,11 @@ backend backend
 {% if mode == 'tcp' %}
     mode        tcp
     balance     roundrobin
+    {% if backend_spec.service_type == 'nfs' %}
+    stick-table type ip size 200k expire 30m peers haproxy_peers
+    stick on src
+    {% endif %}
+    hash-type   consistent
 {% if spec.use_tcp_mode_over_rgw %}
 {% if backend_spec.ssl %}
     option ssl-hello-chk

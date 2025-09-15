@@ -2737,7 +2737,9 @@ class TestIngressService:
             monitor_password='12345',
             keepalived_password='12345',
             enable_haproxy_protocol=enable_haproxy_protocol,
-            enable_stats=True
+            enable_stats=True,
+            placement=PlacementSpec(
+                hosts=['host1'])
         )
 
         cephadm_module.spec_store._specs = {
@@ -2785,9 +2787,14 @@ class TestIngressService:
             '    bind 192.168.122.100:2049\n'
             '    option tcplog\n'
             '    default_backend backend\n\n'
+            'peers haproxy_peers\n'
+            '     peer host1 host1:1024\n\n'
             'backend backend\n'
             '    mode        tcp\n'
             '    balance     roundrobin\n'
+            '    stick-table type ip size 200k expire 30m peers haproxy_peers\n'
+            '    stick on src\n'
+            '    hash-type   consistent\n'
         )
         if enable_haproxy_protocol:
             haproxy_txt += '    default-server send-proxy-v2\n'
@@ -3119,7 +3126,8 @@ class TestIngressService:
                                 monitor_password='12345',
                                 virtual_interface_networks=['1.2.3.0/24'],
                                 virtual_ip="1.2.3.4/32",
-                                use_tcp_mode_over_rgw=True)
+                                use_tcp_mode_over_rgw=True,
+                                enable_stats=True)
             with with_service(cephadm_module, s) as _, with_service(cephadm_module, ispec) as _:
                 # generate the haproxy conf based on the specified spec
                 haproxy_generated_conf = service_registry.get_service('ingress').haproxy_generate_config(
@@ -3637,7 +3645,10 @@ class TestIngressService:
             monitor_password='12345',
             keepalived_password='12345',
             enable_haproxy_protocol=True,
-            enable_stats=True
+            enable_stats=True,
+            placement=PlacementSpec(
+                count=1,
+                hosts=['host1', 'host2']),
         )
 
         cephadm_module.spec_store._specs = {
@@ -3681,9 +3692,15 @@ class TestIngressService:
             '    bind 192.168.122.100:2049\n'
             '    option tcplog\n'
             '    default_backend backend\n\n'
+            'peers haproxy_peers\n'
+            '     peer host1 192.168.122.111:1024\n'
+            '     peer host2 192.168.122.222:1024\n\n'
             'backend backend\n'
             '    mode        tcp\n'
             '    balance     roundrobin\n'
+            '    stick-table type ip size 200k expire 30m peers haproxy_peers\n'
+            '    stick on src\n'
+            '    hash-type   consistent\n'
             '    default-server send-proxy-v2\n'
             '    server nfs.foo.0 192.168.122.111:12049 check\n'
         )
@@ -3866,6 +3883,10 @@ class TestIngressService:
             monitor_password='12345',
             keepalived_password='12345',
             enable_haproxy_protocol=True,
+            placement=PlacementSpec(
+                count=1,
+                hosts=['host1', 'host2']),
+
         )
         cephadm_module.spec_store._specs = {
             'nfs.foo': nfs_service,
