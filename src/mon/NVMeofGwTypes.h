@@ -18,6 +18,12 @@
 #include <iomanip>
 #include <map>
 #include <iostream>
+#include <list>
+#include <vector>
+#include <cstdint>
+#include <chrono>
+#include "include/types.h"
+#include "msg/msg_types.h"
 
 using NvmeGwId = std::string;
 using NvmeGroupKey = std::pair<std::string, std::string>;
@@ -45,6 +51,12 @@ enum class gw_availability_t {
   GW_UNAVAILABLE,
   GW_DELETING,
   GW_DELETED
+};
+
+enum class subsystem_change_t {
+  SUBSYSTEM_ADDED,
+  SUBSYSTEM_CHANGED,
+  SUBSYSTEM_DELETED
 };
 
 #define REDUNDANT_GW_ANA_GROUP_ID 0xFF
@@ -86,6 +98,7 @@ struct BeaconSubsystem {
   NvmeNqnId nqn;
   std::list<BeaconListener>  listeners;
   std::list<BeaconNamespace> namespaces;
+  subsystem_change_t change_descriptor = subsystem_change_t::SUBSYSTEM_ADDED;
 
   // Define the equality operator
   bool operator==(const BeaconSubsystem& other) const {
@@ -131,7 +144,9 @@ struct NvmeGwMonState {
   BlocklistData blocklist_data;
   //ceph entity address allocated for the GW-client that represents this GW-id
   entity_addrvec_t addr_vect;
-  uint16_t beacon_index = 0;
+  uint64_t beacon_sequence = 0;// sequence number of last beacon copied to GW state
+  bool beacon_sequence_ooo = false; // last beacon sequence was out of order;
+  uint16_t beacon_index = 0; // used for filter acks sent to the client as response to beacon
   /**
    * during redeploy action and maybe other emergency use-cases gw performs scenario
    * that we call fast-reboot. It quickly reboots(due to redeploy f.e) and sends the
@@ -169,6 +184,9 @@ struct NvmeGwMonState {
      // after setting this state, the next time monitor sees GW,
      // it expects it performed the full startup
     performed_full_startup = false;
+  }
+  void reset_beacon_sequence(){
+    beacon_sequence = 0;
   }
   void standby_state(NvmeAnaGrpId grpid) {
     sm_state[grpid]       = gw_states_per_group_t::GW_STANDBY_STATE;
@@ -231,12 +249,16 @@ struct NvmeGwClientState {
   epoch_t gw_map_epoch;
   GwSubsystems subsystems;
   gw_availability_t availability;
-  NvmeGwClientState(NvmeAnaGrpId id, epoch_t epoch, gw_availability_t available)
-    : group_id(id), gw_map_epoch(epoch), availability(available) {}
+  uint64_t last_beacon_seq_number;
+  bool last_beacon_seq_ooo; //out of order sequence
+  NvmeGwClientState(NvmeAnaGrpId id, epoch_t epoch, gw_availability_t available,
+     uint64_t sequence, bool sequence_ooo)
+    : group_id(id), gw_map_epoch(epoch), availability(available),
+      last_beacon_seq_number(sequence), last_beacon_seq_ooo(sequence_ooo) {}
 
   NvmeGwClientState()
     : NvmeGwClientState(
-      REDUNDANT_GW_ANA_GROUP_ID, 0, gw_availability_t::GW_UNAVAILABLE) {}
+      REDUNDANT_GW_ANA_GROUP_ID, 0, gw_availability_t::GW_UNAVAILABLE, 0, 0) {}
 };
 
 struct Tmdata {
