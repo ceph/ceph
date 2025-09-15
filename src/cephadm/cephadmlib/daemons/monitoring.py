@@ -38,6 +38,7 @@ class Monitoring(ContainerDaemonForm):
         'alertmanager': [9093, 9094],
         'loki': [3100],
         'promtail': [9080],
+        'alloy': [9080],
     }
 
     components = {
@@ -72,6 +73,17 @@ class Monitoring(ContainerDaemonForm):
             'config-json-files': [
                 'promtail.yml',
             ],
+        },
+        'alloy': {
+            'image': DefaultImages.ALLOY.image_ref,
+            'cpus': '1',
+            'memory': '1GB',
+            'args': [
+                'run',
+                '/etc/alloy/config.alloy',
+                '--storage.path=/var/lib/alloy/data',
+            ],
+            'config-json-files': ['config.alloy'],
         },
         'node-exporter': {
             'image': DefaultImages.NODE_EXPORTER.image_ref,
@@ -112,7 +124,7 @@ class Monitoring(ContainerDaemonForm):
     def get_version(ctx, container_id, daemon_type):
         # type: (CephadmContext, str, str) -> str
         """
-        :param: daemon_type Either "prometheus", "alertmanager", "loki", "promtail" or "node-exporter"
+        :param: daemon_type Either "prometheus", "alertmanager", "loki", "alloy" or "node-exporter"
         """
         assert daemon_type in (
             'prometheus',
@@ -120,6 +132,7 @@ class Monitoring(ContainerDaemonForm):
             'node-exporter',
             'loki',
             'promtail',
+            'alloy',
         )
         cmd = daemon_type.replace('-', '_')
         code = -1
@@ -175,6 +188,8 @@ class Monitoring(ContainerDaemonForm):
             uid, gid = extract_uid_gid(ctx, file_path='/etc/loki')
         elif daemon_type == 'promtail':
             uid, gid = extract_uid_gid(ctx, file_path='/etc/promtail')
+        elif daemon_type == 'alloy':
+            uid, gid = extract_uid_gid(ctx, file_path='/etc/alloy')
         elif daemon_type == 'alertmanager':
             uid, gid = extract_uid_gid(
                 ctx, file_path=['/etc/alertmanager', '/etc/prometheus']
@@ -240,7 +255,7 @@ class Monitoring(ContainerDaemonForm):
         metadata = self.components[daemon_type]
         r = list(metadata.get('args', []))
         # set ip and port to bind to for nodeexporter,alertmanager,prometheus
-        if daemon_type not in ['grafana', 'loki', 'promtail']:
+        if daemon_type not in ['grafana', 'loki', 'promtail', 'alloy']:
             ip = ''
             port = self.port_map[daemon_type][0]
             meta = fetch_meta(ctx)
@@ -333,6 +348,10 @@ class Monitoring(ContainerDaemonForm):
             mounts[os.path.join(data_dir, 'etc/promtail')] = '/etc/promtail:Z'
             mounts[log_dir] = '/var/log/ceph:z'
             mounts[os.path.join(data_dir, 'data')] = '/promtail:Z'
+        elif daemon_type == 'alloy':
+            mounts[os.path.join(data_dir, 'etc/alloy')] = '/etc/alloy:Z'
+            mounts[log_dir] = '/var/log/ceph:z'
+            mounts[os.path.join(data_dir, 'data')] = '/var/lib/alloy/data:Z'
         elif daemon_type == 'node-exporter':
             mounts[
                 os.path.join(data_dir, 'etc/node-exporter')
@@ -379,6 +398,8 @@ class Monitoring(ContainerDaemonForm):
             # by ubuntu 18.04 kernel!)
         ]
         args.extend(monitoring_args)
+        if self.identity.daemon_type == 'alloy':
+            args.extend(['--user=root'])
         if self.identity.daemon_type == 'node-exporter':
             # in order to support setting '--path.procfs=/host/proc','--path.sysfs=/host/sys',
             # '--path.rootfs=/rootfs' for node-exporter we need to disable selinux separation
