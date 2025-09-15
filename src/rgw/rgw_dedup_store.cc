@@ -616,6 +616,9 @@ namespace rgw::dedup {
     unsigned len = (p_curr_block + 1 - p_arr) * sizeof(disk_block_t);
     bufferlist bl = bufferlist::static_from_mem((char*)p_arr, len);
     int ret = store_slab(ioctx, bl, d_md5_shard, d_worker_id, d_seq_number, dpp);
+    if (unlikely(ret != 0)) {
+      p_stats->write_slab_failure++;
+    }
     // Need to make sure the call to rgw_put_system_obj was fully synchronous
 
     // d_seq_number++ must be called **after** flush!!

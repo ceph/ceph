@@ -19,15 +19,18 @@
 #include "common/Formatter.h"
 #include "common/ceph_json.h"
 #include <time.h>
+#include <chrono>
 #include "include/utime.h"
 #include "include/encoding.h"
 #include "common/dout.h"
 
 #define FULL_DEDUP_SUPPORT
 namespace rgw::dedup {
+  using namespace std::chrono;
   using work_shard_t   = uint16_t;
   using md5_shard_t    = uint16_t;
 
+  const uint64_t MICROSECONDS_PER_SECOND = 1000000;
   // settings to help debug small systems
   const work_shard_t MIN_WORK_SHARD = 2;
   const md5_shard_t  MIN_MD5_SHARD  = 4;
@@ -57,7 +60,7 @@ namespace rgw::dedup {
   enum dedup_req_type_t {
     DEDUP_TYPE_NONE     = 0,
     DEDUP_TYPE_ESTIMATE = 1,
-    DEDUP_TYPE_FULL     = 2
+    DEDUP_TYPE_EXEC     = 2
   };
 
   std::ostream& operator<<(std::ostream &out, const dedup_req_type_t& dedup_type);
@@ -85,6 +88,93 @@ namespace rgw::dedup {
     uint8_t flags;
   };
 
+  class alignas(8) Throttle {
+    friend void validate_max_calls_offset();
+  public:
+    // @max_calls_per_sec - max requests per second allowed, 0 means unlimited
+    // disbaled by default
+    Throttle(size_t max_calls_per_sec=0) {
+      set_max_calls_per_sec(max_calls_per_sec);
+      reset();
+    }
+
+    // set the number of calls per second
+    // zero means unlimited
+    inline void set_max_calls_per_sec(uint32_t max_calls_per_sec) {
+      max_calls = max_calls_per_sec;
+    }
+
+    inline size_t get_max_calls_per_second() const {
+      return max_calls;
+    }
+
+    inline uint64_t get_sleep_events() const {
+      return sleep_events;
+    }
+
+    inline uint64_t get_sleep_time_usec() const {
+      return sleep_time_usec;
+    }
+
+    inline void disable() {
+      set_max_calls_per_sec(0);
+    }
+
+    inline bool is_disabled() const {
+      return (max_calls == 0);
+    }
+
+    // Blocks until allowed to proceed
+    void acquire() {
+      if (is_disabled()) {
+        return;
+      }
+      // Should work fine without atomic since acquire is single threaded
+      const steady_clock::time_point now = steady_clock::now();
+      uint64_t elapsed_usec = duration_cast<microseconds>(now - last_reset).count();
+      if (elapsed_usec >= MICROSECONDS_PER_SECOND || last_reset > now) {
+        // Renew tokens if a second (or more) has passed since last_reset
+        reset();
+        --tokens;
+        return;
+      }
+
+      if (tokens > 0) {
+        --tokens;
+        return;
+      }
+
+      // if reached here, all tokens were exhausted, wait for the next time slot
+      ceph_assert(MICROSECONDS_PER_SECOND > elapsed_usec);
+      uint64_t wait_time_usec = MICROSECONDS_PER_SECOND - elapsed_usec;
+      sleep_events ++;
+      sleep_time_usec += wait_time_usec;
+
+      std::this_thread::sleep_for(microseconds(wait_time_usec));
+      // After sleeping, reset and return
+      reset();
+      tokens --;
+    }
+
+  private:
+    void reset() {
+      // atomic operation because it is 8 Bytes aligned
+      tokens = max_calls;
+      last_reset = steady_clock::now();
+    }
+
+    // @max_calls must be the first data member to guarantee 8 Bytes alignment
+    uint32_t max_calls;
+    uint32_t tokens;
+    steady_clock::time_point last_reset;
+    uint64_t sleep_events = 0;
+    uint64_t sleep_time_usec = 0;
+  } __attribute__ ((aligned (8)));
+
+  void validate_max_calls_offset();
+  void encode(const Throttle& t, ceph::bufferlist& bl);
+  void decode(Throttle& t, ceph::bufferlist::const_iterator& bl);
+
   struct dedup_stats_t {
     dedup_stats_t& operator+=(const dedup_stats_t& other);
 
@@ -107,6 +197,9 @@ namespace rgw::dedup {
     uint64_t egress_records = 0;
     uint64_t egress_blocks = 0;
     uint64_t egress_slabs = 0;
+    uint64_t write_slab_failure = 0;
+    uint64_t bidx_throttle_sleep_events = 0;
+    uint64_t bidx_throttle_sleep_time_usec = 0;
 
     uint64_t single_part_objs = 0;
     uint64_t multipart_objs = 0;
@@ -139,6 +232,7 @@ namespace rgw::dedup {
 
     dedup_stats_t small_objs_stat;
     dedup_stats_t big_objs_stat;
+    uint64_t ingress_slabs = 0;
     uint64_t ingress_failed_load_bucket = 0;
     uint64_t ingress_failed_get_object = 0;
     uint64_t ingress_failed_get_obj_attrs = 0;
@@ -178,6 +272,8 @@ namespace rgw::dedup {
     uint64_t deduped_objects_bytes = 0;
     uint64_t dup_head_bytes = 0;
     uint64_t failed_dedup = 0;
+    uint64_t md_throttle_sleep_events = 0;
+    uint64_t md_throttle_sleep_time_usec = 0;
     uint64_t failed_table_load = 0;
     uint64_t failed_map_overflow = 0;
     utime_t  duration = {0, 0};
@@ -218,15 +314,39 @@ namespace rgw::dedup {
   }
 
   enum urgent_msg_t {
-    URGENT_MSG_NONE    = 0,
-    URGENT_MSG_ABORT   = 1,
-    URGENT_MSG_PASUE   = 2,
-    URGENT_MSG_RESUME  = 3,
-    URGENT_MSG_RESTART = 4,
-    URGENT_MSG_INVALID = 5
+    URGENT_MSG_NONE = 0,
+    URGENT_MSG_ABORT,
+    URGENT_MSG_PASUE,
+    URGENT_MSG_RESUME,
+    URGENT_MSG_RESTART,
+    URGENT_MSG_THROTTLE,
+    URGENT_MSG_INVALID
+  };
+  const char* get_urgent_msg_names(int msg);
+  enum op_type_t {
+    NO_OP = 0,
+    BUCKET_INDEX_OP,
+    METADATA_ACCESS_OP,
+    DATA_READ_WRITE_OP,
+    STAT,
+    INVALID_OP
   };
 
-  const char* get_urgent_msg_names(int msg);
+  struct throttle_action_t {
+    op_type_t op_type;
+    uint32_t  limit;
+  };
+  void encode(const throttle_action_t& m, ceph::bufferlist& bl);
+  void decode(throttle_action_t& m, ceph::bufferlist::const_iterator& bl);
+  std::ostream& operator<<(std::ostream &out, const throttle_action_t& action);
+  struct throttle_msg_t {
+    std::vector<throttle_action_t> vec;
+  };
+
+  std::ostream& operator<<(std::ostream &out, const throttle_msg_t& msg);
+  void encode(const throttle_msg_t& m, ceph::bufferlist& bl);
+  void decode(throttle_msg_t& m, ceph::bufferlist::const_iterator& bl);
+
   bool hex2int(const char *p, const char *p_end, uint64_t *p_val);
   bool parse_etag_string(const std::string& etag, parsed_etag_t *parsed_etag);
   void etag_to_bufferlist(uint64_t md5_high, uint64_t md5_low, uint16_t num_parts,
