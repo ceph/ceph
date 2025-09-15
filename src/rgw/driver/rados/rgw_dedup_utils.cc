@@ -14,8 +14,8 @@
 
 #include "rgw_dedup_utils.h"
 #include "common/ceph_crypto.h"
-
 namespace rgw::dedup {
+
   //---------------------------------------------------------------------------
   std::ostream& operator<<(std::ostream &out, const dedup_req_type_t& dedup_type)
   {
@@ -566,10 +566,27 @@ namespace rgw::dedup {
     this->failed_rec_load         += other.failed_rec_load;
     this->failed_block_load       += other.failed_block_load;
 
+    this->different_storage_class       += other.different_storage_class;
+    this->invalid_hash_no_split_head    += other.invalid_hash_no_split_head;
+    this->invalid_storage_class_mapping += other.invalid_storage_class_mapping;
+    this->singleton_after_purge         += other.singleton_after_purge;
+    this->shared_manifest_after_purge   += other.shared_manifest_after_purge;
+    this->split_head_no_tail_placement  += other.split_head_no_tail_placement;
+    this->illegal_rec_id                += other.illegal_rec_id;
+    this->missing_last_block_marker     += other.missing_last_block_marker;
+
     this->valid_hash_attrs        += other.valid_hash_attrs;
     this->invalid_hash_attrs      += other.invalid_hash_attrs;
     this->set_hash_attrs          += other.set_hash_attrs;
     this->skip_hash_cmp           += other.skip_hash_cmp;
+    this->manifest_raw_obj        += other.manifest_raw_obj;
+    this->manifest_no_tail_placement += other.manifest_no_tail_placement;
+    this->rollback_tail_obj       += other.rollback_tail_obj;
+    this->failed_split_head_creat += other.failed_split_head_creat;
+    this->skip_shared_tail_objs   += other.skip_shared_tail_objs;
+    this->split_head_src          += other.split_head_src;
+    this->split_head_tgt          += other.split_head_tgt;
+    this->split_head_dedup_bytes  += other.split_head_dedup_bytes;
 
     this->set_shared_manifest_src += other.set_shared_manifest_src;
     this->loaded_objects          += other.loaded_objects;
@@ -659,8 +676,29 @@ namespace rgw::dedup {
         f->dump_unsigned("Set HASH", this->set_hash_attrs);
       }
 
+      if (this->skip_shared_tail_objs) {
+        f->dump_unsigned("Skip Shared Tail Objs (server-side-copy)", this->skip_shared_tail_objs);
+      }
       if (this->skip_hash_cmp) {
         f->dump_unsigned("Can't run HASH compare", this->skip_hash_cmp);
+      }
+      if (this->manifest_raw_obj) {
+        f->dump_unsigned("Manifest has RAW OBJ", this->manifest_raw_obj);
+      }
+      if (this->manifest_no_tail_placement) {
+        f->dump_unsigned("Manifest has no tail placement", this->manifest_no_tail_placement);
+      }
+      if (this->rollback_tail_obj) {
+        f->dump_unsigned("Rollback tail obj", this->rollback_tail_obj);
+      }
+      if (this->split_head_src) {
+        f->dump_unsigned("Split-Head Src OBJ", this->split_head_src);
+      }
+      if (this->split_head_tgt) {
+        f->dump_unsigned("Split-Head Tgt OBJ", this->split_head_tgt);
+      }
+      if (this->split_head_dedup_bytes) {
+        f->dump_unsigned("Split-Head Dedup-Bytes", this->split_head_dedup_bytes);
       }
     }
 
@@ -716,6 +754,18 @@ namespace rgw::dedup {
       if (this->failed_block_load) {
         f->dump_unsigned("Failed Block-Load ", this->failed_block_load);
       }
+
+      if (this->illegal_rec_id) {
+        f->dump_unsigned("Failed illegal_rec_id", this->illegal_rec_id );
+      }
+      if (this->missing_last_block_marker) {
+        f->dump_unsigned("Failed missing_last_block_marker in rec",
+                         this->missing_last_block_marker);
+      }
+
+      if (this->failed_split_head_creat) {
+        f->dump_unsigned("Failed Split-Head Create (EEXIST)", this->failed_split_head_creat);
+      }
       if (this->failed_dedup) {
         f->dump_unsigned("Failed Dedup", this->failed_dedup);
       }
@@ -731,6 +781,30 @@ namespace rgw::dedup {
       }
       if (this->size_mismatch) {
         f->dump_unsigned("Size mismatch SRC/TGT", this->size_mismatch);
+      }
+      if (this->different_storage_class) {
+        f->dump_unsigned("different_storage_class",
+                         this->different_storage_class);
+      }
+      if (this->invalid_hash_no_split_head) {
+        f->dump_unsigned("Failed rec has invalid hash w/o split-head ",
+                         this->invalid_hash_no_split_head);
+      }
+      if (this->invalid_storage_class_mapping) {
+        f->dump_unsigned("Failed, invalid_storage_class_mapping",
+                         this->invalid_storage_class_mapping);
+      }
+      if (this->singleton_after_purge) {
+        f->dump_unsigned("Failed, has singleton after purge",
+                         this->singleton_after_purge);
+      }
+      if (this->shared_manifest_after_purge) {
+        f->dump_unsigned("Failed, has shared manifest after purge",
+                         this->shared_manifest_after_purge);
+      }
+      if (this->split_head_no_tail_placement) {
+        f->dump_unsigned("No Tail Placement during Split-Head processing",
+                         this->split_head_no_tail_placement);
       }
     }
   }
@@ -768,10 +842,27 @@ namespace rgw::dedup {
     encode(m.failed_rec_load, bl);
     encode(m.failed_block_load, bl);
 
+    encode(m.different_storage_class, bl);
+    encode(m.invalid_hash_no_split_head, bl);
+    encode(m.invalid_storage_class_mapping, bl);
+    encode(m.singleton_after_purge, bl);
+    encode(m.shared_manifest_after_purge, bl);
+    encode(m.split_head_no_tail_placement, bl);
+    encode(m.illegal_rec_id, bl);
+    encode(m.missing_last_block_marker, bl);
+
     encode(m.valid_hash_attrs, bl);
     encode(m.invalid_hash_attrs, bl);
     encode(m.set_hash_attrs, bl);
     encode(m.skip_hash_cmp, bl);
+    encode(m.manifest_raw_obj, bl);
+    encode(m.manifest_no_tail_placement, bl);
+    encode(m.rollback_tail_obj, bl);
+    encode(m.failed_split_head_creat, bl);
+    encode(m.skip_shared_tail_objs, bl);
+    encode(m.split_head_src, bl);
+    encode(m.split_head_tgt, bl);
+    encode(m.split_head_dedup_bytes, bl);
     encode(m.set_shared_manifest_src, bl);
 
     encode(m.loaded_objects, bl);
@@ -822,10 +913,27 @@ namespace rgw::dedup {
     decode(m.failed_rec_load, bl);
     decode(m.failed_block_load, bl);
 
+    decode(m.different_storage_class, bl);
+    decode(m.invalid_hash_no_split_head, bl);
+    decode(m.invalid_storage_class_mapping, bl);
+    decode(m.singleton_after_purge, bl);
+    decode(m.shared_manifest_after_purge, bl);
+    decode(m.split_head_no_tail_placement, bl);
+    decode(m.illegal_rec_id, bl);
+    decode(m.missing_last_block_marker, bl);
+
     decode(m.valid_hash_attrs, bl);
     decode(m.invalid_hash_attrs, bl);
     decode(m.set_hash_attrs, bl);
     decode(m.skip_hash_cmp, bl);
+    decode(m.manifest_raw_obj, bl);
+    decode(m.manifest_no_tail_placement, bl);
+    decode(m.rollback_tail_obj, bl);
+    decode(m.failed_split_head_creat, bl);
+    decode(m.skip_shared_tail_objs, bl);
+    decode(m.split_head_src, bl);
+    decode(m.split_head_tgt, bl);
+    decode(m.split_head_dedup_bytes, bl);
     decode(m.set_shared_manifest_src, bl);
 
     decode(m.loaded_objects, bl);

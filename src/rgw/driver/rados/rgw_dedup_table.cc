@@ -22,11 +22,15 @@ namespace rgw::dedup {
   //---------------------------------------------------------------------------
   dedup_table_t::dedup_table_t(const DoutPrefixProvider* _dpp,
                                uint32_t _head_object_size,
+                               uint32_t _min_obj_size_for_dedup,
+                               uint32_t _max_obj_size_for_split,
                                uint8_t *p_slab,
                                uint64_t slab_size)
   {
     dpp = _dpp;
     head_object_size = _head_object_size;
+    min_obj_size_for_dedup = _min_obj_size_for_dedup;
+    max_obj_size_for_split = _max_obj_size_for_split;
     memset(p_slab, 0, slab_size);
     hash_tab = (table_entry_t*)p_slab;
     entries_count = slab_size/sizeof(table_entry_t);
@@ -51,7 +55,7 @@ namespace rgw::dedup {
       const key_t &key = hash_tab[tab_idx].key;
       // This is an approximation only since size is stored in 4KB resolution
       uint64_t byte_size_approx = disk_blocks_to_byte_size(key.size_4k_units);
-      if (!key.multipart_object() && (byte_size_approx <= head_object_size)) {
+      if (!dedupable_object(key.multipart_object(), min_obj_size_for_dedup, byte_size_approx)) {
         hash_tab[tab_idx].val.clear_flags();
         redistributed_clear++;
         continue;
@@ -126,12 +130,16 @@ namespace rgw::dedup {
     }
     else {
       uint64_t dup_bytes_approx = calc_deduped_bytes(head_object_size,
+                                                     min_obj_size_for_dedup,
+                                                     max_obj_size_for_split,
                                                      p_key->num_parts,
                                                      byte_size_approx);
       p_big_objs->duplicate_count ++;
       p_big_objs->dedup_bytes_estimate += dup_bytes_approx;
 
-      if (!p_key->multipart_object()) {
+      // object smaller than max_obj_size_for_split will split their head
+      // and won't dup it
+      if (!key.multipart_object() && byte_size_approx > max_obj_size_for_split) {
         // single part objects duplicate the head object when dedup is used
         *p_duplicate_head_bytes += head_object_size;
       }
@@ -206,23 +214,31 @@ namespace rgw::dedup {
       // replace value!
       value_t new_val(block_id, rec_id, shared_manifest);
       new_val.count = val.count;
-      hash_tab[idx].val = new_val;
       ldpp_dout(dpp, 20) << __func__ << "::Replaced table entry::["
                          << val.block_idx << "/" << (int)val.rec_id << "] -> ["
                          << block_id << "/" << (int)rec_id << "]" << dendl;
+
+      val = new_val;
     }
   }
 
   //---------------------------------------------------------------------------
-  int dedup_table_t::set_shared_manifest_src_mode(const key_t *p_key,
-                                                  disk_block_id_t block_id,
-                                                  record_id_t rec_id)
+  int dedup_table_t::set_src_mode(const key_t *p_key,
+                                  disk_block_id_t block_id,
+                                  record_id_t rec_id,
+                                  bool set_shared_manifest_src,
+                                  bool set_has_valid_hash_src)
   {
     uint32_t idx = find_entry(p_key);
     value_t &val = hash_tab[idx].val;
     if (val.is_occupied()) {
       if (val.block_idx == block_id && val.rec_id == rec_id) {
-        val.set_shared_manifest_src();
+        if (set_shared_manifest_src) {
+          val.set_shared_manifest_src();
+        }
+        if (set_has_valid_hash_src) {
+          val.set_has_valid_hash_src();
+        }
         return 0;
       }
     }
@@ -281,7 +297,7 @@ namespace rgw::dedup {
       uint64_t byte_size_approx = disk_blocks_to_byte_size(key.size_4k_units);
 
       // skip small single part objects which we can't dedup
-      if (!key.multipart_object() && (byte_size_approx <= head_object_size)) {
+      if (!dedupable_object(key.multipart_object(), min_obj_size_for_dedup, byte_size_approx)) {
         if (hash_tab[tab_idx].val.is_singleton()) {
           p_small_objs->singleton_count++;
         }

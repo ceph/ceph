@@ -123,9 +123,7 @@ namespace rgw::dedup {
     else {
       this->s.shared_manifest = CEPHTOH_64(p_rec->s.shared_manifest);
       // BLAKE3 hash has 256 bit splitted into multiple 64bit units
-      const unsigned units = (256 / (sizeof(uint64_t)*8));
-      static_assert(units == 4);
-      for (unsigned i = 0; i < units; i++) {
+      for (unsigned i = 0; i < HASH_UNITS; i++) {
         this->s.hash[i] = CEPHTOH_64(p_rec->s.hash[i]);
       }
       this->ref_tag = std::string(p, this->s.ref_tag_len);
@@ -189,9 +187,7 @@ namespace rgw::dedup {
     else {
       p_rec->s.shared_manifest = HTOCEPH_64(this->s.shared_manifest);
       // BLAKE3 hash has 256 bit splitted into multiple 64bit units
-      const unsigned units = (256 / (sizeof(uint64_t)*8));
-      static_assert(units == 4);
-      for (unsigned i = 0; i < units; i++) {
+      for (unsigned i = 0; i < HASH_UNITS; i++) {
         p_rec->s.hash[i] = HTOCEPH_64(this->s.hash[i]);
       }
       len = this->ref_tag.length();
@@ -228,7 +224,7 @@ namespace rgw::dedup {
   {
     // optimistic approach
     if (likely((this->s.rec_version == 0) && (this->length() <= MAX_REC_SIZE))) {
-      ldpp_dout(dpp, 20) << __func__ << "::success" << dendl;
+      ldpp_dout(dpp, 20) << caller << "::validate disk_record success" << dendl;
       return 0;
     }
 
@@ -270,14 +266,12 @@ namespace rgw::dedup {
     stream << "MD5       = " << std::hex << rec.s.md5_high << rec.s.md5_low << "\n";
     stream << "HASH      = ";
     // BLAKE3 hash has 256 bit splitted into multiple 64bit units
-    const unsigned units = (256 / (sizeof(uint64_t)*8));
-    static_assert(units == 4);
-    for (unsigned i = 0; i < units; i++) {
+    for (unsigned i = 0; i < HASH_UNITS; i++) {
       stream << rec.s.hash[i];
     }
     stream << "\n";
 
-    if (rec.has_shared_manifest()) {
+    if (rec.s.flags.has_shared_manifest()) {
       stream << "Shared Manifest Object\n";
     }
     else {
@@ -603,19 +597,12 @@ namespace rgw::dedup {
     ceph_assert(bl.length());
 
     int ret = ioctx.write_full(oid, bl);
-    if (ret == (int)bl.length()) {
-      ldpp_dout(dpp, 20) << __func__ << "::wrote " << bl.length() << " bytes to "
-                         << oid << dendl;
+    if (ret == 0) {
+      ldpp_dout(dpp, 20) << __func__ << "::SLAB was written successfully" << dendl;
     }
     else {
-      if (ret == 0) {
-        // no error reported, but we wrote nothing which should never happen
-        ldpp_dout(dpp, 5) << __func__ << "::ERR: No Data was written to " << oid
-                          << ", bl.length()=" << bl.length() << dendl;
-        ret = -ENODATA;
-      }
       ldpp_dout(dpp, 1) << "ERROR: failed to write " << oid
-                        << " with: " << cpp_strerror(-ret) << dendl;
+                        << "::ret=" << ret << "::" << cpp_strerror(-ret) << dendl;
     }
 
     return ret;
