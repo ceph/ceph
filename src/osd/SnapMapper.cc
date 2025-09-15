@@ -870,8 +870,8 @@ bool SnapMapper::Scrubber::_parse_m()
     unsigned long long p, s;
     long sh;
     string k = mapit->key();
-    int r = sscanf(k.c_str(), "SNA_%lld_%llx.%lx", &p, &s, &sh);
-    if (r != 1) {
+    int r = sscanf(k.c_str(), "SNA_%lld_%llx_.%lx", &p, &s, &sh);
+    if (r != 3) {
       shard = shard_id_t::NO_SHARD;
     } else {
       shard = shard_id_t(sh);
