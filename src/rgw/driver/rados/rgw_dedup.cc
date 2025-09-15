@@ -129,6 +129,8 @@ namespace rgw::dedup {
     this->remote_pause_req   = false;
     this->remote_paused      = false;
     this->remote_restart_req = false;
+    this->bucket_index_throttle.disable();
+    this->metadata_access_throttle.disable();
   }
 
   //---------------------------------------------------------------------------
@@ -147,6 +149,8 @@ namespace rgw::dedup {
     encode(ctl.remote_pause_req, bl);
     encode(ctl.remote_paused, bl);
     encode(ctl.remote_restart_req, bl);
+    encode(ctl.bucket_index_throttle, bl);
+    encode(ctl.metadata_access_throttle, bl);
     ENCODE_FINISH(bl);
   }
 
@@ -168,6 +172,8 @@ namespace rgw::dedup {
     decode(ctl.remote_pause_req, bl);
     decode(ctl.remote_paused, bl);
     decode(ctl.remote_restart_req, bl);
+    decode(ctl.bucket_index_throttle, bl);
+    decode(ctl.metadata_access_throttle, bl);
     DECODE_FINISH(bl);
   }
 
@@ -207,6 +213,13 @@ namespace rgw::dedup {
     }
     if (ctl.remote_restart_req) {
       out << "::remote_restart_req";
+    }
+
+    if (!ctl.bucket_index_throttle.is_disabled()) {
+      out << "::bucket_index_throttle=" << ctl.bucket_index_throttle.get_max_calls_per_second();
+    }
+    if (!ctl.metadata_access_throttle.is_disabled()) {
+      out << "::metadata_throttle=" << ctl.metadata_access_throttle.get_max_calls_per_second();
     }
 
     return out;
@@ -534,6 +547,7 @@ namespace rgw::dedup {
       librados::IoCtx ioctx = obj.ioctx;
       ldpp_dout(dpp, 20) << __func__ << "::removing tail object: " << raw_obj.oid
                          << dendl;
+      d_ctl.metadata_access_throttle.acquire();
       ret = ioctx.remove(raw_obj.oid);
     }
 
@@ -567,6 +581,8 @@ namespace rgw::dedup {
       }
 
       ObjectWriteOperation op;
+      d_ctl.metadata_access_throttle.acquire();
+      ldpp_dout(dpp, 20) << __func__ << "::dec ref-count on tail object: " << raw_obj.oid << dendl;
       cls_refcount_put(op, ref_tag, true);
       rgw::AioResultList completed = aio->get(obj.obj,
                                               rgw::Aio::librados_op(obj.ioctx, std::move(op), null_yield),
@@ -602,6 +618,7 @@ namespace rgw::dedup {
 
       ObjectWriteOperation op;
       cls_refcount_get(op, ref_tag, true);
+      d_ctl.metadata_access_throttle.acquire();
       ldpp_dout(dpp, 20) << __func__ << "::inc ref-count on tail object: " << raw_obj.oid << dendl;
       rgw::AioResultList completed = aio->get(obj.obj,
                                               rgw::Aio::librados_op(obj.ioctx, std::move(op), null_yield),
@@ -782,6 +799,7 @@ namespace rgw::dedup {
     ldpp_dout(dpp, 20) << __func__ << "::ref_tag=" << ref_tag << dendl;
     int ret = inc_ref_count_by_manifest(ref_tag, src_oid, src_manifest);
     if (ret == 0) {
+      d_ctl.metadata_access_throttle.acquire();
       ldpp_dout(dpp, 20) << __func__ << "::send TGT CLS (Shared_Manifest)" << dendl;
       ret = tgt_ioctx.operate(tgt_oid, &tgt_op);
       if (unlikely(ret != 0)) {
@@ -809,6 +827,7 @@ namespace rgw::dedup {
           p_stats->set_hash_attrs++;
         }
 
+        d_ctl.metadata_access_throttle.acquire();
         ldpp_dout(dpp, 20) << __func__ <<"::send SRC CLS (Shared_Manifest)"<< dendl;
         ret = src_ioctx.operate(src_oid, &src_op);
         if (unlikely(ret != 0)) {
@@ -1075,6 +1094,7 @@ namespace rgw::dedup {
       return 0;
     }
 
+    d_ctl.metadata_access_throttle.acquire();
     ret = p_obj->get_obj_attrs(null_yield, dpp);
     if (unlikely(ret < 0)) {
       p_stats->ingress_failed_get_obj_attrs++;
@@ -1393,6 +1413,7 @@ namespace rgw::dedup {
         }
       }
 
+      p_stats->ingress_slabs++;
       (*p_slab_count)++;
       failure_count = 0;
       unsigned slab_rec_count = 0;
@@ -1647,6 +1668,7 @@ namespace rgw::dedup {
       const string& oid = oids[current_shard];
       rgw_cls_list_ret result;
       librados::ObjectReadOperation op;
+      d_ctl.bucket_index_throttle.acquire();
       // get bucket-indices of @current_shard
       cls_rgw_bucket_list_op(op, marker, null_prefix, null_delimiter, max_entries,
                              list_versions, &result);
@@ -1781,7 +1803,7 @@ namespace rgw::dedup {
     display_table_stat_counters(dpp, p_stats);
 
     ldpp_dout(dpp, 10) << __func__ << "::MD5 Loop::" << d_ctl.dedup_type << dendl;
-    if (d_ctl.dedup_type != dedup_req_type_t::DEDUP_TYPE_FULL) {
+    if (d_ctl.dedup_type != dedup_req_type_t::DEDUP_TYPE_EXEC) {
       for (work_shard_t worker_id = 0; worker_id < num_work_shards; worker_id++) {
         remove_slabs(worker_id, md5_shard, slab_count_arr[worker_id]);
       }
@@ -2035,6 +2057,8 @@ namespace rgw::dedup {
                                                 &worker_stats,raw_mem, raw_mem_size);
     if (ret == 0) {
       worker_stats.duration = ceph_clock_now() - start_time;
+      worker_stats.bidx_throttle_sleep_events = d_ctl.bucket_index_throttle.get_sleep_events();
+      worker_stats.bidx_throttle_sleep_time_usec = d_ctl.bucket_index_throttle.get_sleep_time_usec();
       d_cluster.mark_work_shard_token_completed(store, worker_id, &worker_stats);
       ldpp_dout(dpp, 10) << "stat counters [worker]:\n" << worker_stats << dendl;
       ldpp_dout(dpp, 10) << "Shard Process Duration   = "
@@ -2042,6 +2066,7 @@ namespace rgw::dedup {
     }
     //ldpp_dout(dpp, 0) << __func__ << "::sleep for 2 seconds\n" << dendl;
     //std::this_thread::sleep_for(std::chrono::seconds(2));
+    //std::this_thread::sleep_forstd::chrono::microseconds(usec_timeout);
     return ret;
   }
 
@@ -2059,6 +2084,9 @@ namespace rgw::dedup {
     int ret = objects_dedup_single_md5_shard(&table, md5_shard, &md5_stats, num_work_shards);
     if (ret == 0) {
       md5_stats.duration = ceph_clock_now() - start_time;
+      md5_stats.md_throttle_sleep_events = d_ctl.metadata_access_throttle.get_sleep_events();
+      md5_stats.md_throttle_sleep_time_usec = d_ctl.metadata_access_throttle.get_sleep_time_usec();
+
       d_cluster.mark_md5_shard_token_completed(store, md5_shard, &md5_stats);
       ldpp_dout(dpp, 10) << "stat counters [md5]:\n" << md5_stats << dendl;
       ldpp_dout(dpp, 10) << "Shard Process Duration   = "
@@ -2248,7 +2276,7 @@ namespace rgw::dedup {
     ldpp_dout(dpp, 10) <<__func__ << "::" << *p_epoch << dendl;
     d_ctl.dedup_type = p_epoch->dedup_type;
 #ifdef FULL_DEDUP_SUPPORT
-    ceph_assert(d_ctl.dedup_type == dedup_req_type_t::DEDUP_TYPE_FULL ||
+    ceph_assert(d_ctl.dedup_type == dedup_req_type_t::DEDUP_TYPE_EXEC ||
                 d_ctl.dedup_type == dedup_req_type_t::DEDUP_TYPE_ESTIMATE);
 #else
     ceph_assert(d_ctl.dedup_type == dedup_req_type_t::DEDUP_TYPE_ESTIMATE);
@@ -2291,14 +2319,27 @@ namespace rgw::dedup {
   {
     int ret = 0;
     int32_t urgent_msg = URGENT_MSG_NONE;
+    auto bl_iter = bl.cbegin();
     try {
-      auto bl_iter = bl.cbegin();
       ceph::decode(urgent_msg, bl_iter);
     } catch (buffer::error& err) {
       ldpp_dout(dpp, 1) << __func__ << "::ERROR: bad urgent_msg" << dendl;
-      ret = -EINVAL;
+      cluster::ack_notify(store, dpp, &d_ctl, notify_id, cookie, -EINVAL);
+      return;
     }
-    ldpp_dout(dpp, 5) << __func__ << "::-->" << get_urgent_msg_names(urgent_msg) << dendl;
+    ldpp_dout(dpp, 5) << __func__ << "::" << get_urgent_msg_names(urgent_msg) << dendl;
+
+    throttle_msg_t throttle_msg;
+    if (urgent_msg == URGENT_MSG_THROTTLE) {
+      try {
+        decode(throttle_msg, bl_iter);
+        ldpp_dout(dpp, 5) << __func__ << "::" << throttle_msg << dendl;
+      } catch (buffer::error& err) {
+        ldpp_dout(dpp, 1) << __func__ << "::ERROR: bad throttle_msg" << dendl;
+        cluster::ack_notify(store, dpp, &d_ctl, notify_id, cookie, -EINVAL);
+        return;
+      }
+    }
 
     // use lock to prevent concurrent pause/resume requests
     std::unique_lock cond_lock(d_cond_mutex); // [------>open lock block
@@ -2357,6 +2398,24 @@ namespace rgw::dedup {
       }
       else {
         ldpp_dout(dpp, 5) << __func__ << "::dedup is not paused->nothing to do" << dendl;
+      }
+      break;
+    case URGENT_MSG_THROTTLE:
+      for (auto action : throttle_msg.vec) {
+        if (action.op_type == BUCKET_INDEX_OP) {
+          d_ctl.bucket_index_throttle.set_max_calls_per_sec(action.limit);
+        }
+        else if (action.op_type == METADATA_ACCESS_OP) {
+          d_ctl.metadata_access_throttle.set_max_calls_per_sec(action.limit);
+        }
+        else if (action.op_type == STAT) {
+          ldpp_dout(dpp, 10) << __func__ << "::Throttle STAT" << dendl;
+        }
+        else {
+          ldpp_dout(dpp, 1) << __func__ << "::unexpected throttle_msg "
+                            << action.op_type << dendl;
+          ret = -EINVAL;
+        }
       }
       break;
     default:

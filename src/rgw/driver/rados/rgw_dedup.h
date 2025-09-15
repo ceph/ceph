@@ -55,6 +55,8 @@ namespace rgw::dedup {
     bool remote_pause_req   = false;
     bool remote_paused      = false;
     bool remote_restart_req = false;
+    Throttle bucket_index_throttle;
+    Throttle metadata_access_throttle;
   };
   std::ostream& operator<<(std::ostream &out, const control_t &ctl);
   void encode(const control_t& ctl, ceph::bufferlist& bl);
@@ -230,9 +232,6 @@ namespace rgw::dedup {
     librados::IoCtx d_dedup_cluster_ioctx;
     utime_t  d_heart_beat_last_update;
     unsigned d_heart_beat_max_elapsed_sec;
-
-    // A pool with 6 billion objects has a  1/(2^64) chance for collison with a 128bit MD5
-    uint64_t d_max_protected_objects   = (6ULL * 1024 * 1024 * 1024);
     uint64_t d_all_buckets_obj_count   = 0;
     uint64_t d_all_buckets_obj_size    = 0;
     // we don't benefit from deduping RGW objects smaller than head-object size

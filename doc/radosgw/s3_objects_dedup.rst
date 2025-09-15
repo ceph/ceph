@@ -8,11 +8,10 @@ Admin commands
 **************
 - ``radosgw-admin dedup estimate``:
    Starts a new dedup estimate session (aborting first existing session if exists).
-   
    It doesn't make any change to the existing system and will only collect statistics and report them.
-- ``radosgw-admin dedup restart --yes-i-really-mean-it``:
+- ``radosgw-admin dedup exec --yes-i-really-mean-it``:
    Starts a new dedup session (aborting first existing session if exists).
-   It will perfrom a full dedup, finding duplicated tail-objects and removing them.
+   It will perform a full dedup, finding duplicated tail-objects and removing them.
 
   This command can lead to **data-loss** and should not be used on production data!!
 - ``radosgw-admin dedup pause``:
@@ -23,6 +22,12 @@ Admin commands
    Aborts an active dedup session and release all resources used by it.
 - ``radosgw-admin dedup stats``:
    Collects & displays last dedup statistics.
+- ``radosgw-admin dedup estimate``:
+   Starts a new dedup estimate session (aborting first existing session if exists).
+- ``radosgw-admin dedup throttle --max-bucket-index-ops=<count>``:
+   Specify max bucket-index requests per second allowed for a single RGW server during dedup, 0 means unlimited.
+- ``radosgw-admin dedup throttle --stat``:
+   Display dedup throttle setting.
 
 ***************
 Skipped Objects
@@ -53,6 +58,14 @@ The Dedup Estimate process does not access the objects themselves
 the underlying media storing the objects (SSD/HDD) since the bucket indices are
 virtually always stored on a fast medium (SSD with heavy memory
 caching).
+
+The admin can throttle the estimate process by setting a limit to the number of
+bucket-index reads per-second per an RGW server (each read brings 1000 object entries) using:
+
+$ radosgw-admin dedup throttle --max-bucket-index-ops=<count>
+
+A typical RGW server performs about 100 bucket-index reads per second (i.e. 100,000 object entries).
+Setting the count to 50 will typically slow down access by half and so on...
 
 *********************
 Full Dedup Processing
