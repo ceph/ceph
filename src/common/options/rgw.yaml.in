@@ -81,6 +81,29 @@ options:
   default: false
   services:
   - rgw
+- name: rgw_dedup_max_obj_size_for_split
+  type: size
+  level: advanced
+  desc: The maximum RGW object size to split head.
+        A value of 0 (zero) disables the split-head functionality
+  long_desc: Dedup code can split head object into 2 objects -
+             one with attributes and no data and
+             a new tail-object with only data.
+             The new-tail object will be deduped (unlike the head objects which
+             can't be deduplicated)
+             We will split head for objects with size 16MB or less
+  default: 16_M
+  services:
+  - rgw
+  with_legacy: true
+- name: rgw_dedup_min_obj_size_for_dedup
+  type: size
+  level: advanced
+  desc: The minimum RGW object size for dedup (0 means dedup all objects).
+  default: 64_K
+  services:
+  - rgw
+  with_legacy: true
 - name: rgw_max_chunk_size
   type: size
   level: advanced

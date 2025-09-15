@@ -124,7 +124,7 @@ namespace rgw::dedup {
     ldpp_dout(dpp, 10) << __func__ << "::oid=" << oid << dendl;
     bool exclusive = true; // block overwrite of old objects
     ret = ctl_ioctx.create(oid, exclusive);
-    if (ret >= 0) {
+    if (ret == 0) {
       ldpp_dout(dpp, 10) << __func__ << "::successfully created Epoch object!" << dendl;
       // now try and take ownership
     }
@@ -495,7 +495,7 @@ namespace rgw::dedup {
       ldpp_dout(dpp, 15) << __func__ << "::creating object: " << oid << dendl;
       bool exclusive = true;
       ret = ctl_ioctx.create(oid, exclusive);
-      if (ret >= 0) {
+      if (ret == 0) {
         ldpp_dout(dpp, 15) << __func__ << "::oid=" << oid << " was created!" << dendl;
       }
       else if (ret == -EEXIST) {
@@ -1124,7 +1124,7 @@ namespace rgw::dedup {
     // create the object to watch (object may already exist)
     bool exclusive = true;
     ret = ctl_ioctx.create(oid, exclusive);
-    if (ret >= 0) {
+    if (ret == 0) {
       ldpp_dout(dpp, 10) << "dedup_bg::watch_reload():" << oid
                          << " was created!" << dendl;
     }
