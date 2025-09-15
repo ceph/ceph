@@ -24,13 +24,14 @@
 #include "common/dout.h"
 
 #define FULL_DEDUP_SUPPORT
+
 namespace rgw::dedup {
   using work_shard_t   = uint16_t;
   using md5_shard_t    = uint16_t;
 
   // settings to help debug small systems
   const work_shard_t MIN_WORK_SHARD = 2;
-  const md5_shard_t  MIN_MD5_SHARD  = 4;
+  const md5_shard_t  MIN_MD5_SHARD  = 2;
 
   // Those are the correct values for production system
   const work_shard_t MAX_WORK_SHARD = 255;
@@ -61,29 +62,6 @@ namespace rgw::dedup {
   };
 
   std::ostream& operator<<(std::ostream &out, const dedup_req_type_t& dedup_type);
-  struct __attribute__ ((packed)) dedup_flags_t {
-  private:
-    static constexpr uint8_t RGW_DEDUP_FLAG_HASH_CALCULATED = 0x01; // REC
-    static constexpr uint8_t RGW_DEDUP_FLAG_SHARED_MANIFEST   = 0x02; // REC + TAB
-    static constexpr uint8_t RGW_DEDUP_FLAG_OCCUPIED          = 0x04; // TAB
-    static constexpr uint8_t RGW_DEDUP_FLAG_FASTLANE          = 0x08; // REC
-
-  public:
-    dedup_flags_t() : flags(0) {}
-    dedup_flags_t(uint8_t _flags) : flags(_flags) {}
-    inline void clear() { this->flags = 0; }
-    inline bool hash_calculated() const { return ((flags & RGW_DEDUP_FLAG_HASH_CALCULATED) != 0); }
-    inline void set_hash_calculated()  { flags |= RGW_DEDUP_FLAG_HASH_CALCULATED; }
-    inline bool has_shared_manifest() const { return ((flags & RGW_DEDUP_FLAG_SHARED_MANIFEST) != 0); }
-    inline void set_shared_manifest() { flags |= RGW_DEDUP_FLAG_SHARED_MANIFEST; }
-    inline bool is_occupied() const {return ((this->flags & RGW_DEDUP_FLAG_OCCUPIED) != 0); }
-    inline void set_occupied() {this->flags |= RGW_DEDUP_FLAG_OCCUPIED; }
-    inline void clear_occupied() { this->flags &= ~RGW_DEDUP_FLAG_OCCUPIED; }
-    inline bool is_fastlane()  const { return ((flags & RGW_DEDUP_FLAG_FASTLANE) != 0); }
-    inline void set_fastlane()  { flags |= RGW_DEDUP_FLAG_FASTLANE; }
-  private:
-    uint8_t flags;
-  };
 
   struct dedup_stats_t {
     dedup_stats_t& operator+=(const dedup_stats_t& other);
@@ -166,8 +144,13 @@ namespace rgw::dedup {
     uint64_t valid_hash_attrs = 0;
     uint64_t invalid_hash_attrs = 0;
     uint64_t set_hash_attrs = 0;
+    uint64_t skip_shared_tail_objs = 0;
     uint64_t skip_hash_cmp = 0;
-
+    uint64_t manifest_raw_obj = 0;
+    uint64_t failed_split_head_creat = 0;
+    uint64_t split_head_src = 0;
+    uint64_t split_head_tgt = 0;
+    uint64_t split_head_dedup_bytes = 0;
     uint64_t set_shared_manifest_src = 0;
     uint64_t loaded_objects = 0;
     uint64_t processed_objects = 0;
@@ -237,15 +220,29 @@ namespace rgw::dedup {
                                 const DoutPrefixProvider* dpp);
 
   //---------------------------------------------------------------------------
-  static inline void build_oid(const std::string &bucket_id,
-                               const std::string &obj_name,
-                               std::string *oid)
+  static inline std::string build_oid(const std::string& bucket_id,
+                                      const std::string& obj_name)
   {
-    *oid = bucket_id + "_" + obj_name;
+    std::string oid;
+    oid.reserve(bucket_id.size() + 1 + obj_name.size());
+    oid.append(bucket_id).append("_").append(obj_name);
+    return oid;
   }
 
   //---------------------------------------------------------------------------
-  static inline uint64_t calc_deduped_bytes(uint64_t head_obj_size,
+  static inline bool dedupable_object(bool     multipart_object,
+                                      uint64_t min_obj_size_for_dedup,
+                                      uint64_t object_byte_size)
+  {
+    // all multipart objects are dedupable because the head-object is empty
+    // otherwise make sure object_bytes_size is large enough
+    return (multipart_object || object_byte_size >= min_obj_size_for_dedup);
+  }
+
+  //---------------------------------------------------------------------------
+  static inline uint64_t calc_deduped_bytes(uint32_t head_obj_size,
+                                            uint32_t min_obj_size_for_dedup,
+                                            uint32_t max_obj_size_for_split,
                                             uint16_t num_parts,
                                             uint64_t size_bytes)
   {
@@ -255,8 +252,12 @@ namespace rgw::dedup {
     }
     else {
       // reduce the head size
-      if (size_bytes > head_obj_size) {
+      if (size_bytes > max_obj_size_for_split) {
         return size_bytes - head_obj_size;
+      }
+      else if (size_bytes >= min_obj_size_for_dedup) {
+        // Head is splitted into an empty obj and a new tail enabling a full dedup
+        return size_bytes;
       }
       else {
         return 0;
