@@ -2443,17 +2443,18 @@ class RgwMultisite:
             raise DashboardException(error, http_status_code=500, component='rgw')
 
     def edit_storage_class_zone(self, zone_name: str, placement_target: str, storage_class: str,
-                               data_pool: str, compression: str):
+                                data_pool: str, compression: str):
         edit_placement_target_cmd = ['zone', 'placement', 'modify', '--rgw-zone', zone_name,
-                                          '--placement-id', placement_target,
-                                          '--storage-class', storage_class,
-                                          '--data-pool', data_pool]
+                                     '--placement-id', placement_target,
+                                     '--storage-class', storage_class,
+                                     '--data-pool', data_pool]
         if compression:
             edit_placement_target_cmd.extend(['--compression', compression])
         try:
             exit_code, _, err = mgr.send_rgwadmin_command(edit_placement_target_cmd)
             if exit_code > 0:
-                raise DashboardException(e=err, msg=f'Unable to modify storage class {storage_class} to zone {zone_name}',
+                raise DashboardException(e=err, msg=f'Unable to modify storage class \
+                                         {storage_class} to zone {zone_name}',
                                          http_status_code=500, component='rgw')
         except SubprocessError as error:
             raise DashboardException(error, http_status_code=500, component='rgw')

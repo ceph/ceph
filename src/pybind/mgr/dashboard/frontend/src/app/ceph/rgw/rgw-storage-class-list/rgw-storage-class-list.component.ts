@@ -1,11 +1,10 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, NgZone, OnInit } from '@angular/core';
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 
 import { ListWithDetails } from '~/app/shared/classes/list-with-details.class';
 import {
-  AllZonesResponse,
   StorageClass,
   TIER_TYPE,
   TIER_TYPE_DISPLAY,
@@ -24,7 +23,6 @@ import { URLBuilderService } from '~/app/shared/services/url-builder.service';
 import { Permission } from '~/app/shared/models/permissions';
 import { BucketTieringUtils } from '../utils/rgw-bucket-tiering';
 import { Router } from '@angular/router';
-import { RgwZoneService } from '~/app/shared/api/rgw-zone.service';
 
 const BASE_URL = 'rgw/tiering';
 @Component({
@@ -47,9 +45,9 @@ export class RgwStorageClassListComponent extends ListWithDetails implements OnI
     private taskWrapper: TaskWrapperService,
     private authStorageService: AuthStorageService,
     private rgwStorageClassService: RgwStorageClassService,
-    private rgwZoneService: RgwZoneService,
     private router: Router,
-    private urlBuilder: URLBuilderService
+    private urlBuilder: URLBuilderService,
+    protected ngZone: NgZone
   ) {
     super();
     this.permission = this.authStorageService.getPermissions().rgw;
@@ -63,7 +61,7 @@ export class RgwStorageClassListComponent extends ListWithDetails implements OnI
         isHidden: true
       },
       {
-        name: $localize`Storage Class name`,
+        name: $localize`Name`,
         prop: 'storage_class',
         flexGrow: 2
       },
@@ -130,9 +128,11 @@ export class RgwStorageClassListComponent extends ListWithDetails implements OnI
         click: () => this.removeStorageClassModal()
       }
     ];
+    this.setTableRefreshTimeout();
   }
 
   loadStorageClass(): Promise<void> {
+    this.setTableRefreshTimeout();
     return new Promise((resolve, reject) => {
       this.rgwZonegroupService.getAllZonegroupsInfo().subscribe(
         (data: ZoneGroupDetails) => {
@@ -197,28 +197,5 @@ export class RgwStorageClassListComponent extends ListWithDetails implements OnI
 
   updateSelection(selection: CdTableSelection) {
     this.selection = selection;
-    const selected = this.selection.first();
-
-    const storage_class = selected?.storage_class;
-    const placement_target = selected?.placement_target;
-
-    this.rgwZoneService.getAllZonesInfo().subscribe((data: AllZonesResponse) => {
-      for (const zone of data.zones) {
-        for (const placement of zone.placement_pools) {
-          if (placement.key === placement_target) {
-            const storageClassEntry = placement.val.storage_classes[storage_class];
-
-            if (storageClassEntry) {
-              selected.zone_name = zone.name;
-              selected.data_pool = storageClassEntry.data_pool;
-            }
-          }
-        }
-      }
-    });
-  }
-
-  setExpandedRow(expandedRow: any) {
-    super.setExpandedRow(expandedRow);
   }
 }

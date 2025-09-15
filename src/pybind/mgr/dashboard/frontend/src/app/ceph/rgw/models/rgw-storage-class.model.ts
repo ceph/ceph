@@ -43,8 +43,9 @@ export interface StorageClassDetails {
   multipart_sync_threshold: number;
   host_style: string;
   allow_read_through: boolean;
+  storage_class: string;
   zonegroup_name?: string;
-  placement_targets?: string;
+  placement_target?: string;
   glacier_restore_days?: number;
   glacier_restore_tier_type?: string;
   read_through_restore_days?: number;
@@ -52,6 +53,8 @@ export interface StorageClassDetails {
   retain_head_object?: boolean;
   acls?: ACL[];
   acl_mappings?: ACL[];
+  zone_name?: string;
+  data_pool?: string;
 }
 
 export interface ZoneGroup {
@@ -63,7 +66,9 @@ export interface ZoneGroup {
 
 export interface ZoneRequest {
   zone_name: string;
-  placement_targets: PlacementTarget[];
+  placement_target: string;
+  storage_class: string;
+  data_pool: string;
 }
 export interface StorageClassPool {
   data_pool: string;

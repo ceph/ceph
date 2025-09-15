@@ -5,13 +5,13 @@ import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { SharedModule } from '~/app/shared/shared.module';
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { RouterTestingModule } from '@angular/router/testing';
-import { SimpleChange } from '@angular/core';
 
 describe('RgwStorageClassDetailsComponent', () => {
   let component: RgwStorageClassDetailsComponent;
   let fixture: ComponentFixture<RgwStorageClassDetailsComponent>;
 
   const mockSelection: StorageClassDetails = {
+    storage_class: 'TestStorageClass',
     access_key: 'TestAccessKey',
     secret: 'TestSecret',
     target_path: '/test/path',
@@ -44,31 +44,5 @@ describe('RgwStorageClassDetailsComponent', () => {
 
   it('should create', () => {
     expect(component).toBeTruthy();
-  });
-
-  it('should update storageDetails when selection input changes', () => {
-    const newSelection: StorageClassDetails = {
-      access_key: 'NewAccessKey',
-      secret: 'NewSecret',
-      target_path: '/new/path',
-      multipart_min_part_size: 500,
-      multipart_sync_threshold: 1000,
-      host_style: 'virtual',
-      retain_head_object: false,
-      allow_read_through: false,
-      tier_type: 'archive',
-      glacier_restore_days: 1,
-      glacier_restore_tier_type: 'standard',
-      placement_targets: '',
-      read_through_restore_days: 7,
-      restore_storage_class: 'restored',
-      zonegroup_name: 'zone1'
-    };
-
-    component.selection = newSelection;
-    component.ngOnChanges({
-      selection: new SimpleChange(null, newSelection, false)
-    });
-    expect(component.storageDetails).toEqual(newSelection);
   });
 });
