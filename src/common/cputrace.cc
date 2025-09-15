@@ -26,11 +26,24 @@
 
 #define PROFILE_ASSERT(x) if (!(x)) { fprintf(stderr, "Assert failed %s:%d\n", __FILE__, __LINE__); exit(1); }
 
-static thread_local uint64_t thread_id_hash;
-static thread_local bool thread_id_initialized;
+static int thread_next_id = 0;
+static std::mutex thread_id_mtx;
+static thread_local int thread_id_local = -1;
 static cputrace_profiler g_profiler;
 static std::unordered_map<std::string, measurement_t> g_named_measurements;
 static std::mutex g_named_measurements_lock;
+static std::unordered_map<std::string, int> name_to_id;
+static int next_id = 0;
+static std::mutex name_id_mtx;
+
+int register_anchor(const char* name) {
+    std::lock_guard<std::mutex> lock(name_id_mtx);
+    auto it = name_to_id.find(name);
+    ceph_assert(it == name_to_id.end());
+    int id = next_id++;
+    name_to_id[name] = id;
+    return id;
+}
 
 struct read_format {
     uint64_t nr;
@@ -45,15 +58,12 @@ static long perf_event_open(struct perf_event_attr* hw_event, pid_t pid,
     return syscall(__NR_perf_event_open, hw_event, pid, cpu, group_fd, flags);
 }
 
-static uint64_t get_thread_id() {
-    if (!thread_id_initialized) {
-        uint64_t tid = pthread_self();
-        for (int i = 0; i < 8; i++)
-            tid = (tid << 7) ^ (tid >> 3);
-        thread_id_hash = tid % CPUTRACE_MAX_THREADS;
-        thread_id_initialized = true;
+inline int get_thread_id() {
+    if (thread_id_local == -1) {
+        std::lock_guard<std::mutex> lck(thread_id_mtx);
+        thread_id_local = thread_next_id++ % CPUTRACE_MAX_THREADS;
     }
-    return thread_id_hash;
+    return thread_id_local;
 }
 
 static void setup_perf_event(struct perf_event_attr* pe, uint32_t type, uint64_t config) {
@@ -155,7 +165,6 @@ void HW_clean(HW_ctx* ctx) {
     close_perf_fd(ctx->fd_cmiss);
     close_perf_fd(ctx->fd_bmiss);
     close_perf_fd(ctx->fd_ins);
-    close_perf_fd(ctx->parent_fd);
 }
 
 void HW_read(HW_ctx* ctx, sample_t* measure) {
@@ -188,12 +197,10 @@ static void collect_samples(sample_t* start, sample_t* end, cputrace_anchor* anc
 
 HW_profile::HW_profile(const char* function, uint64_t index, cputrace_flags flags)
     : function(function), index(index), flags(flags) {
-    pthread_mutex_lock(&g_profiler.global_lock);
-    if (index >= CPUTRACE_MAX_ANCHORS || !g_profiler.profiling) {
-        pthread_mutex_unlock(&g_profiler.global_lock);
+    if (!g_profiler.profiling.load()) {
         return;
     }
-    pthread_mutex_unlock(&g_profiler.global_lock);
+    ceph_assert(index < CPUTRACE_MAX_ANCHORS);
     uint64_t tid = get_thread_id();
     cputrace_anchor& anchor = g_profiler.anchors[index];
     pthread_mutex_lock(&anchor.lock);
@@ -219,17 +226,12 @@ HW_profile::HW_profile(const char* function, uint64_t index, cputrace_flags flag
 }
 
 HW_profile::~HW_profile() {
-    cputrace_anchor& anchor = g_profiler.anchors[index];
-    uint64_t tid = get_thread_id();
-    pthread_mutex_lock(&g_profiler.global_lock);
-    if (!g_profiler.profiling || index >= CPUTRACE_MAX_ANCHORS){
-        pthread_mutex_lock(&anchor.lock);
-        anchor.is_capturing[tid] = false;
-        pthread_mutex_unlock(&anchor.lock);
-        pthread_mutex_unlock(&g_profiler.global_lock);
+    if (!g_profiler.profiling.load()) {
         return;
     }
-    pthread_mutex_unlock(&g_profiler.global_lock);
+    ceph_assert(index < CPUTRACE_MAX_ANCHORS);
+    cputrace_anchor& anchor = g_profiler.anchors[index];
+    uint64_t tid = get_thread_id();
     pthread_mutex_lock(&anchor.lock);
     anchor.nest_level[tid]--;
     if (anchor.nest_level[tid] == 0) {
@@ -247,95 +249,79 @@ measurement_t* get_named_measurement(const std::string& name) {
 }
 
 HW_named_guard::HW_named_guard(const char* name, HW_ctx* ctx)
-    : name(name) 
+    : name(name),
+    guard(ctx, get_named_measurement(name))
 {
-    measurement_t* meas = get_named_measurement(name);
-    guard = new HW_guard(ctx, meas);
 }
 
 HW_named_guard::~HW_named_guard() {
-    delete guard;
-}
-
-void cputrace_start() {
-    pthread_mutex_lock(&g_profiler.global_lock);
-    if (g_profiler.profiling) {
-        pthread_mutex_unlock(&g_profiler.global_lock);
-        return;
-    }
-    g_profiler.profiling = true;
-    pthread_mutex_unlock(&g_profiler.global_lock);
 }
 
 void cputrace_start(ceph::Formatter* f) {
-    pthread_mutex_lock(&g_profiler.global_lock);
-    if (g_profiler.profiling) {
-        f->open_object_section("cputrace_start");
-        f->dump_format("status", "Profiling already active");
-        f->close_section();
-        pthread_mutex_unlock(&g_profiler.global_lock);
+    if (g_profiler.profiling.load()) {
+        if (f) {
+            f->open_object_section("cputrace_start");
+            f->dump_format("status", "Profiling already active");
+            f->close_section();
+        }
         return;
     }
     g_profiler.profiling = true;
-    f->open_object_section("cputrace_start");
-    f->dump_format("status", "Profiling started");
-    f->close_section();
-    pthread_mutex_unlock(&g_profiler.global_lock);
-}
-
-void cputrace_stop() {
-    pthread_mutex_lock(&g_profiler.global_lock);
-    if (!g_profiler.profiling) {
-        pthread_mutex_unlock(&g_profiler.global_lock);
-        return;
+    if (f) {
+        f->open_object_section("cputrace_start");
+        f->dump_format("status", "Profiling started");
+        f->close_section();
     }
-    g_profiler.profiling = false;
-    pthread_mutex_unlock(&g_profiler.global_lock);
 }
 
 void cputrace_stop(ceph::Formatter* f) {
-    pthread_mutex_lock(&g_profiler.global_lock);
-    if (!g_profiler.profiling) {
-        f->open_object_section("cputrace_stop");
-        f->dump_format("status", "Profiling not active");
-        f->close_section();
-        pthread_mutex_unlock(&g_profiler.global_lock);
+    if (!g_profiler.profiling.load()) {
+        if (f) {
+            f->open_object_section("cputrace_stop");
+            f->dump_format("status", "Profiling not active");
+            f->close_section();
+        }
         return;
     }
-    g_profiler.profiling = false;
-    pthread_mutex_unlock(&g_profiler.global_lock);
-    f->open_object_section("cputrace_stop");
-    f->dump_format("status", "Profiling stopped");
-    f->close_section();
-}
-
-void cputrace_reset() {
-    pthread_mutex_lock(&g_profiler.global_lock);
     for (int i = 0; i < CPUTRACE_MAX_ANCHORS; ++i) {
-        if (!g_profiler.anchors[i].name) continue;
-        pthread_mutex_lock(&g_profiler.anchors[i].lock);
-        g_profiler.anchors[i].global_results.reset();
-        pthread_mutex_unlock(&g_profiler.anchors[i].lock);
+        cputrace_anchor& anchor = g_profiler.anchors[i];
+        if (!anchor.name) {
+            continue;
+        }
+        pthread_mutex_lock(&anchor.lock);
+        for (int j = 0; j < CPUTRACE_MAX_THREADS; ++j) {
+            if (anchor.is_capturing[j]) {
+                HW_read(anchor.active_contexts[j], &anchor.end[j]);
+                collect_samples(&anchor.start[j], &anchor.end[j], &anchor);
+                anchor.start[j] = anchor.end[j];
+                anchor.is_capturing[j] = false;
+            }
+        }
+        pthread_mutex_unlock(&anchor.lock);
     }
-    pthread_mutex_unlock(&g_profiler.global_lock);
+    g_profiler.profiling = false;
+    if (f) {
+        f->open_object_section("cputrace_stop");
+        f->dump_format("status", "Profiling stopped");
+        f->close_section();
+    }
 }
 
 void cputrace_reset(ceph::Formatter* f) {
-    pthread_mutex_lock(&g_profiler.global_lock);
     for (int i = 0; i < CPUTRACE_MAX_ANCHORS; ++i) {
         if (!g_profiler.anchors[i].name) continue;
         pthread_mutex_lock(&g_profiler.anchors[i].lock);
         g_profiler.anchors[i].global_results.reset();
         pthread_mutex_unlock(&g_profiler.anchors[i].lock);
     }
-    f->open_object_section("cputrace_reset");
-    f->dump_format("status", "Counters reset");
-    f->close_section();
-    pthread_mutex_unlock(&g_profiler.global_lock);
+    if (f) {
+        f->open_object_section("cputrace_reset");
+        f->dump_format("status", "Counters reset");
+        f->close_section();
+    }
 }
 
 void cputrace_dump(ceph::Formatter* f, const std::string& logger, const std::string& counter) {
-    pthread_mutex_lock(&g_profiler.global_lock);
     f->open_object_section("cputrace");
     bool dumped = false;
 
@@ -347,7 +333,7 @@ void cputrace_dump(ceph::Formatter* f, const std::string& logger, const std::str
 
         pthread_mutex_lock(&anchor.lock);
         for (int j = 0; j < CPUTRACE_MAX_THREADS; ++j) {
-            if (anchor.is_capturing[j] && g_profiler.profiling) {
+            if (anchor.is_capturing[j] && g_profiler.profiling.load()) {
                 HW_read(anchor.active_contexts[j], &anchor.end[j]);
                 collect_samples(&anchor.start[j], &anchor.end[j], &anchor);
                 anchor.start[j] = anchor.end[j];
@@ -363,11 +349,9 @@ void cputrace_dump(ceph::Formatter* f, const std::string& logger, const std::str
 
     f->dump_format("status", dumped ? "Profiling data dumped" : "No profiling data available");
     f->close_section();
-    pthread_mutex_unlock(&g_profiler.global_lock);
 }
 
 void cputrace_print_to_stringstream(std::stringstream& ss) {
-    pthread_mutex_lock(&g_profiler.global_lock);
     ss << "cputrace:\n";
     bool dumped = false;
 
@@ -379,7 +363,7 @@ void cputrace_print_to_stringstream(std::stringstream& ss) {
 
         pthread_mutex_lock(&anchor.lock);
         for (int j = 0; j < CPUTRACE_MAX_THREADS; ++j) {
-            if (anchor.is_capturing[j]) {
+            if (anchor.is_capturing[j] && g_profiler.profiling.load()) {
                 HW_read(anchor.active_contexts[j], &anchor.end[j]);
                 collect_samples(&anchor.start[j], &anchor.end[j], &anchor);
                 anchor.start[j] = anchor.end[j];
@@ -393,7 +377,6 @@ void cputrace_print_to_stringstream(std::stringstream& ss) {
     }
 
     ss << "status: " << (dumped ? "Profiling data dumped" : "No profiling data available") << "\n";
-    pthread_mutex_unlock(&g_profiler.global_lock);
 }
 
 __attribute__((constructor)) static void cputrace_init() {
@@ -408,10 +391,6 @@ __attribute__((constructor)) static void cputrace_init() {
             exit(1);
         }
 
-    }
-    if (pthread_mutex_init(&g_profiler.global_lock, nullptr) != 0) {
-        fprintf(stderr, "Failed to initialize global mutex: %s\n", strerror(errno));
-        exit(1);
     }
 }
 
@@ -430,9 +409,6 @@ __attribute__((destructor)) static void cputrace_fini() {
         if (pthread_mutex_destroy(&g_profiler.anchors[i].lock) != 0) {
             fprintf(stderr, "Failed to destroy mutex for anchor %d: %s\n", i, strerror(errno));
         }
-    }
-    if (pthread_mutex_destroy(&g_profiler.global_lock) != 0) {
-        fprintf(stderr, "Failed to destroy global mutex: %s\n", strerror(errno));
     }
     free(g_profiler.anchors);
     g_profiler.anchors = nullptr;
