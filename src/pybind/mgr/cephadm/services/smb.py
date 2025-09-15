@@ -20,6 +20,11 @@ from ..schedule import DaemonPlacement
 logger = logging.getLogger(__name__)
 
 
+def _add_cfg(cfg_dict: Dict[str, Any], key: str, value: Any) -> None:
+    if value:
+        cfg_dict[key] = value
+
+
 @register_cephadm_service
 class SMBService(CephService):
     TYPE = 'smb'
@@ -130,19 +135,13 @@ class SMBService(CephService):
         config_blobs['cluster_id'] = smb_spec.cluster_id
         config_blobs['features'] = smb_spec.features
         config_blobs['config_uri'] = smb_spec.config_uri
-        if smb_spec.join_sources:
-            config_blobs['join_sources'] = smb_spec.join_sources
-        if smb_spec.user_sources:
-            config_blobs['user_sources'] = smb_spec.user_sources
-        if smb_spec.custom_dns:
-            config_blobs['custom_dns'] = smb_spec.custom_dns
-        if smb_spec.cluster_meta_uri:
-            config_blobs['cluster_meta_uri'] = smb_spec.cluster_meta_uri
-        if smb_spec.cluster_lock_uri:
-            config_blobs['cluster_lock_uri'] = smb_spec.cluster_lock_uri
+        _add_cfg(config_blobs, 'join_sources', smb_spec.join_sources)
+        _add_cfg(config_blobs, 'user_sources', smb_spec.user_sources)
+        _add_cfg(config_blobs, 'custom_dns', smb_spec.custom_dns)
+        _add_cfg(config_blobs, 'cluster_meta_uri', smb_spec.cluster_meta_uri)
+        _add_cfg(config_blobs, 'cluster_lock_uri', smb_spec.cluster_lock_uri)
         cluster_public_addrs = smb_spec.strict_cluster_ip_specs()
-        if cluster_public_addrs:
-            config_blobs['cluster_public_addrs'] = cluster_public_addrs
+        _add_cfg(config_blobs, 'cluster_public_addrs', cluster_public_addrs)
         ceph_users = smb_spec.include_ceph_users or []
         config_blobs.update(
             self._ceph_config_and_keyring_for(
@@ -159,10 +158,41 @@ class SMBService(CephService):
         config_blobs['service_ports'] = smb_spec.service_ports()
         if smb_spec.bind_addrs:
             config_blobs['bind_networks'] = smb_spec.bind_networks()
+        if 'remote-control' in smb_spec.features:
+            files = config_blobs.setdefault('files', {})
+            _add_cfg(
+                files,
+                'remote_control.ssl.crt',
+                self._cert_or_uri(smb_spec.remote_control_ssl_cert),
+            )
+            _add_cfg(
+                files,
+                'remote_control.ssl.key',
+                self._cert_or_uri(smb_spec.remote_control_ssl_key),
+            )
+            _add_cfg(
+                files,
+                'remote_control.ca.crt',
+                self._cert_or_uri(smb_spec.remote_control_ca_cert),
+            )
 
         logger.debug('smb generate_config: %r', config_blobs)
         self._configure_cluster_meta(smb_spec, daemon_spec)
         return config_blobs, []
+
+    def _cert_or_uri(self, data: Optional[str]) -> Optional[str]:
+        if data is None:
+            return None
+        if not data.startswith("URI:"):
+            return data
+        uri = data[4:]
+        if not uri.startswith('rados:mon-config-key'):
+            raise ValueError('unhandled URI scheme')
+
+        from smb.mon_store import MonKeyConfigStore
+        store = MonKeyConfigStore(self.mgr)
+        entry = store.lookup_uri(uri)
+        return entry.get_data()
 
     def config_dashboard(
         self, daemon_descrs: List[DaemonDescription]

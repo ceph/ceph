@@ -35,6 +35,7 @@ from ceph.deployment.utils import unwrap_ipv6, valid_addr, verify_non_negative_i
 from ceph.deployment.utils import verify_positive_int, verify_non_negative_number
 from ceph.deployment.utils import verify_boolean, verify_enum
 from ceph.utils import is_hex
+from ceph.smb import constants as smbconst
 
 ServiceSpecT = TypeVar('ServiceSpecT', bound='ServiceSpec')
 FuncT = TypeVar('FuncT', bound=Callable)
@@ -3291,8 +3292,8 @@ class SMBClusterBindIPSpec:
 
 class SMBSpec(ServiceSpec):
     service_type = 'smb'
-    _valid_features = {'domain', 'clustered', 'cephfs-proxy'}
-    _valid_service_names = {'smb', 'smbmetrics', 'ctdb'}
+    _valid_features = smbconst.FEATURES
+    _valid_service_names = smbconst.SERVICES
     _default_cluster_meta_obj = 'cluster.meta.json'
     _default_cluster_lock_obj = 'cluster.meta.lock'
 
@@ -3352,6 +3353,10 @@ class SMBSpec(ServiceSpec):
         # not listed the default port will be used.
         custom_ports: Optional[Dict[str, int]] = None,
         bind_addrs: Optional[List[SMBClusterBindIPSpec]] = None,
+        # === remote control server ===
+        remote_control_ssl_cert: Optional[str] = None,
+        remote_control_ssl_key: Optional[str] = None,
+        remote_control_ca_cert: Optional[str] = None,
         # --- genearal tweaks ---
         extra_container_args: Optional[GeneralArgList] = None,
         extra_entrypoint_args: Optional[GeneralArgList] = None,
@@ -3386,6 +3391,9 @@ class SMBSpec(ServiceSpec):
         )
         self.custom_ports = custom_ports
         self.bind_addrs = SMBClusterBindIPSpec.convert_list(bind_addrs)
+        self.remote_control_ssl_cert = remote_control_ssl_cert
+        self.remote_control_ssl_key = remote_control_ssl_key
+        self.remote_control_ca_cert = remote_control_ca_cert
         self.validate()
 
     def validate(self) -> None:
@@ -3399,23 +3407,24 @@ class SMBSpec(ServiceSpec):
                 raise ValueError(
                     f'invalid feature flags: {", ".join(invalid)}'
                 )
-        if 'clustered' in self.features and not self.cluster_meta_uri:
+        _clustered = smbconst.CLUSTERED
+        if _clustered in self.features and not self.cluster_meta_uri:
             # derive a cluster meta uri from config uri by default (if possible)
             self.cluster_meta_uri = self._derive_cluster_uri(
                 self.config_uri,
                 self._default_cluster_meta_obj,
             )
-        if 'clustered' not in self.features and self.cluster_meta_uri:
+        if _clustered not in self.features and self.cluster_meta_uri:
             raise ValueError(
                 'cluster meta uri unsupported when "clustered" feature not set'
             )
-        if 'clustered' in self.features and not self.cluster_lock_uri:
+        if _clustered in self.features and not self.cluster_lock_uri:
             # derive a cluster meta uri from config uri by default (if possible)
             self.cluster_lock_uri = self._derive_cluster_uri(
                 self.config_uri,
                 self._default_cluster_lock_obj,
             )
-        if 'clustered' not in self.features and self.cluster_lock_uri:
+        if _clustered not in self.features and self.cluster_lock_uri:
             raise ValueError(
                 'cluster lock uri unsupported when "clustered" feature not set'
             )
@@ -3434,11 +3443,7 @@ class SMBSpec(ServiceSpec):
         return uri
 
     def _default_ports(self) -> Dict[str, int]:
-        return {
-            'smb': 445,
-            'smbmetrics': 9922,
-            'ctdb': 4379,
-        }
+        return dict(smbconst.DEFAULT_PORTS)
 
     def service_ports(self) -> Dict[str, int]:
         ports = self._default_ports()
@@ -3447,13 +3452,13 @@ class SMBSpec(ServiceSpec):
         return ports
 
     def metrics_exporter_port(self) -> int:
-        return self.service_ports()['smbmetrics']
+        return self.service_ports()[smbconst.SMBMETRICS]
 
     def get_port_start(self) -> List[int]:
         _ports = self.service_ports()
-        ports = [_ports['smb'], _ports['smbmetrics']]
-        if 'clustered' in self.features:
-            ports.append(_ports['ctdb'])
+        ports = [_ports[smbconst.SMB], _ports[smbconst.SMBMETRICS]]
+        if smbconst.CLUSTERED in self.features:
+            ports.append(_ports[smbconst.CTDB])
         return ports
 
     def strict_cluster_ip_specs(self) -> List[Dict[str, Any]]:
