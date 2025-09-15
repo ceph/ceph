@@ -7,9 +7,7 @@
         data-testid="rgw-storage-details"
       >
         <tbody>
-          @if( isTierMatch(
-            TIER_TYPE_DISPLAY.LOCAL
-          )){
+          @if( isTierMatch( TIER_TYPE_DISPLAY.LOCAL )){
           <tr>
             <td class="bold"
                 i18n>
@@ -22,10 +20,7 @@
             </td>
             <td>{{ selection?.zonegroup_name }}</td>
           </tr>
-        }
-        @if(isTierMatch(
-            TIER_TYPE_DISPLAY.LOCAL
-          )){
+          } @if(isTierMatch( TIER_TYPE_DISPLAY.LOCAL )){
           <tr>
             <td class="bold"
                 i18n>
@@ -39,8 +34,7 @@
             </td>
             <td>{{ selection?.placement_target }}</td>
           </tr>
-        }
-        @if(isTierMatch( TIER_TYPE_DISPLAY.CLOUD_TIER, TIER_TYPE_DISPLAY.GLACIER)){
+          } @if(isTierMatch( TIER_TYPE_DISPLAY.CLOUD_TIER, TIER_TYPE_DISPLAY.GLACIER)){
           <tr>
             <td class="bold"
                 i18n>
@@ -53,8 +47,6 @@
             </td>
             <td>{{ selection?.target_path }}</td>
           </tr>
-        }
-        @if(isTierMatch(TIER_TYPE_DISPLAY.CLOUD_TIER, TIER_TYPE_DISPLAY.GLACIER)){
           <tr>
             <td class="bold"
                 i18n>
@@ -83,8 +75,6 @@
               </div>
             </td>
           </tr>
-        }
-        @if(isTierMatch(TIER_TYPE_DISPLAY.CLOUD_TIER, TIER_TYPE_DISPLAY.GLACIER)){
           <tr>
             <td class="bold"
                 i18n>
@@ -111,8 +101,6 @@
               </div>
             </td>
           </tr>
-        }
-        @if(isTierMatch( TIER_TYPE_DISPLAY.CLOUD_TIER, TIER_TYPE_DISPLAY.GLACIER)){
           <tr>
             <td class="bold"
                 i18n>
@@ -123,8 +111,6 @@
             </td>
             <td>{{ selection?.host_style }}</td>
           </tr>
-        }
-        @if(isTierMatch( TIER_TYPE_DISPLAY.CLOUD_TIER, TIER_TYPE_DISPLAY.GLACIER)){
           <tr>
             <td class="bold"
                 i18n>
@@ -135,8 +121,6 @@
             </td>
             <td>{{ selection?.retain_head_object ? 'Enabled' : 'Disabled' }}</td>
           </tr>
-        }
-        @if(isTierMatch( TIER_TYPE_DISPLAY.CLOUD_TIER, TIER_TYPE_DISPLAY.GLACIER)){
           <tr>
             <td class="bold"
                 i18n>
@@ -149,9 +133,9 @@
             </td>
             <td>{{ selection?.allow_read_through ? 'Enabled' : 'Disabled' }}</td>
           </tr>
-        }
-        @if(isTierMatch(TIER_TYPE_DISPLAY.CLOUD_TIER, TIER_TYPE_DISPLAY.GLACIER) && (selection?.allow_read_through)) {
-          <tr *ngIf="isTierMatch(TIER_TYPE_DISPLAY.CLOUD_TIER, TIER_TYPE_DISPLAY.GLACIER) && (selection?.allow_read_through)">
+          } @if(isTierMatch(TIER_TYPE_DISPLAY.CLOUD_TIER, TIER_TYPE_DISPLAY.GLACIER) &&
+          (selection?.allow_read_through)) {
+          <tr>
             <td class="bold"
                 i18n>
               Read through Restore Days
@@ -161,10 +145,12 @@
                 </span>
               </cd-helper>
             </td>
-            <td>{{ selection?.read_through_restore_days }}</td>
+            <td>
+              {{ selection?.read_through_restore_days }}
+              {{ selection?.read_through_restore_days === 1 ? 'Day' : 'Days' }}
+            </td>
           </tr>
-        }
-        @if(isTierMatch( TIER_TYPE_DISPLAY.GLACIER)){
+          } @if(isTierMatch( TIER_TYPE_DISPLAY.GLACIER)){
           <tr>
             <td class="bold"
                 i18n>
@@ -175,10 +161,9 @@
                 </span>
               </cd-helper>
             </td>
-            <td>{{ selection?.glacier_restore_days }}</td>
+            <td>  {{ selection?.glacier_restore_days }}
+              {{ selection?.glacier_restore_days === 1 ? 'Day' : 'Days' }}</td>
           </tr>
-        }
-        @if(isTierMatch( TIER_TYPE_DISPLAY.GLACIER)) {
           <tr>
             <td class="bold"
                 i18n>
@@ -191,8 +176,7 @@
             </td>
             <td>{{ selection?.glacier_restore_tier_type }}</td>
           </tr>
-        }
-        @if(isTierMatch( TIER_TYPE_DISPLAY.CLOUD_TIER, TIER_TYPE_DISPLAY.GLACIER)){
+          } @if(isTierMatch( TIER_TYPE_DISPLAY.CLOUD_TIER, TIER_TYPE_DISPLAY.GLACIER)){
           <tr>
             <td class="bold"
                 i18n>
@@ -205,8 +189,6 @@
             </td>
             <td>{{ selection?.restore_storage_class }}</td>
           </tr>
-        }
-          @if(isTierMatch( TIER_TYPE_DISPLAY.CLOUD_TIER, TIER_TYPE_DISPLAY.GLACIER)){
           <tr>
             <td class="bold"
                 i18n>
@@ -219,21 +201,39 @@
             </td>
             <td>{{ selection?.multipart_min_part_size | dimlessBinary }}</td>
           </tr>
-        }
-        @if(isTierMatch( TIER_TYPE_DISPLAY.CLOUD_TIER, TIER_TYPE_DISPLAY.GLACIER)){
           <tr>
             <td class="bold"
                 i18n>
               Multipart Sync Threshold
               <cd-helper class="text-pre-wrap">
                 <span>
-                  {{ multipartSyncThreholdText  }}
+                  {{ multipartSyncThreholdText }}
                 </span>
               </cd-helper>
             </td>
             <td>{{ selection?.multipart_sync_threshold | dimlessBinary }}</td>
           </tr>
-        }
+          } @if(selection?.acl_mappings.length > 0) {
+          <tr>
+            <td class="bold w-25"
+                i18n>ACLs</td>
+            <td>
+              <ng-container *ngFor="let type of groupedACLs | keyvalue">
+                <div class="mb-2">
+                  <div class="cds--label">{{ type.key }}:</div>
+                  <div *ngFor="let item of type.value"
+                       [cdsStack]="'horizontal'"
+                       class="mt-1">
+                    <cds-tag size="sm"
+                             class="tags-background-gray">
+                      {{ item.source_id }} : {{ item.dest_id }}
+                    </cds-tag>
+                  </div>
+                </div>
+              </ng-container>
+            </td>
+          </tr>
+         }
         </tbody>
       </table>
     </cds-tab>
