@@ -792,7 +792,7 @@ bool DaemonServer::handle_report(const ref_t<MMgrReport>& m)
         daemon->last_service_beacon = now;
       }
       if (m->get_connection()->peer_is_osd() || m->get_connection()->peer_is_mon() ||
-	  m->get_connection()->peer_is_client()) { //FIXME: peer_is_cephfs_mirror() to avoid any client
+	  m->get_connection()->peer_is_cephfs_mirror()) {
         daemon->daemon_health_metrics = std::move(m->daemon_health_metrics);
         dout(10) << "daemon_health_metrics " << daemon->daemon_health_metrics
                  << dendl;

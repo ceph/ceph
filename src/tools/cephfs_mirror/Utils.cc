@@ -23,7 +23,7 @@ int connect(std::string_view client_name, std::string_view cluster_name,
   dout(20) << ": connecting to cluster=" << cluster_name << ", client=" << client_name
            << ", mon_host=" << mon_host << dendl;
 
-  CephInitParameters iparams(CEPH_ENTITY_TYPE_CLIENT);
+  CephInitParameters iparams(CEPH_ENTITY_TYPE_CEPHFS_MIRROR);
   if (client_name.empty() || !iparams.name.from_str(client_name)) {
     derr << ": error initializing cluster handle for " << cluster_name << dendl;
     return -EINVAL;
