@@ -13583,7 +13583,12 @@ paths:
       - RgwMultisite
   /api/rgw/realm:
     get:
-      parameters: []
+      parameters:
+      - allowEmptyValue: true
+        in: query
+        name: replicable
+        schema:
+          type: string
       responses:
         '200':
           content:

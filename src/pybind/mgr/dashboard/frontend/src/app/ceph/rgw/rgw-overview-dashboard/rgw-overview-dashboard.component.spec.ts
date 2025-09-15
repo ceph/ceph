@@ -12,6 +12,10 @@ import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { RgwRealmService } from '~/app/shared/api/rgw-realm.service';
 import { RgwZoneService } from '~/app/shared/api/rgw-zone.service';
 import { RgwZonegroupService } from '~/app/shared/api/rgw-zonegroup.service';
+import { SharedModule } from '~/app/shared/shared.module';
+import { ToastrModule } from 'ngx-toastr';
+import { CommonModule } from '@angular/common';
+import { ActivatedRoute } from '@angular/router';
 
 describe('RgwOverviewDashboardComponent', () => {
   let component: RgwOverviewDashboardComponent;
@@ -22,6 +26,7 @@ describe('RgwOverviewDashboardComponent', () => {
   let listZonesSpy: jest.SpyInstance;
   let fetchAndTransformBucketsSpy: jest.SpyInstance;
   let totalBucketsAndUsersSpy: jest.SpyInstance;
+  let params: Record<string, any>;
 
   const totalNumObjectsSubject = new BehaviorSubject<number>(290);
   const totalUsedCapacitySubject = new BehaviorSubject<number>(9338880);
@@ -79,9 +84,13 @@ describe('RgwOverviewDashboardComponent', () => {
             averageObjectSize$: averageObjectSizeSubject.asObservable(),
             getTotalBucketsAndUsersLength: jest.fn()
           }
+        },
+        {
+          provide: ActivatedRoute,
+          useValue: { params: { subscribe: (fn: Function) => fn(params) } }
         }
       ],
-      imports: [HttpClientTestingModule]
+      imports: [HttpClientTestingModule, SharedModule, ToastrModule.forRoot(), CommonModule]
     }).compileComponents();
     fixture = TestBed.createComponent(RgwOverviewDashboardComponent);
     component = fixture.componentInstance;
