@@ -17,7 +17,11 @@
 #include <string>
 #include <unordered_map>
 #include <mutex>
+#include <sstream>
+#include <atomic>
+
 #include "common/Formatter.h"
+#include "include/ceph_assert.h"
 
 #define CPUTRACE_MAX_ANCHORS 10
 #define CPUTRACE_MAX_THREADS 64
@@ -40,7 +44,11 @@ inline cputrace_flags operator&(cputrace_flags a, cputrace_flags b) {
         static_cast<uint64_t>(a) & static_cast<uint64_t>(b));
 }
 
-#define HWProfileFunctionF(var, name, flags) HW_profile var(name, __COUNTER__ + 1, flags)
+int register_anchor(const char* name);
+
+#define HWProfileFunctionF(var, name, flags) \
+  static int var##_id = register_anchor(name); \
+  HW_profile var(name, var##_id, flags)
 
 struct sample_t {
     uint64_t swi  = 0;
@@ -201,8 +209,7 @@ struct cputrace_anchor {
 
 struct cputrace_profiler {
     cputrace_anchor* anchors = nullptr;
-    bool profiling = false;
-    pthread_mutex_t global_lock = PTHREAD_MUTEX_INITIALIZER;
+    std::atomic<bool> profiling{false};
 };
 
 class HW_profile {
@@ -249,17 +256,14 @@ public:
 
 private:
     const char* name = nullptr;
-    HW_guard* guard{nullptr};
+    HW_guard guard;
 };
 
 measurement_t* get_named_measurement(const std::string& name);
 
-void cputrace_start();
-void cputrace_stop();
-void cputrace_reset();
-void cputrace_start(ceph::Formatter* f);
-void cputrace_stop(ceph::Formatter* f);
-void cputrace_reset(ceph::Formatter* f);
+void cputrace_start(ceph::Formatter* f = nullptr);
+void cputrace_stop(ceph::Formatter* f = nullptr);
+void cputrace_reset(ceph::Formatter* f = nullptr);
 void cputrace_dump(ceph::Formatter* f, const std::string& logger = "", const std::string& counter = "");
 void cputrace_print_to_stringstream(std::stringstream& ss);
 
