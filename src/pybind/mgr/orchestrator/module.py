@@ -55,6 +55,7 @@ from ._interface import (
     _cli_write_command,
     json_to_generic_spec,
     raise_if_exception,
+    completion_to_result,
 )
 
 
@@ -793,8 +794,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
     def _host_ok_to_stop(self, hostname: str) -> HandleCommandResult:
         """Check if the specified host can be safely stopped without reducing availability"""""
         completion = self.host_ok_to_stop(hostname)
-        raise_if_exception(completion)
-        return HandleCommandResult(stdout=completion.result_str())
+        return completion_to_result(completion)
 
     @_cli_write_command('orch host maintenance enter')
     def _host_maintenance_enter(self, hostname: str, force: bool = False, yes_i_really_mean_it: bool = False) -> HandleCommandResult:
@@ -802,9 +802,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
         Prepare a host for maintenance by shutting down and disabling all Ceph daemons (cephadm only)
         """
         completion = self.enter_host_maintenance(hostname, force=force, yes_i_really_mean_it=yes_i_really_mean_it)
-        raise_if_exception(completion)
-
-        return HandleCommandResult(stdout=completion.result_str())
+        return completion_to_result(completion)
 
     @_cli_write_command('orch host maintenance exit')
     def _host_maintenance_exit(self, hostname: str, force: bool = False, offline: bool = False) -> HandleCommandResult:
@@ -812,9 +810,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
         Return a host from maintenance, restarting all Ceph daemons (cephadm only)
         """
         completion = self.exit_host_maintenance(hostname, force, offline)
-        raise_if_exception(completion)
-
-        return HandleCommandResult(stdout=completion.result_str())
+        return completion_to_result(completion)
 
     @_cli_write_command('orch host rescan')
     def _host_rescan(self, hostname: str, with_summary: bool = False) -> HandleCommandResult:
@@ -1791,14 +1787,12 @@ Usage:
         """Remove specific daemon(s)"""
         for name in names:
             if '.' not in name:
-                raise OrchestratorError('%s is not a valid daemon name' % name)
+                return HandleCommandResult(stderr=f"{name} is not a valid daemon name", retval=-errno.EINVAL)
             (daemon_type) = name.split('.')[0]
             if not force and daemon_type in ['osd', 'mon', 'prometheus']:
-                raise OrchestratorError(
-                    'must pass --force to REMOVE daemon with potentially PRECIOUS DATA for %s' % name)
+                return HandleCommandResult(stderr=f"must pass --force to REMOVE daemon with potentially PRECIOUS DATA for {name}", retval=-errno.EPERM)
         completion = self.remove_daemons(names)
-        raise_if_exception(completion)
-        return HandleCommandResult(stdout=completion.result_str())
+        return completion_to_result(completion)
 
     @_cli_write_command('orch rm')
     def _service_rm(self,
