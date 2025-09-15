@@ -135,9 +135,10 @@ BlockRBManager::write_ertr::future<> BlockRBManager::write(
   ceph_assert(bptr.is_page_aligned());
   rbm_abs_addr addr = convert_paddr_to_abs_addr(paddr);
   if (!check_valid_range(addr, bptr)) {
-    return crimson::ct_error::erange::make();
+    co_return co_await write_ertr::future<>(
+      crimson::ct_error::erange::make());
   }
-  return device->write(
+  co_return co_await device->write(
     addr,
     bptr);
 }
@@ -150,9 +151,10 @@ BlockRBManager::read_ertr::future<> BlockRBManager::read(
   ceph_assert(bptr.is_page_aligned());
   rbm_abs_addr addr = convert_paddr_to_abs_addr(paddr);
   if (!check_valid_range(addr, bptr)) {
-    return crimson::ct_error::erange::make();
+    co_return co_await read_ertr::future<>(
+      crimson::ct_error::erange::make());
   }
-  return device->read(
+  co_return co_await device->read(
     addr,
     bptr);
 }
@@ -161,7 +163,7 @@ BlockRBManager::close_ertr::future<> BlockRBManager::close()
 {
   ceph_assert(device);
   allocator->close();
-  return device->close();
+  co_return co_await device->close();
 }
 
 BlockRBManager::write_ertr::future<> BlockRBManager::write(
@@ -179,7 +181,7 @@ BlockRBManager::write_ertr::future<> BlockRBManager::write(
     DEBUG("write: exception creating aligned buffer {}", e);
     ceph_assert(0 == "unhandled exception");
   }
-  return device->write(
+  co_return co_await device->write(
     addr,
     std::move(bptr));
 }
