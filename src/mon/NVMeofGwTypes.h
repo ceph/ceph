@@ -250,12 +250,14 @@ struct NvmeGwClientState {
   gw_availability_t availability;
   uint64_t last_beacon_seq_number;
   bool last_beacon_seq_ooo; //out of order sequence
-  NvmeGwClientState(NvmeAnaGrpId id, epoch_t epoch, gw_availability_t available)
-    : group_id(id), gw_map_epoch(epoch), availability(available) {}
+  NvmeGwClientState(NvmeAnaGrpId id, epoch_t epoch, gw_availability_t available,
+     uint64_t sequence, bool sequence_ooo)
+    : group_id(id), gw_map_epoch(epoch), availability(available),
+      last_beacon_seq_number(sequence), last_beacon_seq_ooo(sequence_ooo) {}
 
   NvmeGwClientState()
     : NvmeGwClientState(
-      REDUNDANT_GW_ANA_GROUP_ID, 0, gw_availability_t::GW_UNAVAILABLE) {}
+      REDUNDANT_GW_ANA_GROUP_ID, 0, gw_availability_t::GW_UNAVAILABLE, 0, 0) {}
 };
 
 struct Tmdata {
