@@ -289,7 +289,10 @@ class RbdService(object):
         prev_snap = None
         total_used_size = 0
         for _, size, name in snaps:
-            image.set_snap(name)
+            try:
+                image.set_snap(name)
+            except rbd.ImageNotFound:
+                continue
             du_callb = DUCallback()
             image.diff_iterate(0, size, prev_snap, du_callb,
                                whole_object=whole_object)
@@ -388,10 +391,7 @@ class RbdService(object):
                 stat['snapshots'].append(snap)
 
             # disk usage
-            img_flags = img.flags()
-            if not omit_usage and 'fast-diff' in stat['features_name'] and \
-                    not rbd.RBD_FLAG_FAST_DIFF_INVALID & img_flags and \
-                    mirror_mode != rbd.RBD_MIRROR_IMAGE_MODE_SNAPSHOT:
+            if not omit_usage and 'fast-diff' in stat['features_name']:
                 snaps = [(s['id'], s['size'], s['name'])
                          for s in stat['snapshots']]
                 snaps.sort(key=lambda s: s[0])
