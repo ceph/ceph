@@ -111,6 +111,7 @@ public:
   }
 
   void send_response() override {
+    set_req_state_err(s, op_ret);
     dump_errno(s);
     if (mtime) {
       dump_last_modified(s, *mtime);
@@ -123,6 +124,7 @@ public:
     s->formatter->close_section();
     rgw_flush_formatter_and_reset(s, s->formatter);
   }
+
   const char* name() const override { return "get_bucket_logging"; }
   std::string canonical_name() const override { return fmt::format("REST.{}.LOGGING", s->info.method); }
   RGWOpType get_type() override { return RGW_OP_GET_BUCKET_LOGGING; }
@@ -136,6 +138,7 @@ class RGWPutBucketLoggingOp : public RGWDefaultResponseOp {
   // and usd in execute()
   rgw::bucketlogging::configuration configuration;
   std::unique_ptr<rgw::sal::Bucket> target_bucket;
+  std::string old_obj; // used when conf change triggers a rollover
 
   int init_processing(optional_yield y) override {
     if (const auto ret = verify_bucket_logging_params(this, s); ret < 0) {
@@ -234,7 +237,7 @@ class RGWPutBucketLoggingOp : public RGWDefaultResponseOp {
     }
 
     if (!configuration.enabled) {
-      op_ret = rgw::bucketlogging::source_bucket_cleanup(this, driver, src_bucket.get(), true, y);
+      op_ret = rgw::bucketlogging::source_bucket_cleanup(this, driver, src_bucket.get(), true, y, &old_obj);
       return;
     }
 
@@ -306,12 +309,27 @@ class RGWPutBucketLoggingOp : public RGWDefaultResponseOp {
       }
     } else if (*old_conf != configuration) {
       // conf changed - do cleanup
-      if (const auto ret = commit_logging_object(*old_conf, target_bucket, this, y, nullptr); ret < 0) {
-        ldpp_dout(this, 1) << "WARNING: could not commit pending logging object when updating logging configuration of bucket '" <<
-          src_bucket->get_key() << "', ret = " << ret << dendl;
+      RGWObjVersionTracker objv_tracker;
+      std::string obj_name;
+      const auto region = driver->get_zone()->get_zonegroup().get_api_name();
+      if (const auto ret = rollover_logging_object(*old_conf,
+            target_bucket,
+            obj_name,
+            this,
+            region,
+            src_bucket,
+            y,
+            false, // rollover should happen even if commit failed
+            &objv_tracker,
+            &old_obj); ret < 0) {
+        ldpp_dout(this, 1) << "WARNING: failed to flush pending logging object '" << obj_name << "'"
+            << " to target bucket '" << target_bucket_id << "'. "
+            << " last committed object is '" << old_obj <<
+            "' when updating logging configuration of bucket '" << src_bucket->get_key() << ". error: " << ret << dendl;
       } else {
-        ldpp_dout(this, 20) << "INFO: committed pending logging object when updating logging configuration of bucket '" <<
-          src_bucket->get_key() << "'" << dendl;
+        ldpp_dout(this, 20) << "INFO: flushed pending logging object '" << old_obj
+          << "' to target bucket '" << target_bucket_id << "' when updating logging configuration of bucket '"
+          << src_bucket->get_key() << "'" << dendl;
       }
       if (old_conf->target_bucket != configuration.target_bucket) {
         rgw_bucket old_target_bucket_id;
@@ -332,6 +350,19 @@ class RGWPutBucketLoggingOp : public RGWDefaultResponseOp {
         configuration.to_json_str() << dendl;
     } else {
       ldpp_dout(this, 20) << "INFO: logging configuration of bucket '" << src_bucket_id << "' did not change" << dendl;
+    }
+  }
+
+  void send_response() override {
+    set_req_state_err(s, op_ret);
+    dump_errno(s);
+    end_header(s, this, to_mime_type(s->format));
+    if (!old_obj.empty()) {
+      dump_start(s);
+      s->formatter->open_object_section_in_ns("PutBucketLoggingOutput", XMLNS_AWS_S3);
+      s->formatter->dump_string("FlushedLoggingObject", old_obj);
+      s->formatter->close_section();
+      rgw_flush_formatter_and_reset(s, s->formatter);
     }
   }
 };
@@ -407,6 +438,7 @@ class RGWPostBucketLoggingOp : public RGWDefaultResponseOp {
   }
 
   void send_response() override {
+    set_req_state_err(s, op_ret);
     dump_errno(s);
     end_header(s, this, to_mime_type(s->format));
     dump_start(s);
