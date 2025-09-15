@@ -948,19 +948,15 @@ def parse_cli(build_step_names):
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument(
-        "--debug",
+        "--help-build-steps",
         action="store_true",
-        help="Emit debugging level logging and tracebacks",
+        help="Print executable build steps and brief descriptions",
     )
-    parser.add_argument(
-        "--container-engine",
-        help="Select container engine to use (eg. podman, docker)",
+
+    g_basic = parser.add_argument_group(
+        title="Basic options",
     )
-    parser.add_argument(
-        "--cwd",
-        help="Change working directory before executing commands",
-    )
-    parser.add_argument(
+    g_basic.add_argument(
         "--distro",
         "-d",
         choices=DistroKind.aliases().keys(),
@@ -968,52 +964,19 @@ def parse_cli(build_step_names):
         default=str(DistroKind.CENTOS9),
         help="Specify a distro short name",
     )
-    parser.add_argument(
-        "--tag",
-        "-t",
-        help="Specify a container tag. Append to the auto generated tag"
-        " by prefixing the supplied value with the plus (+) character",
+    g_basic.add_argument(
+        "--execute",
+        "-e",
+        dest="steps",
+        action="append",
+        choices=build_step_names,
+        help="Execute the target build step(s)",
     )
-    parser.add_argument(
-        "--base-branch",
-        help="Specify a base branch name",
+    g_basic.add_argument(
+        "--cwd",
+        help="Change working directory before executing commands",
     )
-    parser.add_argument(
-        "--current-branch",
-        help="Manually specify the current branch name",
-    )
-    parser.add_argument(
-        "--image-repo",
-        help="Specify a container image repository",
-    )
-    parser.add_argument(
-        "--image-sources",
-        "-I",
-        type=ImageSource.argument,
-        help="Specify a set of valid image sources. "
-        f"May be a comma separated list of {ImageSource.hint()}",
-    )
-    parser.add_argument(
-        "--base-image",
-        help=(
-            "Supply a custom base image to use instead of the default"
-            " image for the source distro."
-        ),
-    )
-    parser.add_argument(
-        "--homedir",
-        default="/ceph",
-        help="Container image home/build dir",
-    )
-    parser.add_argument(
-        "--dnf-cache-path",
-        help="DNF caching using provided base dir (during build-container build)",
-    )
-    parser.add_argument(
-        "--npm-cache-path",
-        help="NPM caching using provided base dir (during build)",
-    )
-    parser.add_argument(
+    g_basic.add_argument(
         "--build-dir",
         "-b",
         help=(
@@ -1021,7 +984,77 @@ def parse_cli(build_step_names):
             " (the ceph source root)"
         ),
     )
-    parser.add_argument(
+    g_basic.add_argument(
+        "--env-file",
+        type=pathlib.Path,
+        help="Use this environment file when building",
+    )
+
+    g_debug = parser.add_argument_group(
+        title="Debugging options",
+    )
+    g_debug.add_argument(
+        "--debug",
+        action="store_true",
+        help="Emit debugging level logging and tracebacks",
+    )
+    g_debug.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Do not execute key commands, print and continue if possible",
+    )
+    g_debug.add_argument(
+        "--no-prereqs",
+        "-P",
+        action="store_true",
+        help="Do not execute any prerequisite steps. Only execute specified steps",
+    )
+
+    g_image = parser.add_argument_group(
+        title="Build image configuration",
+        description=(
+            'These options customize what and how the "Build Image" is'
+            " constructed"
+        ),
+    )
+    g_image.add_argument(
+        "--tag",
+        "-t",
+        help="Specify a container tag. Append to the auto generated tag"
+        " by prefixing the supplied value with the plus (+) character",
+    )
+    g_image.add_argument(
+        "--base-branch",
+        help="Specify a base branch name",
+    )
+    g_image.add_argument(
+        "--current-branch",
+        help="Manually specify the current branch name",
+    )
+    g_image.add_argument(
+        "--image-repo",
+        help="Specify a container image repository",
+    )
+    g_image.add_argument(
+        "--image-sources",
+        "-I",
+        type=ImageSource.argument,
+        help="Specify a set of valid image sources. "
+        f"May be a comma separated list of {ImageSource.hint()}",
+    )
+    g_image.add_argument(
+        "--base-image",
+        help=(
+            "Supply a custom base image to use instead of the default"
+            " image for the source distro."
+        ),
+    )
+    g_image.add_argument(
+        "--homedir",
+        default="/ceph",
+        help="Container image home/build dir",
+    )
+    g_image.add_argument(
         "--build-arg",
         dest="build_args",
         action="append",
@@ -1030,7 +1063,37 @@ def parse_cli(build_step_names):
             " Can be used to override default build image behavior."
         ),
     )
-    parser.add_argument(
+    g_image.add_argument(
+        "--containerfile",
+        default="Dockerfile.build",
+        help="Specify the path to a (build) container file",
+    )
+    g_image.add_argument(
+        "--containerdir",
+        default=".",
+        help="Specify the path to container context dir",
+    )
+
+    g_container = parser.add_argument_group(
+        title="Container options",
+        description="Options to control how the containers are run",
+    )
+    g_container.add_argument(
+        "--container-engine",
+        help="Select container engine to use (eg. podman, docker)",
+    )
+    g_container.add_argument(
+        "--extra",
+        "-x",
+        action="append",
+        help="Specify an extra argument to pass to container command",
+    )
+    g_container.add_argument(
+        "--keep-container",
+        action="store_true",
+        help="Skip removing container after executing command",
+    )
+    g_container.add_argument(
         "--overlay-dir",
         "-l",
         help=(
@@ -1039,52 +1102,46 @@ def parse_cli(build_step_names):
             "use a temporary overlay (discarding writes on container exit)"
         ),
     )
-    parser.add_argument(
+
+    g_caching = parser.add_argument_group(
+        title="Persistent cache options",
+        description=(
+            "Options to control caches that persist after the containers"
+            " have exited"
+        ),
+    )
+    g_caching.add_argument(
+        "--dnf-cache-path",
+        help="DNF caching using provided base dir (during build-container build)",
+    )
+    g_caching.add_argument(
+        "--npm-cache-path",
+        help="NPM caching using provided base dir (during build)",
+    )
+    g_caching.add_argument(
         "--ccache-dir",
         help=(
             "Specify a directory (within the container) to save ccache"
             " output"
         ),
     )
-    parser.add_argument(
-        "--extra",
-        "-x",
-        action="append",
-        help="Specify an extra argument to pass to container command",
+
+    g_pkg = parser.add_argument_group(
+        title="RPM & DEB package build options",
+        description="Options specific to building packages",
     )
-    parser.add_argument(
-        "--keep-container",
-        action="store_true",
-        help="Skip removing container after executing command",
-    )
-    parser.add_argument(
-        "--containerfile",
-        default="Dockerfile.build",
-        help="Specify the path to a (build) container file",
-    )
-    parser.add_argument(
-        "--containerdir",
-        default=".",
-        help="Specify the path to container context dir",
-    )
-    parser.add_argument(
-        "--no-prereqs",
-        "-P",
-        action="store_true",
-        help="Do not execute any prerequisite steps. Only execute specified steps",
-    )
-    parser.add_argument(
+    g_pkg.add_argument(
         "--rpm-no-match-sha",
         dest="srpm_match",
         action="store_const",
-        const='any',
+        const="any",
         help=(
             "Do not try to build RPM packages that match the SHA of the current"
             " git checkout. Use any source RPM available."
             " [DEPRECATED] Use --rpm-match=any"
         ),
     )
-    parser.add_argument(
+    g_pkg.add_argument(
         "--srpm-match",
         dest="srpm_match",
         choices=("any", "versionglob", "auto"),
@@ -1096,39 +1153,17 @@ def parse_cli(build_step_names):
             " 'auto' (the default) uses a version derived from ceph.spec."
         ),
     )
-    parser.add_argument(
+    g_pkg.add_argument(
         "--rpmbuild-arg",
-        '-R',
+        "-R",
         action="append",
         help="Pass this extra argument to rpmbuild",
     )
-    parser.add_argument(
+    g_pkg.add_argument(
         "--ceph-version",
         help="Rather than infer the Ceph version, use this value",
     )
-    parser.add_argument(
-        "--execute",
-        "-e",
-        dest="steps",
-        action="append",
-        choices=build_step_names,
-        help="Execute the target build step(s)",
-    )
-    parser.add_argument(
-        "--env-file",
-        type=pathlib.Path,
-        help="Use this environment file when building",
-    )
-    parser.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="Do not execute key commands, print and continue if possible",
-    )
-    parser.add_argument(
-        "--help-build-steps",
-        action="store_true",
-        help="Print executable build steps and brief descriptions",
-    )
+
     cli, rest = parser.parse_my_args()
     if cli.help_build_steps:
         print("Executable Build Steps")
