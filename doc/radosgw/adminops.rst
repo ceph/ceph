@@ -373,7 +373,7 @@ Special Error Responses
 None.
 
 Create Account
-===========
+==============
 .. versionadded:: Squid
 
 Create a new account.
@@ -400,7 +400,7 @@ Request Parameters
 :Example: ``RGW00000000000000001``
 :Required: Yes
 
-An account ID must be 20 bytes long.
+An account ID must be 20 characters long, and in the format of the string "RGW" followed by 17 numeric characters.
 
 ``name``
 
@@ -425,35 +425,35 @@ An account ID must be 20 bytes long.
 
 ``max-users``
 
-:Description: Specifies the maximum number of users the account can own.
+:Description: Specifies the maximum number of users the account can own. The default is 1000.
 :Type: Integer
 :Example: 500 [1000]
 :Required: No
 
 ``max-roles``
 
-:Description: Specifies the maximum number of roles the account can own.
+:Description: Specifies the maximum number of roles the account can own. The default is 1000.
 :Type: Integer
 :Example: 500 [1000]
 :Required: No
 
 ``max-groups``
 
-:Description: Specifies the maximum number of groups the account can own.
+:Description: Specifies the maximum number of groups the account can own. The default is 1000.
 :Type: Integer
 :Example: 500 [1000]
 :Required: No
 
 ``max-access-keys``
 
-:Description: Specifies the maximum number of access keys the account can own.
+:Description: Specifies the maximum number of access keys the account can own. The default is 4.
 :Type: Integer
 :Example: 1 [4]
 :Required: No
 
 ``max-buckets``
 
-:Description: Specifies the maximum number of buckets the account can own.
+:Description: Specifies the maximum number of buckets the account can own. The default is 1000.
 :Type: Integer
 :Example: 500 [1000]
 :Required: No
@@ -600,15 +600,15 @@ Special Error Responses
 
 ``AccountAlreadyExists``
 
-:Description: Attempt to create existing account. This can happen if the Account ID or the email is already in use.
+:Description: Attempt to create existing account. This can happen if the account ID or the email is already in use.
 :Code: 409 Conflict
 
 
 Modify Account
-===========
+==============
 .. versionadded:: Squid
 
-Modify a account. Either an "id", "name", or "email" needs to be provided.
+Modify an account. Either ``id``, ``name``, or ``email`` must be provided.
 
 :caps: accounts=write
 
@@ -647,35 +647,35 @@ Request Parameters
 
 ``max-users``
 
-:Description: Specifies the maximum number of users the account can own.
+:Description: Specifies the maximum number of users the account can own. The default is 1000.
 :Type: Integer
 :Example: 500 [1000]
 :Required: No
 
 ``max-roles``
 
-:Description: Specifies the maximum number of roles the account can own.
+:Description: Specifies the maximum number of roles the account can own. The default is 1000.
 :Type: Integer
 :Example: 500 [1000]
 :Required: No
 
 ``max-groups``
 
-:Description: Specifies the maximum number of groups the account can own.
+:Description: Specifies the maximum number of groups the account can own. The default is 1000.
 :Type: Integer
 :Example: 500 [1000]
 :Required: No
 
 ``max-access-keys``
 
-:Description: Specifies the maximum number of access keys the account can own.
+:Description: Specifies the maximum number of access keys the account can own. The default is 4.
 :Type: Integer
 :Example: 1 [4]
 :Required: No
 
 ``max-buckets``
 
-:Description: Specifies the maximum number of buckets the account can own.
+:Description: Specifies the maximum number of buckets the account can own. The default is 1000.
 :Type: Integer
 :Example: 500 [1000]
 :Required: No
@@ -692,7 +692,7 @@ If successful, the response contains the following account information.
 
 ``id``
 
-:Description: The account id.
+:Description: The account ID.
 :Type: String
 :Parent: ``account``
 
@@ -826,7 +826,7 @@ Get Account Info
 ===========
 .. versionadded:: Squid
 
-Get account info. Either an "id" or a "name" needs to be provided.
+Get account info. Either an ``id`` or a ``name`` must be provided.
 
 :caps: accounts=write
 
@@ -869,7 +869,7 @@ If successful, the response contains the following account information.
 
 ``id``
 
-:Description: The account id.
+:Description: The account ID.
 :Type: String
 :Parent: ``account``
 
@@ -1000,10 +1000,10 @@ Special Error Responses
 None.
 
 Remove Account
-===========
+==============
 .. versionadded:: Squid
 
-Remove an existing account. Either an "id", "name", or "email" needs to be provided.
+Remove an existing account. Either ``id``, ``name``, or ``email`` must be provided.
 
 :caps: accounts=write
 
@@ -1189,7 +1189,7 @@ A tenant name may also specified as a part of ``uid``, by following the syntax
 
 ``account-id``
 
-:Description: the Account under which a user should exist.
+:Description: the account under which a user should exist.
 :Type: string
 :Example: RGW00000000000000001
 :Required: No
@@ -2769,7 +2769,7 @@ as mentioned in Set Bucket Quota section above.
 
 
 Set Account Quota
-~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~
 
 To set a quota, the user must have ``accounts`` capability set with ``write``
 permission. ::
@@ -2777,7 +2777,7 @@ permission. ::
 	PUT /admin/account?quota&id=<account_id>&quota-type=account
 
 Set Bucket Quota under an Account
-~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 To set a quota, the user must have ``accounts`` capability set with ``write``
 permission. ::
