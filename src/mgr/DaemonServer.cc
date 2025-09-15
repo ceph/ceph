@@ -583,7 +583,6 @@ bool DaemonServer::handle_open(const ref_t<MMgrOpen>& m)
 	d->start_epoch = pending_service_map.epoch;
 	d->start_stamp = now;
 	d->metadata = m->daemon_metadata;
-	//d->failed_count = 
 	pending_service_map_dirty = pending_service_map.epoch;
       }
     }
@@ -782,10 +781,6 @@ bool DaemonServer::handle_report(const ref_t<MMgrReport>& m)
         if (m->daemon_status) {
           daemon->service_status_stamp = now;
           daemon->service_status = *m->daemon_status;
-	  std::string sdaemon(daemon->key.type);
-	  if (sdaemon == "cephfs-mirror") {
-	    dout(0) << " service status: " << daemon->service_status << dendl;
-	  }
         }
         daemon->last_service_beacon = now;
       } else if (m->daemon_status) {
@@ -2755,57 +2750,32 @@ void DaemonServer::send_report()
     });
 
   std::map<daemon_metric, unique_ptr<DaemonHealthMetricCollector>> accumulated;
-  for (auto service : {"osd", "mon"} ) {
+  for (auto service : {"osd", "mon", "cephfs-mirror"} ) {
     auto daemons = daemon_state.get_by_service(service);
     for (const auto& [key,state] : daemons) {
       std::lock_guard l{state->lock};
-	 for (const auto& metric : state->daemon_health_metrics) {
-	   auto acc = accumulated.find(metric.get_type());
-	   if (acc == accumulated.end()) {
-	     auto collector = DaemonHealthMetricCollector::create(metric.get_type());
-	     if (!collector) {
-	       derr << __func__ << " " << key
-		    << " sent me an unknown health metric: "
-		    << std::hex << static_cast<uint8_t>(metric.get_type())
-		    << std::dec << dendl;
-	       continue;
-	     } else {
-	     tie(acc, std::ignore) = accumulated.emplace(metric.get_type(),
-		 std::move(collector));
-	     }
-	   }
-	   acc->second->update(key, metric);
-	 }
+      for (const auto& metric : state->daemon_health_metrics) {
+        auto acc = accumulated.find(metric.get_type());
+        if (acc == accumulated.end()) {
+          auto collector = DaemonHealthMetricCollector::create(metric.get_type());
+          if (!collector) {
+            derr << __func__ << " " << key
+		 << " sent me an unknown health metric: "
+		 << std::hex << static_cast<uint8_t>(metric.get_type())
+		 << std::dec << dendl;
+            continue;
+          }
+          tie(acc, std::ignore) = accumulated.emplace(metric.get_type(),
+              std::move(collector));
+        }
+        acc->second->update(key, metric);
       }
     }
+  }
 
   for (const auto& acc : accumulated) {
     acc.second->summarize(m->health_checks);
   }
-  /*
-  auto mdaemons = daemon_state.get_by_service(service);
-  for (const auto& [key,state] : daemons) {
-    std::lock_guard l{state->lock};
-       for (const auto& metric : state->daemon_health_metrics) {
-	 auto acc = accumulated.find(metric.get_type());
-	 if (acc == accumulated.end()) {
-	   auto collector = DaemonHealthMetricCollector::create(metric.get_type());
-	   if (!collector) {
-	     derr << __func__ << " " << key
-		  << " sent me an unknown health metric: "
-		  << std::hex << static_cast<uint8_t>(metric.get_type())
-		  << std::dec << dendl;
-	     continue;
-	   } else {
-	   tie(acc, std::ignore) = accumulated.emplace(metric.get_type(),
-	       std::move(collector));
-	   }
-	 }
-	 acc->second->update(key, metric);
-       }
-    }
-  
-  */
   // TODO? We currently do not notify the PyModules
   // TODO: respect needs_send, so we send the report only if we are asked to do
   //       so, or the state is updated.
