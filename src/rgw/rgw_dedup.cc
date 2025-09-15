@@ -386,8 +386,10 @@ namespace rgw::dedup {
     d_cluster(dpp, cct, driver),
     d_watcher_ctx(this)
   {
-    d_min_obj_size_for_dedup = cct->_conf->rgw_max_chunk_size;
+    d_min_obj_size_for_dedup = (64 * 1024) - 1; // 64KB
+    //d_min_obj_size_for_dedup = cct->_conf->rgw_max_chunk_size;
     d_head_object_size = cct->_conf->rgw_max_chunk_size;
+    //ceph_assert(4*1024*1024 == d_min_obj_size_for_dedup);
     //ceph_assert(4*1024*1024 == d_head_object_size);
 
     int ret = init_rados_access_handles(false);
@@ -421,7 +423,8 @@ namespace rgw::dedup {
     }
     ldpp_dout(dpp, 20) << __func__ << "::" << p_bucket->get_name() << "/"
                        << obj_name << " was written to block_idx="
-                       << rec_info.block_id << " rec_id=" << rec_info.rec_id << dendl;
+                       << rec_info.block_id << " rec_id=" << (int)rec_info.rec_id
+                       << dendl;
     return 0;
   }
 
@@ -437,12 +440,11 @@ namespace rgw::dedup {
     storage_class_idx_t sc_idx = remapper->remap(p_rec->stor_class, dpp,
                                                  &p_stats->failed_map_overflow);
     if (unlikely(sc_idx == remapper_t::NULL_IDX)) {
-      // TBD: need stat counters
       return -EOVERFLOW;
     }
     key_t key(p_rec->s.md5_high, p_rec->s.md5_low, size_4k_units,
               p_rec->s.num_parts, sc_idx);
-    bool has_shared_manifest = p_rec->has_shared_manifest();
+    bool has_shared_manifest = p_rec->s.flags.has_shared_manifest();
     ldpp_dout(dpp, 20) << __func__ << "::bucket=" << p_rec->bucket_name
                        << ", obj=" << p_rec->obj_name << ", block_id="
                        << (uint32_t)block_id << ", rec_id=" << (uint32_t)rec_id
@@ -489,6 +491,61 @@ namespace rgw::dedup {
   }
 
 #ifdef FULL_DEDUP_SUPPORT
+  //---------------------------------------------------------------------------
+  static int get_ioctx(const DoutPrefixProvider* const dpp,
+                       rgw::sal::Driver* driver,
+                       RGWRados* rados,
+                       const disk_record_t *p_rec,
+                       librados::IoCtx *p_ioctx,
+                       std::string *oid)
+  {
+    unique_ptr<rgw::sal::Bucket> bucket;
+    {
+      rgw_bucket b{p_rec->tenant_name, p_rec->bucket_name, p_rec->bucket_id};
+      int ret = driver->load_bucket(dpp, b, &bucket, null_yield);
+      if (unlikely(ret != 0)) {
+        ldpp_dout(dpp, 1) << __func__ << "::ERR: driver->load_bucket(): "
+                          << cpp_strerror(-ret) << dendl;
+        return ret;
+      }
+    }
+
+    build_oid(p_rec->bucket_id, p_rec->obj_name, oid);
+    //ldpp_dout(dpp, 0) << __func__ << "::OID=" << oid << " || bucket_id=" << bucket_id << dendl;
+    rgw_pool data_pool;
+    rgw_obj obj{bucket->get_key(), *oid};
+    if (!rados->get_obj_data_pool(bucket->get_placement_rule(), obj, &data_pool)) {
+      ldpp_dout(dpp, 1) << __func__ << "::failed to get data pool for bucket "
+                        << bucket->get_name()  << dendl;
+      return -EIO;
+    }
+    int ret = rgw_init_ioctx(dpp, rados->get_rados_handle(), data_pool, *p_ioctx);
+    if (ret < 0) {
+      ldpp_dout(dpp, 1) << __func__ << "::ERR: failed to get ioctx from data pool:"
+                        << data_pool.to_str() << dendl;
+      return -EIO;
+    }
+
+    return 0;
+  }
+
+  //---------------------------------------------------------------------------
+  static inline bool should_split_head(uint64_t head_size, uint64_t obj_size)
+  {
+    return (head_size > 0 && obj_size <= max_obj_size_for_split);
+  }
+
+  //---------------------------------------------------------------------------
+  [[maybe_unused]] static bool empty_rgw_bucket(const rgw_bucket &b)
+  {
+    return (b.tenant.empty()    &&
+            b.name.empty()      &&
+            b.marker.empty()    &&
+            b.bucket_id.empty() &&
+            b.explicit_placement.data_pool.empty()       &&
+            b.explicit_placement.data_extra_pool.empty() &&
+            b.explicit_placement.index_pool.empty());
+  }
 
   static constexpr uint64_t cost = 1; // 1 throttle unit per request
   static constexpr uint64_t id = 0; // ids unused
@@ -664,71 +721,37 @@ namespace rgw::dedup {
   }
 
   //---------------------------------------------------------------------------
-  static int get_ioctx(const DoutPrefixProvider* const dpp,
-                       rgw::sal::Driver* driver,
-                       RGWRados* rados,
-                       const disk_record_t *p_rec,
-                       librados::IoCtx *p_ioctx,
-                       std::string *oid)
-  {
-    unique_ptr<rgw::sal::Bucket> bucket;
-    {
-      rgw_bucket b{p_rec->tenant_name, p_rec->bucket_name, p_rec->bucket_id};
-      int ret = driver->load_bucket(dpp, b, &bucket, null_yield);
-      if (unlikely(ret != 0)) {
-        ldpp_dout(dpp, 1) << __func__ << "::ERR: driver->load_bucket(): "
-                          << cpp_strerror(-ret) << dendl;
-        return ret;
-      }
-    }
-
-    build_oid(p_rec->bucket_id, p_rec->obj_name, oid);
-    //ldpp_dout(dpp, 0) << __func__ << "::OID=" << oid << " || bucket_id=" << bucket_id << dendl;
-    rgw_pool data_pool;
-    rgw_obj obj{bucket->get_key(), *oid};
-    if (!rados->get_obj_data_pool(bucket->get_placement_rule(), obj, &data_pool)) {
-      ldpp_dout(dpp, 1) << __func__ << "::failed to get data pool for bucket "
-                        << bucket->get_name()  << dendl;
-      return -EIO;
-    }
-    int ret = rgw_init_ioctx(dpp, rados->get_rados_handle(), data_pool, *p_ioctx);
-    if (ret < 0) {
-      ldpp_dout(dpp, 1) << __func__ << "::ERR: failed to get ioctx from data pool:"
-                        << data_pool.to_str() << dendl;
-      return -EIO;
-    }
-
-    return 0;
-  }
-
-  //---------------------------------------------------------------------------
-  static void init_cmp_pairs(const disk_record_t *p_rec,
-                             const bufferlist    &etag_bl,
-                             bufferlist          &hash_bl, // OUT PARAM
+  static void init_cmp_pairs(const DoutPrefixProvider *dpp,
+                             const disk_record_t *p_rec,
+                             const bufferlist &etag_bl,
+                             bufferlist &hash_bl, // OUT PARAM
                              librados::ObjectWriteOperation *p_op)
   {
     p_op->cmpxattr(RGW_ATTR_ETAG, CEPH_OSD_CMPXATTR_OP_EQ, etag_bl);
-    // TBD: do we really need the secondary compare using the full manifest?
-    // Can replace it with something cheaper like size/version?
-    p_op->cmpxattr(RGW_ATTR_MANIFEST, CEPH_OSD_CMPXATTR_OP_EQ, p_rec->manifest_bl);
-
+    bufferlist ref_tag_bl;
+    ref_tag_bl.append(p_rec->ref_tag);
+    if (p_rec->s.flags.is_ref_tag_from_tail()) {
+      p_op->cmpxattr(RGW_ATTR_TAIL_TAG, CEPH_OSD_CMPXATTR_OP_EQ, ref_tag_bl);
+    }
+    else {
+      p_op->cmpxattr(RGW_ATTR_ID_TAG, CEPH_OSD_CMPXATTR_OP_EQ, ref_tag_bl);
+    }
     // BLAKE3 hash has 256 bit splitted into multiple 64bit units
-    const unsigned units = (256 / (sizeof(uint64_t)*8));
-    static_assert(units == 4);
-    for (unsigned i = 0; i < units; i++) {
+    for (unsigned i = 0; i < HASH_UNITS; i++) {
       ceph::encode(p_rec->s.hash[i], hash_bl);
     }
 
     if (!p_rec->s.flags.hash_calculated()) {
+      ldpp_dout(dpp, 20) << __func__ << "::CMP HASH " << p_rec->obj_name << dendl;
       p_op->cmpxattr(RGW_ATTR_BLAKE3, CEPH_OSD_CMPXATTR_OP_EQ, hash_bl);
     }
   }
 
   //---------------------------------------------------------------------------
-  int Background::dedup_object(const disk_record_t *p_src_rec,
-                               const disk_record_t *p_tgt_rec,
-                               md5_stats_t         *p_stats,
-                               bool                 has_shared_manifest_src)
+  int Background::dedup_object(disk_record_t *p_src_rec,
+                               disk_record_t *p_tgt_rec,
+                               md5_stats_t   *p_stats,
+                               bool           has_shared_manifest_src)
   {
     RGWObjManifest src_manifest;
     try {
@@ -746,6 +769,15 @@ namespace rgw::dedup {
       ldpp_dout(dpp, 1) << __func__ << "::ERROR: bad tgt manifest" << dendl;
       return -EINVAL;
     }
+    const uint64_t src_head_size = src_manifest.get_head_size();
+    const uint64_t tgt_head_size = tgt_manifest.get_head_size();
+    if (should_split_head(src_head_size, p_src_rec->s.obj_bytes_size)) {
+      p_src_rec->s.flags.set_split_head();
+    }
+    if (should_split_head(tgt_head_size, p_tgt_rec->s.obj_bytes_size)) {
+      p_tgt_rec->s.flags.set_split_head();
+    }
+
     ldpp_dout(dpp, 20) << __func__ << "::DEDUP From: "
                        << p_src_rec->bucket_name << "/" << p_src_rec->obj_name << " -> "
                        << p_tgt_rec->bucket_name << "/" << p_tgt_rec->obj_name << dendl;
@@ -760,12 +792,25 @@ namespace rgw::dedup {
     // Use a shorter hash (64bit instead of 160bit)
     hash_bl.splice(0, 8, &manifest_hash_bl);
     librados::ObjectWriteOperation tgt_op;
-    init_cmp_pairs(p_tgt_rec, etag_bl, tgt_hash_bl, &tgt_op);
+    init_cmp_pairs(dpp, p_tgt_rec, etag_bl, tgt_hash_bl, &tgt_op);
     tgt_op.setxattr(RGW_ATTR_SHARE_MANIFEST, manifest_hash_bl);
     tgt_op.setxattr(RGW_ATTR_MANIFEST, p_src_rec->manifest_bl);
     if (p_tgt_rec->s.flags.hash_calculated()) {
       tgt_op.setxattr(RGW_ATTR_BLAKE3, tgt_hash_bl);
       p_stats->set_hash_attrs++;
+    }
+
+    if (p_tgt_rec->s.flags.is_split_head()) {
+      if (src_head_size == 0 && tgt_head_size > 0) {
+        ldpp_dout(dpp, 20) << __func__ <<"::TGT-Split OP (truncate): "
+                           << p_tgt_rec->obj_name << dendl;
+        tgt_op.truncate(0);
+      }
+      else {
+        ldpp_dout(dpp, 5) << __func__ << "::SRC head_size=" << src_head_size
+                          << "::TGT head_size=" << tgt_head_size << dendl;
+        return -EINVAL;
+      }
     }
 
     std::string src_oid, tgt_oid;
@@ -777,11 +822,43 @@ namespace rgw::dedup {
       return (ret1 ? ret1 : ret2);
     }
 
-    // TBD: Do we need to remove target RGW_ATTR_TAIL_TAG??
     string ref_tag = p_tgt_rec->ref_tag;
     ldpp_dout(dpp, 20) << __func__ << "::ref_tag=" << ref_tag << dendl;
     int ret = inc_ref_count_by_manifest(ref_tag, src_oid, src_manifest);
     if (ret == 0) {
+      if (!has_shared_manifest_src) {
+        // When SRC OBJ A has two or more dups (B, C) we set SHARED_MANIFEST
+        // after deduping B and update it in dedup_table, but don't update the
+        // disk-record (as require an expensive random-disk-write).
+        // When deduping C we can trust the shared_manifest state in the table and
+        // skip a redundant update to SRC object attribute
+        bufferlist src_hash_bl;
+        librados::ObjectWriteOperation src_op;
+        init_cmp_pairs(dpp, p_src_rec, etag_bl, src_hash_bl, &src_op);
+        src_op.setxattr(RGW_ATTR_SHARE_MANIFEST, manifest_hash_bl);
+        if (p_src_rec->s.flags.hash_calculated()) {
+          src_op.setxattr(RGW_ATTR_BLAKE3, src_hash_bl);
+          p_stats->set_hash_attrs++;
+        }
+
+        if (p_src_rec->s.flags.is_split_head()) {
+          ldpp_dout(dpp, 20) << __func__ <<"::SRC-Split OP(Manifest, truncate): "
+                             << p_src_rec->obj_name << dendl;
+          src_op.setxattr(RGW_ATTR_MANIFEST, p_src_rec->manifest_bl);
+          src_op.truncate(0);
+        }
+
+        ldpp_dout(dpp, 20) << __func__ <<"::send SRC CLS (Shared_Manifest)"<< dendl;
+        ret = src_ioctx.operate(src_oid, &src_op);
+        if (unlikely(ret != 0)) {
+          ldpp_dout(dpp, 1) << __func__ << "::ERR: failed src_ioctx.operate("
+                            << src_oid << "), err is " << cpp_strerror(-ret)<<dendl;
+          rollback_ref_by_manifest(ref_tag, src_oid, src_manifest);
+          return ret;
+        }
+        p_stats->split_head_src++;
+      }
+
       ldpp_dout(dpp, 20) << __func__ << "::send TGT CLS (Shared_Manifest)" << dendl;
       ret = tgt_ioctx.operate(tgt_oid, &tgt_op);
       if (unlikely(ret != 0)) {
@@ -793,30 +870,6 @@ namespace rgw::dedup {
 
       // free tail objects based on TGT manifest
       free_tail_objs_by_manifest(ref_tag, tgt_oid, tgt_manifest);
-
-      if (!has_shared_manifest_src) {
-        // When SRC OBJ A has two or more dups (B, C) we set SHARED_MANIFEST
-        // after deduping B and update it in dedup_table, but don't update the
-        // disk-record (as require an expensive random-disk-write).
-        // When deduping C we can trust the shared_manifest state in the table and
-        // skip a redundant update to SRC object attribute
-        bufferlist src_hash_bl;
-        librados::ObjectWriteOperation src_op;
-        init_cmp_pairs(p_src_rec, etag_bl, src_hash_bl, &src_op);
-        src_op.setxattr(RGW_ATTR_SHARE_MANIFEST, manifest_hash_bl);
-        if (p_src_rec->s.flags.hash_calculated()) {
-          src_op.setxattr(RGW_ATTR_BLAKE3, src_hash_bl);
-          p_stats->set_hash_attrs++;
-        }
-
-        ldpp_dout(dpp, 20) << __func__ <<"::send SRC CLS (Shared_Manifest)"<< dendl;
-        ret = src_ioctx.operate(src_oid, &src_op);
-        if (unlikely(ret != 0)) {
-          ldpp_dout(dpp, 1) << __func__ << "::ERR: failed src_ioctx.operate("
-                            << src_oid << "), err is " << cpp_strerror(-ret)<<dendl;
-          return ret;
-        }
-      }
     }
 
     // do we need to set compression on the head object or is it set on tail?
@@ -825,48 +878,60 @@ namespace rgw::dedup {
   }
 
   //---------------------------------------------------------------------------
-  int Background::calc_object_blake3(const disk_record_t *p_rec, uint8_t *p_hash)
+  int Background::calc_object_blake3(const RGWObjManifest &manifest,
+                                     disk_record_t *p_rec,
+                                     uint8_t *p_hash,
+                                     blake3_hasher *p_pre_calc_hmac)
   {
-    ldpp_dout(dpp, 20) << __func__ << "::obj_name=" << p_rec->obj_name << dendl;
-    RGWObjManifest manifest;
-    try {
-      auto bl_iter = p_rec->manifest_bl.cbegin();
-      decode(manifest, bl_iter);
-    } catch (buffer::error& err) {
-      ldpp_dout(dpp, 1)  << __func__ << "::ERROR: bad src manifest for: "
-                         << p_rec->obj_name << dendl;
-      return -EINVAL;
+    ldpp_dout(dpp, 20) << __func__ << "::p_rec->obj_name=" << p_rec->obj_name << dendl;
+
+    blake3_hasher _hmac, *p_hmac = nullptr;
+    if (!p_pre_calc_hmac) {
+      blake3_hasher_init(&_hmac);
+      p_hmac = &_hmac;
+    }
+    else {
+      p_hmac = p_pre_calc_hmac;
     }
 
-    blake3_hasher hmac;
-    blake3_hasher_init(&hmac);
     for (auto p = manifest.obj_begin(dpp); p != manifest.obj_end(dpp); ++p) {
-      rgw_raw_obj raw_obj = p.get_location().get_raw_obj(rados);
-      rgw_rados_ref obj;
-      int ret = rgw_get_rados_ref(dpp, rados_handle, raw_obj, &obj);
-      if (ret < 0) {
-        ldpp_dout(dpp, 1) << __func__ << "::failed rgw_get_rados_ref() for oid: "
-                          << raw_obj.oid << ", err is " << cpp_strerror(-ret) << dendl;
-        return ret;
-      }
+      uint64_t offset = p.get_stripe_ofs();
+      const rgw_obj_select& os = p.get_location();
+      if (offset > 0 || !p_pre_calc_hmac) {
+        rgw_raw_obj raw_obj = os.get_raw_obj(rados);
+        rgw_rados_ref obj;
+        int ret = rgw_get_rados_ref(dpp, rados_handle, raw_obj, &obj);
+        if (ret < 0) {
+          ldpp_dout(dpp, 1) << __func__ << "::failed rgw_get_rados_ref() for oid="
+                            << raw_obj.oid << ", err is " << cpp_strerror(-ret) << dendl;
+          return ret;
+        }
 
-      bufferlist bl;
-      librados::IoCtx ioctx = obj.ioctx;
-      // read full object
-      ret = ioctx.read(raw_obj.oid, bl, 0, 0);
-      if (ret > 0) {
+        ldpp_dout(dpp, 20) << __func__ << "::Calc HMAC for "
+                           << (offset ? "TAIL OBJ:" : "HEAD_OBJ:")
+                           << raw_obj.oid << dendl;
+        librados::IoCtx ioctx = obj.ioctx;
+        bufferlist bl;
+        // read full object
+        ret = ioctx.read(raw_obj.oid, bl, 0, 0);
+        if (unlikely(ret <= 0)) {
+          ldpp_dout(dpp, 1) << __func__ << "::ERR: failed to read oid "
+                            << raw_obj.oid  << ", err is " << cpp_strerror(-ret) << dendl;
+          return ret;
+        }
         for (const auto& bptr : bl.buffers()) {
-          blake3_hasher_update(&hmac, (const unsigned char *)bptr.c_str(), bptr.length());
+          blake3_hasher_update(p_hmac, (const unsigned char *)bptr.c_str(), bptr.length());
         }
       }
       else {
-        ldpp_dout(dpp, 1) << __func__ << "::ERR: failed to read " << raw_obj.oid
-                          << ", error is " << cpp_strerror(-ret) << dendl;
-        return ret;
+        ldpp_dout(dpp, 20) << __func__ << "::Use precalculated HMAC for HEAD-OBJ: "
+                           << os.get_raw_obj(rados).oid << dendl;
       }
     }
-
-    blake3_hasher_finalize(&hmac, p_hash, BLAKE3_OUT_LEN);
+    blake3_hasher_finalize(p_hmac, p_hash, BLAKE3_OUT_LEN);
+    ldpp_dout(dpp, 20) << __func__ << "::hmac.Final()" << dendl;
+    p_rec->s.flags.set_hash_calculated();
+    p_rec->s.flags.set_has_valid_hash();
     return 0;
   }
 
@@ -896,12 +961,12 @@ namespace rgw::dedup {
   int Background::add_obj_attrs_to_record(rgw_bucket            *p_rb,
                                           disk_record_t         *p_rec,
                                           const rgw::sal::Attrs &attrs,
-                                          dedup_table_t         *p_table,
                                           md5_stats_t           *p_stats) /*IN-OUT*/
   {
     // if TAIL_TAG exists -> use it as ref-tag, eitherwise take ID_TAG
     auto itr = attrs.find(RGW_ATTR_TAIL_TAG);
     if (itr != attrs.end()) {
+      p_rec->s.flags.set_ref_tag_from_tail();
       p_rec->ref_tag = itr->second.to_str();
     }
     else {
@@ -919,10 +984,11 @@ namespace rgw::dedup {
     // clear bufferlist first
     p_rec->manifest_bl.clear();
 
+    bool need_to_split_head = false;
+    RGWObjManifest manifest;
     itr = attrs.find(RGW_ATTR_MANIFEST);
     if (itr != attrs.end()) {
       const bufferlist &bl = itr->second;
-      RGWObjManifest manifest;
       try {
         auto bl_iter = bl.cbegin();
         decode(manifest, bl_iter);
@@ -931,6 +997,8 @@ namespace rgw::dedup {
                            << "::ERROR: unable to decode manifest" << dendl;
         return -EINVAL;
       }
+      need_to_split_head = should_split_head(manifest.get_head_size(),
+                                             p_rec->s.obj_bytes_size);
 
       // force explicit tail_placement as the dedup could be on another bucket
       const rgw_bucket_placement& tail_placement = manifest.get_tail_placement();
@@ -973,14 +1041,13 @@ namespace rgw::dedup {
     if (itr != attrs.end()) {
       try {
         auto bl_iter = itr->second.cbegin();
-        // BLAKE3 hash 256 bit splitted into multiple 64bit units
-        const unsigned units = (256 / (sizeof(uint64_t)*8));
-        static_assert(units == 4);
-        for (unsigned i = 0; i < units; i++) {
+        // BLAKE3 hash has 256 bit splitted into multiple 64bit units
+        for (unsigned i = 0; i < HASH_UNITS; i++) {
           uint64_t val;
           ceph::decode(val, bl_iter);
           p_rec->s.hash[i] = val;
         }
+        p_rec->s.flags.set_has_valid_hash();
         p_stats->valid_hash_attrs++;
         return 0;
       } catch (buffer::error& err) {
@@ -989,16 +1056,18 @@ namespace rgw::dedup {
       }
     }
 
+    // if arrived here we need to calculate string hash
     p_stats->invalid_hash_attrs++;
     // TBD: redundant memset...
     memset(p_rec->s.hash, 0, sizeof(p_rec->s.hash));
-    // BLAKE3_OUT_LEN is 32 Bytes
-    int ret = calc_object_blake3(p_rec, (uint8_t*)p_rec->s.hash);
-    if (ret == 0) {
-      p_rec->s.flags.set_hash_calculated();
-    }
 
-    return ret;
+    if (!need_to_split_head) {
+      ldpp_dout(dpp, 20) << __func__ << "::CALC Object Strong Hash::"
+                         << p_rec->obj_name << dendl;
+      return calc_object_blake3(manifest, p_rec, (uint8_t*)p_rec->s.hash);
+    }
+    // else, differ strong-hash calculation for next step and piggy back split-head
+    return 0;
   }
 
   //---------------------------------------------------------------------------
@@ -1025,7 +1094,6 @@ namespace rgw::dedup {
     storage_class_idx_t sc_idx = remapper->remap(p_rec->stor_class, dpp,
                                                  &p_stats->failed_map_overflow);
     if (unlikely(sc_idx == remapper_t::NULL_IDX)) {
-      // TBD: need stat counters
       return -EOVERFLOW;
     }
     key_t key_from_bucket_index(p_rec->s.md5_high, p_rec->s.md5_low, size_4k_units,
@@ -1084,6 +1152,21 @@ namespace rgw::dedup {
     }
 
     const rgw::sal::Attrs& attrs = p_obj->get_attrs();
+    if (src_val.has_shared_manifest() && (attrs.find(RGW_ATTR_SHARE_MANIFEST) != attrs.end())) {
+      // A shared_manifest object can't be a dedup target
+      // We only need to keep a single shared_manifest object
+      // to be used as a dedup-source (which we already got)
+      p_stats->skipped_shared_manifest++;
+      uint64_t dedupable_objects_bytes = calc_deduped_bytes(d_head_object_size,
+                                                            d_min_obj_size_for_dedup,
+                                                            p_rec->s.num_parts,
+                                                            ondisk_byte_size);
+      p_stats->shared_manifest_dedup_bytes += dedupable_objects_bytes;
+      ldpp_dout(dpp, 20) << __func__ << "::(1)skipped shared_manifest, SRC::block_id="
+                         << src_val.block_idx << "::rec_id=" << (int)src_val.rec_id << dendl;
+      return 0;
+    }
+
     if (attrs.find(RGW_ATTR_CRYPT_MODE) != attrs.end()) {
       p_stats->ingress_skip_encrypted++;
       p_stats->ingress_skip_encrypted_bytes += ondisk_byte_size;
@@ -1140,7 +1223,7 @@ namespace rgw::dedup {
 
     // reset flags
     p_rec->s.flags.clear();
-    ret = add_obj_attrs_to_record(&b, p_rec, attrs, p_table, p_stats);
+    ret = add_obj_attrs_to_record(&b, p_rec, attrs, p_stats);
     if (unlikely(ret != 0)) {
       ldpp_dout(dpp, 5) << __func__ << "::ERR: failed add_obj_attrs_to_record() ret="
                         << ret << "::" << cpp_strerror(-ret) << dendl;
@@ -1155,9 +1238,10 @@ namespace rgw::dedup {
       ldpp_dout(dpp, 20)  << __func__ << "::" << p_rec->bucket_name << "/"
                           << p_rec->obj_name << " was written to block_idx="
                           << rec_info.block_id << "::rec_id=" << (int)rec_info.rec_id
-                          << "::shared_manifest=" << p_rec->has_shared_manifest() << dendl;
+                          << "::shared_manifest="
+                          << p_rec->s.flags.has_shared_manifest() << dendl;
       p_table->update_entry(&key_from_bucket_index, rec_info.block_id,
-                            rec_info.rec_id, p_rec->has_shared_manifest());
+                            rec_info.rec_id, p_rec->s.flags.has_shared_manifest());
     }
     else {
       ldpp_dout(dpp, 5) << __func__ << "::ERR: Failed p_disk->add_record()"<< dendl;
@@ -1169,17 +1253,18 @@ namespace rgw::dedup {
   }
 
   //---------------------------------------------------------------------------
-  static int write_blake3_object_attribute(const DoutPrefixProvider* const dpp,
-                                           rgw::sal::Driver* driver,
-                                           RGWRados* rados,
-                                           const disk_record_t *p_rec)
+  static int write_hash_object_attribute(const DoutPrefixProvider* const dpp,
+                                         rgw::sal::Driver* driver,
+                                         RGWRados* rados,
+                                         const disk_record_t *p_rec,
+                                         md5_stats_t *p_stats)
   {
     bufferlist etag_bl;
     bufferlist hash_bl;
     librados::ObjectWriteOperation op;
     etag_to_bufferlist(p_rec->s.md5_high, p_rec->s.md5_low, p_rec->s.num_parts,
                        &etag_bl);
-    init_cmp_pairs(p_rec, etag_bl, hash_bl /*OUT PARAM*/, &op);
+    init_cmp_pairs(dpp, p_rec, etag_bl, hash_bl /*OUT PARAM*/, &op);
     op.setxattr(RGW_ATTR_BLAKE3, hash_bl);
 
     std::string oid;
@@ -1195,7 +1280,306 @@ namespace rgw::dedup {
       ldpp_dout(dpp, 5) << __func__ << "::ERR: failed ioctx.operate("
                         << oid << "), err is " << cpp_strerror(-ret) << dendl;
     }
+    p_stats->set_hash_attrs++;
     return ret;
+  }
+
+  //---------------------------------------------------------------------------
+  static int read_hash_and_manifest(const DoutPrefixProvider *const dpp,
+                                    rgw::sal::Driver *driver,
+                                    RGWRados *rados,
+                                    disk_record_t *p_rec)
+  {
+    librados::IoCtx ioctx;
+    std::string oid;
+    int ret = get_ioctx(dpp, driver, rados, p_rec, &ioctx, &oid);
+    if (unlikely(ret != 0)) {
+      ldpp_dout(dpp, 5) << __func__ << "::ERR: failed get_ioctx()" << dendl;
+      return false;
+    }
+
+    std::map<std::string, bufferlist> attrset;
+    ret = ioctx.getxattrs(oid, attrset);
+    if (unlikely(ret < 0)) {
+      ldpp_dout(dpp, 5) << __func__ << "::ERR: failed ioctx.getxattrs("
+                        << oid << "), err is " << cpp_strerror(-ret) << dendl;
+      return ret;
+    }
+
+    auto itr = attrset.find(RGW_ATTR_BLAKE3);
+    if (itr != attrset.end()) {
+      try {
+        auto bl_iter = itr->second.cbegin();
+        // BLAKE3 hash has 256 bit splitted into multiple 64bit units
+        for (unsigned i = 0; i < HASH_UNITS; i++) {
+          uint64_t val;
+          ceph::decode(val, bl_iter);
+          p_rec->s.hash[i] = val;
+        }
+        p_rec->s.flags.set_has_valid_hash();
+      } catch (buffer::error& err) {
+        ldpp_dout(dpp, 1) << __func__ << "::ERR: failed HASH decode" << dendl;
+        return -EINVAL;
+      }
+    }
+    else {
+      ldpp_dout(dpp, 1) << __func__ << "::ERR: No HASH attribute" << dendl;
+      return -ENOENT;
+    }
+
+    itr = attrset.find(RGW_ATTR_MANIFEST);
+    if (itr != attrset.end()) {
+      p_rec->manifest_bl = itr->second;
+      p_rec->s.manifest_len = p_rec->manifest_bl.length();
+    }
+    else {
+      ldpp_dout(dpp, 1) << __func__ << "::ERR: No Manifest attribute" << dendl;
+      return -ENOENT;
+    }
+
+    return 0;
+  }
+
+  //---------------------------------------------------------------------------
+  static void set_explicit_manifest(RGWObjManifest *p_manifest,
+                                    std::map<uint64_t, RGWObjManifestPart> &objs_map)
+  {
+    uint64_t obj_size = p_manifest->get_obj_size();
+    p_manifest->set_head_size(0);
+    p_manifest->set_max_head_size(0);
+    p_manifest->set_prefix("");
+    p_manifest->clear_rules();
+    p_manifest->set_explicit(obj_size, objs_map);
+  }
+
+  //---------------------------------------------------------------------------
+  // This code is based on RGWObjManifest::convert_to_explicit()
+  static void build_explicit_objs_map(const DoutPrefixProvider *dpp,
+                                      RGWRados* rados,
+                                      const RGWObjManifest &manifest,
+                                      std::map<uint64_t, RGWObjManifestPart> *p_objs_map,
+                                      const std::string &tail_name,
+                                      md5_stats_t *p_stats)
+  {
+    bool manifest_raw_obj = false;
+    unsigned idx = 0;
+    auto p = manifest.obj_begin(dpp);
+    while (p != manifest.obj_end(dpp)) {
+      const uint64_t offset = p.get_stripe_ofs();
+      const rgw_obj_select& os = p.get_location();
+      ldpp_dout(dpp, 20) << __func__ << "::[" << idx <<"]OBJ: "
+                         << os.get_raw_obj(rados).oid << "::ofs=" << p.get_ofs()
+                         << "::strp_offset=" << offset << dendl;
+
+      RGWObjManifestPart& part = (*p_objs_map)[offset];
+      part.loc_ofs = 0;
+
+      if (offset == 0) {
+        ldpp_dout(dpp, 20) << __func__ << "::[" << idx <<"] HEAD OBJ: "
+                           << os.get_raw_obj(rados).oid << dendl;
+        const rgw_obj &head_obj = manifest.get_obj();
+        const rgw_obj_key &head_key = head_obj.key;
+        rgw_obj_key tail_key(tail_name, head_key.instance, head_key.ns);
+        rgw_obj tail_obj(head_obj.bucket, tail_key);
+        part.loc = tail_obj;
+      }
+      else {
+        // RGWObjManifest::convert_to_explicit() is assuming raw_obj, but looking
+        // at the RGWObjManifest::obj_iterator code it is clear obj is not raw.
+        // If it happens to be raw we still handle it correctly (and inc stat-count)
+        std::optional<rgw_obj> obj_opt = os.get_head_obj();
+        if (obj_opt.has_value()) {
+          part.loc = obj_opt.value();
+        }
+        else {
+          // report raw object in manifest only once
+          if (!manifest_raw_obj) {
+            manifest_raw_obj = true;
+            ldpp_dout(dpp, 10) << __func__ << "::WARN: obj is_raw" << dendl;
+            p_stats->manifest_raw_obj++;
+          }
+          const rgw_raw_obj& raw = os.get_raw_obj(rados);
+          const rgw_bucket_placement &tail_placement = manifest.get_tail_placement();
+          RGWSI_Tier_RADOS::raw_obj_to_obj(tail_placement.bucket, raw, &part.loc);
+        }
+      }
+
+      ++p;
+      uint64_t next_offset = p.get_stripe_ofs();
+      part.size = next_offset - offset;
+      idx++;
+    } // while (p != manifest.obj_end())
+  }
+
+  //---------------------------------------------------------------------------
+  int Background::split_head_object(disk_record_t *p_rec,
+                                    md5_stats_t *p_stats,
+                                    uint8_t *p_hash)
+  {
+    ldpp_dout(dpp, 10) << __func__ << "::" << p_rec->obj_name << "::"
+                       << p_rec->s.obj_bytes_size << dendl;
+
+    RGWObjManifest manifest;
+    try {
+      auto bl_iter = p_rec->manifest_bl.cbegin();
+      decode(manifest, bl_iter);
+    } catch (buffer::error& err) {
+      ldpp_dout(dpp, 1) << __func__ << "::ERROR: bad src manifest" << dendl;
+      return -EINVAL;
+    }
+
+    uint64_t head_size = manifest.get_head_size();
+    ceph_assert(should_split_head(head_size, manifest.get_obj_size()));
+
+    bufferlist bl;
+    std::string head_oid;
+    librados::IoCtx ioctx;
+    int ret = get_ioctx(dpp, driver, rados, p_rec, &ioctx, &head_oid);
+    if (unlikely(ret != 0)) {
+      ldpp_dout(dpp, 1) << __func__ << "::ERR: failed get_ioctx()" << dendl;
+      return ret;
+    }
+
+    // read the full rados head-object
+    ldpp_dout(dpp, 20) << __func__ << "::ioctx.read(" << head_oid << ")" << dendl;
+    ret = ioctx.read(head_oid, bl, 0, 0);
+    if (unlikely(ret != (int)head_size)) {
+      ldpp_dout(dpp, 1) << __func__ << "::ERR: failed to read " << head_oid
+                        << ", ret=" << ret << ", error is " << cpp_strerror(-ret) << dendl;
+      return ret;
+    }
+
+    if (p_hash) {
+      blake3_hasher hmac;
+      blake3_hasher_init(&hmac);
+      for (const auto& bptr : bl.buffers()) {
+        blake3_hasher_update(&hmac, (const unsigned char *)bptr.c_str(), bptr.length());
+      }
+      ret = calc_object_blake3(manifest, p_rec, p_hash, &hmac);
+      if (ret != 0) {
+        return ret;
+      }
+    }
+    ldpp_dout(dpp, 20) << __func__ << "::build tail_oid" << dendl;
+    bool exclusive = true; // block overwrite
+    std::string tail_name = manifest.get_obj().key.name + "_tail";
+    std::string tail_oid;
+    build_oid(p_rec->bucket_id, tail_name, &tail_oid);
+    ldpp_dout(dpp, 20) << __func__ << "::ioctx.create(" << tail_oid << ")" << dendl;
+    ret = ioctx.create(tail_oid, exclusive);
+    if (ret >= 0) {
+      ldpp_dout(dpp, 20) << __func__ << "::successfully created: " << tail_oid << dendl;
+    }
+    else if (ret == -EEXIST) {
+      ldpp_dout(dpp, 1) << __func__ << "::object " << tail_oid << " exists!" << dendl;
+      return ret;
+    }
+    else{
+      ldpp_dout(dpp, 1) << __func__ << "::ERROR: failed to create " << tail_oid
+                        <<" with: "<< cpp_strerror(-ret) << ", ret=" << ret <<dendl;
+      return ret;
+    }
+    ldpp_dout(dpp, 10) << __func__ << "::ioctx.write_full(" << tail_oid << ")" << dendl;
+    ret = ioctx.write_full(tail_oid, bl);
+    if (unlikely(ret < 0)) {
+      ldpp_dout(dpp, 1) << __func__ << "::ERROR: failed to write " << tail_oid
+                        << " with: " << cpp_strerror(-ret) << dendl;
+      return ret;
+    }
+    else {
+      ldpp_dout(dpp, 10) << __func__ << "::wrote tail obj:" << tail_oid << "::ret="
+                         << ret << dendl;
+    }
+
+    std::map<uint64_t, RGWObjManifestPart> objs_map;
+    build_explicit_objs_map(dpp, rados, manifest, &objs_map, tail_name, p_stats);
+    set_explicit_manifest(&manifest, objs_map);
+
+    const std::string& tail_instance = manifest.get_tail_instance();
+    if (unlikely(!tail_instance.empty())) {
+      ldpp_dout(dpp, 10) << __func__ << "::tail_instance=" << tail_instance << dendl;
+      manifest.set_tail_instance("");
+    }
+    rgw_bucket b{p_rec->tenant_name, p_rec->bucket_name, p_rec->bucket_id};
+    const rgw_bucket_placement& tail_placement = manifest.get_tail_placement();
+    manifest.set_tail_placement(tail_placement.placement_rule, b);
+
+    bufferlist manifest_bl;
+    encode(manifest, manifest_bl);
+    p_rec->manifest_bl = manifest_bl;
+    p_rec->s.manifest_len = p_rec->manifest_bl.length();
+    p_rec->s.flags.set_split_head();
+    return ret;
+  }
+
+  //---------------------------------------------------------------------------
+  bool Background::check_and_set_strong_hash(disk_record_t *p_src_rec,
+                                             disk_record_t *p_tgt_rec,
+                                             const dedup_table_t::value_t *p_src_val,
+                                             md5_stats_t *p_stats)
+  {
+    int ret = 0;
+    // if we don't have a valid strong hash already -> read data and calculate it!
+    if (!p_tgt_rec->s.flags.has_valid_hash()) {
+      ldpp_dout(dpp, 20) << __func__ << "::CALC TGT Strong Hash::"
+                         << p_tgt_rec->obj_name << dendl;
+      RGWObjManifest manifest;
+      try {
+        auto bl_iter = p_tgt_rec->manifest_bl.cbegin();
+        decode(manifest, bl_iter);
+      } catch (buffer::error& err) {
+        ldpp_dout(dpp, 1) << __func__ << "::ERROR: bad src manifest" << dendl;
+        return false;
+      }
+      ret = calc_object_blake3(manifest, p_tgt_rec, (uint8_t*)p_tgt_rec->s.hash);
+      if (unlikely(ret != 0)) {
+        // Don't run dedup without a valid strong hash
+        return false;
+      }
+    }
+
+    // check if SRC-Object has a valid strong-hash (record or table)
+    // and if not need to calculate it
+    if (!p_src_rec->s.flags.has_valid_hash() && !p_src_val->has_valid_hash()) {
+      ldpp_dout(dpp, 20) << __func__ << "::CALC SRC Strong Hash/Split-Head::"
+                         << p_src_rec->obj_name << dendl;
+      // TBD: there is an assumption here that we always split-head when setting
+      //      strong-hash. Maybe we need another check ???
+      ret = split_head_object(p_src_rec, p_stats, (uint8_t*)p_src_rec->s.hash);
+      if (unlikely(ret != 0)) {
+        // still need to set the calculated strong hash in the TGT object
+        write_hash_object_attribute(dpp, driver, rados, p_tgt_rec, p_stats);
+        // Don't run dedup without a valid strong hash
+        return false;
+      }
+    }
+
+    if (!p_src_rec->s.flags.has_valid_hash()) {
+      ceph_assert(p_src_val->has_valid_hash());
+      //ceph_assert(p_src_val->is_split_head_src());
+      ldpp_dout(dpp, 20) << __func__ << "::Fetch SRC strong hash from head-object::"
+                         << p_src_rec->obj_name << dendl;
+      if (unlikely(read_hash_and_manifest(dpp, driver, rados, p_src_rec) != 0)) {
+        return false;
+      }
+    }
+
+    if (unlikely(0 != memcmp(p_src_rec->s.hash, p_tgt_rec->s.hash, sizeof(p_src_rec->s.hash)))) {
+      p_stats->hash_mismatch++;
+      ldpp_dout(dpp, 10) << __func__ << "::HASH mismatch" << dendl;
+      // set hash attributes on head objects to save calc next time
+      if (p_src_rec->s.flags.hash_calculated()) {
+        write_hash_object_attribute(dpp, driver, rados, p_src_rec, p_stats);
+      }
+      if (p_tgt_rec->s.flags.hash_calculated()) {
+        write_hash_object_attribute(dpp, driver, rados, p_tgt_rec, p_stats);
+      }
+      // Don't run dedup - strong hash shows the SRC/TGT differ
+      return false;
+    }
+    ldpp_dout(dpp, 20) << __func__ << "::SRC-TGT Strong-Hash match" << dendl;
+    // all is good
+    return true;
   }
 
   //---------------------------------------------------------------------------
@@ -1209,18 +1593,21 @@ namespace rgw::dedup {
   // we can withstand most errors moving to the next object
   // only report an error if we recived a stop scan request!
   //
-  int Background::try_deduping_record(dedup_table_t       *p_table,
-                                      const disk_record_t *p_tgt_rec,
-                                      disk_block_id_t      block_id,
-                                      record_id_t          rec_id,
-                                      md5_shard_t          md5_shard,
-                                      md5_stats_t         *p_stats, /* IN-OUT */
-                                      remapper_t          *remapper)
+  int Background::try_deduping_record(dedup_table_t   *p_table,
+                                      disk_record_t   *p_tgt_rec,
+                                      disk_block_id_t  block_id,
+                                      record_id_t      rec_id,
+                                      md5_shard_t      md5_shard,
+                                      md5_stats_t     *p_stats, /* IN-OUT */
+                                      remapper_t      *remapper)
   {
     bool should_print_debug = cct->_conf->subsys.should_gather<ceph_subsys_rgw, 20>();
     if (unlikely(should_print_debug)) {
       print_record(dpp, p_tgt_rec, block_id, rec_id, md5_shard);
     }
+    ldpp_dout(dpp, 20) << __func__ << "::bucket=" << p_tgt_rec->bucket_name
+                       << ", obj=" << p_tgt_rec->obj_name
+                       << ", block_id=" << block_id << ", rec_id=" << (int)rec_id << dendl;
 
     uint32_t size_4k_units = byte_size_to_disk_blocks(p_tgt_rec->s.obj_bytes_size);
     storage_class_idx_t sc_idx = remapper->remap(p_tgt_rec->stor_class, dpp,
@@ -1246,76 +1633,76 @@ namespace rgw::dedup {
     if (block_id == src_block_id && rec_id == src_rec_id) {
       // the table entry point to this record which means it is a dedup source so nothing to do
       p_stats->skipped_source_record++;
-      ldpp_dout(dpp, 20) << __func__ << "::skipped source-record" << dendl;
+      ldpp_dout(dpp, 20) << __func__ << "::(2)skipped source-record, block_id="
+                         << block_id << "::rec_id=" << (int)rec_id << dendl;
       return 0;
     }
-
+#if 1
+    // should never happen
+    if (p_tgt_rec->s.flags.has_shared_manifest()) {
+      // record holds a shared_manifest object so can't be a dedup target
+      ldpp_dout(dpp, 1) << __func__ << "::(3)skipped shared_manifest, block_id="
+                        << block_id << "::rec_id=" << (int)rec_id << dendl;
+      ceph_abort("unexpcted shared_manifest");
+      return 0;
+    }
+#endif
     // ceph store full blocks so need to round up and multiply by block_size
     uint64_t ondisk_byte_size = disk_blocks_to_byte_size(size_4k_units);
     uint64_t dedupable_objects_bytes = calc_deduped_bytes(d_head_object_size,
+                                                          d_min_obj_size_for_dedup,
                                                           p_tgt_rec->s.num_parts,
                                                           ondisk_byte_size);
-    if (p_tgt_rec->s.flags.has_shared_manifest()) {
-      // record holds a shared_manifest object so can't be a dedup target
-      p_stats->skipped_shared_manifest++;
-      p_stats->shared_manifest_dedup_bytes += dedupable_objects_bytes;
-      ldpp_dout(dpp, 20) << __func__ << "::skipped shared_manifest" << dendl;
-      return 0;
-    }
 
     // This records is a dedup target with source record on source_block_id
-    disk_record_t src_rec;
-    ret = load_record(d_dedup_cluster_ioctx, p_tgt_rec, &src_rec, src_block_id,
+    disk_record_t src_rec, *p_src_rec = &src_rec;
+    ret = load_record(d_dedup_cluster_ioctx, p_tgt_rec, p_src_rec, src_block_id,
                       src_rec_id, md5_shard, dpp);
     if (unlikely(ret != 0)) {
       p_stats->failed_src_load++;
       // we can withstand most errors moving to the next object
       ldpp_dout(dpp, 5) << __func__ << "::ERR: Failed load_record("
-                        << src_block_id << ", " << src_rec_id << ")" << dendl;
+                        << src_block_id << ", " << (int)src_rec_id << ")" << dendl;
       return 0;
     }
 
-    ldpp_dout(dpp, 20) << __func__ << "::SRC=" << src_rec.bucket_name
-                       << "/" << src_rec.obj_name << dendl;
+    ldpp_dout(dpp, 20) << __func__ << "::SRC-OBJ=" << p_src_rec->bucket_name
+                       << "/" << p_src_rec->obj_name << dendl;
     // verify that SRC and TGT records don't refer to the same physical object
     // This could happen in theory if we read the same objects twice
-    if (src_rec.obj_name == p_tgt_rec->obj_name && src_rec.bucket_name == p_tgt_rec->bucket_name) {
+    if (p_src_rec->obj_name == p_tgt_rec->obj_name && p_src_rec->bucket_name == p_tgt_rec->bucket_name) {
       p_stats->duplicate_records++;
       ldpp_dout(dpp, 10) << __func__ << "::WARN: Duplicate records for object="
-                         << src_rec.obj_name << dendl;
+                         << p_src_rec->obj_name << dendl;
       return 0;
     }
 
     // the hash table size is rounded to the nearest 4KB and will wrap after 16G
-    if (unlikely(src_rec.s.obj_bytes_size != p_tgt_rec->s.obj_bytes_size)) {
+    if (unlikely(p_src_rec->s.obj_bytes_size != p_tgt_rec->s.obj_bytes_size)) {
       p_stats->size_mismatch++;
       ldpp_dout(dpp, 10) << __func__ << "::WARN: different byte size for objects::"
-                         << src_rec.obj_name << "::" << src_rec.s.obj_bytes_size
+                         << p_src_rec->obj_name << "::" << p_src_rec->s.obj_bytes_size
                          << "::" << p_tgt_rec->obj_name << "::"
                          << p_tgt_rec->s.obj_bytes_size << dendl;
       return 0;
     }
 
-    if (memcmp(src_rec.s.hash, p_tgt_rec->s.hash, sizeof(src_rec.s.hash)) != 0) {
-      p_stats->hash_mismatch++;
-      ldpp_dout(dpp, 10) << __func__ << "::HASH mismatch" << dendl;
-      // TBD: set hash attributes on head objects to save calc next time
-      if (src_rec.s.flags.hash_calculated()) {
-        write_blake3_object_attribute(dpp, driver, rados, &src_rec);
-        p_stats->set_hash_attrs++;
-      }
-      if (p_tgt_rec->s.flags.hash_calculated()) {
-        write_blake3_object_attribute(dpp, driver, rados, p_tgt_rec);
-        p_stats->set_hash_attrs++;
-      }
+    if (!check_and_set_strong_hash(p_src_rec, p_tgt_rec, &src_val, p_stats)) {
       return 0;
     }
 
-    ret = dedup_object(&src_rec, p_tgt_rec, p_stats, src_val.has_shared_manifest());
+    ret = dedup_object(p_src_rec, p_tgt_rec, p_stats, src_val.has_shared_manifest());
     if (ret == 0) {
       p_stats->deduped_objects++;
       p_stats->deduped_objects_bytes += dedupable_objects_bytes;
-      if (p_tgt_rec->s.num_parts == 0) {
+      if (p_tgt_rec->s.flags.is_split_head()) {
+        ldpp_dout(dpp, 20) << __func__ <<"::TGT-Split: dedup_bytes="
+                           << ondisk_byte_size << dendl;
+        p_stats->split_head_dedup_bytes += ondisk_byte_size;
+      }
+      else if (p_tgt_rec->s.num_parts == 0 &&
+               // if we don't split head it will be duplicated
+               p_tgt_rec->s.obj_bytes_size > d_head_object_size) {
         // single part objects duplicate the head object when dedup is used
         p_stats->dup_head_bytes += d_head_object_size;
       }
@@ -1323,8 +1710,8 @@ namespace rgw::dedup {
       // mark the SRC object as a providor of a shared manifest
       if (!src_val.has_shared_manifest()) {
         p_stats->set_shared_manifest_src++;
-        // set the shared manifest flag in the dedup table
-        p_table->set_shared_manifest_src_mode(&key, src_block_id, src_rec_id);
+        // We always set strong hash on SRC during dedup so mark in table!
+        p_table->set_src_mode(&key, src_block_id, src_rec_id, true, true);
       }
       else {
         ldpp_dout(dpp, 20) << __func__ << "::SRC object already marked as shared_manifest" << dendl;
@@ -1332,7 +1719,7 @@ namespace rgw::dedup {
     }
     else {
       ldpp_dout(dpp, 10) << __func__ << "::ERR: Failed dedup for "
-                         << src_rec.bucket_name << "/" << src_rec.obj_name << dendl;
+                         << p_src_rec->bucket_name << "/" << p_src_rec->obj_name << dendl;
       p_stats->failed_dedup++;
     }
 
@@ -2054,7 +2441,8 @@ namespace rgw::dedup {
     utime_t start_time = ceph_clock_now();
     md5_stats_t md5_stats;
     //DEDUP_DYN_ALLOC
-    dedup_table_t table(dpp, d_head_object_size, raw_mem, raw_mem_size);
+    dedup_table_t table(dpp, d_head_object_size, d_min_obj_size_for_dedup, raw_mem,
+                        raw_mem_size);
     int ret = objects_dedup_single_md5_shard(&table, md5_shard, &md5_stats, num_work_shards);
     if (ret == 0) {
       md5_stats.duration = ceph_clock_now() - start_time;
