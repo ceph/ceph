@@ -89,7 +89,6 @@ using ceph::crypto::MD5;
 #define RGW_ATTR_CORS		RGW_ATTR_PREFIX "cors"
 #define RGW_ATTR_ETAG RGW_ATTR_PREFIX "etag"
 #define RGW_ATTR_CKSUM          RGW_ATTR_PREFIX "cksum"
-#define RGW_ATTR_SHA256         RGW_ATTR_PREFIX "x-amz-content-sha256"
 #define RGW_ATTR_BLAKE3         RGW_ATTR_PREFIX "blake3"
 #define RGW_ATTR_BUCKETS	RGW_ATTR_PREFIX "buckets"
 #define RGW_ATTR_META_PREFIX	RGW_ATTR_PREFIX RGW_AMZ_META_PREFIX
