@@ -87,7 +87,7 @@ int LFUDAPolicy::init(CephContext* cct, const DoutPrefixProvider* dpp, asio::io_
     req.push("HSETNX", "lfuda", "age", age); /* Only set maximum age if it doesn't exist */
     req.push("EXEC");
   
-    redis_exec(conn, ec, req, resp, y);
+    redis_exec(connections[0], ec, req, resp, y);
 
     if (ec) {
       ldpp_dout(dpp, 0) << "LFUDAPolicy::" << __func__ << "() ERROR: " << ec.what() << dendl;
@@ -112,7 +112,7 @@ int LFUDAPolicy::age_sync(const DoutPrefixProvider* dpp, optional_yield y) {
     request req;
     req.push("HGET", "lfuda", "age");
       
-    redis_exec(conn, ec, req, resp, y);
+    redis_exec(connections[0], ec, req, resp, y);
 
     if (ec) {
       ldpp_dout(dpp, 0) << "LFUDAPolicy::" << __func__ << "() ERROR: " << ec.what() << dendl;
@@ -129,7 +129,7 @@ int LFUDAPolicy::age_sync(const DoutPrefixProvider* dpp, optional_yield y) {
       request req;
       req.push("HSET", "lfuda", "age", age);
 
-      redis_exec(conn, ec, req, ret, y);
+      redis_exec(connections[0], ec, req, ret, y);
 
       if (ec) {
 	ldpp_dout(dpp, 0) << "LFUDAPolicy::" << __func__ << "() ERROR: " << ec.what() << dendl;
@@ -154,7 +154,7 @@ int LFUDAPolicy::local_weight_sync(const DoutPrefixProvider* dpp, optional_yield
       request req;
       req.push("HMGET", "lfuda", "minLocalWeights_sum", "minLocalWeights_size");
 	
-      redis_exec(conn, ec, req, resp, y);
+      redis_exec(connections[0], ec, req, resp, y);
 
       if (ec) {
 	ldpp_dout(dpp, 0) << "LFUDAPolicy::" << __func__ << "() ERROR: " << ec.what() << dendl;
@@ -178,7 +178,7 @@ int LFUDAPolicy::local_weight_sync(const DoutPrefixProvider* dpp, optional_yield
                   "minLocalWeights_size", std::to_string(entries_map.size()), 
                   "minLocalWeights_address", dpp->get_cct()->_conf->rgw_d4n_l1_datacache_address);
 
-	redis_exec(conn, ec, req, resp, y);
+	redis_exec(connections[0], ec, req, resp, y);
 
 	if (ec) {
 	  ldpp_dout(dpp, 0) << "LFUDAPolicy::" << __func__ << "() ERROR: " << ec.what() << dendl;
@@ -200,7 +200,7 @@ int LFUDAPolicy::local_weight_sync(const DoutPrefixProvider* dpp, optional_yield
     req.push("HSET", dpp->get_cct()->_conf->rgw_d4n_l1_datacache_address, "avgLocalWeight_sum", std::to_string(weightSum), 
               "avgLocalWeight_size", std::to_string(entries_map.size()));
 
-    redis_exec(conn, ec, req, resp, y);
+    redis_exec(connections[0], ec, req, resp, y);
 
     if (ec) {
       ldpp_dout(dpp, 0) << "LFUDAPolicy::" << __func__ << "() ERROR: " << ec.what() << dendl;
