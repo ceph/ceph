@@ -67,7 +67,7 @@ frontend frontend
 backend backend
 {% if mode == 'http' %}
     option forwardfor
-{% if backend_spec.ssl %}
+{% if backend_spec.ssl is defined and backend_spec.ssl %}
     default-server ssl
     default-server verify none
 {% endif %}
