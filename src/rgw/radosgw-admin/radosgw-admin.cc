@@ -136,6 +136,69 @@ inline int posix_errortrans(int r)
 
 static const std::string LUA_CONTEXT_LIST("prerequest, postrequest, background, getdata, putdata");
 
+//---------------------------------------------------------------------------
+static void display_rules(RGWObjManifest &manifest, unsigned rules_count)
+{
+  uint64_t offset = 0;
+  RGWObjManifestRule rule;
+  for (unsigned i = 0; i < rules_count; i++ ) {
+    offset = i * (4 << 20);
+    if (manifest.get_rule(offset, &rule)) {
+      std::cout << "offset=" << offset << std::endl;
+      std::cout << "rule: start_part_num  = " << rule.start_part_num << std::endl;
+      std::cout << "rule: start_ofs       = " << rule.start_ofs      << std::endl;
+      std::cout << "rule: part_size       = " << rule.part_size      << std::endl;
+      std::cout << "rule: stripe_max_size = " << rule.stripe_max_size<< std::endl;
+      std::cout << "rule: override_prefix = " << rule.override_prefix<< std::endl;
+      std::cout << "===============================================" << std::endl;
+    }
+    else {
+      cerr << "ERROR: empty_rules offset " << offset << std::endl;
+    }
+  }
+}
+
+//---------------------------------------------------------------------------
+static int display_manifest(RGWRados *rados, RGWObjManifest &manifest)
+{
+  auto rados_handle = rados->get_rados_handle();
+  unsigned parts = 0;
+  auto p = manifest.obj_begin(dpp());
+  auto p_end = manifest.obj_end(dpp());
+
+  while (p != p_end) {
+    uint64_t offset = p.get_ofs();
+    rgw_raw_obj raw_obj = p.get_location().get_raw_obj(rados);
+    rgw_rados_ref obj;
+    int ret = rgw_get_rados_ref(dpp(), rados_handle, raw_obj, &obj);
+    if (ret < 0) {
+      std::cout << "failed rgw_get_rados_ref() for raw_obj.oid="
+		<< raw_obj.oid << "::err is " << cpp_strerror(-ret) << std::endl;
+      return ret;
+    }
+
+    std::cout << "[" << std::setw(4) << std::setfill('0')
+	      << parts << "] offset=" << offset << "::" << p.get_stripe_size()
+	      << "::" << raw_obj.oid << std::endl;
+#if 0
+    librados::IoCtx ioctx = obj.ioctx;
+    if (parts == 0) {
+      std::cout << "FIRST_PART::" << raw_obj.oid << std::endl;
+    }
+#endif
+    // the iterator holds now the next position
+    // we will only access the iterator in the next loop
+    ++p;
+    parts++;
+    if (p == p_end) {
+      //std::cout << "LAST_PART::" << raw_obj.oid << std::endl;
+      break;
+    }
+  }
+
+  return 0;
+}
+
 void usage()
 {
   cout << "usage: radosgw-admin <cmd> [options...]" << std::endl;
@@ -746,6 +809,10 @@ enum class OPT {
   OBJECT_UNLINK,
   OBJECT_STAT,
   OBJECT_MANIFEST,
+  OBJECT_MANIFEST0,
+  OBJECT_MANIFEST1,
+  OBJECT_MANIFEST2,
+  OBJECT_MANIFEST_SHOW,
   OBJECT_REWRITE,
   OBJECT_REINDEX,
   OBJECTS_EXPIRE,
@@ -996,6 +1063,10 @@ static SimpleCmd::Commands all_cmds = {
   { "object unlink", OPT::OBJECT_UNLINK },
   { "object stat", OPT::OBJECT_STAT },
   { "object manifest", OPT::OBJECT_MANIFEST },
+  { "object manifest0", OPT::OBJECT_MANIFEST0 },
+  { "object manifest1", OPT::OBJECT_MANIFEST1 },
+  { "object manifest2", OPT::OBJECT_MANIFEST2 },
+  { "object manifest_show", OPT::OBJECT_MANIFEST_SHOW },
   { "object rewrite", OPT::OBJECT_REWRITE },
   { "object reindex", OPT::OBJECT_REINDEX },
   { "objects expire", OPT::OBJECTS_EXPIRE },
@@ -4571,6 +4642,10 @@ int main(int argc, const char **argv)
 			 OPT::USAGE_SHOW,
 			 OPT::OBJECT_STAT,
 			 OPT::OBJECT_MANIFEST,
+			 OPT::OBJECT_MANIFEST0,
+			 OPT::OBJECT_MANIFEST1,
+			 OPT::OBJECT_MANIFEST2,
+			 OPT::OBJECT_MANIFEST_SHOW,
 			 OPT::BI_GET,
 			 OPT::BI_LIST,
 			 OPT::OLH_GET,
@@ -9179,6 +9254,320 @@ next:
     formatter->close_section(); // outer
     formatter->flush(cout);
   } // OPT::OBJECT_MANIFEST
+
+  if (opt_cmd == OPT::OBJECT_MANIFEST0) {
+    rgw::sal::RadosStore *store = dynamic_cast<rgw::sal::RadosStore*>(driver);
+    if (!store) {
+      cerr << "ERROR: this command (currently) only works with RADOS back-ends" << std::endl;
+      return EINVAL;
+    }
+    RGWRados *rados = store->getRados();
+
+    int ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
+    if (ret < 0) {
+      cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) <<
+	std::endl;
+      return -ret;
+    }
+
+    std::unique_ptr<rgw::sal::Object> obj = bucket->get_object(object);
+    obj->set_instance(object_version);
+
+    ret = obj->get_obj_attrs(null_yield, dpp());
+    if (ret < 0) {
+      cerr << "ERROR: failed to retrieve object metadata, returned error: "
+	   << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
+
+    rgw::sal::Attrs& attrs = obj->get_attrs();
+    auto attr_itr = attrs.find(RGW_ATTR_MANIFEST);
+    if (attr_itr == attrs.end()) {
+      cerr << "ERROR: unable to find object manifest" << std::endl;
+      return ENOENT;
+    }
+    bufferlist manifest_bl;
+    RGWObjManifest manifest;
+    try {
+      auto itr = attr_itr->second.cbegin();
+      decode(manifest, itr);
+    } catch (buffer::error& err) {
+      cerr << "ERROR: unable to decode manifest" << std::endl;
+      return EIO;
+    }
+
+    manifest.set_head_size(0);
+    manifest.set_trivial_rule(0, 4 << 20);
+
+    display_rules(manifest, 1);
+    display_manifest(rados, manifest);
+    encode(manifest, manifest_bl);
+    attrs[RGW_ATTR_MANIFEST] = manifest_bl;
+    obj->set_attrs(attrs);
+    ret = obj->set_obj_attrs(dpp(), &attrs, nullptr, null_yield, 0);
+    if (ret < 0) {
+      cerr << "ERROR: failed to set object metadata, returned error: " <<
+	cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
+  }
+
+  if (opt_cmd == OPT::OBJECT_MANIFEST1) {
+    rgw::sal::RadosStore *store = dynamic_cast<rgw::sal::RadosStore*>(driver);
+    if (!store) {
+      cerr << "ERROR: this command (currently) only works with RADOS back-ends" << std::endl;
+      return EINVAL;
+    }
+    RGWRados *rados = store->getRados();
+
+    int ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
+    if (ret < 0) {
+      cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) <<	std::endl;
+      return -ret;
+    }
+
+    std::unique_ptr<rgw::sal::Object> obj = bucket->get_object(object);
+    obj->set_instance(object_version);
+
+    ret = obj->get_obj_attrs(null_yield, dpp());
+    if (ret < 0) {
+      cerr << "ERROR: failed to retrieve object metadata, returned error: "
+	   << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
+
+    rgw::sal::Attrs& attrs = obj->get_attrs();
+    auto attr_itr = attrs.find(RGW_ATTR_MANIFEST);
+    if (attr_itr == attrs.end()) {
+      cerr << "ERROR: unable to find object manifest" << std::endl;
+      return ENOENT;
+    }
+    bufferlist manifest_bl;
+    RGWObjManifest manifest;
+    try {
+      auto itr = attr_itr->second.cbegin();
+      decode(manifest, itr);
+    } catch (buffer::error& err) {
+      cerr << "ERROR: unable to decode manifest" << std::endl;
+      return EIO;
+    }
+
+    uint64_t obj_size  = manifest.get_obj_size();
+    uint64_t head_size = manifest.get_head_size();
+    if (head_size != obj_size) {
+      cerr << "head_size=" << head_size << ", obj_size=" << obj_size << std::endl;
+      return EINVAL;
+    }
+
+    std::map<uint64_t, RGWObjManifestPart> objs_map;
+    rgw_obj head_obj = obj->get_obj();
+    rgw_obj_key &head_key = head_obj.key;
+    std::string tail_name = head_key.name + "_tail";
+    // TBD: What should we do about instance ???
+    //rgw_obj_key tail_key(tail_name, manifest.get_tail_instance(), head_key.ns);
+    rgw_obj_key tail_key(tail_name, head_key.instance, head_key.ns);
+    rgw_obj tail_obj(head_obj.bucket, tail_key);
+    RGWObjManifestPart tail_part;
+    tail_part.loc=tail_obj, tail_part.loc_ofs=0, tail_part.size=obj_size;
+    objs_map[0] = tail_part;
+
+    manifest.set_head_size(0);
+    manifest.set_max_head_size(0);
+    manifest.set_prefix("");
+    manifest.clear_rules();
+    manifest.set_explicit(obj_size, objs_map);
+
+    display_manifest(rados, manifest);
+    encode(manifest, manifest_bl);
+    attrs[RGW_ATTR_MANIFEST] = manifest_bl;
+    obj->set_attrs(attrs);
+    ret = obj->set_obj_attrs(dpp(), &attrs, nullptr, null_yield, 0);
+    if (ret < 0) {
+      cerr << "ERROR: failed to set object metadata, returned error: " <<
+	cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
+  }
+
+  if (opt_cmd == OPT::OBJECT_MANIFEST2) {
+    rgw::sal::RadosStore *store = dynamic_cast<rgw::sal::RadosStore*>(driver);
+    if (!store) {
+      cerr << "ERROR: this command (currently) only works with RADOS back-ends" << std::endl;
+      return EINVAL;
+    }
+    RGWRados *rados = store->getRados();
+
+    int ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
+    if (ret < 0) {
+      cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
+
+    std::unique_ptr<rgw::sal::Object> obj = bucket->get_object(object);
+    obj->set_instance(object_version);
+
+    ret = obj->get_obj_attrs(null_yield, dpp());
+    if (ret < 0) {
+      cerr << "ERROR: failed to retrieve object metadata, returned error: "
+	   << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
+
+    rgw::sal::Attrs& attrs = obj->get_attrs();
+    auto attr_itr = attrs.find(RGW_ATTR_MANIFEST);
+    if (attr_itr == attrs.end()) {
+      cerr << "ERROR: unable to find object manifest" << std::endl;
+      return ENOENT;
+    }
+    bufferlist manifest_bl;
+    RGWObjManifest manifest;
+    try {
+      auto itr = attr_itr->second.cbegin();
+      decode(manifest, itr);
+    } catch (buffer::error& err) {
+      cerr << "ERROR: unable to decode manifest" << std::endl;
+      return EIO;
+    }
+
+    uint64_t stripe_max_size = 4 << 20;
+    for (uint64_t part_num = 0; part_num < 20; part_num++) {
+      manifest.set_head_size(0);
+      manifest.set_multipart_part_rule(stripe_max_size, part_num);
+      //display_rules(manifest, 1);
+      display_manifest(rados, manifest);
+      std::cout << "------------------------------------------------" << std::endl;
+    }
+    encode(manifest, manifest_bl);
+    attrs[RGW_ATTR_MANIFEST] = manifest_bl;
+    obj->set_attrs(attrs);
+    ret = obj->set_obj_attrs(dpp(), &attrs, nullptr, null_yield, 0);
+    if (ret < 0) {
+      cerr << "ERROR: failed to set object metadata, returned error: " <<
+	cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
+  }
+
+  if (opt_cmd == OPT::OBJECT_MANIFEST_SHOW) {
+    rgw::sal::RadosStore *store = dynamic_cast<rgw::sal::RadosStore*>(driver);
+    if (!store) {
+      cerr << "ERROR: this command (currently) only works with RADOS back-ends" << std::endl;
+      return EINVAL;
+    }
+    RGWRados *rados = store->getRados();
+
+    int ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
+    if (ret < 0) {
+      cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
+    std::unique_ptr<rgw::sal::Object> obj = bucket->get_object(object);
+    ret = obj->get_obj_attrs(null_yield, dpp());
+    if (ret < 0) {
+      cerr << "ERROR: failed to retrieve object metadata, returned error: "
+	   << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
+
+    rgw::sal::Attrs& attrs = obj->get_attrs();
+    auto attr_itr = attrs.find(RGW_ATTR_MANIFEST);
+    if (attr_itr == attrs.end()) {
+      cerr << "ERROR: unable to find object manifest" << std::endl;
+      return ENOENT;
+    }
+
+    bufferlist manifest_bl;
+    RGWObjManifest manifest;
+    try {
+      auto itr = attr_itr->second.cbegin();
+      decode(manifest, itr);
+    } catch (buffer::error& err) {
+      cerr << "ERROR: unable to decode manifest" << std::endl;
+      return EIO;
+    }
+
+    uint64_t obj_size  = manifest.get_obj_size();
+    std::map<uint64_t, RGWObjManifestPart> objs_map;
+    unsigned idx = 0;
+    auto p = manifest.obj_begin(dpp());
+    while (p != manifest.obj_end(dpp())) {
+      const uint64_t offset = p.get_stripe_ofs();
+      const rgw_obj_select& os = p.get_location();
+      cout << "[" << idx <<"]OBJ: " << os.get_raw_obj(rados).oid
+	   << "::ofs=" << p.get_ofs() << "::strp_offset=" << offset << std::endl;
+
+      RGWObjManifestPart& part = objs_map[offset];
+      part.loc_ofs = 0;
+
+      if (offset == 0) {
+	cout << "[" << idx <<"]HEAD OBJ: "<< os.get_raw_obj(rados).oid << std::endl;
+	rgw_obj head_obj = manifest.get_obj();
+	rgw_obj_key &head_key = head_obj.key;
+	std::string tail_name = head_key.name + "_tail";
+	rgw_obj_key tail_key(tail_name, head_key.instance, head_key.ns);
+	rgw_obj tail_obj(head_obj.bucket, tail_key);
+	part.loc = tail_obj;
+      }
+      else {
+	std::optional<rgw_obj> obj_opt = os.get_head_obj();
+	if (obj_opt.has_value()) {
+	  rgw_obj obj = obj_opt.value();
+	  part.loc = obj;
+	}
+	else {
+	  cerr << "ERR: obj is_raw" << std::endl;
+	  const rgw_raw_obj& raw = os.get_raw_obj(rados);
+	  const rgw_bucket_placement &tail_placement = manifest.get_tail_placement();
+	  RGWSI_Tier_RADOS::raw_obj_to_obj(tail_placement.bucket, raw, &part.loc);
+	  return EINVAL;
+	}
+      }	// tail-object
+
+      ++p;
+      uint64_t next_offset = p.get_stripe_ofs();
+      part.size = next_offset - offset;
+
+      cout << "[" << idx <<"] loc_ofs = " << part.loc_ofs
+	   << "::size = " << part.size << std::endl;
+      idx++;
+    } // while ()
+
+    manifest.set_head_size(0);
+    manifest.set_max_head_size(0);
+    manifest.set_prefix("");
+    manifest.clear_rules();
+    manifest.set_explicit(obj_size, objs_map);
+
+    display_manifest(rados, manifest);
+    encode(manifest, manifest_bl);
+    attrs[RGW_ATTR_MANIFEST] = manifest_bl;
+    obj->set_attrs(attrs);
+    ret = obj->set_obj_attrs(dpp(), &attrs, nullptr, null_yield, 0);
+    if (ret < 0) {
+      cerr << "ERROR: failed to set object metadata, returned error: " <<
+	cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
+
+#if 1
+    rgw_obj head_obj = manifest.get_obj();
+    rgw_pool data_pool;
+    if (!rados->get_obj_data_pool(bucket->get_placement_rule(), head_obj, &data_pool)) {
+      cerr << "::failed to get data pool for bucket " << bucket->get_name()<< std::endl;
+      return EIO;
+    }
+    librados::IoCtx ioctx;
+    ret = rgw_init_ioctx(dpp(), rados->get_rados_handle(), data_pool, ioctx);
+    if (ret < 0) {
+      cerr << "::ERR: failed to get ioctx from data pool:" << data_pool.to_str() << std::endl;
+      return EIO;
+    }
+    const std::string oid = head_obj.bucket.bucket_id + "_" + head_obj.key.name;
+    cout << "ioctx.trunc(" << oid << ", 0)" << std::endl;
+    ret = ioctx.trunc(oid, 0);
+    cout << "ioctx.trunc() ret=" << ret << std::endl;
+#endif
+  }
 
   if (opt_cmd == OPT::BUCKET_CHECK) {
     if (check_head_obj_locator) {
