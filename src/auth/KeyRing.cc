@@ -48,12 +48,11 @@ int KeyRing::from_ceph_context(CephContext *cct)
   int ret = ceph_resolve_file_search(conf->keyring, filename);
   if (!ret) {
     ret = load(cct, filename);
-    if (ret < 0)
+    if (ret < 0) {
       lderr(cct) << "failed to load " << filename
 		 << ": " << cpp_strerror(ret) << dendl;
-  } else if (conf->key.empty() && conf->keyfile.empty()) {
-    lderr(cct) << "unable to find a keyring on " << conf->keyring
-	       << ": " << cpp_strerror(ret) << dendl;
+    }
+    return ret;
   }
 
   if (!conf->key.empty()) {
@@ -82,15 +81,17 @@ int KeyRing::from_ceph_context(CephContext *cct)
     try {
       ea.key.decode_base64(k);
       add(conf->name, ea);
+      return 0;
     }
     catch (ceph::buffer::error& e) {
       lderr(cct) << "failed to decode key '" << k << "'" << dendl;
       return -EINVAL;
     }
-    return 0;
   }
 
-  return ret;
+  /* this can happen during startup when configs are still being set */
+  ldout(cct, 2) << "unable to find a keyring on " << conf->keyring << ": " << cpp_strerror(ret) << dendl;
+  return -ENOENT;
 }
 
 int KeyRing::set_modifier(const char *type,
