@@ -630,6 +630,10 @@ if(WITH_RADOSGW_FDB)
 
 # JFW: sadly, I'm having trouble getting FoundationDB to build, but this is VERY close
 # to "just working", and I'd sure like it to...
+# ...we could then maybe use file(ARCHIVE_EXTRACT) 
+#("https://cmake.org/cmake/help/latest/command/file.html")
+# and build it... but, for now it will have to wait. :-/ This gets tantalizingly
+# close:
 # CPMAddPackage("gh:apple/foundationdb@7.3.63")
 # message("-- enabled FoundationDB")
 

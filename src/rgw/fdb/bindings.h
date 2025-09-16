@@ -17,14 +17,34 @@
 #include "base.h"
 #include "conversion.h"
 
+#include <map> // JFW: REMOVEME when iterators are properly lifted
+
 #include <span>
 #include <cstdint>
 #include <concepts>
 #include <iterator>
+#include <exception>
 #include <algorithm>
 #include <functional>
 
-#include <fmt/format.h> // JFW:
+/* JFW: needs tinkering
+namespace ceph::libfdb::detail {
+
+template <typename FnT>
+auto commit_wrapper(FnT& f, ceph::libfdb::transaction_handle&& txn, const commit_after_op&& commit_after, auto&& ...params)
+{
+ auto r = f(txn, std::forward(params...));
+
+ if(commit_after_op::commit == commit_after) {
+    // Perhaps a tri-state return is the better long-term path?
+    if(false == ceph::libfdb::detail::commit(txn))
+     throw ceph::libfdb::libfdb_exception("transaction commit failed");
+ }
+
+ return r;
+}
+
+} // namespace ceph::libfdb::detail */
 
 namespace ceph::libfdb {
 
@@ -38,7 +58,7 @@ inline transaction_handle make_transaction(database_handle dbh)
  return std::make_shared<transaction>(dbh);
 }
 
-// Note only rarely is a direct call to this requireda.
+// Note only rarely is a direct call to this.
 // On false, the client should retry the transaction:
 [[nodiscard]] inline bool commit(transaction_handle& txn)
 {
@@ -49,6 +69,48 @@ inline transaction_handle make_transaction(database_handle dbh)
 
 namespace ceph::libfdb::detail {
 
+/* Equivalence with FDBStreamingMode:
+ *
+FDB_STREAMING_MODE_ITERATOR
+
+The caller is implementing an iterator (most likely in a binding to a higher level language). The amount of data returned depends on the value of the iteration parameter to fdb_transaction_get_range().
+
+FDB_STREAMING_MODE_SMALL
+
+Data is returned in small batches (not much more expensive than reading individual key-value pairs).
+
+FDB_STREAMING_MODE_MEDIUM
+
+Data is returned in batches between _SMALL and _LARGE.
+
+FDB_STREAMING_MODE_LARGE
+
+Data is returned in batches large enough to be, in a high-concurrency environment, nearly as efficient as possible. If the caller does not need the entire range, some disk and network bandwidth may be wasted. The batch size may be still be too small to allow a single client to get high throughput from the database.
+
+FDB_STREAMING_MODE_SERIAL
+
+Data is returned in batches large enough that an individual client can get reasonable read bandwidth from the database. If the caller does not need the entire range, considerable disk and network bandwidth may be wasted.
+
+FDB_STREAMING_MODE_WANT_ALL
+
+The caller intends to consume the entire range and would like it all transferred as early as possible.
+
+FDB_STREAMING_MODE_EXACT
+
+The caller has passed a specific row limit and wants that many rows delivered in a single batch.
+
+enum struct streaming_mode_t : int {
+ iterator	= FDB_STREAMING_MODE_ITERATOR,
+ small		= FDB_STREAMING_MODE_SMALL,
+ medium		= FDB_STREAMING_MODE_MEDIUM,
+ large		= FDB_STREAMING_MODE_LARGE,
+ serial		= FDB_STREAMING_MODE_SERIAL,
+ all		= FDB_STREAMING_MODE_WANT_ALL,
+3F exact		= FDB_STREAMING_MODE_EXACT
+};
+
+...these are not defined in terms of int or enum as far as I can tell, needs more exploring.
+*/
 // The alternatives were "spanlike" or even "Span-ish", but that was a little /too/ cute; thanks
 // to Adam Emerson for the coinage:
 auto ptr_and_sz(const auto& spanoid)
@@ -63,140 +125,204 @@ auto value_collector(auto& out_value)
         }; 
 }
 
+// RAII wrapper:
+struct maybe_commit final
+{
+ transaction_handle& txn;
+
+ commit_after_op commit_after;
+
+ maybe_commit(transaction_handle& txn_, const commit_after_op commit_after_)
+  : txn(txn_), commit_after(commit_after_)
+ {}
+
+ ~maybe_commit()
+ {
+  if(std::uncaught_exceptions() || commit_after_op::commit != commit_after) {
+   return;
+  }
+
+  txn->commit();
+ }
+};
+
 } // namespace ceph::libfdb::detail
+
+// JFW: these can maybe go away (or move?):
 
 namespace ceph::libfdb::detail {
 
-/* JFW:
-// Used iternally to get values from futures:
-struct transaction_value_result
-{
- fdb_bool_t key_was_found = false;
- 
- fdb_bool_t is_snapshot = false;
-
- // Kept here to extend the future's (and data within it) lifetime:
- future_value fv = nullptr;
-
- // JFW: this can be a variant; the data lives only as long as the future_value lives:
- // By the time we have an instance of transaction_value_result(), this must have already
- // been provided by the appropriate FDB function:
- const std::span<const std::uint8_t> out_data;
-};*/
-
 // Core dispatch from internal DB value to external concrete value:
-void reify_value(const uint8_t *buffer, const size_t buffer_size, auto& target)
+[[deprecated]] void reify_value(const uint8_t *buffer, const size_t buffer_size, auto& target)
 {
  return ceph::libfdb::from::convert(std::span { buffer, buffer_size }, target);
 }
 
-// Grab a future and its related result from a request:
-inline bool get_single_value_from_transaction(transaction_handle& txn, const std::span<const std::uint8_t>& key, std::invocable<std::span<const std::uint8_t>> auto& write_output);
-
-inline future_value get_range_future_from_transaction(transaction_handle& txn, std::span<const std::uint8_t> begin_key, std::span<const std::uint8_t> end_key);
-
-} // namespace ceph::libfdb::detail
+} // namespace ceph::libfdb::detail */
 
 namespace ceph::libfdb {
 
-template <typename K, typename V>
-inline void set(transaction_handle txn, const K& k, const V& v, const commit_after_op commit_after)
+inline void set(transaction_handle txn, std::string_view k, const auto& v, const commit_after_op commit_after)
 {
- txn->set(detail::as_fdb_span(k), ceph::libfdb::to::convert(v));
- 
- if(commit_after_op::no_commit == commit_after) {
-  return;
- }
+ detail::maybe_commit mc(txn, commit_after);
 
- txn->commit();
+ return txn->set(detail::as_fdb_span(k), ceph::libfdb::to::convert(v));
 }
 
-template <std::input_iterator PairIter>
-inline void set(transaction_handle txn, PairIter b, PairIter e, const commit_after_op commit_after)
+inline void set(transaction_handle txn, std::string_view k, const auto& v)
 {
+ return set(txn, k, v, commit_after_op::no_commit);
+}
+
+inline void set(database_handle dbh, std::string_view k, const auto& v)
+{
+ return set(make_transaction(dbh), k, v, commit_after_op::commit);
+}
+
+// JFW: this needs lifting on the iterator types:
+inline void set(transaction_handle txn, std::map<std::string, std::string>::const_iterator b, std::map<std::string, std::string>::const_iterator e, const commit_after_op commit_after)
+{
+ detail::maybe_commit mc(txn, commit_after);
+
  std::for_each(b, e, [&txn](const auto& kv) {
-  txn->set(detail::as_fdb_span(kv.first), ceph::libfdb::to::convert(kv.second)); 
- });
-
- if(commit_after_op::no_commit == commit_after) {
-  return;
- }
-
- txn->commit();
+            txn->set(detail::as_fdb_span(kv.first), ceph::libfdb::to::convert(kv.second)); 
+           });
 }
+
+// JFW: this is a glaring embarassment in the interface-- ok for now as I'm just trying to get things to
+// work for the prototype, but I've /got/ to find another way to do this.
+inline void set(transaction_handle txn, const char *k, const char *v, ceph::libfdb::commit_after_op commit_after)
+{
+ // Since we've got a static extent key, we need to be sure we convert data appropriately:
+ return txn->set(detail::as_fdb_span(k), detail::as_fdb_span(v));
+}
+
+//JFW: this likely needs disambiguation of iterator vs. const char *
+inline void set(database_handle dbh, auto b, auto e)
+{
+ return set(make_transaction(dbh), b, e, commit_after_op::commit);
+}
+
+} // namespace ceph::libfdb
+
+namespace ceph::libfdb {
 
 // erase() is clear() in FDB parlance:
-//
-// "[R]emove all keys (if any) which are lexicographically greater than or equal to the given begin key and 
-// lexicographically less than the given end_key."
-//
-// JFW: See note about some current key-type limitations (we will reinvestigate when the prototype is
-// starting to work, there's no hard need for the string type limitation, it's just most straightforward
-// to deal with):
 inline void erase(ceph::libfdb::transaction_handle txn, const ceph::libfdb::select& key_range, const commit_after_op commit_after)
 {
- txn->erase(key_range);
+ detail::maybe_commit mc(txn, commit_after);
 
- if(commit_after_op::commit == commit_after) {
-  txn->commit();
- }
+ return txn->erase(key_range);
+}
+
+inline void erase(ceph::libfdb::transaction_handle txn, const ceph::libfdb::select& key_range)
+{
+ return erase(txn, key_range, commit_after_op::no_commit);
+}
+
+inline void erase(ceph::libfdb::database_handle dbh, const ceph::libfdb::select& key_range)
+{
+ return erase(ceph::libfdb::make_transaction(dbh), key_range, commit_after_op::commit);
 }
 
 inline void erase(ceph::libfdb::transaction_handle txn, std::string_view k, const commit_after_op commit_after)
 {
- txn->erase(detail::as_fdb_span(k));
+ detail::maybe_commit mc(txn, commit_after);
 
- if(commit_after_op::no_commit == commit_after) {
-  return;
- }
-
- txn->commit();
+ return txn->erase(detail::as_fdb_span(k));
 }
 
-inline bool get(ceph::libfdb::transaction_handle txn, const ceph::libfdb::select& key_range, auto out_iter, const commit_after_op commit_after)
+inline void erase(ceph::libfdb::transaction_handle txn, std::string_view k)
 {
- auto r = ceph::libfdb::detail::get_value_range_from_transaction(txn, detail::as_fdb_span(key_range.begin_key), detail::as_fdb_span(key_range.end_key), out_iter);
-
- if(commit_after_op::commit == commit_after) {
-  txn->commit();
- }
-
- return r;
+ return erase(txn, k, commit_after_op::commit);
 }
 
-inline bool get(ceph::libfdb::transaction_handle txn, const auto& key, auto& out_value, const commit_after_op commit_after)
+inline void erase(ceph::libfdb::database_handle dbh, std::string_view k)
 {
- auto vc = detail::value_collector(out_value);
+ return erase(make_transaction(dbh), k);
+}
 
- if(false == ceph::libfdb::detail::get_single_value_from_transaction(txn, detail::as_fdb_span(key), vc))
-  return false;
+} // namespace ceph::libfdb
 
- if(commit_after_op::commit == commit_after) {
-  txn->commit();
- }
+namespace ceph::libfdb {
 
- return true;
+// get() with selector:
+// JFW: Satisfying output_iterator is not as straightforward as it appears, I need to look at this mechanism again:
+inline bool get(ceph::libfdb::transaction_handle txn, const ceph::libfdb::select& key_range, auto out_iter, const ceph::libfdb::commit_after_op commit_after)
+{
+ detail::maybe_commit mc(txn, commit_after);
+
+ return txn->get(detail::as_fdb_span(key_range.begin_key), detail::as_fdb_span(key_range.end_key), out_iter);
+}
+
+inline bool get(ceph::libfdb::transaction_handle txn, const ceph::libfdb::select& key_range, auto out_iter)
+{
+ return get(txn, key_range, out_iter, commit_after_op::no_commit);
+}
+
+inline bool get(ceph::libfdb::database_handle dbh, const ceph::libfdb::select& key_range, auto out_iter)
+{
+ return get(ceph::libfdb::make_transaction(dbh), key_range, out_iter, ceph::libfdb::commit_after_op::commit);
+}
+
+inline bool get(ceph::libfdb::transaction_handle txn, std::string_view key, auto& out_value, const commit_after_op commit_after)
+{
+ detail::maybe_commit mc(txn, commit_after);
+
+ auto vc = detail::value_collector(out_value); 
+
+ return txn->get(detail::as_fdb_span(key), vc);
+}
+
+inline bool get(ceph::libfdb::transaction_handle txn, std::string_view key, auto& out_value)
+{
+ return get(txn, key, out_value, commit_after_op::no_commit);
+}
+
+inline bool get(ceph::libfdb::database_handle dbh, std::string_view key, auto& out_value)
+{
+ return get(ceph::libfdb::make_transaction(dbh), key, out_value, commit_after_op::commit);
 }
 
 // The user can provide an immediate conversion function (no function_ref until C++26):
-inline bool get(ceph::libfdb::transaction_handle txn, auto& key, std::invocable auto fn, const commit_after_op commit_after)
+// JFW: std::remove_cvref_t
+inline bool get(ceph::libfdb::transaction_handle txn, std::string_view key, auto&& fn, const commit_after_op commit_after)
 {
- if(!ceph::libfdb::detail::get_single_value_from_transaction(txn, detail::as_fdb_span(key), fn))
-  return false;
+ detail::maybe_commit mc(txn, commit_after);
 
- if(commit_after_op::commit == commit_after) {
-  txn->commit();
- }
-
- return true;
+ return txn->get(detail::as_fdb_span(key), fn);
 }
 
-template <typename K>
-inline bool key_exists(transaction_handle txn, K k)
+inline bool get(ceph::libfdb::transaction_handle txn, std::string_view key, auto&& fn)
 {
- auto bit_bucket = [](auto) {};
+ return get(txn, key, fn, commit_after_op::commit);
+}
 
- return ceph::libfdb::detail::get_single_value_from_transaction(txn, detail::as_fdb_span(k), bit_bucket);
+inline bool get(ceph::libfdb::database_handle dbh, std::string_view key, auto&& fn)
+{
+ return get(ceph::libfdb::make_transaction(dbh), key, fn, commit_after_op::commit);
+}
+
+} // namespace ceph::libfdb
+
+namespace ceph::libfdb {
+
+// Does a key exist?
+inline bool key_exists(transaction_handle txn, std::string_view k, const commit_after_op commit_after)
+{
+ detail::maybe_commit mc(txn, commit_after);
+
+ return txn->key_exists(k);
+}
+
+inline bool key_exists(transaction_handle txn, std::string_view k)
+{
+ return key_exists(txn, k, commit_after_op::no_commit);
+}
+
+inline bool key_exists(database_handle dbh, std::string_view k)
+{
+ return key_exists(ceph::libfdb::make_transaction(dbh), k, commit_after_op::commit);
 }
 
 } // namespace ceph::libfdb

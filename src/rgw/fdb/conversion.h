@@ -111,8 +111,9 @@ inline auto convert(const auto& from) -> std::vector<std::uint8_t>
  zpp::bits::out out(out_data);
 
  // zpp::bits won't write a size if we start with a fixed size array:
+ // (see dynamic_extent):
  if constexpr (not std::is_array_v<decltype(from)>)
-  out(from);
+  out(from).or_throw();
  else 
   out(std::span(from, std::size(from))).or_throw();
 

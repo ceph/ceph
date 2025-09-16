@@ -18,6 +18,7 @@
 
 namespace ceph::libfdb {
 
+/*JFW:
 database::database()
 {
  std::call_once(ceph::libfdb::detail::database_system::fdb_was_initialized, ceph::libfdb::detail::database_system::initialize_fdb);
@@ -35,7 +36,7 @@ database::~database()
  if(nullptr != fdb_handle) {
   fdb_database_destroy(fdb_handle), fdb_handle = nullptr;
  }
-}
+}*/
 
 [[nodiscard]] bool transaction::commit()
 {
@@ -78,10 +79,11 @@ database::~database()
  return true;
 }
 
-} // namespace ceph::libfdb
+} // namespace ceph::libfdb 
 
 namespace ceph::libfdb::detail {
 
+// JFW: challenge: how to access ceph::libfdb::from at the right time w/o this being in here?
 std::pair<std::string, std::string> to_decoded_kv_pair(const FDBKeyValue kv)
 {
  std::pair<std::string, std::string> r;
@@ -93,5 +95,5 @@ std::pair<std::string, std::string> to_decoded_kv_pair(const FDBKeyValue kv)
  return r;
 }
 
-} // namespace ceph::libfdb::detail
+} // namespace ceph::libfdb::detail 
 

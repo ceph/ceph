@@ -94,7 +94,6 @@ auto key_count(const auto& selector) {
  return key_counter(lfdb::make_transaction(dbh), selector, _);
 }
 
-
 // Note that the generated keys are ONE based, not zero:
 inline std::map<std::string, std::string> make_monotonic_kvs(const int N)
 {
@@ -222,17 +221,17 @@ TEST_CASE("fdb simple", "[rgw][fdb]") {
     lfdb::erase(lfdb::make_transaction(dbh), k, lfdb::commit_after_op::commit);
 
     // Now, we shouldn't find anything:
-    CHECK_FALSE(lfdb::key_exists(lfdb::make_transaction(dbh), k));
+    CHECK_FALSE(lfdb::key_exists(lfdb::make_transaction(dbh), k, lfdb::commit_after_op::no_commit));
 
     // Write the key:
     lfdb::set(lfdb::make_transaction(dbh), k, v, lfdb::commit_after_op::commit);
 
     // ...it should magically be there!
-    CHECK(lfdb::key_exists(lfdb::make_transaction(dbh), k));
+    CHECK(lfdb::key_exists(lfdb::make_transaction(dbh), k, lfdb::commit_after_op::no_commit));
 
     // ...and now it should be gone again:
     lfdb::erase(lfdb::make_transaction(dbh), k, lfdb::commit_after_op::commit);
-    CHECK_FALSE(lfdb::key_exists(lfdb::make_transaction(dbh), k));
+    CHECK_FALSE(lfdb::key_exists(lfdb::make_transaction(dbh), k, lfdb::commit_after_op::no_commit));
  }
 }
 
@@ -418,14 +417,93 @@ TEMPLATE_PRODUCT_TEST_CASE("associative data", "[fdb][rgw]",
 
  // From the "database" point of view, the structure is now that we have a single 
  // key pointing (p) to an associative array, e.g. map<p, map<k, v>>:
-
- lfdb::set(lfdb::make_transaction(dbh), "key", kvs, lfdb::commit_after_op::commit);
+lfdb::set(lfdb::make_transaction(dbh), "key", kvs, lfdb::commit_after_op::commit);
 
  std::map<std::string, std::string> out_kvs;
 
  lfdb::get(lfdb::make_transaction(dbh), "key", out_kvs, lfdb::commit_after_op::no_commit);
 
  CHECK(pearl_msg == out_kvs["pearl"]);
+}
+
+SCENARIO("implicit transactions", "[fdb][rgw]")
+{
+ // If you pass a dbh or tenant, a transaction should be constructed and
+ //if not otherwise specified handled "appropriately".
+ //
+ //The rules are:
+ // 1) if passed a transaction and NO specific handler, the transaction is used and NOT committed on success;
+ // 2) if passed a handle and a handler, the transaction is used and treated accordingly (potentially dangerous);
+ // 3) if passed a handle and no handler, a transaction is created AND committed on success;
+ //...need to test with range operations, etc.. 
+
+ janitor j;
+
+ auto dbh = lfdb::make_database();
+
+// A no-no because of zpp_bits-- we can work around it, but...
+// const auto k = "hi", v = "there";
+ std::string_view k = "hi", v = "there";
+
+ CAPTURE(k);   
+ CAPTURE(v);   
+
+ SECTION("implicitly create and complete transactions") {
+
+  REQUIRE_FALSE(lfdb::key_exists(dbh, k));
+  CHECK_NOTHROW(lfdb::set(dbh, k, v));
+  CHECK(lfdb::key_exists(dbh, k));
+
+  std::string ov;
+  CHECK(lfdb::get(dbh, k, ov));
+
+  CAPTURE(ov);   
+
+  REQUIRE(v == ov);
+
+  CHECK_NOTHROW(lfdb::erase(dbh, k));
+  REQUIRE_FALSE(lfdb::key_exists(dbh, k));
+
+  REQUIRE_FALSE(lfdb::get(dbh, k, ov));
+ }
+ 
+ SECTION("implicitly create and complete transactions-- selection operations") {
+  // With an implicit transaction, transactions should commit by default:
+  const auto selector = lfdb::select { make_key(0), make_key(20) };
+
+  const auto kvs = make_monotonic_kvs(20);
+
+  CHECK_NOTHROW(lfdb::set(dbh, begin(kvs), end(kvs)));
+
+  lfdb::erase(dbh, lfdb::select { make_key(1), make_key(6) });
+  CHECK(15 == key_count(selector));
+
+  CHECK_FALSE(lfdb::key_exists(dbh, "key_03"));
+ }
+
+ SECTION("test behavior with shared transaction") {
+
+  SECTION("write in uncommitted transaction") {
+    // With a shared transaction, transactions should NOT commit on API calls by default:
+    auto txn = lfdb::make_transaction(dbh);
+  
+    lfdb::set(txn, "Herman", "Hollerith");
+   
+    // Key exists with respect to this transaction: 
+    CHECK(lfdb::key_exists(txn, "Herman"));
+    
+    lfdb::set(txn, "John", "Backus");
+  
+    // Key exists with respect to this transaction: 
+    CHECK(lfdb::key_exists(txn, "John"));
+
+    // transaction is abandoned
+  }
+
+  // These were only set in the abandoned transaction:
+  CHECK_FALSE(lfdb::key_exists(dbh, "Herman"));
+  CHECK_FALSE(lfdb::key_exists(dbh, "John"));
+ }
 }
 
 TEST_CASE("fdb misc", "[fdb]")

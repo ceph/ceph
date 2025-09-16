@@ -25,6 +25,8 @@
 // Ceph uses libfmt rather than <format>:
 #include <fmt/format.h>
 
+#include <map> // JFW: remove after lifting (and, indeed, remove to see what you need to lift!)
+
 #include <tuple>
 #include <mutex>
 #include <memory>
@@ -90,7 +92,6 @@ using transaction_handle = std::shared_ptr<transaction>;
 // Should we commit after the (possibly) mutating operation?
 enum struct commit_after_op { commit, no_commit };
 
-// JFW: it may be with messing with error_code here, but I don't see a ton of utility in that at the moment:
 struct libfdb_exception final : std::runtime_error
 {
  using std::runtime_error::runtime_error;
@@ -136,20 +137,7 @@ struct future_value final
  friend class transaction;
 };
 
-/* Analogs to work with key ranges:
-JFW: this is TODO and requires a bit of thought-- for now, these types will
-at least keep us from "stepping over our own feet" in terms of API design, and
-be a sensible default: 
-#define         FDB_KEYSEL_LAST_LESS_THAN(k, l) k, l, 0, 0
-#define     FDB_KEYSEL_LAST_LESS_OR_EQUAL(k, l) k, l, 1, 0
-#define     FDB_KEYSEL_FIRST_GREATER_THAN(k, l) k, l, 1, 1
-#define FDB_KEYSEL_FIRST_GREATER_OR_EQUAL(k, l) k, l, 0, 1
-
-enum struct key_selector { first_gt, first_gteq, last_lt, last_lteq }; 
-
-JFW: add Concepts-- keytype should be <= orderable, copyable, ... mostly the <= comp is important; 
-the restriction to string_view is artificial
-*/
+// May be good to revisit my earlier idea of doing this with references/string_view:
 struct select final
 {
  std::string begin_key, end_key;
@@ -172,158 +160,31 @@ struct select final
 
 namespace ceph::libfdb::detail {
 
-// I tried fancier versions of this that wrapped the function and forwarded the parameters; unfortunately,
-// FDB sometimes likes to use macros, which wind up making that scheme less orthogonal than it should be--
-// which is unfortunate. This isn't as pretty, but "works with everything":
-[[maybe_unused]] inline auto check_fdb_result(const fdb_error_t result)
+constexpr auto as_fdb_span(const char *s)
 {
- if(0 != result)
-  throw libfdb_exception(result);
-
- return result;
+ // Sorry this is tied to the encoding (zpp_bits), but it "just is" for now...
+ return std::span<const std::uint8_t>((const std::uint8_t *)s, std::strlen(s));
 }
-
-inline bool commit(ceph::libfdb::transaction_handle& txn);
-
-} // namespace ceph::libfdb::detail
-
-namespace ceph::libfdb::detail {
 
 constexpr auto as_fdb_span(std::string_view sv) 
 { 
  return std::span<const std::uint8_t>((const std::uint8_t *)sv.data(), sv.size()); 
 }
 
-}
+} // namespace ceph::libfdb::detail
 
-namespace ceph::libfdb {
+namespace ceph::libfdb::detail {
 
-struct database;
-struct transaction;
+std::pair<std::string, std::string> to_decoded_kv_pair(const FDBKeyValue kv);
 
-class database final
-{
- private:
- FDBDatabase *fdb_handle = nullptr;
+struct maybe_commit;
 
- public:
- database(const std::filesystem::path cluster_file_path);
- database();
-
- ~database();
-
- public:
- operator bool() { return nullptr != raw_handle(); }
-
- public:
- FDBDatabase *raw_handle() const noexcept { return fdb_handle; }
-
- private:
- friend transaction;
-};
-
-class transaction final
-{
- database_handle dbh;
-
-//JFW: FDBTransaction *txn_handle = nullptr;
- std::unique_ptr<FDBTransaction, decltype(&fdb_transaction_destroy)> txn_ptr;
-
- private:
- FDBTransaction *create_transaction() {
-  FDBTransaction *txn_p = nullptr;
-  if(fdb_error_t r = fdb_database_create_transaction(dbh->raw_handle(), &txn_p); 0 != r) {
-   throw libfdb_exception(r);
-  }
-
-  return txn_p;
- }
-
- void establish() {
-  destroy(), txn_ptr.reset(create_transaction());
- }
-
- void maybe_vivify() {
-  if(not this) {
-    throw ceph::libfdb::libfdb_exception("inactive transaction");
-  }
-
-/* if(not this) {
-   establish();
-  }*/
- }
-
- public:
- transaction(database_handle& dbh)
- : dbh(dbh),
-   txn_ptr(create_transaction(), &fdb_transaction_destroy)
- {}
-
- public:
- operator bool() { return dbh && nullptr != raw_handle(); }
-
- public:
- FDBTransaction *raw_handle() const noexcept { return txn_ptr.get(); }
-
-/*JFW:
- private:
- void set_option(FDBTransactionOption o, std::string_view v) {
-    detail::check_fdb_result(
-      fdb_transaction_set_option(raw_handle(), o, (const std::uint8_t *)v.data(), v.length()));
-*/
-
- private:
- void set(std::span<const std::uint8_t> k, std::span<const std::uint8_t> v) {
-    maybe_vivify();
-    fdb_transaction_set(raw_handle(),
-                        (const uint8_t*)k.data(), k.size(),
-                        (const uint8_t*)v.data(), v.size());
- }
-
- void erase(std::span<const std::uint8_t> k) {
-    maybe_vivify();
-    fdb_transaction_clear(raw_handle(),
-			  (const std::uint8_t *)k.data(), k.size());
- }
-
- void erase(const ceph::libfdb::concepts::selector auto& key_range) {
-    maybe_vivify();
-    fdb_transaction_clear_range(raw_handle(),
-        (const uint8_t *)key_range.begin_key.data(), key_range.begin_key.size(), 
-        (const uint8_t *)key_range.end_key.data(), key_range.end_key.size());
- }
-
- private:
- bool commit();
- void destroy() { txn_ptr.reset(); }
-
- private:
- friend inline bool get(ceph::libfdb::transaction_handle, const auto&, auto&, const commit_after_op);
- friend inline bool get(ceph::libfdb::transaction_handle, const ceph::libfdb::select&, auto, const commit_after_op);
-
- template <typename K, typename V>
- friend inline void set(transaction_handle h, const K& k, const V& v, const commit_after_op commit_after);
-
- template <std::input_iterator PairIter>
- friend inline void set(transaction_handle h, PairIter b, PairIter e, const commit_after_op commit_after);
-
- friend inline void erase(ceph::libfdb::transaction_handle, std::string_view, const commit_after_op);   // JFW: should adjust back to auto
- friend inline void erase(ceph::libfdb::transaction_handle, const ceph::libfdb::select&, const commit_after_op);
-
-
- private:
- friend inline bool commit(transaction_handle& txn);
-
- private:
- friend transaction_handle make_transaction(database_handle dbh);
-};
-
-} // namespace ceph::libfdb
+} // namespace ceph::libfdb::detail
 
 namespace ceph::libfdb::detail {
 
 // The global DB state and management thread:
-// JFW: there are some more user hooks that go go in here
+// JFW: more user hooks that go into FDB system possible here
 class database_system final
 {
  database_system() = delete;
@@ -389,6 +250,173 @@ class database_system final
 
 namespace ceph::libfdb {
 
+struct database;
+struct transaction;
+
+class database final
+{
+ private:
+ FDBDatabase *fdb_handle = nullptr;
+
+ public:
+ database() 
+ {
+  std::call_once(ceph::libfdb::detail::database_system::fdb_was_initialized, ceph::libfdb::detail::database_system::initialize_fdb);
+
+  if(fdb_error_t r = fdb_create_database(nullptr, &fdb_handle); 0 != r)
+   throw libfdb_exception(r);
+
+  // may now set database options:
+  ; // JFW
+ }
+
+ ~database()
+ {
+//JFW: move to smartptr
+  if(nullptr != fdb_handle) {
+   fdb_database_destroy(fdb_handle), fdb_handle = nullptr;
+  }
+ }
+
+ public:
+ operator bool() { return nullptr != raw_handle(); }
+
+ public:
+ FDBDatabase *raw_handle() const noexcept { return fdb_handle; }
+
+ private:
+ friend transaction;
+};
+
+class transaction final
+{
+ database_handle dbh;
+
+ std::unique_ptr<FDBTransaction, decltype(&fdb_transaction_destroy)> txn_ptr;
+
+ private:
+ FDBTransaction *create_transaction() {
+  FDBTransaction *txn_p = nullptr; // JFW: *or* should it be angherror to create over extant txn?
+  if(fdb_error_t r = fdb_database_create_transaction(dbh->raw_handle(), &txn_p); 0 != r) {
+   throw libfdb_exception(r);
+  }
+
+  return txn_p;
+ }
+
+/*JFW: rework into a coherent mechanism--
+ void establish() {
+  destroy(), txn_ptr.reset(create_transaction());
+ }
+
+ void maybe_vivify() {
+  if(not this) {
+    throw ceph::libfdb::libfdb_exception("inactive transaction");
+  }
+ if(not this) {
+   establish();
+  }
+ }*/
+
+ private:
+ inline bool get_single_value_from_transaction(const std::span<const std::uint8_t>& key, std::invocable<std::span<const std::uint8_t>> auto&& write_output);
+ inline bool get_value_range_from_transaction(std::span<const std::uint8_t> begin_key, std::span<const std::uint8_t> end_key, auto out_iter); 
+ inline future_value get_range_future_from_transaction(std::span<const std::uint8_t> begin_key, std::span<const std::uint8_t> end_key);
+
+ public:
+ transaction(database_handle& dbh)
+ : dbh(dbh),
+   txn_ptr(create_transaction(), &fdb_transaction_destroy)
+ {}
+
+ public:
+ // I vacillate between considering this ok, or not even a good idea...
+ operator bool() { return dbh && nullptr != raw_handle(); }
+
+ public:
+ FDBTransaction *raw_handle() const noexcept { return txn_ptr.get(); }
+
+/*JFW:
+ private:
+ void set_option(FDBTransactionOption o, std::string_view v) {
+    detail::check_fdb_result(
+      fdb_transaction_set_option(raw_handle(), o, (const std::uint8_t *)v.data(), v.length()));
+*/
+
+ private:
+ void set(std::span<const std::uint8_t> k, std::span<const std::uint8_t> v) {
+ //   maybe_vivify();
+    fdb_transaction_set(raw_handle(),
+                        (const uint8_t*)k.data(), k.size(),
+                        (const uint8_t*)v.data(), v.size());
+ }
+
+ // The output requirement to std::string is a bit artificial, and should be revisited:
+ // Satisfying std::output_iterator<std::string, ??> appears to be trickier than it looks-- so don't be
+ // misled by my poor specification here, please; I will fix this!!:
+ bool get(std::span<const std::uint8_t> begin_key, std::span<const std::uint8_t> end_key, auto out_iter) {
+    return ceph::libfdb::transaction::get_value_range_from_transaction(begin_key, end_key, out_iter);
+ }
+ 
+ bool get(std::span<const std::uint8_t> k, std::invocable<std::span<const std::uint8_t>> auto& val_collector) {
+    return get_single_value_from_transaction(k, val_collector);
+ }
+
+ void erase(std::span<const std::uint8_t> k) {
+//    maybe_vivify();
+    fdb_transaction_clear(raw_handle(),
+			  (const std::uint8_t *)k.data(), k.size());
+ }
+
+ void erase(const ceph::libfdb::concepts::selector auto& key_range) {
+ //   maybe_vivify();
+    fdb_transaction_clear_range(raw_handle(),
+        (const uint8_t *)key_range.begin_key.data(), key_range.begin_key.size(), 
+        (const uint8_t *)key_range.end_key.data(), key_range.end_key.size());
+ }
+
+ bool key_exists(std::string_view k) {
+    return get_single_value_from_transaction(detail::as_fdb_span(k), [](auto) {});
+ }
+
+ bool commit();
+ void destroy() { txn_ptr.reset(); }
+
+ private:
+ friend transaction_handle make_transaction(database_handle dbh);
+
+ private:
+ friend inline void set(transaction_handle, const char*, const char*, commit_after_op);
+ friend inline void set(std::span<const unsigned char>, std::span<const unsigned char>);
+ friend inline void set(std::span<const std::uint8_t>, std::span<const std::uint8_t>);
+ friend inline void set(transaction_handle, const std::string_view, const auto&, const commit_after_op);
+ friend inline void set(transaction_handle, std::input_iterator auto, std::input_iterator auto, const commit_after_op);
+
+ // Clearly, this could use some work-- the trick is disambiguating the iterators, do-able but it will take a little work:
+ friend inline void set(transaction_handle txn, std::map<std::string, std::string>::const_iterator b, std::map<std::string, std::string>::const_iterator e, const commit_after_op commit_after);
+
+
+// JFW: needs lifting
+ friend inline bool get(ceph::libfdb::transaction_handle, std::string_view, auto&, const commit_after_op);
+ friend inline bool get(ceph::libfdb::transaction_handle, const ceph::libfdb::select&, auto, const commit_after_op);
+
+ friend inline void erase(ceph::libfdb::transaction_handle, std::string_view, const commit_after_op);
+ friend inline void erase(ceph::libfdb::transaction_handle, const ceph::libfdb::select&, const commit_after_op);
+
+ friend inline bool key_exists(transaction_handle txn, std::string_view k, const commit_after_op commit_after);
+
+ // JFW: std::remove_cvref():
+ friend inline bool commit(transaction_handle& txn);
+ friend inline bool commit(transaction_handle txn);
+
+ // private:
+ friend struct ceph::libfdb::detail::maybe_commit;
+};
+
+} // namespace ceph::libfdb
+
+namespace ceph::libfdb {
+
 inline void shutdown_libfdb()
 {
  // Shutdown the FDB thread:
@@ -397,43 +425,17 @@ inline void shutdown_libfdb()
 
 } // namespace ceph::libfdb
 
-// This is where the touchier FDB interfacing is-- hopefully any bugs will be easy
-// to correct by at least having this in "sorta" one place:
-namespace ceph::libfdb::detail {
-
-inline bool get_value_range_from_transaction(transaction_handle& txn, std::span<const std::uint8_t> begin_key, std::span<const std::uint8_t> end_key, auto out_iter);
-
-inline bool get_single_value_from_transaction(transaction_handle& txn, const std::span<const std::uint8_t>& key, std::invocable<std::span<const std::uint8_t>> auto& write_output);
-
-inline future_value get_range_future_from_transaction(transaction_handle& txn, std::span<const std::uint8_t> begin_key, std::span<const std::uint8_t> end_key);
-
-std::pair<std::string, std::string> to_decoded_kv_pair(const FDBKeyValue kv);
-/*
-{
- std::pair<std::string, std::string> r;
-
- r.first.assign((const char *)kv.key, static_cast<std::string::size_type>(kv.key_length));
-
- ceph::libfdb::from::convert(std::span<const std::uint8_t>(kv.value, kv.value_length), r.second);
-
- return r;
-}*/
-
 // JFW: TODO: consolidate this with get_value_from_transaction()! See details there.
-// JFW:		(it's a bit trickier than it looks at first...)
-inline bool get_value_range_from_transaction(transaction_handle& txn, std::span<const std::uint8_t> begin_key, std::span<const std::uint8_t> end_key, auto out_iter)
+// JFW:		(it's a bit trickier than it looks at first-- I need to separate it into more components.)
+inline bool ceph::libfdb::transaction::get_value_range_from_transaction(std::span<const std::uint8_t> begin_key, std::span<const std::uint8_t> end_key, auto out_iter)
 {
- if(nullptr == txn) {
-  throw libfdb_exception("missing transaction");
- }
-
  const fdb_bool_t is_snapshot = false;
 
  const FDBKeyValue *out_kvs = nullptr;
  int out_count = 0;		// updated by FDB's read
  fdb_bool_t out_more = false;	// true if there's more to read
 
- future_value fv = get_range_future_from_transaction(txn, begin_key, end_key);
+ future_value fv = get_range_future_from_transaction(begin_key, end_key);
 
  if(fdb_error_t r = fdb_future_block_until_ready(fv.raw_handle()); 0 != r) {
    throw libfdb_exception(r);
@@ -441,7 +443,7 @@ inline bool get_value_range_from_transaction(transaction_handle& txn, std::span<
 
  if(fdb_error_t r = fdb_future_get_keyvalue_array(fv.raw_handle(), &out_kvs, &out_count, &out_more); 0 != r) {
 
-   auto fv2 = future_value(fdb_transaction_on_error(txn->raw_handle(), r));
+   auto fv2 = future_value(fdb_transaction_on_error(raw_handle(), r));
 
    if(fdb_error_t r2 = fdb_future_block_until_ready(fv2.raw_handle()); 0 != r2) {
      throw libfdb_exception(r);
@@ -469,7 +471,7 @@ inline bool get_value_range_from_transaction(transaction_handle& txn, std::span<
 // JFW: This probably needs to go back into base.h;
 // JFW: I think there's a simpler and also-"approved" way to do this-- I'll look at it later, getting rid
 // of the strangeness and complexity here would be good:
-inline bool get_single_value_from_transaction(transaction_handle& txn, const std::span<const std::uint8_t>& key, std::invocable<std::span<const std::uint8_t>> auto& write_output)
+inline bool ceph::libfdb::transaction::get_single_value_from_transaction(const std::span<const std::uint8_t>& key, std::invocable<std::span<const std::uint8_t>> auto&& write_output)
 {
  fdb_bool_t key_was_found = false;
  fdb_bool_t is_snapshot = false; 
@@ -477,7 +479,7 @@ inline bool get_single_value_from_transaction(transaction_handle& txn, const std
  const uint8_t *out_buffer = nullptr;
  int out_len = 0;
 
- future_value fv = fdb_transaction_get(txn->raw_handle(), (const uint8_t *)key.data(), key.size(), is_snapshot);
+ ceph::libfdb::future_value fv = fdb_transaction_get(raw_handle(), (const uint8_t *)key.data(), key.size(), is_snapshot);
 
  // AWAIT the FUTURE:
  if(fdb_error_t r = fdb_future_block_until_ready(fv.raw_handle()); 0 != r) {
@@ -486,7 +488,7 @@ inline bool get_single_value_from_transaction(transaction_handle& txn, const std
  }
 
  if(fdb_error_t r = fdb_future_get_value(fv.raw_handle(), &key_was_found, &out_buffer, &out_len); 0 != r) {
-    auto fv2 = future_value(fdb_transaction_on_error(txn->raw_handle(), r));
+    auto fv2 = future_value(fdb_transaction_on_error(raw_handle(), r));
 
     if(fdb_error_t r2 = fdb_future_block_until_ready(fv2.raw_handle()); 0 != r2) {
       throw libfdb_exception(r2);
@@ -570,7 +572,7 @@ in the library, and especially std::string::compare();
 
 */
 // JFW: TODO: implement/expose remaining features (key selectors, batching and chunking, etc.):
-inline future_value get_range_future_from_transaction(transaction_handle& txn, std::span<const std::uint8_t> begin_key, std::span<const std::uint8_t> end_key)
+inline ceph::libfdb::future_value ceph::libfdb::transaction::get_range_future_from_transaction(std::span<const std::uint8_t> begin_key, std::span<const std::uint8_t> end_key)
 {
   // By default, give (begin, end]; not much in the C API documentation about selector details, the Python docs
   // have a bit more information:
@@ -589,7 +591,7 @@ inline future_value get_range_future_from_transaction(transaction_handle& txn, s
   int iterations = 1; // should start at one, is incremented when streaming_mode_t::iterator is enabled, else ignored
 
   return fdb_transaction_get_range(
-		      txn->raw_handle(),
+		      raw_handle(),
 		      (const uint8_t *)begin_key.data(), begin_key.size(),	// the reference-point key (begin_key)
 		      begin_or_eq,
 		      begin_offset,
@@ -610,8 +612,5 @@ inline future_value get_range_future_from_transaction(transaction_handle& txn, s
 		      reverse		// should items come in reverse order?
 		    );
 }
-
-} // namespace ceph::libfdb::detail 
-
 
 #endif
