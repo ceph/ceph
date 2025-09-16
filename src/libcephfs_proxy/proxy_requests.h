@@ -126,6 +126,7 @@ enum {
 	LIBCEPHFSD_OP_LL_RELEASEDIR,
 	LIBCEPHFSD_OP_MOUNT_PERMS,
 	LIBCEPHFSD_OP_LL_NONBLOCKING_RW,
+	LIBCEPHFSD_OP_LL_NONBLOCKING_FSYNC,
 
 	/* Add more operations above this comment. */
 
@@ -135,6 +136,7 @@ enum {
 enum {
 	LIBCEPHFSD_CBK_NULL = 0,
 	LIBCEPHFSD_CBK_LL_NONBLOCKING_RW,
+	LIBCEPHFSD_CBK_LL_NONBLOCKING_FSYNC,
 
 	/* Add more callbacks above this comment. */
 
@@ -989,6 +991,22 @@ PROTO_CALL(ceph_ll_nonblocking_readv_writev,
 	)
 );
 
+PROTO_CALL(ceph_ll_nonblocking_fsync,
+	PROTO_REQ(
+		PROTO_VER(v0,
+			uint64_t cmount;
+			uint64_t info;
+			uint64_t inode;
+			bool syncdataonly;
+		)
+	),
+	PROTO_ANS(
+		PROTO_VER(v0,
+			int32_t res;
+			)
+	)
+);
+
 typedef union _proxy_req {
 	proxy_link_req_t header;
 
@@ -1040,6 +1058,7 @@ typedef union _proxy_req {
 	proxy_ceph_ll_releasedir_req_t ll_releasedir;
 	proxy_ceph_mount_perms_req_t mount_perms;
 	proxy_ceph_ll_nonblocking_readv_writev_req_t ll_nonblocking_rw;
+	proxy_ceph_ll_nonblocking_fsync_req_t ll_nonblocking_fsync;
 } proxy_req_t;
 
 PROTO_NOTIFY(ceph_ll_nonblocking_readv_writev,
@@ -1051,9 +1070,19 @@ PROTO_NOTIFY(ceph_ll_nonblocking_readv_writev,
 	)
 );
 
+PROTO_NOTIFY(ceph_ll_nonblocking_fsync,
+	PROTO_CBK(
+		PROTO_VER(v0,
+			uint64_t info;
+			int64_t res;
+		)
+	)
+);
+
 typedef union _proxy_cbk {
 	proxy_link_req_t header;
 	proxy_ceph_ll_nonblocking_readv_writev_cbk_t ll_nonblocking_rw;
+	proxy_ceph_ll_nonblocking_fsync_cbk_t ll_nonblocking_fsync;
 } proxy_cbk_t;
 
 #endif
