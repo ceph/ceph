@@ -231,6 +231,7 @@ options:
   level: advanced
   desc: The number of generations in the hot tier or the whole SeaStore instance if there's only one tier.
   default: 5
+  min: 5
 - name: seastore_cold_tier_generations
   type: uint
   level: advanced
