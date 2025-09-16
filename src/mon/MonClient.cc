@@ -519,6 +519,8 @@ int MonClient::init()
     }
   }
   if (!auth_registry.any_supported_methods(messenger->get_mytype())) {
+    lderr(cct) << "no supported authentication method found! Is the keyring missing?" << dendl;
+    lderr(cct) << "Try debugging using arguments: --debug_monc=20 --debug_auth=5" << dendl;
     return -ENOENT;
   }
 
