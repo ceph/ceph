@@ -114,11 +114,9 @@ public:
     laddr_t offset) {
     LOG_PREFIX(TransactionManager::get_pin);
     SUBDEBUGT(seastore_tm, "{} ...", t, offset);
-    return lba_manager->get_mapping(t, offset, false
-    ).si_then([FNAME, &t](LBAMapping pin) {
-      SUBDEBUGT(seastore_tm, "got {}", t, pin);
-      return pin;
-    });
+    auto pin = co_await lba_manager->get_mapping(t, offset, false);
+    SUBDEBUGT(seastore_tm, "got {}", t, pin);
+    co_return pin;
   }
 
   /**
@@ -131,21 +129,17 @@ public:
     laddr_t laddr) {
     LOG_PREFIX(TransactionManager::get_containing_pin);
     SUBDEBUGT(seastore_tm, "{} ...", t, laddr);
-    return lba_manager->get_mapping(t, laddr, true
-    ).si_then([FNAME, &t](LBAMapping pin) {
-      SUBDEBUGT(seastore_tm, "got {}", t, pin);
-      return pin;
-    });
+    auto pin = co_await lba_manager->get_mapping(t, laddr, true);
+    SUBDEBUGT(seastore_tm, "got {}", t, pin);
+    co_return pin;
   }
 
   get_pin_ret get_pin(Transaction &t, LogicalChildNode &extent) {
     LOG_PREFIX(TransactionManager::get_pin);
     SUBDEBUGT(seastore_tm, "{} ...", t, extent);
-    return lba_manager->get_mapping(t, extent
-    ).si_then([FNAME, &t](LBAMapping pin) {
-      SUBDEBUGT(seastore_tm, "got {}", t, pin);
-      return pin;
-    });
+    auto pin = co_await lba_manager->get_mapping(t, extent);
+    SUBDEBUGT(seastore_tm, "got {}", t, pin);
+    co_return pin;
   }
 
   /**
@@ -161,12 +155,9 @@ public:
     extent_len_t length) {
     LOG_PREFIX(TransactionManager::get_pins);
     SUBDEBUGT(seastore_tm, "{}~0x{:x} ...", t, offset, length);
-    return lba_manager->get_mappings(
-      t, offset, length
-    ).si_then([FNAME, &t](lba_mapping_list_t pins) {
-      SUBDEBUGT(seastore_tm, "got {} pins", t, pins.size());
-      return pins;
-    });
+    auto pins = co_await lba_manager->get_mappings(t, offset, length);
+    SUBDEBUGT(seastore_tm, "got {} pins", t, pins.size());
+    co_return pins;
   }
 
   /**
