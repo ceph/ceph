@@ -112,16 +112,6 @@ void redis_exec_cp(std::shared_ptr<rgw::d4n::RedisPool> pool,
 	pool->release(conn);
 }
 
-int check_bool(std::string str) {
-  if (str == "true" || str == "1") {
-    return 1;
-  } else if (str == "false" || str == "0") {
-    return 0;
-  } else {
-    return -EINVAL;
-  }
-}
-
 void redis_exec_connection_pool(const DoutPrefixProvider* dpp,
 				std::shared_ptr<RedisPool> redis_pool,
 				std::shared_ptr<connection> conn,

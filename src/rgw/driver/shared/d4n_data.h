@@ -58,10 +58,11 @@ struct CacheBlock {
   /* Blocks use the cacheObj's dirty and hostsList metadata to store their dirty flag values and locations in the block directory. */
 };
 
+/* JFW:
 class Directory {
   public:
     Directory() {}
-};
+}; */
 
 inline int check_bool(std::string str) {
   if (str == "true" || str == "1") {

@@ -3,6 +3,8 @@
 #include "rgw_common.h"
 #include "rgw_asio_thread.h"
 
+#include "driver/shared/d4n_data.h"
+
 #include <boost/asio/detached.hpp>
 #include <boost/redis/connection.hpp>
 #include <condition_variable>

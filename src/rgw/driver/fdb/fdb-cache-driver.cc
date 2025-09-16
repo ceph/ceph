@@ -1,6 +1,5 @@
 
 #include "rgw/rgw_fdb.h"
-
 #include "rgw/driver/fdb/fdb-cache-driver.h"
 
 #include "common/dout.h"

@@ -339,10 +339,11 @@ if(D4N_USE_FDB_SINK)
  message("Building with FDB support as D4N sink (experimental).")
 
  target_include_directories(rgw_common PRIVATE
+    driver/
 	driver/fdb)
  
  list(APPEND librgw_common_srcs
-        driver/fdb/sal_d4n_fdb.cc
+    driver/fdb/sal_d4n_fdb.cc
 	driver/fdb/fdb-cache-driver.cc)
 endif(D4N_USE_FDB_SINK)
 
