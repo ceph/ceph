@@ -10,7 +10,11 @@ export class InventoryPageHelper extends PageHelper {
   identify() {
     // Nothing we can do, just verify the form is there
     this.getFirstTableCell().click();
-    cy.contains('[data-testid="primary-action"]', 'Identify').click();
+    cy.wait(500);
+    cy.contains('[data-testid="primary-action"]', 'Identify')
+      .should('exist')
+      .should('not.be.disabled', { timeout: 15000 })
+      .click();
     cy.get('cds-modal').within(() => {
       cy.get('#duration').select('15 minutes');
       cy.get('#duration').select('10 minutes');

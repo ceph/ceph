@@ -66,6 +66,8 @@ class Service(RESTController):
         :return: None
         """
 
+        if service_spec.get('service_type') not in ServiceSpec.REQUIRES_SERVICE_ID:
+            service_spec.pop('service_id', None)
         OrchClient.instance().services.apply(service_spec, no_overwrite=True)
 
     @UpdatePermission
