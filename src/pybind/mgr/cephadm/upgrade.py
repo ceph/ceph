@@ -1186,10 +1186,9 @@ class CephadmUpgrade:
         # unset mon flags for upgrade
         if self.upgrade_state.mon_flags:
             try:
-                currently_set_flags = self.mgr.get_set_global_mon_flags()
                 flags_toggled = list()
                 for flag in self.upgrade_state.mon_flags:
-                    if flag in currently_set_flags:
+                    if self.mgr.is_global_mon_flag_set(flag):
                         self.mgr.unset_global_mon_flag(flag)
                         flags_toggled.append(flag)
                 # set mon_flags to the list of flags actually unset before upgrade.

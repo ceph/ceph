@@ -3021,6 +3021,8 @@ Then run the following:
                 return True
             if s in {"false", "no", "off", "disabled", "disable", "unset"}:
                 return False
+        except Exception as e:
+            raise OrchestratorError(f'Failed to get set mon flags: {e}')
 
     def _trigger_preview_refresh(self,
                                  specs: Optional[List[DriveGroupSpec]] = None,
