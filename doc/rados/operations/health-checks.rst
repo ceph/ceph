@@ -313,7 +313,7 @@ failover to another daemon.
 **Module failed to initialize**
 
 If the ``ceph health detail`` looks something like this, it means that some
-modules took too long to initialize post a mgr failover, and are unable to process
+modules took too long to initialize after a Manager failover, and are unable to process
 commands:
 
 .. code-block:: console
@@ -325,10 +325,18 @@ commands:
        Module 'telemetry' has failed: Module failed to initialize.
        Module 'volumes' has failed: Module failed to initialize.
 
-To troubleshoot, you may try running ``ceph mgr fail`` to reboot
+
+You can also see these modules listed under ``pending_modules``
+in the output of the following command:
+
+.. prompt:: bash $
+
+   ceph tell mgr mgr_status
+
+To troubleshoot, you may run ``ceph mgr fail`` to reboot
 module initialization.
 
-Note that the health error may disappear on its own since modules
+Note that the health error may clear on its own since modules
 will continue to initialize in the background.
 
 If the modules are still failing to initialize, please file a bug
