@@ -222,8 +222,11 @@ seastar::future<> SeaStore::start()
   assert(d_type == device_type_t::SSD ||
          d_type == device_type_t::RANDOM_BLOCK_SSD);
 
+  type = get_conf<std::string>("seastore_main_backend_type");
+  auto b_type = string_to_backend_type(type);
+  INFO("main device type: {}, main backend type: {}", d_type, b_type);
   ceph_assert(root != "");
-  return Device::make_device(root, d_type
+  return Device::make_device(root, d_type, b_type
   ).then([this](DeviceRef device_obj) {
     device = std::move(device_obj);
     return device->start();
@@ -298,9 +301,12 @@ SeaStore::mount_ertr::future<> SeaStore::mount()
       device_id_t id = device_entry.first;
       magic_t magic = device_entry.second.magic;
       device_type_t dtype = device_entry.second.dtype;
+      backend_type_t btype = device_entry.second.btype;
+      auto btype_conf_str = get_conf<std::string>("seastore_secondary_backend_type");
+      ceph_assert(string_to_backend_type(btype_conf_str) == btype);
       std::string path =
-        fmt::format("{}/block.{}.{}", root, dtype, std::to_string(id));
-      return Device::make_device(path, dtype
+        fmt::format("{}/block.{}", root, std::to_string(id));
+      return Device::make_device(path, dtype, btype
       ).then([this, path, magic](DeviceRef sec_dev) {
         return sec_dev->start(
         ).then([this, magic, sec_dev = std::move(sec_dev)]() mutable {
@@ -487,6 +493,19 @@ seastar::future<> SeaStore::prepare_meta(uuid_d new_osd_fsid)
   });
 }
 
+std::optional<device_id_t> parse_device_id(const seastar::sstring &name) {
+  auto prefix_len = sizeof("block.") - 1;
+  if (name.starts_with("block.") && name.length() > prefix_len) {
+    int id = 0;
+    std::string id_str = name.substr(prefix_len);
+    std::istringstream iss(id_str);
+    iss >> id;
+    assert(id < std::numeric_limits<uint8_t>::max());
+    return std::make_optional<device_id_t>(id);
+  }
+  return std::nullopt;
+}
+
 SeaStore::mkfs_ertr::future<> SeaStore::mkfs(uuid_d new_osd_fsid)
 {
   LOG_PREFIX(SeaStore::mkfs);
@@ -499,73 +518,62 @@ SeaStore::mkfs_ertr::future<> SeaStore::mkfs(uuid_d new_osd_fsid)
     if (done == 0) {
       ERROR("failed");
       return seastar::now();
-    } else {
-      return seastar::do_with(
-        secondary_device_set_t(),
-        [this, new_osd_fsid, FNAME](auto& sds) {
-        auto fut = seastar::now();
-        if (!root.empty()) {
-          fut = seastar::open_directory(root
-          ).then([this, &sds, new_osd_fsid, FNAME](seastar::file rdir) mutable {
-            std::unique_ptr<seastar::file> root_f =
-              std::make_unique<seastar::file>(std::move(rdir));
-            auto sub = root_f->list_directory(
-              [this, &sds, new_osd_fsid, FNAME](auto de) mutable -> seastar::future<>
-            {
-              DEBUG("found file: {}", de.name);
-              if (de.name.find("block.") == 0
-                  && de.name.length() > 6 /* 6 for "block." */) {
-                std::string entry_name = de.name;
-                auto dtype_end = entry_name.find_first_of('.', 6);
-                device_type_t dtype =
-                  string_to_device_type(
-                    entry_name.substr(6, dtype_end - 6));
-                if (dtype == device_type_t::NONE) {
-                  // invalid device type
-                  return seastar::now();
-                }
-                auto id = std::stoi(entry_name.substr(dtype_end + 1));
-                std::string path = fmt::format("{}/{}", root, entry_name);
-                return Device::make_device(path, dtype
-                ).then([this, &sds, id, dtype, new_osd_fsid](DeviceRef sec_dev) {
-                  auto p_sec_dev = sec_dev.get();
-                  secondaries.emplace_back(std::move(sec_dev));
-                  return p_sec_dev->start(
-                  ).then([&sds, id, dtype, new_osd_fsid, p_sec_dev]() {
-                    magic_t magic = (magic_t)std::rand();
-                    sds.emplace(
-                      (device_id_t)id,
-                      device_spec_t{magic, dtype, (device_id_t)id});
-                    return p_sec_dev->mkfs(device_config_t::create_secondary(
-                      new_osd_fsid, id, dtype, magic)
-                    ).handle_error(crimson::ct_error::assert_all{"not possible"});
-                  });
-                }).then([this] {
-                   return set_secondaries();
-                });
+    }
+    auto dtype_str = get_conf<std::string>("seastore_secondary_device_type");
+    auto dtype = string_to_device_type(dtype_str);
+    auto btype_str = get_conf<std::string>("seastore_secondary_backend_type");
+    auto btype = string_to_backend_type(btype_str);
+    ceph_assert(!root.empty());
+    LOG_PREFIX(SeaStore::mkfs);
+    INFO("secondary device type: {}, secondary backend type: {}", dtype, btype);
+    return seastar::do_with(
+      secondary_device_set_t(),
+      [this, new_osd_fsid, dtype, btype](auto &sds) {
+        return seastar::open_directory(root
+        ).then([this, new_osd_fsid, &sds, dtype, btype](auto _root_dir) {
+          auto root_dir = std::make_unique<seastar::file>(std::move(_root_dir));
+          return root_dir->list_directory(
+            [this, new_osd_fsid, &sds, dtype, btype]
+            (seastar::directory_entry de) -> seastar::future<> {
+              auto p = parse_device_id(de.name);
+              if (!p) {
+                return seastar::now();
               }
-              return seastar::now();
-            });
-            return sub.done().then([root_f=std::move(root_f)] {});
-          });
-        }
-        return fut.then([this, &sds, new_osd_fsid] {
-          device_id_t id = 0;
-          device_type_t d_type = device->get_device_type();
-          assert(d_type == device_type_t::SSD ||
-            d_type == device_type_t::RANDOM_BLOCK_SSD);
-          if (d_type == device_type_t::RANDOM_BLOCK_SSD) {
-            id = static_cast<device_id_t>(DEVICE_ID_RANDOM_BLOCK_MIN);
-          }
-
-          return device->mkfs(
-            device_config_t::create_primary(new_osd_fsid, id, d_type, sds)
-          );
-        }).safe_then([this] {
-          return crimson::do_for_each(secondaries, [](auto& sec_dev) {
-            return sec_dev->mount();
-          });
-        });
+              auto path = fmt::format("{}/{}", root, de.name);
+              return Device::make_device(path, dtype, btype
+              ).then([this, &sds, id=*p, dtype,
+		      btype, new_osd_fsid](DeviceRef sec_dev) {
+                auto p_sec_dev = sec_dev.get();
+                secondaries.emplace_back(std::move(sec_dev));
+                return p_sec_dev->start(
+                ).then([&sds, id, dtype, btype, new_osd_fsid, p_sec_dev] {
+                  magic_t magic = std::rand();
+                  sds.emplace(id, device_spec_t{magic, dtype, btype, id});
+                  return p_sec_dev->mkfs(device_config_t::create_secondary(
+                    new_osd_fsid, id, dtype, btype, magic)
+                  ).handle_error(crimson::ct_error::assert_all{"not possible"});
+                });
+              }).then([this] {
+                return set_secondaries();
+              });
+            }).done().then([root_dir=std::move(root_dir)] {});
+        }).then([this, new_osd_fsid, &sds] {
+	  device_id_t id = 0;
+	  device_type_t d_type = device->get_device_type();
+	  backend_type_t b_type = device->get_backend_type();
+	  assert(d_type == device_type_t::SSD ||
+		 d_type == device_type_t::RANDOM_BLOCK_SSD);
+	  assert(b_type != backend_type_t::NONE);
+	  if (d_type == device_type_t::RANDOM_BLOCK_SSD) {
+	    id = static_cast<device_id_t>(DEVICE_ID_RANDOM_BLOCK_MIN);
+	  }
+	  return device->mkfs(device_config_t::create_primary(
+            new_osd_fsid, id, d_type, b_type, sds));
+	});
+      }).safe_then([this] {
+	return crimson::do_for_each(secondaries, [](auto& sec_dev) {
+	  return sec_dev->mount();
+	});
       }).safe_then([this] {
         return device->mount();
       }).safe_then([this] {
@@ -584,7 +592,6 @@ SeaStore::mkfs_ertr::future<> SeaStore::mkfs(uuid_d new_osd_fsid)
           "Invalid error in SeaStore::mkfs"
         }
       );
-    }
   });
 }
 
@@ -1689,7 +1696,8 @@ SeaStore::Shard::_do_transaction_step(
     }
     OnodeRef& d_onode = onodes[op->dest_oid];
     if ((op->op == Transaction::OP_CLONE
-	  || op->op == Transaction::OP_COLL_MOVE_RENAME)
+	  || op->op == Transaction::OP_COLL_MOVE_RENAME
+	  || op->op == Transaction::OP_CLONERANGE2)
 	&& !d_onode) {
       const ghobject_t& dest_oid = i.get_oid(op->dest_oid);
       DEBUGT("op {}, get_or_create dest oid={} ...",
@@ -1863,6 +1871,22 @@ SeaStore::Shard::_do_transaction_step(
                *ctx.transaction, oid, i.get_oid(op->dest_oid));
 	return _clone(ctx, *onode, *onodes[op->dest_oid]);
       }
+      case Transaction::OP_CLONERANGE2:
+      {
+        assert(op->off <= std::numeric_limits<extent_len_t>::max());
+        assert(op->len <= std::numeric_limits<extent_len_t>::max());
+        assert(op->dest_off <= std::numeric_limits<extent_len_t>::max());
+        extent_len_t srcoff = (extent_len_t)op->off;
+        extent_len_t len = (extent_len_t)op->len;
+        extent_len_t dstoff = (extent_len_t)op->dest_off;
+        return _clone_range(
+          ctx,
+          onode,
+          onodes[op->dest_oid],
+          srcoff,
+          len,
+          dstoff);
+      }
       case Transaction::OP_COLL_MOVE_RENAME:
       {
         DEBUGT("op COLL_MOVE_RENAME, oid={}, dest oid={} ...",
@@ -1907,39 +1931,70 @@ SeaStore::Shard::_do_transaction_step(
   );
 }
 
+namespace {
+void rename_onode_omap_metadata(
+  Transaction &t, Onode &src, Onode &dst)
+{
+  auto src_prefix = *src.get_clone_prefix();
+  auto dst_prefix = *dst.get_clone_prefix();
+
+  auto rename_root = [&src, &dst, src_prefix, dst_prefix](omap_type_t type) {
+    auto root = src.get_root(type).get(dst.get_metadata_hint());
+    if (root.is_null()) {
+      return root;
+    }
+    auto offset = root.addr.get_byte_distance<loffset_t>(src_prefix);
+    root.update(
+      (dst_prefix + offset).checked_to_laddr(),
+      root.depth, dst.get_metadata_hint(), type);
+    return root;
+  };
+
+  auto omap_root = rename_root(omap_type_t::OMAP);
+  auto xattr_root = rename_root(omap_type_t::XATTR);
+  auto log_root = rename_root(omap_type_t::LOG);
+
+  dst.update_omap_root(t, omap_root);
+  dst.update_xattr_root(t, xattr_root);
+  dst.update_log_root(t, log_root);
+}
+}
+
 SeaStore::Shard::tm_ret
 SeaStore::Shard::_rename(
   internal_context_t &ctx,
   OnodeRef &onode,
   OnodeRef &d_onode)
 {
-  auto olayout = onode->get_layout();
-  uint32_t size = olayout.size;
-  auto omap_root = rename_omap_root(omap_type_t::OMAP, *onode, *d_onode);
-  auto xattr_root = rename_omap_root(omap_type_t::XATTR, *onode, *d_onode);
-  auto log_root = rename_omap_root(omap_type_t::LOG, *onode, *d_onode);
-  auto object_data = olayout.object_data.get();
-  auto oi_bl = ceph::bufferlist::static_from_mem(
-    &olayout.oi[0],
-    (uint32_t)olayout.oi_size);
-  auto ss_bl = ceph::bufferlist::static_from_mem(
-    &olayout.ss[0],
-    (uint32_t)olayout.ss_size);
+  return seastar::do_with(
+    ObjectDataHandler(max_object_size),
+    [this, &ctx, &onode, &d_onode](ObjectDataHandler &objHanlder)
+  {
+    return objHanlder.rename(ObjectDataHandler::context_t{
+      *transaction_manager, *ctx.transaction, *onode, d_onode.get()
+    }).si_then([&ctx, &onode, &d_onode] {
+      auto olayout = onode->get_layout();
+      uint32_t size = olayout.size;
+      auto oi_bl = ceph::bufferlist::static_from_mem(
+	&olayout.oi[0],
+	(uint32_t)olayout.oi_size);
+      auto ss_bl = ceph::bufferlist::static_from_mem(
+	&olayout.ss[0],
+	(uint32_t)olayout.ss_size);
 
-  d_onode->update_onode_size(*ctx.transaction, size);
-  d_onode->update_omap_root(*ctx.transaction, omap_root);
-  d_onode->update_xattr_root(*ctx.transaction, xattr_root);
-  d_onode->update_log_root(*ctx.transaction, log_root);
-  d_onode->update_object_data(*ctx.transaction, object_data);
-  d_onode->update_object_info(*ctx.transaction, oi_bl);
-  d_onode->update_snapset(*ctx.transaction, ss_bl);
-  return onode_manager->erase_onode(
-    *ctx.transaction, onode
-  ).handle_error_interruptible(
-    crimson::ct_error::input_output_error::pass_further(),
-    crimson::ct_error::assert_all{
-      "Invalid error in SeaStoreS::_rename"}
-  );
+      d_onode->update_onode_size(*ctx.transaction, size);
+      d_onode->update_object_info(*ctx.transaction, oi_bl);
+      d_onode->update_snapset(*ctx.transaction, ss_bl);
+      rename_onode_omap_metadata(*ctx.transaction, *onode, *d_onode);
+    });
+  }).si_then([this, &ctx, &onode] {
+    return onode_manager->erase_onode(
+      *ctx.transaction, onode
+    ).handle_error_interruptible(
+      crimson::ct_error::input_output_error::pass_further(),
+      crimson::ct_error::assert_all{
+	"Invalid error in SeaStoreS::_rename"});
+  });
 }
 
 SeaStore::Shard::tm_ret
@@ -1963,12 +2018,15 @@ SeaStore::Shard::_remove(
       ObjectDataHandler(max_object_size),
       [&onode, this, &ctx](auto &objhandler)
     {
-      return objhandler.clear(
-        ObjectDataHandler::context_t{
-          *transaction_manager,
-          *ctx.transaction,
-          *onode,
-        });
+      return _maybe_copy_on_write(ctx, *onode, objhandler
+      ).si_then([&onode, this, &ctx, &objhandler] {
+	return objhandler.clear(
+	  ObjectDataHandler::context_t{
+	    *transaction_manager,
+	    *ctx.transaction,
+	    *onode,
+	  });
+      });
     });
   }).si_then([this, &ctx, &onode] {
     return onode_manager->erase_onode(*ctx.transaction, onode);
@@ -1985,7 +2043,12 @@ SeaStore::Shard::_touch(
   internal_context_t &ctx,
   Onode &onode)
 {
-  return tm_iertr::now();
+  auto objhandler = ObjectDataHandler(max_object_size);
+  co_await objhandler.touch(ObjectDataHandler::context_t{
+    *transaction_manager,
+    *ctx.transaction,
+    onode
+  });
 }
 
 SeaStore::Shard::tm_ret
@@ -2005,16 +2068,20 @@ SeaStore::Shard::_write(
   return seastar::do_with(
     std::move(_bl),
     ObjectDataHandler(max_object_size),
-    [=, this, &ctx, &onode](auto &bl, auto &objhandler) {
+    [=, this, &ctx, &onode](auto &bl, auto &objhandler)
+  {
+    return _maybe_copy_on_write(ctx, onode, objhandler
+    ).si_then([&ctx, &onode, &objhandler, offset, &bl, this] {
       return objhandler.write(
-        ObjectDataHandler::context_t{
-          *transaction_manager,
-          *ctx.transaction,
-          onode,
-        },
-        offset,
-        bl);
+	ObjectDataHandler::context_t{
+	  *transaction_manager,
+	  *ctx.transaction,
+	  onode,
+	},
+	offset,
+	bl);
     });
+  });
 }
 
 SeaStore::Shard::tm_ret
@@ -2029,21 +2096,109 @@ SeaStore::Shard::_clone(
   {
     auto &object_size = onode.get_layout().size;
     d_onode.update_onode_size(*ctx.transaction, object_size);
-    return objHandler.clone(
+    if (onode.is_head()) { // OP_CLONE
+      assert(onode.is_head());
+      assert(d_onode.is_snap());
+      /* The most common usage of OP_CLONE is during a write operation.
+       * The osd will submit a transaction cloning HEAD to clone and
+       * then mutating HEAD.  ObjectDataHandler::do_clone optimizes for
+       * the case where the *source* is not further mutated, so here we
+       * reverse the two onodes so that HEAD will be the target.
+       */
+      auto id = onode.get_layout()
+	  .object_data
+	  .get()
+	  .get_reserved_data_base()
+	  .get_local_object_id();
+      onode.swap_layout(*ctx.transaction, d_onode);
+      onode.set_sibling_object_id(id);
+      return objHandler.clone(
+	ObjectDataHandler::context_t{
+	  *transaction_manager,
+	  *ctx.transaction,
+	  d_onode,
+	  &onode});
+    } else { // OP_ROLLBACK
+      assert(d_onode.is_head());
+      return objHandler.clone(
+	ObjectDataHandler::context_t{
+	  *transaction_manager,
+	  *ctx.transaction,
+	  onode,
+	  &d_onode});
+    }
+  }).si_then([&ctx, &onode, &d_onode, this] {
+    return omaptree_clone(
+      *ctx.transaction,
+      omap_type_t::XATTR,
+      onode.is_head() ? d_onode : onode,
+      onode.is_head() ? onode : d_onode);
+  }).si_then([&ctx, &onode, &d_onode, this] {
+    return omaptree_clone(
+      *ctx.transaction,
+      omap_type_t::OMAP,
+      onode.is_head() ? d_onode : onode,
+      onode.is_head() ? onode : d_onode);
+  }).si_then([&ctx, &onode, &d_onode, this] {
+    return omaptree_clone(
+      *ctx.transaction,
+      omap_type_t::LOG,
+      onode.is_head() ? d_onode : onode,
+      onode.is_head() ? onode : d_onode);
+  });
+}
+
+SeaStore::Shard::tm_ret
+SeaStore::Shard::_maybe_copy_on_write(
+  internal_context_t &ctx,
+  Onode &onode,
+  ObjectDataHandler &handler)
+{
+  if (!onode.need_cow()) {
+    co_return;
+  }
+  auto fake_onode = onode.offload_data_and_md(*ctx.transaction);
+  onode.set_sibling_object_id(fake_onode->get_clone_prefix()->get_local_object_id());
+  co_await handler.copy_on_write(
+    ObjectDataHandler::context_t{
+      *transaction_manager,
+      *ctx.transaction,
+      *fake_onode,
+      &onode
+    });
+  rename_onode_omap_metadata(*ctx.transaction, *fake_onode, onode);
+}
+
+SeaStore::Shard::tm_ret
+SeaStore::Shard::_clone_range(
+  internal_context_t &ctx,
+  OnodeRef &src_onode,
+  OnodeRef &dst_onode,
+  extent_len_t srcoff,
+  extent_len_t length,
+  extent_len_t dstoff)
+{
+  LOG_PREFIX(SeaStore::_clone_range);
+  DEBUGT("src_onode={}, dst_onode={}, src {}~{}, dst {}",
+    *ctx.transaction, *src_onode, *dst_onode, srcoff, length, dstoff);
+  const auto &d_object_size = dst_onode->get_layout().size;
+  if (srcoff + length > d_object_size) {
+    dst_onode->update_onode_size(
+      *ctx.transaction,
+      std::max<uint64_t>(srcoff + length, d_object_size));
+  }
+  return seastar::do_with(
+    ObjectDataHandler(max_object_size),
+    [=, this, &ctx](auto &objHandler) {
+    return objHandler.clone_range(
       ObjectDataHandler::context_t{
 	*transaction_manager,
 	*ctx.transaction,
-	onode,
-	&d_onode});
-  }).si_then([&ctx, &onode, &d_onode, this] {
-    return omaptree_clone(
-      *ctx.transaction, omap_type_t::XATTR, onode, d_onode);
-  }).si_then([&ctx, &onode, &d_onode, this] {
-    return omaptree_clone(
-      *ctx.transaction, omap_type_t::OMAP, onode, d_onode);
-  }).si_then([&ctx, &onode, &d_onode, this] {
-    return omaptree_clone(
-      *ctx.transaction, omap_type_t::LOG, onode, d_onode);
+	*src_onode,
+	dst_onode.get()},
+      srcoff,
+      length,
+      dstoff);
   });
 }
 
@@ -2066,15 +2221,19 @@ SeaStore::Shard::_zero(
     std::max<uint64_t>(offset + len, object_size));
   return seastar::do_with(
     ObjectDataHandler(max_object_size),
-    [=, this, &ctx, &onode](auto &objhandler) {
+    [=, this, &ctx, &onode](auto &objhandler)
+  {
+    return _maybe_copy_on_write(ctx, onode, objhandler
+    ).si_then([this, &ctx, &onode, &objhandler, offset, len] {
       return objhandler.zero(
-        ObjectDataHandler::context_t{
-          *transaction_manager,
-          *ctx.transaction,
-          onode,
-        },
-        offset,
-        len);
+	ObjectDataHandler::context_t{
+	  *transaction_manager,
+	  *ctx.transaction,
+	  onode,
+	},
+	offset,
+	len);
+    });
   });
 }
 
@@ -2122,14 +2281,18 @@ SeaStore::Shard::_truncate(
   onode.update_onode_size(*ctx.transaction, size);
   return seastar::do_with(
     ObjectDataHandler(max_object_size),
-    [=, this, &ctx, &onode](auto &objhandler) {
-    return objhandler.truncate(
-      ObjectDataHandler::context_t{
-        *transaction_manager,
-        *ctx.transaction,
-        onode
-      },
-      size);
+    [=, this, &ctx, &onode](auto &objhandler)
+  {
+    return _maybe_copy_on_write(ctx, onode, objhandler
+    ).si_then([this, &ctx, &onode, &objhandler, size] {
+      return objhandler.truncate(
+	ObjectDataHandler::context_t{
+	  *transaction_manager,
+	  *ctx.transaction,
+	  onode,
+	},
+	size);
+    });
   });
 }
 

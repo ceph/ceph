@@ -17,11 +17,13 @@ using magic_t = uint64_t;
 struct device_spec_t {
   magic_t magic = 0;
   device_type_t dtype = device_type_t::NONE;
+  backend_type_t btype = backend_type_t::NONE;
   device_id_t id = DEVICE_ID_NULL;
   DENC(device_spec_t, v, p) {
     DENC_START(1, 1, p);
     denc(v.magic, p);
     denc(v.dtype, p);
+    denc(v.btype, p);
     denc(v.id, p);
     DENC_FINISH(p);
   }
@@ -49,12 +51,14 @@ struct device_config_t {
     uuid_d new_osd_fsid,
     device_id_t id,
     device_type_t d_type,
+    backend_type_t b_type,
     secondary_device_set_t sds) {
     return device_config_t{
              true,
              device_spec_t{
                (magic_t)std::rand(),
 		d_type,
+                b_type,
 		id},
              seastore_meta_t{new_osd_fsid},
              sds};
@@ -63,12 +67,14 @@ struct device_config_t {
     uuid_d new_osd_fsid,
     device_id_t id,
     device_type_t d_type,
+    backend_type_t b_type,
     magic_t magic) {
     return device_config_t{
              false,
              device_spec_t{
                magic,
                d_type,
+               b_type,
                id},
              seastore_meta_t{new_osd_fsid},
              secondary_device_set_t()};
@@ -117,7 +123,8 @@ public:
 
   static seastar::future<DeviceRef> make_device(
     const std::string &device,
-    device_type_t dtype);
+    device_type_t dtype,
+    backend_type_t btype);
 
 // interfaces used by each device shard
 public:

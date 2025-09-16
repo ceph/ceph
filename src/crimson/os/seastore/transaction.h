@@ -476,7 +476,16 @@ public:
   friend class crimson::os::seastore::SeaStore;
   friend class TransactionConflictCondition;
 
+  uint64_t write_hit_hot = 0;
+  uint64_t write_hit_cold = 0;
+  uint64_t read_hit_hot = 0;
+  uint64_t read_hit_cold = 0;
+
   void reset_preserve_handle() {
+    write_hit_hot = 0;
+    write_hit_cold = 0;
+    read_hit_hot = 0;
+    read_hit_cold = 0;
     root.reset();
     offset = 0;
     delayed_temp_offset = 0;
@@ -509,6 +518,7 @@ public:
     }
     get_handle().exit();
     views.clear();
+    touched_prefix.clear();
   }
 
   bool did_reset() const {
@@ -617,6 +627,14 @@ public:
 
   cache_hint_t get_cache_hint() const {
     return cache_hint;
+  }
+
+  void touch_laddr_prefix(laddr_t laddr) {
+    touched_prefix.insert(laddr.get_object_prefix());
+  }
+
+  std::unordered_set<laddr_t> &get_touched_laddr_prefix() {
+    return touched_prefix;
   }
 
   btree_cursor_stats_t cursor_stats;
@@ -821,6 +839,8 @@ private:
    * Set of extents retired by *this.
    */
   retired_extent_set_t retired_set;
+
+  std::unordered_set<laddr_t> touched_prefix;
 
   /// stats to collect when commit or invalidate
   tree_stats_t onode_tree_stats;

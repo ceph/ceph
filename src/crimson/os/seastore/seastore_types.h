@@ -24,6 +24,14 @@
 
 #include "crimson/common/errorator.h"
 
+#ifndef SEASTORE_LADDR_USE_BOOST_U128
+#define SEASTORE_LADDR_USE_BOOST_U128 0
+#endif
+
+#if !defined (__SIZEOF_INT128__) || SEASTORE_LADDR_USE_BOOST_U128
+#include <boost/multiprecision/cpp_int.hpp>
+#endif
+
 namespace crimson::os::seastore {
 
 using base_ertr = crimson::errorator<
@@ -971,23 +979,15 @@ std::ostream& operator<<(std::ostream& out, device_type_t t);
 bool can_delay_allocation(device_type_t type);
 device_type_t string_to_device_type(std::string type);
 
-enum class backend_type_t {
+enum class backend_type_t : uint8_t {
+  NONE,
   SEGMENTED,    // SegmentManager: SSD, ZBD, HDD
   RANDOM_BLOCK  // RBMDevice:      RANDOM_BLOCK_SSD
 };
 
 std::ostream& operator<<(std::ostream& out, backend_type_t);
 
-constexpr backend_type_t get_default_backend_of_device(device_type_t dtype) {
-  assert(dtype != device_type_t::NONE &&
-	 dtype != device_type_t::NUM_TYPES);
-  if (dtype >= device_type_t::HDD &&
-      dtype <= device_type_t::EPHEMERAL_MAIN) {
-    return backend_type_t::SEGMENTED;
-  } else {
-    return backend_type_t::RANDOM_BLOCK;
-  }
-}
+backend_type_t string_to_backend_type(const std::string &str);
 
 /**
  * Monotonically increasing identifier for the location of a
@@ -1088,40 +1088,252 @@ inline extent_len_le_t init_extent_len_le(extent_len_t len) {
   return ceph_le32(len);
 }
 
-// logical addr, see LBAManager, TransactionManager
+using local_object_id_t = uint32_t;
+// LOCAL_OBJECT_ID_ZERO is reserved for SeastoreNodeExtent
+constexpr local_object_id_t LOCAL_OBJECT_ID_ZERO = 0;
+constexpr local_object_id_t LOCAL_OBJECT_ID_NULL =
+    std::numeric_limits<uint32_t>::max();
+using local_object_id_le_t = ceph_le32;
+
+using local_clone_id_t = uint32_t;
+constexpr local_clone_id_t LOCAL_CLONE_ID_NULL =
+    std::numeric_limits<uint32_t>::max();
+using local_clone_id_le_t = ceph_le32;
+
+using laddr_shard_t = int8_t;
+using laddr_pool_t = int64_t;
+// Note: this is the reversed version of the object hash
+using laddr_crush_hash_t = uint32_t;
+
+using laddr_block_offset_t = uint32_t;
+constexpr laddr_block_offset_t LADDR_BLOCK_OFFSET_NULL =
+    std::numeric_limits<uint32_t>::max();
+using laddr_block_offset_le_t = ceph_le32;
+
+// refer to doc/dev/crimson/seastore_laddr.rst
 class laddr_t {
 public:
-  // the type of underlying integer
-  using Unsigned = uint64_t;
+#if defined (__SIZEOF_INT128__) && !SEASTORE_LADDR_USE_BOOST_U128
+  // The other components must be compatible with boost version laddr_t.
+  using Unsigned = unsigned __int128;
+#else
+  using Unsigned = boost::multiprecision::uint128_t;
+#endif
+
+  static_assert(
+    std::numeric_limits<Unsigned>::is_specialized,
+    "numeric_limits not specialized for the underlying int128 type, "
+    "set RAW_VALUE_MAX manually");
+
   static constexpr Unsigned RAW_VALUE_MAX =
       std::numeric_limits<Unsigned>::max();
 
   constexpr laddr_t() : laddr_t(RAW_VALUE_MAX) {}
+  laddr_t(const laddr_t &) noexcept = default;
+  laddr_t(laddr_t &&) noexcept = default;
+  laddr_t &operator=(const laddr_t &) noexcept = default;
+  laddr_t &operator=(laddr_t &&) noexcept = default;
 
   // laddr_t is block aligned, one logical address represents one 4KiB block in disk
   static constexpr unsigned UNIT_SHIFT = 12;
   static constexpr unsigned UNIT_SIZE = 1 << UNIT_SHIFT; // 4096
   static constexpr unsigned UNIT_MASK = UNIT_SIZE - 1;
 
-  static laddr_t from_byte_offset(Unsigned value) {
+  // This factory is only used in nbd driver and test cases.
+  // Cast the byte offset to valid rados object extents format.
+  static laddr_t from_byte_offset(loffset_t value) {
     assert((value & UNIT_MASK) == 0);
-    return laddr_t(value >> UNIT_SHIFT);
+    // make value block aligned.
+    value >>= UNIT_SHIFT;
+    laddr_t addr;
+    // set block offset directly.
+    addr.value = value & layout::BlockOffsetSpec::MASK;
+    // move the remaining bits to reversed hash field.
+    // 12(UNIT_SHIFT) + 27(block offset) + 32(reversed hash) = 71 > 64
+    // the rest bits won't overflow
+    addr.value |= Unsigned(value >> layout::BlockOffsetSpec::length)
+      << (layout::ObjectContentSpec::length + layout::LocalObjectIdSpec::length);
+    // don't use LOCAL_OBJECT_ID_ZERO, as it is for onode extents.
+    addr.set_local_object_id(1);
+    assert(addr.is_object_address());
+    return addr;
   }
 
   static constexpr laddr_t from_raw_uint(Unsigned v) {
     return laddr_t(v);
   }
 
+  // Return wheter this address belongs to global metadata(RootMetaBlock
+  // or CollectionNode).
+  // Always ignore the upgrade bit.
+  bool is_global_address() const {
+    return (value & layout::ObjectInfoSpec::MASK) == 0;
+  }
+
+  // Return wheter this address belongs to SeastoreNodeExtent
+  // Always ignore the upgrade bit.
+  bool is_onode_extent_address() const {
+    return get_local_object_id() == LOCAL_OBJECT_ID_ZERO;
+  }
+
+  // Return wheter this address belongs to a rados object.
+  // Always ignore the upgrade bit.
+  bool is_object_address() const {
+    return !is_global_address()
+	&& !is_onode_extent_address()
+	&& get_object_info() != layout::ObjectInfoSpec::MAX;
+  }
+
+  // Upgrade bit with object info bits
+  laddr_t get_object_prefix() const {
+    auto ret = *this;
+    ret.value &= layout::OBJECT_PREFIX_MASK;
+    return ret;
+  }
+
+  // Object prefix with local_clone_id
+  laddr_t get_clone_prefix() const {
+    auto ret = *this;
+    ret.value &= layout::CLONE_PREFIX_MASK;
+    return ret;
+  }
+
+  Unsigned get_object_info() const {
+    return layout::ObjectInfoSpec::get<Unsigned>(value);
+  }
+
+  laddr_shard_t get_shard() const {
+    return layout::ShardSpec::get<laddr_shard_t>(value);
+  }
+  void set_shard(laddr_shard_t shard) {
+    layout::ShardSpec::set(value, static_cast<Unsigned>(shard));
+  }
+  // Shard has similar problems as pool.
+  bool match_shard_bits(laddr_shard_t shard) const {
+    // The most significant bit of laddr_shard_t will be discarded if it is casted
+    // from boost::multiprecision::uint128_t directly, so that we cast it to
+    // uint8_t.
+    auto unsigned_shard = static_cast<uint8_t>(shard);
+    return (unsigned_shard & layout::ShardSpec::MAX)
+	== layout::ShardSpec::get<uint8_t>(value);
+  }
+
+  laddr_pool_t get_pool() const {
+    return layout::PoolSpec::get<laddr_pool_t>(value);
+  }
+  void set_pool(laddr_pool_t pool) {
+    layout::PoolSpec::set(value, static_cast<Unsigned>(pool));
+  }
+  // The pool field uses 12 bits, so we cann't figure out the real
+  // pool id is -1 or 4095. If their bits match, the pool ids match.
+  bool match_pool_bits(laddr_pool_t pool) const {
+    auto unsigned_pool = static_cast<uint64_t>(pool);
+    return (unsigned_pool & layout::PoolSpec::MAX)
+	== layout::PoolSpec::get<uint64_t>(value);
+  }
+
+  laddr_crush_hash_t get_reversed_hash() const {
+    return layout::ReversedHashSpec::get<laddr_crush_hash_t>(value);
+  }
+  void set_reversed_hash(laddr_crush_hash_t hash) {
+    return layout::ReversedHashSpec::set(value, hash);
+  }
+
+  Unsigned get_object_content() const {
+    return layout::ObjectContentSpec::get<Unsigned>(value);
+  }
+  void set_object_content(Unsigned v) {
+    layout::ObjectContentSpec::set(value, v);
+  }
+  laddr_t with_object_content(Unsigned v) const {
+    auto ret = *this;
+    ret.set_object_content(v);
+    return ret;
+  }
+
+  local_object_id_t get_local_object_id() const {
+    return layout::LocalObjectIdSpec::get<local_object_id_t>(value);
+  }
+  void set_local_object_id(local_object_id_t id) {
+    layout::LocalObjectIdSpec::set(value, id);
+  }
+  laddr_t with_local_object_id(local_object_id_t id) const {
+    auto ret = *this;
+    ret.set_local_object_id(id);
+    return ret;
+  }
+
+  bool is_metadata() const {
+    return layout::MetadataFlagSpec::get<bool>(value);
+  }
+  void set_metadata(bool md) {
+    layout::MetadataFlagSpec::set(value, md);
+  }
+  laddr_t with_metadata() const {
+    auto ret = *this;
+    ret.set_metadata(true);
+    return ret;
+  }
+  laddr_t without_metadata() const {
+    auto ret = *this;
+    ret.set_metadata(false);
+    return ret;
+  }
+
+  local_clone_id_t get_local_clone_id() const {
+    return layout::LocalCloneIdSpec::get<local_clone_id_t>(value);
+  }
+  void set_local_clone_id(local_clone_id_t id) {
+    layout::LocalCloneIdSpec::set(value, id);
+  }
+  laddr_t with_local_clone_id(local_clone_id_t id) const {
+    auto ret = *this;
+    ret.set_local_clone_id(id);
+    return ret;
+  }
+
+  // The result is related to clone prefix
+  loffset_t get_offset_bytes() const {
+    return layout::BlockOffsetSpec::get<loffset_t>(value) << UNIT_SHIFT;
+  }
+  laddr_block_offset_t get_offset_blocks() const {
+    return layout::BlockOffsetSpec::get<laddr_block_offset_t>(value);
+  }
+  void set_offset_by_bytes(loffset_t offset) {
+    assert(p2align(uint64_t(offset), uint64_t(UNIT_SIZE)) == offset);
+    offset >>= UNIT_SHIFT;
+    layout::BlockOffsetSpec::set(value, offset);
+  }
+  void set_offset_by_blocks(laddr_block_offset_t offset) {
+    layout::BlockOffsetSpec::set(value, offset);
+  }
+  laddr_t with_offset_by_bytes(loffset_t offset) const {
+    auto ret = *this;
+    ret.set_offset_by_bytes(offset);
+    return ret;
+  }
+  laddr_t with_offset_by_blocks(laddr_block_offset_t offset) const {
+    auto ret = *this;
+    ret.set_offset_by_blocks(offset);
+    return ret;
+  }
+
   /// laddr_t works like primitive integer type, encode/decode it manually
   void encode(::ceph::buffer::list::contiguous_appender& p) const {
-    p.append(reinterpret_cast<const char *>(&value), sizeof(Unsigned));
+    auto lo = get_low64();
+    auto hi = get_high64();
+    denc(lo, p);
+    denc(hi, p);
   }
   void bound_encode(size_t& p) const {
-    p += sizeof(Unsigned);
+    p += sizeof(uint64_t) * 2;
   }
   void decode(::ceph::buffer::ptr::const_iterator& p) {
-    assert(static_cast<std::size_t>(p.get_end() - p.get_pos()) >= sizeof(Unsigned));
-    memcpy((char *)&value, p.get_pos_add(sizeof(Unsigned)), sizeof(Unsigned));
+    assert(static_cast<std::size_t>(p.get_end() - p.get_pos()) >= sizeof(uint64_t) * 2);
+    uint64_t lo = 0, hi = 0;
+    denc(lo, p);
+    denc(hi, p);
+    value = Unsigned(lo) | (Unsigned(hi) << 64);
   }
 
   // laddr_offset_t contains one base laddr and one block not aligned
@@ -1137,16 +1349,18 @@ public:
 
     laddr_t get_roundup_laddr(size_t alignment) const {
       ceph_assert(alignment % laddr_t::UNIT_SIZE == 0);
+      Unsigned align_shift = alignment >> laddr_t::UNIT_SHIFT;
       if (offset == 0) {
-	return laddr_t(p2roundup(base, alignment >> laddr_t::UNIT_SHIFT));
+	return laddr_t(p2roundup(base, align_shift));
       } else {
 	assert(offset < laddr_t::UNIT_SIZE);
-	return laddr_t(p2roundup(base + 1, alignment >> laddr_t::UNIT_SHIFT));
+	return laddr_t(p2roundup(base + 1, align_shift));
       }
     }
     laddr_t get_aligned_laddr(size_t alignment) const {
       ceph_assert(alignment % laddr_t::UNIT_SIZE == 0);
-      return laddr_t(p2align(base, alignment >> laddr_t::UNIT_SHIFT));
+      Unsigned align_shift = alignment >> laddr_t::UNIT_SHIFT;
+      return laddr_t(p2align(base, align_shift));
     }
     laddr_t get_laddr() const {
       return laddr_t{base};
@@ -1197,7 +1411,19 @@ public:
     }
 
     friend bool operator==(const laddr_offset_t&, const laddr_offset_t&) = default;
-    friend auto operator<=>(const laddr_offset_t&, const laddr_offset_t&) = default;
+    friend std::strong_ordering operator<=>(
+      const laddr_offset_t& l, const laddr_offset_t& r) {
+      assert(l.offset < laddr_t::UNIT_SIZE);
+      assert(r.offset < laddr_t::UNIT_SIZE);
+      // boost uint128 doesn't support three way compare operator,
+      // we need to implement it manually.
+      if (l.base == r.base) {
+	return l.offset <=> r.offset;
+      } else {
+	// use laddr_t <=> laddr_t
+	return laddr_t(l.base) <=> laddr_t(r.base);
+      }
+    }
     friend std::ostream &operator<<(std::ostream&, const laddr_offset_t&);
     friend laddr_offset_t operator+(const laddr_offset_t &laddr_offset,
 				    const loffset_t &offset) {
@@ -1263,7 +1489,17 @@ public:
     return laddr_offset.get_laddr() == laddr
 	&& laddr_offset.get_offset() == 0;
   }
-  friend auto operator<=>(const laddr_t&, const laddr_t&) = default;
+  friend std::strong_ordering operator<=>(const laddr_t& l, const laddr_t& r) {
+    // boost::multiprecision::uint128_t doesn't support three ways operator,
+    // so we need to implement it manually.
+    if (l.value < r.value) {
+      return std::strong_ordering::less;
+    } else if (l.value == r.value) {
+      return std::strong_ordering::equal;
+    } else {
+      return std::strong_ordering::greater;
+    }
+  }
   friend auto operator<=>(const laddr_t &laddr,
 			  const laddr_offset_t &laddr_offset) {
     return laddr_offset_t(laddr, 0) <=> laddr_offset;
@@ -1299,13 +1535,73 @@ public:
 
   struct laddr_hash_t {
     std::size_t operator()(const laddr_t &laddr) const {
-      return static_cast<std::size_t>(laddr.value);
+      auto h = laddr.get_high64();
+      auto l = laddr.get_low64();
+      auto seed = h ^ l;
+      boost::hash_combine(seed, h);
+      boost::hash_combine(seed, l);
+      return static_cast<std::size_t>(seed);
     }
   };
 private:
+  constexpr laddr_t(uint64_t low, uint64_t high)
+      : value((Unsigned(high) << 64) | Unsigned(low)) {}
+
+  uint64_t get_high64() const { return static_cast<uint64_t>(value >> 64); }
+  uint64_t get_low64() const { return static_cast<uint64_t>(value); }
+
   // Prevent direct construction of laddr_t with an integer,
   // always use laddr_t::from_raw_uint instead.
   constexpr explicit laddr_t(Unsigned value) : value(value) {}
+
+  template <int LENGTH, int OFFSET>
+  struct FieldSpec {
+    static constexpr int length = LENGTH;
+    static constexpr int offset = OFFSET;
+    static constexpr Unsigned MAX = (Unsigned(1) << LENGTH) - 1;
+    static constexpr Unsigned MASK = MAX << OFFSET;
+
+    template <typename ReturnType>
+    static ReturnType get(const Unsigned &laddr_value) {
+      return static_cast<ReturnType>((laddr_value & MASK) >> OFFSET);
+    }
+    static void set(Unsigned &laddr_value, Unsigned field_value) {
+      laddr_value &= ~MASK;
+      laddr_value |= (field_value << OFFSET) & MASK;
+    }
+  };
+
+  // The upgrade bit position never changes
+  using UpgradeFlagSpec = FieldSpec<1, 127>;
+
+  struct layout_v1 {
+    // object info:
+    // [shard:6][pool:12][reverse_hash:32][local_object_id:26]
+    // object content:
+    // [local_clone_id:23][is_metadata:1][block_address:27]
+
+    using ObjectInfoSpec    = FieldSpec<76, 51>;
+    using ObjectContentSpec = FieldSpec<51, 0>;
+
+    using ShardSpec         = FieldSpec<6,  121>;
+    using PoolSpec          = FieldSpec<12, 109>;
+    using ReversedHashSpec  = FieldSpec<32, 77>;
+    using LocalObjectIdSpec = FieldSpec<26, 51>;
+
+    using LocalCloneIdSpec  = FieldSpec<23, 28>;
+    using MetadataFlagSpec  = FieldSpec<1,  27>;
+    using BlockOffsetSpec   = FieldSpec<27, 0>;
+
+    static constexpr Unsigned OBJECT_PREFIX_MASK =
+	UpgradeFlagSpec::MASK | ObjectInfoSpec::MASK;
+    static constexpr Unsigned CLONE_PREFIX_MASK =
+	OBJECT_PREFIX_MASK | LocalCloneIdSpec::MASK;
+  };
+
+  // Always alias to the latest layout implementation.
+  // All accesses, except for fsck, to the laddr fields should use this alias.
+  using layout = layout_v1;
+
   Unsigned value;
 };
 using laddr_offset_t = laddr_t::laddr_offset_t;
@@ -1314,39 +1610,188 @@ constexpr laddr_t L_ADDR_MAX = laddr_t::from_raw_uint(laddr_t::RAW_VALUE_MAX);
 constexpr laddr_t L_ADDR_MIN = laddr_t::from_raw_uint(0);
 constexpr laddr_t L_ADDR_NULL = L_ADDR_MAX;
 
+// This enum specifies the conflict condition for laddr allocation.
+enum class laddr_conflict_condition_t {
+  // Fixed shard, pool, and reversed_hash, allocate a unique local object id.
+  object_prefix_at_object_id,
+  // Fixed object prefix, allocate a unique local clone id.
+  clone_prefix_at_clone_id,
+  // Fixed object prefix, allocate a unique object content value.
+  all_at_object_content,
+  // Fixed clone prefix, allocate a unique block offset.
+  all_at_block_offset,
+  // Fixed laddr, conflicts never occur
+  all_at_never,
+};
+
+// The behavior of handling laddr allocation conflict
+// see BtreeLBAManager::search_insert_pos()
+enum class laddr_conflict_policy_t {
+  // Find appropriate address by following the lba iterator, only
+  // laddr_conflict_policy_t::{all_at_object_content, all_at_block_offset}
+  // could use this policy.
+  linear_search,
+  // Generate a new random hint.
+  gen_random,
+};
+
+struct laddr_hint_t {
+  laddr_t addr;
+  laddr_conflict_condition_t condition;
+  laddr_conflict_policy_t policy;
+  extent_len_t block_size;
+
+  static laddr_hint_t create_as_fixed(
+    laddr_t laddr,
+    extent_len_t block_size = laddr_t::UNIT_SIZE)
+  {
+    return {
+      laddr,
+      laddr_conflict_condition_t::all_at_never,
+      laddr_conflict_policy_t::linear_search,
+      block_size
+    };
+  }
+  static laddr_hint_t create_global_md_hint(
+    extent_len_t block_size = laddr_t::UNIT_SIZE);
+  static laddr_hint_t create_onode_hint(
+    laddr_shard_t shard,
+    laddr_pool_t pool,
+    laddr_crush_hash_t crush,
+    extent_len_t block_size);
+
+  // According to the state of Onode, there are 6 valid cases when constructing
+  // laddr hint:
+  // |No.|object id|clone id|is metadata|description|
+  // | 1 | N | N | N | write data to a fresh object                       |
+  // | 2 | N | N | Y | write omap/xattr to a fresh object                 |
+  // | 3 | N | Y | N | invalid case                                       |
+  // | 4 | N | Y | Y | invalid case                                       |
+  // | 5 | Y | N | N | clone existing onode                               |
+  // | 6 | Y | N | Y | clone existing onode that might only contains omap |
+  // | 7 | Y | Y | N | it might occur if first write omap then write data |
+  // | 8 | Y | Y | Y | allocate omap extents in existing onode            |
+
+  // 1
+  static laddr_hint_t create_fresh_object_data_hint(
+    laddr_shard_t shard,
+    laddr_pool_t pool,
+    laddr_crush_hash_t crush,
+    extent_len_t block_size);
+  // 2
+  static laddr_hint_t create_fresh_object_md_hint(
+    laddr_shard_t shard,
+    laddr_pool_t pool,
+    laddr_crush_hash_t crush,
+    extent_len_t block_size);
+  // 5
+  static laddr_hint_t create_clone_object_data_hint(
+    laddr_shard_t shard,
+    laddr_pool_t pool,
+    laddr_crush_hash_t crush,
+    local_object_id_t object_id,
+    extent_len_t block_size);
+  // 6
+  static laddr_hint_t create_clone_object_md_hint(
+    laddr_shard_t shard,
+    laddr_pool_t pool,
+    laddr_crush_hash_t crush,
+    local_object_id_t object_id,
+    extent_len_t block_size);
+  // 7
+  static laddr_hint_t create_object_data_hint(
+    laddr_t clone_prefix,
+    extent_len_t block_size);
+  // 8
+  static laddr_hint_t create_object_md_hint(
+    laddr_t clone_prefix,
+    extent_len_t block_size);
+
+  void find_next_random();
+
+  bool conflict_with(laddr_t other) const {
+    switch (condition) {
+    case laddr_conflict_condition_t::object_prefix_at_object_id:
+      assert(addr.is_object_address());
+      return addr.get_object_prefix() == other.get_object_prefix();
+    case laddr_conflict_condition_t::clone_prefix_at_clone_id:
+      assert(addr.is_object_address());
+      return addr.get_clone_prefix() == other.get_clone_prefix();
+    case laddr_conflict_condition_t::all_at_object_content:
+    case laddr_conflict_condition_t::all_at_block_offset:
+    case laddr_conflict_condition_t::all_at_never:
+      return addr == other;
+    default:
+      __builtin_unreachable();
+    }
+  }
+
+  laddr_t lower_boundary() const {
+    switch (condition) {
+    case laddr_conflict_condition_t::object_prefix_at_object_id:
+      assert(addr.is_object_address());
+      return addr.with_object_content(0);
+    case laddr_conflict_condition_t::clone_prefix_at_clone_id:
+      assert(addr.is_object_address());
+      return addr.with_offset_by_blocks(0).without_metadata();
+    case laddr_conflict_condition_t::all_at_object_content:
+    case laddr_conflict_condition_t::all_at_block_offset:
+    case laddr_conflict_condition_t::all_at_never:
+      return addr;
+    default:
+      __builtin_unreachable();
+    }
+  }
+
+  bool operator==(const laddr_hint_t&) const = default;
+};
+std::ostream &operator<<(std::ostream &out, const laddr_hint_t &hint);
+
+constexpr laddr_hint_t LADDR_HINT_NULL = {
+  L_ADDR_NULL,
+  laddr_conflict_condition_t::all_at_never,
+  laddr_conflict_policy_t::gen_random,
+  /*block_size=*/ 0
+};
+
 struct __attribute__((packed)) laddr_le_t {
-  ceph_le64 laddr;
+  ceph_le64 low64;
+  ceph_le64 high64;
 
   using orig_type = laddr_t;
 
   laddr_le_t() : laddr_le_t(L_ADDR_NULL) {}
   laddr_le_t(const laddr_le_t &) = default;
   explicit laddr_le_t(const laddr_t &addr)
-    : laddr(addr.value) {}
+    : low64(addr.get_low64()), high64(addr.get_high64()) {}
 
   operator laddr_t() const {
-    return laddr_t(laddr);
+    return laddr_t(low64, high64);
   }
   laddr_le_t& operator=(laddr_t addr) {
-    ceph_le64 val;
-    val = addr.value;
-    laddr = val;
+    low64 = addr.get_low64();
+    high64 = addr.get_high64();
     return *this;
   }
 
   bool operator==(const laddr_le_t&) const = default;
 };
 
-constexpr uint64_t PL_ADDR_NULL = std::numeric_limits<uint64_t>::max();
-
+/**
+ * pladdr_t
+ *
+ * The value of LBA tree leaf node entries, stores either the physical address
+ * of the logical extent, or the value of local_clone_id field of the intermediate
+ * key which points to the physical lba mapping.
+ */
 struct pladdr_t {
-  std::variant<laddr_t, paddr_t> pladdr;
+  std::variant<local_clone_id_t, paddr_t> pladdr;
 
   pladdr_t() = default;
   pladdr_t(const pladdr_t &) = default;
-  pladdr_t(laddr_t laddr)
-    : pladdr(laddr) {}
-  pladdr_t(paddr_t paddr)
+  explicit pladdr_t(local_clone_id_t id)
+    : pladdr(id) {}
+  constexpr explicit pladdr_t(paddr_t paddr)
     : pladdr(paddr) {}
 
   bool is_laddr() const {
@@ -1362,8 +1807,8 @@ struct pladdr_t {
     return *this;
   }
 
-  pladdr_t& operator=(laddr_t laddr) {
-    pladdr = laddr;
+  pladdr_t& operator=(local_clone_id_t id) {
+    pladdr = id;
     return *this;
   }
 
@@ -1374,13 +1819,19 @@ struct pladdr_t {
     return paddr_t(std::get<1>(pladdr));
   }
 
-  laddr_t get_laddr() const {
+  local_clone_id_t get_local_clone_id() const {
     assert(pladdr.index() == 0);
-    return laddr_t(std::get<0>(pladdr));
+    return std::get<0>(pladdr);
   }
 
+  // The corresponding lba key with stored local clone id is the real
+  // intermediate key.
+  laddr_t build_laddr(laddr_t key) const {
+    return key.with_local_clone_id(get_local_clone_id());
+  }
 };
 
+constexpr pladdr_t PL_ADDR_NULL = pladdr_t(P_ADDR_NULL);
 std::ostream &operator<<(std::ostream &out, const pladdr_t &pladdr);
 
 enum class addr_type_t : uint8_t {
@@ -1390,29 +1841,26 @@ enum class addr_type_t : uint8_t {
 };
 
 struct __attribute__((packed)) pladdr_le_t {
-  ceph_le64 pladdr = ceph_le64(PL_ADDR_NULL);
-  addr_type_t addr_type = addr_type_t::MAX;
+  ceph_le64 addr;
+  addr_type_t addr_type;
 
-  pladdr_le_t() = default;
+  pladdr_le_t() : pladdr_le_t(PL_ADDR_NULL) {}
   pladdr_le_t(const pladdr_le_t &) = default;
   explicit pladdr_le_t(const pladdr_t &addr)
-    : pladdr(
-	ceph_le64(
-	  addr.is_laddr() ?
-	    std::get<0>(addr.pladdr).value :
-	    std::get<1>(addr.pladdr).internal_paddr)),
-      addr_type(
-	addr.is_laddr() ?
-	  addr_type_t::LADDR :
-	  addr_type_t::PADDR)
+    : addr(ceph_le64(addr.is_laddr()
+		     ? addr.get_local_clone_id()
+		     : addr.get_paddr().internal_paddr)),
+      addr_type(addr.is_laddr()
+		? addr_type_t::LADDR
+		: addr_type_t::PADDR)
   {}
 
   operator pladdr_t() const {
     if (addr_type == addr_type_t::LADDR) {
-      return pladdr_t(laddr_t(pladdr));
+      return pladdr_t(static_cast<local_clone_id_t>(addr));
     } else {
       assert(addr_type == addr_type_t::PADDR);
-      return pladdr_t(paddr_t(pladdr));
+      return pladdr_t(paddr_t(addr));
     }
   }
 };
@@ -1585,6 +2033,13 @@ constexpr bool is_real_type(extent_types_t type) {
 }
 
 std::ostream &operator<<(std::ostream &out, extent_types_t t);
+
+enum class write_policy_t {
+  WRITE_BACK,
+  WRITE_THROUGH
+};
+
+std::ostream& operator<<(std::ostream& out, write_policy_t w);
 
 /**
  * rewrite_gen_t
@@ -1824,6 +2279,9 @@ public:
     reserved_data_len = 0;
   }
 };
+constexpr object_data_t get_null_object_data() {
+  return object_data_t{L_ADDR_NULL, 0};
+}
 
 struct __attribute__((packed)) object_data_le_t {
   laddr_le_t reserved_data_base = laddr_le_t(L_ADDR_NULL);
@@ -1852,15 +2310,15 @@ std::ostream &operator<<(std::ostream &out, const omap_type_t &type);
 struct omap_root_t {
   laddr_t addr = L_ADDR_NULL;
   depth_t depth = 0;
-  laddr_t hint = L_ADDR_MIN;
+  laddr_hint_t hint = LADDR_HINT_NULL;
   bool mutated = false;
   omap_type_t type = omap_type_t::NONE;
 
   omap_root_t() = default;
-  omap_root_t(laddr_t addr, depth_t depth, laddr_t addr_min, omap_type_t type)
+  omap_root_t(laddr_t addr, depth_t depth, laddr_hint_t hint, omap_type_t type)
     : addr(addr),
       depth(depth),
-      hint(addr_min),
+      hint(hint),
       type(type) {}
 
   omap_root_t(const omap_root_t &o) = default;
@@ -1876,7 +2334,7 @@ struct omap_root_t {
     return mutated;
   }
   
-  void update(laddr_t _addr, depth_t _depth, laddr_t _hint, omap_type_t _type) {
+  void update(laddr_t _addr, depth_t _depth, laddr_hint_t _hint, omap_type_t _type) {
     mutated = true;
     addr = _addr;
     depth = _depth;
@@ -1892,7 +2350,7 @@ struct omap_root_t {
     return depth;
   }
 
-  laddr_t get_hint() const {
+  laddr_hint_t get_hint() const {
     return hint;
   }
 
@@ -1926,7 +2384,7 @@ public:
     type = nroot.get_type();
   }
   
-  omap_root_t get(laddr_t hint) const {
+  omap_root_t get(laddr_hint_t hint) const {
     return omap_root_t(addr, depth, hint, type);
   }
   
@@ -2236,6 +2694,8 @@ enum class transaction_type_t : uint8_t {
   TRIM_ALLOC,
   CLEANER_MAIN,
   CLEANER_COLD,
+  PROMOTE,
+  DEMOTE,
   MAX
 };
 
@@ -3135,6 +3595,7 @@ template <> struct fmt::formatter<crimson::os::seastore::extent_types_t> : fmt::
 template <> struct fmt::formatter<crimson::os::seastore::journal_seq_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::journal_tail_delta_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::laddr_t> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::os::seastore::laddr_hint_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::laddr_offset_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::laddr_list_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::omap_root_t> : fmt::ostream_formatter {};
@@ -3143,6 +3604,7 @@ template <> struct fmt::formatter<crimson::os::seastore::paddr_t> : fmt::ostream
 template <> struct fmt::formatter<crimson::os::seastore::pladdr_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::placement_hint_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::device_type_t> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::os::seastore::backend_type_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::record_group_header_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::record_group_size_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::record_header_t> : fmt::ostream_formatter {};

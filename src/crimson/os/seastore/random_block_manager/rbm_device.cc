@@ -36,12 +36,14 @@ RBMDevice::mkfs_ret RBMDevice::do_primary_mkfs(device_config_t config,
       crimson::ct_error::assert_all{
       "Invalid error stat_device in RBMDevice::do_primary_mkfs"}
     ).safe_then(
-      [this, FNAME, config=std::move(config), shard_num, journal_size](auto st) {
+      [this, FNAME, config=std::move(config), shard_num, journal_size](auto st) mutable {
+      config.spec.id |= 0x80;
       super.block_size = st.block_size;
       super.size = st.size;
       super.config = std::move(config);
       super.journal_size = journal_size;
-      ceph_assert_always(super.journal_size > 0);
+      ceph_assert_always(super.journal_size > 0 ||
+			 config.spec.dtype == device_type_t::HDD);
       ceph_assert_always(super.size >= super.journal_size);
       ceph_assert_always(shard_num > 0);
 

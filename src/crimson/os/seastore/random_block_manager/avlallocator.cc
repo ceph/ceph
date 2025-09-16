@@ -96,6 +96,15 @@ extent_len_t AvlAllocator::find_block(
   if (p != extent_size_tree.rend()) {
     max_size = p->end - p->start;
   }
+  const auto compare = extent_tree.key_comp();
+  auto rs = extent_tree.lower_bound(extent_range_t{start, size}, compare);
+  if (rs != extent_tree.end()) {
+    uint64_t offset = rs->start;
+    if (offset + size <= rs->end) {
+      start = offset;
+      return size;
+    }
+  }
 
   assert(max_size);
   if (max_size <= size) {
@@ -202,7 +211,7 @@ std::optional<interval_set<rbm_abs_addr>> AvlAllocator::alloc_extent(
 }
 
 std::optional<interval_set<rbm_abs_addr>> AvlAllocator::alloc_extents(
-  size_t size)
+  size_t size, rbm_abs_addr hint)
 {
   LOG_PREFIX(AvlAllocator::alloc_extents);
   if (available_size < size) {
@@ -216,10 +225,10 @@ std::optional<interval_set<rbm_abs_addr>> AvlAllocator::alloc_extents(
 
   interval_set<rbm_abs_addr> result;
 
-  auto try_to_alloc_block = [this, &result, FNAME] (uint64_t alloc_size)
+  auto try_to_alloc_block = [this, hint, &result, FNAME] (uint64_t alloc_size)
   {
+    rbm_abs_addr start = hint;
     while (alloc_size) {
-      rbm_abs_addr start = 0;
       extent_len_t len = find_block(std::min(max_alloc_size, alloc_size), start);
       ceph_assert(len);
       _remove_from_tree(start, len);

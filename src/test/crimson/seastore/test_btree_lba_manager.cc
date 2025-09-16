@@ -313,7 +313,7 @@ struct lba_btree_test : btree_test_base {
   }
 
   static auto get_map_val(extent_len_t len) {
-    return lba_map_val_t{0, (pladdr_t)P_ADDR_NULL, len, 0};
+    return lba_map_val_t{0, (pladdr_t)P_ADDR_NULL, P_ADDR_NULL, len, 0, extent_types_t::TEST_BLOCK};
   }
 
   device_off_t next_off = 0;
@@ -327,11 +327,9 @@ struct lba_btree_test : btree_test_base {
     check.emplace(addr, get_map_val(len));
     lba_btree_update([=, this](auto &btree, auto &t) {
       auto extents = cache->alloc_new_data_extents<TestBlock>(
-	  t,
-	  TestBlock::SIZE,
-	  placement_hint_t::HOT,
-	  0,
-	  get_paddr());
+	  t, TestBlock::SIZE,
+	  {placement_hint_t::HOT, 0, false, P_ADDR_NULL,
+	   write_policy_t::WRITE_BACK, get_paddr()});
       return seastar::do_with(
 	std::move(extents),
 	[this, addr, &t, len, &btree](auto &extents) {
@@ -456,8 +454,7 @@ struct btree_lba_manager_test : btree_test_base {
       cache->alloc_new_non_data_extent<TestBlockPhysical>(
           *t.t,
           TestBlockPhysical::SIZE,
-          placement_hint_t::HOT,
-          0);
+          {placement_hint_t::HOT, 0});
     };
     return t;
   }
@@ -546,17 +543,15 @@ struct btree_lba_manager_test : btree_test_base {
 
   auto alloc_mappings(
     test_transaction_t &t,
-    laddr_t hint,
+    laddr_hint_t hint,
     size_t len) {
     auto rets = with_trans_intr(
       *t.t,
       [=, this](auto &t) {
 	auto extents = cache->alloc_new_data_extents<TestBlock>(
-	    t,
-	    TestBlock::SIZE,
-	    placement_hint_t::HOT,
-	    0,
-	    get_paddr());
+	    t, TestBlock::SIZE,
+	    {placement_hint_t::HOT, 0, false, P_ADDR_NULL,
+	     write_policy_t::WRITE_BACK, get_paddr()});
 	return seastar::do_with(
 	  std::vector<LogicalChildNodeRef>(
 	    extents.begin(), extents.end()),
@@ -580,6 +575,18 @@ struct btree_lba_manager_test : btree_test_base {
 	));
     }
     return rets;
+  }
+
+  auto alloc_mappings(
+    test_transaction_t &t,
+    laddr_t addr,
+    size_t len) {
+    laddr_hint_t hint;
+    hint.addr = addr;
+    hint.condition = laddr_conflict_condition_t::all_at_object_content;
+    hint.policy = laddr_conflict_policy_t::linear_search;
+    hint.block_size = laddr_t::UNIT_SIZE;
+    return alloc_mappings(t, hint, len);
   }
 
   auto decref_mapping(
@@ -677,7 +684,7 @@ struct btree_lba_manager_test : btree_test_base {
 	  *t.t,
 	  L_ADDR_MIN,
 	  L_ADDR_MAX,
-	  [iter=t.mappings.begin(), &t](auto l, auto p, auto len) mutable {
+	  [iter=t.mappings.begin(), &t](auto l, auto p, auto s, auto len) mutable {
 	    EXPECT_NE(iter, t.mappings.end());
 	    EXPECT_EQ(l, iter->first);
 	    EXPECT_EQ(p, iter->second.addr);
@@ -851,6 +858,280 @@ TEST_F(btree_lba_manager_test, split_merge_multi)
     iterate([&](auto &t, auto idx) {
       decref_mapping(t, laddr_t::from_byte_offset(idx * block_size));
     });
+    check_mappings();
+  });
+}
+
+TEST_F(btree_lba_manager_test, conflict_policy_global_linear)
+{
+  run_async([this] {
+    constexpr auto MAX = std::numeric_limits<uint64_t>::max();
+    auto t = create_transaction(false);
+
+    laddr_hint_t hint;
+    hint.addr = L_ADDR_MIN.with_object_content(MAX - 1);
+    hint.condition = laddr_conflict_condition_t::all_at_never;
+    hint.policy = laddr_conflict_policy_t::linear_search;
+    hint.block_size = laddr_t::UNIT_SIZE;
+
+    auto alloc = [&]() -> laddr_t {
+      std::vector<LBAMapping> ret = alloc_mappings(t, hint, 4096);
+      assert(ret.size() == 1);
+      return ret.front().get_key();
+    };
+
+    // 1 base
+    auto addr = alloc();
+    ASSERT_EQ(addr, hint.addr);
+
+    // 2 global end
+    hint.condition = laddr_conflict_condition_t::all_at_object_content;
+    addr = alloc();
+    ASSERT_EQ(addr, L_ADDR_MIN.with_object_content(MAX));
+
+    // 3 loop back
+    addr = alloc();
+    ASSERT_EQ(addr, L_ADDR_MIN);
+
+    submit_test_transaction(std::move(t));
+    check_mappings();
+  });
+}
+
+TEST_F(btree_lba_manager_test, conflict_policy_global_random)
+{
+  run_async([this] {
+    auto t = create_transaction(false);
+
+    laddr_hint_t hint = laddr_hint_t::create_global_md_hint();
+    hint.addr = L_ADDR_MIN;
+
+    std::set<laddr_t> addrs;
+    for (int i = 0; i < 128; i++) {
+      std::vector<LBAMapping> ret = alloc_mappings(t, hint, 4096);
+      assert(ret.size() == 1);
+      auto addr = ret.front().get_key();
+      ASSERT_EQ(addr.get_object_prefix(), L_ADDR_MIN.get_object_prefix());
+      auto p = addrs.insert(addr);
+      ASSERT_TRUE(p.second);
+    }
+
+    submit_test_transaction(std::move(t));
+    check_mappings();
+  });
+}
+
+TEST_F(btree_lba_manager_test, conflict_policy_object_data)
+{
+  run_async([this] {
+    auto t = create_transaction(false);
+    laddr_shard_t shard = 1;
+    laddr_pool_t pool = 1;
+    laddr_crush_hash_t crush = 1;
+
+    auto alloc = [&](laddr_hint_t hint) -> laddr_t {
+      auto ret = alloc_mappings(t, hint, 4096);
+      assert(ret.size() == 1);
+      return ret.front().get_key();
+    };
+
+    auto hint = laddr_hint_t::create_fresh_object_data_hint(
+      shard, pool, crush, laddr_t::UNIT_SHIFT);
+    {
+      auto object_id = hint.addr.get_local_object_id();
+      if (object_id == LOCAL_OBJECT_ID_NULL) {
+	hint.addr.set_local_object_id(object_id - 1);
+      }
+      auto clone_id = hint.addr.get_local_clone_id();
+      if (clone_id == LOCAL_CLONE_ID_NULL) {
+	hint.addr.set_local_clone_id(clone_id - 1);
+      }
+    }
+
+    auto base_addr = alloc(hint);
+    auto object_id = base_addr.get_local_object_id();
+    auto clone_id = base_addr.get_local_clone_id();
+
+    {
+      laddr_hint_t hint;
+      hint.addr = base_addr;
+      // conflict with other object
+      hint.condition = laddr_conflict_condition_t::object_prefix_at_object_id;
+      hint.policy = laddr_conflict_policy_t::gen_random;
+      hint.block_size = laddr_t::UNIT_SIZE;
+      auto addr = alloc(hint);
+      ASSERT_EQ(base_addr.get_shard(), addr.get_shard());
+      ASSERT_EQ(base_addr.get_pool(), addr.get_pool());
+      ASSERT_EQ(base_addr.get_reversed_hash(), addr.get_reversed_hash());
+      ASSERT_NE(object_id, addr.get_local_object_id());
+      ASSERT_EQ(clone_id, addr.get_local_clone_id());
+    }
+
+    {
+      laddr_hint_t hint;
+      hint.addr = base_addr.with_local_clone_id(clone_id + 1);
+      // conflict with other object, check prev
+      hint.condition = laddr_conflict_condition_t::object_prefix_at_object_id;
+      hint.policy = laddr_conflict_policy_t::gen_random;
+      hint.block_size = laddr_t::UNIT_SIZE;
+      auto addr = alloc(hint);
+      ASSERT_EQ(base_addr.get_shard(), addr.get_shard());
+      ASSERT_EQ(base_addr.get_pool(), addr.get_pool());
+      ASSERT_EQ(base_addr.get_reversed_hash(), addr.get_reversed_hash());
+      ASSERT_NE(object_id, addr.get_local_object_id());
+      ASSERT_EQ(clone_id + 1, addr.get_local_clone_id());
+    }
+
+    {
+      laddr_hint_t hint;
+      hint.addr = base_addr.with_offset_by_blocks(rand());
+      hint.addr.set_metadata(true);
+      // allocating metadata for fresh clone conflicts with other clone, check prev
+      hint.condition = laddr_conflict_condition_t::clone_prefix_at_clone_id;
+      hint.policy = laddr_conflict_policy_t::gen_random;
+      hint.block_size = laddr_t::UNIT_SIZE;
+      auto addr = alloc(hint);
+      ASSERT_EQ(base_addr.get_shard(), addr.get_shard());
+      ASSERT_EQ(base_addr.get_pool(), addr.get_pool());
+      ASSERT_EQ(base_addr.get_reversed_hash(), addr.get_reversed_hash());
+      ASSERT_EQ(object_id, addr.get_local_object_id());
+      ASSERT_NE(clone_id, addr.get_local_clone_id());
+    }
+
+    {
+      laddr_hint_t hint;
+      hint.addr = base_addr;
+      // conflict with other clone
+      hint.condition = laddr_conflict_condition_t::clone_prefix_at_clone_id;
+      hint.policy = laddr_conflict_policy_t::gen_random;
+      hint.block_size = laddr_t::UNIT_SIZE;
+      auto addr = alloc(hint);
+      ASSERT_EQ(base_addr.get_shard(), addr.get_shard());
+      ASSERT_EQ(base_addr.get_pool(), addr.get_pool());
+      ASSERT_EQ(base_addr.get_reversed_hash(), addr.get_reversed_hash());
+      ASSERT_EQ(object_id, addr.get_local_object_id());
+      ASSERT_NE(clone_id, addr.get_local_clone_id());
+    }
+
+    submit_test_transaction(std::move(t));
+    check_mappings();
+  });
+}
+
+TEST_F(btree_lba_manager_test, conflict_policy_object_metadata)
+{
+  run_async([this] {
+    auto t = create_transaction(false);
+    laddr_shard_t shard = 1;
+    laddr_pool_t pool = 1;
+    laddr_crush_hash_t crush = 1;
+
+    auto alloc = [&](laddr_hint_t hint) -> laddr_t {
+      auto ret = alloc_mappings(t, hint, 4096);
+      assert(ret.size() == 1);
+      return ret.front().get_key();
+    };
+
+    auto hint = laddr_hint_t::create_fresh_object_md_hint(
+      shard, pool, crush, laddr_t::UNIT_SIZE);
+    // set to max - 1 to test the linear_search policy
+    hint.addr.set_offset_by_blocks(
+      uint64_t(std::numeric_limits<uint32_t>::max() - 1));
+
+    auto base_addr = alloc(hint);
+    auto object_id = base_addr.get_local_object_id();
+    auto clone_id = base_addr.get_local_clone_id();
+    auto block_offset = base_addr.get_offset_bytes();
+
+    {
+      laddr_hint_t hint;
+      hint.addr = base_addr;
+      // conflict with other object
+      hint.condition = laddr_conflict_condition_t::object_prefix_at_object_id;
+      hint.policy = laddr_conflict_policy_t::gen_random;
+      hint.block_size = laddr_t::UNIT_SIZE;
+      auto addr = alloc(hint);
+      ASSERT_EQ(base_addr.get_shard(), addr.get_shard());
+      ASSERT_EQ(base_addr.get_pool(), addr.get_pool());
+      ASSERT_EQ(base_addr.get_reversed_hash(), addr.get_reversed_hash());
+      ASSERT_NE(object_id, addr.get_local_object_id());
+      ASSERT_EQ(clone_id, addr.get_local_clone_id());
+      ASSERT_EQ(block_offset, addr.get_offset_bytes());
+    }
+
+    {
+      laddr_hint_t hint;
+      hint.addr = base_addr.with_offset_by_bytes(block_offset + laddr_t::UNIT_SIZE);
+      // conflict with other object, check prev
+      hint.condition = laddr_conflict_condition_t::object_prefix_at_object_id;
+      hint.policy = laddr_conflict_policy_t::gen_random;
+      hint.block_size = laddr_t::UNIT_SIZE;
+      auto addr = alloc(hint);
+      ASSERT_EQ(base_addr.get_shard(), addr.get_shard());
+      ASSERT_EQ(base_addr.get_pool(), addr.get_pool());
+      ASSERT_EQ(base_addr.get_reversed_hash(), addr.get_reversed_hash());
+      ASSERT_NE(object_id, addr.get_local_object_id());
+      ASSERT_EQ(clone_id, addr.get_local_clone_id());
+      ASSERT_EQ(block_offset + laddr_t::UNIT_SIZE, addr.get_offset_bytes());
+    }
+
+    {
+      laddr_hint_t hint;
+      hint.addr = base_addr;
+      // conflict with other clone
+      hint.condition = laddr_conflict_condition_t::clone_prefix_at_clone_id;
+      hint.policy = laddr_conflict_policy_t::gen_random;
+      hint.block_size = laddr_t::UNIT_SIZE;
+      auto addr = alloc(hint);
+      ASSERT_EQ(base_addr.get_shard(), addr.get_shard());
+      ASSERT_EQ(base_addr.get_pool(), addr.get_pool());
+      ASSERT_EQ(base_addr.get_reversed_hash(), addr.get_reversed_hash());
+      ASSERT_EQ(object_id, addr.get_local_object_id());
+      ASSERT_NE(clone_id, addr.get_local_clone_id());
+      ASSERT_EQ(block_offset, addr.get_offset_bytes());
+    }
+
+    {
+      laddr_hint_t hint;
+      hint.addr = base_addr.with_offset_by_bytes(block_offset + laddr_t::UNIT_SIZE);
+      // conflict with other clone, check prev
+      hint.condition = laddr_conflict_condition_t::clone_prefix_at_clone_id;
+      hint.policy = laddr_conflict_policy_t::gen_random;
+      hint.block_size = laddr_t::UNIT_SIZE;
+      auto addr = alloc(hint);
+      ASSERT_EQ(base_addr.get_shard(), addr.get_shard());
+      ASSERT_EQ(base_addr.get_pool(), addr.get_pool());
+      ASSERT_EQ(base_addr.get_reversed_hash(), addr.get_reversed_hash());
+      ASSERT_EQ(object_id, addr.get_local_object_id());
+      ASSERT_NE(clone_id, addr.get_local_clone_id());
+      ASSERT_EQ(block_offset + laddr_t::UNIT_SIZE, addr.get_offset_bytes());
+    }
+
+    {
+      laddr_hint_t hint;
+      hint.addr = base_addr;
+      // conflict with other extents
+      hint.condition = laddr_conflict_condition_t::all_at_object_content;
+      hint.policy = laddr_conflict_policy_t::linear_search;
+      hint.block_size = laddr_t::UNIT_SIZE;
+      auto addr = alloc(hint);
+      ASSERT_EQ(base_addr.get_shard(), addr.get_shard());
+      ASSERT_EQ(base_addr.get_pool(), addr.get_pool());
+      ASSERT_EQ(base_addr.get_reversed_hash(), addr.get_reversed_hash());
+      ASSERT_EQ(object_id, addr.get_local_object_id());
+      ASSERT_EQ(clone_id, addr.get_local_clone_id());
+      ASSERT_EQ(block_offset + laddr_t::UNIT_SIZE, addr.get_offset_bytes());
+
+      addr = alloc(hint);
+      ASSERT_EQ(base_addr.get_shard(), addr.get_shard());
+      ASSERT_EQ(base_addr.get_pool(), addr.get_pool());
+      ASSERT_EQ(base_addr.get_reversed_hash(), addr.get_reversed_hash());
+      ASSERT_EQ(object_id, addr.get_local_object_id());
+      ASSERT_EQ(clone_id, addr.get_local_clone_id());
+      ASSERT_EQ(0, addr.get_offset_bytes());
+    }
+
+    submit_test_transaction(std::move(t));
     check_mappings();
   });
 }

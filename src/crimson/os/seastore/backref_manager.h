@@ -123,7 +123,8 @@ public:
   using remove_mapping_ret = remove_mapping_iertr::future<remove_mapping_result_t>;
   virtual remove_mapping_ret remove_mapping(
     Transaction &t,
-    paddr_t offset) = 0;
+    paddr_t offset,
+    extent_types_t type) = 0;
 
   /**
    * scan all extents in both tree and cache,
@@ -137,6 +138,17 @@ public:
   virtual scan_mapped_space_ret scan_mapped_space(
     Transaction &t,
     scan_mapped_space_func_t &&f) = 0;
+
+#ifdef CRIMSON_TEST_WORKLOAD
+  using scan_device_ret = base_iertr::future<>;
+  using scan_device_func_t = std::function<
+    base_iertr::future<seastar::stop_iteration>(
+      paddr_t, extent_len_t, extent_types_t, laddr_t)>;
+  virtual scan_device_ret scan_device(
+    Transaction &t,
+    paddr_t start,
+    scan_device_func_t &f) = 0;
+#endif
 
   virtual ~BackrefManager() {}
 };

@@ -87,11 +87,16 @@ namespace lba {
 
 std::ostream& operator<<(std::ostream& out, const lba_map_val_t& v)
 {
-  return out << "lba_map_val_t("
-             << v.pladdr
-             << "~0x" << std::hex << v.len
+  out << "lba_map_val_t(";
+  if (v.shadow_paddr != P_ADDR_NULL) {
+    out << '[' << v.pladdr << ',' << v.shadow_paddr << ']';
+  } else {
+    out << v.pladdr;
+  }
+  return out << "~0x" << std::hex << v.len
              << ", checksum=0x" << v.checksum
              << ", refcount=" << std::dec << v.refcount
+             << ", type=" << v.type
              << ")";
 }
 

@@ -40,6 +40,14 @@ struct onode_layout_t {
 
   char oi[MAX_OI_LENGTH] = {0};
   char ss[MAX_SS_LENGTH] = {0};
+  /**
+    * needs_cow
+    *
+    * If true, all lba mappings for onode must be cloned
+    * to a new range prior to mutation. See ObjectDataHandler::copy_on_write,
+    * do_clone, do_clonerange
+    */
+  bool need_cow = false;
 
   onode_layout_t() : omap_root(omap_type_t::OMAP), log_root(omap_type_t::LOG),
     xattr_root(omap_type_t::XATTR) {}
@@ -70,21 +78,55 @@ class Onode : public boost::intrusive_ref_counter<
   boost::thread_unsafe_counter>
 {
 protected:
-  virtual laddr_t get_hint() const = 0;
-  const uint32_t default_metadata_offset = 0;
-  const uint32_t default_metadata_range = 0;
+  virtual laddr_hint_t init_hint(
+    extent_len_t block_size,
+    bool is_metadata) const = 0;
+  virtual laddr_hint_t generate_clone_hint(
+    local_object_id_t object_id,
+    extent_len_t block_size,
+    bool is_metadata) const = 0;
+  laddr_hint_t get_hint(extent_len_t block_size, bool is_metadata) const {
+    assert(block_size >= laddr_t::UNIT_SIZE);
+    auto prefix = get_clone_prefix();
+    if (prefix) {
+      if (is_metadata) {
+        return laddr_hint_t::create_object_md_hint(*prefix, block_size);
+      } else {
+        return laddr_hint_t::create_object_data_hint(*prefix, block_size);
+      }
+    } else if (sibling_object_id) {
+      return generate_clone_hint(
+        *sibling_object_id, block_size, is_metadata);
+    } else {
+      return init_hint(block_size, is_metadata);
+    }
+  }
+  laddr_hint_t get_clone_hint(extent_len_t block_size, bool is_metadata) const {
+    return generate_clone_hint(
+      get_clone_prefix()->get_local_object_id(), block_size, is_metadata);
+  }
   const hobject_t hobj;
+  std::optional<local_object_id_t> sibling_object_id;
+
 public:
-  Onode(uint32_t ddr, uint32_t dmr, const hobject_t &hobj)
-    : default_metadata_offset(ddr),
-      default_metadata_range(dmr),
-      hobj(hobj)
-  {}
+  explicit Onode(const hobject_t &hobj) : hobj(hobj) {}
 
   virtual bool is_alive() const = 0;
   virtual const onode_layout_t &get_layout() const = 0;
   virtual ~Onode() = default;
 
+  const hobject_t &get_hobj() const {
+    return hobj;
+  }
+  bool is_head() const {
+    return hobj.is_head();
+  }
+  bool is_snap() const {
+    return hobj.is_snap();
+  }
+  bool need_cow() const {
+    return get_layout().need_cow;
+  }
   virtual void update_onode_size(Transaction&, uint32_t) = 0;
   virtual void update_omap_root(Transaction&, omap_root_t&) = 0;
   virtual void update_log_root(Transaction&, omap_root_t&) = 0;
@@ -94,20 +136,77 @@ public:
   virtual void update_snapset(Transaction&, ceph::bufferlist&) = 0;
   virtual void clear_object_info(Transaction&) = 0;
   virtual void clear_snapset(Transaction&) = 0;
+  virtual void set_need_cow(Transaction&) = 0;
+  virtual void unset_need_cow(Transaction&) = 0;
+  virtual void swap_layout(Transaction&, Onode&) = 0;
+  virtual boost::intrusive_ptr<Onode> offload_data_and_md(Transaction&) = 0;
 
-  laddr_t get_metadata_hint(uint64_t block_size) const {
-    assert(default_metadata_offset);
-    assert(default_metadata_range);
-    uint64_t range_blocks = default_metadata_range / block_size;
-    auto random_offset = default_metadata_offset +
-        (((uint32_t)std::rand() % range_blocks) * block_size);
-    return (get_hint() + random_offset).checked_to_laddr();
+  laddr_hint_t get_metadata_hint(uint64_t block_size = laddr_t::UNIT_SIZE) const {
+    return get_hint(block_size, /*is_metadata*/true);
   }
-  laddr_t get_data_hint() const {
-    return get_hint();
+  laddr_hint_t get_data_hint(uint64_t block_size = laddr_t::UNIT_SIZE) const {
+    return get_hint(block_size, /*is_metadata*/false);
+  }
+  laddr_hint_t get_metadata_clone_hint(uint64_t block_size = laddr_t::UNIT_SIZE) const {
+    return get_clone_hint(block_size, /*is_metadata*/true);
+  }
+  laddr_hint_t get_data_clone_hint(uint64_t block_size = laddr_t::UNIT_SIZE) const {
+    return get_clone_hint(block_size, /*is_metadata*/false);
   }
   const omap_root_le_t& get_root(omap_type_t type) const {
     return get_layout().get_root(type);
+  }
+  std::optional<laddr_t> get_clone_prefix() const {
+    std::optional<laddr_t> prefix = std::nullopt;
+
+    const auto &layout = get_layout();
+    auto omap_root = layout.omap_root.get(LADDR_HINT_NULL);
+    if (!omap_root.is_null()) {
+      prefix.emplace(omap_root.addr.get_clone_prefix());
+    }
+
+    auto log_root = layout.log_root.get(LADDR_HINT_NULL);
+    if (!log_root.is_null()) {
+      auto laddr = log_root.addr.get_clone_prefix();
+      if (prefix) {
+        ceph_assert(*prefix == laddr);
+      } else {
+        prefix.emplace(laddr);
+      }
+    }
+
+    auto xattr_root = layout.xattr_root.get(LADDR_HINT_NULL);
+    if (!xattr_root.is_null()) {
+      auto laddr = xattr_root.addr.get_clone_prefix();
+      if (prefix) {
+        ceph_assert(*prefix == laddr);
+      } else {
+        prefix.emplace(laddr);
+      }
+    }
+
+    auto obj_data = layout.object_data.get();
+    if (!obj_data.is_null()) {
+      auto laddr = obj_data.get_reserved_data_base().get_clone_prefix();
+      if (prefix) {
+        ceph_assert(*prefix == laddr);
+      } else {
+        prefix.emplace(laddr);
+      }
+    }
+
+    return prefix;
+  }
+  std::optional<laddr_t> get_object_prefix() const {
+    auto prefix = get_clone_prefix();
+    if (prefix) {
+      return prefix->get_object_prefix();
+    }
+    return std::nullopt;
+  }
+  void set_sibling_object_id(local_object_id_t id) {
+    assert(!sibling_object_id);
+    sibling_object_id = id;
   }
   friend std::ostream& operator<<(std::ostream &out, const Onode &rhs);
 };
