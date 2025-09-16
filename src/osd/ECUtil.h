@@ -211,22 +211,26 @@ class slice_iterator {
 
         // If we have reached the end of the extent, we need to move that on too.
         if (bl_iter == emap_iter.get_val().end()) {
+          // NOTE: Despite appearances, the following is happening BEFORE
+          // the caller gets to use the buffer pointers (since the in/out is
+          // set a few lines above).  This means that the caller must not
+          // check the CRC.
+          if (out_set.contains(shard)) {
+            invalidate_crcs(shard);
+          }
           ++emap_iter;
           if (emap_iter == input[shard].end()) {
             erase = true;
           } else {
-            if (out_set.contains(shard)) {
-              bufferlist bl = emap_iter.get_val();
-              bl.invalidate_crc();
-            }
             iters.at(shard).second = emap_iter.get_val().begin();
             if (zeros) {
               zeros->emplace(shard, emap_iter.get_off(), emap_iter.get_len());
             }
           }
         }
-      } else
+      } else {
         ceph_assert(iter_offset > start);
+      }
 
       if (erase) {
         iter = iters.erase(iter);
@@ -247,6 +251,11 @@ class slice_iterator {
     if (out.empty()) {
       advance();
     }
+  }
+
+  void invalidate_crcs(shard_id_t shard) {
+    bufferlist bl = iters.at(shard).first.get_val();
+    bl.invalidate_crc();
   }
 
 public:
@@ -650,10 +659,6 @@ public:
       ErasureCodeInterface::FLAG_EC_PLUGIN_REQUIRE_SUB_CHUNKS) != 0;
   }
 
-  bool get_is_hinfo_required() const {
-    return !supports_ec_overwrites();
-  }
-
   bool supports_partial_reads() const {
     return (plugin_flags &
       ErasureCodeInterface::FLAG_EC_PLUGIN_PARTIAL_READ_OPTIMIZATION) != 0;
@@ -1054,16 +1059,9 @@ public:
     }
   }
 
-  bool add_zero_padding_for_decode(uint64_t object_size, shard_id_set &exclude_set) {
-    shard_extent_set_t zeros(sinfo->get_k_plus_m());
-    sinfo->ro_size_to_zero_mask(object_size, zeros);
-    extent_set superset = get_extent_superset();
+  void add_zero_padding_for_decode(ECUtil::shard_extent_set_t &zeros) {
     bool changed = false;
     for (auto &&[shard, z] : zeros) {
-      if (exclude_set.contains(shard)) {
-        continue;
-      }
-      z.intersection_of(superset);
       for (auto [off, len] : z) {
         changed = true;
         bufferlist bl;
@@ -1075,8 +1073,6 @@ public:
     if (changed) {
       compute_ro_range();
     }
-
-    return changed;
   }
 
   template <typename IntervalSetT> requires is_interval_set_v<IntervalSetT>

@@ -267,12 +267,20 @@ int ECCommon::ReadPipeline::get_min_avail_to_read_shards(
      * redundant reads is set, then we want to have the same reads on
      * every extent. Otherwise, we need to read every shard only if the
      * necessary shard is missing.
+     * In some (recovery) scenarios, we can "want" a shard, but not "need" to
+     * read it.  This typically happens when we do not have a data shard and the
+     * recovery for this will read enough shards to also generate all the parity.
+     *
+     * Since parity shards are often larger than data shards, we must make sure
+     * to read the extra bit!
      */
-    if (!have.contains(shard) || do_redundant_reads) {
+    if (!have.contains(shard) || do_redundant_reads ||
+        (want.contains(shard) && !need_set.contains(shard))) {
       extra_extents.union_of(extent_set);
     }
   }
 
+  read_request.zeros_for_decode.clear();
   for (auto &shard: need_set) {
     if (!have.contains(shard)) {
       continue;
@@ -292,6 +300,15 @@ int ECCommon::ReadPipeline::get_min_avail_to_read_shards(
     extents.align(EC_ALIGN_SIZE);
     if (read_mask.contains(shard)) {
       shard_read.extents.intersection_of(extents, read_mask.at(shard));
+    }
+
+    if (zero_mask.contains(shard)) {
+      extents.intersection_of(zero_mask.at(shard));
+
+      /* Any remaining extents can be assumed ot be zeros... so record these. */
+      if (!extents.empty()) {
+        read_request.zeros_for_decode.emplace(shard, std::move(extents));
+      }
     }
 
     if (!shard_read.extents.empty()) {
@@ -322,17 +339,18 @@ int ECCommon::ReadPipeline::get_remaining_shards(
     read_result_t &read_result,
     read_request_t &read_request,
     const bool for_recovery,
-    const bool fast_read) {
-  shard_id_map<pg_shard_t> shards(sinfo.get_k_plus_m());
+    bool want_attrs) {
   set<pg_shard_t> error_shards;
   for (auto &shard: std::views::keys(read_result.errors)) {
     error_shards.insert(shard);
   }
 
+  /* fast-reads should already have scheduled reads to everything, so
+   * this function is irrelevant. */
   const int r = get_min_avail_to_read_shards(
     hoid,
     for_recovery,
-    fast_read,
+    false,
     read_request,
     error_shards);
 
@@ -341,6 +359,9 @@ int ECCommon::ReadPipeline::get_remaining_shards(
 	    << " read result was " << read_result << dendl;
     return -EIO;
   }
+
+  bool need_attr_request = want_attrs;
+  read_request.want_attrs = want_attrs;
 
   // Rather than repeating whole read, we can remove everything we already have.
   for (auto iter = read_request.shard_reads.begin();
@@ -358,11 +379,37 @@ int ECCommon::ReadPipeline::get_remaining_shards(
     if (do_erase) {
       iter = read_request.shard_reads.erase(iter);
     } else {
+      if (need_attr_request && !sinfo.is_nonprimary_shard(shard_id)) {
+        // We have a suitable candidate for attr requests.
+        need_attr_request = false;
+      }
       ++iter;
     }
   }
 
-  return read_request.shard_reads.empty()?1:0;
+  if (need_attr_request) {
+    // This happens if we got an error from the shard where we were requesting
+    // the attributes from and the recovery does not require any non primary
+    // shards. The example seen in test was a 2+1 EC being recovered. shards 0
+    // and 2 were being requested and read as part of recovery. Shard was reading
+    // the attributes and failed. The recovery required shard 1, but that does
+    // not have valid attributes on it, so the attribute read failed.
+    // This is a pretty obscure case, so no need to optimise that much. Do an
+    // empty read!
+    shard_id_set have;
+    shard_id_map<pg_shard_t> pg_shards(sinfo.get_k_plus_m());
+    get_all_avail_shards(hoid, have, pg_shards, for_recovery, error_shards);
+    for (auto shard : have) {
+      if (!sinfo.is_nonprimary_shard(shard)) {
+        shard_read_t shard_read;
+        shard_read.pg_shard = pg_shards[shard];
+        read_request.shard_reads.insert(shard, shard_read_t());
+        break;
+      }
+    }
+  }
+
+  return 0;
 }
 
 void ECCommon::ReadPipeline::start_read_op(
@@ -395,6 +442,7 @@ void ECCommon::ReadPipeline::start_read_op(
 void ECCommon::ReadPipeline::do_read_op(ReadOp &rop) {
   const int priority = rop.priority;
   const ceph_tid_t tid = rop.tid;
+  bool reads_sent = false;
 
   dout(10) << __func__ << ": starting read " << rop << dendl;
   ceph_assert(!rop.to_read.empty());
@@ -402,7 +450,6 @@ void ECCommon::ReadPipeline::do_read_op(ReadOp &rop) {
   map<pg_shard_t, ECSubRead> messages;
   for (auto &&[hoid, read_request]: rop.to_read) {
     bool need_attrs = read_request.want_attrs;
-    ceph_assert(!read_request.shard_reads.empty());
 
     for (auto &&[shard, shard_read]: read_request.shard_reads) {
       if (need_attrs && !sinfo.is_nonprimary_shard(shard)) {
@@ -425,9 +472,11 @@ void ECCommon::ReadPipeline::do_read_op(ReadOp &rop) {
       for (auto &[start, len]: shard_read.extents) {
         messages[shard_read.pg_shard].to_read[hoid].emplace_back(
           boost::make_tuple(start, len, read_request.flags));
+        reads_sent = true;
       }
     }
     ceph_assert(!need_attrs);
+    ceph_assert(reads_sent);
   }
 
   std::vector<std::pair<int, Message*>> m;
@@ -496,17 +545,18 @@ struct ClientReadCompleter final : ECCommon::ReadCompleter {
     extent_map result;
     if (res.r == 0) {
       ceph_assert(res.errors.empty());
-      dout(30) << __func__ << ": before decode: "
-               << res.buffers_read.debug_string(2048, 8)
+      dout(20) << __func__ << ": before decode: "
+               << res.buffers_read.debug_string(2048, 0)
                << dendl;
       /* Decode any missing buffers */
+      res.buffers_read.add_zero_padding_for_decode(req.zeros_for_decode);
       int r = res.buffers_read.decode(read_pipeline.ec_impl,
                                   req.shard_want_to_read,
                                   req.object_size,
                                   read_pipeline.get_parent()->get_dpp());
       ceph_assert( r == 0 );
-      dout(30) << __func__ << ": after decode: "
-               << res.buffers_read.debug_string(2048, 8)
+      dout(20) << __func__ << ": after decode: "
+               << res.buffers_read.debug_string(2048, 0)
                << dendl;
 
       for (auto &&read: req.to_read) {
@@ -741,11 +791,14 @@ void ECCommon::RMWPipeline::cache_ready(Op &op) {
      * As such we must never skip a transaction completely.  Note that if
      * should_send is false, then an empty transaction is sent.
      */
-    if (should_send && op.skip_transaction(pending_roll_forward, shard, transaction)) {
+    if (!next_write_all_shards && should_send && op.skip_transaction(pending_roll_forward, shard, transaction)) {
       // Must be an empty transaction
       ceph_assert(transaction.empty());
       dout(20) << __func__ << " Skipping transaction for shard " << shard << dendl;
       continue;
+    }
+    if (!should_send || transaction.empty()) {
+      dout(20) << __func__ << " Sending empty transaction for shard " << shard << dendl;
     }
     op.pending_commits++;
     const pg_stat_t &stats =
@@ -794,6 +847,8 @@ void ECCommon::RMWPipeline::cache_ready(Op &op) {
       messages.push_back(std::make_pair(pg_shard.osd, r));
     }
   }
+
+  next_write_all_shards = false;
 
   if (!messages.empty()) {
     get_parent()->send_message_osd_cluster(messages, get_osdmap_epoch());
@@ -858,7 +913,7 @@ void ECCommon::RMWPipeline::finish_rmw(OpRef const &op) {
   dout(20) << __func__ << " op=" << *op << dendl;
 
   if (op->on_all_commit) {
-    dout(10) << __func__ << " Calling on_all_commit on " << op << dendl;
+    dout(10) << __func__ << " Calling on_all_commit on " << *op << dendl;
     op->on_all_commit->complete(0);
     op->on_all_commit = nullptr;
     op->trace.event("ec write all committed");
@@ -906,6 +961,7 @@ void ECCommon::RMWPipeline::on_change() {
   tid_to_op_map.clear();
   oid_to_version.clear();
   waiting_commit.clear();
+  next_write_all_shards = false;
 }
 
 void ECCommon::RMWPipeline::on_change2() {
@@ -913,5 +969,6 @@ void ECCommon::RMWPipeline::on_change2() {
 }
 
 void ECCommon::RMWPipeline::call_write_ordered(std::function<void(void)> &&cb) {
+  next_write_all_shards = true;
   extent_cache.add_on_write(std::move(cb));
 }
