@@ -79,8 +79,8 @@ struct create_meta
   }
   static std::list<create_meta> generate_test_instances() {
     std::list<create_meta> o;
-    o.push_back(create_meta{});
-    o.push_back(create_meta{});
+    o.emplace_back();
+    o.emplace_back();
     o.back().id = "id";
     objv v1;
     v1.instance = "inst1";
@@ -116,8 +116,8 @@ struct get_meta
   }
   static std::list<get_meta> generate_test_instances() {
     std::list<get_meta> o;
-    o.push_back(get_meta{});
-    o.push_back(get_meta{});
+    o.emplace_back();
+    o.emplace_back();
     objv v1;
     v1.instance = "inst1";
     v1.ver = 1;
@@ -155,8 +155,8 @@ struct get_meta_reply
   }
   static std::list<get_meta_reply> generate_test_instances() {
     std::list<get_meta_reply> o;
-    o.push_back(get_meta_reply{});
-    o.push_back(get_meta_reply{});
+    o.emplace_back();
+    o.emplace_back();
     o.back().info = fifo::info();
     o.back().part_header_size = 1024;
     o.back().part_entry_overhead = 1024;

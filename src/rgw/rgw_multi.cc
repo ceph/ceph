@@ -89,7 +89,7 @@ list<RGWUploadPartInfo> RGWUploadPartInfo::generate_test_instances()
   i.size = 10 * 1024 * 1024;
   i.etag = "etag";
   o.push_back(std::move(i));
-  o.push_back(RGWUploadPartInfo{});
+  o.emplace_back();
   return o;
 }
 

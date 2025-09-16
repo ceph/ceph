@@ -54,7 +54,7 @@ void client_t::dump(ceph::Formatter *f) const {
 
 std::list<client_t> client_t::generate_test_instances() {
   std::list<client_t> ls;
-  ls.push_back(client_t{});
+  ls.emplace_back();
   ls.push_back(client_t(1));
   ls.push_back(client_t(123));
   return ls;

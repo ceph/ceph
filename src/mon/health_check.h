@@ -60,9 +60,9 @@ struct health_check_t {
 
   static std::list<health_check_t> generate_test_instances() {
     std::list<health_check_t> ls;
-    ls.push_back(health_check_t{});
+    ls.emplace_back();
     ls.back().severity = HEALTH_WARN;
-    ls.push_back(health_check_t{});
+    ls.emplace_back();
     ls.back().severity = HEALTH_ERR;
     ls.back().summary = "summarization";
     ls.back().detail = {"one", "two", "three"};
@@ -102,8 +102,8 @@ struct health_mute_t {
 
   static std::list<health_mute_t> generate_test_instances() {
     std::list<health_mute_t> ls;
-    ls.push_back(health_mute_t{});
-    ls.push_back(health_mute_t{});
+    ls.emplace_back();
+    ls.emplace_back();
     ls.back().code = "OSD_DOWN";
     ls.back().ttl = utime_t(1, 2);
     ls.back().sticky = true;
@@ -132,8 +132,8 @@ struct health_check_map_t {
   static std::list<health_check_map_t> generate_test_instances() {
     std::list<health_check_map_t> ls;
 
-    ls.push_back(health_check_map_t{});
-    ls.push_back(health_check_map_t{});
+    ls.emplace_back();
+    ls.emplace_back();
     {
       auto& d = ls.back().add("FOO", HEALTH_WARN, "foo", 2);
       d.detail.push_back("a");

@@ -2072,7 +2072,7 @@ void RGWUserCaps::dump(Formatter *f) const
 list<RGWUserCaps> RGWUserCaps::generate_test_instances()
 {
   list<RGWUserCaps> o;
-  o.push_back(RGWUserCaps{});
+  o.emplace_back();
   RGWUserCaps caps;
   caps.add_cap("read");
   caps.add_cap("write");
@@ -2525,7 +2525,7 @@ list<RGWBucketEnt> RGWBucketEnt::generate_test_instances()
   e.size_rounded = 4096;
   e.count = 1;
   o.push_back(std::move(e));
-  o.push_back(RGWBucketEnt{});
+  o.emplace_back();
   return o;
 }
 
@@ -2546,7 +2546,7 @@ list<rgw_obj> rgw_obj::generate_test_instances()
   rgw_bucket b;
   init_bucket(&b, "tenant", "bucket", "pool", ".index_pool", "marker", "10");
   o.push_back(rgw_obj(b, "object"));
-  o.push_back(rgw_obj{});
+  o.emplace_back();
   return o;
 }
 
@@ -2682,7 +2682,7 @@ list<RGWUserInfo> RGWUserInfo::generate_test_instances()
   i.subusers[u.name] = u;
   o.push_back(std::move(i));
 
-  o.push_back(RGWUserInfo{});
+  o.emplace_back();
   return o;
 }
 
@@ -2975,7 +2975,7 @@ list<RGWSubUser> RGWSubUser::generate_test_instances()
   u.name = "name";
   u.perm_mask = 0xf;
   o.push_back(std::move(u));
-  o.push_back(RGWSubUser{});
+  o.emplace_back();
   return o;
 }
 
@@ -3031,7 +3031,7 @@ list<RGWAccessKey> RGWAccessKey::generate_test_instances()
   k.key = "key";
   k.subuser = "subuser";
   o.push_back(std::move(k));
-  o.push_back(RGWAccessKey{});
+  o.emplace_back();
   return o;
 }
 
@@ -3135,7 +3135,7 @@ void RGWAccountInfo::decode_json(JSONObj* obj)
 std::list<RGWAccountInfo> RGWAccountInfo::generate_test_instances()
 {
   std::list<RGWAccountInfo> o;
-  o.push_back(RGWAccountInfo{});
+  o.emplace_back();
   auto p = RGWAccountInfo{};
   p.id = "account1";
   p.tenant = "tenant1";
@@ -3171,7 +3171,7 @@ void RGWGroupInfo::decode_json(JSONObj* obj)
 std::list<RGWGroupInfo> RGWGroupInfo::generate_test_instances()
 {
   std::list<RGWGroupInfo> o;
-  o.push_back(RGWGroupInfo{});
+  o.emplace_back();
   auto p = RGWGroupInfo{};
   p.id = "id";
   p.tenant = "tenant";

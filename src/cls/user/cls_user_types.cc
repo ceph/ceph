@@ -33,7 +33,7 @@ void cls_user_bucket::dump(Formatter *f) const
 list<cls_user_bucket> cls_user_bucket::generate_test_instances()
 {
   list<cls_user_bucket> ls;
-  ls.push_back(cls_user_bucket{});
+  ls.emplace_back();
   cls_user_bucket b;
   cls_user_gen_test_bucket(&b, 0);
   ls.push_back(std::move(b));
@@ -63,7 +63,7 @@ void cls_user_gen_test_bucket_entry(cls_user_bucket_entry *entry, int i)
 list<cls_user_bucket_entry> cls_user_bucket_entry::generate_test_instances()
 {
   list<cls_user_bucket_entry> ls;
-  ls.push_back(cls_user_bucket_entry{});
+  ls.emplace_back();
   cls_user_bucket_entry entry;
   cls_user_gen_test_bucket_entry(&entry, 0);
   ls.push_back(std::move(entry));
@@ -87,7 +87,7 @@ void cls_user_stats::dump(Formatter *f) const
 list<cls_user_stats> cls_user_stats::generate_test_instances()
 {
   list<cls_user_stats> ls;
-  ls.push_back(cls_user_stats{});
+  ls.emplace_back();
   cls_user_stats s;
   cls_user_gen_test_stats(&s);
   ls.push_back(std::move(s));
@@ -111,7 +111,7 @@ void cls_user_header::dump(Formatter *f) const
 list<cls_user_header> cls_user_header::generate_test_instances()
 {
   list<cls_user_header> ls;
-  ls.push_back(cls_user_header{});
+  ls.emplace_back();
   cls_user_header h;
   cls_user_gen_test_header(&h);
   ls.push_back(std::move(h));
@@ -127,7 +127,7 @@ void cls_user_account_header::dump(ceph::Formatter* f) const
 std::list<cls_user_account_header> cls_user_account_header::generate_test_instances()
 {
   std::list<cls_user_account_header> ls;
-  ls.push_back(cls_user_account_header{});
+  ls.emplace_back();
   return ls;
 }
 
@@ -147,7 +147,7 @@ void cls_user_gen_test_resource(cls_user_account_resource& r)
 std::list<cls_user_account_resource> cls_user_account_resource::generate_test_instances()
 {
   std::list<cls_user_account_resource> ls;
-  ls.push_back(cls_user_account_resource{});
+  ls.emplace_back();
   cls_user_account_resource p;
   cls_user_gen_test_resource(p);
   ls.push_back(std::move(p));

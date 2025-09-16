@@ -72,8 +72,8 @@ void bluestore_bdev_label_t::dump(Formatter *f) const
 list<bluestore_bdev_label_t> bluestore_bdev_label_t::generate_test_instances()
 {
   list<bluestore_bdev_label_t> o;
-  o.push_back(bluestore_bdev_label_t{});
-  o.push_back(bluestore_bdev_label_t{});
+  o.emplace_back();
+  o.emplace_back();
   o.back().size = 123;
   o.back().btime = utime_t(4, 5);
   o.back().description = "fakey";
@@ -379,8 +379,8 @@ void bluestore_extent_ref_map_t::dump(Formatter *f) const
 list<bluestore_extent_ref_map_t> bluestore_extent_ref_map_t::generate_test_instances()
 {
   list<bluestore_extent_ref_map_t> o;
-  o.push_back(bluestore_extent_ref_map_t{});
-  o.push_back(bluestore_extent_ref_map_t{});
+  o.emplace_back();
+  o.emplace_back();
   o.back().get(10, 10);
   o.back().get(18, 22);
   o.back().get(20, 20);
@@ -749,7 +749,7 @@ ostream& operator<<(ostream& out, const bluestore_pextent_t& o) {
 list<bluestore_pextent_t> bluestore_pextent_t::generate_test_instances()
 {
   list<bluestore_pextent_t> ls;
-  ls.push_back(bluestore_pextent_t{});
+  ls.emplace_back();
   ls.push_back(bluestore_pextent_t(1, 2));
   return ls;
 }
@@ -834,11 +834,11 @@ void bluestore_blob_t::dump(Formatter *f) const
 list<bluestore_blob_t> bluestore_blob_t::generate_test_instances()
 {
   list<bluestore_blob_t> ls;
-  ls.push_back(bluestore_blob_t{});
+  ls.emplace_back();
   ls.push_back(bluestore_blob_t(0));
-  ls.push_back(bluestore_blob_t{});
+  ls.emplace_back();
   ls.back().allocated_test(bluestore_pextent_t(111, 222));
-  ls.push_back(bluestore_blob_t{});
+  ls.emplace_back();
   ls.back().init_csum(Checksummer::CSUM_XXHASH32, 16, 65536);
   ls.back().csum_data = ceph::buffer::claim_malloc(4, strdup("abcd"));
   ls.back().add_unused(0, 3);
@@ -1397,8 +1397,8 @@ void bluestore_onode_t::shard_info::dump(Formatter *f) const
 auto bluestore_onode_t::shard_info::generate_test_instances() -> list<shard_info>
 {
   list<shard_info> o;
-  o.push_back(shard_info{});
-  o.push_back(shard_info{});
+  o.emplace_back();
+  o.emplace_back();
   o.back().offset = 123;
   o.back().bytes = 456;
   return o;
@@ -1501,8 +1501,8 @@ void bluestore_deferred_op_t::dump(Formatter *f) const
 list<bluestore_deferred_op_t> bluestore_deferred_op_t::generate_test_instances()
 {
   list<bluestore_deferred_op_t> o;
-  o.push_back(bluestore_deferred_op_t{});
-  o.push_back(bluestore_deferred_op_t{});
+  o.emplace_back();
+  o.emplace_back();
   o.back().op = OP_WRITE;
   o.back().extents.push_back(bluestore_pextent_t(1, 2));
   o.back().extents.push_back(bluestore_pextent_t(100, 5));
@@ -1555,7 +1555,7 @@ void bluestore_compression_header_t::dump(Formatter *f) const
 list<bluestore_compression_header_t> bluestore_compression_header_t::generate_test_instances()
 {
   list<bluestore_compression_header_t> o;
-  o.push_back(bluestore_compression_header_t{});
+  o.emplace_back();
   o.push_back(bluestore_compression_header_t(1));
   o.back().length = 1234;
   return o;

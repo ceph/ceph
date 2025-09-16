@@ -209,8 +209,8 @@ template<template<typename> class Allocator>
 auto old_inode_t<Allocator>::generate_test_instances() -> std::list<old_inode_t<Allocator>>
 {
   std::list<old_inode_t<Allocator>> ls;
-  ls.push_back(old_inode_t<Allocator>{});
-  ls.push_back(old_inode_t<Allocator>{});
+  ls.emplace_back();
+  ls.emplace_back();
   ls.back().first = 2;
   std::list<inode_t<Allocator>> ils = inode_t<Allocator>::generate_test_instances();
   ls.back().inode = ils.back();

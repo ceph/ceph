@@ -6676,7 +6676,7 @@ list<rgw_data_sync_info> rgw_data_sync_info::generate_test_instances()
   info.state = rgw_data_sync_info::StateBuildingFullSyncMaps;
   info.num_shards = 8;
   o.push_back(std::move(info));
-  o.push_back(rgw_data_sync_info{});
+  o.emplace_back();
   return o;
 }
 
@@ -6688,14 +6688,14 @@ list<rgw_data_sync_marker> rgw_data_sync_marker::generate_test_instances()
   marker.marker = "01234";
   marker.pos = 5;
   o.push_back(std::move(marker));
-  o.push_back(rgw_data_sync_marker{});
+  o.emplace_back();
   return o;
 }
 
 list<rgw_data_sync_status> rgw_data_sync_status::generate_test_instances()
 {
   list<rgw_data_sync_status> o;
-  o.push_back(rgw_data_sync_status{});
+  o.emplace_back();
   return o;
 }
 

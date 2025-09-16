@@ -60,7 +60,7 @@ struct CephXServerChallenge {
   }
   static std::list<CephXServerChallenge> generate_test_instances() {
     std::list<CephXServerChallenge> ls;
-    ls.push_back(CephXServerChallenge{});
+    ls.emplace_back();
     ls.back().server_challenge = 1;
     return ls;
   }
@@ -86,7 +86,7 @@ struct CephXRequestHeader {
   }
   static std::list<CephXRequestHeader> generate_test_instances() {
     std::list<CephXRequestHeader> ls;
-    ls.push_back(CephXRequestHeader{});
+    ls.emplace_back();
     ls.back().request_type = 1;
     return ls;
   }
@@ -113,7 +113,7 @@ struct CephXResponseHeader {
   }
   static std::list<CephXResponseHeader> generate_test_instances() {
     std::list<CephXResponseHeader> ls;
-    ls.push_back(CephXResponseHeader{});
+    ls.emplace_back();
     ls.back().request_type = 1;
     ls.back().status = 0;
     return ls;
@@ -150,7 +150,7 @@ struct CephXTicketBlob {
 
   static std::list<CephXTicketBlob> generate_test_instances() {
     std::list<CephXTicketBlob> ls;
-    ls.push_back(CephXTicketBlob{});
+    ls.emplace_back();
     ls.back().secret_id = 123;
     ls.back().blob.append(std::string_view("this is a blob"));
     return ls;
@@ -204,10 +204,10 @@ struct CephXAuthenticate {
   }
   static std::list<CephXAuthenticate> generate_test_instances() {
     std::list<CephXAuthenticate> ls;
-    ls.push_back(CephXAuthenticate{});
+    ls.emplace_back();
     ls.back().client_challenge = 0;
     ls.back().key = 0;
-    ls.push_back(CephXAuthenticate{});
+    ls.emplace_back();
     ls.back().client_challenge = 1;
     ls.back().key = 2;
     ls.back().old_ticket.secret_id = 3;
@@ -237,7 +237,7 @@ struct CephXChallengeBlob {
   }
   static std::list<CephXChallengeBlob> generate_test_instances() {
     std::list<CephXChallengeBlob> ls;
-    ls.push_back(CephXChallengeBlob{});
+    ls.emplace_back();
     ls.back().server_challenge = 123;
     ls.back().client_challenge = 456;
     return ls;
@@ -299,7 +299,7 @@ struct CephXServiceTicketRequest {
 
   static std::list<CephXServiceTicketRequest> generate_test_instances() {
     std::list<CephXServiceTicketRequest> ls;
-    ls.push_back(CephXServiceTicketRequest{});
+    ls.emplace_back();
     ls.back().keys = 123;
     return ls;
   }
@@ -342,9 +342,9 @@ struct CephXAuthorizeReply {
   }
   static std::list<CephXAuthorizeReply> generate_test_instances() {
     std::list<CephXAuthorizeReply> ls;
-    ls.push_back(CephXAuthorizeReply{});
+    ls.emplace_back();
     ls.back().nonce_plus_one = 0;
-    ls.push_back(CephXAuthorizeReply{});
+    ls.emplace_back();
     ls.back().nonce_plus_one = 123;
     ls.back().connection_secret = "secret";
     return ls;
@@ -457,8 +457,8 @@ struct CephXServiceTicket {
   }
   static std::list<CephXServiceTicket> generate_test_instances() {
     std::list<CephXServiceTicket> ls;
-    ls.push_back(CephXServiceTicket{});
-    ls.push_back(CephXServiceTicket{});
+    ls.emplace_back();
+    ls.emplace_back();
     ls.back().session_key.set_secret(
       CEPH_CRYPTO_AES, bufferptr("1234567890123456", 16), utime_t(123, 456));
     ls.back().validity = utime_t(123, 456);
@@ -492,8 +492,8 @@ struct CephXServiceTicketInfo {
   }
   static std::list<CephXServiceTicketInfo> generate_test_instances() {
     std::list<CephXServiceTicketInfo> ls;
-    ls.push_back(CephXServiceTicketInfo{});
-    ls.push_back(CephXServiceTicketInfo{});
+    ls.emplace_back();
+    ls.emplace_back();
     ls.back().ticket.global_id = 1234;
     ls.back().ticket.init_timestamps(utime_t(123, 456), utime_t(123, 456));
     ls.back().session_key.set_secret(
@@ -522,7 +522,7 @@ struct CephXAuthorizeChallenge : public AuthAuthorizerChallenge {
   }
   static std::list<CephXAuthorizeChallenge> generate_test_instances() {
     std::list<CephXAuthorizeChallenge> ls;
-    ls.push_back(CephXAuthorizeChallenge{});
+    ls.emplace_back();
     ls.back().server_challenge = 1234;
     return ls;
   }
@@ -558,8 +558,8 @@ struct CephXAuthorize {
   }
   static std::list<CephXAuthorize> generate_test_instances() {
     std::list<CephXAuthorize> ls;
-    ls.push_back(CephXAuthorize{});
-    ls.push_back(CephXAuthorize{});
+    ls.emplace_back();
+    ls.emplace_back();
     ls.back().nonce = 1234;
     ls.back().have_challenge = true;
     ls.back().server_challenge_plus_one = 1234;

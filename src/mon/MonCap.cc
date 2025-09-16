@@ -532,20 +532,20 @@ void MonCap::dump(Formatter *f) const
 list<MonCap> MonCap::generate_test_instances()
 {
   list<MonCap> ls;
-  ls.push_back(MonCap{});
-  ls.push_back(MonCap{});
+  ls.emplace_back();
+  ls.emplace_back();
   ls.back().parse("allow *");
-  ls.push_back(MonCap{});
+  ls.emplace_back();
   ls.back().parse("allow rwx");
-  ls.push_back(MonCap{});
+  ls.emplace_back();
   ls.back().parse("allow service foo x");
-  ls.push_back(MonCap{});
+  ls.emplace_back();
   ls.back().parse("allow command bar x");
-  ls.push_back(MonCap{});
+  ls.emplace_back();
   ls.back().parse("allow service foo r, allow command bar x");
-  ls.push_back(MonCap{});
+  ls.emplace_back();
   ls.back().parse("allow command bar with k1=v1 x");
-  ls.push_back(MonCap{});
+  ls.emplace_back();
   ls.back().parse("allow command bar with k1=v1 k2=v2 x");
   return ls;
 }

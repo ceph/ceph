@@ -245,7 +245,7 @@ struct MDSConfigPayload {
   }
   static std::list<MDSConfigPayload> generate_test_instances() {
     std::list<MDSConfigPayload> ls;
-    ls.push_back(MDSConfigPayload{});
+    ls.emplace_back();
     return ls;
   }
 };

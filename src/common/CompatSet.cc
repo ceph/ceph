@@ -83,8 +83,8 @@ void CompatSet::dump(ceph::Formatter *f) const {
 
 std::list<CompatSet> CompatSet::generate_test_instances() {
   std::list<CompatSet> o;
-  o.push_back(CompatSet{});
-  o.push_back(CompatSet{});
+  o.emplace_back();
+  o.emplace_back();
   o.back().compat.insert(Feature(1, "one"));
   o.back().compat.insert(Feature(2, "two"));
   o.back().ro_compat.insert(Feature(4, "four"));

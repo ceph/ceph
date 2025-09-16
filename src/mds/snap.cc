@@ -67,8 +67,8 @@ void SnapInfo::dump(Formatter *f) const
 std::list<SnapInfo> SnapInfo::generate_test_instances()
 {
   std::list<SnapInfo> ls;
-  ls.push_back(SnapInfo{});
-  ls.push_back(SnapInfo{});
+  ls.emplace_back();
+  ls.emplace_back();
   ls.back().snapid = 1;
   ls.back().ino = 2;
   ls.back().stamp = utime_t(3, 4);
@@ -126,8 +126,8 @@ void snaplink_t::dump(Formatter *f) const
 std::list<snaplink_t> snaplink_t::generate_test_instances()
 {
   std::list<snaplink_t> ls;
-  ls.push_back(snaplink_t{});
-  ls.push_back(snaplink_t{});
+  ls.emplace_back();
+  ls.emplace_back();
   ls.back().ino = 2;
   ls.back().first = 123;
   return ls;
@@ -226,8 +226,8 @@ void sr_t::dump(Formatter *f) const
 std::list<sr_t> sr_t::generate_test_instances()
 {
   std::list<sr_t> ls;
-  ls.push_back(sr_t{});
-  ls.push_back(sr_t{});
+  ls.emplace_back();
+  ls.emplace_back();
   ls.back().seq = 1;
   ls.back().created = 2;
   ls.back().last_created = 3;

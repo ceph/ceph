@@ -28,7 +28,7 @@ list<obj_version> obj_version::generate_test_instances()
   v.tag = "tag";
 
   o.push_back(std::move(v));
-  o.push_back(obj_version{});
+  o.emplace_back();
   return o;
 }
 
@@ -42,6 +42,6 @@ std::list<RGWBucketEncryptionConfig> RGWBucketEncryptionConfig::generate_test_in
   bc = RGWBucketEncryptionConfig("AES256");
   o.push_back(std::move(bc));
 
-  o.push_back(RGWBucketEncryptionConfig{});
+  o.emplace_back();
   return o;
 }

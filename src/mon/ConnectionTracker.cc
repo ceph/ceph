@@ -504,8 +504,8 @@ void ConnectionReport::dump(ceph::Formatter *f) const
 std::list<ConnectionReport> ConnectionReport::generate_test_instances()
 {
   std::list<ConnectionReport> o;
-  o.push_back(ConnectionReport{});
-  o.push_back(ConnectionReport{});
+  o.emplace_back();
+  o.emplace_back();
   o.back().rank = 1;
   o.back().epoch = 2;
   o.back().epoch_version = 3;
@@ -533,8 +533,8 @@ void ConnectionTracker::dump(ceph::Formatter *f) const
 std::list<ConnectionTracker> ConnectionTracker::generate_test_instances()
 {
   std::list<ConnectionTracker> o;
-  o.push_back(ConnectionTracker{});
-  o.push_back(ConnectionTracker{});
+  o.emplace_back();
+  o.emplace_back();
   ConnectionTracker& e = o.back();
   e.rank = 2;
   e.epoch = 3;

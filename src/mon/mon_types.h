@@ -120,8 +120,8 @@ struct FeatureMap {
 
   static std::list<FeatureMap> generate_test_instances() {
     std::list<FeatureMap> ls;
-    ls.push_back(FeatureMap{});
-    ls.push_back(FeatureMap{});
+    ls.emplace_back();
+    ls.emplace_back();
     ls.back().add(CEPH_ENTITY_TYPE_OSD, CEPH_FEATURE_UID);
     ls.back().add(CEPH_ENTITY_TYPE_OSD, CEPH_FEATURE_NOSRCADDR);
     ls.back().add(CEPH_ENTITY_TYPE_OSD, CEPH_FEATURE_PGID64);
@@ -179,8 +179,8 @@ struct MonitorDBStoreStats {
 
   static std::list<MonitorDBStoreStats> generate_test_instances() {
     std::list<MonitorDBStoreStats> ls;
-    ls.push_back(MonitorDBStoreStats{});
-    ls.push_back(MonitorDBStoreStats{});
+    ls.emplace_back();
+    ls.emplace_back();
     ls.back().bytes_total = 1024*1024;
     ls.back().bytes_sst = 512*1024;
     ls.back().bytes_log = 256*1024;
@@ -212,8 +212,8 @@ struct DataStats {
   }
   static std::list<DataStats> generate_test_instances() {
     std::list<DataStats> ls;
-    ls.push_back(DataStats{});
-    ls.push_back(DataStats{});
+    ls.emplace_back();
+    ls.emplace_back();
     ls.back().fs_stats.byte_total = 1024*1024;
     ls.back().fs_stats.byte_used = 512*1024;
     ls.back().fs_stats.byte_avail = 256*1024;
@@ -295,8 +295,8 @@ struct ScrubResult {
   }
   static std::list<ScrubResult> generate_test_instances() {
     std::list<ScrubResult> ls;
-    ls.push_back(ScrubResult{});
-    ls.push_back(ScrubResult{});
+    ls.emplace_back();
+    ls.emplace_back();
     ls.back().prefix_crc["foo"] = 123;
     ls.back().prefix_keys["bar"] = 456;
     return ls;
@@ -508,10 +508,10 @@ public:
 
   static std::list<mon_feature_t> generate_test_instances() {
     std::list<mon_feature_t> ls;
-    ls.push_back(mon_feature_t{});
-    ls.push_back(mon_feature_t{});
+    ls.emplace_back();
+    ls.emplace_back();
     ls.back().features = 1;
-    ls.push_back(mon_feature_t{});
+    ls.emplace_back();
     ls.back().features = 2;
     return ls;
   }
@@ -739,8 +739,8 @@ struct ProgressEvent {
   }
   static std::list<ProgressEvent> generate_test_instances() {
     std::list<ProgressEvent> o;
-    o.push_back(ProgressEvent{});
-    o.push_back(ProgressEvent{});
+    o.emplace_back();
+    o.emplace_back();
     o.back().message = "test message";
     o.back().progress = 0.5;
     o.back().add_to_ceph_s = true;
@@ -801,11 +801,11 @@ struct PoolAvailability {
 
   static std::list<PoolAvailability> generate_test_instances() {
     std::list<PoolAvailability> o;
-    o.push_back(PoolAvailability{});
+    o.emplace_back();
     o.back().started_at = utime_t(123, 456);
     o.back().last_uptime = utime_t(123, 456);
     o.back().last_downtime = utime_t(123, 456);
-    o.push_back(PoolAvailability{});
+    o.emplace_back();
     o.back().pool_name = "foo";
     o.back().started_at = utime_t(123, 456);
     o.back().uptime = 100;
