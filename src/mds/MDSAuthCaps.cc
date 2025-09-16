@@ -237,7 +237,7 @@ bool MDSAuthCaps::is_capable(string_view fs_name,
 			     const entity_addr_t& addr,
 			     string_view trimmed_inode_path) const
 {
-  ldout(g_ceph_context, 10) << __func__ << "fs_name " << fs_name
+  ldout(g_ceph_context, 10) << __func__ << " fs_name " << fs_name
 		 << " inode(path /" << trimmed_inode_path
 		 << " owner " << inode_uid << ":" << inode_gid
 		 << " mode 0" << std::oct << inode_mode << std::dec
