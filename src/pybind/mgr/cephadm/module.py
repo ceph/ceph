@@ -2969,8 +2969,10 @@ Then run the following:
         # attempt to set a mon flag. If we get a nonzero return code,
         # raise an OrchestratorError
         rc, out, err = self.mon_command({
-            'prefix': 'mon set',
-            'key': f'{flag}',
+            'prefix': 'config set',
+            'who': 'mon', 
+            'name': f'{flag}',
+            'value': 'true', 
         })
         if rc:
             self.log.warning(
@@ -2985,8 +2987,10 @@ Then run the following:
         # attempt to unset an mon flag. If we get a nonzero return code,
         # raise an OrchestratorError
         rc, out, err = self.mon_command({
-            'prefix': 'mon unset',
-            'key': f'{flag}',
+            'prefix': 'config set',
+            'who': 'mon', 
+            'name': f'{flag}',
+            'value': 'false', 
         })
         if rc:
             self.log.warning(
@@ -2997,24 +3001,26 @@ Then run the following:
             self.log.info(
                 f"Unset global mon flag {flag}")
 
-    def get_set_global_mon_flags(self) -> List[str]:
-        # try to find all the currently set global mon flags. If we get a
+    def is_global_mon_flag_set(self, flag: str) -> bool:
+        # returns if the given mon flag is set or not. If we get a
         # nonzero return code, raise an OrchestratorError
         rc, out, err = self.mon_command({
-            'prefix': 'mon dump',
-            'format': 'json',
+            'prefix': 'config get',
+            'who': 'mon',
+            'key': f'{flag}',
         })
         if rc:
             self.log.warning(
-                f"Failed trying to find set mon flags with `ceph mon dump` (rc: {rc}): {err}")
+                f"Failed trying to find set mon flags with `ceph config get mon` (rc: {rc}): {err}")
             raise OrchestratorError(
-                f"Failed trying to find set mon flags with `ceph mon dump` (rc: {rc}): {err}")
+                f"Failed trying to find set mon flags with `ceph config get mon` (rc: {rc}): {err}")
 
         try:
-            flags: List[str] = json.loads(out)['flags_set']
-            return flags
-        except Exception as e:
-            raise OrchestratorError(f'Failed to get set mon flags: {e}')
+            s = (out or "").strip().lower()
+            if s in {"true", "yes", "on", "enabled", "enable", "set"}:
+                return True
+            if s in {"false", "no", "off", "disabled", "disable", "unset"}:
+                return False
 
     def _trigger_preview_refresh(self,
                                  specs: Optional[List[DriveGroupSpec]] = None,
