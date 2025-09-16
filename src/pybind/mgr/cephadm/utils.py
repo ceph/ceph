@@ -185,3 +185,18 @@ def get_node_proxy_status_value(data: Any, key: str, lower: bool = False) -> str
     if not isinstance(value, str):
         return ''
     return value.lower() if lower else value
+
+
+def build_ceph_volume_cmd(
+    log_level: str,
+    command: List[str],
+    prefix: Optional[List[str]] = None,
+) -> List[str]:
+    """Build ceph-volume argv after cephadm's '--' separator.
+
+    prefix is for flags that must appear before '--' (e.g. --config-json).
+    """
+    cmd: List[str] = list(prefix or [])
+    cmd.extend(['--', '--log-level', log_level])
+    cmd.extend(command)
+    return cmd
