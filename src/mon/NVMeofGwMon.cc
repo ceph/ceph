@@ -244,7 +244,8 @@ void NVMeofGwMon::encode_pending(MonitorDBStore::TransactionRef t)
   }
   pending_map.encode(bl, features);
   dout(10) << " has NVMEOFHA: " << HAVE_FEATURE(features, NVMEOFHA)
-       << " has NVMEOFHAMAP: " << HAVE_FEATURE(features, NVMEOFHAMAP) << dendl;
+       << " has NVMEOFHAMAP: " <<  HAVE_FEATURE(features, NVMEOFHAMAP)
+       << " has BEACON_DIFF: " <<  HAVE_FEATURE(features, NVMEOF_BEACON_DIFF) << dendl;
   put_version(t, pending_map.epoch, bl);
   put_last_committed(t, pending_map.epoch);
 
@@ -257,7 +258,9 @@ void NVMeofGwMon::encode_pending(MonitorDBStore::TransactionRef t)
 void NVMeofGwMon::update_from_paxos(bool *need_bootstrap)
 {
   version_t version = get_last_committed();
-
+  uint64_t features = mon.get_quorum_con_features();
+  dout(20) << " has BEACON_DIFF: " <<  HAVE_FEATURE(features, NVMEOF_BEACON_DIFF)
+		   << dendl;
   if (version != map.epoch) {
     dout(10) << " NVMeGW loading version " << version
 	     << " " << map.epoch << dendl;
@@ -721,7 +724,8 @@ int NVMeofGwMon::apply_beacon(const NvmeGwId &gw_id, int gw_version,
                      pending_map.created_gws[group_key][gw_id].subsystems;
   auto &state = pending_map.created_gws[group_key][gw_id];
 
-  if (true) {
+  if (!HAVE_FEATURE(mon.get_quorum_con_features(), NVMEOF_BEACON_DIFF) &&
+		  gw_version == 0) {
     if (gw_subs != sub) {
       dout(10) << "BEACON_DIFF logic not applied."
           "subsystems of GW changed, propose pending " << gw_id << dendl;

@@ -1155,8 +1155,8 @@ bool NVMeofGwMap::put_gw_beacon_sequence_number(const NvmeGwId &gw_id,
   bool rc = true;
   NvmeGwMonState& gw_map = created_gws[group_key][gw_id];
 
-  if (true) // preparation for HAVE_FEATURE BEACON_DIFF
-  {
+  if (HAVE_FEATURE(mon->get_quorum_con_features(), NVMEOF_BEACON_DIFF) ||
+		  (gw_version > 0) ) {
     uint64_t seq_number = gw_map.beacon_sequence;
     if ((beacon_sequence != seq_number+1) &&
         !(beacon_sequence == 0 && seq_number == 0 )) {// new GW startup
@@ -1177,11 +1177,11 @@ bool NVMeofGwMap::set_gw_beacon_sequence_number(const NvmeGwId &gw_id,
 	 int gw_version, const NvmeGroupKey& group_key, uint64_t beacon_sequence)
 {
   NvmeGwMonState& gw_map = created_gws[group_key][gw_id];
-  if (true) // preparation for HAVE_FEATURE BEACON_DIFF
-  {
-	gw_map.beacon_sequence = beacon_sequence;
-	gw_map.beacon_sequence_ooo = false;
-    dout(10) << gw_id << " set beacon_sequence " << beacon_sequence << dendl;
+  if (HAVE_FEATURE(mon->get_quorum_con_features(), NVMEOF_BEACON_DIFF) ||
+		  (gw_version > 0)) {
+      gw_map.beacon_sequence = beacon_sequence;
+      gw_map.beacon_sequence_ooo = false;
+      dout(10) << gw_id << " set beacon_sequence " << beacon_sequence << dendl;
   }
   return true;
 }

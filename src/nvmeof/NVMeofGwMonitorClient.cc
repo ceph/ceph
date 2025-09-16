@@ -252,7 +252,10 @@ void NVMeofGwMonitorClient::send_beacon()
     " osdmap_epoch " << osdmap_epoch << " gwmap_epoch " << gwmap_epoch << dendl;
 
   // Check if NVMEOF_BEACON_DIFF feature is supported by the cluster
-  bool include_diff = true;
+  bool include_diff = HAVE_FEATURE(cluster_features, NVMEOF_BEACON_DIFF);
+
+  dout(10) << "Cluster features: 0x" << std::hex << cluster_features << std::dec
+            << ", NVMEOF_BEACON_DIFF supported: " << (include_diff ? "yes" : "no") << dendl;
 
   // Send beacon with appropriate version based on cluster features
   auto m = ceph::make_message<MNVMeofGwBeacon>(

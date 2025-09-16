@@ -12,6 +12,7 @@
  */
 #ifndef MON_NVMEOFGWSERIALIZE_H_
 #define MON_NVMEOFGWSERIALIZE_H_
+
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mon
 #undef dout_prefix
@@ -316,7 +317,9 @@ inline  void decode(
 
 inline void encode(const NvmeGwClientState& state,  ceph::bufferlist &bl, uint64_t features) {
   uint8_t version = 1;
-
+  if (HAVE_FEATURE(features, NVMEOF_BEACON_DIFF)) {
+     version = 2;
+  }
   ENCODE_START(version, version, bl);
   encode(state.group_id, bl);
   encode(state.gw_map_epoch, bl);
@@ -851,7 +854,9 @@ inline void decode(BeaconListener& ls, ceph::buffer::list::const_iterator &bl) {
 
 inline void encode(const BeaconSubsystem& sub,  ceph::bufferlist &bl, uint64_t features) {
   uint8_t version = BEACON_SUBSYS_VERSION_LEGACY;  // Default to legacy version
-
+  if (HAVE_FEATURE(features, NVMEOF_BEACON_DIFF)) {
+    version = BEACON_SUBSYS_VERSION_ENHANCED;  // Use enhanced version if feature supported
+  }
   // For legacy encoding, skip deleted subsystems to maintain compatibility
   if (version == BEACON_SUBSYS_VERSION_LEGACY &&
       sub.change_descriptor != subsystem_change_t::SUBSYSTEM_ADDED) {
