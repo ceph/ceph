@@ -47,7 +47,7 @@ void frag_t::dump(ceph::Formatter *f) const {
 
 std::list<frag_t> frag_t::generate_test_instances() {
   std::list<frag_t> ls;
-  ls.push_back(frag_t{});
+  ls.emplace_back();
   ls.push_back(frag_t(10, 2));
   ls.push_back(frag_t(11, 3));
   return ls;
@@ -189,8 +189,8 @@ void fragtree_t::dump(ceph::Formatter *f) const {
 
 std::list<fragtree_t> fragtree_t::generate_test_instances() {
   std::list<fragtree_t> ls;
-  ls.push_back(fragtree_t{});
-  ls.push_back(fragtree_t{});
+  ls.emplace_back();
+  ls.emplace_back();
   return ls;
 }
 

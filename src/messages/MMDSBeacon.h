@@ -227,8 +227,8 @@ struct MDSHealth
 
   static std::list<MDSHealth> generate_test_instances() {
     std::list<MDSHealth> ls;
-    ls.push_back(MDSHealth{});
-    ls.push_back(MDSHealth{});
+    ls.emplace_back();
+    ls.emplace_back();
     ls.back().metrics.push_back(MDSHealthMetric(MDS_HEALTH_TRIM, HEALTH_WARN,
              "MDS is behind on trimming"));
     return ls;

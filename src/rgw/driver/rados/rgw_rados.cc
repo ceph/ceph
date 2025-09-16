@@ -11635,7 +11635,7 @@ list<objexp_hint_entry> objexp_hint_entry::generate_test_instances()
   it.bucket_id = "1234";
   it.obj_key = rgw_obj_key("obj");
   o.push_back(std::move(it));
-  o.push_back(objexp_hint_entry{});
+  o.emplace_back();
   return o;
 }
 
@@ -11657,7 +11657,7 @@ list<RGWOLHInfo> RGWOLHInfo::generate_test_instances()
   RGWOLHInfo olh;
   olh.removed = false;
   o.push_back(olh);
-  o.push_back(RGWOLHInfo{});
+  o.emplace_back();
   return o;
 }
 

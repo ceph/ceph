@@ -539,7 +539,7 @@ void ParentImageSpec::dump(Formatter *f) const {
 
 std::list<ParentImageSpec> ParentImageSpec::generate_test_instances() {
   std::list<ParentImageSpec> o;
-  o.push_back(ParentImageSpec{});
+  o.emplace_back();
   o.push_back(ParentImageSpec{1, "", "foo", 3});
   o.push_back(ParentImageSpec{1, "ns", "foo", 3});
   return o;

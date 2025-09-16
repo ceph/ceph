@@ -1042,8 +1042,8 @@ void RGWQuotaInfo::dump(Formatter *f) const
 std::list<RGWQuotaInfo> RGWQuotaInfo::generate_test_instances()
 {
   std::list<RGWQuotaInfo> o;
-  o.push_back(RGWQuotaInfo{});
-  o.push_back(RGWQuotaInfo{});
+  o.emplace_back();
+  o.emplace_back();
   o.back().enabled = true;
   o.back().check_on_raw = true;
   o.back().max_size = 1024;

@@ -363,7 +363,7 @@ list<ObjectMetaInfo> ObjectMetaInfo::generate_test_instances()
   ObjectMetaInfo m;
   m.size = 1024 * 1024;
   o.push_back(std::move(m));
-  o.push_back(ObjectMetaInfo{});
+  o.emplace_back();
   return o;
 }
 
@@ -392,7 +392,7 @@ list<ObjectCacheInfo> ObjectCacheInfo::generate_test_instances()
   i.rm_xattrs["r3"] = data;
   i.meta.size = 512 * 1024;
   o.push_back(std::move(i));
-  o.push_back(ObjectCacheInfo{});
+  o.emplace_back();
   return o;
 }
 
@@ -410,7 +410,7 @@ void ObjectCacheInfo::dump(Formatter *f) const
 list<RGWCacheNotifyInfo> RGWCacheNotifyInfo::generate_test_instances()
 {
   list<RGWCacheNotifyInfo> o;
-  o.push_back(RGWCacheNotifyInfo{});
+  o.emplace_back();
   return o;
 }
 

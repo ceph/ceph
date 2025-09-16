@@ -99,8 +99,8 @@ void RGWMetadataLogData::decode_json(JSONObj *obj) {
 
 std::list<RGWMetadataLogData> RGWMetadataLogData::generate_test_instances() {
   std::list<RGWMetadataLogData> l;
-  l.push_back(RGWMetadataLogData{});
-  l.push_back(RGWMetadataLogData{});
+  l.emplace_back();
+  l.emplace_back();
   l.back().read_version = obj_version();
   l.back().read_version.tag = "read_tag";
   l.back().write_version = obj_version();

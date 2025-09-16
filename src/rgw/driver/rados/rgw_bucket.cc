@@ -3668,7 +3668,7 @@ list<RGWBucketEntryPoint> RGWBucketEntryPoint::generate_test_instances()
   bp.creation_time = ceph::real_clock::from_ceph_timespec({ceph_le32(2), ceph_le32(3)});
 
   o.push_back(std::move(bp));
-  o.push_back(RGWBucketEntryPoint{});
+  o.emplace_back();
 
   return o;
 }

@@ -613,10 +613,10 @@ struct sha_digest_t {
   }
   static std::list<sha_digest_t> generate_test_instances() {
     std::list<sha_digest_t> ls;
-    ls.push_back(sha_digest_t{});
-    ls.push_back(sha_digest_t{});
+    ls.emplace_back();
+    ls.emplace_back();
     ls.back().v[0] = 1;
-    ls.push_back(sha_digest_t{});
+    ls.emplace_back();
     ls.back().v[0] = 2;
     return ls;
   }

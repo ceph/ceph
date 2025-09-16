@@ -47,9 +47,9 @@ struct cls_2pc_reservation
 
   static std::list<cls_2pc_reservation> generate_test_instances() {
     std::list<cls_2pc_reservation> ls;
-    ls.push_back(cls_2pc_reservation{});
+    ls.emplace_back();
     ls.back().size = 0;
-    ls.push_back(cls_2pc_reservation{});
+    ls.emplace_back();
     ls.back().size = 123;
     ls.back().timestamp = ceph::coarse_real_clock::zero();
     return ls;
@@ -105,8 +105,8 @@ struct cls_2pc_urgent_data
 
   static std::list<cls_2pc_urgent_data> generate_test_instances() {
     std::list<cls_2pc_urgent_data> ls;
-    ls.push_back(cls_2pc_urgent_data{});
-    ls.push_back(cls_2pc_urgent_data{});
+    ls.emplace_back();
+    ls.emplace_back();
     ls.back().reserved_size = 123;
     ls.back().last_id = 456;
     ls.back().reservations.emplace(789, cls_2pc_reservation(1, ceph::coarse_real_clock::zero(), 2));

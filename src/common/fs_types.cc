@@ -146,8 +146,8 @@ void file_layout_t::decode_json(JSONObj *obj){
 std::list<file_layout_t> file_layout_t::generate_test_instances()
 {
   std::list<file_layout_t> o;
-  o.push_back(file_layout_t{});
-  o.push_back(file_layout_t{});
+  o.emplace_back();
+  o.emplace_back();
   o.back().stripe_unit = 4096;
   o.back().stripe_count = 16;
   o.back().object_size = 1048576;

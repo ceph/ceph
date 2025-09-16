@@ -1603,8 +1603,8 @@ struct multipart_upload_info
 
   static std::list<multipart_upload_info> generate_test_instances() {
     std::list<multipart_upload_info> o;
-    o.push_back(multipart_upload_info{});
-    o.push_back(multipart_upload_info{});
+    o.emplace_back();
+    o.emplace_back();
     o.back().dest_placement.name = "dest_placement";
     o.back().dest_placement.storage_class = "dest_storage_class";
     return o;

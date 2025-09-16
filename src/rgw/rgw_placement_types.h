@@ -96,7 +96,7 @@ struct rgw_placement_rule {
 
   static std::list<rgw_placement_rule> generate_test_instances() {
     std::list<rgw_placement_rule> o;
-    o.push_back(rgw_placement_rule{});
+    o.emplace_back();
     o.push_back(rgw_placement_rule("name", "storage_class"));
     return o;
   }

@@ -192,7 +192,7 @@ public:
     }
     static std::list<Params> generate_test_instances() {
       std::list<Params> o;
-      o.push_back(Params{});
+      o.emplace_back();
       return o;
     }
   };
@@ -240,8 +240,8 @@ public:
   void dump(ceph::Formatter *f) const override;
   static std::list<ExplicitHashHitSet> generate_test_instances() {
     std::list<ExplicitHashHitSet> o;
-    o.push_back(ExplicitHashHitSet{});
-    o.push_back(ExplicitHashHitSet{});
+    o.emplace_back();
+    o.emplace_back();
     o.back().insert(hobject_t());
     o.back().insert(hobject_t("asdf", "", CEPH_NOSNAP, 123, 1, ""));
     o.back().insert(hobject_t("qwer", "", CEPH_NOSNAP, 456, 1, ""));
@@ -267,7 +267,7 @@ public:
     }
     static std::list<Params> generate_test_instances() {
       std::list<Params> o;
-      o.push_back(Params{});
+      o.emplace_back();
       return o;
     }
   };
@@ -315,8 +315,8 @@ public:
   void dump(ceph::Formatter *f) const override;
   static std::list<ExplicitObjectHitSet> generate_test_instances() {
     std::list<ExplicitObjectHitSet> o;
-    o.push_back(ExplicitObjectHitSet{});
-    o.push_back(ExplicitObjectHitSet{});
+    o.emplace_back();
+    o.emplace_back();
     o.back().insert(hobject_t());
     o.back().insert(hobject_t("asdf", "", CEPH_NOSNAP, 123, 1, ""));
     o.back().insert(hobject_t("qwer", "", CEPH_NOSNAP, 456, 1, ""));
@@ -388,8 +388,8 @@ public:
     }
     static std::list<Params> generate_test_instances() {
       std::list<Params> o;
-      o.push_back(Params{});
-      o.push_back(Params{});
+      o.emplace_back();
+      o.emplace_back();
       o.back().fpp_micro = 123456;
       o.back().target_size = 300;
       o.back().seed = 99;
@@ -454,7 +454,7 @@ public:
   void dump(ceph::Formatter *f) const override;
   static std::list<BloomHitSet> generate_test_instances() {
     std::list<BloomHitSet> o;
-    o.push_back(BloomHitSet{});
+    o.emplace_back();
     o.push_back(BloomHitSet(10, .1, 1));
     o.back().insert(hobject_t());
     o.back().insert(hobject_t("asdf", "", CEPH_NOSNAP, 123, 1, ""));

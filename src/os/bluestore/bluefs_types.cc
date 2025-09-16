@@ -28,8 +28,8 @@ void bluefs_extent_t::dump(Formatter *f) const
 list<bluefs_extent_t> bluefs_extent_t::generate_test_instances()
 {
   list<bluefs_extent_t> ls;
-  ls.push_back(bluefs_extent_t{});
-  ls.push_back(bluefs_extent_t{});
+  ls.emplace_back();
+  ls.emplace_back();
   ls.back().offset = 1;
   ls.back().length = 2;
   ls.back().bdev = 1;
@@ -168,8 +168,8 @@ void bluefs_layout_t::dump(Formatter *f) const
 list<bluefs_layout_t> bluefs_layout_t::generate_test_instances()
 {
   list<bluefs_layout_t> ls;
-  ls.push_back(bluefs_layout_t{});
-  ls.push_back(bluefs_layout_t{});
+  ls.emplace_back();
+  ls.emplace_back();
   ls.back().shared_bdev = 1;
   ls.back().dedicated_db = true;
   ls.back().dedicated_wal = true;
@@ -224,8 +224,8 @@ void bluefs_super_t::dump(Formatter *f) const
 list<bluefs_super_t> bluefs_super_t::generate_test_instances()
 {
   list<bluefs_super_t> ls;
-  ls.push_back(bluefs_super_t{});
-  ls.push_back(bluefs_super_t{});
+  ls.emplace_back();
+  ls.emplace_back();
   ls.back().seq = 1;
   ls.back().block_size = 4096;
   return ls;
@@ -313,8 +313,8 @@ void bluefs_fnode_t::dump(Formatter *f) const
 list<bluefs_fnode_t> bluefs_fnode_t::generate_test_instances()
 {
   list<bluefs_fnode_t> ls;
-  ls.push_back(bluefs_fnode_t{});
-  ls.push_back(bluefs_fnode_t{});
+  ls.emplace_back();
+  ls.emplace_back();
   ls.back().ino = 123;
   ls.back().size = 1048576;
   ls.back().mtime = utime_t(123,45);
@@ -419,8 +419,8 @@ void bluefs_transaction_t::dump(Formatter *f) const
 list<bluefs_transaction_t> bluefs_transaction_t::generate_test_instances()
 {
   list<bluefs_transaction_t> ls;
-  ls.push_back(bluefs_transaction_t{});
-  ls.push_back(bluefs_transaction_t{});
+  ls.emplace_back();
+  ls.emplace_back();
   ls.back().op_init();
   ls.back().op_dir_create("dir");
   ls.back().op_dir_create("dir2");

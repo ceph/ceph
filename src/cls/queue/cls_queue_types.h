@@ -44,8 +44,8 @@ struct cls_queue_entry
   }
   static std::list<cls_queue_entry> generate_test_instances() {
     std::list<cls_queue_entry> o;
-    o.push_back(cls_queue_entry{});
-    o.push_back(cls_queue_entry{});
+    o.emplace_back();
+    o.emplace_back();
     o.back().data.append(std::string_view("data"));
     o.back().marker = "marker";
     return o;
@@ -102,8 +102,8 @@ struct cls_queue_marker
   }
   static std::list<cls_queue_marker> generate_test_instances() {
     std::list<cls_queue_marker> o;
-    o.push_back(cls_queue_marker{});
-    o.push_back(cls_queue_marker{});
+    o.emplace_back();
+    o.emplace_back();
     o.back().offset = 1024;
     o.back().gen = 0;
     return o;
@@ -153,8 +153,8 @@ struct cls_queue_head
   }
   static std::list<cls_queue_head> generate_test_instances() {
     std::list<cls_queue_head> o;
-    o.push_back(cls_queue_head{});
-    o.push_back(cls_queue_head{});
+    o.emplace_back();
+    o.emplace_back();
     o.back().max_head_size = 1024;
     o.back().front.offset = 1024;
     o.back().front.gen = 0;

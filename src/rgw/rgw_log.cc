@@ -703,7 +703,7 @@ list<rgw_log_entry> rgw_log_entry::generate_test_instances()
   e.account_id = "account_id";
   e.role_id = "role_id";
   o.push_back(std::move(e));
-  o.push_back(rgw_log_entry{});
+  o.emplace_back();
   return o;
 }
 

@@ -98,7 +98,7 @@ struct rgw_pool {
 
   static std::list<rgw_pool> generate_test_instances() {
     std::list<rgw_pool> o;
-    o.push_back(rgw_pool{});
+    o.emplace_back();
     o.push_back(rgw_pool("pool", "ns"));
     return o;
   }

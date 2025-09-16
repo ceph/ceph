@@ -67,8 +67,8 @@ struct ceph_data_stats
 
   static std::list<ceph_data_stats> generate_test_instances() {
     std::list<ceph_data_stats> ls;
-    ls.push_back(ceph_data_stats{});
-    ls.push_back(ceph_data_stats{});
+    ls.emplace_back();
+    ls.emplace_back();
     ls.back().byte_total = 1024*1024;
     ls.back().byte_used = 512*1024;
     ls.back().byte_avail = 512*1024;

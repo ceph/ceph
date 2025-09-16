@@ -275,7 +275,7 @@ std::list<RGWObjManifestPart> RGWObjManifestPart::generate_test_instances()
 {
   std::list<RGWObjManifestPart> o;
 
-  o.push_back(RGWObjManifestPart{});
+  o.emplace_back();
 
   RGWObjManifestPart p;
   rgw_bucket b;
@@ -308,7 +308,7 @@ std::list<RGWObjManifest> RGWObjManifest::generate_test_instances()
   }
   m.set_explicit(total_size, objs);
   o.push_back(std::move(m));
-  o.push_back(RGWObjManifest{});
+  o.emplace_back();
   return o;
 }
 
@@ -384,7 +384,7 @@ std::list<RGWObjManifestRule> RGWObjManifestRule::generate_test_instances()
   r.stripe_max_size = 512 * 1024 * 1024;
   r.override_prefix = "override_prefix";
   o.push_back(std::move(r));
-  o.push_back(RGWObjManifestRule{});
+  o.emplace_back();
   return o;
 }
 
@@ -413,7 +413,7 @@ std::list<RGWObjTier> RGWObjTier::generate_test_instances()
   }
   t.is_multipart_upload = true;
   o.push_back(std::move(t));
-  o.push_back(RGWObjTier{});
+  o.emplace_back();
   return o;
 }
 

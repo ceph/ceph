@@ -330,8 +330,8 @@ public:
   }
   static std::list<openc_response_t> generate_test_instances() {
     std::list<openc_response_t> ls;
-    ls.push_back(openc_response_t{});
-    ls.push_back(openc_response_t{});
+    ls.emplace_back();
+    ls.emplace_back();
     ls.back().created_ino = 1;
     ls.back().delegated_inos.insert(1, 10);
     return ls;

@@ -51,7 +51,7 @@ void ObjectLockRule::dump(Formatter *f) const {
 
 std::list<ObjectLockRule> ObjectLockRule::generate_test_instances() {
   std::list<ObjectLockRule> o;
-  o.push_back(ObjectLockRule{});
+  o.emplace_back();
   return o;
 }
 
