@@ -7,7 +7,7 @@ OAuth2 Proxy
 Deploying oauth2-proxy
 ======================
 
-In Ceph releases starting from Squid, the `oauth2-proxy` service introduces an advanced method
+In Ceph releases starting from Tentacle, the `oauth2-proxy` service introduces an advanced method
 for managing authentication and access control for Ceph applications. This service integrates
 with external Identity Providers (IDPs) to provide secure, flexible authentication via the
 OIDC (OpenID Connect) protocol. `oauth2-proxy` acts as an authentication gateway, ensuring that
