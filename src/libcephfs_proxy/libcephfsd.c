@@ -2007,6 +2007,88 @@ static int32_t libcephfsd_ll_is_encrypted(proxy_client_t *client,
 	return CEPH_COMPLETE(client, err, ans);
 }
 
+static void libcephfsd_ll_nonblocking_fsync_cbk(struct ceph_ll_io_info *cb_info)
+{
+	CEPH_CBK(ceph_ll_nonblocking_fsync, cbk, 0);
+	proxy_async_io_t *async_io;
+	proxy_async_t *async;
+	int32_t err;
+
+	async_io = container_of(cb_info, proxy_async_io_t, io_info);
+	async = async_io->async;
+
+	cbk.info = (uintptr_t)cb_info->priv;
+	cbk.res = cb_info->result;
+
+	err = CEPH_CALL_CBK(async->fd, LIBCEPHFSD_CBK_LL_NONBLOCKING_FSYNC,
+			    cbk);
+	if (err < 0) {
+		proxy_log(LOG_ERR, -err,
+			  "Failed to send nonblocking fsync completion "
+			  "notification");
+	}
+
+	proxy_free(async_io);
+}
+
+static int32_t libcephfsd_ll_nonblocking_fsync(proxy_client_t *client,
+					       proxy_req_t *req,
+					       const void *data,
+					       int32_t data_size)
+{
+	CEPH_DATA(ceph_ll_nonblocking_fsync, ans, 0);
+	struct ceph_ll_io_info *io_info;
+	proxy_mount_t *mount;
+	proxy_async_io_t *async_io;
+	struct Inode *inode;
+	int64_t res;
+	int32_t err;
+
+	if ((client->neg.v1.enabled & PROXY_FEAT_ASYNC_IO) == 0) {
+		return -EOPNOTSUPP;
+	}
+
+	err = ptr_check(&client->random, req->ll_nonblocking_fsync.cmount,
+			(void **)&mount);
+	if (err < 0) {
+		goto done;
+	}
+
+	async_io = proxy_malloc(sizeof(proxy_async_io_t));
+	if (async_io == NULL) {
+		err = -ENOMEM;
+		goto done;
+	}
+	io_info = &async_io->io_info;
+
+	memset(io_info, 0, sizeof(struct ceph_ll_io_info));
+	io_info->callback = libcephfsd_ll_nonblocking_fsync_cbk;
+	io_info->priv = (void *)(uintptr_t)req->ll_nonblocking_fsync.info;
+	io_info->syncdataonly = req->ll_nonblocking_fsync.syncdataonly;
+
+	err = ptr_check(&client->random, req->ll_nonblocking_fsync.inode,
+			(void **)&inode);
+	if (err < 0) {
+		proxy_free(async_io);
+		goto done;
+	}
+
+	async_io->async = &client->async;
+
+	res = ceph_ll_nonblocking_fsync(proxy_cmount(mount), inode, io_info);
+	TRACE("ceph_ll_nonblocking_fsync(%p) -> %ld", mount, res);
+
+	ans.res = res;
+	if (res < 0) {
+		proxy_free(async_io);
+	}
+
+	err = 0;
+
+done:
+	return CEPH_COMPLETE(client, err, ans);
+}
+
 static proxy_handler_t libcephfsd_handlers[LIBCEPHFSD_OP_TOTAL_OPS] = {
 	[LIBCEPHFSD_OP_VERSION] = libcephfsd_version,
 	[LIBCEPHFSD_OP_USERPERM_NEW] = libcephfsd_userperm_new,
@@ -2065,6 +2147,7 @@ static proxy_handler_t libcephfsd_handlers[LIBCEPHFSD_OP_TOTAL_OPS] = {
 	[LIBCEPHFSD_OP_LL_GET_FSCRYPT_POLICY_V2] =
 		libcephfsd_ll_get_fscrypt_policy_v2,
 	[LIBCEPHFSD_OP_LL_IS_ENCRYPTED] = libcephfsd_ll_is_encrypted,
+	[LIBCEPHFSD_OP_LL_NONBLOCKING_FSYNC] = libcephfsd_ll_nonblocking_fsync,
 };
 
 static void serve_binary(proxy_client_t *client)
