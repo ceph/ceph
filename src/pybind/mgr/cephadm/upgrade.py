@@ -1090,6 +1090,18 @@ class CephadmUpgrade:
             self._save_upgrade_state()
 
     def _mark_upgrade_complete(self) -> None:
+        # Upgrade is complete. Reset mon flags
+        if self.upgrade_state.mon_flags:
+            try:
+                for flag in self.upgrade_state.mon_flags:
+                    if not self.mgr.is_global_mon_flag_set(flag):
+                        self.mgr.set_global_mon_flag(flag)
+            except OrchestratorError as e:
+                # the upgrade is already basically complete here
+                # so it doesn't make sense to mark it failed if we can't
+                # unset the OSD flags. Just log an error?
+                self.mgr.log.error(f'Failed to set MON flags at end of upgrade: {str(e)}')
+
         if not self.upgrade_state:
             logger.debug('_mark_upgrade_complete upgrade already marked complete, exiting')
             return
@@ -1355,19 +1367,6 @@ class CephadmUpgrade:
                 'name': 'container_image',
                 'who': name_to_config_section(daemon_type),
             })
-
-        # Upgrade is complete. Reset mon flags
-        if self.upgrade_state.mon_flags:
-            try:
-                currently_set_flags = self.mgr.get_set_global_mon_flags()
-                for flag in self.upgrade_state.mon_flags:
-                    if flag not in currently_set_flags:
-                        self.mgr.set_global_mon_flag(flag)
-            except OrchestratorError as e:
-                # the upgrade is already basically complete here
-                # so it doesn't make sense to mark it failed if we can't
-                # unset the OSD flags. Just log an error?
-                self.mgr.log.error(f'Failed to set MON flags at end of upgrade: {str(e)}')
 
         self._mark_upgrade_complete()
         return
