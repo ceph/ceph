@@ -1699,8 +1699,10 @@ void Replayer<I>::prune_mirror_group_snapshots(
       }
     }
     mirror_group_snapshot_unlink_peer(prune_snap->id);
-    // prune all the image snaps of the group snap locally
-    if (prune_all_image_snapshots(prune_snap, locker)) {
+    const auto& ns = std::get<cls::rbd::GroupSnapshotNamespaceMirror>(
+        prune_snap->snapshot_namespace);
+    if (ns.is_primary() ||
+        prune_all_image_snapshots(prune_snap, locker)) {
       prune_snap = nullptr;
       skip_next_snap_check = false;
       continue;
