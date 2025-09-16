@@ -74,7 +74,7 @@ class CephVolume:
                 - A list of strings representing the standard error output of the command.
                 - An integer representing the return code of the command execution.
         """
-        cmd: List[str] = ['--']
+        cmd: List[str] = ['--', '--log-level', self.mgr.ceph_volume_log_level]
         cmd.extend(command)
         result = await CephadmServe(self.mgr)._run_cephadm(
             hostname, 'osd', 'ceph-volume',
@@ -99,7 +99,7 @@ class CephVolume:
             Dict[str, Any]: The result of the command execution as a dictionary parsed from
                             the JSON output.
         """
-        cmd: List[str] = ['--']
+        cmd: List[str] = ['--', '--log-level', self.mgr.ceph_volume_log_level]
         cmd.extend(command)
         result = await CephadmServe(self.mgr)._run_cephadm_json(
             hostname, 'osd', 'ceph-volume',
