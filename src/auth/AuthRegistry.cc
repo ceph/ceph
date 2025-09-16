@@ -175,10 +175,6 @@ void AuthRegistry::_refresh_config()
 	}
       }
     }
-    if (_no_keyring_disabled_cephx) {
-      lderr(cct) << "no keyring found at " << cct->_conf->keyring
-	       << ", disabling cephx" << dendl;
-    }
   }
 }
 
