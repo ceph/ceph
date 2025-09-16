@@ -55,8 +55,6 @@ enum {
   l_subvolume_metrics_write_iops,
   l_subvolume_metrics_write_tp_Bps,
   l_subvolume_metrics_avg_write_latency,
-  l_subvolume_metrics_last_window_end,
-  l_subvolume_metrics_last_window,
   l_subvolume_metrics_last
 };
 
