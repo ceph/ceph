@@ -707,13 +707,10 @@ void ECBackend::handle_sub_read_reply(
     rop.debug_log.emplace_back(ECUtil::ERROR, op.from, complete.buffers_read);
     complete.buffers_read.erase_shard(from.shard);
     complete.processed_read_requests.erase(from.shard);
-    // If we are doing redundant reads, then we must take care that any failed
-    // reads are not replaced with a zero buffer. When fast_reads are disabled,
-    // the send_all_remaining_reads() call will replace the zeros_for_decode
-    // based on the recovery read.
-    if (rop.do_redundant_reads) {
-      rop.to_read.at(hoid).zeros_for_decode.erase(from.shard);
-    }
+    // If there was an error for non-zero data on this shard, then we must also
+    // ignore all zeros, or minimum_to_decode may conclude that it has enough
+    // shards available.
+    rop.to_read.at(hoid).zeros_for_decode.erase(from.shard);
     dout(20) << __func__ << " shard=" << from << " error=" << err << dendl;
   }
 

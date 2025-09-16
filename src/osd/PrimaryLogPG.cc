@@ -14491,9 +14491,9 @@ void PrimaryLogPG::scan_range_primary(
       bool added_default = false;
       for (auto & shard: backfill_targets) {
 	if (shard_versions.contains(shard.shard)) {
-	  version = shard_versions.at(shard.shard);
+	  auto shard_version = shard_versions.at(shard.shard);
 	  bi->objects.insert(make_pair(*p, std::make_pair(shard.shard,
-							  version)));
+							  shard_version)));
 	} else if (!added_default) {
 	  bi->objects.insert(make_pair(*p, std::make_pair(shard_id_t::NO_SHARD,
 							  version)));
