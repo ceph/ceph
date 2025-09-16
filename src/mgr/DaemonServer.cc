@@ -2765,6 +2765,11 @@ void DaemonServer::send_report()
 		 << std::dec << dendl;
             continue;
           }
+	  dout(0)<< __func__ << " " << key
+		 << " sent me a health metric: "
+		 << std::hex << static_cast<uint8_t>(metric.get_type())
+		 << std::dec << dendl;
+
           tie(acc, std::ignore) = accumulated.emplace(metric.get_type(),
               std::move(collector));
         }
