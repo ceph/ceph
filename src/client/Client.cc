@@ -12029,14 +12029,6 @@ int64_t Client::_write(Fh *f, int64_t offset, uint64_t size, bufferlist bl,
 
     get_cap_ref(in, CEPH_CAP_FILE_BUFFER);
 
-    auto delay = get_injected_write_delay_secs();
-    if (unlikely(delay > 0)) {
-      ldout(cct, 20) << __func__ << ": delaying write for " << delay << " seconds" << dendl;
-      client_lock.unlock();
-      sleep(delay);
-      client_lock.lock();
-    }
-
     ldout(cct, 10) << " _write_filer" << dendl;
     filer->write_trunc(in->ino, &in->layout, in->snaprealm->get_snap_context(),
 		       offset, size, bl, ceph::real_clock::now(), 0,
