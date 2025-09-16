@@ -1374,7 +1374,7 @@ class UdevData:
 
         with open(self.udev_data_path, 'r') as f:
             content: str = f.read().strip()
-            self.raw_data: List[str] = content.split('\n')
+            self.raw_data: List[str] = content.split('\n') if content else []
 
         for line in self.raw_data:
             data_type, data = line.split(':', 1)
