@@ -8648,7 +8648,7 @@ void Server::_rmdir_rollback_finish(MDRequestRef& mdr, metareqid_t reqid, CDentr
  */
 bool Server::_dir_is_nonempty_unlocked(MDRequestRef& mdr, CInode *in)
 {
-  dout(10) << "dir_is_nonempty_unlocked " << *in << dendl;
+  dout(10) << __func__ << " " << *in << dendl;
   ceph_assert(in->is_auth());
 
   if (in->filelock.is_cached())
@@ -8661,7 +8661,7 @@ bool Server::_dir_is_nonempty_unlocked(MDRequestRef& mdr, CInode *in)
     // is the frag obviously non-empty?
     if (dir->is_auth()) {
       if (dir->get_projected_fnode()->fragstat.size()) {
-	dout(10) << "dir_is_nonempty_unlocked dirstat has " 
+	dout(10) << __func__ << " dirstat has "
 		 << dir->get_projected_fnode()->fragstat.size() << " items " << *dir << dendl;
 	return true;
       }
