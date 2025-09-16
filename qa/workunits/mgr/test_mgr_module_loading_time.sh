@@ -72,7 +72,7 @@ mgr_status=$("$ceph" tell mgr mgr_status | jq -c '.pending_modules')
 if [[ "$mgr_status" == "$expected" ]]; then
     echo "PASS: No modules are pending."
 else
-    echo "FAIL: Some modules are pending when there shouldn't be."
+    echo "FAIL: Some modules are pending when they shouldn't be."
     echo "Expected: $expected"
     echo "Actual:   $mgr_status"
     exit 1
