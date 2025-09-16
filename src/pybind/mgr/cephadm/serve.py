@@ -802,11 +802,11 @@ class CephadmServe:
                         )
                         found = True
                         break
-                if not found and spec.virtual_interface_networks:
+                if not found and ingress_spec.virtual_interface_networks:
                     for subnet, ifaces in self.mgr.cache.networks.get(host, {}).items():
-                        if subnet in spec.virtual_interface_networks:
+                        if subnet in ingress_spec.virtual_interface_networks:
                             logger.debug(
-                                f'{subnet} found in virtual_interface_networks list {list(spec.virtual_interface_networks)}'
+                                f'{subnet} found in virtual_interface_networks list {list(ingress_spec.virtual_interface_networks)}'
                             )
                             found = True
                             break
