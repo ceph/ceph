@@ -183,8 +183,8 @@
   unavailable if any PG in the pool is not in active state or if there are unfound 
   objects. Otherwise the pool is considered available. The score is updated every 
   one second by default. This interval can be changed using the new config option
-  ``pool_availability_update_interval.``. The feature is on by default. A new config option 
-  ``enable_availability_tracking`` can be used to turn off the feature if required. 
+  ``pool_availability_update_interval.``. The feature is off by default. A new config option 
+  ``enable_availability_tracking`` can be used to turn on the feature if required. 
   Another command is added to clear the availability status for a specific pool, 
   ``ceph osd pool clear-availability-status <pool-name>``. 
   This feature is in tech preview. 
