@@ -668,6 +668,7 @@ V:1"""
         self.fs.create_file(self.fake_device, st_mode=(stat.S_IFBLK | 0o600))
         self.fs.create_file('/run/udev/data/b999:0', create_missing_dirs=True, contents=udev_data_bare_device)
         self.fs.create_file('/run/udev/data/b998:1', create_missing_dirs=True, contents=udev_data_lv_device)
+        self.fs.create_file('/run/udev/data/b997:2', create_missing_dirs=True, contents="")
 
     def test_device_not_found(self) -> None:
         self.fs.remove(self.fake_device)
@@ -681,6 +682,13 @@ V:1"""
         self.fs.remove('/run/udev/data/b999:0')
         with pytest.raises(RuntimeError):
             disk.UdevData(self.fake_device)
+
+    @patch('ceph_volume.util.disk.os.stat', MagicMock())
+    @patch('ceph_volume.util.disk.os.minor', Mock(return_value=2))
+    @patch('ceph_volume.util.disk.os.major', Mock(return_value=997))
+    def test_empty_data(self) -> None:
+        # no exception should be raised when a /run/udev/data/* file is empty
+        _ = disk.UdevData(self.fake_device)
 
     @patch('ceph_volume.util.disk.os.stat', MagicMock())
     @patch('ceph_volume.util.disk.os.minor', Mock(return_value=0))
