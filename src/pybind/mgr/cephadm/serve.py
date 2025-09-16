@@ -29,7 +29,8 @@ from cephadm.services.cephadmservice import CephadmDaemonDeploySpec, DaemonDeplo
 from cephadm.schedule import HostAssignment, HostSelector
 from cephadm.autotune import MemoryAutotuner
 from cephadm.utils import forall_hosts, cephadmNoImage, is_repo_digest, \
-    CephadmNoImage, CEPH_TYPES, ContainerInspectInfo, SpecialHostLabels
+    CephadmNoImage, CEPH_TYPES, ContainerInspectInfo, SpecialHostLabels, \
+    build_ceph_volume_cmd
 from mgr_module import MonCommandFailed
 from mgr_util import format_bytes
 from cephadm.services.service_registry import service_registry
@@ -408,24 +409,25 @@ class CephadmServe:
     def _refresh_host_devices(self, host: str) -> Optional[str]:
         with_lsm = self.mgr.device_enhanced_scan
         list_all = self.mgr.inventory_list_all
-        inventory_args = ['--', 'inventory',
-                          '--format=json-pretty',
-                          '--filter-for-batch']
+        inventory_args = build_ceph_volume_cmd(
+            self.mgr.ceph_volume_log_level,
+            ['inventory', '--format=json-pretty', '--filter-for-batch'])
         if with_lsm:
             inventory_args.insert(-1, "--with-lsm")
         if list_all:
             inventory_args.insert(-1, "--list-all")
-
         try:
             try:
-                with self.mgr.async_timeout_handler(host, 'cephadm ceph-volume -- inventory'):
+                with self.mgr.async_timeout_handler(
+                        host, f'cephadm ceph-volume {" ".join(inventory_args)}'):
                     devices = self.mgr.wait_async(self._run_cephadm_json(
                         host, 'osd', 'ceph-volume', inventory_args, log_output=self.mgr.log_refresh_metadata))
             except OrchestratorError as e:
                 if 'unrecognized arguments: --filter-for-batch' in str(e):
                     rerun_args = inventory_args.copy()
                     rerun_args.remove('--filter-for-batch')
-                    with self.mgr.async_timeout_handler(host, 'cephadm ceph-volume -- inventory'):
+                    with self.mgr.async_timeout_handler(
+                            host, f'cephadm ceph-volume {" ".join(rerun_args)}'):
                         devices = self.mgr.wait_async(self._run_cephadm_json(
                             host, 'osd', 'ceph-volume', rerun_args, log_output=self.mgr.log_refresh_metadata))
                 else:
