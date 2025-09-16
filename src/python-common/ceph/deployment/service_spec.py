@@ -1305,6 +1305,13 @@ class NFSServiceSpec(ServiceSpec):
                  extra_entrypoint_args: Optional[GeneralArgList] = None,
                  idmap_conf: Optional[Dict[str, Dict[str, str]]] = None,
                  custom_configs: Optional[List[CustomConfig]] = None,
+                 tls_enable: Optional[bool] = None,
+                 tls_cert: Optional[str] = None,
+                 tls_key: Optional[str] = None,
+                 tls_ca_cert: Optional[str] = None,
+                 tls_ktls: Optional[bool] = None,
+                 tls_debug: Optional[bool] = None,
+                 tls_min_version: Optional[str] = None,
                  ):
         assert service_type == 'nfs'
         super(NFSServiceSpec, self).__init__(
@@ -1329,6 +1336,15 @@ class NFSServiceSpec(ServiceSpec):
         self.idmap_conf = idmap_conf
         self.enable_nlm = enable_nlm
 
+        # TLS fields  
+        self.tls_enable=tls_enable
+        self.tls_cert=tls_cert
+        self.tls_key=tls_key
+        self.tls_ca_cert=tls_ca_cert
+        self.tls_ktls=tls_ktls
+        self.tls_debug=tls_debug
+        self.tls_min_version=tls_min_version
+
     def get_port_start(self) -> List[int]:
         if self.port:
             return [self.port]
@@ -1344,6 +1360,18 @@ class NFSServiceSpec(ServiceSpec):
         if self.virtual_ip and (self.ip_addrs or self.networks):
             raise SpecValidationError("Invalid NFS spec: Cannot set virtual_ip and "
                                       f"{'ip_addrs' if self.ip_addrs else 'networks'} fields")
+
+        tls_field_names = [
+            'tls_enable',
+            'tls_cert',
+            'tls_key',
+            'tls_ca_cert',
+        ]
+        tls_fields = [getattr(self, tls_field) for tls_field in tls_field_names]
+        if any(tls_fields) and not all(tls_fields):
+            raise SpecValidationError(
+                f'{tls_field_names} attrbutes must be set'
+            )
 
 
 yaml.add_representer(NFSServiceSpec, ServiceSpec.yaml_representer)
