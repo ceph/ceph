@@ -302,8 +302,9 @@
 
 <ng-template #checkIconTpl
              let-value="data.value">
-  <i [ngClass]="[icons.check]"
-     [hidden]="!(value | boolean)"></i>
+@if (value | boolean) {
+  <cd-icon type="check"></cd-icon>
+}
 </ng-template>
 
 <ng-template #perSecondTpl
