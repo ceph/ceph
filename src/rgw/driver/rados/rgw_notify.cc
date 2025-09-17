@@ -50,7 +50,7 @@ static inline std::ostream& operator<<(std::ostream& out,
 
 struct persistency_tracker {
   ceph::coarse_real_time last_retry_time {ceph::coarse_real_clock::zero()};
-  uint32_t retires_num {0};
+  uint32_t retries_num {0};
 };
 
 using queues_t = std::set<std::string>;
@@ -233,11 +233,11 @@ private:
     const auto time_now = ceph::coarse_real_clock::now();
     if ( (topic_persistency_ttl != 0 && event_entry.creation_time != ceph::coarse_real_clock::zero() &&
          time_now - event_entry.creation_time > std::chrono::seconds(topic_persistency_ttl))
-         || ( topic_persistency_max_retries != 0 && entry_persistency_tracker.retires_num >  topic_persistency_max_retries) ) {
+         || ( topic_persistency_max_retries != 0 && entry_persistency_tracker.retries_num >  topic_persistency_max_retries) ) {
       ldpp_dout(this, 1) << "WARNING: Expiring entry marker: " << entry.marker
                          << " for event with " << event_entry
                          << " entry retry_number: "
-                         << entry_persistency_tracker.retires_num
+                         << entry_persistency_tracker.retries_num
                          << " creation_time: " << event_entry.creation_time
                          << " time_now: " << time_now << dendl;
       return EntryProcessingResult::Expired;
@@ -246,11 +246,11 @@ private:
       return EntryProcessingResult::Sleeping;
     }
 
-    ++entry_persistency_tracker.retires_num;
+    ++entry_persistency_tracker.retries_num;
     entry_persistency_tracker.last_retry_time = time_now;
     ldpp_dout(this, 20) << "Processing event entry with " << event_entry
                         << " retry_number: "
-                        << entry_persistency_tracker.retires_num
+                        << entry_persistency_tracker.retries_num
                         << " current time: " << time_now << dendl;
     ret = push_endpoint->send(this, event_entry.event, yield);
     if (ret < 0) {
