@@ -80,6 +80,61 @@ struct profile_t {
   client_config_t client;
   client_config_t background_recovery;
   client_config_t background_best_effort;
+
+  constexpr profile_t(
+    client_config_t client,
+    client_config_t background_recovery,
+    client_config_t background_best_effort
+  ) : client(client), background_recovery(background_recovery),
+      background_best_effort(background_best_effort) {}
+};
+
+/**
+ * high_client_ops
+ *
+ * Client Allocation:
+ *   reservation: 60% | weight: 2 | limit: 0 (max) |
+ * Background Recovery Allocation:
+ *   reservation: 40% | weight: 1 | limit: 0 (max) |
+ * Background Best Effort Allocation:
+ *   reservation: 0 (min) | weight: 1 | limit: 70% |
+ */
+constexpr profile_t HIGH_CLIENT_OPS{
+  { .6, 2,  0 },
+  { .4, 1,  0 },
+  {  0, 1, .7 }
+};
+
+/**
+ * high_recovery_ops
+ *
+ * Client Allocation:
+ *   reservation: 30% | weight: 1 | limit: 0 (max) |
+ * Background Recovery Allocation:
+ *   reservation: 70% | weight: 2 | limit: 0 (max) |
+ * Background Best Effort Allocation:
+ *   reservation: 0 (min) | weight: 1 | limit: 0 (max) |
+ */
+constexpr profile_t HIGH_RECOVERY_OPS{
+  { .3, 1, 0 },
+  { .7, 2, 0 },
+  {  0, 1, 0 }
+};
+
+/**
+ * balanced
+ *
+ * Client Allocation:
+ *   reservation: 50% | weight: 1 | limit: 0 (max) |
+ * Background Recovery Allocation:
+ *   reservation: 50% | weight: 1 | limit: 0 (max) |
+ * Background Best Effort Allocation:
+ *   reservation: 0 (min) | weight: 1 | limit: 90% |
+ */
+constexpr profile_t BALANCED{
+  { .5, 1, 0 },
+  { .5, 1, 0 },
+  {  0, 1, .9 }
 };
 
 struct client_profile_id_t {
@@ -125,60 +180,70 @@ class ClientRegistry {
         internal_client_infos.emplace_back(1, 1, 1);
       }
     }
-    void update_from_config(const ConfigProxy &conf,
-      double capacity_per_shard);
+    void update_from_profile(
+      const profile_t &current_profile,
+      const double capacity_per_shard);
+
     const crimson::dmclock::ClientInfo *get_info(
       const scheduler_id_t &id) const;
 };
 
-class MclockConfig {
+class MclockConfig final : public md_config_obs_t {
 private:
   CephContext *cct;
   uint32_t num_shards;
   bool is_rotational;
-  PerfCounters *logger;
+  PerfCounters *logger = nullptr;
   int shard_id;
   int whoami;
-  double osd_bandwidth_cost_per_io;
-  double osd_bandwidth_capacity_per_shard;
+  double osd_bandwidth_cost_per_io = 0.0;
+  double osd_bandwidth_capacity_per_shard = 0.0;
   ClientRegistry& client_registry;
-  #ifndef WITH_CRIMSON
-  MonClient *monc;
-  #endif
+
+  // currently active profile, will be overridden from config on startup
+  // and upon config change
+  profile_t current_profile = BALANCED;
 public:
-  #ifdef WITH_CRIMSON
   MclockConfig(CephContext *cct, ClientRegistry& creg,
                uint32_t num_shards, bool is_rotational, int shard_id,
 	       int whoami):cct(cct),
                            num_shards(num_shards),
                            is_rotational(is_rotational),
-			   logger(nullptr),shard_id(shard_id),
-                           whoami(whoami), osd_bandwidth_cost_per_io(0.0),
-	                   osd_bandwidth_capacity_per_shard(0.0),
+			   shard_id(shard_id),
+                           whoami(whoami),
 	                   client_registry(creg)
-  {}
-  #else
-  MclockConfig(CephContext *cct, ClientRegistry& creg,
-               MonClient *monc, uint32_t num_shards, bool is_rotational,
-	       int shard_id, int whoami):cct(cct),
-                                         num_shards(num_shards),
-                                         is_rotational(is_rotational),
-					 logger(nullptr),shard_id(shard_id),
-                                         whoami(whoami),
-					 osd_bandwidth_cost_per_io(0.0),
-	                                 osd_bandwidth_capacity_per_shard(0.0),
-	                                 client_registry(creg), monc(monc)
-  {}
-#endif
-  ~MclockConfig();
-  void set_config_defaults_from_profile();
-  void set_osd_capacity_params_from_config();
+  {
+    cct->_conf.add_observer(this);
+    set_from_config();
+  }
+  ~MclockConfig() final;
+
+  void set_from_config();
   void init_logger();
   void get_mclock_counter(scheduler_id_t id);
   void put_mclock_counter(scheduler_id_t id);
   double get_cost_per_io() const;
   double get_capacity_per_shard() const;
-  void mclock_handle_conf_change(const ConfigProxy& conf,
-                                 const std::set<std::string> &changed);
+  void handle_conf_change(const ConfigProxy& conf,
+			  const std::set<std::string> &changed) final;
+  std::vector<std::string> get_tracked_keys() const noexcept final {
+    using namespace std::literals;
+    return {
+      "osd_mclock_scheduler_client_res"s,
+      "osd_mclock_scheduler_client_wgt"s,
+      "osd_mclock_scheduler_client_lim"s,
+      "osd_mclock_scheduler_background_recovery_res"s,
+      "osd_mclock_scheduler_background_recovery_wgt"s,
+      "osd_mclock_scheduler_background_recovery_lim"s,
+      "osd_mclock_scheduler_background_best_effort_res"s,
+      "osd_mclock_scheduler_background_best_effort_wgt"s,
+      "osd_mclock_scheduler_background_best_effort_lim"s,
+      "osd_mclock_max_capacity_iops_hdd"s,
+      "osd_mclock_max_capacity_iops_ssd"s,
+      "osd_mclock_max_sequential_bandwidth_hdd"s,
+      "osd_mclock_max_sequential_bandwidth_ssd"s,
+      "osd_mclock_profile"s
+    };
+  }
   uint32_t calc_scaled_cost(int item_cost);
 };

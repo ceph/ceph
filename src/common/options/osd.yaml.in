@@ -1085,6 +1085,7 @@ options:
     of 0 specifies the lowest possible reservation. Any value greater than
     0 and up to 1.0 specifies the minimum IO proportion to reserve for each
     client in terms of a fraction of the OSD's maximum IOPS capacity.
+    Ignored unless osd_mclock_profile is set to 'custom'.
   long_desc: Only considered for osd_op_queue = mclock_scheduler
   fmt_desc: IO proportion reserved for each client (default).
   default: 0
@@ -1092,15 +1093,18 @@ options:
   max: 1.0
   see_also:
   - osd_op_queue
+  - osd_mclock_profile
 - name: osd_mclock_scheduler_client_wgt
   type: uint
   level: advanced
   desc: IO share for each client (default) over reservation
+    Ignored unless osd_mclock_profile is set to 'custom'.
   long_desc: Only considered for osd_op_queue = mclock_scheduler
   fmt_desc: IO share for each client (default) over reservation.
   default: 1
   see_also:
   - osd_op_queue
+  - osd_mclock_profile
 - name: osd_mclock_scheduler_client_lim
   type: float
   level: advanced
@@ -1110,6 +1114,7 @@ options:
     than 0 and up to 1.0 specifies the upper IO limit over reservation
     that each client receives in terms of a fraction of the OSD's
     maximum IOPS capacity.
+    Ignored unless osd_mclock_profile is set to 'custom'.
   long_desc: Only considered for osd_op_queue = mclock_scheduler
   fmt_desc: IO limit for each client (default) over reservation.
   default: 0
@@ -1117,6 +1122,7 @@ options:
   max: 1.0
   see_also:
   - osd_op_queue
+  - osd_mclock_profile
 - name: osd_mclock_scheduler_background_recovery_res
   type: float
   level: advanced
@@ -1125,6 +1131,7 @@ options:
     greater than 0 and up to 1.0 specifies the minimum IO proportion to
     reserve for background recovery operations in terms of a fraction of
     the OSD's maximum IOPS capacity.
+    Ignored unless osd_mclock_profile is set to 'custom'.
   long_desc: Only considered for osd_op_queue = mclock_scheduler
   fmt_desc: IO proportion reserved for background recovery (default).
   default: 0
@@ -1132,15 +1139,18 @@ options:
   max: 1.0
   see_also:
   - osd_op_queue
+  - osd_mclock_profile
 - name: osd_mclock_scheduler_background_recovery_wgt
   type: uint
   level: advanced
   desc: IO share for each background recovery over reservation
+    Ignored unless osd_mclock_profile is set to 'custom'.
   long_desc: Only considered for osd_op_queue = mclock_scheduler
   fmt_desc: IO share for each background recovery over reservation.
   default: 1
   see_also:
   - osd_op_queue
+  - osd_mclock_profile
 - name: osd_mclock_scheduler_background_recovery_lim
   type: float
   level: advanced
@@ -1150,6 +1160,7 @@ options:
     OSD. Any value greater than 0 and up to 1.0 specifies the upper IO
     limit over reservation that background recovery operation receives in
     terms of a fraction of the OSD's maximum IOPS capacity.
+    Ignored unless osd_mclock_profile is set to 'custom'.
   long_desc: Only considered for osd_op_queue = mclock_scheduler
   fmt_desc: IO limit for background recovery over reservation.
   default: 0
@@ -1157,6 +1168,7 @@ options:
   max: 1.0
   see_also:
   - osd_op_queue
+  - osd_mclock_profile
 - name: osd_mclock_scheduler_background_best_effort_res
   type: float
   level: advanced
@@ -1165,6 +1177,7 @@ options:
     greater than 0 and up to 1.0 specifies the minimum IO proportion to
     reserve for background best_effort operations in terms of a fraction
     of the OSD's maximum IOPS capacity.
+    Ignored unless osd_mclock_profile is set to 'custom'.
   long_desc: Only considered for osd_op_queue = mclock_scheduler
   fmt_desc: IO proportion reserved for background best_effort (default).
   default: 0
@@ -1172,15 +1185,18 @@ options:
   max: 1.0
   see_also:
   - osd_op_queue
+  - osd_mclock_profile
 - name: osd_mclock_scheduler_background_best_effort_wgt
   type: uint
   level: advanced
   desc: IO share for each background best_effort over reservation
+    Ignored unless osd_mclock_profile is set to 'custom'.
   long_desc: Only considered for osd_op_queue = mclock_scheduler
   fmt_desc: IO share for each background best_effort over reservation.
   default: 1
   see_also:
   - osd_op_queue
+  - osd_mclock_profile
 - name: osd_mclock_scheduler_background_best_effort_lim
   type: float
   level: advanced
@@ -1190,6 +1206,7 @@ options:
     OSD. Any value greater than 0 and up to 1.0 specifies the upper IO
     limit over reservation that background best_effort operation receives
     in terms of a fraction of the OSD's maximum IOPS capacity.
+    Ignored unless osd_mclock_profile is set to 'custom'.
   long_desc: Only considered for osd_op_queue = mclock_scheduler
   fmt_desc: IO limit for background best_effort over reservation.
   default: 0
@@ -1197,6 +1214,7 @@ options:
   max: 1.0
   see_also:
   - osd_op_queue
+  - osd_mclock_profile
 - name: osd_mclock_scheduler_anticipation_timeout
   type: float
   level: advanced
