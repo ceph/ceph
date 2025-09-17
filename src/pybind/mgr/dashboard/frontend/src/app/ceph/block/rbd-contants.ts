@@ -16,9 +16,9 @@ export const RBDActionHelpers = {
 export const RBDPoolMirrorModes = {
   pool: 'pool',
   image: 'image'
-}
+};
 
 export const RBDMirroringModes = {
   journal: 'journal',
   snapshot: 'snapshot'
-}
+};
