@@ -290,7 +290,7 @@
                      }
                   ]
                },
-               "unit": "decbytes"
+               "unit": "bytes"
             }
          },
          "gridPos": {
@@ -505,15 +505,75 @@
                      {
                         "color": "green",
                         "value": null
-                     },
-                     {
-                        "color": "red",
-                        "value": 80
                      }
                   ]
                },
                "unit": "none"
-            }
+            },
+            "overrides": [
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "All"
+                  },
+                  "properties": [
+                     {
+                        "id": "color",
+                        "value": {
+                           "mode": "fixed"
+                        }
+                     }
+                  ]
+               },
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "Out"
+                  },
+                  "properties": [
+                     {
+                        "id": "thresholds",
+                        "value": {
+                           "mode": "absolute",
+                           "steps": [
+                              {
+                                 "color": "green",
+                                 "value": null
+                              },
+                              {
+                                 "color": "red",
+                                 "value": 1
+                              }
+                           ]
+                        }
+                     }
+                  ]
+               },
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "Down"
+                  },
+                  "properties": [
+                     {
+                        "id": "thresholds",
+                        "value": {
+                           "mode": "absolute",
+                           "steps": [
+                              {
+                                 "color": "green",
+                                 "value": null
+                              },
+                              {
+                                 "color": "red",
+                                 "value": 1
+                              }
+                           ]
+                        }
+                     }
+                  ]
+               }
+            ]
          },
          "flipCard": false,
          "flipTime": 5,
@@ -571,7 +631,7 @@
                "displayAliasType": "Always",
                "displayType": "Regular",
                "displayValueWithAlias": "When Alias Displayed",
-               "expr": "count(ceph_osd_in{cluster=~\"$cluster\", })",
+               "expr": "sum(ceph_osd_in{cluster=~\"$cluster\", })",
                "format": "time_series",
                "interval": "$interval",
                "intervalFactor": 1,
@@ -913,7 +973,7 @@
                      }
                   ]
                },
-               "unit": "decbytes"
+               "unit": "bytes"
             }
          },
          "gridPos": {
@@ -1483,7 +1543,7 @@
                      }
                   ]
                },
-               "unit": "decbytes"
+               "unit": "bytes"
             },
             "overrides": [ ]
          },
@@ -1590,7 +1650,7 @@
                      }
                   ]
                },
-               "unit": "decbytes"
+               "unit": "bytes"
             },
             "overrides": [ ]
          },
