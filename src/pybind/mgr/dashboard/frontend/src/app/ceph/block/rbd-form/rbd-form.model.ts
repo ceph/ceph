@@ -21,6 +21,17 @@ export class RbdFormModel {
   enable_mirror?: boolean;
   mirror_mode?: string;
 
-  schedule_interval: string;
+  schedule_info: ScheduleInfo;
+  start_time: string;
+}
+
+export class ScheduleInfo {
+  image: string;
+  schedule_time: string;
+  schedule_interval: ScheduleInterval[];
+}
+
+export class ScheduleInterval {
+  interval: string;
   start_time: string;
 }
