@@ -3790,7 +3790,7 @@
          },
          {
             "auto": true,
-            "auto_count": 300,
+            "auto_count": 10,
             "auto_min": "1m",
             "current": {
                "text": "$__auto_interval_interval",
