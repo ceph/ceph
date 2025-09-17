@@ -10476,28 +10476,18 @@ class MonCmdSetConfigOnFinish : public Context {
   CephContext *cct;
   std::string key;
   std::string val;
-  bool update_shard;
 public:
   explicit MonCmdSetConfigOnFinish(
     OSD *o,
     CephContext *cct,
     const std::string &k,
-    const std::string &v,
-    const bool s)
-      : osd(o), cct(cct), key(k), val(v), update_shard(s) {}
+    const std::string &v) : osd(o), cct(cct), key(k), val(v) {}
   void finish(int r) override {
     if (r != 0) {
       // Fallback to setting the config within the in-memory "values" map.
       cct->_conf.set_val_default(key, val);
     }
-
-    // If requested, apply this option on the
-    // active scheduler of each op shard.
-    if (update_shard) {
-      for (auto& shard : osd->shards) {
-        shard->update_scheduler_config();
-      }
-    }
+    cct->_conf.apply_changes(nullptr);
   }
 };
 
@@ -10512,16 +10502,7 @@ void OSD::mon_cmd_set_config(const std::string &key, const std::string &val)
     "}";
   vector<std::string> vcmd{cmd};
 
-  // List of config options to be distributed across each op shard.
-  // Currently limited to a couple of mClock options.
-  static const std::vector<std::string> shard_option =
-    { "osd_mclock_max_capacity_iops_hdd", "osd_mclock_max_capacity_iops_ssd" };
-  const bool update_shard = std::find(shard_option.begin(),
-                                      shard_option.end(),
-                                      key) != shard_option.end();
-
-  auto on_finish = new MonCmdSetConfigOnFinish(this, cct, key,
-                                               val, update_shard);
+  auto on_finish = new MonCmdSetConfigOnFinish(this, cct, key, val);
   dout(10) << __func__ << " Set " << key << " = " << val << dendl;
   monc->start_mon_command(vcmd, {}, nullptr, nullptr, on_finish);
 }
@@ -11029,11 +11010,6 @@ void OSDShard::unprime_split_children(spg_t parent, unsigned old_pg_num)
   for (auto pgid : to_delete) {
     pg_slots.erase(pgid);
   }
-}
-
-void OSDShard::update_scheduler_config()
-{
-  scheduler->update_configuration();
 }
 
 op_queue_type_t OSDShard::get_op_queue_type() const
