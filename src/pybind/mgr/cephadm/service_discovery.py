@@ -9,7 +9,6 @@ except ImportError:
 import logging
 
 import orchestrator  # noqa
-from mgr_module import ServiceInfoT
 from mgr_util import build_url
 from typing import Dict, List, TYPE_CHECKING, cast, Collection, Callable, NamedTuple, Optional, IO
 from cephadm.services.nfs import NFSService
@@ -21,6 +20,7 @@ import tempfile
 from cephadm.services.ingress import IngressSpec
 from cephadm.services.cephadmservice import CephExporterService
 from cephadm.services.nvmeof import NvmeofService
+from cephadm.services.service_registry import service_registry
 
 from ceph.deployment.service_spec import SMBSpec
 
@@ -183,17 +183,16 @@ class Root(Server):
             return []
 
     def prometheus_sd_config(self) -> List[Dict[str, Collection[str]]]:
-        """Return <http_sd_config> compatible prometheus config for prometheus service."""
-        servers = self.mgr.list_servers()
+        """Return <http_sd_config> compatible prometheus config for prometheus service.
+        Targets should be a length one list containing only the active mgr
+        """
         targets = []
-        for server in servers:
-            hostname = server.get('hostname', '')
-            for service in cast(List[ServiceInfoT], server.get('services', [])):
-                if service['type'] != 'mgr' or service['id'] != self.mgr.get_mgr_id():
-                    continue
-                port = self.mgr.get_module_option_ex(
-                    'prometheus', 'server_port', PrometheusService.DEFAULT_MGR_PROMETHEUS_PORT)
-                targets.append(f'{hostname}:{port}')
+        mgr_daemons = self.mgr.cache.get_daemons_by_service('mgr')
+        host = service_registry.get_service('mgr').get_active_daemon(mgr_daemons).hostname or ''
+        fqdn = self.mgr.get_fqdn(host)
+        port = self.mgr.get_module_option_ex(
+            'prometheus', 'server_port', PrometheusService.DEFAULT_MGR_PROMETHEUS_PORT)
+        targets.append(f'{fqdn}:{port}')
         return [{"targets": targets, "labels": {}}]
 
     def alertmgr_sd_config(self) -> List[Dict[str, Collection[str]]]:
