@@ -1148,6 +1148,32 @@ TEST(FSCrypt, SetPolicyAlreadyExistDifferentPolicyNotEmpty) {
   ceph_shutdown(cmount);
 }
 
+TEST(FSCrypt, FSCryptDummyEncryptionNoExistingRegularPolicy) {
+  struct ceph_mount_info* cmount;
+  ASSERT_EQ(0, ceph_create(&cmount, NULL));
+  ASSERT_EQ(0, ceph_conf_read_file(cmount, NULL));
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
+
+  string name = get_unique_dir_name();
+  name = string("/") + name;
+
+  int r = ceph_mount(cmount, NULL);
+  ASSERT_EQ(0, ceph_mkdir(cmount, name.c_str(), 0777));
+  ceph_unmount(cmount);
+
+  ASSERT_EQ(0, ceph_conf_set(cmount, "client_fscrypt_dummy_encryption", "true"));
+  r = ceph_mount(cmount, name.c_str());
+  ASSERT_EQ(0, r);
+
+  int fd = ceph_open(cmount, ".", O_DIRECTORY, 0);
+
+  fscrypt_policy_v2 policy;
+  ASSERT_EQ(0, ceph_get_fscrypt_policy_v2(cmount, fd, &policy));
+
+
+  ceph_shutdown(cmount);
+}
+
 int main(int argc, char **argv)
 {
   int r = update_root_mode();
