@@ -2612,6 +2612,9 @@ void RGWBucketInfo::dump(Formatter *f) const
   if (!empty_sync_policy()) {
     encode_json("sync_policy", *sync_policy, f);
   }
+  if (obj_lock_enabled()) {
+    encode_json("obj_lock", obj_lock, f);
+  }
 }
 
 void RGWBucketInfo::decode_json(JSONObj *obj) {
@@ -2654,6 +2657,9 @@ void RGWBucketInfo::decode_json(JSONObj *obj) {
   JSONDecoder::decode_json("sync_policy", sp, obj);
   if (!sp.empty()) {
     set_sync_policy(std::move(sp));
+  }
+  if (obj_lock_enabled()) {
+    JSONDecoder::decode_json("obj_lock", obj_lock, obj);
   }
 }
 

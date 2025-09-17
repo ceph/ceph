@@ -7,6 +7,7 @@
 #include "include/encoding.h"
 #include "common/ceph_time.h"
 #include "common/iso_8601.h"
+#include "common/ceph_json.h"
 #include "rgw_xml.h"
 
 class DefaultRetention
@@ -46,6 +47,8 @@ public:
     decode(years, bl);
     DECODE_FINISH(bl);
   }
+
+  void decode_json(JSONObj *obj);
   void dump(Formatter *f) const;
   void decode_xml(XMLObj *obj);
   void dump_xml(Formatter *f) const;
@@ -81,6 +84,7 @@ public:
     DECODE_FINISH(bl);
   }
 
+  void decode_json(JSONObj *obj);
   void decode_xml(XMLObj *obj);
   void dump_xml(Formatter *f) const;
   void dump(Formatter *f) const;
@@ -141,6 +145,7 @@ public:
     DECODE_FINISH(bl);
   }
 
+  void decode_json(JSONObj *obj);
   void decode_xml(XMLObj *obj);
   void dump_xml(Formatter *f) const;
   ceph::real_time get_lock_until_date(const ceph::real_time& mtime) const;
