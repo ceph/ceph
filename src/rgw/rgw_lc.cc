@@ -2609,10 +2609,10 @@ bool RGWLC::going_down()
 
 bool RGWLC::LCWorker::should_work(utime_t& now)
 {
-  int start_hour;
-  int start_minute;
-  int end_hour;
-  int end_minute;
+  int start_hour = 0;
+  int start_minute = 0;
+  int end_hour = 23;
+  int end_minute = 59;
   string worktime = cct->_conf->rgw_lifecycle_work_time;
   sscanf(worktime.c_str(),"%d:%d-%d:%d",&start_hour, &start_minute,
 	 &end_hour, &end_minute);
@@ -2649,10 +2649,10 @@ int RGWLC::LCWorker::schedule_next_start_time(utime_t &start, utime_t& now)
 	return (secs);
   }
 
-  int start_hour;
-  int start_minute;
-  int end_hour;
-  int end_minute;
+  int start_hour = 0;
+  int start_minute = 0;
+  int end_hour = 23;
+  int end_minute = 59;
   string worktime = cct->_conf->rgw_lifecycle_work_time;
   sscanf(worktime.c_str(),"%d:%d-%d:%d",&start_hour, &start_minute, &end_hour,
 	 &end_minute);
