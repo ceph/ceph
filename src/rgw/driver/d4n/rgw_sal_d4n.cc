@@ -160,7 +160,9 @@ void D4NFilterBucket::finalize_transaction(const DoutPrefixProvider* dpp, int& r
 	}
 
 	//NOTE: upon end_trx failed , the rc should be set to result_code, so that the caller can decide whether to retry the transaction or not.
-	auto rc = m_d4n_trx->end_trx(dpp, this->filter->get_connection(), null_yield);
+	//get the connection from the pool
+	auto connection = this->filter->get_redis_pool()->acquire();
+	auto rc = m_d4n_trx->end_trx(dpp, connection, null_yield);
 	if (rc < 0) {
 		result_code = rc;
 		ldout(g_ceph_context, 0) << "D4NFilterBucket::finalize_transaction " << m_d4n_trx.get() << " had failed, returned rc: " << rc << dendl;
@@ -168,6 +170,8 @@ void D4NFilterBucket::finalize_transaction(const DoutPrefixProvider* dpp, int& r
 		ldout(g_ceph_context, 0) << "D4NFilterBucket::finalize_transaction " << m_d4n_trx.get() << " had completed successfully " << dendl; 
 		result_code = 0;
 	}
+	this->filter->get_redis_pool()->release(connection);//TODO use RAII
+
 	//delete the Directory* objects. (if driver create Directory* objects, it should delete them)
 	m_objDir.reset();
 	m_blockDir.reset();
@@ -698,8 +702,10 @@ void D4NFilterObject::finalize_transaction(const DoutPrefixProvider* dpp, int& r
 		return;
   }
 
+  //get the connection from the pool
+  auto connection = driver->get_redis_pool()->acquire();
   //NOTE: upon end_trx failed , the rc should be set to result_code, so that the caller can decide whether to retry the transaction or not.
-  auto rc = m_d4n_trx->end_trx(dpp, driver->get_connection(), null_yield);
+  auto rc = m_d4n_trx->end_trx(dpp, connection, null_yield);
   if (rc < 0) {
 		result_code = rc;
 		ldout(g_ceph_context, 0) << "D4NFilterObject::finalize_transaction " << m_d4n_trx.get() << " had failed, returned rc: " << rc << dendl;
@@ -707,6 +713,8 @@ void D4NFilterObject::finalize_transaction(const DoutPrefixProvider* dpp, int& r
 		ldout(g_ceph_context, 0) << "D4NFilterObject::finalize_transaction " << m_d4n_trx.get() << " had completed successfully " << dendl; 
 		result_code = 0;
   }
+  driver->get_redis_pool()->release(connection);//TODO RAII
+  
   m_objDir.reset();
   m_blockDir.reset();
   m_bucketDir.reset();

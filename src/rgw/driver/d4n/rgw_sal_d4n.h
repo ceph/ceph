@@ -315,6 +315,7 @@ class D4NFilterObject : public FilterObject {
 };
 
 class D4NTransactionMng {
+   //scope-guard object to manage the transaction lifecycle (RAII)
     D4NFilterObject* filter_obj=nullptr;
     d4n::ObjectDirectory* obj_dir=nullptr; 
     const DoutPrefixProvider* dpp;//NOTE: this dpp can not be saved, it should be passed on stack

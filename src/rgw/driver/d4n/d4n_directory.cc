@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <boost/asio/consign.hpp>
 #include <boost/algorithm/string.hpp>
+#include <boost/redis/response.hpp>
 #include <cstring>
 #include <memory>
 #include <stop_token>
@@ -8,6 +9,10 @@
 #include "common/async/blocked_completion.h"
 #include "common/dout.h" 
 #include "d4n_directory.h"
+
+#ifndef dout_subsys
+#define dout_subsys ceph_subsys_rgw
+#endif
 
 namespace rgw { namespace d4n {
 
@@ -40,6 +45,42 @@ auto async_exec(std::shared_ptr<connection> conn,
 }
 
 template <typename... Types>
+struct redis_error {
+	boost::system::error_code ec;
+  	std::string message;
+
+  	redis_error(boost::system::error_code ec, std::string message,
+	      boost::redis::response<Types...>& resp)
+    	: ec(ec), message(std::move(message)) {
+   
+	   if(ec) { 
+   		ldout(g_ceph_context, 0) << message << ": ERROR ec{message,value} " 
+		<< ec.message() << "  " << ec.value() << dendl;
+	   }
+
+	   auto& r = std::get<0>(resp);
+	   if(r.has_error()) {
+   		ldout(g_ceph_context, 0) << message << ": Response has ERROR " << dendl;
+	   }
+    }
+	//another constructor for generic_response
+	redis_error(boost::system::error_code ec, std::string message,
+	      boost::redis::generic_response& resp)
+    	: ec(ec), message(std::move(message)) {
+   
+	   if(ec) { 
+   		ldout(g_ceph_context, 0) << message << ": ERROR ec{message,value} " 
+		<< ec.message() << "  " << ec.value() << dendl;
+	   }
+
+	   if(resp.has_error()) {
+   		ldout(g_ceph_context, 0) << message << ": Response has ERROR " << dendl;
+	   }
+    }
+};
+
+    
+template <typename... Types>
 void redis_exec(std::shared_ptr<connection> conn,
                 boost::system::error_code& ec,
                 const boost::redis::request& req,
@@ -51,6 +92,9 @@ void redis_exec(std::shared_ptr<connection> conn,
   } else {
     async_exec(std::move(conn), req, resp, ceph::async::use_blocked[ec]);
   }
+
+  redis_error err_report{ec, "redis_exec: (not using connection pool)", resp};
+
 }
 
 template <typename... Types>
@@ -71,6 +115,8 @@ void redis_exec_cp(const DoutPrefixProvider* dpp,
   		} else {
     		async_exec(conn, req, resp, ceph::async::use_blocked[ec]);
   		}
+  		redis_error err_report{ec, "redis_exec_cp:", resp};
+
 	} catch (const std::exception& e) {
 		//release the connection upon exception
     		pool->release(conn);
@@ -91,6 +137,7 @@ void redis_exec(std::shared_ptr<connection> conn,
   } else {
     async_exec(std::move(conn), req, resp, ceph::async::use_blocked[ec]);
   }
+  redis_error err_report{ec, "redis_exec_cp:", resp};
 }
 
 void redis_exec_cp(const DoutPrefixProvider* dpp,
@@ -109,12 +156,13 @@ void redis_exec_cp(const DoutPrefixProvider* dpp,
   		} else {
     			async_exec(conn, req, resp, ceph::async::use_blocked[ec]);
   		}	
+  		redis_error err_report{ec, "redis_exec_cp:", resp};
 	} catch (const std::exception& e) {
     			pool->release(conn);
     			throw;
 	}
 	//release the connection back to the pool after execution
-	pool->release(conn);
+	pool->release(conn);//TODO: use RAII 
 }
 
 int check_bool(std::string str) {
@@ -138,7 +186,6 @@ void redis_exec_connection_pool(const DoutPrefixProvider* dpp,
     if(!redis_pool)[[unlikely]]
     {
 	redis_exec(conn, ec, req, resp, y);
-	ldpp_dout(dpp, 0) << "Directory::" << __func__ << " not using connection-pool, it's using the shared connection " << dendl;
     }
     else[[likely]]
     	redis_exec_cp(dpp, redis_pool, ec, req, resp, y);
@@ -156,15 +203,10 @@ void redis_exec_connection_pool(const DoutPrefixProvider* dpp,
     if(!redis_pool)[[unlikely]]
     {
 	redis_exec(conn, ec, req, resp, y);
-	ldpp_dout(dpp, 0) << "Directory::" << __func__ << " not using connection-pool, it's using the shared connection " << dendl;
     }
     else[[likely]]
     	redis_exec_cp(dpp, redis_pool, ec, req, resp, y);
 }
-
-#ifndef dout_subsys
-#define dout_subsys ceph_subsys_rgw
-#endif
 
 int BucketDirectory::zadd(const DoutPrefixProvider* dpp, const std::string& bucket_id, double score, const std::string& member, optional_yield y, Pipeline* pipeline)
 {
@@ -1336,14 +1378,16 @@ if allComparisonsSuccessful == true then
 
 	log_message("allComparisonsSuccessful is true, renaming all write keys")
 	rename_all_write_keys()
-	return {true, "Processing complete - commit transaction"}
+--	return {true, "Processing complete - commit transaction"}
+	return true
 else
 -- the transaction should be rolled back, all temp keys should be deleted
 	log_message("allComparisonsSuccessful is false")
 	deleteKeysWithSuffix("_temp_write")
 	deleteKeysWithSuffix("_temp_test_write")
 	deleteKeysWithSuffix("_temp_read") 
-	return {false, "Processing failed - rolling back"}
+--	return {false, "Processing failed - rolling back"}
+	return false
 end
 
 
