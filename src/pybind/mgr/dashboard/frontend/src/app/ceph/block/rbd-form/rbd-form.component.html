@@ -98,7 +98,7 @@
 
       <!-- Size -->
       <div class="form-item">
-        <cds-text-label for="size"
+        <cds-text-label labelInputID="size"
                         i18n
                         [invalid]="!rbdForm.controls['size'].valid && (rbdForm.controls['size'].dirty)"
                         [invalidText]="sizeError"
@@ -107,7 +107,6 @@
                  type="text"
                  placeholder="e.g., 10GiB"
                  id="size"
-                 name="size"
                  formControlName="size"
                  defaultUnit="GiB"
                  [invalid]="!rbdForm.controls['size'].valid && (rbdForm.controls['size'].dirty)"
@@ -119,7 +118,7 @@
                 i18n>This field is required.</span>
           <span class="invalid-feedback"
                 *ngIf="rbdForm.showError('size', formDir, 'invalidSizeObject')"
-                i18n>You have to increase the size.</span>
+                i18n>Size must be increased.</span>
           <span *ngIf="rbdForm.showError('size', formDir, 'pattern')"
                 class="invalid-feedback"
                 i18n>Size must be a number or in a valid format. eg: 5 GiB</span>
@@ -131,8 +130,7 @@
       <div class="form-item"
            *ngIf="mode !== 'editing' && rbdForm.getValue('pool') && namespaces === null">
         <cds-select label="Namespace"
-                    for="namespace"
-                    name="namespace"
+                    labelInputID="namespace"
                     id="namespace"
                     [skeleton]="true"
                     formControlName="namespace">
@@ -144,7 +142,7 @@
       <div class="form-item"
            *ngIf="(mode === 'editing' && rbdForm.getValue('namespace')) || mode !== 'editing' && (namespaces && namespaces.length > 0 || !poolPermission.read)">
         <cds-text-label label="Namespace"
-                        id="namespace"
+                        labelInputID="namespace"
                         [helperText]="namespaceHelperTpl"
                         *ngIf="mode === 'editing' || !poolPermission.read"
                         i18n>Namespace
@@ -155,8 +153,6 @@
 
         <cds-select label="Namespace"
                     [helperText]="namespaceHelperTpl"
-                    for="namespace"
-                    name="namespace"
                     id="namespace"
                     formControlName="namespace"
                     (valueChange)="disableMirroring($event)"
@@ -232,7 +228,7 @@
 
       <!-- Snapshot Schedule Interval -->
       <div class="form-item"
-           *ngIf="rbdForm.getValue('mirroringMode') === 'snapshot' && mirroring">
+           *ngIf="rbdForm.getValue('mirroringMode') === rbdMirrorModes.snapshot && mirroring">
         <cds-text-label for="schedule"
                         helperText="Create Mirror-Snapshots automatically on a periodic basis. The interval can be specified in days, hours, or minutes using d, h, m suffix respectively. To create mirror snapshots, you must import or create and have available peers to mirror"
                         cdRequiredField="Schedule Interval"
