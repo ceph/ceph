@@ -12,3 +12,13 @@ export const RBDActionHelpers = {
   journalTooltipText: $localize`'Ensures reliable replication by logging changes before updating the image, but doubles write time, impacting performance. Not recommended for high-speed data processing tasks.`,
   snapshotTooltipText: $localize`This mode replicates RBD images between clusters using snapshots, efficiently copying data changes but requiring complete delta syncing during failover. Ideal for less demanding tasks due to its less granular approach compared to journaling.`
 };
+
+export const RBDPoolMirrorModes = {
+  pool: 'pool',
+  image: 'image'
+}
+
+export const RBDMirroringModes = {
+  journal: 'journal',
+  snapshot: 'snapshot'
+}
