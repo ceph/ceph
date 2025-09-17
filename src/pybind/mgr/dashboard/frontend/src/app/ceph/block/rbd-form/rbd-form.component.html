@@ -232,7 +232,7 @@
 
       <!-- Snapshot Schedule Interval -->
       <div class="form-item"
-           *ngIf="rbdForm.getValue('mirroringMode') === 'snapshot' && mirroring">
+           *ngIf="rbdForm.getValue('mirroringMode') === rbdMirrorModes.snapshot && mirroring">
         <cds-text-label for="schedule"
                         helperText="Create Mirror-Snapshots automatically on a periodic basis. The interval can be specified in days, hours, or minutes using d, h, m suffix respectively. To create mirror snapshots, you must import or create and have available peers to mirror"
                         cdRequiredField="Schedule Interval"
