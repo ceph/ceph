@@ -298,7 +298,7 @@ export class RbdFormComponent extends CdForm implements OnInit {
     });
   }
 
-  setPoolMirrorMode() {
+  setPoolMirrorMode(namespace?: string) {
     this.currentPoolName =
       this.mode === this.rbdFormMode.editing
         ? this.response?.pool_name
@@ -309,7 +309,11 @@ export class RbdFormComponent extends CdForm implements OnInit {
         const pool = data.content_data.pools.find((o: any) => o.name === this.currentPoolName);
         this.currentPoolMirrorMode = pool.mirror_mode;
         if (this.mode === this.rbdFormMode.editing) {
-          if (this.currentPoolMirrorMode === 'pool') {
+          if (namespace) {
+            this.mirroring = false;
+            this.rbdForm.get('mirroring').disable();
+          }
+          if (this.currentPoolMirrorMode === this.rbdPoolMirrorModes.pool) {
             this.showMirrorDisableMessage = true;
           } else {
             this.showMirrorDisableMessage = false;
@@ -668,7 +672,7 @@ export class RbdFormComponent extends CdForm implements OnInit {
         this.mirroring = false;
         this.rbdForm.get('mirroring').setValue(this.mirroring);
       }
-      this.setPoolMirrorMode();
+      this.setPoolMirrorMode(response.namespace);
     }
     this.rbdForm.get('pool').setValue(response.pool_name);
     this.onPoolChange(response.pool_name);
@@ -852,7 +856,18 @@ export class RbdFormComponent extends CdForm implements OnInit {
   }
 
   shouldDisable(option: string): boolean {
-    return this.currentPoolMirrorMode === 'pool' && option === 'snapshot' ? true : null;
+    return this.currentPoolMirrorMode === 'pool' && option === 'snapshot' ? true : false;
+  }
+
+  disableMirroring(namespace: string) {
+    const mirroringControl = this.rbdForm.get('mirroring');
+    if (namespace) {
+      this.mirroring = false;
+      mirroringControl.disable();
+    } else {
+      this.mirroring = true;
+      mirroringControl.enable();
+    }
   }
 
   submit() {
