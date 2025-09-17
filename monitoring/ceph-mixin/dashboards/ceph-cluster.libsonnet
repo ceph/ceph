@@ -39,7 +39,7 @@ local g = import 'grafonnet/grafana.libsonnet';
       current='$__auto_interval_interval',
       refresh=2,
       label='Interval',
-      auto_count=300,
+      auto_count=10,
       auto_min='1m',
       options=[
         { selected: true, text: 'auto', value: '$__auto_interval_interval' },
