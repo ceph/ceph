@@ -1227,7 +1227,10 @@ public:
       // shallow copy the buffer from original extent
       auto remap_offset = remap_laddr.get_byte_distance<
 	extent_len_t>(original_laddr);
-      auto nbp = ceph::bufferptr(*original_bptr, remap_offset, remap_length);
+
+      auto nbp = ceph::bufferptr(buffer::create_page_aligned(remap_length));
+      original_bptr->copy_out(remap_offset, remap_length, nbp.c_str());
+
       // ExtentPlacementManager::alloc_new_extent will make a new
       // (relative/temp) paddr, so make extent directly
       ext = CachedExtent::make_cached_extent_ref<T>(std::move(nbp));
@@ -1681,11 +1684,6 @@ private:
   friend class crimson::os::seastore::BackrefManager;
 
   ExtentPinboardRef pinboard;
-
-  struct query_counters_t {
-    uint64_t access = 0;
-    uint64_t hit = 0;
-  };
 
   btree_cursor_stats_t cursor_stats;
   struct invalid_trans_efforts_t {

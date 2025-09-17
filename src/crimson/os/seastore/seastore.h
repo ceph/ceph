@@ -38,7 +38,6 @@ class TransactionManager;
 enum class op_type_t : uint8_t {
     DO_TRANSACTION = 0,
     READ,
-    WRITE,
     GET_ATTR,
     GET_ATTRS,
     STAT,
@@ -245,60 +244,6 @@ public:
     get_coll_bits(CollectionRef ch, Transaction &t) const;
 
     static void on_error(ceph::os::Transaction &t);
-
-    template <typename F>
-    auto repeat_with_internal_context(
-      CollectionRef ch,
-      ceph::os::Transaction &&t,
-      Transaction::src_t src,
-      const char* tname,
-      op_type_t op_type,
-      F &&f) {
-      // The below repeat_io_num requires MUTATE
-      assert(src == Transaction::src_t::MUTATE);
-      return seastar::do_with(
-        internal_context_t(
-          ch, std::move(t),
-          transaction_manager->create_transaction(
-	    src, tname, t.get_fadvise_flags())),
-        std::forward<F>(f),
-        [this, op_type](auto &ctx, auto &f) {
-        assert(shard_stats.starting_io_num);
-        --(shard_stats.starting_io_num);
-        ++(shard_stats.waiting_collock_io_num);
-
-	return ctx.transaction->get_handle().take_collection_lock(
-	  static_cast<SeastoreCollection&>(*(ctx.ch)).ordering_lock
-	).then([this] {
-	  assert(shard_stats.waiting_collock_io_num);
-	  --(shard_stats.waiting_collock_io_num);
-	  ++(shard_stats.waiting_throttler_io_num);
-
-	  return throttler.get(1);
-	}).then([&, this] {
-	  assert(shard_stats.waiting_throttler_io_num);
-	  --(shard_stats.waiting_throttler_io_num);
-	  ++(shard_stats.processing_inlock_io_num);
-
-	  return repeat_eagain([&, this] {
-	    ++(shard_stats.repeat_io_num);
-
-	    ctx.reset_preserve_handle(*transaction_manager);
-	    return std::invoke(f, ctx);
-	  }).handle_error(
-	    crimson::ct_error::all_same_way([&ctx](auto e) {
-	      on_error(ctx.ext_transaction);
-	      return seastar::now();
-	    })
-	  );
-	}).then([this, op_type, &ctx] {
-	  add_latency_sample(op_type,
-	      std::chrono::steady_clock::now() - ctx.begin_timestamp);
-	}).finally([this] {
-	  throttler.put();
-	});
-      });
-    }
 
     template <typename Ret, typename F>
     auto repeat_with_onode(
