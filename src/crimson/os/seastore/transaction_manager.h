@@ -232,18 +232,14 @@ public:
     LOG_PREFIX(TransactionManager::read_extent);
     SUBDEBUGT(seastore_tm, "{}~0x{:x} {} ...",
               t, offset, length, T::TYPE);
-    return get_pin(
-      t, offset
-    ).si_then([this, FNAME, &t, offset, length,
-	      maybe_init=std::move(maybe_init)] (auto pin) mutable
-      -> read_extent_ret<T> {
-      if (length != pin.get_length() || !pin.get_val().is_real_location()) {
-        SUBERRORT(seastore_tm, "{}~0x{:x} {} got wrong pin {}",
-                  t, offset, length, T::TYPE, pin);
-        ceph_abort_msg("Impossible");
-      }
-      return this->read_pin<T>(t, std::move(pin), std::move(maybe_init));
-    });
+    auto pin = co_await get_pin(t, offset);
+    if (length != pin.get_length() || !pin.get_val().is_real_location()) {
+      SUBERRORT(seastore_tm, "{}~0x{:x} {} got wrong pin {}",
+		t, offset, length, T::TYPE, pin);
+      ceph_abort_msg("Impossible");
+    }
+    co_return co_await this->read_pin<T>(
+      t, std::move(pin), std::move(maybe_init));
   }
 
   /**
@@ -259,18 +255,14 @@ public:
     LOG_PREFIX(TransactionManager::read_extent);
     SUBDEBUGT(seastore_tm, "{} {} ...",
               t, offset, T::TYPE);
-    return get_pin(
-      t, offset
-    ).si_then([this, FNAME, &t, offset,
-	      maybe_init=std::move(maybe_init)] (auto pin) mutable
-      -> read_extent_ret<T> {
-      if (!pin.get_val().is_real_location()) {
-        SUBERRORT(seastore_tm, "{} {} got wrong pin {}",
-                  t, offset, T::TYPE, pin);
-        ceph_abort_msg("Impossible");
-      }
-      return this->read_pin<T>(t, std::move(pin), std::move(maybe_init));
-    });
+    auto pin = co_await get_pin(t, offset);
+    if (!pin.get_val().is_real_location()) {
+      SUBERRORT(seastore_tm, "{} {} got wrong pin {}",
+		t, offset, T::TYPE, pin);
+      ceph_abort_msg("Impossible");
+    }
+    co_return co_await this->read_pin<T>(
+      t, std::move(pin), std::move(maybe_init));
   }
 
   template <typename T>
