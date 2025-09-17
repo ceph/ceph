@@ -1,5 +1,3 @@
-//JFW: I'm not sure I even use this file any more...
-
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
       
@@ -24,42 +22,37 @@ between FDB's types! If you have a user type to add, this is the place!
  
 #include "include/buffer.h"
 
-//JFW: #include "fdb/fdb.h"
-
 #include <span>
 #include <cstdint>
 #include <string_view>
 
-namespace ceph::libfdb::to {
+// Hook into zpp_bit's system-- we'll need to clarify the relationship between libfdb's 
+// extensions and the underlying serializer's:
+// This is where "list" (aka bufferlist) lives:
+namespace ceph::buffer {
 
-// Be aware-- c_str() on buffer::list has different semantics than on std::string--
-// for this reason, the parameter cannot itself be const (it's entirely fine to do that
-// computation earlier and pass a span or string_view yourself if you don't want the 
-// buffer::list to potentially mutate itself):
-inline auto convert(ceph::buffer::list& bl) -> std::span<const std::uint8_t> {
-// JFW: avoid making copy of bl in param
- return { (const std::uint8_t *)bl.c_str(), bl.length() };
+// Note that "list" here is therefore "ceph::buffer::list":
+constexpr auto serialize(auto& ar, list& bl)
+{
+ // It would be nice to figure out how to do this with less copying, but the
+ // mysteries of buffer::list are mysterious:
+
+ std::string o;
+ auto r = ar(o);
+
+ bl.clear();
+ bl.append(o);
+
+ return r;
 }
 
-/* JFW:
-inline auto convert(const std::vector<std::uint8_t>& xs) -> std::span<const std::uint8_t> {
- return { xs };
-} */
-
-} // namespace ceph::libfdb::to
-
-namespace ceph::libfdb::from {
-
-inline void convert(const std::span<const std::uint8_t>& in, ceph::buffer::list& out) {
- out.clear();
- out.append((char *)in.data(), in.size());
+constexpr auto serialize(auto& ar, const list& bl)
+{
+ // Likewise, not really sure there's a way to avoid the extra copy
+ // here:
+ return ar(bl.to_str());
 }
 
-/* JFW:
-inline void convert(const std::span<const std::uint8_t>& in, std::vector<std::uint8_t>& out) {
- out.assign(in);
-} */
-
-} // namespace ceph::libfdb::from
+} // namespace ceph::buffer
 
 #endif

@@ -16,8 +16,9 @@
 #ifndef CEPH_FDB_CONVERSION_H
  #define CEPH_FDB_CONVERSION_H
 
-#include "base.h"
+#include "include/buffer.h"
 
+#include "base.h"
 #include "zpp_bits.h"
 
 #include <span>
@@ -112,7 +113,7 @@ inline auto convert(const auto& from) -> std::vector<std::uint8_t>
 
  // zpp::bits won't write a size if we start with a fixed size array:
  if constexpr (not std::is_array_v<decltype(from)>)
-  out(from);
+  out(from).or_throw();
  else 
   out(std::span(from, std::size(from))).or_throw();
 
@@ -172,7 +173,7 @@ namespace ceph::libfdb::from {
 inline void convert(const std::span<const std::uint8_t>& from, auto& to)
 {
  zpp::bits::in zpp_in(from);
- zpp_in(to).or_throw();
+ zpp_in(to).or_throw();  
 }
 
 template <std::invocable<const char *, size_t> OutputFunction>

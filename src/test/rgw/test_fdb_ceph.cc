@@ -24,6 +24,7 @@
 
 #define CATCH_CONFIG_MAIN
 
+#include "fdb/fdb.h"
 #include "rgw/rgw_fdb.h"
 
 #include <fmt/format.h>
@@ -34,6 +35,7 @@
 
 #include <chrono>
 #include <vector>
+#include <ranges>
 
 using Catch::Matchers::AllMatch;
 
@@ -81,7 +83,7 @@ TEST_CASE("fdb conversions (ceph)", "[fdb][rgw]") {
   ceph::buffer::list n;
   n.append(msg);
 
-  std::span<const std::uint8_t> x;
+  std::vector<std::uint8_t> x;
   x = ceph::libfdb::to::convert(n);
 
   std::string o;
@@ -95,7 +97,7 @@ TEST_CASE("fdb conversions (ceph)", "[fdb][rgw]") {
  ceph::buffer::list n;
  n.append(msg);
 
- std::span<const std::uint8_t> x;
+ std::vector<std::uint8_t> x;
  x = ceph::libfdb::to::convert(n);
 
  ceph::buffer::list o;
@@ -115,7 +117,7 @@ TEST_CASE("fdb conversions (round-trip, ceph)", "[fdb][rgw]") {
     ceph::buffer::list o;
   
     lfdb::set(lfdb::make_transaction(dbh), "key", n, lfdb::commit_after_op::commit);
-    lfdb::get(lfdb::make_transaction(dbh), "key", o);
+    lfdb::get(lfdb::make_transaction(dbh), "key", o, lfdb::commit_after_op::no_commit);
   
     REQUIRE_THAT(n, Catch::Matchers::RangeEquals(o));
   }
@@ -128,7 +130,7 @@ TEST_CASE("fdb conversions (round-trip, ceph)", "[fdb][rgw]") {
     o.append(n);
   
     lfdb::set(lfdb::make_transaction(dbh), "key", n, lfdb::commit_after_op::commit);
-    lfdb::get(lfdb::make_transaction(dbh), "key", o);
+    lfdb::get(lfdb::make_transaction(dbh), "key", o, lfdb::commit_after_op::no_commit);
   
     REQUIRE_THAT(n, Catch::Matchers::RangeEquals(o));
   }
@@ -142,7 +144,7 @@ TEST_CASE("fdb conversions (round-trip, ceph)", "[fdb][rgw]") {
     o.append(n);
   
     lfdb::set(lfdb::make_transaction(dbh), "key", n, lfdb::commit_after_op::commit);
-    lfdb::get(lfdb::make_transaction(dbh), "key", o);
+    lfdb::get(lfdb::make_transaction(dbh), "key", o, lfdb::commit_after_op::no_commit);
   
     REQUIRE_THAT(n, Catch::Matchers::RangeEquals(o));
   }
@@ -156,26 +158,10 @@ TEST_CASE("fdb conversions (round-trip, ceph)", "[fdb][rgw]") {
     o.append(n);
   
     lfdb::set(lfdb::make_transaction(dbh), "key", n, lfdb::commit_after_op::commit);
-    lfdb::get(lfdb::make_transaction(dbh), "key", o);
+    lfdb::get(lfdb::make_transaction(dbh), "key", o, lfdb::commit_after_op::no_commit);
   
     REQUIRE_THAT(n, Catch::Matchers::RangeEquals(o));
   }
-}
-
-TEST_CASE("standard container FDB conversions") {
-
- std::map<int, std::string> kvs {
-   { 0, "hello" },
-   { 1, "world" }
- };
-
- std::vector<std::uint8_t> buffer;
-
-
- ceph::libfdb::to::convert(kvs, buffer);
- ceph::libfdb::from::convert(buffer, kvs_out);
- 
-...TODO 
 }
 
 // Adapted from Catch2 documentation:

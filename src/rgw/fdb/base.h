@@ -244,11 +244,11 @@ class transaction final
  }
 
  void maybe_vivify() {
-  if(not this) {
+/* JFW:
+  if(not txn_ptr) {
     throw ceph::libfdb::libfdb_exception("inactive transaction");
-  }
 
-/* if(not this) {
+ JFW: if(not txn_ptr) {
    establish();
   }*/
  }
