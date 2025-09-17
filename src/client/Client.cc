@@ -18446,11 +18446,11 @@ int Client::ll_get_fscrypt_policy_v2(Inode *in, struct fscrypt_policy_v2* policy
   if (in->is_fscrypt_enabled()) {
     in->fscrypt_ctx->convert_to(policy);
     if (policy->version != 2) {
-      return EINVAL;
+      return -EINVAL;
     }
     return 0;
   }
-  return ENODATA;
+  return -ENODATA;
 }
 
 int Client::is_encrypted(int fd, UserPerm& perms, char* enctag)
