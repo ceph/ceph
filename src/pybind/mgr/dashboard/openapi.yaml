@@ -9385,7 +9385,7 @@ paths:
                   description: Read only namespace
                   type: string
                 size:
-                  description: RBD image size
+                  description: Deprecated. Use `rbd_image_size` instead
                   type: integer
                 traddr:
                   description: Target gateway address
@@ -9419,7 +9419,7 @@ paths:
             trace.
       security:
       - jwt: []
-      summary: Create a new NVMeoF namespace
+      summary: Create a new NVMeoF namespace.
       tags:
       - NVMe-oF Subsystem Namespace
   /api/nvmeof/subsystem/{nqn}/namespace/{nsid}:
