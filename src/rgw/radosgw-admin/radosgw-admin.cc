@@ -11930,9 +11930,9 @@ next:
     rgw::notify::rgw_topic_stats stats;
     ret = rgw::notify::get_persistent_queue_stats(
         dpp(), ioctx,
-        topic.dest.persistent_queue, stats, null_yield);
+        topic.dest.get_shard_names(), stats, null_yield);
     if (ret < 0) {
-      cerr << "ERROR: could not get persistent queue: " << cpp_strerror(-ret) << std::endl;
+      cerr << "ERROR: could not get persistent queues: " << cpp_strerror(-ret) << std::endl;
       return -ret;
     }
     encode_json("", stats, formatter.get());
@@ -11964,37 +11964,41 @@ next:
     std::string end_marker;
     librados::ObjectReadOperation rop;
     std::vector<cls_queue_entry> queue_entries;
-    bool truncated = true;
+    bool truncated;
     formatter->open_array_section("eventEntries");
-    while (truncated) {
-      bufferlist bl;
-      int rc;
-      cls_2pc_queue_list_entries(rop, marker, max_entries, &bl, &rc);
-      ioctx.operate(topic.dest.persistent_queue, &rop, nullptr);
-      if (rc < 0 ) {
-        cerr << "ERROR: could not list entries from queue. error: " << cpp_strerror(-ret) << std::endl;
-        return -rc;
-      }
-      rc = cls_2pc_queue_list_entries_result(bl, queue_entries, &truncated, end_marker);
-      if (rc < 0) {
-        cerr << "ERROR: failed to parse list entries from queue (skipping). error: " << cpp_strerror(-ret) << std::endl;
-        return -rc;
-      }
 
-      std::for_each(queue_entries.cbegin(), 
-        queue_entries.cend(), 
-        [&formatter](const auto& queue_entry) {
-          rgw::notify::event_entry_t event_entry;
-          bufferlist::const_iterator iter{&queue_entry.data};
-          try {
-            event_entry.decode(iter);
-            encode_json("", event_entry, formatter.get());
-          } catch (const buffer::error& e) {
-            cerr << "ERROR: failed to decode queue entry. error: " << e.what() << std::endl;
-          }
-        });
-      formatter->flush(cout);
-      marker = end_marker;
+    for (const auto& shard_name: topic.dest.get_shard_names()){
+      truncated = true; 
+      marker.clear();
+      while (truncated) {
+        bufferlist bl;
+        int rc;
+        cls_2pc_queue_list_entries(rop, marker, max_entries, &bl, &rc);
+        ioctx.operate(shard_name, &rop, nullptr);
+        if (rc < 0 ) {
+          cerr << "ERROR: could not list entries from queue. error: " << cpp_strerror(-ret) << std::endl;
+          return -rc;
+        }
+        rc = cls_2pc_queue_list_entries_result(bl, queue_entries, &truncated, end_marker);
+        if (rc < 0) {
+          cerr << "ERROR: failed to parse list entries from queue (skipping). error: " << cpp_strerror(-ret) << std::endl;
+          return -rc;
+        }
+        std::for_each(queue_entries.cbegin(), 
+          queue_entries.cend(), 
+          [&formatter](const auto& queue_entry) {
+            rgw::notify::event_entry_t event_entry;
+            bufferlist::const_iterator iter{&queue_entry.data};
+            try {
+              event_entry.decode(iter);
+              encode_json("", event_entry, formatter.get());
+            } catch (const buffer::error& e) {
+              cerr << "ERROR: failed to decode queue entry. error: " << e.what() << std::endl;
+            }
+          });
+        formatter->flush(cout);
+        marker = end_marker;
+      }
     }
     formatter->close_section();
     formatter->flush(cout);
