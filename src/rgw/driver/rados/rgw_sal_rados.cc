@@ -2891,7 +2891,7 @@ int RadosObject::RadosDeleteOp::delete_obj(const DoutPrefixProvider* dpp, option
   parent_op.params.parts_accounted_size = params.parts_accounted_size;
   parent_op.params.null_verid = params.null_verid;
 
-  int ret = parent_op.delete_obj(y, dpp, flags & FLAG_LOG_OP, flags & FLAG_FORCE_OP);
+  int ret = parent_op.delete_obj(y, dpp, flags & FLAG_LOG_OP, flags & FLAG_FORCE_OP, flags & FLAG_SKIP_UPDATE_OLH);
   if (ret < 0) {
     return ret;
   }
@@ -2922,7 +2922,7 @@ int RadosObject::delete_object(const DoutPrefixProvider* dpp,
   }
 
   // convert flags to bool params
-  return del_op.delete_obj(y, dpp, flags & FLAG_LOG_OP, flags & FLAG_FORCE_OP);
+  return del_op.delete_obj(y, dpp, flags & FLAG_LOG_OP, flags & FLAG_FORCE_OP, flags & FLAG_SKIP_UPDATE_OLH);
 } // RadosObject::delete_object
 
 int RadosObject::copy_object(const ACLOwner& owner,
