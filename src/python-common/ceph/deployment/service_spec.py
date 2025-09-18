@@ -1510,16 +1510,21 @@ class RGWSpec(ServiceSpec):
         return ports
 
     def validate(self) -> None:
-        super(RGWSpec, self).validate()
 
         if self.ssl:
             if not self.ssl_cert and self.rgw_frontend_ssl_certificate:
                 combined_cert = self.rgw_frontend_ssl_certificate
                 if isinstance(combined_cert, list):
                     combined_cert = '\n'.join(combined_cert)
+                self.certificate_source = CertificateSource.INLINE.value
                 self.ssl_cert, self.ssl_key = parse_combined_pem_file(combined_cert)
+                self.rgw_frontend_ssl_certificate = None
                 if not (self.ssl_cert and self.ssl_key):
                     raise SpecValidationError("Failed to parse rgw_frontend_ssl_certificate field.")
+
+        # This validation is done after adjusting the SSL field so when
+        # RGW Spec is updated with the right fields before validation
+        super(RGWSpec, self).validate()
 
         if self.rgw_realm and not self.rgw_zone:
             raise SpecValidationError(
