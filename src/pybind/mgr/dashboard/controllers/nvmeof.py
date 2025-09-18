@@ -7,6 +7,7 @@ import cherrypy
 from orchestrator import OrchestratorError
 
 from .. import mgr
+from ..exceptions import DashboardException
 from ..model import nvmeof as model
 from ..security import Scope
 from ..services.nvmeof_cli import NvmeofCLICommand, convert_to_bytes
@@ -435,13 +436,13 @@ else:
             "nvmeof namespace add", model.NamespaceCreation, alias="nvmeof ns add"
         )
         @EndpointDoc(
-            "Create a new NVMeoF namespace",
+            "Create a new NVMeoF namespace.",
             parameters={
                 "nqn": Param(str, "NVMeoF subsystem NQN"),
                 "rbd_pool": Param(str, "RBD pool name"),
                 "rbd_image_name": Param(str, "RBD image name"),
                 "create_image": Param(bool, "Create RBD image"),
-                "size": Param(int, "RBD image size"),
+                "size": Param(int, "Deprecated. Use `rbd_image_size` instead"),
                 "rbd_image_size": Param(int, "RBD image size"),
                 "trash_image": Param(bool, "Trash the RBD image when namespace is removed"),
                 "block_size": Param(int, "NVMeoF namespace block size"),
@@ -481,6 +482,14 @@ else:
             gw_group: Optional[str] = None,
             traddr: Optional[str] = None,
         ):
+            if size and rbd_image_size:
+                raise DashboardException(
+                    msg="Can use size or rbd_image_size but not both",
+                    code="can_use_size_or_rbd_image_size_but_not_both",
+                    http_status_code=400,
+                    component="nvmeof",
+                )
+
             size_b = rbd_image_size_b = None
             if size:
                 size_b = convert_to_bytes(size, default_unit='MB')
