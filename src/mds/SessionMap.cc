@@ -1035,7 +1035,7 @@ void Session::decode(bufferlist::const_iterator &p)
   _update_human_name();
 }
 
-int Session::check_access(CInode *in, unsigned mask,
+int Session::check_access(std::string_view fs_name, CInode *in, unsigned mask,
 			  int caller_uid, int caller_gid,
 			  const vector<uint64_t> *caller_gid_list,
 			  int new_uid, int new_gid)
@@ -1086,7 +1086,7 @@ int Session::check_access(CInode *in, unsigned mask,
     return -EIO;
   }
 
-  if (!auth_caps.is_capable(path, inode->uid, inode->gid, inode->mode,
+  if (!auth_caps.is_capable(fs_name, path, inode->uid, inode->gid, inode->mode,
 			    caller_uid, caller_gid, caller_gid_list, mask,
 			    new_uid, new_gid,
 			    info.inst.addr)) {
