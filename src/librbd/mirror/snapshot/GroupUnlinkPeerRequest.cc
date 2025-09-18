@@ -15,6 +15,8 @@
 //#include "librbd/mirror/snapshot/UnlinkPeerRequest.h"
 #include "librbd/mirror/snapshot/GroupUnlinkPeerRequest.h"
 
+#define MAX_SNAP_REMOVE_RETRIES 3
+
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
 #define dout_prefix *_dout << "librbd::mirror::snapshot::GroupUnlinkPeerRequest: " << this \
@@ -214,9 +216,9 @@ void GroupUnlinkPeerRequest<I>::remove_group_snapshot(
                               cls::rbd::GroupSnapshot group_snap) {
   ldout(m_cct, 10) << "group snap id: " << group_snap.id << dendl;
 
-  auto ctx = create_context_callback<
-      GroupUnlinkPeerRequest,
-      &GroupUnlinkPeerRequest<I>::handle_remove_group_snapshot>(this);
+  auto ctx = new LambdaContext([this, group_snap](int r) {
+      handle_remove_group_snapshot(r, group_snap);
+      });
 
   m_group_snap_id = group_snap.id;
 
@@ -277,13 +279,19 @@ void GroupUnlinkPeerRequest<I>::remove_group_snapshot(
 }
 
 template <typename I>
-void GroupUnlinkPeerRequest<I>::handle_remove_group_snapshot(int r) {
+void GroupUnlinkPeerRequest<I>::handle_remove_group_snapshot(
+    int r, cls::rbd::GroupSnapshot group_snap) {
   ldout(m_cct, 10) << "r=" << r << dendl;
 
-  if (r < 0) {
+  if (r < 0 && r != -ENOENT) {
     lderr(m_cct) << "failed to remove image snapshot metadata: "
-               << cpp_strerror(r) << dendl;
-    finish(r);
+                 << cpp_strerror(r) << dendl;
+    if (m_retry_count < MAX_SNAP_REMOVE_RETRIES) {
+      remove_group_snapshot(group_snap);
+      m_retry_count++;
+    } else {
+      finish(r);
+    }
     return;
   }
 
