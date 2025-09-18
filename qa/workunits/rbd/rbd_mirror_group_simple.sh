@@ -2931,6 +2931,79 @@ test_force_promote_before_initial_sync()
   start_mirrors "${secondary_cluster}"
 }
 
+# test group snapshot resync after relocate and force promote of primary
+declare -a test_resync_after_relocate_and_force_promote_1=("${CLUSTER2}" "${CLUSTER1}" "${pool0}" 2 128)
+
+test_resync_after_relocate_and_force_promote_scenarios=1
+
+test_resync_after_relocate_and_force_promote()
+{
+  local primary_cluster=$1 ; shift
+  local secondary_cluster=$1 ; shift
+  local pool=$1 ; shift
+  local image_count=$1 ; shift
+  local image_size=$1 ; shift
+
+  local group_snap_id
+  local group0=test-group0
+  local image_prefix="test_image"
+
+  start_mirrors "${primary_cluster}"
+  start_mirrors "${secondary_cluster}"
+
+  group_create "${primary_cluster}" "${pool}/${group0}"
+  images_create "${primary_cluster}" "${pool}/${image_prefix}" "${image_count}" "${image_size}"
+  group_images_add "${primary_cluster}" "${pool}/${group0}" "${pool}/${image_prefix}" "${image_count}"
+
+  mirror_group_enable "${primary_cluster}" "${pool}/${group0}"
+
+  wait_for_group_present "${secondary_cluster}" "${pool}" "${group0}" "${image_count}"
+  wait_for_group_replay_started "${secondary_cluster}" "${pool}"/"${group0}" "${image_count}"
+  wait_for_group_status_in_pool_dir "${secondary_cluster}" "${pool}"/"${group0}" 'up+replaying' "${image_count}"
+  wait_for_group_synced "${primary_cluster}" "${pool}"/"${group0}" "${secondary_cluster}" "${pool}"/"${group0}"
+
+  mirror_group_snapshot "${primary_cluster}" "${pool}/${group0}"
+
+  # relocation: demote primary and promote secondary
+  mirror_group_demote "${primary_cluster}" "${pool}/${group0}"
+  wait_for_group_status_in_pool_dir "${primary_cluster}" "${pool}"/"${group0}" 'up+unknown'
+  wait_for_group_status_in_pool_dir "${secondary_cluster}" "${pool}"/"${group0}" 'up+unknown'
+  mirror_group_promote "${secondary_cluster}" "${pool}/${group0}"
+  wait_for_group_status_in_pool_dir "${secondary_cluster}" "${pool}"/"${group0}" 'up+stopped' ${image_count}
+  wait_for_group_status_in_pool_dir "${primary_cluster}" "${pool}"/"${group0}" 'up+replaying' ${image_count}
+
+  # force promote old primary and demote old secondary
+  # rbd mirror daemon on ${primary_cluster} isn't stopped on purpose -- this used to trigger a bug where group
+  # replayer attempted to prune old primary demote snapshot
+  mirror_group_promote "${primary_cluster}" "${pool}/${group0}" '--force'
+  wait_for_group_status_in_pool_dir "${secondary_cluster}" "${pool}"/"${group0}" 'up+stopped' ${image_count}
+  wait_for_group_status_in_pool_dir "${primary_cluster}" "${pool}"/"${group0}" 'up+stopped' ${image_count}
+  # demote and wait for split-brain to follow
+  mirror_group_demote "${secondary_cluster}" "${pool}/${group0}"
+  wait_for_group_status_in_pool_dir "${secondary_cluster}" "${pool}"/"${group0}" 'up+error' "${image_count}" 'split-brain'
+
+  mirror_group_snapshot "${primary_cluster}" "${pool}/${group0}" group_snap_id
+
+  # resync and verify status of mirror group snapshot
+  local group_id_before_resync
+  get_id_from_group_info "${secondary_cluster}" "${pool}/${group0}" group_id_before_resync
+  mirror_group_resync "${secondary_cluster}" "${pool}/${group0}"
+  wait_for_group_id_changed  "${secondary_cluster}" "${pool}/${group0}" "${group_id_before_resync}"
+  wait_for_group_synced "${primary_cluster}" "${pool}"/"${group0}" "${secondary_cluster}" "${pool}"/"${group0}"
+
+  wait_for_group_status_in_pool_dir "${primary_cluster}" "${pool}"/"${group0}" 'up+stopped' ${image_count}
+  wait_for_group_status_in_pool_dir "${secondary_cluster}" "${pool}"/"${group0}" 'up+replaying' ${image_count}
+
+  wait_for_group_snap_sync_complete "${secondary_cluster}" "${pool}/${group0}" "${group_snap_id}"
+
+  # cleanup
+  mirror_group_disable "${primary_cluster}" "${pool}/${group0}"
+  group_remove "${primary_cluster}" "${pool}/${group0}"
+  wait_for_group_not_present "${primary_cluster}" "${pool}" "${group0}"
+  wait_for_group_not_present "${secondary_cluster}" "${pool}" "${group0}"
+  images_remove "${primary_cluster}" "${pool}/${image_prefix}" "${image_count}"
+}
+
 # test snapshot sync when rbd-mirror daemon on secondary cluster is interrupted
 declare -a test_interrupted_sync_restarted_daemon_1=("${CLUSTER2}" "${CLUSTER1}" "${pool0}" 3 2048)
 
@@ -3750,6 +3823,7 @@ run_all_tests()
   # TODO: add the capabilty to have clone images support in the mirror group
   run_test_all_scenarios test_group_with_clone_image
   run_test_all_scenarios test_interrupted_sync_restarted_daemon
+  run_test_all_scenarios test_resync_after_relocate_and_force_promote
   run_test_all_scenarios test_multiple_mirror_group_snapshot_unlink_time
   run_test_all_scenarios test_force_promote_delete_group
   run_test_all_scenarios test_create_group_stop_daemon_then_recreate
