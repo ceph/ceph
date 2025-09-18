@@ -764,3 +764,11 @@ Relevant tracker: https://tracker.ceph.com/issues/64777
 when decoding, resulting in Linux codes on the wire, and host codes on the receiver.
 All CEPHFS_E* defines have been removed across Ceph (including the Python binding).
 Relevant tracker: https://tracker.ceph.com/issues/64611
+
+* RGW: Persistent bucket notifications will use queues with multiple shards instead of one queue. Number of shards
+can be configured using the `rgw` option `rgw_bucket_persistent_notif_num_shards`. Note that pre-existing topics will continue to function as is, i.e, they are mapped to only one RADOS object.   
+  
+  For more details, see: 
+  https://docs.ceph.com/en/latest/radosgw/notifications/
+
+Relevant tracker: https://tracker.ceph.com/issues/71677

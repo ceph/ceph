@@ -92,6 +92,11 @@ function rgw {
   echo "$mrgw $name $port $ssl_port $rgw_flags $@"
 }
 
+function ceph {
+  [ $# -lt 1 ] && echo "ceph() needs atleast 1 param" && exit 1
+  echo "$mrun $1 ceph"
+}
+
 function init_first_zone {
   [ $# -ne 7 ] && echo "init_first_zone() needs 7 params" && exit 1
 
@@ -173,6 +178,13 @@ function call_rgw_rados {
   x $(rgw_rados $cid) "$@"
 }
 
+function call_ceph {
+  cid=$1
+  shift 1
+  echo $@
+  x $(ceph $cid) "$@"
+}
+
 function get_mstart_parameters {
   [ $# -ne 1 ] && echo "get_mstart_parameters() needs 1 param" && exit 1
   # bash arrays start from zero
@@ -204,4 +216,3 @@ function get_mstart_parameters {
 
   echo "$parameters $VSTART_PARAMETERS"
 }
-

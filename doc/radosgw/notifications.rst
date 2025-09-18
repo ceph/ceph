@@ -85,6 +85,18 @@ which tells the client that it may retry later.
 .. tip:: To minimize the latency added by asynchronous notification, we
    recommended placing the "log" pool on fast media.
 
+Persistent bucket notifications are managed by the following central configuration options:
+
+.. confval:: rgw_bucket_persistent_notif_num_shards
+
+.. note:: When a topic is created during a Ceph upgrade, per-key reordering of notifications may
+   happen on any bucket mapped to that topic.
+   
+.. note:: Persistent topics that were created on a radosgw that does not support sharding, will be treated as a single shard topics
+
+.. tip:: It is also recommended that you avoid modifying or deleting topics created during 
+   upgrades, as this might result in orphan RADOS objects that will not be deleted when the topic is deleted.
+
 
 Topic Management via CLI
 ------------------------
