@@ -589,9 +589,9 @@ public:
      * to cloud. This list is maintained for the duration of each RGWLC::process()
      * post which it is discarded. */
     std::set<std::string> cloud_targets;
+    time_t lc_start_time;
 
-  public:
-
+   public:
     using lock_guard = std::lock_guard<std::mutex>;
     using unique_lock = std::unique_lock<std::mutex>;
 
@@ -642,7 +642,7 @@ public:
   int process(int index, int max_lock_secs, LCWorker* worker, bool once);
   int process_bucket(int index, int max_lock_secs, LCWorker* worker,
 		     const std::string& bucket_entry_marker, bool once);
-  bool expired_session(time_t started);
+  bool expired_session(time_t started, time_t lc_start_time);
   time_t thread_stop_at();
   int list_lc_progress(std::string& marker, uint32_t max_entries,
 		       std::vector<rgw::sal::LCEntry>&,

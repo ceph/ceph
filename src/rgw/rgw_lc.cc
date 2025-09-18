@@ -204,6 +204,7 @@ void *RGWLC::LCWorker::entry() {
     std::unique_ptr<rgw::sal::Bucket> all_buckets; // empty restriction
     utime_t start = ceph_clock_now();
     if (should_work(start)) {
+      lc_start_time = time(nullptr);
       ldpp_dout(dpp, 2) << "life cycle: start worker=" << ix << dendl;
       int r = lc->process(this, all_buckets, false /* once */);
       if (r < 0) {
@@ -2104,14 +2105,19 @@ int RGWLC::process(LCWorker* worker,
   return 0;
 }
 
-bool RGWLC::expired_session(time_t started)
-{
+bool RGWLC::expired_session(time_t started, time_t lc_start_time) {
   if (! cct->_conf->rgwlc_auto_session_clear) {
     return false;
   }
-
-  time_t interval = (cct->_conf->rgw_lc_debug_interval > 0)
-    ? cct->_conf->rgw_lc_debug_interval : secs_in_a_day;
+  // lc_start_time is greater than last time when bucket was updated, then
+  // session is confirmed expired
+  if (cct->_conf->rgw_lc_debug_interval <= 0) {
+    if (lc_start_time > started) {
+      return true;
+    }
+    return false;
+  }
+  time_t interval = cct->_conf->rgw_lc_debug_interval;
 
   auto now = time(nullptr);
 
@@ -2180,8 +2186,8 @@ int RGWLC::process_bucket(int index, int max_lock_secs, LCWorker* worker,
                           bucket_entry_marker, entry);
   if (ret >= 0) {
     if (entry.status == lc_processing) {
-      if (expired_session(entry.start_time)) {
-	ldpp_dout(this, 5) << "RGWLC::process_bucket(): STALE lc session found for: " << entry
+      if (expired_session(entry.start_time, worker->lc_start_time)) {
+        ldpp_dout(this, 5) << "RGWLC::process_bucket(): STALE lc session found for: " << entry
 			   << " index: " << index << " worker ix: " << worker->ix
 			   << " (clearing)"
 			   << dendl;
@@ -2447,7 +2453,7 @@ int RGWLC::process(int index, int max_lock_secs, LCWorker* worker,
 
     if (!entry.bucket.empty()) {
       if (entry.status == lc_processing) {
-        if (expired_session(entry.start_time)) {
+        if (expired_session(entry.start_time, worker->lc_start_time)) {
           ldpp_dout(this, 5)
               << "RGWLC::process(): STALE lc session found for: " << entry
               << " index: " << index << " worker ix: " << worker->ix
