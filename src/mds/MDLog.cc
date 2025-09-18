@@ -295,7 +295,7 @@ LogSegment* MDLog::_start_new_segment(SegmentBoundary* sb)
   return ls;
 }
 
-void MDLog::_submit_entry(LogEvent *le, MDSLogContextBase* c)
+LogSegment::seq_t MDLog::_submit_entry(LogEvent *le, MDSLogContextBase* c)
 {
   dout(20) << __func__ << " " << *le << dendl;
   ceph_assert(ceph_mutex_is_locked_by_me(mds->mds_lock));
@@ -342,6 +342,7 @@ void MDLog::_submit_entry(LogEvent *le, MDSLogContextBase* c)
   }
 
   unflushed++;
+  return event_seq;
 }
 
 void MDLog::_segment_upkeep()
