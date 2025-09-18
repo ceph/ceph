@@ -5,8 +5,10 @@ Version Tracking for Ceph
 =========================
 
 Cephadm tracks all cluster version history and allows accessing 
-of this information for debugging purposes. Information is handled
-with two main CLI commands.
+of this information for debugging purposes. Information is managed
+with two main CLI commands. This feature only tracks version history
+starting from when it was introduced. Version history before the 
+introduction of this feature is not tracked.
 
 Viewing Version history
 =======================
@@ -15,7 +17,7 @@ Viewing Version history
 
     ceph cephadm get-cluster-version-history
 
-This command will display the entire version history stored in 
+This command displays stored version history stored in 
 chronological order.
 
 ::
