@@ -171,7 +171,7 @@ void RGWOp_Account_Modify::execute(optional_yield y)
 class RGWOp_Account_Get : public RGWRESTOp {
 public:
   int check_caps(const RGWUserCaps& caps) override {
-    return caps.check_cap("account", RGW_CAP_READ);
+    return caps.check_cap("accounts", RGW_CAP_READ);
   }
 
   void execute(optional_yield y) override;
@@ -193,7 +193,7 @@ void RGWOp_Account_Get::execute(optional_yield y)
 class RGWOp_Account_Delete : public RGWRESTOp {
 public:
   int check_caps(const RGWUserCaps& caps) override {
-    return caps.check_cap("account", RGW_CAP_WRITE);
+    return caps.check_cap("accounts", RGW_CAP_WRITE);
   }
 
   void execute(optional_yield y) override;
