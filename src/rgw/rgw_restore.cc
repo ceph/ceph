@@ -417,6 +417,7 @@ int Restore::process_restore_entry(RestoreEntry& entry, optional_yield y)
     return ret;
   }
 
+  ldpp_dout(this, 10) << "Restore:: Processing restore entry of object(" << obj->get_key() << ") entry: " << entry << dendl;
   target_placement.inherit_from(bucket->get_placement_rule());
 
   auto& attrs = obj->get_attrs();
@@ -439,11 +440,13 @@ int Restore::process_restore_entry(RestoreEntry& entry, optional_yield y)
   attr_iter = attrs.find(RGW_ATTR_STORAGE_CLASS);
   if (attr_iter != attrs.end()) {
     target_placement.storage_class = attr_iter->second.to_str();
+  } else {
+    ldpp_dout(this, -1) << __PRETTY_FUNCTION__ << ": ERROR: Attr RGW_ATTR_STORAGE_CLASS not found for object: " << obj->get_key() << dendl;
   }
   ret = driver->get_zone()->get_zonegroup().get_placement_tier(target_placement, &tier);
 
   if (ret < 0) {
-    ldpp_dout(this, -1) << __PRETTY_FUNCTION__ << ": ERROR: failed to fetch tier placement handle, ret = " << ret << dendl;
+    ldpp_dout(this, -1) << __PRETTY_FUNCTION__ << ": ERROR: failed to fetch tier placement handle, target_placement = " << target_placement << ", for zonegroup = " << driver->get_zone()->get_zonegroup().get_name() << ", ret = " << ret << dendl;
     goto done;	  
   } else {
     ldpp_dout(this, 20) << __PRETTY_FUNCTION__ << ": getting tier placement handle"
