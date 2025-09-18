@@ -9754,8 +9754,8 @@ next:
         std::string err_msg;
         int ret = rgw::account::list_users(
             dpp(), driver, op_state, path_prefix, marker,
-            max_entries_specified, max_entries, err_msg,
-            stream_flusher, null_yield);
+            max_entries_specified, max_entries, account_root,
+            err_msg, stream_flusher, null_yield);
         if (ret < 0)  {
           cerr << "ERROR: " << err_msg << std::endl;
           return -ret;
