@@ -133,6 +133,7 @@ DaemonServer::DaemonServer(MonClient *monc_,
                                            cct->_conf->mgr_op_history_duration);
   op_tracker.set_history_slow_op_size_and_threshold(cct->_conf->mgr_op_history_slow_op_size,
                                                     cct->_conf->mgr_op_history_slow_op_threshold);
+  baseline_stats_period = changed_stats_period = g_conf().get_val<int64_t>("mgr_stats_period");
 }
 
 DaemonServer::~DaemonServer() {
@@ -422,11 +423,18 @@ void DaemonServer::maybe_ready(int32_t osd_id)
 void DaemonServer::tick()
 {
   dout(10) << dendl;
+  auto tick_period = g_conf().get_val<int64_t>("mgr_tick_period");
+  utime_t now = ceph_clock_now();
+  if (g_conf().get_val<bool>("mgr_stats_period_autotune") &&
+    (now - last_period_check > tick_period * 5)) {
+    dout(10) << "checking whether to adjust stats period" << dendl;
+    try_adjust_stats_period();
+    last_period_check = now;
+  }
   send_report();
   adjust_pgs();
 
-  schedule_tick_locked(
-    g_conf().get_val<std::chrono::seconds>("mgr_tick_period").count());
+  schedule_tick_locked(tick_period);
 }
 
 // Currently modules do not set health checks in response to events delivered to
@@ -815,7 +823,7 @@ bool DaemonServer::handle_report(const ref_t<MMgrReport>& m)
     const MetricReportMessage &message = *m->metric_report_message;
     std::visit(HandlePayloadVisitor(this), message.payload);
   }
-
+  
   return true;
 }
 
@@ -3197,6 +3205,15 @@ void DaemonServer::handle_conf_change(const ConfigProxy& conf,
 {
 
   if (changed.count("mgr_stats_threshold") || changed.count("mgr_stats_period")) {
+    if (changed.count("mgr_stats_period")) {
+      int64_t new_period = g_conf().get_val<int64_t>("mgr_stats_period");
+      if (changed_stats_period != new_period) {
+        // User manually changed mgr_stats_period,
+        // update our baseline for autotune recovery
+        baseline_stats_period = new_period;
+        changed_stats_period = new_period;
+      }
+    }
     dout(4) << "Updating stats threshold/period on "
             << daemon_connections.size() << " clients" << dendl;
     // Send a fresh MMgrConfigure to all clients, so that they can follow
@@ -3337,4 +3354,43 @@ will start to track new ops received afterwards.";
 
 out:
   return false;
+}
+
+
+void DaemonServer::try_adjust_stats_period() {
+  int64_t queue_depth = msgr->get_dispatch_queue_len();
+  int64_t current_period = g_conf().get_val<int64_t>("mgr_stats_period");
+  dout(20) << " queue depth " << queue_depth << " current stats period " << current_period << dendl;
+
+  if (queue_depth > g_conf().get_val<int64_t>("mgr_stats_period_autotune_queue_threshold")) {
+    int64_t increment = std::max(int64_t(5), current_period / 4);
+    int64_t new_period = std::min(current_period + increment, int64_t(60)); // max 1 minute
+    adjust_stats_period(new_period, "high queue depth");
+  } else if (current_period > baseline_stats_period && queue_depth < 20 ) {
+    int64_t new_period = std::max(current_period / 2, baseline_stats_period);
+    if (new_period < current_period) {
+      adjust_stats_period(new_period, "performance recovered");
+    }
+  }
+}
+
+void DaemonServer::adjust_stats_period(int64_t new_period, const std::string& reason) {
+  int64_t current_period = g_conf().get_val<int64_t>("mgr_stats_period");
+  
+  if (new_period == current_period) {
+    return;
+  }
+  
+  dout(5) << "Adjusting mgr_stats_period from " << current_period 
+          << " to " << new_period << " seconds (" << reason << ")" << dendl;
+
+  // Update the configuration - handle_conf_change() will handle daemon notification
+  std::stringstream ss;
+  int r = cct->_conf.set_val("mgr_stats_period", std::to_string(new_period), &ss);
+  if (r != 0) {
+    derr << "Failed to update mgr_stats_period: " << ss.str() << dendl;
+    return;
+  }
+  changed_stats_period = new_period;
+  cct->_conf.apply_changes(nullptr);
 }
