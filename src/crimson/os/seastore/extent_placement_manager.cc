@@ -723,6 +723,12 @@ ExtentPlacementManager::BackgroundProcess::reserve_projected_usage(
               res.cleaner_result.reserve_cold_success,
               usage);
         abort_io_usage(usage, res);
+        if (!res.reserve_inline_success) {
+          ++stats.io_retried_blocked_count_trim;
+        }
+          if (!res.cleaner_result.is_successful()) {
+          ++stats.io_retried_blocked_count_clean;
+        }
         blocking_io = seastar::promise<>();
       }
     } while (blocking_io);
@@ -981,6 +987,10 @@ void ExtentPlacementManager::BackgroundProcess::register_metrics()
                      sm::description("IOs that are blocked by gc")),
     sm::make_counter("io_blocked_count_trim", stats.io_blocked_count_trim,
                      sm::description("IOs that are blocked by trimming")),
+    sm::make_counter("io_retried_blocked_count_clean", stats.io_blocked_count_clean,
+                     sm::description("Retried IOs that are blocked by cleaning")),
+    sm::make_counter("io_retried_blocked_count_trim", stats.io_blocked_count_trim,
+                     sm::description("Retried IOs that are blocked by trimming")),
     sm::make_counter("io_blocked_count_clean", stats.io_blocked_count_clean,
                      sm::description("IOs that are blocked by cleaning")),
     sm::make_counter("io_blocked_sum", stats.io_blocked_sum,
