@@ -2250,11 +2250,11 @@ static inline bool already_run_today(CephContext* cct, time_t start_date)
   utime_t now = ceph_clock_now();
   localtime_r(&start_date, &bdt);
 
-  if (cct->_conf->rgw_lc_debug_interval > 0) {
-    if (now - start_date < cct->_conf->rgw_lc_debug_interval)
-      return true;
-    else
-      return false;
+  if (const auto interval = cct->_conf->rgw_lc_debug_interval; interval > 0) {
+    // compare start_date against the beginning of the current interval
+    const auto remainder = now.sec() % interval;
+    const time_t interval_start = now.sec() - remainder;
+    return start_date >= interval_start;
   }
 
   bdt.tm_hour = 0;
@@ -2642,8 +2642,10 @@ int RGWLC::LCWorker::schedule_next_start_time(utime_t &start, utime_t& now)
 {
   int secs;
 
-  if (cct->_conf->rgw_lc_debug_interval > 0) {
-	secs = start + cct->_conf->rgw_lc_debug_interval - now;
+  if (const auto interval = cct->_conf->rgw_lc_debug_interval; interval > 0) {
+	// schedule for the next interval
+	const auto remainder = now.sec() % interval;
+	secs = interval - remainder;
 	if (secs < 0)
 	  secs = 0;
 	return (secs);
