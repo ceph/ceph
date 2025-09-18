@@ -615,7 +615,7 @@ class CephadmService(metaclass=ABCMeta):
         r = HandleCommandResult(*self.mgr.mon_command({
             'prefix': "osd ok-to-stop",
             'ids': osds,
-            'max': 16,
+            'max': self.mgr.max_parallel_osd_upgrades,
         }))
         j = None
         try:
