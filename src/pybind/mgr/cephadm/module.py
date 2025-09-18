@@ -403,6 +403,12 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             desc='max number of osds that will be drained simultaneously when osds are removed'
         ),
         Option(
+            'max_parallel_osd_upgrades',
+            type='int',
+            default=16,
+            desc='Maximum number of OSD daemons upgraded in parallel.'
+        ),
+        Option(
             'service_discovery_port',
             type='int',
             default=8765,
@@ -587,6 +593,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             self.secure_monitoring_stack = False
             self.apply_spec_fails: List[Tuple[str, str]] = []
             self.max_osd_draining_count = 10
+            self.max_parallel_osd_upgrades = 16
             self.device_enhanced_scan = False
             self.inventory_list_all = False
             self.cgroups_split = True
