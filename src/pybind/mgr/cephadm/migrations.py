@@ -446,16 +446,12 @@ class Migrations:
             grafana_cert = self.mgr.get_store(grafana_cert_path)
             grafana_key = self.mgr.get_store(grafana_key_path)
             if grafana_cert:
-                (org, cn) = get_cert_issuer_info(grafana_cert)
-                if org == 'Ceph':
-                    logger.info(f'Migrating {grafana_daemon.name()}/{hostname} cert/key to cert store (as cephadm-signed certs)')
-                    self.mgr.cert_mgr.register_self_signed_cert_key_pair('grafana')
-                    self.mgr.cert_mgr.save_self_signed_cert_key_pair('grafana', CertKeyPair(grafana_cert, grafana_key), host=hostname)
-                else:
+                org, _ = get_cert_issuer_info(grafana_cert)
+                if org != 'Ceph':
                     logger.info(f'Migrating {grafana_daemon.name()}/{hostname} cert/key to cert store (as custom-certs)')
                     grafana_cephadm_signed_certs = False
-                    self.mgr.cert_mgr.save_cert('grafana_ssl_cert', grafana_cert, host=hostname)
-                    self.mgr.cert_mgr.save_key('grafana_ssl_key', grafana_key, host=hostname)
+                    self.mgr.cert_mgr.save_cert('grafana_ssl_cert', grafana_cert, host=hostname, user_made=True, editable=True)
+                    self.mgr.cert_mgr.save_key('grafana_ssl_key', grafana_key, host=hostname, user_made=True, editable=True)
 
         if not grafana_cephadm_signed_certs:
             # Update the spec to specify the right certificate source

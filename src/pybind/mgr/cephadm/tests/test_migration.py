@@ -8,7 +8,8 @@ from ceph.deployment.service_spec import (
     RGWSpec,
     IngressSpec,
     IscsiServiceSpec,
-    GrafanaSpec
+    GrafanaSpec,
+    CertificateSource
 )
 from ceph.utils import datetime_to_str, datetime_now
 from cephadm import CephadmOrchestrator
@@ -403,25 +404,6 @@ def test_migrate_rgw_spec(cephadm_module: CephadmOrchestrator, rgw_spec_store_en
 
 
 @mock.patch('cephadm.migrations.get_cert_issuer_info')
-def test_migrate_grafana_cephadm_signed(mock_get_cert_issuer_info, cephadm_module: CephadmOrchestrator):
-    mock_get_cert_issuer_info.return_value = ('Ceph', 'MockCephCN')
-
-    cephadm_module.set_store('host1/grafana_crt', 'grafana_cert1')
-    cephadm_module.set_store('host1/grafana_key', 'grafana_key1')
-    cephadm_module.set_store('host2/grafana_crt', 'grafana_cert2')
-    cephadm_module.set_store('host2/grafana_key', 'grafana_key2')
-    cephadm_module.cache.daemons = {'host1': {'grafana.host1': DaemonDescription('grafana', 'host1', 'host1')},
-                                    'host2': {'grafana.host2': DaemonDescription('grafana', 'host2', 'host2')}}
-
-    cephadm_module.migration.migrate_6_7()
-
-    assert cephadm_module.cert_mgr.get_cert('cephadm-signed_grafana_cert', host='host1')
-    assert cephadm_module.cert_mgr.get_cert('cephadm-signed_grafana_cert', host='host2')
-    assert cephadm_module.cert_mgr.get_key('cephadm-signed_grafana_key', host='host1')
-    assert cephadm_module.cert_mgr.get_key('cephadm-signed_grafana_key', host='host2')
-
-
-@mock.patch('cephadm.migrations.get_cert_issuer_info')
 def test_migrate_grafana_custom_certs(mock_get_cert_issuer_info, cephadm_module: CephadmOrchestrator):
     from datetime import datetime, timezone
 
@@ -445,6 +427,7 @@ def test_migrate_grafana_custom_certs(mock_get_cert_issuer_info, cephadm_module:
     assert cephadm_module.cert_mgr.get_cert('grafana_ssl_cert', host='host2')
     assert cephadm_module.cert_mgr.get_key('grafana_ssl_key', host='host1')
     assert cephadm_module.cert_mgr.get_key('grafana_ssl_key', host='host2')
+    assert cephadm_module.spec_store._specs['grafana'].certificate_source == CertificateSource.REFERENCE.value
 
 
 def test_migrate_cert_store(cephadm_module: CephadmOrchestrator):
