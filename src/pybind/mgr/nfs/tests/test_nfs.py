@@ -13,7 +13,7 @@ from rados import ObjectNotFound
 from ceph.deployment.service_spec import NFSServiceSpec
 from nfs import Module
 from nfs.export import ExportMgr, normalize_path
-from nfs.ganesha_conf import GaneshaConfParser, Export, RawBlock
+from nfs.ganesha_conf import GaneshaConfParser, Export, RawBlock, format_block
 from nfs.cluster import NFSCluster
 from orchestrator import ServiceDescription, DaemonDescription, OrchResult
 
@@ -1256,6 +1256,26 @@ NFS_CORE_PARAM {
     def test_cluster_config(self):
         self._do_mock_test(self._do_test_cluster_config)
 
+    def _do_test_nfs_byok_export(self):
+        nfs_mod = Module('nfs', '', '')
+        conf = ExportMgr(nfs_mod)
+        
+        conf.create_export(
+            fsal_type='cephfs',
+            cluster_id=self.cluster_id,
+            fs_name='myfs',
+            path='/',
+            pseudo_path='/cephfs4',
+            read_only=False,
+            squash='root',
+            kmip_key_id='12345'
+        )
+        export = conf._fetch_export(self.cluster_id, '/cephfs4')
+        block = format_block(export.to_export_block())
+        assert block.startswith('EXPORT {\n    kmip_key_id = "12345";')
+
+    def test_nfs_byok_export(self):
+        self._do_mock_test(self._do_test_nfs_byok_export)
 
 @pytest.mark.parametrize(
     "path,expected",
