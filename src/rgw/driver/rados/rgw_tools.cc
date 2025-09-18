@@ -145,14 +145,16 @@ int rgw_rados_ref::unwatch(const DoutPrefixProvider* dpp, uint64_t handle,
   }
 }
 
-map<string, bufferlist>* no_change_attrs() {
-  static map<string, bufferlist> no_change;
+std::map<std::string, bufferlist>* no_change_attrs_omap() {
+  static std::map<std::string, bufferlist> no_change;
   return &no_change;
 }
 
 int rgw_put_system_obj(const DoutPrefixProvider *dpp, RGWSI_SysObj* svc_sysobj,
                        const rgw_pool& pool, const string& oid, bufferlist& data, bool exclusive,
-                       RGWObjVersionTracker *objv_tracker, real_time set_mtime, optional_yield y, const map<string, bufferlist> *pattrs)
+                       RGWObjVersionTracker *objv_tracker, real_time set_mtime, optional_yield y,
+		       const map<string, bufferlist>* pattrs,
+		       const std::map<std::string, bufferlist>* omap_entries)
 {
   map<string,bufferlist> no_attrs;
   if (!pattrs) {
@@ -161,7 +163,7 @@ int rgw_put_system_obj(const DoutPrefixProvider *dpp, RGWSI_SysObj* svc_sysobj,
 
   rgw_raw_obj obj(pool, oid);
 
-  auto sysobj = svc_sysobj->get_obj(obj);
+  RGWSI_SysObj::Obj sysobj = svc_sysobj->get_obj(obj);
   int ret;
 
   if (pattrs != no_change_attrs()) {
@@ -179,7 +181,12 @@ int rgw_put_system_obj(const DoutPrefixProvider *dpp, RGWSI_SysObj* svc_sysobj,
       .write_data(dpp, data, y);
   }
 
-  return ret;
+  if (ret || !omap_entries) {
+    return ret;
+  }
+
+#warning "update wop to allow omap entries to be added, overwritten, or cleared?"
+  return  sysobj.omap().set(dpp, *omap_entries, y);
 }
 
 int rgw_stat_system_obj(const DoutPrefixProvider *dpp, RGWSI_SysObj* svc_sysobj,
@@ -195,6 +202,24 @@ int rgw_stat_system_obj(const DoutPrefixProvider *dpp, RGWSI_SysObj* svc_sysobj,
                .set_last_mod(pmtime)
                .set_obj_size(psize)
                .stat(y, dpp);
+}
+
+int rgw_read_system_obj_map(const DoutPrefixProvider *dpp,
+                            RGWSI_SysObj* svc_sysobj,
+                            const rgw_pool& pool,
+                            const std::string& oid,
+                            const std::string& after,
+                            const std::string& prefix,
+                            const uint64_t count,
+                            const std::string* default_key, // nullptr indicates none
+                            std::map<std::string, bufferlist>* results,
+                            bool* more,
+                            optional_yield y)
+{
+  rgw_raw_obj obj(pool, oid);
+  auto sysobj = svc_sysobj->get_obj(obj);
+  return sysobj.omap().get_vals(dpp, after, prefix, count, default_key,
+                                results, more, y);
 }
 
 

@@ -865,7 +865,23 @@ int rgw_bucket_init_index(cls_method_context_t hctx, bufferlist *in, bufferlist 
     return -EINVAL;
   }
 
+  auto in_iter = in->cbegin();
+  rgw::BucketIndexType index_type;
+  bufferlist index_type_data;
+  if (!in_iter.end()) {
+    try {
+      decode(index_type, in_iter);
+      decode(index_type_data, in_iter);
+    } catch (ceph::buffer::error& err) {
+      CLS_LOG(1,
+	      "ERROR: %s: failed to decode index_type or index_type_data", __func__);
+      return -EINVAL;
+    }
+  }
+
   rgw_bucket_dir dir;
+  dir.header.index_type = index_type;
+  dir.header.index_type_data = index_type_data;
 
   return write_bucket_header(hctx, &dir.header);
 }

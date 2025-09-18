@@ -298,38 +298,102 @@ int RGWSI_SysObj_Core::omap_get_vals(const DoutPrefixProvider *dpp,
                                      bool *pmore,
                                      optional_yield y)
 {
+  return omap_get_vals(dpp, obj, marker, "", count, nullptr, m, pmore, y);
+}
+
+/*
+ * parameters:
+ *   marker: returned keys must be greater than *after*; this won't add
+             the prefix to the marker, so if that's expected that the
+             first call will include the prefix with marker
+ *   prefix: all returned entries must begin with prefix
+ *   count: maximum number to return
+ *   default_key: if using after and prefix nothing matches, then return
+ *                this entry instead
+ *   m: key/value pairs
+ *   pmore: if true additional entries match
+ */
+int RGWSI_SysObj_Core::omap_get_vals(const DoutPrefixProvider *dpp, 
+                                     const rgw_raw_obj& obj,
+                                     const string& marker,
+                                     const string& prefix,
+                                     uint64_t count,
+                                     const string* default_key,
+                                     std::map<std::string, bufferlist>* m,
+                                     bool* pmore,
+                                     optional_yield y)
+{
   rgw_rados_ref rados_obj;
   int r = get_rados_obj(dpp, zone_svc, obj, &rados_obj);
   if (r < 0) {
-    ldpp_dout(dpp, 20) << "get_rados_obj() on obj=" << obj << " returned " << r << dendl;
+    ldpp_dout(dpp, 20) << "get_rados_obj() on obj=" << obj <<
+      ", zone_svc=" << zone_svc << ", returned " << r << dendl;
     return r;
   }
 
-  string start_after = marker;
-  bool more;
-
+  std::string start_after = marker;
+  bool more = true;
   do {
     librados::ObjectReadOperation op;
 
-    std::map<string, bufferlist> t;
+    std::map<std::string, bufferlist> vals;
     int rval;
-    op.omap_get_vals2(start_after, count, &t, &more, &rval);
+    op.omap_get_vals2(start_after, prefix, count, &vals, &more, &rval);
   
     r = rados_obj.operate(dpp, std::move(op), nullptr, y);
     if (r < 0) {
       return r;
     }
-    if (t.empty()) {
+    if (vals.empty()) {
       break;
     }
-    count -= t.size();
-    start_after = t.rbegin()->first;
-    m->insert(t.begin(), t.end());
+
+    if (prefix.empty()) {
+      // optimize when there's no prefix
+      count -= vals.size();
+      start_after = vals.rbegin()->first;
+      m->insert(vals.begin(), vals.end());
+    } else {
+      for (const auto& entry : vals) {
+        if (entry.first.starts_with(prefix)) {
+          --count;
+          start_after = entry.first;
+          m->insert(entry);
+        } else {
+          more = false;
+          break;
+        }
+      }
+    }
   } while (more && count > 0);
+
+  // if no results found, then we'll see if we can access the
+  // default_key
+  if (default_key && m->empty()) {
+    librados::ObjectReadOperation op;
+    std::set<std::string> keys;
+    keys.insert(*default_key);
+    std::map<std::string, bufferlist> vals;
+    int rval;
+
+    op.omap_get_vals_by_keys(keys, &vals, &rval);
+    r = rados_obj.operate(dpp, std::move(op), nullptr, y);
+    if (r < 0) {
+      return r;
+    }
+
+    // we expect 0 or 1 result; this works either way
+    for (const auto& entry : vals) {
+      m->insert(entry);
+    }
+
+    more = false; // should already be false if *m is empty
+  }
 
   if (pmore) {
     *pmore = more;
   }
+
   return 0;
 }
 

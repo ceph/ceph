@@ -454,9 +454,11 @@ static bool pass_object_lock_check(rgw::sal::Driver* driver, rgw::sal::Object* o
  * excess OSD requests
  */
 static bool should_list_unordered(const rgw::bucket_index_layout_generation& current_index, uint64_t threshold) {
-  return current_index.layout.type == rgw::BucketIndexType::Normal
-    && rgw::num_shards(current_index.layout.normal) > threshold;
+  return current_index.layout.type == rgw::BucketIndexType::Hashed &&
+    rgw::num_shards(current_index) > (rgw::BIShardIndex) threshold;
 }
+
+
 class LCObjsLister {
   rgw::sal::Driver* driver;
   rgw::sal::Bucket* bucket;

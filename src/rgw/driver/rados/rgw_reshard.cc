@@ -23,9 +23,12 @@
 #include "services/svc_sys_obj.h"
 #include "services/svc_tier_rados.h"
 #include "services/svc_bilog_rados.h"
+#include "services/svc_bindexer_rados.h"
+
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
+
 
 using namespace std;
 
@@ -199,6 +202,7 @@ public:
     store(_store), bucket_info(_bucket_info), shard_id(shard_id),
     bs(store->getRados()), aio_completions(_completions)
   {
+#warning "OBI: BucketShard::init with generation"
     bs.init(dpp, bucket_info, index, shard_id, null_yield);
 
     max_aio_completions =
@@ -258,7 +262,9 @@ public:
     }
     ret = bs.bucket_obj.aio_operate(c, &op);
     if (ret < 0) {
-      derr << "ERROR: failed to store entries in target bucket shard (bs=" << bs.bucket << "/" << bs.shard_id << ") error=" << cpp_strerror(-ret) << dendl;
+      derr << "ERROR: failed to store entries in target bucket shard (bs=" <<
+        bs.bucket << "/" << bs.shard_ident << ") error=" <<
+        cpp_strerror(-ret) << dendl;
       return ret;
     }
     entries.clear();
@@ -282,8 +288,8 @@ public:
 
 class BucketReshardManager {
   rgw::sal::RadosStore *store;
-  deque<librados::AioCompletion *> completions;
-  vector<BucketReshardShard> target_shards;
+  std::deque<librados::AioCompletion *> completions;
+  std::vector<BucketReshardShard> target_shards;
 
 public:
   BucketReshardManager(const DoutPrefixProvider *dpp,
@@ -292,7 +298,7 @@ public:
                        const rgw::bucket_index_layout_generation& target)
     : store(_store)
   {
-    const uint32_t num_shards = rgw::num_shards(target.layout.normal);
+    const uint32_t num_shards = rgw::num_shards(target.layout.specs);
     target_shards.reserve(num_shards);
     for (uint32_t i = 0; i < num_shards; ++i) {
       target_shards.emplace_back(dpp, store, bucket_info, target, i, completions);
@@ -385,19 +391,20 @@ static int init_target_index(rgw::sal::RadosStore* store,
                              const rgw::bucket_index_layout_generation& index,
                              ReshardFaultInjector& fault,
                              bool& support_logrecord,
-                             const DoutPrefixProvider* dpp, optional_yield y)
+                             const DoutPrefixProvider* dpp,
+			     optional_yield y)
 {
-
   int ret = 0;
+  std::map<std::string, bufferlist> binfo_map_entries;
   if (ret = fault.check("init_index");
       ret == 0) { // no fault injected, initialize index
-    ret = store->svc()->bi->init_index(dpp, y, bucket_info, index, true);
+    ret = store->svc()->bi->init_index(dpp, y, bucket_info, index, &binfo_map_entries, true);
   }
   if (ret == -EOPNOTSUPP) {
-    ldpp_dout(dpp, 0) << "WARNING: " << "init_index() does not supported logrecord, "
+    ldpp_dout(dpp, 0) << "WARNING: " << "init_index() does not support logrecord; "
                       << "falling back to block reshard mode." << dendl;
     support_logrecord = false;
-    ret = store->svc()->bi->init_index(dpp, y, bucket_info, index, false);
+    ret = store->svc()->bi->init_index(dpp, y, bucket_info, index, &binfo_map_entries, false);
   } else if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: " << __func__ << " failed to initialize "
        "target index shard objects: " << cpp_strerror(ret) << dendl;
@@ -427,6 +434,7 @@ static int init_target_layout(rgw::sal::RadosStore* store,
 			      std::map<std::string, bufferlist>& bucket_attrs,
                               ReshardFaultInjector& fault,
                               const uint32_t new_num_shards,
+			      rgw::BucketIndexType dest_index_type,
                               bool& support_logrecord,
                               const DoutPrefixProvider* dpp, optional_yield y)
 {
@@ -435,10 +443,21 @@ static int init_target_layout(rgw::sal::RadosStore* store,
 
   // initialize a new normal target index layout generation
   rgw::bucket_index_layout_generation target;
-  target.layout.type = rgw::BucketIndexType::Normal;
-  target.layout.normal.num_shards = new_num_shards;
-  target.layout.normal.min_num_shards = current.layout.normal.min_num_shards;
-  target.gen = current.gen + 1;
+
+  int ret = create_layout_generation(current.gen + 1,
+				     dest_index_type, new_num_shards,
+				     current.layout, &target);
+  if (ret < 0) {
+    return ret;
+  }
+
+  auto target_bindexer =
+    rgw::rados::BIndexer::create_unique(store, dpp, bucket_info, target);
+
+  if (! target_bindexer->may_support_log_record()) {
+    // if definitely does not support set it to false
+    support_logrecord = false;
+  }
 
   if (bucket_info.reshard_status == cls_rgw_reshard_status::IN_PROGRESS) {
     // backward-compatible cleanup of old reshards, where the target was in a
@@ -466,7 +485,7 @@ static int init_target_layout(rgw::sal::RadosStore* store,
   }
 
   // create the index shard objects
-  int ret = init_target_index(store, bucket_info, target, fault, support_logrecord, dpp, y);
+  ret = init_target_index(store, bucket_info, target, fault, support_logrecord, dpp, y);
   if (ret < 0) {
     return ret;
   }
@@ -490,7 +509,10 @@ static int init_target_layout(rgw::sal::RadosStore* store,
     if (ret = fault.check("set_target_layout");
         ret == 0) { // no fault injected, write the bucket instance metadata
       ret = store->getRados()->put_bucket_instance_info(bucket_info, false,
-                                                        real_time(), &bucket_attrs, dpp, y);
+                                                        real_time(),
+							&bucket_attrs,
+							no_change_attrs_omap(),
+							dpp, y);
     } else if (ret == -ECANCELED) {
       fault.clear(); // clear the fault so a retry can succeed
     }
@@ -571,7 +593,9 @@ static int revert_target_layout(rgw::sal::RadosStore* store,
         ret == 0) { // no fault injected, revert the bucket instance metadata
       ret = store->getRados()->put_bucket_instance_info(bucket_info, false,
                                                         real_time(),
-                                                        &bucket_attrs, dpp, y);
+                                                        &bucket_attrs,
+							no_change_attrs_omap(),
+							dpp, y);
     } else if (ret == -ECANCELED) {
       fault.clear(); // clear the fault so a retry can succeed
     }
@@ -621,6 +645,7 @@ static int init_reshard(rgw::sal::RadosStore* store,
 			std::map<std::string, bufferlist>& bucket_attrs,
                         ReshardFaultInjector& fault,
                         const uint32_t new_num_shards,
+			const std::optional<rgw::BucketIndexType> bindex_type,
                         bool& support_logrecord,
                         const DoutPrefixProvider *dpp, optional_yield y)
 {
@@ -629,7 +654,15 @@ static int init_reshard(rgw::sal::RadosStore* store,
     return -EINVAL;
   }
 
-  int ret = init_target_layout(store, bucket_info, bucket_attrs, fault, new_num_shards,
+  rgw::BucketIndexType index_type;
+  if (bindex_type) {
+    index_type = *bindex_type;
+  } else {
+    index_type = bucket_info.get_current_bucket_index_type();
+  }
+
+  int ret = init_target_layout(store, bucket_info, bucket_attrs, fault,
+			       new_num_shards, index_type,
                                support_logrecord, dpp, y);
   if (ret < 0) {
     return ret;
@@ -695,7 +728,10 @@ static int change_reshard_state(rgw::sal::RadosStore* store,
     if (ret = fault.check("change_reshard_state");
         ret == 0) { // no fault injected, write the bucket instance metadata
       ret = store->getRados()->put_bucket_instance_info(bucket_info, false,
-                                                        real_time(), &bucket_attrs, dpp, y);
+                                                        real_time(),
+							&bucket_attrs,
+							no_change_attrs_omap(),
+							dpp, y);
     } else if (ret == -ECANCELED) {
       fault.clear(); // clear the fault so a retry can succeed
     }
@@ -805,7 +841,10 @@ static int commit_target_layout(rgw::sal::RadosStore* store,
   int ret = fault.check("commit_target_layout");
   if (ret == 0) { // no fault injected, write the bucket instance metadata
     ret = store->getRados()->put_bucket_instance_info(
-        bucket_info, false, real_time(), &bucket_attrs, dpp, y);
+        bucket_info, false, real_time(),
+	&bucket_attrs,
+	no_change_attrs_omap(), // retain possible omap to access shard info
+	dpp, y);
   } else if (ret == -ECANCELED) {
     fault.clear(); // clear the fault so a retry can succeed
   }
@@ -874,12 +913,12 @@ static int commit_reshard(rgw::sal::RadosStore* store,
   }
 
   if (store->svc()->zone->need_to_log_data() && !prev.logs.empty() &&
-      prev.current_index.layout.type == rgw::BucketIndexType::Normal) {
+      prev.current_index.layout.type == rgw::BucketIndexType::Hashed) {
     // write a datalog entry for each shard of the previous index. triggering
     // sync on the old shards will force them to detect the end-of-log for that
     // generation, and eventually transition to the next
     // TODO: use a log layout to support types other than BucketLogType::InIndex
-    for (uint32_t shard_id = 0; shard_id < rgw::num_shards(prev.current_index.layout.normal); ++shard_id) {
+    for (rgw::BIShardIndex shard_id = 0; shard_id < rgw::num_shards(prev.current_index.layout.specs); ++shard_id) {
       // This null_yield can stay, for now, since we're in our own thread
       ret = store->svc()->datalog_rados->add_entry(dpp, bucket_info, prev.logs.back(), shard_id,
 						   null_yield);
@@ -1040,8 +1079,19 @@ int RGWBucketReshard::renew_lock_if_needed(const DoutPrefixProvider *dpp) {
   return 0;
 }
 
-int RGWBucketReshard::calc_target_shard(const RGWBucketInfo& bucket_info, const rgw_obj_key& key,
-                                        int& shard, const DoutPrefixProvider *dpp) {
+int RGWBucketReshard::calc_target_shard(const RGWBucketInfo& bucket_info,
+					const rgw_obj_key& key,
+                                        int& shard,
+					const DoutPrefixProvider* dpp) {
+#warning "fix this"
+  auto hash_layout_p = bucket_info.hashed_layout_ptr();
+  if (! hash_layout_p) {
+    ldpp_dout(dpp, 0) <<
+      "ERROR: tried to calculate the target shard on a bucket with a "
+      "non-hashed layout: " << bucket_info.bucket << dendl;
+    return -EINVAL;
+  }
+
   int target_shard_id, ret;
 
   rgw_obj obj(bucket_info.bucket, key);
@@ -1050,8 +1100,9 @@ int RGWBucketReshard::calc_target_shard(const RGWBucketInfo& bucket_info, const 
     // place the multipart .meta object on the same shard as its head object
     obj.index_hash_source = mp.get_key();
   }
-  ret = store->getRados()->get_target_shard_id(bucket_info.layout.target_index->layout.normal,
-                obj.get_hash_object(), &target_shard_id);
+  ret = store->getRados()->get_target_shard_id(*hash_layout_p,
+					       obj.get_hash_object(),
+					       &target_shard_id);
   if (ret < 0) {
     ldpp_dout(dpp, -1) << "ERROR: get_target_shard_id() returned ret=" << ret << dendl;
     return ret;
@@ -1066,8 +1117,10 @@ int RGWBucketReshard::reshard_process(const rgw::bucket_index_layout_generation&
                                       BucketReshardManager& target_shards_mgr,
                                       bool verbose_json_out,
                                       ostream *out,
-                                      Formatter *formatter, rgw::BucketReshardState reshard_stage,
-                                      const DoutPrefixProvider *dpp, optional_yield y)
+                                      Formatter *formatter,
+				      rgw::BucketReshardState reshard_stage,
+                                      const DoutPrefixProvider* dpp,
+				      optional_yield y)
 {
   list<rgw_cls_bi_entry> entries;
 
@@ -1098,7 +1151,7 @@ int RGWBucketReshard::reshard_process(const rgw::bucket_index_layout_generation&
     (*out) << stage;
   }
 
-  const uint32_t num_source_shards = rgw::num_shards(current.layout.normal);
+  const uint32_t num_source_shards = rgw::num_shards(current.layout.specs);
   string marker;
   for (uint32_t i = 0; i < num_source_shards; ++i) {
     bool is_truncated = true;
@@ -1200,6 +1253,7 @@ int RGWBucketReshard::do_reshard(const rgw::bucket_index_layout_generation& curr
                                  ReshardFaultInjector& fault,
                                  const DoutPrefixProvider *dpp, optional_yield y)
 {
+#warning "work on this"
   if (out) {
     (*out) << "tenant: " << bucket_info.bucket.tenant << std::endl;
     (*out) << "bucket name: " << bucket_info.bucket.name << std::endl;
@@ -1258,6 +1312,7 @@ int RGWBucketReshard::get_status(const DoutPrefixProvider *dpp, optional_yield y
 }
 
 int RGWBucketReshard::execute(int num_shards,
+			      const std::optional<rgw::BucketIndexType> dest_bindex_type,
                               ReshardFaultInjector& fault,
                               int max_op_entries,  // max num to process per op
 			      const cls_rgw_reshard_initiator initiator,
@@ -1285,7 +1340,8 @@ int RGWBucketReshard::execute(int num_shards,
 
   bool support_logrecord = true;
   // prepare the target index and add its layout the bucket info
-  ret = init_reshard(store, bucket_info, bucket_attrs, fault, num_shards,
+  ret = init_reshard(store, bucket_info, bucket_attrs, fault,
+		     num_shards, dest_bindex_type,
                      support_logrecord, dpp, y);
   if (ret < 0) {
     return ret;
@@ -1293,6 +1349,7 @@ int RGWBucketReshard::execute(int num_shards,
 
   if (ret = fault.check("do_reshard");
       ret == 0) { // no fault injected, do the reshard
+#warning "go into here"
     ret = do_reshard(bucket_info.layout.current_index,
                      *bucket_info.layout.target_index,
                      max_op_entries, support_logrecord,
@@ -1587,6 +1644,14 @@ int RGWReshard::process_entry(const cls_rgw_reshard_entry& entry,
     }
   }
 
+  auto hash_layout_p = bucket_info.hashed_layout_ptr();
+  if (!hash_layout_p) {
+    ldpp_dout(dpp, 0) <<
+      "ERROR: tried to process a reshard entry for a bucket without a "
+      "hashed bucket index: " << bucket_info.bucket << dendl;
+    return -EINVAL;
+  }
+
   // if *dynamic* reshard reduction, perform extra sanity checks in
   // part to prevent chasing constantly changing entry count. If
   // *admin*-initiated (or unknown-initiated) reshard reduction, skip
@@ -1615,10 +1680,8 @@ int RGWReshard::process_entry(const cls_rgw_reshard_entry& entry,
     }
 
     const bool is_versioned = bucket_info.versioned();
-    const uint32_t current_shard_count =
-      rgw::current_num_shards(bucket_info.layout);
-    const uint32_t min_layout_shards =
-      rgw::current_min_layout_shards(bucket_info.layout);
+    const uint32_t current_shard_count = hash_layout_p->num_shards;
+    const uint32_t min_layout_shards = hash_layout_p->min_num_shards;
 
     bool needs_resharding { false };
     uint32_t suggested_shard_count { 0 };
@@ -1687,7 +1750,9 @@ int RGWReshard::process_entry(const cls_rgw_reshard_entry& entry,
   RGWBucketReshard br(store, bucket_info, bucket_attrs, nullptr);
 
   ReshardFaultInjector f; // no fault injected
-  ret = br.execute(entry.new_num_shards, f, max_op_entries, entry.initiator,
+  ret = br.execute(entry.new_num_shards,
+		   std::optional<rgw::BucketIndexType>(),
+		   f, max_op_entries, entry.initiator,
 		   dpp, y, false, nullptr, nullptr, this);
   if (ret < 0) {
     ldpp_dout(dpp, 0) <<  __func__ <<

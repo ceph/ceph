@@ -4163,7 +4163,7 @@ void RGWCreateBucket::execute(optional_yield y)
     if ((createparams.index_type && *createparams.index_type !=
          info.layout.current_index.layout.type) ||
         (createparams.index_shards && *createparams.index_shards !=
-         info.layout.current_index.layout.normal.num_shards)) {
+         current_num_shards(info.layout))) {
       s->err.message =
           "Cannot modify existing bucket's index type or shard count";
       op_ret = -EEXIST;
@@ -4266,6 +4266,8 @@ void RGWCreateBucket::execute(optional_yield y)
     createparams.quota = master_info.quota;
     createparams.creation_time = master_info.creation_time;
   }
+
+  createparams.index_type = rgw::BucketIndexType::Hashed;
 
   ldpp_dout(this, 10) << "user=" << s->user << " bucket=" << s->bucket << dendl;
   op_ret = s->bucket->create(this, createparams, y);

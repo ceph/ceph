@@ -155,12 +155,30 @@ public:
 
       OmapOp(Obj& _source) : source(_source) {}
 
-      int get_all(const DoutPrefixProvider *dpp, std::map<std::string, bufferlist> *m, optional_yield y);
-      int get_vals(const DoutPrefixProvider *dpp, const std::string& marker, uint64_t count,
+      int get_all(const DoutPrefixProvider *dpp,
+                  std::map<std::string, bufferlist> *m,
+                  optional_yield y);
+      int get_vals(const DoutPrefixProvider *dpp,
+                   const std::string& marker,
+                   uint64_t count,
                    std::map<std::string, bufferlist> *m,
-                   bool *pmore, optional_yield y);
-      int set(const DoutPrefixProvider *dpp, const std::string& key, bufferlist& bl, optional_yield y);
-      int set(const DoutPrefixProvider *dpp, const std::map<std::string, bufferlist>& m, optional_yield y);
+                   bool *pmore,
+                   optional_yield y);
+      int get_vals(const DoutPrefixProvider* dpp,
+                   const std::string& marker,
+                   const std::string& prefix,
+                   uint64_t count,
+                   const std::string* default_key,
+                   std::map<std::string, bufferlist>* m,
+                   bool* pmore,
+                   optional_yield y);
+      int set(const DoutPrefixProvider *dpp,
+              const std::string& key,
+              bufferlist& bl,
+              optional_yield y);
+      int set(const DoutPrefixProvider *dpp,
+              const std::map<std::string, bufferlist>& m,
+              optional_yield y);
       int del(const DoutPrefixProvider *dpp, const std::string& key, optional_yield y);
     };
 

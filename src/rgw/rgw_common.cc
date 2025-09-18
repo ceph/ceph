@@ -34,6 +34,7 @@
 
 #define dout_context g_ceph_context
 
+
 static constexpr auto dout_subsys = ceph_subsys_rgw;
 
 using rgw::ARN;
@@ -43,6 +44,14 @@ using rgw::IAM::Policy;
 using rgw::IAM::PolicyPrincipal;
 
 const uint32_t RGWBucketInfo::NUM_SHARDS_BLIND_BUCKET(UINT32_MAX);
+
+// helper for std::visit
+template<class... Ts>
+struct overloaded : Ts... { using Ts::operator()...; };
+// explicit deduction guide (not needed as of C++20)
+template<class... Ts>
+overloaded(Ts...) -> overloaded<Ts...>;
+
 
 rgw_http_errors rgw_http_s3_errors({
     { 0, {200, "" }},
@@ -2338,31 +2347,51 @@ void RGWBucketInfo::decode(bufferlist::const_iterator& bl) {
     decode(s, bl);
     user.from_str(s);
   }
-  if (struct_v >= 3)
+  if (struct_v >= 3) {
     decode(flags, bl);
-  if (struct_v >= 5)
+  }
+  if (struct_v >= 5) {
     decode(zonegroup, bl);
+  }
   if (struct_v >= 6) {
     uint64_t ct;
     decode(ct, bl);
-    if (struct_v < 17)
+    if (struct_v < 17) {
       creation_time = ceph::real_clock::from_time_t((time_t)ct);
+    }
   }
-  if (struct_v >= 7)
+  if (struct_v >= 7) {
     decode(placement_rule, bl);
-  if (struct_v >= 8)
+  }
+  if (struct_v >= 8) {
     decode(has_instance_obj, bl);
-  if (struct_v >= 9)
+  }
+  if (struct_v >= 9) {
     decode(quota, bl);
+  }
+
   static constexpr uint8_t new_layout_v = 22;
-  if (struct_v >= 10 && struct_v < new_layout_v)
-    decode(layout.current_index.layout.normal.num_shards, bl);
-  if (struct_v >= 11 && struct_v < new_layout_v)
-    decode(layout.current_index.layout.normal.hash_type, bl);
-  if (struct_v >= 12)
+
+
+  // read in the layout for older versions
+  if (struct_v >= 10 && struct_v < new_layout_v) {
+    rgw::bucket_index_hashed_layout new_layout;
+
+    decode(new_layout.num_shards, bl); // if struct_v >= 10 && struct_v < new_layout_v
+
+    if (struct_v >= 11) { // and if struct_v < new_layout_v
+      decode(new_layout.hash_type, bl);
+    }
+
+    layout.current_index.layout.specs = new_layout;
+  }
+
+  if (struct_v >= 12) {
     decode(requester_pays, bl);
-  if (struct_v >= 13)
+  }
+  if (struct_v >= 13) {
     decode(user.tenant, bl);
+  }
   if (struct_v >= 14) {
     decode(has_website, bl);
     if (has_website) {
@@ -2376,7 +2405,7 @@ void RGWBucketInfo::decode(bufferlist::const_iterator& bl) {
     decode(it, bl);
     layout.current_index.layout.type = (rgw::BucketIndexType)it;
   } else {
-    layout.current_index.layout.type = rgw::BucketIndexType::Normal;
+    layout.current_index.layout.type = rgw::BucketIndexType::Hashed;
   }
   swift_versioning = false;
   swift_ver_location.clear();
@@ -2384,7 +2413,7 @@ void RGWBucketInfo::decode(bufferlist::const_iterator& bl) {
     decode(swift_versioning, bl);
     if (swift_versioning) {
       decode(swift_ver_location, bl);
-   }
+    }
   }
   if (struct_v >= 17) {
     decode(creation_time, bl);
@@ -2415,7 +2444,7 @@ void RGWBucketInfo::decode(bufferlist::const_iterator& bl) {
   }
 
   if (layout.logs.empty() &&
-      layout.current_index.layout.type == rgw::BucketIndexType::Normal) {
+      layout.current_index.layout.type == rgw::BucketIndexType::Hashed) {
     layout.logs.push_back(rgw::log_layout_from_index(0, layout.current_index));
   }
   DECODE_FINISH(bl);
@@ -2509,9 +2538,11 @@ list<RGWBucketInfo> RGWBucketInfo::generate_test_instances()
   // round-trip properly.
   auto gen_layout = [](rgw::BucketLayout& l) {
     l.current_index.gen = 0;
-    l.current_index.layout.normal.hash_type = rgw::BucketHashType::Mod;
-    l.current_index.layout.type = rgw::BucketIndexType::Normal;
-    l.current_index.layout.normal.num_shards = 11;
+    rgw::bucket_index_hashed_layout prep_layout;
+    prep_layout.num_shards = 11;
+    prep_layout.hash_type = rgw::BucketHashType::Mod;
+    l.current_index.layout.type = rgw::BucketIndexType::Hashed;
+    l.current_index.layout.specs = prep_layout;
     l.logs.push_back(log_layout_from_index(
                        l.current_index.gen,
                        l.current_index));
@@ -2541,8 +2572,19 @@ void RGWBucketInfo::dump(Formatter *f) const
   encode_json("placement_rule", placement_rule, f);
   encode_json("has_instance_obj", has_instance_obj, f);
   encode_json("quota", quota, f);
-  encode_json("num_shards", layout.current_index.layout.normal.num_shards, f);
-  encode_json("bi_shard_hash_type", (uint32_t)layout.current_index.layout.normal.hash_type, f);
+  encode_json("index_type", (uint32_t)layout.current_index.layout.type, f);
+
+  std::visit(overloaded {
+      [f](rgw::bucket_index_hashed_layout arg) {
+	encode_json("num_shards", arg.num_shards, f);
+	encode_json("bi_shard_hash_type", (uint32_t) arg.hash_type, f);
+	encode_json("min_num_shards", arg.min_num_shards, f);
+      },
+      [f](rgw::bucket_index_ordered_layout arg) {
+	encode_json("num_shards", arg.num_shards, f);
+      }
+  }, layout.current_index.layout.specs);
+
   encode_json("requester_pays", requester_pays, f);
   encode_json("has_website", has_website, f);
   if (has_website) {
@@ -2550,7 +2592,6 @@ void RGWBucketInfo::dump(Formatter *f) const
   }
   encode_json("swift_versioning", swift_versioning, f);
   encode_json("swift_ver_location", swift_ver_location, f);
-  encode_json("index_type", (uint32_t)layout.current_index.layout.type, f);
   encode_json("mdsearch_config", mdsearch_config, f);
   encode_json("reshard_status", (int)reshard_status, f);
   encode_json("new_bucket_instance_id", new_bucket_instance_id, f);
@@ -2579,10 +2620,7 @@ void RGWBucketInfo::decode_json(JSONObj *obj) {
   placement_rule.from_str(pr);
   JSONDecoder::decode_json("has_instance_obj", has_instance_obj, obj);
   JSONDecoder::decode_json("quota", quota, obj);
-  JSONDecoder::decode_json("num_shards", layout.current_index.layout.normal.num_shards, obj);
-  uint32_t hash_type;
-  JSONDecoder::decode_json("bi_shard_hash_type", hash_type, obj);
-  layout.current_index.layout.normal.hash_type = static_cast<rgw::BucketHashType>(hash_type);
+
   JSONDecoder::decode_json("requester_pays", requester_pays, obj);
   JSONDecoder::decode_json("has_website", has_website, obj);
   if (has_website) {
@@ -2603,10 +2641,56 @@ void RGWBucketInfo::decode_json(JSONObj *obj) {
   if (!sp.empty()) {
     set_sync_policy(std::move(sp));
   }
+
   if (obj_lock_enabled()) {
     JSONDecoder::decode_json("obj_lock", obj_lock, obj);
   }
-}
+
+  // piece together the layout
+
+  uint32_t num_shards;
+  if (! JSONDecoder::decode_json("num_shards", num_shards, obj)) {
+    throw JSONDecoder::err("failed to parse RGWBucketInfo; num_shards not specified");
+  }
+
+  uint32_t min_num_shards = 1;
+  JSONDecoder::decode_json("min_num_shards", min_num_shards, obj);
+
+  rgw::BucketHashType hash_type;
+  {
+    uint32_t hash_type_val;
+    if (JSONDecoder::decode_json("bi_shard_hash_type", hash_type_val, obj)) {
+      hash_type = static_cast<rgw::BucketHashType>(hash_type_val);
+    } else {
+      hash_type = rgw::BucketHashType::Mod;
+    }
+  }
+
+  {
+    rgw::BucketIndexType index_type;
+    uint32_t index_type_val;
+    if (JSONDecoder::decode_json("bi_type", index_type_val, obj)) {
+      index_type = static_cast<rgw::BucketIndexType>(index_type_val);
+    } else {
+      index_type = rgw::BucketIndexType::Hashed;
+    }
+
+    rgw::bucket_index_hashed_layout normal;
+    rgw::bucket_index_ordered_layout ordered;
+    switch (index_type) {
+    case rgw::BucketIndexType::Hashed:
+      normal = rgw::bucket_index_hashed_layout { num_shards, min_num_shards, hash_type };
+      layout.current_index.layout.specs = normal;
+      break;
+    case rgw::BucketIndexType::Ordered:
+      ordered = rgw::bucket_index_ordered_layout { num_shards };
+      layout.current_index.layout.specs = ordered;
+      break;
+    default:
+      throw JSONDecoder::err("failed to parse RGWBucketInfo; bi_type unknown");
+    }
+  } // scope
+} // RGWBucketInfo::decode_json
 
 list<RGWUserInfo> RGWUserInfo::generate_test_instances()
 {

@@ -44,10 +44,10 @@ struct RGWZoneParams;
 // conforms to the type RGWBucketListNameFilter
 extern bool rgw_bucket_object_check_filter(const std::string& oid);
 
-void init_default_bucket_layout(CephContext *cct, rgw::BucketLayout& layout,
-				const RGWZone& zone,
-				std::optional<rgw::BucketIndexType> type,
-				std::optional<uint32_t> shards);
+int init_default_bucket_layout(CephContext *cct, rgw::BucketLayout& layout,
+			       const RGWZone& zone,
+			       std::optional<rgw::BucketIndexType> type,
+			       std::optional<uint32_t> shards);
 
 struct RGWBucketCompleteInfo {
   RGWBucketInfo info;
@@ -376,7 +376,7 @@ public:
 
   const RGWBucketInfo& get_bucket_info() const { return bucket->get_info(); }
   rgw::sal::User* get_user() { return user.get(); }
-};
+}; // class RGWRbucket
 
 class RGWBucketAdminOp {
 public:
@@ -498,7 +498,7 @@ public:
       RGWObjVersionTracker *objv_tracker{nullptr};
       ceph::real_time mtime;
       bool exclusive{false};
-      const std::map<std::string, bufferlist> *attrs{nullptr};
+      const std::map<std::string, bufferlist>* attrs{nullptr};
 
       PutParams() {}
 
@@ -521,7 +521,7 @@ public:
         attrs = _attrs;
         return *this;
       }
-    };
+};
 
     struct RemoveParams {
       RGWObjVersionTracker *objv_tracker{nullptr};
@@ -576,7 +576,8 @@ public:
                                                    nullptr: orig_info was not found (new bucket instance */
       ceph::real_time mtime;
       bool exclusive{false};
-      const std::map<std::string, bufferlist> *attrs{nullptr};
+      const std::map<std::string, bufferlist>* attrs{nullptr};
+      const std::map<std::string, bufferlist>* omap_entries{nullptr};
       RGWObjVersionTracker *objv_tracker{nullptr};
 
       PutParams() {}
@@ -598,6 +599,11 @@ public:
 
       PutParams& set_attrs(const std::map<std::string, bufferlist> *_attrs) {
         attrs = _attrs;
+        return *this;
+      }
+
+      PutParams& set_omap_entries(const std::map<std::string, bufferlist>* entries) {
+	omap_entries = entries;
         return *this;
       }
 

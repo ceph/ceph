@@ -379,7 +379,7 @@ private:
 
     librados::ObjectWriteOperation op;
     op.assert_exists();
-    rados::cls::lock::unlock(&op, m_lock_name, m_lock_cookie);
+    ::rados::cls::lock::unlock(&op, m_lock_name, m_lock_cookie);
     const auto ret = rgw_rados_operate(this, rados_ioctx, list_obj_name,
                                        std::move(op), yield);
     if (ret == -ENOENT) {
@@ -401,10 +401,10 @@ private:
                          optional_yield y) {
     {
       librados::ObjectWriteOperation op;
-      rados::cls::lock::assert_locked(&op, m_lock_name,
-                                      ClsLockType::EXCLUSIVE,
-                                      m_lock_cookie,
-                                      "" /*no tag*/);
+      ::rados::cls::lock::assert_locked(&op, m_lock_name,
+					ClsLockType::EXCLUSIVE,
+					m_lock_cookie,
+					"" /*no tag*/);
       op.remove();
       auto ret = rgw_rados_operate(this, rados_ioctx, commit_list_name, std::move(op), y);
       if (ret < 0 && ret != -ENOENT) {
@@ -476,10 +476,10 @@ private:
         constexpr auto max_chunk = 1024U;
         std::string start_after;
         bool more = true;
-        rados::cls::lock::assert_locked(&op, m_lock_name,
-                                        ClsLockType::EXCLUSIVE,
-                                        m_lock_cookie,
-                                        "" /*no tag*/);
+        ::rados::cls::lock::assert_locked(&op, m_lock_name,
+					  ClsLockType::EXCLUSIVE,
+					  m_lock_cookie,
+					  "" /*no tag*/);
         op.omap_get_vals2(start_after, max_chunk, &entries, &more, &rval);
         op.getxattr(TEMP_POOL_ATTR.c_str(), &pool_obl, &pool_rval);
         // check ownership and list entries in one batch
@@ -672,10 +672,10 @@ private:
                             << dendl;
         librados::ObjectWriteOperation op;
         op.assert_exists();
-        rados::cls::lock::lock(&op, m_lock_name, ClsLockType::EXCLUSIVE,
-                               m_lock_cookie, "" /*no tag*/,
-                               "" /*no description*/, m_failover_time,
-                               LOCK_FLAG_MAY_RENEW);
+        ::rados::cls::lock::lock(&op, m_lock_name, ClsLockType::EXCLUSIVE,
+				 m_lock_cookie, "" /*no tag*/,
+				 "" /*no description*/, m_failover_time,
+				 LOCK_FLAG_MAY_RENEW);
 
         ret = rgw_rados_operate(this, rados_ioctx, list_obj_name, std::move(op), yield);
         if (ret == -EBUSY) {

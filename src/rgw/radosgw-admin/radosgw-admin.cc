@@ -518,6 +518,9 @@ void usage()
   cout << "   --deny-bucket-list=<file>     file with bucket names to deny in dedup (mutually exclusive with --allow-bucket-list)\n";
   cout << "   --allow-storage-class-list=<file> file with storage class names to allow in dedup (mutually exclusive with --deny-storage-class-list)\n";
   cout << "   --deny-storage-class-list=<file>  file with storage class names to deny in dedup (mutually exclusive with --allow-storage-class-list)\n";
+  cout << "\nReshard options:\n";
+  cout << "   --num-shards                  desired number of shards\n";
+  cout << "   --bucket-index-type           desired bucket index type -- \"hashed\" or \"ordered\" or leave blank to maintain current type\n'";
   cout << "\nQuota options:\n";
   cout << "   --max-objects                 specify max objects (negative value to disable)\n";
   cout << "   --max-size                    specify max size (in B/K/M/G/T, negative value to disable)\n";
@@ -3400,8 +3403,11 @@ int check_reshard_bucket_params(rgw::sal::Driver* driver,
     return -EINVAL;
   }
 
-  if (num_shards > (int)static_cast<rgw::sal::RadosStore*>(driver)->getRados()->get_max_bucket_shards()) {
-    cerr << "ERROR: num_shards too high, max value: " << static_cast<rgw::sal::RadosStore*>(driver)->getRados()->get_max_bucket_shards() << std::endl;
+  if (num_shards >
+      int(static_cast<rgw::sal::RadosStore*>(driver)->getRados()->get_max_bucket_shards())) {
+    cerr << "ERROR: num_shards too high, max value: " <<
+      static_cast<rgw::sal::RadosStore*>(driver)->getRados()->get_max_bucket_shards() <<
+      std::endl;
     return -EINVAL;
   }
 
@@ -3416,21 +3422,24 @@ int check_reshard_bucket_params(rgw::sal::Driver* driver,
     return ret;
   }
 
-  if (! is_layout_reshardable((*bucket)->get_info().layout)) {
+  const RGWBucketInfo& bucket_info = (*bucket)->get_info();
+
+  if (! is_layout_reshardable(bucket_info.layout)) {
     std::cerr << "Bucket '" << (*bucket)->get_name() <<
       "' currently has layout '" <<
-      current_layout_desc((*bucket)->get_info().layout) <<
+      current_layout_desc(bucket_info.layout) <<
       "', which does not support resharding." << std::endl;
     return -EINVAL;
   }
 
-  int num_source_shards = rgw::current_num_shards((*bucket)->get_info().layout);
+  int num_source_shards = rgw::current_num_shards(bucket_info.layout);
 
   if (num_shards <= num_source_shards && !yes_i_really_mean_it) {
     cerr << "num shards is less or equal to current shards count" << std::endl
 	 << "do you really mean it? (requires --yes-i-really-mean-it)" << std::endl;
     return -EINVAL;
   }
+
   return 0;
 }
 
@@ -3923,6 +3932,7 @@ int main(int argc, const char **argv)
   int num_shards = 0;
   bool num_shards_specified = false;
   std::optional<int> bucket_index_max_shards;
+  std::optional<rgw::BucketIndexType> bucket_index_type;
 
   int max_concurrent_ios = 32;
   ceph::timespan min_age = std::chrono::hours(1);
@@ -3950,7 +3960,7 @@ int main(int argc, const char **argv)
   boost::optional<string> data_pool;
   boost::optional<string> data_extra_pool;
 #ifdef WITH_RADOSGW_RADOS
-  rgw::BucketIndexType placement_index_type = rgw::BucketIndexType::Normal;
+  rgw::BucketIndexType placement_index_type = rgw::BucketIndexType::Hashed;
   bool index_type_specified = false;
 #endif
 
@@ -4288,6 +4298,16 @@ int main(int argc, const char **argv)
         cerr << "ERROR: failed to parse bucket-index-max-shards: " << err << std::endl;
         return EINVAL;
       }
+    } else if (ceph_argparse_witharg(args, i, &val, "--bucket-index-type", (char*)NULL)) {
+      parse(val, bucket_index_type);
+      if (! bucket_index_type.has_value()) {
+	std::cerr << "ERROR: --index_type, when specified, must \"hashed\", or \"ordered\"" <<
+	  std::endl;
+	return EINVAL;
+      } else if (bucket_index_type.value() == rgw::BucketIndexType::Indexless) {
+	std::cerr << "ERROR: --index_type cannot be set to Indexless" << std::endl;
+	return EINVAL;
+      }
     } else if (ceph_argparse_witharg(args, i, &val, "--max-concurrent-ios", (char*)NULL)) {
       max_concurrent_ios = (int)strict_strtol(val.c_str(), 10, &err);
       if (!err.empty()) {
@@ -4518,7 +4538,7 @@ int main(int argc, const char **argv)
 #ifdef WITH_RADOSGW_RADOS
     } else if (ceph_argparse_witharg(args, i, &val, "--placement-index-type", (char*)NULL)) {
       if (val == "normal") {
-        placement_index_type = rgw::BucketIndexType::Normal;
+        placement_index_type = rgw::BucketIndexType::Hashed;
       } else if (val == "indexless") {
         placement_index_type = rgw::BucketIndexType::Indexless;
       } else {
@@ -8636,20 +8656,28 @@ next:
       max_entries << ", index=" << index << ", max_shards=" << max_shards <<
       dendl;
 
-    formatter->open_array_section("entries");
+    RGWRados* rados = static_cast<rgw::sal::RadosStore*>(driver)->getRados();
+    auto bindexer = rados->svc.bi_rados->create_bindexer(
+      dpp(), bucket->get_info());
 
-    auto rados = static_cast<rgw::sal::RadosStore*>(driver)->getRados();
-    int i = (specified_shard_id ? shard_id : 0);
-    for (; i < max_shards; i++) {
-      ldpp_dout(dpp(), 20) << "INFO: " << __func__ << ": starting shard=" <<
-	i << dendl;
+    auto shard_iterator =  bindexer->create_shard_iterator();
+    if (!shard_iterator.valid()) {
+      // if not immediately valid indicates an error
+      ldpp_dout(dpp(), 20) << "ERROR: " << __func__ <<
+        ": could not create shard iterator for bucket " << bucket << dendl;
+    }
+
+    formatter->open_array_section("entries");
+    for (; shard_iterator.valid(); shard_iterator.next()) {
       marker.clear();
 
-      RGWRados::BucketShard bs(rados);
-      int ret = bs.init(dpp(), bucket->get_info(), index, i, null_yield);
+      const auto shard_ident_p = shard_iterator.get_ident();
+      RGWRados::BucketShard bs(static_cast<rgw::sal::RadosStore*>(driver)->getRados());
+      int ret = bs.init(dpp(), shard_iterator, null_yield);
       if (ret < 0) {
 	ldpp_dout(dpp(), 0) << "ERROR: bs.init(bucket=" << bucket <<
-	  ", shard=" << i << "): " << cpp_strerror(-ret) << dendl;
+          ", shard=" << *shard_ident_p <<
+	  "): " << cpp_strerror(-ret) << dendl;
         return -ret;
       }
 
@@ -9104,7 +9132,7 @@ next:
     } else if (inject_delay_at) {
       fault.inject(*inject_delay_at, InjectDelay{inject_delay, dpp()});
     }
-    ret = br.execute(num_shards, fault, max_entries,
+    ret = br.execute(num_shards, bucket_index_type, fault, max_entries,
 		     cls_rgw_reshard_initiator::Admin,
 		     dpp(), null_yield,
                      verbose, &cout, formatter.get());
@@ -9134,6 +9162,7 @@ next:
     entry.bucket_id = bucket->get_info().bucket.bucket_id;
     entry.old_num_shards = num_source_shards;
     entry.new_num_shards = num_shards;
+    entry.bucket_index_type = bucket_index_type;
     entry.initiator = cls_rgw_reshard_initiator::Admin;
 
     return reshard.add(dpp(), entry, null_yield);
@@ -9310,19 +9339,26 @@ next:
     }
     auto& bucket_info = bucket->get_info();
 
+    auto hash_layout_p = bucket_info.hashed_layout_ptr();
+
     const rgw::BucketIndexType type =
       bucket_info.layout.current_index.layout.type;
-    if (type != rgw::BucketIndexType::Normal) {
+    if (type != rgw::BucketIndexType::Hashed) {
       cerr << "ERROR: the bucket's layout is type " << type <<
-	" instead of type " << rgw::BucketIndexType::Normal <<
+	" instead of type " << rgw::BucketIndexType::Hashed <<
 	" and therefore does not have a "
 	"minimum number of shards that can be altered" << std::endl;
       return EINVAL;
     }
 
-    uint32_t& min_num_shards =
-      bucket_info.layout.current_index.layout.normal.min_num_shards;
-    min_num_shards = num_shards;
+    if (!hash_layout_p) {
+      cerr << "INTERNAL ERROR: the bucket's layout is type " << type <<
+	" but the data is of a different layout type" << std::endl;
+      return EIO;
+    }
+
+    // copy command-line argument into data structure
+    hash_layout_p->min_num_shards = num_shards;
 
     ret = bucket->put_info(dpp(), false, real_time(), null_yield);
     if (ret < 0) {

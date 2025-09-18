@@ -82,14 +82,25 @@ protected:
                         RGWObjVersionTracker *objv_tracker,
                         bool exclusive, optional_yield y);
 
-  virtual int omap_get_all(const DoutPrefixProvider *dpp, const rgw_raw_obj& obj, std::map<std::string, bufferlist> *m,
+  virtual int omap_get_all(const DoutPrefixProvider *dpp,
+                           const rgw_raw_obj& obj,
+                           std::map<std::string, bufferlist> *m,
                            optional_yield y);
-  virtual int omap_get_vals(const DoutPrefixProvider *dpp, 
+  virtual int omap_get_vals(const DoutPrefixProvider *dpp,
                             const rgw_raw_obj& obj,
                             const std::string& marker,
                             uint64_t count,
                             std::map<std::string, bufferlist> *m,
                             bool *pmore,
+                            optional_yield y);
+  virtual int omap_get_vals(const DoutPrefixProvider* dpp,
+                            const rgw_raw_obj& obj,
+                            const std::string& marker,
+                            const std::string& prefix,
+                            uint64_t count,
+                            const std::string* default_key,
+                            std::map<std::string, bufferlist>* m,
+                            bool* pmore,
                             optional_yield y);
   virtual int omap_set(const DoutPrefixProvider *dpp, 
                        const rgw_raw_obj& obj, const std::string& key,

@@ -623,7 +623,7 @@ namespace rgw::dedup {
       ldpp_dout(dpp, 10) << __func__ << "::try garbbing " << oid << dendl;
       librados::ObjectWriteOperation op;
       op.assert_exists();
-      rados::cls::lock::lock(&op, oid, ClsLockType::EXCLUSIVE, d_lock_cookie,
+      ::rados::cls::lock::lock(&op, oid, ClsLockType::EXCLUSIVE, d_lock_cookie,
                              lock_tag, "dedup_shard_token", lock_duration, lock_flags);
       ret = rgw_rados_operate(dpp, ctl_ioctx, oid, std::move(op), null_yield);
       if (ret == -EBUSY) {

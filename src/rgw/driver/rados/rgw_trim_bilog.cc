@@ -782,7 +782,7 @@ int BucketTrimInstanceCR::operate(const DoutPrefixProvider *dpp)
 	yield call(new RGWPutBucketInstanceInfoCR(
 		     store->svc()->async_processor,
 		     store, clean_info->first, false, {},
-		     no_change_attrs(), dpp));
+		     no_change_attrs_omap(), dpp));
 
 	// Raced, try again.
 	if (retcode == -ECANCELED) {
@@ -841,7 +841,7 @@ int BucketTrimInstanceCR::operate(const DoutPrefixProvider *dpp)
 
       // initialize each shard with the maximum marker, which is only used when
       // there are no peers syncing from us
-      min_markers.assign(std::max(1u, rgw::num_shards(totrim.layout.in_index)),
+      min_markers.assign(std::max((rgw::BIShardIndex) 1u, rgw::num_shards(totrim.layout.in_index)),
 			 RGWSyncLogTrimCR::max_marker);
 
       retcode = take_min_status(cct, totrim.gen, peer_status.cbegin(),

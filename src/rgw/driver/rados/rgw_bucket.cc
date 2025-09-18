@@ -355,6 +355,10 @@ static int check_bad_index_multipart(rgw::sal::RadosStore* const rados_store,
 				     const int shard,
 				     optional_yield y)
 {
+#if 1
+  // OB: push ordered bucket indexes here
+  return 0;
+#else
   RGWRados* store = rados_store->getRados();
   RGWRados::BucketShard bs(store);
 
@@ -486,6 +490,7 @@ static int check_bad_index_multipart(rgw::sal::RadosStore* const rados_store,
   flusher.flush();
 
   return 0;
+#endif
 } // static ::check_bad_index_multipart
 #endif
 
@@ -516,13 +521,13 @@ int RGWBucket::check_bad_index_multipart(rgw::sal::RadosStore* const rados_store
   formatter->open_array_section("invalid_multipart_entries");
 
   const auto& index_layout = bucket_info.layout.current_index.layout;
-  if (index_layout.type != rgw::BucketIndexType::Normal) {
+  if (index_layout.type != rgw::BucketIndexType::Hashed) {
     ldpp_dout(dpp, 0) << "ERROR: cannot check bucket indices with layouts of type " <<
       current_layout_desc(bucket_info.layout) <<
       " for bad multipart entries" << dendl;
     return -EINVAL;
   }
-  const int num_shards = rgw::num_shards(index_layout.normal);
+  const int num_shards = rgw::num_shards(index_layout.specs);
   int next_shard = 0;
 
   boost::asio::io_context context;
@@ -566,7 +571,7 @@ int RGWBucket::check_bad_index_multipart(rgw::sal::RadosStore* const rados_store
 }
 #endif
 
-int RGWBucket::check_object_index(const DoutPrefixProvider *dpp, 
+int RGWBucket::check_object_index(const DoutPrefixProvider *dpp,
                                   RGWBucketAdminOpState& op_state,
                                   RGWFormatterFlusher& flusher,
                                   optional_yield y,
@@ -630,10 +635,14 @@ static int check_index_olh(rgw::sal::RadosStore* const rados_store,
                            const DoutPrefixProvider *dpp,
                            RGWBucketAdminOpState& op_state,
                            RGWFormatterFlusher& flusher,
-                           const int shard, 
+                           const int shard,
                            uint64_t* const count_out,
                            optional_yield y)
 {
+#if 1
+  // OBI: push ordered bucket indexes here
+  return 0;
+#else
   string marker = BI_OLH_ENTRY_NS_START;
   bool is_truncated = true;
   list<rgw_cls_bi_entry> entries;
@@ -647,7 +656,7 @@ static int check_index_olh(rgw::sal::RadosStore* const rados_store,
     ldpp_dout(dpp, -1) << "ERROR bs.init(bucket=" << bucket << "): " << cpp_strerror(-ret) << dendl;
     return ret;
   }
-  
+
   *count_out = 0;
   do {
     entries.clear();
@@ -709,6 +718,7 @@ static int check_index_olh(rgw::sal::RadosStore* const rados_store,
   } while (is_truncated);
   flusher.flush();
   return 0;
+#endif
 }
 #endif
 
@@ -735,26 +745,26 @@ int RGWBucket::check_index_olh(rgw::sal::RadosStore* const rados_store,
     ldpp_dout(dpp, 0) << "WARNING: this command is only applicable to versioned buckets" << dendl;
     return 0;
   }
-  
+
   Formatter* formatter = flusher.get_formatter();
   if (op_state.dump_keys) {
     formatter->open_array_section("");
   }
 
   const auto& index_layout = bucket_info.layout.current_index.layout;
-  if (index_layout.type != rgw::BucketIndexType::Normal) {
+  if (index_layout.type != rgw::BucketIndexType::Hashed) {
     ldpp_dout(dpp, 0) << "ERROR: cannot check bucket indices with layouts of type " <<
       current_layout_desc(bucket_info.layout) <<
       " for bad OLH entries" << dendl;
     return -EINVAL;
   }
-  const int max_shards = rgw::num_shards(index_layout.normal);
+  const int max_shards = rgw::num_shards(index_layout.specs);
   std::string verb = op_state.will_fix_index() ? "removed" : "found";
   uint64_t count_out = 0;
-  
+
   boost::asio::io_context context;
   int next_shard = 0;
-  
+
   const int max_aio = std::max(1, op_state.get_max_aio());
 
   for (int i=0; i<max_aio; i++) {
@@ -769,7 +779,7 @@ int RGWBucket::check_index_olh(rgw::sal::RadosStore* const rados_store,
         uint64_t shard_count;
         int r = ::check_index_olh(rados_store, &*bucket, dpp, op_state, flusher, shard, &shard_count, y);
         if (r < 0) {
-          ldpp_dout(dpp, -1) << "NOTICE: error processing shard " << shard << 
+          ldpp_dout(dpp, -1) << "NOTICE: error processing shard " << shard <<
             " check_index_olh(): " << r << dendl;
         }
         count_out += shard_count;
@@ -858,10 +868,14 @@ static int check_index_unlinked(rgw::sal::RadosStore* const rados_store,
                                 const DoutPrefixProvider *dpp,
                                 RGWBucketAdminOpState& op_state,
                                 RGWFormatterFlusher& flusher,
-                                const int shard, 
+                                const int shard,
                                 uint64_t* const count_out,
                                 optional_yield y)
 {
+#if 1
+  // OBI: push ordered bucket indexes here
+  return 0;
+#else
   string marker = BI_INSTANCE_ENTRY_NS_START;
   bool is_truncated = true;
   list<rgw_cls_bi_entry> entries;
@@ -878,7 +892,7 @@ static int check_index_unlinked(rgw::sal::RadosStore* const rados_store,
 
   ceph::real_clock::time_point now = ceph::real_clock::now();
   ceph::real_clock::time_point not_after = now - op_state.min_age;
-  
+
   *count_out = 0;
   do {
     entries.clear();
@@ -941,6 +955,7 @@ static int check_index_unlinked(rgw::sal::RadosStore* const rados_store,
   } while (is_truncated);
   flusher.flush();
   return 0;
+#endif
 }
 
 /**
@@ -957,7 +972,7 @@ int RGWBucket::check_index_unlinked(rgw::sal::RadosStore* const rados_store,
     ldpp_dout(dpp, 0) << "WARNING: this command is only applicable to versioned buckets" << dendl;
     return 0;
   }
-  
+
   Formatter* formatter = flusher.get_formatter();
   if (op_state.dump_keys) {
     formatter->open_array_section("");
@@ -966,7 +981,7 @@ int RGWBucket::check_index_unlinked(rgw::sal::RadosStore* const rados_store,
   const int max_shards = rgw::num_shards(bucket_info.layout.current_index);
   std::string verb = op_state.will_fix_index() ? "removed" : "found";
   uint64_t count_out = 0;
-  
+
   int max_aio = std::max(1, op_state.get_max_aio());
   int next_shard = 0;
   boost::asio::io_context context;
@@ -981,7 +996,7 @@ int RGWBucket::check_index_unlinked(rgw::sal::RadosStore* const rados_store,
         uint64_t shard_count = 0;
         int r = ::check_index_unlinked(rados_store, &*bucket, dpp, op_state, flusher, shard, &shard_count, yield);
         if (r < 0) {
-          ldpp_dout(dpp, -1) << "ERROR: error processing shard " << shard << 
+          ldpp_dout(dpp, -1) << "ERROR: error processing shard " << shard <<
             " check_index_unlinked(): " << r << dendl;
         }
         count_out += shard_count;
@@ -1453,17 +1468,17 @@ int RGWBucketAdminOp::check_index(rgw::sal::Driver* driver,
   }
 
   dump_index_check(existing_stats, calculated_stats, formatter);
-  
+
   formatter->close_section();
   flusher.flush();
 
   return 0;
-}
+} // RGWBucketAdminOp::check_index
 #endif
 
 int RGWBucketAdminOp::remove_bucket(rgw::sal::Driver* driver, const rgw::SiteConfig& site,
                                     RGWBucketAdminOpState& op_state,
-				    optional_yield y, const DoutPrefixProvider *dpp, 
+				    optional_yield y, const DoutPrefixProvider *dpp,
                                     bool bypass_gc, bool keep_index_consistent, bool forwarded_request)
 {
   std::unique_ptr<rgw::sal::Bucket> bucket;
@@ -1642,8 +1657,11 @@ static int bucket_stats(rgw::sal::Driver* driver, const rgw::SiteConfig& site,
   ::encode_json("explicit_placement", bucket->get_key().explicit_placement, formatter);
   formatter->dump_string("id", bucket->get_bucket_id());
   formatter->dump_string("marker", bucket->get_marker());
-  formatter->dump_stream("index_type") << index.layout.type;
-  formatter->dump_int("index_generation", index.gen);
+
+  formatter->dump_stream("index_type") << bucket_info.layout.current_index.layout.type;
+  formatter->dump_int("index_generation", bucket_info.layout.current_index.gen);
+  formatter->dump_int("num_shards",
+		      rgw::num_shards(bucket_info.layout.current_index.layout.specs));
   formatter->dump_string("reshard_status", to_string(bucket_info.layout.resharding));
   logrecord_ut.gmtime(formatter->dump_stream("judge_reshard_lock_time"));
   formatter->dump_bool("object_lock_enabled", bucket_info.obj_lock_enabled());
@@ -1683,7 +1701,7 @@ static int bucket_stats(rgw::sal::Driver* driver, const rgw::SiteConfig& site,
     bufferlist::const_iterator piter{&iter->second};
     try {
       tagset.decode(piter);
-      tagset.dump(formatter); 
+      tagset.dump(formatter);
     } catch (buffer::error& err) {
       cerr << "ERROR: caught buffer:error, couldn't decode TagSet" << std::endl;
     }
@@ -1766,7 +1784,7 @@ int RGWBucketAdminOp::limit_check(rgw::sal::Driver* driver,
 	  num_objects += s.second.num_objects;
 	}
 
-	const uint32_t num_shards = rgw::num_shards(index.layout.normal);
+	const uint32_t num_shards = rgw::num_shards(index.layout.specs);
 	uint64_t objs_per_shard =
 	  (num_shards) ? num_objects/num_shards : num_objects;
 	{
@@ -2995,7 +3013,11 @@ int RGWBucketInstanceMetadataHandler::put(std::string& entry, RGWMetadataObject*
   RGWBucketInfo* old_info = (old ? &old->info : nullptr);
   auto mtime = obj->get_mtime();
   ret = svc_bucket->store_bucket_instance_info(entry, bci.info, old_info, false,
-                                               mtime, &bci.attrs, y, dpp);
+                                               mtime,
+					       &bci.attrs,
+// OBI: is nullptr appropriate here?
+					       nullptr,
+					       y, dpp);
   if (ret < 0) {
     return ret;
   }
@@ -3005,31 +3027,54 @@ int RGWBucketInstanceMetadataHandler::put(std::string& entry, RGWMetadataObject*
 }
 #endif
 
-void init_default_bucket_layout(CephContext *cct, rgw::BucketLayout& layout,
+int init_default_bucket_layout(CephContext *cct, rgw::BucketLayout& layout,
 				const RGWZone& zone,
 				std::optional<rgw::BucketIndexType> type,
 				std::optional<uint32_t> shards) {
   layout.current_index.gen = 0;
-  layout.current_index.layout.normal.hash_type = rgw::BucketHashType::Mod;
-
   layout.current_index.layout.type =
-    type.value_or(rgw::BucketIndexType::Normal);
+    type.value_or(rgw::BucketIndexType::Hashed);
 
-  if (shards) {
-    layout.current_index.layout.normal.num_shards = *shards;
-    layout.current_index.layout.normal.min_num_shards = *shards;
-  } else if (cct->_conf->rgw_override_bucket_index_max_shards > 0) {
-    layout.current_index.layout.normal.num_shards =
-      cct->_conf->rgw_override_bucket_index_max_shards;
-  } else {
-    layout.current_index.layout.normal.num_shards =
-      zone.bucket_index_max_shards;
-  }
+  if (layout.current_index.layout.type == rgw::BucketIndexType::Hashed) {
+    rgw::bucket_index_hashed_layout hash_layout;
 
-  if (layout.current_index.layout.type == rgw::BucketIndexType::Normal) {
+    hash_layout.hash_type = rgw::BucketHashType::Mod;
+
+    if (shards) {
+      hash_layout.num_shards = *shards;
+      hash_layout.min_num_shards = *shards;
+    } else if (cct->_conf->rgw_override_bucket_index_max_shards > 0) {
+      hash_layout.num_shards = cct->_conf->rgw_override_bucket_index_max_shards;
+      hash_layout.min_num_shards = cct->_conf->rgw_override_bucket_index_max_shards;
+    } else {
+      hash_layout.num_shards = zone.bucket_index_max_shards;
+      hash_layout.min_num_shards = zone.bucket_index_max_shards;
+    }
+
     layout.logs.push_back(log_layout_from_index(0, layout.current_index));
+
+    layout.current_index.layout.specs = hash_layout;
+  } else if (layout.current_index.layout.type == rgw::BucketIndexType::Ordered) {
+    rgw::bucket_index_ordered_layout ordered_layout;
+
+    if (shards) {
+      ldout(cct, 0) << "WARNING: " << __func__ <<
+        ": suggested number of initial shards for buckets with ordered bucket "
+        "indexes currently ignored" << dendl;
+    }
+    ordered_layout.num_shards = rgw::rados::OrderedBIndexer::get_initial_shard_count();
+
+    layout.current_index.layout.specs = ordered_layout;
+  } else {
+    ldout(cct, 0) << "ERROR: " << __func__ <<
+      " called with unknown BucketIndexType" << dendl;
+
+    return -EINVAL;
   }
-}
+
+  return 0;
+} // init_default_bucket_layout
+
 
 #ifdef WITH_RADOSGW_RADOS
 int RGWBucketInstanceMetadataHandler::put_prepare(
@@ -3047,9 +3092,12 @@ int RGWBucketInstanceMetadataHandler::put_prepare(
     } else {
       // replace peer's layout with default-constructed, then apply our defaults
       bci.info.layout = rgw::BucketLayout{};
-      init_default_bucket_layout(dpp->get_cct(), bci.info.layout,
-				 svc_zone->get_zone(),
-				 std::nullopt, std::nullopt);
+      int ret = init_default_bucket_layout(dpp->get_cct(), bci.info.layout,
+					   svc_zone->get_zone(),
+					   std::nullopt, std::nullopt);
+      if (ret < 0) {
+	return ret;
+      }
     }
   }
 
@@ -3106,9 +3154,9 @@ int RGWBucketInstanceMetadataHandler::put_prepare(
   /* record the read version (if any), store the new version */
   bci.info.objv_tracker.read_version = objv_tracker.read_version;
   bci.info.objv_tracker.write_version = objv_tracker.write_version;
-  
+
   return 0;
-}
+} // RGWBucketInstanceMetadataHandler::put_prepare
 
 int RGWBucketInstanceMetadataHandler::put_post(
     const DoutPrefixProvider* dpp, optional_yield y,
@@ -3116,10 +3164,16 @@ int RGWBucketInstanceMetadataHandler::put_post(
     const std::optional<RGWBucketCompleteInfo>& old_bci,
     RGWObjVersionTracker& objv_tracker)
 {
-  int ret = svc_bi->init_index(dpp, y, bci.info, bci.info.layout.current_index);
+#warning "init_index here"
+  int ret = svc_bi->init_index(dpp, y,
+			       bci.info,
+			       bci.info.layout.current_index,
+			       nullptr);
   if (ret < 0) {
     return ret;
   }
+
+// OBI: do we need to combine attributes?
 
   /* update lc list on changes to lifecyle policy */
   {
@@ -3403,6 +3457,7 @@ int RGWBucketCtl::store_bucket_instance_info(const rgw_bucket& bucket,
                                                 params.exclusive,
                                                 params.mtime,
                                                 params.attrs,
+						params.omap_entries,
                                                 y,
                                                 dpp);
 }
@@ -3438,14 +3493,18 @@ int RGWBucketCtl::do_store_linked_bucket_info(RGWBucketInfo& info,
                                                    info,
                                                    orig_info,
                                                    exclusive,
-                                                   mtime, pattrs,
+                                                   mtime,
+						   pattrs,
+// OBI: is nullptr appropriate here?
+						   nullptr,
 						   y, dpp);
   if (ret < 0) {
     return ret;
   }
 
-  if (!create_head)
+  if (!create_head) {
     return 0; /* done! */
+  }
 
   RGWBucketEntryPoint entry_point;
   entry_point.bucket = info.bucket;

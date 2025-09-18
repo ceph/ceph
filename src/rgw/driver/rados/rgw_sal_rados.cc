@@ -198,8 +198,9 @@ int RadosBucket::create(const DoutPrefixProvider* dpp,
     // prevent re-creation with different index type or shard count
     if ((params.index_type && *params.index_type !=
          info.layout.current_index.layout.type) ||
-        (params.index_shards && *params.index_shards !=
-         info.layout.current_index.layout.normal.num_shards)) {
+        (params.index_shards &&
+	 (rgw::BIShardIndex) (*params.index_shards) !=
+	 rgw::num_shards(info.layout.current_index.layout))) {
       return -ERR_BUCKET_EXISTS;
     }
     ret = 0;
@@ -774,7 +775,8 @@ int RadosBucket::chown(const DoutPrefixProvider* dpp,
 int RadosBucket::put_info(const DoutPrefixProvider* dpp, bool exclusive, ceph::real_time _mtime, optional_yield y)
 {
   mtime = _mtime;
-  return store->getRados()->put_bucket_instance_info(info, exclusive, mtime, &attrs, dpp, y);
+  // OBI: is nullptr OK here?
+  return store->getRados()->put_bucket_instance_info(info, exclusive, mtime, &attrs, nullptr, dpp, y);
 }
 
 int RadosBucket::check_empty(const DoutPrefixProvider* dpp, optional_yield y)
@@ -850,10 +852,11 @@ int RadosBucket::set_tag_timeout(const DoutPrefixProvider *dpp, optional_yield y
 
 int RadosBucket::purge_instance(const DoutPrefixProvider* dpp, optional_yield y)
 {
-  int max_shards = (info.layout.current_index.layout.normal.num_shards > 0 ? info.layout.current_index.layout.normal.num_shards : 1);
+  int max_shards = (rgw::num_shards(info.layout.current_index.layout.specs) > 0 ?
+		    rgw::num_shards(info.layout.current_index.layout.specs) : 1);
   for (int i = 0; i < max_shards; i++) {
     RGWRados::BucketShard bs(store->getRados());
-    int shard_id = (info.layout.current_index.layout.normal.num_shards > 0  ? i : -1);
+    int shard_id = (rgw::num_shards(info.layout.current_index.layout.specs) > 0 ? i : -1);
     int ret = bs.init(dpp, info, info.layout.current_index, shard_id, y);
     if (ret < 0) {
       cerr << "ERROR: bs.init(bucket=" << info.bucket << ", shard=" << shard_id
@@ -1294,7 +1297,7 @@ int RadosBucket::set_logging_object_name(const std::string& obj_name,
                                objv_tracker,
                                ceph::real_time::clock::now(),
                                y,
-                               no_change_attrs());
+                               no_change_attrs_omap());
   if (ret == -EEXIST) {
     ldpp_dout(dpp, 20) << "INFO: race detected in initializing '" << obj_name_oid << "' with logging object name:'" << obj_name  << "'. ret = " << ret << dendl;
   } else if (ret == -ECANCELED) {

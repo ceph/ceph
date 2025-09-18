@@ -991,7 +991,7 @@ list<cls_rgw_lc_entry> cls_rgw_lc_entry::generate_test_instances()
   return o;
 }
 
-void cls_rgw_lc_obj_head::dump(Formatter *f) const 
+void cls_rgw_lc_obj_head::dump(Formatter *f) const
 {
   encode_json("start_date", start_date, f);
   encode_json("marker", marker, f);
@@ -1022,3 +1022,31 @@ std::ostream& operator<<(std::ostream& out, cls_rgw_reshard_status status) {
 
   return out;
 }
+
+void rgw_ordered_bi_omap_value::dump(Formatter *f) const
+{
+  encode_json("split", split, f);
+  encode_json("shard_ident", shard_ident, f);
+}
+
+std::list<rgw_ordered_bi_omap_value>
+rgw_ordered_bi_omap_value::generate_test_instances()
+{
+  return {};
+}
+
+void rgw_ordered_bi_shard_data::dump(Formatter *f) const
+{
+  encode_json("split", split, f);
+  encode_json("shard_ident", shard_ident, f);
+  encode_json("prev_shard_ident", prev_shard_ident, f);
+  encode_json("next_shard_ident", next_shard_ident, f);
+}
+
+std::list<rgw_ordered_bi_shard_data>
+rgw_ordered_bi_shard_data::generate_test_instances()
+{
+  return {};
+}
+
+

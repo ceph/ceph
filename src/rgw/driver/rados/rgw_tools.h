@@ -87,7 +87,8 @@ int rgw_put_system_obj(const DoutPrefixProvider *dpp, RGWSI_SysObj* svc_sysobj,
                        bufferlist& data, bool exclusive,
                        RGWObjVersionTracker *objv_tracker,
                        real_time set_mtime, optional_yield y,
-                       const std::map<std::string, bufferlist> *pattrs = nullptr);
+                       const std::map<std::string, bufferlist> *pattrs = nullptr,
+                       const std::map<std::string, bufferlist>* omap_entries = nullptr);
 int rgw_get_system_obj(RGWSI_SysObj* svc_sysobj, const rgw_pool& pool,
                        const std::string& key, bufferlist& bl,
                        RGWObjVersionTracker *objv_tracker, real_time *pmtime,
@@ -104,6 +105,28 @@ int rgw_stat_system_obj(const DoutPrefixProvider *dpp, RGWSI_SysObj* svc_sysobj,
                         RGWObjVersionTracker *objv_tracker,
                         real_time *pmtime, uint64_t *psize, optional_yield y,
                         std::map<std::string, bufferlist> *pattrs = nullptr);
+
+/*
+ * parameters:
+ *   after: returned keys must be greater than after
+ *   prefix: all returned entries must begin with prefix
+ *   max: maximum number to return
+ *   default_key: if using after and prefix nothing matches, then return
+ *                this entry instead
+ *   results: key/value pairs
+ *   more: if true additional entries match
+ */
+int rgw_read_system_obj_map(const DoutPrefixProvider *dpp,
+                            RGWSI_SysObj* svc_sysobj,
+                            const rgw_pool& pool,
+                            const std::string& oid,
+                            const std::string& after,
+                            const std::string& prefix,
+                            const uint64_t count,
+                            const std::string* default_key, // nullptr indicates none
+                            std::map<std::string, bufferlist>* results,
+                            bool* more,
+                            optional_yield y);
 
 std::string_view rgw_find_mime_by_ext(std::string_view ext);
 
@@ -180,13 +203,11 @@ void rgw_tools_cleanup();
 /// calls and error handling.
 void rgw_complete_aio_completion(librados::AioCompletion* c, int r);
 
-/// This returns a static, non-NULL pointer, recognized only by
-/// rgw_put_system_obj(). When supplied instead of the attributes, the
-/// attributes will be unmodified.
-///
-// (Currently providing nullptr will wipe all attributes.)
-
-std::map<std::string, ceph::buffer::list>* no_change_attrs();
+/// These return a static, non-NULL pointer, recognized only by
+/// rgw_put_system_obj(). When supplied instead of the attributes/omap
+/// omap), the attributes and omap will be unmodified. Providing
+/// nullptr will wipe all attributes.
+std::map<std::string, ceph::buffer::list>* no_change_attrs_omap();
 
 bool rgw_check_secure_mon_conn(const DoutPrefixProvider *dpp);
 int rgw_clog_warn(librados::Rados* h, const std::string& msg);

@@ -84,7 +84,8 @@ int RGWServices_Def::init(CephContext *cct,
 
   async_processor->start();
   bi_rados->init(zone.get(), driver->getRados()->get_rados_handle(),
-		 bilog_rados.get(), datalog_rados.get());
+		 bilog_rados.get(), datalog_rados.get(), bucket_sobj.get());
+  rgw::rados::BIndexer::init(bucket_sobj.get()); // static init
   bilog_rados->init(bi_rados.get());
   bucket_sobj->init(zone.get(), sysobj.get(), sysobj_cache.get(),
                     bi_rados.get(), mdlog.get(),

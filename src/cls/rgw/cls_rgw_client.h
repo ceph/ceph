@@ -16,6 +16,9 @@
 #include "common/ceph_mutex.h"
 
 
+extern const bufferlist cls_rgw_empty_buffer_list;
+
+
 class RGWGetDirHeader_CB : public boost::intrusive_ref_counter<RGWGetDirHeader_CB> {
 public:
   virtual ~RGWGetDirHeader_CB() {}
@@ -126,8 +129,12 @@ public:
 };
 
 /* bucket index */
-void cls_rgw_bucket_init_index(librados::ObjectWriteOperation& o);
-void cls_rgw_bucket_init_index2(librados::ObjectWriteOperation& o);
+void cls_rgw_bucket_init_index(librados::ObjectWriteOperation& o,
+			       rgw::BucketIndexType type = rgw::BucketIndexType::Hashed,
+			       const bufferlist& index_type_data = cls_rgw_empty_buffer_list);
+void cls_rgw_bucket_init_index2(librados::ObjectWriteOperation& o,
+				rgw::BucketIndexType type = rgw::BucketIndexType::Hashed,
+				const bufferlist& index_type_data = cls_rgw_empty_buffer_list);
 
 void cls_rgw_bucket_set_tag_timeout(librados::ObjectWriteOperation& op,
                                     uint64_t timeout);

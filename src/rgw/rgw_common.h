@@ -71,6 +71,11 @@ struct RGWProcessEnv;
 
 using ceph::crypto::MD5;
 
+// used for version 1 of ordered bucket indexes, where shard
+// cut-points are stored as keys in the omap for bucket instance
+// object (aka bucket_info)
+#define RGW_ATTR_OBI1_KEY_PREFIX "obi1."
+
 #define RGW_ATTR_PREFIX  "user.rgw."
 
 #define RGW_HTTP_RGWX_ATTR_PREFIX "RGWX_ATTR_"
@@ -1167,6 +1172,27 @@ struct RGWBucketInfo {
   }
   rgw::bucket_index_layout_generation& get_current_index() {
     return layout.current_index;
+  }
+
+  const rgw::bucket_index_hashed_layout* hashed_layout_ptr() const {
+    return rgw::hashed_layout_ptr(layout.current_index.layout);
+  }
+  rgw::bucket_index_hashed_layout* hashed_layout_ptr() {
+    return rgw::hashed_layout_ptr(layout.current_index.layout);
+  }
+  const rgw::bucket_index_ordered_layout* ordered_layout_ptr() const {
+    return rgw::ordered_layout_ptr(layout.current_index.layout);
+  }
+  rgw::bucket_index_ordered_layout* ordered_layout_ptr() {
+    return rgw::ordered_layout_ptr(layout.current_index.layout);
+  }
+
+  rgw::BucketIndexType get_current_bucket_index_type() const {
+    return layout.current_index.layout.type;
+  }
+
+  const rgw::LayoutVariant& get_current_layout_variant() const {
+    return layout.current_index.layout.specs;
   }
 
   RGWBucketInfo();

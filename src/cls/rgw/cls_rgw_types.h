@@ -858,11 +858,16 @@ struct rgw_bucket_dir_header {
   bool syncstopped;
   uint32_t reshardlog_entries;
 
+  rgw::BucketIndexType index_type;
+  // contains any data a specific index type (e.g., ordered indices)
+  // needs
+  bufferlist index_type_data;
+
   rgw_bucket_dir_header() : tag_timeout(0), ver(0), master_ver(0), syncstopped(false),
                             reshardlog_entries(0) {}
 
   void encode(ceph::buffer::list &bl) const {
-    ENCODE_START(8, 2, bl);
+    ENCODE_START(9, 2, bl);
     encode(stats, bl);
     encode(tag_timeout, bl);
     encode(ver, bl);
@@ -871,10 +876,11 @@ struct rgw_bucket_dir_header {
     encode(new_instance, bl);
     encode(syncstopped,bl);
     encode(reshardlog_entries, bl);
+    encode(index_type_data, bl);
     ENCODE_FINISH(bl);
   }
   void decode(ceph::buffer::list::const_iterator &bl) {
-    DECODE_START_LEGACY_COMPAT_LEN(8, 2, 2, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(9, 2, 2, bl);
     decode(stats, bl);
     if (struct_v > 2) {
       decode(tag_timeout, bl);
@@ -902,6 +908,11 @@ struct rgw_bucket_dir_header {
       decode(reshardlog_entries, bl);
     } else {
       reshardlog_entries = 0;
+    }
+    if (struct_v >= 9) {
+      decode(index_type_data, bl);
+    } else {
+      index_type_data.clear();
     }
     DECODE_FINISH(bl);
   }
@@ -1426,11 +1437,12 @@ struct cls_rgw_reshard_entry
   uint32_t old_num_shards {0};
   uint32_t new_num_shards {0};
   cls_rgw_reshard_initiator initiator {cls_rgw_reshard_initiator::Unknown};
+  std::optional<rgw::BucketIndexType> bucket_index_type;
 
   cls_rgw_reshard_entry() {}
 
   void encode(ceph::buffer::list& bl) const {
-    ENCODE_START(3, 1, bl);
+    ENCODE_START(4, 1, bl);
     encode(time, bl);
     encode(tenant, bl);
     encode(bucket_name, bl);
@@ -1438,11 +1450,12 @@ struct cls_rgw_reshard_entry
     encode(old_num_shards, bl);
     encode(new_num_shards, bl);
     encode(initiator, bl);
+    encode(bucket_index_type, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(ceph::buffer::list::const_iterator& bl) {
-    DECODE_START(3, bl);
+    DECODE_START(4, bl);
     decode(time, bl);
     decode(tenant, bl);
     decode(bucket_name, bl);
@@ -1458,6 +1471,11 @@ struct cls_rgw_reshard_entry
     } else {
       initiator = cls_rgw_reshard_initiator::Unknown;
     }
+    if (struct_v >= 4) {
+      decode(bucket_index_type, bl);
+    } else {
+      bucket_index_type = std::nullopt;
+    }
     DECODE_FINISH(bl);
   }
 
@@ -1468,3 +1486,79 @@ struct cls_rgw_reshard_entry
   void get_key(std::string *key) const;
 };
 WRITE_CLASS_ENCODER(cls_rgw_reshard_entry)
+
+
+// the bucket instance object for a bucket using ordered bi shards has
+// omap entries where key is split and this is the value
+struct rgw_ordered_bi_omap_value {
+  std::string split; // entries in shard are less than the split
+  rgw::NestedIndex shard_ident;
+
+  rgw_ordered_bi_omap_value() {}
+
+  void encode(ceph::buffer::list& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(split, bl);
+    encode(shard_ident, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(ceph::buffer::list::const_iterator& bl) {
+    DECODE_START(1, bl);
+    decode(split, bl);
+    decode(shard_ident, bl);
+    DECODE_FINISH(bl);
+  }
+
+  void dump(ceph::Formatter *f) const;
+
+  friend std::ostream& operator<<(std::ostream& out, const rgw_ordered_bi_omap_value& v) {
+    return out << "rgw_ordered_bi_omap_value{ split=\"" << v.split <<
+      "\", shard_ident=" << v.shard_ident << " }";
+  }
+
+  static std::list<rgw_ordered_bi_omap_value> generate_test_instances();
+}; // rgw_ordered_bi_omap_value
+WRITE_CLASS_ENCODER(rgw_ordered_bi_omap_value);
+
+
+// this is what's contained in the data block in every orderd bucket
+// index shard
+struct rgw_ordered_bi_shard_data {
+  std::string split; // all entries are after the split
+  rgw::NestedIndex shard_ident;
+  rgw::NestedIndex prev_shard_ident;
+  rgw::NestedIndex next_shard_ident;
+
+  rgw_ordered_bi_shard_data() {}
+
+  void encode(ceph::buffer::list& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(split, bl);
+    encode(shard_ident, bl);
+    encode(prev_shard_ident, bl);
+    encode(next_shard_ident, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(ceph::buffer::list::const_iterator& bl) {
+    DECODE_START(1, bl);
+    decode(split, bl);
+    decode(shard_ident, bl);
+    decode(prev_shard_ident, bl);
+    decode(next_shard_ident, bl);
+    DECODE_FINISH(bl);
+  }
+
+  void dump(ceph::Formatter *f) const;
+
+  friend std::ostream& operator<<(std::ostream& out, const rgw_ordered_bi_shard_data& v) {
+    return out << "rgw_ordered_bi_shard_data{ split=\"" << v.split <<
+      "\", shard_ident=" << v.shard_ident <<
+      ", prev_shard_ident=" << v.prev_shard_ident <<
+      ", next_shard_ident=" << v.next_shard_ident << " }";
+  }
+
+  static std::list<rgw_ordered_bi_shard_data> generate_test_instances();
+}; // rgw_ordered_bi_shard_data
+WRITE_CLASS_ENCODER(rgw_ordered_bi_shard_data);

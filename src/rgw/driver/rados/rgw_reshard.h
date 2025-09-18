@@ -111,7 +111,9 @@ public:
 		   const RGWBucketInfo& _bucket_info,
 		   const std::map<std::string, bufferlist>& _bucket_attrs,
 		   RGWBucketReshardLock* _outer_reshard_lock);
-  int execute(int num_shards, ReshardFaultInjector& f,
+  int execute(int num_shards,
+	      const std::optional<rgw::BucketIndexType> bindex_type,
+	      ReshardFaultInjector& f,
               int max_op_entries, const cls_rgw_reshard_initiator initiator,
 	      const DoutPrefixProvider *dpp, optional_yield y,
               bool verbose = false, std::ostream *out = nullptr,
