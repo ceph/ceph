@@ -250,7 +250,7 @@ describe('NavigationComponent', () => {
         '.tc_submenuitem_rgw_overview': 'Overview',
         '.tc_submenuitem_rgw_users': 'Users',
         '.tc_submenuitem_rgw_buckets': 'Buckets',
-        '.tc_submenuitem_rgw_topics': 'Topics',
+        '.tc_submenuitem_rgw_topics': 'Events',
         '.tc_submenuitem_rgw_multi-site': 'Multi-site',
         '.tc_submenuitem_rgw_daemons': 'Gateways',
         '.tc_submenuitem_rgw_nfs': 'NFS',
