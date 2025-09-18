@@ -51,6 +51,7 @@ class MonClient;
 class CommandContext;
 struct OSDPerfMetricQuery;
 struct MDSPerfMetricQuery;
+class StatsAutotuner;
 
 
 struct offline_pg_report {
@@ -199,6 +200,8 @@ private:
   SafeTimer timer;
   Context *tick_event;
   void tick();
+  void try_adjust_stats_period();
+  void adjust_stats_period(int64_t new_period, const std::string &reason);
   void schedule_tick_locked(double delay_sec);
 
   class OSDPerfMetricCollectorListener : public MetricListener {
@@ -261,7 +264,7 @@ private:
 private:
   // -- op tracking --
   OpTracker op_tracker;
-
+  std::unique_ptr<StatsAutotuner> stats_autotuner_;
 public:
   int init(uint64_t gid, entity_addrvec_t client_addrs);
 
@@ -326,5 +329,67 @@ public:
                     std::ostream& ss);
 };
 
+class StatsAutotuner {
+private:
+  int64_t baseline_period_;
+  int64_t changed_stats_period_;
+  utime_t last_period_check_;
+  
+  static constexpr int64_t MAX_PERIOD = 60;
+  static constexpr int64_t RECOVERY_THRESHOLD = 20;
+  
+public:
+  explicit StatsAutotuner(int64_t baseline) 
+    : baseline_period_(baseline), changed_stats_period_(baseline) {}
+  
+  void set_baseline_period(int64_t period) { 
+    baseline_period_ = changed_stats_period_ = period; 
+  }
+
+  void record_our_change(int64_t new_period) {
+    changed_stats_period_ = new_period;  // We changed it
+  }
+
+  bool was_changed_by_user(int64_t current_period) const {
+    return changed_stats_period_ != current_period;
+  }
+  
+  bool should_check_now(utime_t now, double tick_period) {
+    if (now - last_period_check_ > tick_period * 5) {
+      last_period_check_ = now;
+      return true;
+    }
+    return false;
+  }
+  
+  struct AdjustmentResult {
+    bool should_adjust = false;
+    int64_t new_period = 0;
+    std::string reason;
+  };
+  
+  AdjustmentResult evaluate_adjustment(
+      int64_t queue_depth, 
+      int64_t current_period, 
+      int64_t queue_threshold) {
+    
+    if (queue_depth > queue_threshold) {
+      int64_t increment = std::max(int64_t(5), current_period / 4);
+      int64_t new_period = std::min(current_period + increment, MAX_PERIOD);
+      
+      if (new_period > current_period) {
+        return {true, new_period, "high queue depth"};
+      }
+    } else if (current_period > baseline_period_ && queue_depth < RECOVERY_THRESHOLD) {
+      int64_t new_period = std::max(current_period / 2, baseline_period_);
+      
+      if (new_period < current_period) {
+        return {true, new_period, "performance recovered"};
+      }
+    }
+    
+    return {false, current_period, ""};
+  }
+};
 #endif
 

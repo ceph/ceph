@@ -125,7 +125,9 @@ DaemonServer::DaemonServer(MonClient *monc_,
       mds_perf_metric_collector_listener(this),
       mds_perf_metric_collector(mds_perf_metric_collector_listener),
       op_tracker(g_ceph_context, g_ceph_context->_conf->mgr_enable_op_tracker,
-                                 g_ceph_context->_conf->mgr_num_op_tracker_shard)
+                                 g_ceph_context->_conf->mgr_num_op_tracker_shard),
+      stats_autotuner_(std::make_unique<StatsAutotuner>(
+        g_conf().get_val<int64_t>("mgr_stats_period")))
 {
   g_conf().add_observer(this);
   /* define op size and time for mgr daemon */
@@ -424,11 +426,51 @@ void DaemonServer::maybe_ready(int32_t osd_id)
 void DaemonServer::tick()
 {
   dout(10) << dendl;
+  auto tick_period = g_conf().get_val<std::chrono::seconds>("mgr_tick_period").count();
+  utime_t now = ceph_clock_now();
+
+  if (g_conf().get_val<bool>("mgr_stats_period_autotune") &&
+      stats_autotuner_->should_check_now(now, tick_period)) {
+    dout(20) << "checking whether to adjust stats period" << dendl;
+    try_adjust_stats_period();
+  }
   send_report();
   adjust_pgs();
 
   schedule_tick_locked(
     g_conf().get_val<std::chrono::seconds>("mgr_tick_period").count());
+}
+
+void DaemonServer::try_adjust_stats_period() {
+  int64_t queue_depth = msgr->get_dispatch_queue_len();
+  int64_t current_period = g_conf().get_val<int64_t>("mgr_stats_period");
+  int64_t queue_threshold = g_conf().get_val<int64_t>("mgr_stats_period_autotune_queue_threshold");
+  auto result = stats_autotuner_->evaluate_adjustment(queue_depth, current_period, queue_threshold);
+
+  if (result.should_adjust) {
+    adjust_stats_period(result.new_period, result.reason);
+  }
+}
+
+void DaemonServer::adjust_stats_period(int64_t new_period, const std::string& reason) {
+  int64_t current_period = g_conf().get_val<int64_t>("mgr_stats_period");
+
+  if (new_period == current_period) {
+    return;
+  }
+
+  dout(10) << "Adjusting mgr_stats_period from " << current_period
+          << " to " << new_period << " seconds (" << reason << ")" << dendl;
+
+  std::stringstream ss;
+  int r = cct->_conf.set_val("mgr_stats_period", std::to_string(new_period), &ss);
+  if (r != 0) {
+    derr << "Failed to update mgr_stats_period: " << ss.str() << dendl;
+    return;
+  }
+
+  stats_autotuner_->record_our_change(new_period);  // Track that we made this change
+  cct->_conf.apply_changes(nullptr);
 }
 
 // Currently modules do not set health checks in response to events delivered to
@@ -3201,6 +3243,12 @@ void DaemonServer::handle_conf_change(const ConfigProxy& conf,
   if (changed.count("mgr_stats_threshold") || changed.count("mgr_stats_period")) {
     dout(4) << "Updating stats threshold/period on "
             << daemon_connections.size() << " clients" << dendl;
+    if (changed.count("mgr_stats_period")) {
+      int64_t new_period = g_conf().get_val<int64_t>("mgr_stats_period");
+      if (stats_autotuner_->was_changed_by_user(new_period)) {
+        stats_autotuner_->set_baseline_period(new_period); // user changed
+      }
+    }
     // Send a fresh MMgrConfigure to all clients, so that they can follow
     // the new policy for transmitting stats
     finisher.queue(new LambdaContext([this](int r) {
