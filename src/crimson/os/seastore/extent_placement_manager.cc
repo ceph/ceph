@@ -729,6 +729,7 @@ ExtentPlacementManager::BackgroundProcess::reserve_projected_usage(
           if (!res.cleaner_result.is_successful()) {
           ++stats.io_retried_blocked_count_clean;
         }
+        // TODO: add thresholds for number/time of retries on a blocked IO?
         blocking_io = seastar::promise<>();
       }
     } while (blocking_io);
