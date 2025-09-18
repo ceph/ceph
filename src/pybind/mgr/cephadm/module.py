@@ -816,6 +816,35 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
                 timeout = 60
         return self.event_loop.get_result(coro, timeout)
 
+    def update_host_timeout_error(self, host: str, remove: bool = False) -> None:
+        if 'CEPHADM_HOST_TIMEOUT_ERROR' in self.health_checks:
+            hosts = self.health_checks['CEPHADM_HOST_TIMEOUT_ERROR'].get('detail', [])
+        else:
+            hosts = []
+        if remove and host not in hosts:
+            # If the host being removed isn't in the host list, there's no way we'd be removing
+            # the last host from the list, so no need to worry about clearing the warning
+            return
+        elif remove:
+            hosts.remove(host)
+        elif not remove and host in hosts:
+            # If the host was in the host list we got, the warning must already exist and
+            # include the host, so nothing to be done
+            return
+        else:  # not remove and host is not in list case
+            hosts.append(host)
+
+        if not hosts:
+            self.remove_health_warning('CEPHADM_HOST_TIMEOUT_ERROR')
+        else:
+            self.set_health_warning(
+                'CEPHADM_HOST_TIMEOUT_ERROR',
+                f'SSH command execution failed with TimeoutError for {len(hosts)} hosts',
+                len(hosts),
+                hosts
+            )
+        return
+
     @contextmanager
     def async_timeout_handler(self, host: Optional[str] = '',
                               cmd: Optional[str] = '',
@@ -827,6 +856,9 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         try:
             yield
         except (asyncio.TimeoutError, concurrent.futures.TimeoutError):
+            # raise health warning for timeout issue
+            if host:
+                self.update_host_timeout_error(host)
             err_str: str = ''
             if cmd:
                 err_str = f'Command "{cmd}" timed out '
@@ -849,6 +881,9 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
                 err_str += f'on host {host} '
             err_str += f' - {str(e)}'
             raise OrchestratorError(err_str)
+        else:
+            if host:
+                self.update_host_timeout_error(host, remove=True)
 
     def set_container_image(self, entity: str, image: str) -> None:
         self.check_mon_command({
