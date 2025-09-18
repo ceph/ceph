@@ -672,7 +672,7 @@ ExtentPlacementManager::BackgroundProcess::reserve_projected_usage(
     io_usage_t usage)
 {
   if (!is_ready()) {
-    return seastar::now();
+    co_return;
   }
   ceph_assert(!blocking_io);
   // The pipeline configuration prevents another IO from entering
@@ -681,7 +681,7 @@ ExtentPlacementManager::BackgroundProcess::reserve_projected_usage(
 
   auto res = try_reserve_io(usage);
   if (res.is_successful()) {
-    return seastar::now();
+    co_return;
   } else {
     LOG_PREFIX(BackgroundProcess::reserve_projected_usage);
     DEBUG("blocked: inline={}, main={}, cold={}, usage={}",
@@ -702,37 +702,30 @@ ExtentPlacementManager::BackgroundProcess::reserve_projected_usage(
 
     blocking_io = seastar::promise<>();
     auto begin_time = seastar::lowres_system_clock::now();
-    return blocking_io->get_future(
-    ).then([this, usage, FNAME, begin_time] {
-      return seastar::repeat([this, usage, FNAME, begin_time] {
-        ceph_assert(!blocking_io);
-        auto res = try_reserve_io(usage);
-        if (res.is_successful()) {
-          DEBUG("unblocked");
-          assert(stats.io_blocking_num == 1);
-          --stats.io_blocking_num;
-          auto end_time = seastar::lowres_system_clock::now();
-          auto duration = end_time - begin_time;
-          stats.io_blocked_time += std::chrono::duration_cast<
-            std::chrono::milliseconds>(duration).count();
-          return seastar::make_ready_future<seastar::stop_iteration>(
-            seastar::stop_iteration::yes);
-        } else {
-          DEBUG("blocked again: inline={}, main={}, cold={}, usage={}",
-                res.reserve_inline_success,
-                res.cleaner_result.reserve_main_success,
-                res.cleaner_result.reserve_cold_success,
-                usage);
-          abort_io_usage(usage, res);
-          blocking_io = seastar::promise<>();
-          return blocking_io->get_future(
-          ).then([] {
-            return seastar::make_ready_future<seastar::stop_iteration>(
-              seastar::stop_iteration::no);
-          });
-        }
-      });
-    });
+    // we just blocked this IO, now wait until
+    // maybe_wake_blocked_io will set value to blocking_io
+    do {
+      co_await blocking_io->get_future();
+      ceph_assert(!blocking_io);
+      auto res = try_reserve_io(usage);
+      if (res.is_successful()) {
+        DEBUG("unblocked");
+        assert(stats.io_blocking_num == 1);
+        --stats.io_blocking_num;
+        auto end_time = seastar::lowres_system_clock::now();
+        auto duration = end_time - begin_time;
+        stats.io_blocked_time += std::chrono::duration_cast<
+        std::chrono::milliseconds>(duration).count();
+      } else {
+        DEBUG("blocked again: inline={}, main={}, cold={}, usage={}",
+              res.reserve_inline_success,
+              res.cleaner_result.reserve_main_success,
+              res.cleaner_result.reserve_cold_success,
+              usage);
+        abort_io_usage(usage, res);
+        blocking_io = seastar::promise<>();
+      }
+    } while (blocking_io);
   }
 }
 
