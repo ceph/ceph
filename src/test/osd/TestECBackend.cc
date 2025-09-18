@@ -297,6 +297,9 @@ public:
 };
 
 class ECListenerStub : public ECListener {
+
+
+private:
   OSDMapRef osd_map_ref;
   pg_info_t pg_info;
   set<pg_shard_t> backfill_shards;
@@ -458,6 +461,10 @@ public:
   }
 
   void send_message_osd_cluster(vector<std::pair<int, Message *>> &messages, epoch_t from_epoch) override {
+
+  }
+
+  void send_message_osd_cluster(int osd, MOSDPGPush* msg, epoch_t from_epoch) override {
 
   }
 
@@ -1474,6 +1481,27 @@ TEST(ECCommon, decode7) {
   want[shard_id_t(5)].insert(0, 32*1024);
 
   acting_set.insert_range(shard_id_t(0), 3);
+
+  test_decode(k, m, chunk_size, object_size, want, acting_set);
+}
+
+TEST(ECCommon, decode8) {
+  const unsigned int k = 3;
+  const unsigned int m = 2;
+  const uint64_t chunk_size = 64 * 1024;
+  const uint64_t object_size = 672 * 1024;
+
+
+  ECUtil::shard_extent_set_t want(k+m);
+  shard_id_set acting_set;
+  want[shard_id_t(0)].insert(64 * 1024, 64 * 1024);
+  want[shard_id_t(2)].insert(32 * 1024, 32 * 1024);
+  want[shard_id_t(3)].insert(32 * 1024, 64 * 1024);
+  want[shard_id_t(4)].insert(32 * 1024, 64 * 1024);
+
+
+  acting_set.insert(shard_id_t(0));
+  acting_set.insert_range(shard_id_t(2), 2);
 
   test_decode(k, m, chunk_size, object_size, want, acting_set);
 }

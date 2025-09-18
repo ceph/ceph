@@ -18,6 +18,7 @@
 #include "ECUtil.h"
 #include "erasure-code/ErasureCodeInterface.h"
 #include "os/Transaction.h"
+#include "OSDMap.h"
 #include "PGTransaction.h"
 
 namespace ECTransaction {
@@ -105,7 +106,7 @@ class Generate {
   void truncate();
   void overlay_writes();
   void appends_and_clone_ranges();
-  void written_and_present_shards();
+  void written_shards();
   void attr_updates();
 
  public:

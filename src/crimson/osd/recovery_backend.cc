@@ -268,8 +268,9 @@ RecoveryBackend::scan_for_backfill_primary(
 	bool added_default = false;
 	for (auto & shard: backfill_targets) {
 	  if (shard_versions.contains(shard.shard)) {
-	    version = shard_versions.at(shard.shard);
-	    version_map->emplace(object, std::make_pair(shard.shard, version));
+	    auto shard_version = shard_versions.at(shard.shard);
+	    version_map->emplace(object, std::make_pair(shard.shard,
+							shard_version));
 	  } else if (!added_default) {
 	    version_map->emplace(object, std::make_pair(shard_id_t::NO_SHARD,
 							version));
