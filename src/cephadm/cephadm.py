@@ -2863,19 +2863,45 @@ def command_registry_login(ctx: CephadmContext) -> int:
     if ctx.registry_json:
         logger.info('Pulling custom registry login info from %s.' % ctx.registry_json)
         d = get_parm(ctx.registry_json)
-        if d.get('url') and d.get('username') and d.get('password'):
-            ctx.registry_url = d.get('url')
-            ctx.registry_username = d.get('username')
-            ctx.registry_password = d.get('password')
-            registry_login(ctx, ctx.registry_url, ctx.registry_username, ctx.registry_password)
-        else:
-            raise Error('json provided for custom registry login did not include all necessary fields. '
-                        'Please setup json file as\n'
-                        '{\n'
-                        ' "url": "REGISTRY_URL",\n'
-                        ' "username": "REGISTRY_USERNAME",\n'
-                        ' "password": "REGISTRY_PASSWORD"\n'
-                        '}\n')
+        # to support multiple container registries, the command will now accept a list
+        # of dictionaries. For backward compatibility, it will first check for the presence
+        # of the registry_credentials key. If the key is not found, it will fall back to
+        # parsing the old JSON format.
+        example_multi_registry = {
+            'registry_credentials': [
+                {
+                    'url': 'REGISTRY_URL1',
+                    'username': 'REGISTRY_USERNAME1',
+                    'password': 'REGISTRY_PASSWORD1'
+                },
+                {
+                    'url': 'REGISTRY_URL2',
+                    'username': 'REGISTRY_USERNAME2',
+                    'password': 'REGISTRY_PASSWORD2'
+                }
+            ]
+        }
+        registry_creds = d.get('registry_credentials')
+        if not registry_creds:
+            registry_creds = [d]
+        for d in registry_creds:
+            if d.get('url') and d.get('username') and d.get('password'):
+                ctx.registry_url = d.get('url')
+                ctx.registry_username = d.get('username')
+                ctx.registry_password = d.get('password')
+                registry_login(ctx, ctx.registry_url, ctx.registry_username, ctx.registry_password)
+            else:
+                raise Error(
+                    'json provided for custom registry login did not include all necessary fields. '
+                    'Please setup json file as\n'
+                    '{\n'
+                    ' "url": "REGISTRY_URL",\n'
+                    ' "username": "REGISTRY_USERNAME",\n'
+                    ' "password": "REGISTRY_PASSWORD"\n'
+                    '}\n'
+                    'or as below for multiple registry login\n'
+                    f'{json.dumps(example_multi_registry, indent=4)}'
+                )
     elif ctx.registry_url and ctx.registry_username and ctx.registry_password:
         registry_login(ctx, ctx.registry_url, ctx.registry_username, ctx.registry_password)
     else:

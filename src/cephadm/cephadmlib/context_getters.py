@@ -45,7 +45,7 @@ def _get_config_json(option: str) -> Dict[str, Any]:
         return js
 
 
-def get_parm(option: str) -> Dict[str, str]:
+def get_parm(option: str) -> Dict[str, Any]:
     js = _get_config_json(option)
     # custom_config_files is a special field that may be in the config
     # dict. It is used for mounting custom config files into daemon's containers

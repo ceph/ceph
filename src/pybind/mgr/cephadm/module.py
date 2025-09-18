@@ -1316,18 +1316,28 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             return -errno.EINVAL, "", ("Invalid arguments. Please provide arguments <url> <username> <password> "
                                        "or -i <login credentials json file>")
         elif (url and username and password):
-            registry_json = {'url': url, 'username': username, 'password': password}
+            registry_json = {'registry_credentials': [{'url': url, 'username': username, 'password': password}]}
         else:
             assert isinstance(inbuf, str)
             registry_json = json.loads(inbuf)
-            if "url" not in registry_json or "username" not in registry_json or "password" not in registry_json:
-                return -errno.EINVAL, "", ("json provided for custom registry login did not include all necessary fields. "
-                                           "Please setup json file as\n"
-                                           "{\n"
-                                           " \"url\": \"REGISTRY_URL\",\n"
-                                           " \"username\": \"REGISTRY_USERNAME\",\n"
-                                           " \"password\": \"REGISTRY_PASSWORD\"\n"
-                                           "}\n")
+            registry_creds = registry_json.get('registry_credentials')
+            if not registry_creds:
+                if isinstance(registry_json, dict) and all(
+                    isinstance(k, str) and isinstance(v, str) for k, v in registry_json.items()
+                ):
+                    registry_creds = [registry_json]  # type: ignore[list-item]
+                    registry_json = {'registry_credentials': registry_creds}
+                else:
+                    return -errno.EINVAL, "", "Invalid login credentials json file"
+            for d in registry_creds:
+                if "url" not in d or "username" not in d or "password" not in d:
+                    return -errno.EINVAL, "", ("json provided for custom registry login did not include all necessary fields. "
+                                               "Please setup json file as\n"
+                                               "{\n"
+                                               " \"url\": \"REGISTRY_URL\",\n"
+                                               " \"username\": \"REGISTRY_USERNAME\",\n"
+                                               " \"password\": \"REGISTRY_PASSWORD\"\n"
+                                               "}\n")
 
         # verify login info works by attempting login on random host
         host = None
