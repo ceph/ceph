@@ -55,6 +55,7 @@ private:
   Context *m_on_finish;
 
   uint64_t m_max_snaps;
+  uint64_t m_retry_count = 0;
   bool m_has_newer_mirror_snap = false;
   CephContext *m_cct;
 
@@ -75,7 +76,7 @@ private:
   void handle_remove_peer_uuid(int r, cls::rbd::GroupSnapshot group_snap);
 
   void remove_group_snapshot(cls::rbd::GroupSnapshot group_snap);
-  void handle_remove_group_snapshot(int r);
+  void handle_remove_group_snapshot(int r, cls::rbd::GroupSnapshot group_snap);
 
   void remove_snap_metadata();
   void handle_remove_snap_metadata(int r);
