@@ -196,17 +196,12 @@ export class RgwMultisiteZoneFormComponent implements OnInit {
               key,
               value
             }));
-            let placementDataPool = storageClasses['STANDARD']
-              ? storageClasses['STANDARD']['data_pool']
-              : '';
             let placementIndexPool = plc_pool.val.index_pool;
             let placementDataExtraPool = plc_pool.val.data_extra_pool;
-            this.poolList.push({ poolname: placementDataPool });
             this.poolList.push({ poolname: placementIndexPool });
             this.poolList.push({ poolname: placementDataExtraPool });
             this.multisiteZoneForm.get('storageClass').setValue(this.storageClassList[0]['key']);
             this.getStorageClassData(this.storageClassList[0]['key']);
-            this.multisiteZoneForm.get('placementDataPool').setValue(placementDataPool);
             this.multisiteZoneForm.get('placementIndexPool').setValue(placementIndexPool);
             this.multisiteZoneForm.get('placementDataExtraPool').setValue(placementDataExtraPool);
           }
@@ -217,10 +212,10 @@ export class RgwMultisiteZoneFormComponent implements OnInit {
 
   getStorageClassData(storageClass: string) {
     let storageClassSelected = this.storageClassList.find((sc) => sc['key'] === storageClass);
-    this.poolList.push({ poolname: storageClassSelected['value']['data_pool'] });
-    this.multisiteZoneForm
-      .get('storageDataPool')
-      .setValue(storageClassSelected['value']['data_pool']);
+    let dataPoolName = storageClassSelected['value']['data_pool'];
+    this.poolList.push({ poolname: dataPoolName });
+    this.multisiteZoneForm.get('storageDataPool').setValue(dataPoolName);
+    this.multisiteZoneForm.get('placementDataPool').setValue(dataPoolName);
     this.multisiteZoneForm
       .get('storageCompression')
       .setValue(storageClassSelected['value']['compression_type']);
