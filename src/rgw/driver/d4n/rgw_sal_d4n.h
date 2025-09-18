@@ -300,6 +300,7 @@ class D4NFilterObject : public FilterObject {
     bool exists(void) override { if (exists_in_cache) { return true;} return next->exists(); };
     bool load_obj_from_store() { return load_from_store; }
     void set_load_obj_from_store(bool load_from_store) { this->load_from_store = load_from_store; }
+    int delete_cache_entry(const DoutPrefixProvider* dpp, const std::string key, optional_yield y);
     void set_cache_request() { cache_request = true; }
     bool is_cache_request() { return cache_request; }
 };
