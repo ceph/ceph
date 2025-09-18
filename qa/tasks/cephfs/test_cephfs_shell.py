@@ -833,7 +833,7 @@ class TestDF(TestCephFSShell):
     def test_df_for_invalid_directory(self):
         dir_abspath = path.join(self.mount_a.mountpoint, 'non-existent-dir')
         self.negtest_cephfs_shell_cmd(cmd='df ' + dir_abspath,
-                                      errmsg='error in stat')
+                                      errmsg='statfs failed')
 
     def test_df_for_valid_file(self):
         s = 'df test' * 14145016
