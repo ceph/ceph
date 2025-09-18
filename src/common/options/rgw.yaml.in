@@ -4124,6 +4124,13 @@ options:
   default: /tmp/rgw_posix_driver
   services:
   - rgw
+- name: rgw_posix_userdb_dir
+  type: str
+  level: advanced
+  desc: path for the directory for storing the User db
+  default: /var/lib/ceph/radosgw
+  services:
+  - rgw
 - name: rgw_posix_database_root
   type: str
   level: advanced

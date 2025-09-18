@@ -481,7 +481,7 @@ public:
   POSIXDriver(CephContext *_cct) : StoreDriver(), cct(_cct), zone(this)
   {
     const static std::string tenant = "default_ns";
-    const auto& db_path = g_conf().get_val<std::string>("dbstore_db_dir");
+    const auto& db_path = g_conf().get_val<std::string>("rgw_posix_userdb_dir");
     const auto& db_name = g_conf().get_val<std::string>("dbstore_db_name_prefix") + "-" + tenant;
     auto db_full_path = std::filesystem::path(db_path) / db_name;
     
