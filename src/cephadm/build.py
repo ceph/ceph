@@ -301,13 +301,16 @@ def _ignore_cephadmlib(
 def _compile(dest, tempdir):
     """Compile the zipapp."""
     log.info("Byte-compiling py to pyc")
-    compileall.compile_dir(
+    ok = compileall.compile_dir(
         tempdir,
         maxlevels=16,
         legacy=True,
         quiet=1,
         workers=0,
     )
+    if not ok:
+        log.error("compileall.compile_dir failed (see output for details)")
+        raise ValueError("byte-compile failed")
     # TODO we could explicitly pass a python version here
     log.info("Constructing the zipapp file")
     try:
