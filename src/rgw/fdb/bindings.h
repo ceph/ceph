@@ -191,12 +191,17 @@ inline bool get(ceph::libfdb::transaction_handle txn, auto& key, std::invocable 
  return true;
 }
 
-template <typename K>
-inline bool key_exists(transaction_handle txn, K k)
+inline bool key_exists(transaction_handle txn, const auto& k, const commit_after_op commit_after)
 {
  auto bit_bucket = [](auto) {};
 
- return ceph::libfdb::detail::get_single_value_from_transaction(txn, detail::as_fdb_span(k), bit_bucket);
+ auto r = ceph::libfdb::detail::get_single_value_from_transaction(txn, detail::as_fdb_span(k), bit_bucket);
+
+ if(commit_after_op::commit == commit_after) {
+  txn->commit();
+ }
+
+ return r;
 }
 
 } // namespace ceph::libfdb

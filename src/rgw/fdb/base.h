@@ -298,6 +298,8 @@ class transaction final
  void destroy() { txn_ptr.reset(); }
 
  private:
+ friend inline bool key_exists(transaction_handle, const auto& K, const commit_after_op);
+
  friend inline bool get(ceph::libfdb::transaction_handle, const auto&, auto&, const commit_after_op);
  friend inline bool get(ceph::libfdb::transaction_handle, const ceph::libfdb::select&, auto, const commit_after_op);
 

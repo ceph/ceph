@@ -222,17 +222,17 @@ TEST_CASE("fdb simple", "[rgw][fdb]") {
     lfdb::erase(lfdb::make_transaction(dbh), k, lfdb::commit_after_op::commit);
 
     // Now, we shouldn't find anything:
-    CHECK_FALSE(lfdb::key_exists(lfdb::make_transaction(dbh), k));
+    CHECK_FALSE(lfdb::key_exists(lfdb::make_transaction(dbh), k, lfdb::commit_after_op::no_commit));
 
     // Write the key:
     lfdb::set(lfdb::make_transaction(dbh), k, v, lfdb::commit_after_op::commit);
 
     // ...it should magically be there!
-    CHECK(lfdb::key_exists(lfdb::make_transaction(dbh), k));
+    CHECK(lfdb::key_exists(lfdb::make_transaction(dbh), k, lfdb::commit_after_op::no_commit));
 
     // ...and now it should be gone again:
     lfdb::erase(lfdb::make_transaction(dbh), k, lfdb::commit_after_op::commit);
-    CHECK_FALSE(lfdb::key_exists(lfdb::make_transaction(dbh), k));
+    CHECK_FALSE(lfdb::key_exists(lfdb::make_transaction(dbh), k, lfdb::commit_after_op::no_commit));
  }
 }
 
@@ -418,8 +418,7 @@ TEMPLATE_PRODUCT_TEST_CASE("associative data", "[fdb][rgw]",
 
  // From the "database" point of view, the structure is now that we have a single 
  // key pointing (p) to an associative array, e.g. map<p, map<k, v>>:
-
- lfdb::set(lfdb::make_transaction(dbh), "key", kvs, lfdb::commit_after_op::commit);
+lfdb::set(lfdb::make_transaction(dbh), "key", kvs, lfdb::commit_after_op::commit);
 
  std::map<std::string, std::string> out_kvs;
 
@@ -427,6 +426,46 @@ TEMPLATE_PRODUCT_TEST_CASE("associative data", "[fdb][rgw]",
 
  CHECK(pearl_msg == out_kvs["pearl"]);
 }
+
+/* JFW: need to implement this; if you pass a dbh or tenant, a transaction should be constructed and
+if not otherwise specified handled "appropriately".
+
+The rules are:
+  1) if passed a transaction and NO specific handler, the transaction is used and NOT committed on success;
+  2) if passed a handle and a handler, the transaction is used and treated accordingly (potentially dangerous);
+  3) if passed a handle and no handler, a transaction is created AND committed on success;
+...need to test with range operations, etc..**********************************************
+
+SCENARIO("implicit transactions", "[fdb][rgw]")
+{
+ janitor j;
+
+ GIVEN("a database handle") {
+    auto dbh = lfdb::make_database();
+
+    const auto k = "hi", v = "there";
+ }
+ THEN("database operations should implicitly create and complete transactions") {
+  CHECK(lfdb::set(dbh, k, v));
+  CHECK(lfdb::key_exists(dbh, k));
+
+  std::string ov;
+  CHECK(lfdb::get(dbh, k, ov));
+
+  CAPTURE(k);   
+  CAPTURE(v);   
+  CAPTURE(ov);   
+
+  REQUIRE(v == ov);
+
+  CHECK(lfdb::erase(dbh, k));
+  REQUIRE_FALSE(lfdb::key_exists(dbh, k));
+
+  REQUIRE_FALSE(lfdb::get(dbh, k, ov));
+
+  // JFW: range operations
+ }
+}*/
 
 TEST_CASE("fdb misc", "[fdb]")
 {
