@@ -464,6 +464,22 @@ public:
   void send_response() override;
 };
 
+class RGWGetBucketOwnershipControls_ObjStore_S3 : public RGWGetBucketOwnershipControls_ObjStore {
+ public:
+  void send_response() override;
+};
+
+class RGWPutBucketOwnershipControls_ObjStore_S3 : public RGWPutBucketOwnershipControls_ObjStore {
+  int get_params(optional_yield y) override;
+ public:
+  void send_response() override;
+};
+
+class RGWDeleteBucketOwnershipControls_ObjStore_S3 : public RGWDeleteBucketOwnershipControls_ObjStore {
+ public:
+  void send_response() override;
+};
+
 class RGWGetRequestPayment_ObjStore_S3 : public RGWGetRequestPayment {
 public:
   RGWGetRequestPayment_ObjStore_S3() {}
@@ -746,6 +762,9 @@ protected:
   }
   bool is_bucket_encryption_op() {
     return s->info.args.exists("encryption");
+  }
+  bool is_bucket_ownership_op() const {
+    return s->info.args.exists("ownershipControls");
   }
 
   RGWOp *get_obj_op(bool get_data) const;

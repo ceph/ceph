@@ -434,6 +434,12 @@ public:
   ~RGWDeleteBucketEncryption_ObjStore() override {}
 };
 
+class RGWGetBucketOwnershipControls_ObjStore : public RGWGetBucketOwnershipControls {};
+
+class RGWPutBucketOwnershipControls_ObjStore : public RGWPutBucketOwnershipControls {};
+
+class RGWDeleteBucketOwnershipControls_ObjStore : public RGWDeleteBucketOwnershipControls {};
+
 class RGWInitMultipart_ObjStore : public RGWInitMultipart {
 public:
   RGWInitMultipart_ObjStore() {}
