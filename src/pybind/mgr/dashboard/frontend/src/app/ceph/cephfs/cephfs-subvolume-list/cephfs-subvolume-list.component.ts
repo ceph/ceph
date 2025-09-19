@@ -221,9 +221,9 @@ export class CephfsSubvolumeListComponent extends CdForm implements OnInit, OnCh
         this.modalRef = this.modalService.show(CephfsMountDetailsComponent, {
           onSubmit: () => this.modalRef.close(),
           mountData: {
-            fsId: clusterId,
+            clusterFSID: clusterId,
             fsName: this.fsName,
-            rootPath: selectedSubVolume.info.path
+            path: selectedSubVolume.info.path
           }
         });
       }

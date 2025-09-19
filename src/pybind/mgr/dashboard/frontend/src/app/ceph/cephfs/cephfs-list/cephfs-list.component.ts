@@ -165,9 +165,9 @@ export class CephfsListComponent extends ListWithDetails implements OnInit {
           this.modalRef = this.modalService.show(CephfsMountDetailsComponent, {
             onSubmit: () => this.modalRef.close(),
             mountData: {
-              fsId: val.clusterId,
+              clusterFSID: val.clusterId,
               fsName: selectedFileSystem?.mdsmap?.fs_name,
-              rootPath: val.fs['path']
+              path: val.fs['path']
             }
           });
         }
