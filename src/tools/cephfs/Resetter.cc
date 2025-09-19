@@ -119,7 +119,6 @@ int Resetter::reset()
   journaler.set_read_pos(new_start);
   journaler.set_write_pos(new_start);
   journaler.set_expire_pos(new_start);
-  journaler.set_trimmed_pos(new_start);
   journaler.set_writeable();
 
   cout << "writing journal head" << std::endl;
