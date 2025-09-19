@@ -3,13 +3,14 @@ import os
 import logging
 import re
 import json
+import shlex
 from ceph_volume import process, conf, terminal
 from ceph_volume.util import constants, system
 from ceph_volume.util.device import Device
 from .prepare import write_keyring
 from .disk import lsblk, device_family, get_part_entry_type, _dd_read
 from packaging import version
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 mlogger = terminal.MultiLogger(__name__)
@@ -93,23 +94,27 @@ def create_dmcrypt_key() -> str:
     return key
 
 
-def luks_format(key: str, device: str) -> None:
+def luks_format(key: str, device: str, options: Optional[str] = None) -> None:
     """
     Decrypt (open) an encrypted device, previously prepared with cryptsetup
 
     :param key: dmcrypt secret key, will be used for decrypting
     :param device: Absolute path to device
+    :param options: A list of additional cryptsetup args
     """
-    command = [
+    extra_args: List[str] = []
+    base_cmd: List[str] = [
         'cryptsetup',
         '--batch-mode', # do not prompt
-        '--key-size',
-        get_key_size_from_conf(),
-        '--key-file', # misnomer, should be key
-        '-',          # because we indicate stdin for the key here
-        'luksFormat',
-        device,
+        '--key-size', get_key_size_from_conf(),
+        '--key-file', '-',
     ]
+
+    if options is not None:
+        extra_args: List[str] = shlex.split(options)
+
+    command: List[str] = base_cmd + ["luksFormat"] + extra_args + [device]
+
     process.call(command, stdin=key, terminal_verbose=True, show_command=True)
 
 
@@ -182,7 +187,8 @@ def rename_mapper(current: str, new: str) -> None:
 def luks_open(key: str,
               device: str,
               mapping: str,
-              with_tpm: int = 0) -> None:
+              with_tpm: int = 0,
+              options: Optional[str] = None) -> None:
     """
     Decrypt (open) an encrypted device, previously prepared with cryptsetup
 
@@ -192,8 +198,10 @@ def luks_open(key: str,
     :param device: absolute path to device
     :param mapping: mapping name used to correlate device. Usually a UUID
     :param with_tpm: whether to use tpm2 token enrollment.
+    :param options: A list of additional cryptsetup args
     """
     command: List[str] = []
+    extra_args: List[str] = []
     if with_tpm:
         command = ['/usr/lib/systemd/systemd-cryptsetup',
                    'attach',
@@ -204,17 +212,20 @@ def luks_open(key: str,
         if bypass_workqueue(device):
             command[-1] += ',no-read-workqueue,no-write-workqueue'
     else:
-        command = [
-            'cryptsetup',
-            '--key-size',
-            get_key_size_from_conf(),
-            '--key-file',
-            '-',
-            '--allow-discards',  # allow discards (aka TRIM) requests for device
-            'luksOpen',
-            device,
-            mapping,
+        base_cmd: List[str] = [
+            "cryptsetup",
+            "--key-size", str(get_key_size_from_conf()),
+            "--key-file", "-",
+            "--allow-discards",
         ]
+        if options is not None:
+            extra_args = shlex.split(options)
+        command: List[str] = (
+            base_cmd
+            + ["luksOpen"]
+            + extra_args
+            + [device, mapping]
+        )
 
         if bypass_workqueue(device):
             command.extend(['--perf-no_read_workqueue',
@@ -395,7 +406,11 @@ def legacy_encrypted(device):
             break
     return metadata
 
-def prepare_dmcrypt(key, device, mapping):
+def prepare_dmcrypt(key: str,
+                    device: str,
+                    mapping: str,
+                    format_options: Optional[str] = None,
+                    open_options: Optional[str] = None):
     """
     Helper for devices that are encrypted. The operations needed for
     block, db, wal, or data/journal devices are all the same
@@ -405,12 +420,14 @@ def prepare_dmcrypt(key, device, mapping):
     # format data device
     luks_format(
         key,
-        device
+        device,
+        format_options
     )
     luks_open(
         key,
         device,
-        mapping
+        mapping,
+        options=open_options
     )
     return '/dev/mapper/%s' % mapping
 
