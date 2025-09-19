@@ -1,0 +1,19 @@
+os_type: centos
+os_version: "9.stream"
+
+tasks:
+- cephadm:
+    image: quay.ceph.io/ceph-ci/ceph:squid-nvmeof
+    compiled_cephadm_branch: squid-nvmeof
+
+- nvmeof:
+    installer: host.a
+    rbd:
+      pool_name: mypool
+      image_name_prefix: myimage
+    gateway_config:
+      subsystems_count: 3
+      namespaces_count: 20
+
+- cephadm.wait_for_service:
+    service: nvmeof.mypool.mygroup0
