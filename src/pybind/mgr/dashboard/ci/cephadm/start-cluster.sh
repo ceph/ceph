@@ -59,8 +59,8 @@ fi
 npm run build ${FRONTEND_BUILD_OPTS} &
 
 cd ${CEPH_DEV_FOLDER}
-: ${VM_IMAGE:='fedora40'}
-: ${VM_IMAGE_URL:='https://download.fedoraproject.org/pub/fedora/linux/releases/40/Cloud/x86_64/images/Fedora-Cloud-Base-Generic.x86_64-40-1.14.qcow2'}
+: ${VM_IMAGE:='fedora42'}
+: ${VM_IMAGE_URL:='https://download.fedoraproject.org/pub/fedora/linux/releases/42/Cloud/x86_64/images/Fedora-Cloud-Base-Generic-42-1.1.x86_64.qcow2'}
 kcli download image -p ceph-dashboard -u ${VM_IMAGE_URL} ${VM_IMAGE}
 kcli delete plan -y ceph || true
 # Compile cephadm locally for the shared_ceph_folder to pick it up
@@ -96,7 +96,7 @@ if [[ -n "${JENKINS_HOME}" ]]; then
     PROMETHEUS_RUNNING_COUNT=$(get_prometheus_running_count)
     # retrying for 10 times to see if we can get the prometheus count
     # otherwise this would run indefinitely and bloat up the machine
-    while [[ $retry -lt 10 && $PROMETHEUS_RUNNING_COUNT -lt 1 ]]; do
+    while [[ $retry -lt 20 && $PROMETHEUS_RUNNING_COUNT -lt 1 ]]; do
         if [[ ${retry} -gt 0 ]]; then
             echo "Retry attempt to get the prometheus count..." ${retry}
         fi
