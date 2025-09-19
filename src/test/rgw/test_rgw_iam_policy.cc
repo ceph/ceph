@@ -1566,3 +1566,199 @@ TEST(Condition, ArnLike)
     EXPECT_FALSE(ArnLike.eval({{key, "arn:aws:s3:::user"}}));
   }
 }
+
+
+class ConditionTest : public ::testing::Test {
+protected:
+  intrusive_ptr<CephContext> cct;
+  
+  ConditionTest() {
+    cct.reset(new CephContext(CEPH_ENTITY_TYPE_CLIENT), false);
+  }
+};
+
+// Test cases for NotEquals condition logic fix
+// These tests verify that NotEquals conditions use correct AND logic
+// instead of incorrect OR logic (requiring mismatch with ALL values, not ANY)
+
+TEST_F(ConditionTest, StringNotEqualsLogic)
+{
+  std::string key = "aws:UserName";
+  
+  // Test case: value matches one of multiple condition values
+  // Should return false because value equals at least one condition value
+  {
+    Condition stringNotEquals{TokenID::StringNotEquals, key.data(), key.size(), false};
+    stringNotEquals.vals.push_back("alice");
+    stringNotEquals.vals.push_back("bob");
+    stringNotEquals.vals.push_back("charlie");
+
+    // Input "bob" matches second condition value, should return false
+    EXPECT_FALSE(stringNotEquals.eval({{key, "bob"}}));
+    // Input "alice" matches first condition value, should return false  
+    EXPECT_FALSE(stringNotEquals.eval({{key, "alice"}}));
+  }
+  
+  // Test case: value doesn't match any condition values
+  // Should return true because value differs from all condition values
+  {
+    Condition stringNotEquals{TokenID::StringNotEquals, key.data(), key.size(), false};
+    stringNotEquals.vals.push_back("alice");
+    stringNotEquals.vals.push_back("bob");
+    stringNotEquals.vals.push_back("charlie");
+
+    // Input "david" doesn't match any condition value, should return true
+    EXPECT_TRUE(stringNotEquals.eval({{key, "david"}}));
+  }
+}
+
+TEST_F(ConditionTest, NumericNotEqualsLogic)
+{
+  std::string key = "aws:RequestedRegion";
+  
+  // Test case: value matches one of multiple condition values
+  // Should return false because value equals at least one condition value
+  {
+    Condition numericNotEquals{TokenID::NumericNotEquals, key.data(), key.size(), false};
+    numericNotEquals.vals.push_back("10");
+    numericNotEquals.vals.push_back("20");
+    numericNotEquals.vals.push_back("30");
+
+    // Input "20" matches second condition value, should return false
+    EXPECT_FALSE(numericNotEquals.eval({{key, "20"}}));
+    // Input "10" matches first condition value, should return false
+    EXPECT_FALSE(numericNotEquals.eval({{key, "10"}}));
+  }
+  
+  // Test case: value doesn't match any condition values
+  // Should return true because value differs from all condition values
+  {
+    Condition numericNotEquals{TokenID::NumericNotEquals, key.data(), key.size(), false};
+    numericNotEquals.vals.push_back("10");
+    numericNotEquals.vals.push_back("20");
+    numericNotEquals.vals.push_back("30");
+
+    // Input "40" doesn't match any condition value, should return true
+    EXPECT_TRUE(numericNotEquals.eval({{key, "40"}}));
+  }
+}
+
+TEST_F(ConditionTest, DateNotEqualsLogic)
+{
+  std::string key = "aws:CurrentTime";
+  
+  // Test case: value matches one of multiple condition values
+  // Should return false because value equals at least one condition value
+  {
+    Condition dateNotEquals{TokenID::DateNotEquals, key.data(), key.size(), false};
+    dateNotEquals.vals.push_back("2023-01-01T00:00:00Z");
+    dateNotEquals.vals.push_back("2023-06-01T00:00:00Z");
+    dateNotEquals.vals.push_back("2023-12-01T00:00:00Z");
+
+    // Input matches second condition value, should return false
+    EXPECT_FALSE(dateNotEquals.eval({{key, "2023-06-01T00:00:00Z"}}));
+  }
+  
+  // Test case: value doesn't match any condition values
+  // Should return true because value differs from all condition values
+  {
+    Condition dateNotEquals{TokenID::DateNotEquals, key.data(), key.size(), false};
+    dateNotEquals.vals.push_back("2023-01-01T00:00:00Z");
+    dateNotEquals.vals.push_back("2023-06-01T00:00:00Z");
+    dateNotEquals.vals.push_back("2023-12-01T00:00:00Z");
+
+    // Input doesn't match any condition value, should return true
+    EXPECT_TRUE(dateNotEquals.eval({{key, "2024-01-01T00:00:00Z"}}));
+  }
+}
+
+TEST_F(ConditionTest, NotIpAddressLogic)
+{
+  std::string key = "aws:SourceIp";
+  
+  // Test case: value matches one of multiple condition values
+  // Should return false because value equals at least one condition value
+  {
+    Condition notIpAddress{TokenID::NotIpAddress, key.data(), key.size(), false};
+    notIpAddress.vals.push_back("192.168.1.1");
+    notIpAddress.vals.push_back("10.0.0.1");
+    notIpAddress.vals.push_back("172.16.0.1");
+
+    // Input matches second condition value, should return false
+    EXPECT_FALSE(notIpAddress.eval({{key, "10.0.0.1"}}));
+    // Input matches first condition value, should return false
+    EXPECT_FALSE(notIpAddress.eval({{key, "192.168.1.1"}}));
+  }
+  
+  // Test case: value doesn't match any condition values
+  // Should return true because value differs from all condition values
+  {
+    Condition notIpAddress{TokenID::NotIpAddress, key.data(), key.size(), false};
+    notIpAddress.vals.push_back("192.168.1.1");
+    notIpAddress.vals.push_back("10.0.0.1");
+    notIpAddress.vals.push_back("172.16.0.1");
+
+    // Input doesn't match any condition value, should return true
+    EXPECT_TRUE(notIpAddress.eval({{key, "8.8.8.8"}}));
+  }
+}
+
+TEST_F(ConditionTest, ArnNotEqualsLogic)
+{
+  std::string key = "aws:SourceArn";
+  
+  // Test case: value matches one of multiple condition values
+  // Should return false because value equals at least one condition value
+  {
+    Condition arnNotEquals{TokenID::ArnNotEquals, key.data(), key.size(), false};
+    arnNotEquals.vals.push_back("arn:aws:s3:::bucket1");
+    arnNotEquals.vals.push_back("arn:aws:s3:::bucket2");
+    arnNotEquals.vals.push_back("arn:aws:s3:::bucket3");
+
+    // Input matches second condition value, should return false
+    EXPECT_FALSE(arnNotEquals.eval({{key, "arn:aws:s3:::bucket2"}}));
+  }
+  
+  // Test case: value doesn't match any condition values
+  // Should return true because value differs from all condition values
+  {
+    Condition arnNotEquals{TokenID::ArnNotEquals, key.data(), key.size(), false};
+    arnNotEquals.vals.push_back("arn:aws:s3:::bucket1");
+    arnNotEquals.vals.push_back("arn:aws:s3:::bucket2");
+    arnNotEquals.vals.push_back("arn:aws:s3:::bucket3");
+
+    // Input doesn't match any condition value, should return true
+    EXPECT_TRUE(arnNotEquals.eval({{key, "arn:aws:s3:::other-bucket"}}));
+  }
+}
+
+TEST_F(ConditionTest, StringNotLikeLogic)
+{
+  std::string key = "s3:prefix";
+  
+  // Test case: value matches one of multiple condition patterns
+  // Should return false because value matches at least one condition pattern
+  {
+    Condition stringNotLike{TokenID::StringNotLike, key.data(), key.size(), false};
+    stringNotLike.vals.push_back("user/*");
+    stringNotLike.vals.push_back("admin/*");
+    stringNotLike.vals.push_back("temp/*");
+
+    // Input matches second condition pattern, should return false
+    EXPECT_FALSE(stringNotLike.eval({{key, "admin/config.txt"}}));
+    // Input matches first condition pattern, should return false
+    EXPECT_FALSE(stringNotLike.eval({{key, "user/profile.jpg"}}));
+  }
+  
+  // Test case: value doesn't match any condition patterns
+  // Should return true because value differs from all condition patterns
+  {
+    Condition stringNotLike{TokenID::StringNotLike, key.data(), key.size(), false};
+    stringNotLike.vals.push_back("user/*");
+    stringNotLike.vals.push_back("admin/*");
+    stringNotLike.vals.push_back("temp/*");
+
+    // Input doesn't match any condition pattern, should return true
+    EXPECT_TRUE(stringNotLike.eval({{key, "public/document.pdf"}}));
+  }
+}
