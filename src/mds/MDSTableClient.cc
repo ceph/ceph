@@ -16,6 +16,7 @@
 #include "MDSMap.h"
 
 #include "MDSContext.h"
+#include "mds_table_types.h"
 #include "RetryMessage.h"
 #include "msg/Messenger.h"
 

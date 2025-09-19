@@ -23,6 +23,7 @@
 #include "common/Clock.h" // for ceph_clock_now()
 #include "common/BackTrace.h"
 #include "common/debug.h"
+#include "common/Formatter.h"
 #include "common/safe_io.h"
 #include "common/version.h"
 

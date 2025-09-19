@@ -19,19 +19,16 @@
 #include <string_view>
 
 #include "common/admin_socket.h" // for asok_finisher
-#include "common/DecayCounter.h"
 #include "common/LogClient.h"
 #include "common/TrackedOp.h" // for class OpTracker
 
 #include "include/common_fwd.h"
 
-#include "Beacon.h"
 #include "DamageTable.h"
 #include "MDSMap.h"
 #include "SessionMap.h"
 #include "PurgeQueue.h"
 #include "MetricsHandler.h"
-#include "mon/MonClient.h"
 
 // Full .h import instead of forward declaration for PerfCounter, for the
 // benefit of those including this header and using MDSRank::logger
@@ -39,6 +36,7 @@
 
 #include <boost/intrusive_ptr.hpp>
 
+class DecayCounter;
 class MDSContext;
 class MDSMetaRequest;
 class MMDSMap;
@@ -134,6 +132,7 @@ namespace ceph {
 template <class Mutex>
 class CommonSafeTimer;
 
+class Beacon;
 class Locker;
 class MDCache;
 class MDLog;
@@ -209,7 +208,7 @@ class MDSRank {
     Session *get_session(const cref_t<Message> &m);
 
     MDSMap::DaemonState get_state() const { return state; } 
-    MDSMap::DaemonState get_want_state() const { return beacon.get_want_state(); } 
+    MDSMap::DaemonState get_want_state() const;
 
     bool is_creating() const { return state == MDSMap::STATE_CREATING; }
     bool is_starting() const { return state == MDSMap::STATE_STARTING; }
@@ -259,9 +258,7 @@ class MDSRank {
       progress_thread.signal();
     }
 
-    uint64_t get_global_id() const {
-      return monc->get_global_id();
-    }
+    uint64_t get_global_id() const;
 
     // Daemon lifetime functions: these guys break the abstraction
     // and call up into the parent MDSDaemon instance.  It's kind
@@ -308,9 +305,7 @@ class MDSRank {
      */
     void damaged_unlocked();
 
-    double last_cleared_laggy() const {
-      return beacon.last_cleared_laggy();
-    }
+    double last_cleared_laggy() const;
 
     double get_dispatch_queue_max_age(utime_t now) const;
 
