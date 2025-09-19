@@ -505,7 +505,7 @@ tests:
            summary: Host filesystem free space is getting low on cluster mycluster
            description: "Mountpoint /rootfs on node-1.unittests.com will be full in less than 5 days based on the 48 hour trailing fill rate."
 
- # MTU Mismatch
+# MTU Mismatch
  - interval: 1m
    input_series:
     - series: 'node_network_mtu_bytes{device="eth0",instance="node-exporter",job="node-exporter",cluster="mycluster"}'
@@ -538,47 +538,43 @@ tests:
       values: '0 0 0 0 0'
    promql_expr_test:
      - expr: |
-          node_network_mtu_bytes * (node_network_up{device!="lo"} > 0) ==
-            scalar(
-              max by (cluster,device) (node_network_mtu_bytes * (node_network_up{device!="lo"} > 0)) !=
-                quantile by (cluster,device) (.5, node_network_mtu_bytes * (node_network_up{device!="lo"} > 0))
-            )
-          or
-          node_network_mtu_bytes * (node_network_up{device!="lo"} > 0) ==
-            scalar(
-              min by (cluster,device) (node_network_mtu_bytes * (node_network_up{device!="lo"} > 0)) !=
-                quantile by (cluster,device) (.5, node_network_mtu_bytes * (node_network_up{device!="lo"} > 0))
-            )
+         node_network_mtu_bytes * (node_network_up{device!="lo"} > 0) != on (cluster, device) group_left quantile by (cluster, device) (0.5, node_network_mtu_bytes * (node_network_up{device!="lo"} > 0))
        eval_time: 1m
        exp_samples:
-         - labels: '{device="eth4", instance="node-exporter", job="node-exporter", cluster="mycluster"}'
-           value: 9000
          - labels: '{device="eth4", instance="hostname1", job="node-exporter", cluster="mycluster"}'
            value: 2200
+         - labels: '{device="eth4", instance="node-exporter", job="node-exporter", cluster="mycluster"}'
+           value: 9000
    alert_rule_test:
-     - eval_time: 1m
-       alertname: CephNodeInconsistentMTU
-       exp_alerts:
-       - exp_labels:
-           device: eth4
-           instance: hostname1
-           job: node-exporter
-           severity: warning
-           type: ceph_default
-           cluster: "mycluster"
-         exp_annotations:
-           summary: MTU settings across Ceph hosts are inconsistent on cluster mycluster
-           description: "Node hostname1 has a different MTU size (2200) than the median of devices named eth4."
-       - exp_labels:
-           device: eth4
-           instance: node-exporter
-           job: node-exporter
-           severity: warning
-           type: ceph_default
-           cluster: "mycluster"
-         exp_annotations:
-           summary: MTU settings across Ceph hosts are inconsistent on cluster mycluster
-           description: "Node node-exporter has a different MTU size (9000) than the median of devices named eth4."
+    - eval_time: 1m
+      alertname: CephNodeInconsistentMTU
+      exp_alerts:
+        - exp_labels:
+            device: eth4
+            instance: hostname1
+            job: node-exporter
+            severity: warning
+            type: ceph_default
+            cluster: "mycluster"
+          exp_annotations:
+            summary: "Node hostname1 has inconsistent MTU settings in cluster mycluster"
+            description: |
+              The network interface eth4 on node hostname1 has an MTU of 2200,
+              which differs from the cluster median MTU.
+              To fix this, update the MTU of this network interface(eth4) on the node(hostname1) to match the cluster median MTU.
+        - exp_labels:
+            device: eth4
+            instance: node-exporter
+            job: node-exporter
+            severity: warning
+            type: ceph_default
+            cluster: "mycluster"
+          exp_annotations:
+            summary: "Node node-exporter has inconsistent MTU settings in cluster mycluster"
+            description: |
+              The network interface eth4 on node node-exporter has an MTU of 9000,
+              which differs from the cluster median MTU.
+              To fix this, update the MTU of this network interface(eth4) on the node(node-exporter) to match the cluster median MTU.
 
  # pool full, data series has 6 but using topk(5) so to ensure the
  # results are working as expected
