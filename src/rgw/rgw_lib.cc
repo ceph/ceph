@@ -545,7 +545,9 @@ namespace rgw {
     }
 
     main.init_lua();
+#ifdef WITH_RADOSGW_RADOS
     main.init_dedup();
+#endif
 
     return 0;
   } /* RGWLib::init() */

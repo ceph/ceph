@@ -72,6 +72,7 @@ set(librgw_common_srcs
   rgw_multi_del.cc
   rgw_multipart_meta_filter.cc
   rgw_obj_manifest.cc
+  driver/rados/rgw_obj_manifest.cc
   rgw_period.cc
   rgw_realm.cc
   rgw_sync.cc
@@ -139,11 +140,6 @@ set(librgw_common_srcs
   rgw_bucket_encryption.cc
   rgw_tracer.cc
   rgw_lua_background.cc
-  rgw_dedup.cc
-  rgw_dedup_table.cc
-  rgw_dedup_store.cc
-  rgw_dedup_utils.cc
-  rgw_dedup_cluster.cc
   rgw_data_access.cc
   rgw_realm_watcher.cc
   rgw_bucket_logging.cc
@@ -156,6 +152,11 @@ list(APPEND librgw_common_srcs
 
 if(WITH_RADOSGW_RADOS)
   list(APPEND librgw_common_srcs
+	  rgw_dedup.cc
+	  rgw_dedup_table.cc
+	  rgw_dedup_store.cc
+	  rgw_dedup_utils.cc
+	  rgw_dedup_cluster.cc
           services/svc_finisher.cc
           services/svc_bi_rados.cc
           services/svc_bilog_rados.cc
@@ -515,6 +516,11 @@ set(radosgw_admin_srcs
   radosgw-admin/sync_checkpoint.cc
   radosgw-admin/orphan.cc)
 
+set(radosgw_admin_srcs_without_rados
+  radosgw-admin/radosgw-admin.cc
+  driver/rados/rgw_user.cc
+  driver/rados/rgw_bucket.cc)
+
 # this is unsatisfying and hopefully temporary; ARROW should not be
 # part of radosgw_admin
 if(WITH_RADOSGW_ARROW_FLIGHT)
@@ -534,6 +540,12 @@ target_link_libraries(radosgw-admin
   ${CURL_LIBRARIES} ${EXPAT_LIBRARIES} ${BLKID_LIBRARIES})
 endif()
 
+if(WITH_RADOSGW_POSIX)
+add_executable(radosgw-admin ${radosgw_admin_srcs_without_rados})
+target_link_libraries(radosgw-admin
+  ${rgw_libs} librados)
+endif(WITH_RADOSGW_POSIX)
+
 # this is unsatisfying and hopefully temporary; ARROW should not be
 # part of radosgw_admin
 if(WITH_RADOSGW_ARROW_FLIGHT)
@@ -541,6 +553,10 @@ if(WITH_RADOSGW_ARROW_FLIGHT)
 endif(WITH_RADOSGW_ARROW_FLIGHT)
 
 if(WITH_RADOSGW_RADOS)
+install(TARGETS radosgw-admin DESTINATION bin)
+endif()
+
+if(WITH_RADOSGW_POSIX)
 install(TARGETS radosgw-admin DESTINATION bin)
 endif()
 
