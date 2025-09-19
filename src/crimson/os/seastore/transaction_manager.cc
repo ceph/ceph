@@ -206,20 +206,17 @@ TransactionManager::ref_ret TransactionManager::remove(
 {
   LOG_PREFIX(TransactionManager::remove);
   DEBUGT("{} ...", t, *ref);
-  return lba_manager->get_mapping(t, *ref
-  ).si_then([ref, this, &t](auto mapping) {
-    return lba_manager->remove_mapping(t, std::move(mapping));
-  }).si_then([this, FNAME, &t, ref](auto result) {
-    assert(!result.direct_result);
-    auto &primary_result = result.result;
-    if (primary_result.refcount == 0) {
-      cache->retire_extent(t, ref);
-    }
-    DEBUGT("removed {}~0x{:x} refcount={} -- {}",
-           t, primary_result.addr, primary_result.length,
-           primary_result.refcount, *ref);
-    return primary_result.refcount;
-  });
+  auto mapping = co_await lba_manager->get_mapping(t, *ref);
+  auto result = co_await lba_manager->remove_mapping(t, std::move(mapping));
+  assert(!result.direct_result);
+  auto &primary_result = result.result;
+  if (primary_result.refcount == 0) {
+    cache->retire_extent(t, ref);
+  }
+  DEBUGT("removed {}~0x{:x} refcount={} -- {}",
+	 t, primary_result.addr, primary_result.length,
+	 primary_result.refcount, *ref);
+  co_return primary_result.refcount;
 }
 
 TransactionManager::ref_ret TransactionManager::remove(
@@ -228,12 +225,9 @@ TransactionManager::ref_ret TransactionManager::remove(
 {
   LOG_PREFIX(TransactionManager::remove);
   DEBUGT("{} ...", t, offset);
-  return lba_manager->get_mapping(t, offset
-  ).si_then([&t, this](auto mapping) {
-    return _remove(t, std::move(mapping));
-  }).si_then([](auto result) {
-    return result.result.refcount;
-  });
+  auto mapping = co_await lba_manager->get_mapping(t, offset);
+  auto result = co_await _remove(t, std::move(mapping));
+  co_return result.result.refcount;
 }
 
 TransactionManager::ref_iertr::future<LBAMapping>
@@ -241,11 +235,9 @@ TransactionManager::remove(
   Transaction &t,
   LBAMapping mapping)
 {
-  return mapping.refresh().si_then([&t, this](auto mapping) {
-    return _remove(t, std::move(mapping));
-  }).si_then([](auto res) {
-    return std::move(res.result.mapping);
-  });
+  mapping = co_await mapping.refresh();
+  auto res = co_await _remove(t, std::move(mapping));
+  co_return std::move(res.result.mapping);
 }
 
 TransactionManager::ref_iertr::future<LBAMapping>
