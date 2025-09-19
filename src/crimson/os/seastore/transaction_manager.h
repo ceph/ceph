@@ -361,7 +361,7 @@ public:
    */
   ref_ret remove(
     Transaction &t,
-    LogicalChildNodeRef &ref);
+    LogicalChildNodeRef ref);
 
   ref_ret remove(
     Transaction &t,
