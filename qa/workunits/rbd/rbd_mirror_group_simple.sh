@@ -2736,9 +2736,13 @@ test_force_promote()
   start_mirrors "${secondary_cluster}"
 }
 
-declare -a test_force_promote_delete_group_1=("${CLUSTER2}" "${CLUSTER1}" "${pool0}" "${image_prefix}" 5)
+declare -a test_force_promote_delete_group_1=("${CLUSTER2}" "${CLUSTER1}" "${pool0}" "${image_prefix}" 5 '')
+declare -a test_force_promote_delete_group_2=("${CLUSTER2}" "${CLUSTER1}" "${pool0}" "${image_prefix}" 5 'disable_reenable_primary')
 
-test_force_promote_delete_group_scenarios=1
+# TODO: scenario 2 fails sometimes -- after disabling and re-enabling the
+# original primary, the group doesn't always get fully mirrored back to the
+# secondary
+test_force_promote_delete_group_scenarios='1 2'
 
 test_force_promote_delete_group()
 {
@@ -2747,6 +2751,7 @@ test_force_promote_delete_group()
   local pool=$1 ; shift
   local image_prefix=$1 ; shift
   local image_count=$(($1*"${image_multiplier}")) ; shift
+  local scenario=$1 ; shift
 
   local group0=test-group0
 
@@ -2810,13 +2815,23 @@ test_force_promote_delete_group()
   group_remove "${secondary_cluster}" "${pool}/${group0}"
   images_remove "${secondary_cluster}" "${pool}/${image_prefix}" "${image_count}"
 
-  # disable and re-enable on original primary
-  mirror_group_disable "${primary_cluster}" "${pool}/${group0}"
-  mirror_group_enable "${primary_cluster}" "${pool}/${group0}"
+  if [ "${scenario}" = 'disable_reenable_primary' ]; then
+    # disable and re-enable on original primary
+    mirror_group_disable "${primary_cluster}" "${pool}/${group0}"
+    mirror_group_enable "${primary_cluster}" "${pool}/${group0}"
+  fi
 
   # confirm that group is mirrored back to secondary
   wait_for_group_present "${primary_cluster}" "${pool}" "${group0}" "${image_count}"
   wait_for_group_present "${secondary_cluster}" "${pool}" "${group0}" "${image_count}"
+  wait_for_group_replay_started "${secondary_cluster}" "${pool}"/"${group0}" "${image_count}"
+  wait_for_group_status_in_pool_dir "${secondary_cluster}" "${pool}"/"${group0}" 'up+replaying' "${image_count}"
+
+  if [ -z "${RBD_MIRROR_USE_RBD_MIRROR}" ]; then
+    wait_for_group_status_in_pool_dir "${primary_cluster}" "${pool}"/"${group0}" 'up+stopped' "${image_count}"
+  fi
+
+  wait_for_group_synced "${primary_cluster}" "${pool}"/"${group0}" "${secondary_cluster}" "${pool}"/"${group0}"
 
   # tidy up
   mirror_group_disable "${primary_cluster}" "${pool}/${group0}"
