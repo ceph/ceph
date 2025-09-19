@@ -73,14 +73,20 @@ class NFSService(CephService):
         assert self.TYPE == spec.service_type
         create_ganesha_pool(self.mgr)
 
-    def config_deps(self, spec: NFSServiceSpec) -> List[str]:
+    @classmethod
+    def get_dependencies(
+        cls,
+        mgr: "CephadmOrchestrator",
+        spec: Optional[ServiceSpec] = None,
+        daemon_type: Optional[str] = None
+    ) -> List[str]:
         deps: List[str] = []
-        if (spec.tls_enable and spec.tls_cert and spec.tls_key and spec.tls_ca_cert):
-            # add dependency of tls fields
-            deps.append(f'tls_enable: {spec.tls_enable}')
-            deps.append(f'tls_cert: {str(utils.md5_hash(spec.tls_cert))}')
-            deps.append(f'tls_key: {str(utils.md5_hash(spec.tls_key))}')
-            deps.append(f'tls_ca_cert: {str(utils.md5_hash(spec.tls_ca_cert))}')
+        # add dependency of tls fields
+        if (spec.ssl and spec.ssl_cert and spec.ssl_key and spec.ca_cert):
+            deps.append(f'tls_enable: {spec.ssl}')
+            deps.append(f'tls_cert: {str(utils.md5_hash(spec.ssl_cert))}')
+            deps.append(f'tls_key: {str(utils.md5_hash(spec.ssl_key))}')
+            deps.append(f'tls_ca_cert: {str(utils.md5_hash(spec.ca_cert))}')
         return sorted(deps)
 
     def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
@@ -95,8 +101,6 @@ class NFSService(CephService):
         daemon_id = daemon_spec.daemon_id
         host = daemon_spec.host
         spec = cast(NFSServiceSpec, self.mgr.spec_store[daemon_spec.service_name].spec)
-
-        deps: List[str] = self.config_deps(spec)
 
         nodeid = f'{daemon_spec.rank}'
 
@@ -192,12 +196,10 @@ class NFSService(CephService):
                 'idmap.conf': get_idmap_conf()
             }
             if add_tls_block:
-                for tls_cert_key_field in [
-                    'tls_cert',
-                    'tls_key',
-                    'tls_ca_cert',
-                ]:
-                    config['files'][f'{tls_cert_key_field}.pem'] = getattr(spec, tls_cert_key_field)
+                tls_pair = self.get_certificates(daemon_spec)
+                config['files']['tls_cert.pem'] = tls_pair.cert
+                config['files']['tls_key.pem'] = tls_pair.key
+                config['files']['tls_ca_cert.pem'] = spec.ca_cert
             config.update(
                 self.get_config_and_keyring(
                     daemon_type, daemon_id,
@@ -213,7 +215,7 @@ class NFSService(CephService):
             logger.debug('Generated cephadm config-json: %s' % config)
             return config
 
-        return get_cephadm_config(), deps
+        return get_cephadm_config(), self.get_dependencies(self.mgr, spec)
 
     def create_rados_config_obj(self,
                                 spec: NFSServiceSpec,

@@ -1305,12 +1305,12 @@ class NFSServiceSpec(ServiceSpec):
                  extra_entrypoint_args: Optional[GeneralArgList] = None,
                  idmap_conf: Optional[Dict[str, Dict[str, str]]] = None,
                  custom_configs: Optional[List[CustomConfig]] = None,
-                 tls_enable: Optional[bool] = None,
-                 tls_cert: Optional[str] = None,
-                 tls_key: Optional[str] = None,
-                 tls_ca_cert: Optional[str] = None,
-                 tls_ktls: Optional[bool] = None,
-                 tls_debug: Optional[bool] = None,
+                 ssl: bool = False,
+                 ssl_cert: Optional[str] = None,
+                 ssl_key: Optional[str] = None,
+                 ca_cert: Optional[str] = None,
+                 tls_ktls: bool = False,
+                 tls_debug: bool = False,
                  tls_min_version: Optional[str] = None,
                  ):
         assert service_type == 'nfs'
@@ -1337,13 +1337,13 @@ class NFSServiceSpec(ServiceSpec):
         self.enable_nlm = enable_nlm
 
         # TLS fields  
-        self.tls_enable=tls_enable
-        self.tls_cert=tls_cert
-        self.tls_key=tls_key
-        self.tls_ca_cert=tls_ca_cert
-        self.tls_ktls=tls_ktls
-        self.tls_debug=tls_debug
-        self.tls_min_version=tls_min_version
+        self.ssl = ssl
+        self.ssl_cert = ssl_cert
+        self.ssl_key = ssl_key
+        self.ca_cert = ca_cert
+        self.tls_ktls = tls_ktls
+        self.tls_debug = tls_debug
+        self.tls_min_version = tls_min_version
 
     def get_port_start(self) -> List[int]:
         if self.port:
@@ -1362,15 +1362,15 @@ class NFSServiceSpec(ServiceSpec):
                                       f"{'ip_addrs' if self.ip_addrs else 'networks'} fields")
 
         tls_field_names = [
-            'tls_enable',
-            'tls_cert',
-            'tls_key',
-            'tls_ca_cert',
+            'ssl',
+            'ssl_cert',
+            'ssl_key',
+            'ca_cert',
         ]
         tls_fields = [getattr(self, tls_field) for tls_field in tls_field_names]
         if any(tls_fields) and not all(tls_fields):
             raise SpecValidationError(
-                f'{tls_field_names} attrbutes must be set'
+                f'Either none or all of {tls_field_names} attributes must be set'
             )
 
 

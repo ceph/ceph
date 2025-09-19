@@ -134,25 +134,25 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                                 port: Optional[int] = None,
                                 inbuf: Optional[str] = None) -> None:
         """Create an NFS Cluster"""
-        tls_cert = tls_key = tls_ca_cert = tls_min_version = None
-        tls_enable = tls_ktls = tls_debug = False
+        ssl_cert = ssl_key = ca_cert = tls_min_version = None
+        ssl = tls_ktls = tls_debug = False
         if inbuf:
-            tls_config = yaml.safe_load(inbuf)
-            tls_enable = tls_config.get('tls_enable')
-            tls_cert = tls_config.get('tls_cert')
-            tls_key = tls_config.get('tls_key')
-            tls_ca_cert = tls_config.get('tls_ca_cert')
-            tls_min_version = tls_config.get('tls_min_version')
-            tls_ktls = tls_config.get('tls_ktls')
-            tls_debug = tls_config.get('tls_debug')
+            config = yaml.safe_load(inbuf)
+            ssl = config.get('ssl')
+            ssl_cert = config.get('ssl_cert')
+            ssl_key = config.get('ssl_key')
+            ca_cert = config.get('ca_cert')
+            tls_min_version = config.get('tls_min_version')
+            tls_ktls = config.get('tls_ktls')
+            tls_debug = config.get('tls_debug')
 
         return self.nfs.create_nfs_cluster(cluster_id=cluster_id, placement=placement,
                                            virtual_ip=virtual_ip, ingress=ingress,
                                            ingress_mode=ingress_mode, port=port,
-                                           tls_enable=tls_enable,
-                                           tls_cert=tls_cert,
-                                           tls_key=tls_key,
-                                           tls_ca_cert=tls_ca_cert,
+                                           ssl=ssl,
+                                           ssl_cert=ssl_cert,
+                                           ssl_key=ssl_key,
+                                           ca_cert=ca_cert,
                                            tls_ktls=tls_ktls,
                                            tls_debug=tls_debug,
                                            tls_min_version=tls_min_version)
