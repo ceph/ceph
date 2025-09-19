@@ -3695,6 +3695,84 @@ static int select_bucket_placement(const DoutPrefixProvider* dpp,
   return 0;
 }
 
+int put_swift_bucket_metadata(const DoutPrefixProvider* dpp,
+                              req_state* s,
+                              RGWAccessControlPolicy& policy,
+                              bool const has_policy,
+                              uint32_t policy_rw_mask,
+                              const RGWCORSConfiguration& cors_config,
+                              bool const has_cors,
+                              std::optional<std::string> swift_ver_location,
+                              const std::set<std::string>& rmattr_names,
+                              optional_yield y) {
+  std::map<std::string, ceph::bufferlist> attrs;
+  int op_ret = rgw_get_request_metadata(dpp, s->cct, s->info, attrs, false);
+  if (op_ret < 0) {
+    return op_ret;
+  }
+
+  return retry_raced_bucket_write(
+      dpp, s->bucket.get(),
+      [s, has_policy, policy_rw_mask, &policy, cors_config, has_cors, &attrs,
+       dpp, rmattr_names, swift_ver_location] {
+        /* Encode special metadata first as we're using std::map::emplace under
+         * the hood. This method will add the new items only if the map doesn't
+         * contain such keys yet. */
+        if (has_policy) {
+          if (s->dialect.compare("swift") == 0) {
+            rgw::swift::merge_policy(policy_rw_mask, s->bucket_acl, policy);
+          }
+          buffer::list bl;
+          policy.encode(bl);
+          attrs.emplace(RGW_ATTR_ACL, std::move(bl));
+        }
+
+        if (has_cors) {
+          buffer::list bl;
+          cors_config.encode(bl);
+          attrs.emplace(RGW_ATTR_CORS, std::move(bl));
+        }
+
+        /* It's supposed that following functions WILL NOT change any
+         * special attributes (like RGW_ATTR_ACL) if they are already
+         * present in attrs. */
+        prepare_add_del_attrs(s->bucket_attrs, rmattr_names, attrs);
+        populate_with_generic_attrs(s, attrs);
+
+        /* According to the Swift's behaviour and its container_quota
+         * WSGI middleware implementation: anyone with write permissions
+         * is able to set the bucket quota. This stays in contrast to
+         * account quotas that can be set only by clients holding
+         * reseller admin privileges. */
+        int ret = filter_out_quota_info(attrs, rmattr_names,
+                                        s->bucket->get_info().quota);
+        if (ret < 0) {
+          return ret;
+        }
+
+        if (swift_ver_location) {
+          s->bucket->get_info().swift_ver_location = *swift_ver_location;
+          s->bucket->get_info().swift_versioning =
+              (!swift_ver_location->empty());
+        }
+
+        /* Web site of Swift API. */
+        filter_out_website(attrs, rmattr_names,
+                           s->bucket->get_info().website_conf);
+        s->bucket->get_info().has_website =
+            !s->bucket->get_info().website_conf.is_empty();
+
+        /* Setting attributes also stores the provided bucket info. Due
+         * to this fact, the new quota settings can be serialized with
+         * the same call. */
+        s->bucket->set_attrs(attrs);
+        constexpr bool exclusive = false;  // overwrite
+        constexpr ceph::real_time no_set_mtime{};
+        return s->bucket->put_info(dpp, exclusive, no_set_mtime, s->yield);
+      },
+      y);
+}
+
 void RGWCreateBucket::execute(optional_yield y)
 {
   op_ret = get_params(y);
@@ -3806,6 +3884,24 @@ void RGWCreateBucket::execute(optional_yield y)
       return;
     }
 
+    // prevent re-creation with different index type or shard count
+    if ((createparams.index_type && *createparams.index_type !=
+         info.layout.current_index.layout.type) ||
+        (createparams.index_shards && *createparams.index_shards !=
+         info.layout.current_index.layout.normal.num_shards)) {
+      s->err.message =
+          "Cannot modify existing bucket's index type or shard count";
+      op_ret = -EEXIST;
+      return;
+    }
+
+    // don't allow changes to object lock
+    if (createparams.obj_lock_enabled != info.obj_lock_enabled()) {
+      s->err.message = "Cannot modify existing bucket's object lock";
+      op_ret = -EEXIST;
+      return;
+    }
+
     // don't allow changes to the acl policy
     RGWAccessControlPolicy old_policy;
     int r = rgw_op_get_bucket_policy_from_attr(this, s->cct, driver, info.owner,
@@ -3814,6 +3910,20 @@ void RGWCreateBucket::execute(optional_yield y)
     if (r >= 0 && old_policy != policy) {
       s->err.message = "Cannot modify existing access control policy";
       op_ret = -EEXIST;
+      return;
+    }
+
+    // For s3::CreateBucket just return back if bucket exists, as we do not allow
+    // any changes in bucket config param. need_metadata_upload() is always false
+    // for S3, so use the check to decide if its s3 request and not swift request.
+    if (!need_metadata_upload()) {
+      op_ret = -ERR_BUCKET_EXISTS;
+      return;
+    } else {
+      // For swift, update the bucket metadata and do not call createbucket.
+      op_ret = put_swift_bucket_metadata(
+          this, s, policy, has_policy, policy_rw_mask, cors_config, has_cors,
+          createparams.swift_ver_location, rmattr_names, y);
       return;
     }
   }
@@ -3888,68 +3998,6 @@ void RGWCreateBucket::execute(optional_yield y)
   /* continue if EEXIST and create_bucket will fail below.  this way we can
    * recover from a partial create by retrying it. */
   ldpp_dout(this, 20) << "Bucket::create() returned ret=" << op_ret << " bucket=" << s->bucket << dendl;
-
-  if (op_ret < 0 && op_ret != -EEXIST && op_ret != -ERR_BUCKET_EXISTS)
-    return;
-
-  const bool existed = s->bucket_exists;
-  if (need_metadata_upload() && existed) {
-    /* OK, it looks we lost race with another request. As it's required to
-     * handle metadata fusion and upload, the whole operation becomes very
-     * similar in nature to PutMetadataBucket. However, as the attrs may
-     * changed in the meantime, we have to refresh. */
-    short tries = 0;
-    do {
-      map<string, bufferlist> battrs;
-
-      op_ret = s->bucket->load_bucket(this, y);
-      if (op_ret < 0) {
-        return;
-      } else if (!s->auth.identity->is_owner_of(s->bucket->get_owner())) {
-        /* New bucket doesn't belong to the account we're operating on. */
-        op_ret = -EEXIST;
-        return;
-      } else {
-        s->bucket_attrs = s->bucket->get_attrs();
-      }
-
-      createparams.attrs.clear();
-
-      op_ret = rgw_get_request_metadata(this, s->cct, s->info, createparams.attrs, false);
-      if (op_ret < 0) {
-        return;
-      }
-      prepare_add_del_attrs(s->bucket_attrs, rmattr_names, createparams.attrs);
-      populate_with_generic_attrs(s, createparams.attrs);
-      op_ret = filter_out_quota_info(createparams.attrs, rmattr_names,
-                                     s->bucket->get_info().quota);
-      if (op_ret < 0) {
-        return;
-      }
-
-      /* Handle updates of the metadata for Swift's object versioning. */
-      if (createparams.swift_ver_location) {
-        s->bucket->get_info().swift_ver_location = *createparams.swift_ver_location;
-        s->bucket->get_info().swift_versioning = !createparams.swift_ver_location->empty();
-      }
-
-      /* Web site of Swift API. */
-      filter_out_website(createparams.attrs, rmattr_names,
-                         s->bucket->get_info().website_conf);
-      s->bucket->get_info().has_website = !s->bucket->get_info().website_conf.is_empty();
-
-      /* This will also set the quota on the bucket. */
-      s->bucket->set_attrs(std::move(createparams.attrs));
-      constexpr bool exclusive = false; // overwrite
-      constexpr ceph::real_time no_set_mtime{};
-      op_ret = s->bucket->put_info(this, exclusive, no_set_mtime, y);
-    } while (op_ret == -ECANCELED && tries++ < 20);
-
-    /* Restore the proper return code. */
-    if (op_ret >= 0) {
-      op_ret = -ERR_BUCKET_EXISTS;
-    }
-  } /* if (need_metadata_upload() && existed) */
 } /* RGWCreateBucket::execute() */
 
 int RGWDeleteBucket::verify_permission(optional_yield y)
@@ -5304,71 +5352,15 @@ void RGWPutMetadataBucket::execute(optional_yield y)
   if (op_ret < 0) {
     return;
   }
-
-  op_ret = rgw_get_request_metadata(this, s->cct, s->info, attrs, false);
-  if (op_ret < 0) {
-    return;
-  }
-
   if (!placement_rule.empty() &&
       placement_rule != s->bucket->get_placement_rule()) {
     op_ret = -EEXIST;
     return;
   }
 
-  op_ret = retry_raced_bucket_write(this, s->bucket.get(), [this] {
-      /* Encode special metadata first as we're using std::map::emplace under
-       * the hood. This method will add the new items only if the map doesn't
-       * contain such keys yet. */
-      if (has_policy) {
-	if (s->dialect.compare("swift") == 0) {
-	  rgw::swift::merge_policy(policy_rw_mask, s->bucket_acl, policy);
-	}
-	buffer::list bl;
-	policy.encode(bl);
-	emplace_attr(RGW_ATTR_ACL, std::move(bl));
-      }
-
-      if (has_cors) {
-	buffer::list bl;
-	cors_config.encode(bl);
-	emplace_attr(RGW_ATTR_CORS, std::move(bl));
-      }
-
-      /* It's supposed that following functions WILL NOT change any
-       * special attributes (like RGW_ATTR_ACL) if they are already
-       * present in attrs. */
-      prepare_add_del_attrs(s->bucket_attrs, rmattr_names, attrs);
-      populate_with_generic_attrs(s, attrs);
-
-      /* According to the Swift's behaviour and its container_quota
-       * WSGI middleware implementation: anyone with write permissions
-       * is able to set the bucket quota. This stays in contrast to
-       * account quotas that can be set only by clients holding
-       * reseller admin privileges. */
-      op_ret = filter_out_quota_info(attrs, rmattr_names, s->bucket->get_info().quota);
-      if (op_ret < 0) {
-	return op_ret;
-      }
-
-      if (swift_ver_location) {
-	s->bucket->get_info().swift_ver_location = *swift_ver_location;
-	s->bucket->get_info().swift_versioning = (!swift_ver_location->empty());
-      }
-
-      /* Web site of Swift API. */
-      filter_out_website(attrs, rmattr_names, s->bucket->get_info().website_conf);
-      s->bucket->get_info().has_website = !s->bucket->get_info().website_conf.is_empty();
-
-      /* Setting attributes also stores the provided bucket info. Due
-       * to this fact, the new quota settings can be serialized with
-       * the same call. */
-      s->bucket->set_attrs(attrs);
-      constexpr bool exclusive = false; // overwrite
-      constexpr ceph::real_time no_set_mtime{};
-      op_ret = s->bucket->put_info(this, exclusive, no_set_mtime, s->yield);
-      return op_ret;
-    }, y);
+  op_ret = put_swift_bucket_metadata(this, s, policy, has_policy,
+                                     policy_rw_mask, cors_config, has_cors,
+                                     swift_ver_location, rmattr_names, y);
 }
 
 int RGWPutMetadataObject::verify_permission(optional_yield y)
