@@ -888,7 +888,7 @@ bool Condition::eval(const Environment& env) const {
     return multimap_any(std::equal_to<std::string>(), itr, isruntime? runtime_vals : vals);
 
   case TokenID::StringNotEquals:
-    return multimap_any(std::not_fn(std::equal_to<std::string>()),
+    return multimap_none(std::equal_to<std::string>(),
      itr, isruntime? runtime_vals : vals);
 
   case TokenID::ForAnyValueStringEqualsIgnoreCase:
@@ -896,14 +896,14 @@ bool Condition::eval(const Environment& env) const {
     return multimap_any(ci_equal_to(), itr, isruntime? runtime_vals : vals);
 
   case TokenID::StringNotEqualsIgnoreCase:
-    return multimap_any(std::not_fn(ci_equal_to()), itr, isruntime? runtime_vals : vals);
+    return multimap_none(ci_equal_to(), itr, isruntime? runtime_vals : vals);
 
   case TokenID::ForAnyValueStringLike:
   case TokenID::StringLike:
     return multimap_any(string_like(), itr, isruntime? runtime_vals : vals);
 
   case TokenID::StringNotLike:
-    return multimap_any(std::not_fn(string_like()), itr, isruntime? runtime_vals : vals);
+    return multimap_none(string_like(), itr, isruntime? runtime_vals : vals);
 
   case TokenID::ForAllValuesStringEquals:
     return multimap_all(std::equal_to<std::string>(), itr, isruntime? runtime_vals : vals);
@@ -919,7 +919,7 @@ bool Condition::eval(const Environment& env) const {
     return typed_any(std::equal_to<double>(), as_number, s, vals);
 
   case TokenID::NumericNotEquals:
-    return typed_any(std::not_fn(std::equal_to<double>()),
+    return typed_none(std::equal_to<double>(),
        as_number, s, vals);
 
 
@@ -942,7 +942,7 @@ bool Condition::eval(const Environment& env) const {
     return typed_any(std::equal_to<ceph::real_time>(), as_date, s, vals);
 
   case TokenID::DateNotEquals:
-    return typed_any(std::not_fn(std::equal_to<ceph::real_time>()),
+    return typed_none(std::equal_to<ceph::real_time>(),
        as_date, s, vals);
   case TokenID::DateLessThan:
     return typed_any(std::less<ceph::real_time>(), as_date, s, vals);
@@ -972,24 +972,8 @@ bool Condition::eval(const Environment& env) const {
     return typed_any(std::equal_to<MaskedIP>(), as_network, s, vals);
 
   case TokenID::NotIpAddress:
-    {
-      auto xc = as_network(s);
-      if (!xc) {
-	return false;
-      }
-
-      for (const string& d : vals) {
-	auto xd = as_network(d);
-	if (!xd) {
-	  continue;
-	}
-
-	if (xc == xd) {
-	  return false;
-	}
-      }
-      return true;
-    }
+    return typed_none(std::equal_to<MaskedIP>(),
+      as_network, s, vals);
 
     // Amazon Resource Names!
     // The ArnEquals and ArnLike condition operators behave identically.
@@ -998,7 +982,7 @@ bool Condition::eval(const Environment& env) const {
     return multimap_any(arn_like, itr, isruntime? runtime_vals : vals);
   case TokenID::ArnNotEquals:
   case TokenID::ArnNotLike:
-    return multimap_any(std::not_fn(arn_like), itr, isruntime? runtime_vals : vals);
+    return multimap_none(arn_like, itr, isruntime? runtime_vals : vals);
 
   default:
     return false;
