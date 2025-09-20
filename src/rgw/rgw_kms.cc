@@ -290,10 +290,8 @@ protected:
       secret_req.set_send_length(postdata.length());
     }
 
-    secret_req.append_header("X-Vault-Token", vault_token);
-    if (!vault_token.empty()){
+    if (!vault_token.empty()) {
       secret_req.append_header("X-Vault-Token", vault_token);
-      vault_token.replace(0, vault_token.length(), vault_token.length(), '\000');
     }
 
     string vault_namespace = kctx.k_namespace();
@@ -503,6 +501,8 @@ public:
     int res = send_request(dpp, "POST", "/datakey/plaintext/", key_id,
                            post_data, y, secret_bl);
     if (res < 0) {
+      ldpp_dout(dpp, 0) << "ERROR: Failed to send request to Vault, res: "
+                        << res << " response: " << string_view(secret_bl.c_str(), secret_bl.length()) << dendl;
       return res;
     }
 
@@ -588,6 +588,8 @@ public:
     int res = send_request(dpp, "POST", "/decrypt/", key_id,
                            post_data, y, secret_bl);
     if (res < 0) {
+      ldpp_dout(dpp, 0) << "ERROR: Failed to send request to Vault for decrypt, res: "
+                        << res << " response: " << string_view(secret_bl.c_str(), secret_bl.length()) << dendl;
       return res;
     }
 
@@ -656,12 +658,11 @@ public:
     int res = send_request(dpp, "POST", "/keys/", key_name,
                            post_data, y, dummy_bl);
     if (res < 0) {
-      return res;
-    }
-    if (dummy_bl.length() != 0) {
-      ldpp_dout(dpp, 0) << "ERROR: unexpected response from Vault making a key: "
+      ldpp_dout(dpp, 0) << "ERROR: key creation failed by Vault, ret: "
+        << res << " response: "
         << std::string_view(dummy_bl.c_str(), dummy_bl.length())
         << dendl;
+      return res;
     }
     return 0;
   }
