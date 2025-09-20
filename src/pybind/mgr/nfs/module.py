@@ -1,5 +1,6 @@
 import logging
 import threading
+import yaml
 from typing import Tuple, Optional, List, Dict, Any
 
 from mgr_module import MgrModule, CLICommand, Option, CLICheckNonemptyFileInput
@@ -130,11 +131,31 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                                 ingress: Optional[bool] = None,
                                 virtual_ip: Optional[str] = None,
                                 ingress_mode: Optional[IngressType] = None,
-                                port: Optional[int] = None) -> None:
+                                port: Optional[int] = None,
+                                inbuf: Optional[str] = None) -> None:
         """Create an NFS Cluster"""
+        tls_cert = tls_key = tls_ca_cert = tls_min_version = None
+        tls_enable = tls_ktls = tls_debug = False
+        if inbuf:
+            tls_config = yaml.safe_load(inbuf)
+            tls_enable = tls_config.get('tls_enable')
+            tls_cert = tls_config.get('tls_cert')
+            tls_key = tls_config.get('tls_key')
+            tls_ca_cert = tls_config.get('tls_ca_cert')
+            tls_min_version = tls_config.get('tls_min_version')
+            tls_ktls = tls_config.get('tls_ktls')
+            tls_debug = tls_config.get('tls_debug')
+
         return self.nfs.create_nfs_cluster(cluster_id=cluster_id, placement=placement,
                                            virtual_ip=virtual_ip, ingress=ingress,
-                                           ingress_mode=ingress_mode, port=port)
+                                           ingress_mode=ingress_mode, port=port,
+                                           tls_enable=tls_enable,
+                                           tls_cert=tls_cert,
+                                           tls_key=tls_key,
+                                           tls_ca_cert=tls_ca_cert,
+                                           tls_ktls=tls_ktls,
+                                           tls_debug=tls_debug,
+                                           tls_min_version=tls_min_version)
 
     @CLICommand('nfs cluster rm', perm='rw')
     @object_format.EmptyResponder()

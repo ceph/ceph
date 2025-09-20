@@ -14,6 +14,8 @@ from mgr_module import NFS_POOL_NAME as POOL_NAME
 from ceph.deployment.service_spec import ServiceSpec, NFSServiceSpec
 from .service_registry import register_cephadm_service
 
+from cephadm import utils
+
 from orchestrator import DaemonDescription, OrchestratorError
 
 from cephadm.services.cephadmservice import AuthEntity, CephadmDaemonDeploySpec, CephService
@@ -71,6 +73,16 @@ class NFSService(CephService):
         assert self.TYPE == spec.service_type
         create_ganesha_pool(self.mgr)
 
+    def config_deps(self, spec: NFSServiceSpec) -> List[str]:
+        deps: List[str] = []
+        if (spec.tls_enable and spec.tls_cert and spec.tls_key and spec.tls_ca_cert):
+            # add dependency of tls fields
+            deps.append(f'tls_enable: {spec.tls_enable}')
+            deps.append(f'tls_cert: {str(utils.md5_hash(spec.tls_cert))}')
+            deps.append(f'tls_key: {str(utils.md5_hash(spec.tls_key))}')
+            deps.append(f'tls_ca_cert: {str(utils.md5_hash(spec.tls_ca_cert))}')
+        return sorted(deps)
+
     def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
         assert self.TYPE == daemon_spec.daemon_type
         daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
@@ -84,7 +96,7 @@ class NFSService(CephService):
         host = daemon_spec.host
         spec = cast(NFSServiceSpec, self.mgr.spec_store[daemon_spec.service_name].spec)
 
-        deps: List[str] = []
+        deps: List[str] = self.config_deps(spec)
 
         nodeid = f'{daemon_spec.rank}'
 
@@ -125,6 +137,8 @@ class NFSService(CephService):
         if monitoring_ip:
             daemon_spec.port_ips.update({str(monitoring_port): monitoring_ip})
 
+        add_tls_block = (spec.tls_enable and spec.tls_cert and spec.tls_key and spec.tls_ca_cert)
+
         # generate the ganesha config
         def get_ganesha_conf() -> str:
             context: Dict[str, Any] = {
@@ -143,6 +157,7 @@ class NFSService(CephService):
                 "nfs_idmap_conf": nfs_idmap_conf,
                 "enable_nlm": str(spec.enable_nlm).lower(),
                 "cluster_id": self.mgr._cluster_fsid,
+                "tls_add": spec.tls_enable if add_tls_block else None,
             }
             if spec.enable_haproxy_protocol:
                 context["haproxy_hosts"] = self._haproxy_hosts()
@@ -176,6 +191,13 @@ class NFSService(CephService):
                 'ganesha.conf': get_ganesha_conf(),
                 'idmap.conf': get_idmap_conf()
             }
+            if add_tls_block:
+                for tls_cert_key_field in [
+                    'tls_cert',
+                    'tls_key',
+                    'tls_ca_cert',
+                ]:
+                    config['files'][f'{tls_cert_key_field}.pem'] = getattr(spec, tls_cert_key_field)
             config.update(
                 self.get_config_and_keyring(
                     daemon_type, daemon_id,
