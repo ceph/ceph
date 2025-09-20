@@ -39,6 +39,7 @@
 #include "include/timegm.h"
 
 #include <boost/asio/yield.hpp>
+#include <expected>
 #include <shared_mutex> // for std::shared_lock
 #include <string_view>
 
@@ -6125,7 +6126,7 @@ int RGWBucketPipeSyncStatusManager::remote_info(const DoutPrefixProvider *dpp,
   return 0;
 }
 
-tl::expected<std::unique_ptr<RGWBucketPipeSyncStatusManager>, int>
+std::expected<std::unique_ptr<RGWBucketPipeSyncStatusManager>, int>
 RGWBucketPipeSyncStatusManager::construct(
   const DoutPrefixProvider* dpp,
   rgw::sal::RadosStore* driver,
@@ -6139,7 +6140,7 @@ RGWBucketPipeSyncStatusManager::construct(
 				       dest_bucket)};
   auto r = self->do_init(dpp, ostr);
   if (r < 0) {
-    return tl::unexpected(r);
+    return std::unexpected(r);
   }
   return self;
 }
@@ -6173,7 +6174,7 @@ int RGWBucketPipeSyncStatusManager::init_sync_status(
   return 0;
 }
 
-tl::expected<std::map<int, rgw_bucket_shard_sync_info>, int>
+std::expected<std::map<int, rgw_bucket_shard_sync_info>, int>
 RGWBucketPipeSyncStatusManager::read_sync_status(
   const DoutPrefixProvider *dpp)
 {
@@ -6191,19 +6192,19 @@ RGWBucketPipeSyncStatusManager::read_sync_status(
     if (sz == sources.end()) {
       ldpp_dout(this, 0) << "ERROR: failed to find source zone: "
 			 << *source_zone << dendl;
-      return tl::unexpected(-ENOENT);
+      return std::unexpected(-ENOENT);
     }
   } else {
     ldpp_dout(this, 5) << "No source zone specified, using source zone: "
 		       << sz->sc.source_zone << dendl;
-    return tl::unexpected(-ENOENT);
+    return std::unexpected(-ENOENT);
   }
   uint64_t num_shards, latest_gen;
   auto ret = remote_info(dpp, *sz, nullptr, &latest_gen, &num_shards);
   if (ret < 0) {
     ldpp_dout(this, 5) << "Unable to get remote info: "
 		       << ret << dendl;
-    return tl::unexpected(ret);
+    return std::unexpected(ret);
   }
   auto stack = new RGWCoroutinesStack(driver->ctx(), &cr_mgr);
   std::vector<rgw_bucket_sync_pair_info> pairs(num_shards);
@@ -6223,7 +6224,7 @@ RGWBucketPipeSyncStatusManager::read_sync_status(
   if (ret < 0) {
     ldpp_dout(this, 0) << "ERROR: failed to read sync status for "
 		       << bucket_str{dest_bucket} << dendl;
-    return tl::unexpected(ret);
+    return std::unexpected(ret);
   }
 
   return sync_status;
