@@ -2063,6 +2063,7 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
       osd->handle_misdirected_op(this, op);
       return;
     }
+    op->set_balance_read();
   } else {
     // normal case; must be primary
     if (!is_primary()) {
@@ -5882,17 +5883,25 @@ int PrimaryLogPG::do_read(OpContext *ctx, OSDOp& osd_op) {
     if (oi.is_data_digest() && op.extent.offset == 0 &&
         op.extent.length >= oi.size)
       maybe_crc = oi.data_digest;
-    ctx->pending_async_reads.push_back(
-      make_pair(
-        boost::make_tuple(op.extent.offset, op.extent.length, op.flags),
-        make_pair(&osd_op.outdata,
-		  new FillInVerifyExtent(&op.extent.length, &osd_op.rval,
-					 &osd_op.outdata, maybe_crc, oi.size,
-					 osd, soid, op.flags))));
-    dout(10) << " async_read noted for " << soid << dendl;
 
-    ctx->op_finishers[ctx->current_osd_subop_num].reset(
-      new ReadFinisher(osd_op));
+    if (ctx->op->balance_read()) {
+      result = pgbackend->objects_read_sync(
+        soid, op.extent.offset, op.extent.length, op.flags, &osd_op.outdata);
+
+        dout(20) << " EC sync read for " << soid << " result=" << result << dendl;
+    } else {
+      ctx->pending_async_reads.push_back(
+        make_pair(
+          boost::make_tuple(op.extent.offset, op.extent.length, op.flags),
+            make_pair(&osd_op.outdata,
+              new FillInVerifyExtent(&op.extent.length, &osd_op.rval,
+                                     &osd_op.outdata, maybe_crc, oi.size,
+                                     osd, soid, op.flags))));
+      dout(10) << " async_read noted for " << soid << dendl;
+
+      ctx->op_finishers[ctx->current_osd_subop_num].reset(
+        new ReadFinisher(osd_op));
+    }
   } else {
     int r = pgbackend->objects_read_sync(
       soid, op.extent.offset, op.extent.length, op.flags, &osd_op.outdata);
@@ -5952,7 +5961,7 @@ int PrimaryLogPG::do_sparse_read(OpContext *ctx, OSDOp& osd_op) {
   }
 
   ++ctx->num_read;
-  if (pool.info.is_erasure()) {
+  if (pool.info.is_erasure() && !ctx->op->balance_read()) {
     // translate sparse read to a normal one if not supported
 
     if (length > 0) {
@@ -5975,9 +5984,10 @@ int PrimaryLogPG::do_sparse_read(OpContext *ctx, OSDOp& osd_op) {
   } else {
     // read into a buffer
     map<uint64_t, uint64_t> m;
+    auto [shard_offset, shard_length] = pgbackend->extent_to_shard_extent(offset, length);
     int r = osd->store->fiemap(ch, ghobject_t(soid, ghobject_t::NO_GEN,
 					      info.pgid.shard),
-			       offset, length, m);
+			       shard_offset, shard_length, m);
     if (r < 0)  {
       return r;
     }
@@ -5988,6 +5998,7 @@ int PrimaryLogPG::do_sparse_read(OpContext *ctx, OSDOp& osd_op) {
       r = rep_repair_primary_object(soid, ctx);
     }
     if (r < 0) {
+      dout(10) << " sparse_read failed r=" << r << " from object " << soid << dendl;
       return r;
     }
 
@@ -5995,7 +6006,8 @@ int PrimaryLogPG::do_sparse_read(OpContext *ctx, OSDOp& osd_op) {
     // Maybe at first, there is no much whole objects. With continued use, more
     // and more whole object exist. So from this point, for spare-read add
     // checksum make sense.
-    if ((uint64_t)r == oi.size && oi.is_data_digest()) {
+    // EC Can never be a whole object.
+    if ((uint64_t)r == oi.size && oi.is_data_digest() && pool.info.is_erasure()) {
       uint32_t crc = data_bl.crc32c(-1);
       if (oi.data_digest != crc) {
         osd->clog->error() << info.pgid << std::hex

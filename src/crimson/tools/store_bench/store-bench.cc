@@ -119,7 +119,7 @@ public:
 };
 
 
-class PGLogWorkload : public StoreBenchWorkload {
+class PGLogWorkload final : public StoreBenchWorkload {
   unsigned num_logs = 4;
   unsigned log_size = 1024;
   unsigned log_length = 256;
@@ -144,7 +144,7 @@ public:
   ~PGLogWorkload() final {}
 };
 
-class RGWIndexWorkload : public StoreBenchWorkload {
+class RGWIndexWorkload final : public StoreBenchWorkload {
   unsigned num_indices = 16;
   uint64_t key_size = 1024;
   uint64_t value_size = 1024;

@@ -535,7 +535,7 @@ public:
       projected_log.skip_can_rollback_to_to_head();
       projected_log.trim(cct, last->version, nullptr, nullptr, nullptr);
     }
-    if (!is_primary() && !is_ec_pg()) {
+    if (!is_primary()) {
       replica_clear_repop_obc(logv, t);
     }
     recovery_state.append_log(
