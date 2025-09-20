@@ -170,6 +170,8 @@ cluster's monitor address and user key. However, bootstrapping a peer is the
 recommended way to add a peer.
 
 .. note:: Only a single peer is supported right now.
+          The ``peer_add`` command is deprecated and will be removed in a future release.
+          Use the ``peer_bootstrap`` command instead.
 
 To remove a peer, run a command of the following form:
 
