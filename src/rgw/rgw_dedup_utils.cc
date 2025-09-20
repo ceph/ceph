@@ -441,6 +441,9 @@ namespace rgw::dedup {
     this->invalid_hash_attrs      += other.invalid_hash_attrs;
     this->set_hash_attrs          += other.set_hash_attrs;
     this->skip_hash_cmp           += other.skip_hash_cmp;
+    this->manifest_raw_obj        += other.manifest_raw_obj;
+    this->split_head_src          += other.split_head_src;
+    this->split_head_dedup_bytes  += other.split_head_dedup_bytes;
 
     this->set_shared_manifest_src += other.set_shared_manifest_src;
     this->loaded_objects          += other.loaded_objects;
@@ -523,6 +526,15 @@ namespace rgw::dedup {
 
       if (this->skip_hash_cmp) {
         f->dump_unsigned("Can't run HASH compare", this->skip_hash_cmp);
+      }
+      if (this->manifest_raw_obj) {
+        f->dump_unsigned("Manifest has RAW OBJ", this->manifest_raw_obj);
+      }
+      if (this->split_head_src) {
+        f->dump_unsigned("Split-Head Src OBJ", this->split_head_src);
+      }
+      if (this->split_head_dedup_bytes) {
+        f->dump_unsigned("Split-Head Dedup-Bytes", this->split_head_dedup_bytes);
       }
     }
 
@@ -629,6 +641,9 @@ namespace rgw::dedup {
     encode(m.invalid_hash_attrs, bl);
     encode(m.set_hash_attrs, bl);
     encode(m.skip_hash_cmp, bl);
+    encode(m.manifest_raw_obj, bl);
+    encode(m.split_head_src, bl);
+    encode(m.split_head_dedup_bytes, bl);
     encode(m.set_shared_manifest_src, bl);
 
     encode(m.loaded_objects, bl);
@@ -679,6 +694,9 @@ namespace rgw::dedup {
     decode(m.invalid_hash_attrs, bl);
     decode(m.set_hash_attrs, bl);
     decode(m.skip_hash_cmp, bl);
+    decode(m.manifest_raw_obj, bl);
+    decode(m.split_head_src, bl);
+    decode(m.split_head_dedup_bytes, bl);
     decode(m.set_shared_manifest_src, bl);
 
     decode(m.loaded_objects, bl);
