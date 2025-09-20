@@ -9,6 +9,7 @@ import re
 import errno
 import random
 
+from copy import deepcopy
 from io import BytesIO, StringIO
 from errno import EBUSY
 
@@ -561,7 +562,34 @@ class FilesystemBase(MDSClusterBase):
         self.data_pool_name = None
         self.data_pools = None
         self.fs_config = fs_config
-        self.ec_profile = fs_config.get('ec_profile')
+        if self.fs_config:
+            log.debug(f"Filesystem init - using passed config={self.fs_config} for fsname={self.name}")
+        elif self.name:
+            # Construct fs_config from config stored in context.
+            log.debug(f"Filesystem init - using context cephfs_config={ctx.cephfs_config} for fsname={self.name}")
+            log.debug(f"Filesystem init - using context subvols={ctx.subvols} for fsname={self.name}")
+            # There are generic fs options which should apply to all the filesystems and each
+            # filesystem can have extra options or can override the generic ones. The
+            # temp_cephfs_config has generic fs options and the fs_configs has fs specific options
+            # after it's popped from temp_cephfs_config. The for loop iterates through fs specific
+            # option and merges them with generic fs option and construct the final list for the
+            # particular fs.
+            temp_cephfs_config = deepcopy(ctx.cephfs_config)
+            subvols = deepcopy(ctx.subvols)
+            fs_configs =  temp_cephfs_config.pop('fs', [{'name': 'cephfs'}])
+            for fs_conf in fs_configs:
+                assert isinstance(fs_conf, dict)
+                fs_name = fs_conf.pop('name')
+                if fs_name == self.name:
+                    misc.deep_merge(temp_cephfs_config, fs_conf)
+                    if subvols:
+                        misc.deep_merge(temp_cephfs_config, {'subvols': subvols})
+                    self.fs_config = temp_cephfs_config
+            log.debug(f"Filesystem init - constructed from context - cephfs_config {self.fs_config} for {self.name}")
+        else:
+            log.debug("Filesystem init - no fs_config and fsname - instance is not used for fs create")
+
+        self.ec_profile = self.fs_config.get('ec_profile')
 
         client_list = list(misc.all_roles_of_type(self._ctx.cluster, 'client'))
         self.client_id = client_list[0]
