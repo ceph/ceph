@@ -26,3 +26,9 @@ export interface SubvolumeSnapshotInfo {
   created_at: string;
   has_pending_clones: string;
 }
+
+export interface MountData {
+  clusterFSID: string;
+  fsName: string;
+  path: string;
+}
