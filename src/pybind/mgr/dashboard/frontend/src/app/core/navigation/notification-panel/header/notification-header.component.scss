@@ -8,6 +8,7 @@
   padding: spacing.$spacing-04;
   border-bottom: 1px solid theme.$border-subtle-01;
   background-color: theme.$layer-01;
+  flex-shrink: 0;
 
   &__top {
     display: flex;
