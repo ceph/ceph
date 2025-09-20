@@ -4746,6 +4746,9 @@ int RGWCompleteMultipart_ObjStore_S3::get_params(optional_yield y)
     return ret;
   }
 
+  if_match = s->info.env->get("HTTP_IF_MATCH");
+  if_nomatch = s->info.env->get("HTTP_IF_NONE_MATCH");
+
   map_qs_metadata(s, true);
 
   return do_aws4_auth_completion();
