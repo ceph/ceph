@@ -9,6 +9,7 @@
 
 #ifndef __STDC_FORMAT_MACROS
 #define __STDC_FORMAT_MACROS
+#include "common/admin_socket.h"
 #endif
 
 #include "BinnedLRUCache.h"
@@ -16,11 +17,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string>
-
+#include "common/debug.h"
+#include "kv/RocksDBStore.h"
 #define dout_context cct
 #define dout_subsys ceph_subsys_rocksdb
 #undef dout_prefix
 #define dout_prefix *_dout << "rocksdb: "
+
+using namespace std;
 
 namespace rocksdb_cache {
 
@@ -101,9 +105,13 @@ void BinnedLRUHandleTable::Resize() {
   length_ = new_length;
 }
 
-BinnedLRUCacheShard::BinnedLRUCacheShard(CephContext *c, size_t capacity, bool strict_capacity_limit,
+BinnedLRUCacheShard::BinnedLRUCacheShard(CephContext *c, RocksDBStore* store,
+  const string& shard_name,
+  size_t capacity, bool strict_capacity_limit,
                              double high_pri_pool_ratio)
     : cct(c),
+      store(store),
+      shard_name(shard_name),
       capacity_(0),
       high_pri_pool_usage_(0),
       strict_capacity_limit_(strict_capacity_limit),
@@ -269,6 +277,22 @@ void BinnedLRUCacheShard::MaintainPoolSize() {
   }
 }
 
+void BinnedLRUCacheShard::FreeDeleted(BinnedLRUHandle* deleted) {
+  while (deleted) {
+    if (cct->_conf->rocksdb_binned_lru_log != 0) {
+      char hexhash[20];
+      sprintf(hexhash, "%8.8x", deleted->hash);
+      store->log(std::string("D  ") +
+      pretty_binary_string(string(deleted->key_data, deleted->key_length))
+      + ":" + hexhash + ":" + shard_name);
+    }
+    auto* entry = deleted;
+    deleted = deleted->next;
+    entry->Free();
+  }
+}
+
+
 void BinnedLRUCacheShard::EvictFromLRU(size_t charge,
                                  BinnedLRUHandle*& deleted) {
   while (usage_ + charge > capacity_ && lru_.next != &lru_) {
@@ -315,6 +339,13 @@ rocksdb::Cache::Handle* BinnedLRUCacheShard::Lookup(const rocksdb::Slice& key, u
     e->refs++;
     e->SetHit();
   }
+  if (cct->_conf->rocksdb_binned_lru_log != 0) {
+    char hexhash[20];
+    sprintf(hexhash, "%8.8x", hash);
+    store->log(std::string(e ? "L  " : "Lx ") + pretty_binary_string(key.ToString()) +
+      ":" + hexhash + ":" + shard_name);
+  }
+
   return reinterpret_cast<rocksdb::Cache::Handle*>(e);
 }
 
@@ -445,7 +476,12 @@ rocksdb::Status BinnedLRUCacheShard::Insert(const rocksdb::Slice& key, uint32_t 
   // we free the entries here outside of mutex for
   // performance reasons
   FreeDeleted(deleted);
-
+  if (cct->_conf->rocksdb_binned_lru_log != 0) {
+    char hexhash[20];
+    sprintf(hexhash, "%8.8x", hash);
+    store->log(std::string(priority == rocksdb::Cache::Priority::HIGH ? "Ih " : "I  ") +
+      pretty_binary_string(key.ToString()) + ":" + hexhash + ":" + shard_name);
+  }
   return s;
 }
 
@@ -517,12 +553,19 @@ DeleterFn BinnedLRUCacheShard::GetDeleter(rocksdb::Cache::Handle* h) const
   return handle->deleter;
 }
 
-BinnedLRUCache::BinnedLRUCache(CephContext *c, 
-                               size_t capacity, 
-                               int num_shard_bits,
-                               bool strict_capacity_limit, 
-                               double high_pri_pool_ratio)
-    : ShardedCache(capacity, num_shard_bits, strict_capacity_limit), cct(c) {
+BinnedLRUCache::BinnedLRUCache(
+  CephContext *c,
+  RocksDBStore* store,
+  const string& name,
+  size_t capacity,
+  int num_shard_bits,
+  bool strict_capacity_limit,
+  double high_pri_pool_ratio)
+  : ShardedCache(capacity, num_shard_bits, strict_capacity_limit)
+  , cct(c)
+  , store(store)
+  , name(name)
+{
   num_shards_ = 1 << num_shard_bits;
   // TODO: Switch over to use mempool
   int rc = posix_memalign((void**) &shards_, 
@@ -534,7 +577,8 @@ BinnedLRUCache::BinnedLRUCache(CephContext *c,
   size_t per_shard = (capacity + (num_shards_ - 1)) / num_shards_;
   for (int i = 0; i < num_shards_; i++) {
     new (&shards_[i])
-        BinnedLRUCacheShard(c, per_shard, strict_capacity_limit, high_pri_pool_ratio);
+        BinnedLRUCacheShard(c, store, name + "-" + to_string(i),
+        per_shard, strict_capacity_limit, high_pri_pool_ratio);
   }
 }
 
@@ -699,7 +743,9 @@ void BinnedLRUCache::set_bin_count(uint32_t count) {
 }
 
 std::shared_ptr<rocksdb::Cache> NewBinnedLRUCache(
-    CephContext *c, 
+    CephContext *c,
+    RocksDBStore* store,
+    const string& name,
     size_t capacity,
     int num_shard_bits,
     bool strict_capacity_limit,
@@ -715,7 +761,7 @@ std::shared_ptr<rocksdb::Cache> NewBinnedLRUCache(
     num_shard_bits = GetDefaultCacheShardBits(capacity);
   }
   return std::make_shared<BinnedLRUCache>(
-      c, capacity, num_shard_bits, strict_capacity_limit, high_pri_pool_ratio);
+      c, store, name, capacity, num_shard_bits, strict_capacity_limit, high_pri_pool_ratio);
 }
 
 }  // namespace rocksdb_cache
