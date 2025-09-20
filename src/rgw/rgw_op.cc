@@ -5752,7 +5752,7 @@ bool RGWCopyObj::parse_copy_location(const std::string_view& url_src,
     params_str = url_src.substr(pos + 1);
   }
 
-  if (name_str[0] == '/') // trim leading slash
+  if (!name_str.empty() && name_str[0] == '/') // trim leading slash
     name_str.remove_prefix(1);
 
   std::string dec_src = url_decode(name_str);
