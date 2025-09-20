@@ -86,41 +86,48 @@ class Migrations:
                 "cephadm migration still ongoing. Please wait, until the migration is complete.")
 
     def migrate(self, startup: bool = False) -> None:
-        logger.info('running migrations')
-
         if self.mgr.migration_current == 0:
+            logger.info('Running migration 0 -> 1')
             if self.migrate_0_1():
                 self.set(1)
 
         if self.mgr.migration_current == 1:
+            logger.info('Running migration 1 -> 2')
             if self.migrate_1_2():
                 self.set(2)
 
         if self.mgr.migration_current == 2 and not startup:
+            logger.info('Running migration 2 -> 3')
             if self.migrate_2_3():
                 self.set(3)
 
         if self.mgr.migration_current == 3:
+            logger.info('Running migration 3 -> 4')
             if self.migrate_3_4():
                 self.set(4)
 
         if self.mgr.migration_current == 4:
+            logger.info('Running migration 4 -> 5')
             if self.migrate_4_5():
                 self.set(5)
 
         if self.mgr.migration_current == 5:
+            logger.info('Running migration 5 -> 6')
             if self.migrate_5_6():
                 self.set(6)
 
         if self.mgr.migration_current == 6:
+            logger.info('Running migration 6 -> 7')
             if self.migrate_6_7():
                 self.set(7)
 
         if self.mgr.migration_current == 7:
+            logger.info('Running migration 7 -> 8')
             if self.migrate_7_8():
                 self.set(8)
 
         if self.mgr.migration_current == 8:
+            logger.info('Running migration 8 -> 9')
             if self.migrate_8_9():
                 self.set(9)
 
