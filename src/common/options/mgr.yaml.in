@@ -361,6 +361,14 @@ options:
   default: 5
   min: 0
   max: 11
+- name: mgr_module_monitor_interval
+  type: int
+  level: advanced
+  desc: Period in seconds for collecting modules cpu and memory to perf count
+  long_desc: Period in seconds for ThreadMonitor to collect the cpu and memory for 
+    each enabled module. If set to 0, collection of these stats will be disabled.
+  default: 5
+  min: 0
 - name: mgr_tick_period
   type: secs
   level: advanced

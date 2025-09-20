@@ -18,7 +18,9 @@
 #include <string>
 #include <vector>
 #include <boost/optional.hpp>
+#include "common/ceph_context.h"
 #include "common/ceph_mutex.h"
+#include "common/perf_counters.h"
 #include "Python.h"
 #include "Gil.h"
 #include "mon/MgrMap.h"
@@ -90,16 +92,14 @@ private:
   std::set<std::string> notify_types;
 
 public:
+  std::unique_ptr<PerfCounters> perfcounter;
   static std::string mgr_store_prefix;
 
   SafeThreadState pMyThreadState;
   PyObject *pClass = nullptr;
   PyObject *pStandbyClass = nullptr;
 
-  explicit PyModule(const std::string &module_name_)
-    : module_name(module_name_)
-  {
-  }
+  explicit PyModule(const std::string &module_name_);
 
   ~PyModule();
 
@@ -169,6 +169,20 @@ public:
   bool get_can_run() const {
     std::lock_guard l(lock) ; return can_run;
   }
+
+  enum PerfModuleCounters {
+    l_pym_first = 10000,
+    l_pym_notify_avg_usec,
+    l_pym_cmd_avg_usec,
+    l_pym_alive,
+    l_pym_cpu_usage,
+    l_pym_mem_rss_change,
+    l_pym_mem_rss_current,
+    l_pym_serve_cpu_usage,
+    l_pym_last
+  };
+
+  int perf_counter_build(CephContext *cct);
 };
 
 typedef std::shared_ptr<PyModule> PyModuleRef;
