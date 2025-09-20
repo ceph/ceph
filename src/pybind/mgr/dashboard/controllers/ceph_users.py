@@ -70,13 +70,16 @@ class CephUserEndpoints:
         return f"Successfully created user '{user_entity}'"
 
     @staticmethod
-    def user_delete(_, user_entity: str):
+    def user_delete(_, user_entities: str):
         """
-        Delete a ceph user and it's defined capabilities.
+        Delete one or more ceph users and their defined capabilities.
+        user_entities: comma-separated string of users to delete
         """
-        logger.debug("Sending command 'auth del' of entity '%s'", user_entity)
-        CephUserEndpoints._run_auth_command('auth del', entity=user_entity)
-        return f"Successfully deleted user '{user_entity}'"
+        users = user_entities.split(',')
+        for user in users:
+            logger.debug("Sending command 'auth del' of entity '%s'", user)
+            CephUserEndpoints._run_auth_command('auth del', entity=user)
+        return f"Successfully deleted user(s) '{user_entities}'"
 
     @staticmethod
     def export(_, entities: List[str]):
@@ -209,7 +212,7 @@ edit_form = Form(path='/cluster/user/edit',
     ),
     delete=CRUDCollectionMethod(
         func=CephUserEndpoints.user_delete,
-        doc=EndpointDoc("Delete Ceph User",
+        doc=EndpointDoc("Delete one or more Ceph Users",
                         parameters={
                             "user_entity": Param(str, "Entity to delete")
                         })
