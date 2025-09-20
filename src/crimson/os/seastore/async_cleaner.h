@@ -1385,6 +1385,7 @@ public:
   bool should_block_io_on_clean() const final {
     assert(background_callback->is_ready());
     if (get_segments_reclaimable() == 0) {
+      // No CLOSED segments to reclaim
       return false;
     }
     auto aratio = get_projected_available_ratio();
