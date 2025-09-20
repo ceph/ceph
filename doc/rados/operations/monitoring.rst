@@ -761,6 +761,9 @@ Example output:
    cephfs.a.meta 	77s    	0s        	0	     0s	  0s     	1      	1
    cephfs.a.data 	76s    	0s        	0	     0s	  0s     	1      	1
 
+The time values above are rounded for readability. To see the exact second 
+values, use the option ``--format`` with ``json`` or ``json-pretty`` value. 
+
 A pool is considered ``unavailable`` when at least one PG in the pool 
 becomes inactive or there is at least one unfound object in the pool. 
 Otherwise the pool is considered ``available``. Depending on the 
