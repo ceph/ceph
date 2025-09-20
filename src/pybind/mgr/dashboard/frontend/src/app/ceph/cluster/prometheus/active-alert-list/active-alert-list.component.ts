@@ -31,6 +31,21 @@ export class ActiveAlertListComponent extends PrometheusListHelper implements On
   icons = Icons;
   expandedInnerRow: any;
 
+  filters: CdTableColumn[] = [
+    {
+      name: $localize`State`,
+      prop: 'status.state',
+      filterOptions: [$localize`All`, $localize`Active`, $localize`Suppressed`],
+      filterInitValue: $localize`Active`,
+      filterPredicate: (row, value) => {
+        if (value === `Active`) return row.status?.state === 'active';
+        else if (value === `Suppressed`) return row.status?.state === 'suppressed';
+        if (value === `All`) return true;
+        return false;
+      }
+    }
+  ];
+
   constructor(
     // NotificationsComponent will refresh all alerts every 5s (No need to do it here as well)
     private authStorageService: AuthStorageService,
