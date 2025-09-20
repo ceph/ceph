@@ -31,9 +31,6 @@ on:
   push:
     branches:
       - 'feature/redmine-upkeep'
-concurrency:
-  group: redmine-upkeep-workflow-concurrency-group
-  cancel-in-progress: false
 jobs:
   redmine-upkeep:
     runs-on: ubuntu-latest
