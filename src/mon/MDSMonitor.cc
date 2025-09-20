@@ -24,7 +24,9 @@
 #include "FSCommands.h"
 #include "Monitor.h"
 #include "MonitorDBStore.h"
+#include "MonMap.h"
 #include "OSDMonitor.h"
+#include "Paxos.h"
 
 #include "common/strtol.h"
 #include "common/perf_counters.h"
