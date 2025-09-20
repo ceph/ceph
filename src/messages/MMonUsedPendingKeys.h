@@ -18,6 +18,7 @@
 
 #include <boost/intrusive_ptr.hpp>
 
+#include "include/encoding_map.h"
 #include "auth/Crypto.h" // for CryptoKey
 #include "messages/PaxosServiceMessage.h"
 

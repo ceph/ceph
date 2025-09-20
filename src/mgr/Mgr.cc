@@ -37,8 +37,10 @@
 
 #include "MgrContext.h"
 #include "DaemonServer.h"
+#include "JSONCommand.h"
 #include "PyModule.h"
 #include "Mgr.h"
+#include "DaemonHealthMetric.h" // for accessing DaemonState::daemon_health_metrics
 
 #include <sstream>
 

@@ -17,6 +17,7 @@
 */
 
 #include "acconfig.h"
+#include "include/byte_u_t.h"
 #include "include/int_types.h"
 #include "include/scope_guard.h"
 
@@ -52,7 +53,8 @@
 #include <boost/algorithm/string/predicate.hpp>
 #include <boost/lexical_cast.hpp>
 
-#include "common/Formatter.h"
+#include "common/JSONFormatter.h"
+#include "common/XMLFormatter.h"
 #include "common/Preforker.h"
 #include "common/SubProcess.h"
 #include "common/TextTable.h"
