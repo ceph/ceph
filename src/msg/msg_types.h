@@ -58,6 +58,7 @@ public:
   static const int TYPE_MDS = CEPH_ENTITY_TYPE_MDS;
   static const int TYPE_OSD = CEPH_ENTITY_TYPE_OSD;
   static const int TYPE_CLIENT = CEPH_ENTITY_TYPE_CLIENT;
+  static const int TYPE_CEPHFS_MIRROR = CEPH_ENTITY_TYPE_CEPHFS_MIRROR;
   static const int TYPE_MGR = CEPH_ENTITY_TYPE_MGR;
 
   static const int64_t NEW = -1;

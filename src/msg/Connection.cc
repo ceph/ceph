@@ -17,6 +17,8 @@ bool Connection::is_blackhole() const {
     return conf->ms_blackhole_mds;
   case CEPH_ENTITY_TYPE_CLIENT:
     return conf->ms_blackhole_client;
+  case CEPH_ENTITY_TYPE_CEPHFS_MIRROR:
+    return conf->ms_blackhole_cephfs_mirror;
   default:
     return false;
   }

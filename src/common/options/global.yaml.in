@@ -1366,6 +1366,11 @@ options:
   level: dev
   default: false
   with_legacy: true
+- name: ms_blackhole_cephfs_mirror
+  type: bool
+  level: dev
+  default: false
+  with_legacy: true
 - name: ms_dump_on_send
   type: bool
   level: advanced

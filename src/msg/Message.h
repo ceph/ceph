@@ -581,7 +581,8 @@ public:
 #ifdef WITH_CRIMSON
     ceph_abort("In crimson, conn is independently maintained outside Message");
 #else
-    return get_connection()->get_peer_type() == CEPH_ENTITY_TYPE_CLIENT;
+    return get_connection()->get_peer_type() == CEPH_ENTITY_TYPE_CLIENT ||
+      get_connection()->get_peer_type() == CEPH_ENTITY_TYPE_CEPHFS_MIRROR;
 #endif
   }
 
