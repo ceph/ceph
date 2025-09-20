@@ -545,6 +545,7 @@ WRITE_CLASS_ENCODER(RGWZoneGroupPlacementTierS3)
 enum GlacierRestoreTierType : uint8_t {
   Standard = 0,
   Expedited = 1,
+  NoTier = 2,
 };
 
 struct RGWZoneGroupTierS3Glacier {
