@@ -17,7 +17,6 @@
 #include "common/RefCountedObj.h"
 
 #include "rgw_coroutine.h"
-#include "rgw_tools.h"
 
 #include <atomic>
 #include <string_view>
@@ -831,9 +830,11 @@ void RGWHTTPManager::_complete_request(rgw_http_req_data *req_data)
     std::lock_guard l{req_data->lock};
     req_data->mgr = nullptr;
   }
+#ifdef WITH_RADOSGW_RADOS
   if (completion_mgr) {
     completion_mgr->complete(NULL, req_data->control_io_id, req_data->user_info);
   }
+#endif
 
   req_data->put();
 }
@@ -1191,9 +1192,11 @@ void *RGWHTTPManager::reqs_thread_entry()
 
   reqs.clear();
 
+#ifdef WITH_RADOSGW_RADOS
   if (completion_mgr) {
     completion_mgr->go_down();
   }
+#endif
   
   return 0;
 }

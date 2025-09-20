@@ -7,7 +7,7 @@
 #include "rgw_bucket.h"
 #include "rgw_log.h"
 #include "rgw_rest.h"
-#include "rgw_user.h"
+#include "driver/rados/rgw_user.h"
 #include "rgw_process_env.h"
 #include "rgw_sal.h"
 #include "rgw_sal_rados.h"
