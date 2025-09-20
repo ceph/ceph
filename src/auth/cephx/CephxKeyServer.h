@@ -22,12 +22,12 @@
 
 #include "auth/KeyRing.h"
 #include "CephxProtocol.h"
-#include "common/ceph_json.h"
 #include "common/ceph_mutex.h"
-#include "common/Formatter.h"
 #include "include/common_fwd.h"
 #include "include/encoding.h"
 #include "include/types.h" // for version_t
+
+namespace ceph { class Formatter; }
 
 struct KeyServerData {
   version_t version{0};
@@ -46,46 +46,12 @@ struct KeyServerData {
       extra_secrets(extra),
       rotating_ver(0) {}
 
-  void encode(ceph::buffer::list& bl) const {
-     __u8 struct_v = 1;
-    using ceph::encode;
-    encode(struct_v, bl);
-    encode(version, bl);
-    encode(rotating_ver, bl);
-    encode(secrets, bl);
-    encode(rotating_secrets, bl);
-  }
-  void decode(ceph::buffer::list::const_iterator& bl) {
-    using ceph::decode;
-    __u8 struct_v;
-    decode(struct_v, bl);
-    decode(version, bl);
-    decode(rotating_ver, bl);
-    decode(secrets, bl);
-    decode(rotating_secrets, bl);
-  }
+  void encode(ceph::buffer::list& bl) const;
+  void decode(ceph::buffer::list::const_iterator& bl);
 
-  void encode_rotating(ceph::buffer::list& bl) const {
-    using ceph::encode;
-     __u8 struct_v = 1;
-    encode(struct_v, bl);
-    encode(rotating_ver, bl);
-    encode(rotating_secrets, bl);
-  }
-  void decode_rotating(ceph::buffer::list& rotating_bl) {
-    using ceph::decode;
-    auto iter = rotating_bl.cbegin();
-    __u8 struct_v;
-    decode(struct_v, iter);
-    decode(rotating_ver, iter);
-    decode(rotating_secrets, iter);
-  }
-  void dump(ceph::Formatter *f) const {
-    f->dump_unsigned("version", version);
-    f->dump_unsigned("rotating_version", rotating_ver);
-    encode_json("secrets", secrets, f);
-    encode_json("rotating_secrets", rotating_secrets, f);
-  }
+  void encode_rotating(ceph::buffer::list& bl) const;
+  void decode_rotating(ceph::buffer::list& rotating_bl);
+  void dump(ceph::Formatter *f) const;
   static std::list<KeyServerData> generate_test_instances() {
     std::list<KeyServerData> ls;
     ls.emplace_back();
@@ -153,39 +119,9 @@ struct KeyServerData {
     EntityName name;
     EntityAuth auth;
 
-    void encode(ceph::buffer::list& bl) const {
-      using ceph::encode;
-      __u8 struct_v = 1;
-      encode(struct_v, bl);
-     __u32 _op = (__u32)op;
-      encode(_op, bl);
-      if (op == AUTH_INC_SET_ROTATING) {
-	encode(rotating_bl, bl);
-      } else {
-	encode(name, bl);
-	encode(auth, bl);
-      }
-    }
-    void decode(ceph::buffer::list::const_iterator& bl) {
-      using ceph::decode;
-      __u8 struct_v;
-      decode(struct_v, bl);
-      __u32 _op;
-      decode(_op, bl);
-      op = (IncrementalOp)_op;
-      ceph_assert(op >= AUTH_INC_NOP && op <= AUTH_INC_SET_ROTATING);
-      if (op == AUTH_INC_SET_ROTATING) {
-	decode(rotating_bl, bl);
-      } else {
-	decode(name, bl);
-	decode(auth, bl);
-      }
-    }
-    void dump(ceph::Formatter *f) const {
-      f->dump_unsigned("op", op);
-      f->dump_object("name", name);
-      f->dump_object("auth", auth);
-    }
+    void encode(ceph::buffer::list& bl) const;
+    void decode(ceph::buffer::list::const_iterator& bl);
+    void dump(ceph::Formatter *f) const;
     static std::list<Incremental> generate_test_instances() {
       std::list<Incremental> ls;
       ls.emplace_back();
@@ -276,15 +212,8 @@ public:
 
   bool generate_secret(EntityName& name, CryptoKey& secret);
 
-  void encode(ceph::buffer::list& bl) const {
-    using ceph::encode;
-    encode(data, bl);
-  }
-  void decode(ceph::buffer::list::const_iterator& bl) {
-    std::scoped_lock l{lock};
-    using ceph::decode;
-    decode(data, bl);
-  }
+  void encode(ceph::buffer::list& bl) const;
+  void decode(ceph::buffer::list::const_iterator& bl);
   void dump(ceph::Formatter *f) const;
   static std::list<KeyServer> generate_test_instances();
   bool contains(const EntityName& name) const;
