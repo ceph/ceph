@@ -2887,7 +2887,7 @@ void RGWGetUsage::execute(optional_yield y)
   }
 
   op_ret = rgw_sync_all_stats(this, y, driver, s->user->get_id(),
-                              s->user->get_tenant());
+                              false, s->user->get_tenant());
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "ERROR: failed to sync user stats" << dendl;
     return;
@@ -4035,7 +4035,7 @@ void RGWDeleteBucket::execute(optional_yield y)
 
   if (own_bucket) {
     // only if we own the bucket
-    op_ret = s->bucket->sync_owner_stats(this, y, nullptr);
+    op_ret = s->bucket->sync_owner_stats(this, y, false, nullptr);
     if (op_ret < 0) {
       ldpp_dout(this, 1) << "WARNING: failed to sync user stats before bucket delete: op_ret= " << op_ret << dendl;
     }
