@@ -7,6 +7,7 @@ tasks:
     client.1:
       port: 8001
 - rgw-cloudtier:
+    client.1:
     client.0:
       cloud_storage_class: CLOUDTIER-CLIENT0
       cloud_client: client.1
@@ -27,5 +28,6 @@ tasks:
       extra_attrs: ["cloud_restore"]
       lc_debug_interval: 10
       rgw_restore_debug_interval: 20
+      rgw_restore_processor_period: 10
       lifecycle_tests: True
       cloudtier_tests: True
