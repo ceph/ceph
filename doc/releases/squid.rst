@@ -20,6 +20,7 @@ Notable Changes
 
    - https://tracker.ceph.com/issues/67179
    - https://tracker.ceph.com/issues/66867
+
 * RBD: Moving an image that is a member of a group to trash is no longer
   allowed.  `rbd trash mv` command now behaves the same way as `rbd rm` in this
   scenario.
