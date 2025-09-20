@@ -1118,8 +1118,7 @@ class RedmineUpkeep:
                     issue_update.logger.info("Successfully updated Redmine issue.")
                     self.issues_modified += 1
                     for t_name in applied_transformations:
-                        self.modifications_made.setdefault(t_name, 0)
-                        self.modifications_made[t_name] += 1
+                        self.modifications_made.setdefault(t_name, set()).add(issue.id)
                     return True
                 except requests.exceptions.HTTPError as e:
                     issue_update.logger.error("API PUT failure during upkeep.", exc_info=True)
@@ -1483,7 +1482,12 @@ def main():
     if RU:
         log.info(f"Summary: Issues Inspected: {RU.issues_inspected}, Issues Modified: {RU.issues_modified}, Issues Failed: {RU.upkeep_failures}")
         if RU.issues_modified > 0:
-            log.info(f"Modifications by Transformation: {RU.modifications_made}")
+            log.info("Modifications by Transformation:")
+            for transform, issues in sorted(RU.modifications_made.items()):
+                transform_name = transform.removeprefix('_transform_')
+                log.info(f" - {transform_name}: {len(issues)} issues")
+                for issue in issues:
+                    log.debug(f"  + {REDMINE_ENDPOINT}/issues/{issue}")
         if RedmineUpkeep.GITHUB_RATE_LIMITED:
             log.warning("GitHub API rate limit was encountered during execution.")
 
@@ -1502,8 +1506,11 @@ def main():
                     f.write(f"- **Warning:** GitHub API rate limit was encountered. Some GitHub-related transformations might have been skipped.\n")
                 if RU.issues_modified > 0:
                     f.write(f"#### Modifications by Transformation:\n")
-                    for transform, count in RU.modifications_made.items():
-                        f.write(f"- `{transform}`: {count} issues\n")
+                    for transform, issues in sorted(RU.modifications_made.items()):
+                        transform_name = transform.removeprefix('_transform_')
+                        f.write(f"- **{transform_name}**\n")
+                        for issue in issues:
+                            f.write(f"  - [#{issue}]({REDMINE_ENDPOINT}/issues/{issue})\n")
                 f.write(f"\n")
 
     sys.exit(0)
